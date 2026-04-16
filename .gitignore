@@ -55,3 +55,6 @@ fix-*.png
 *.tgz
 .eslintcache
 .cache/
+
+# Temporary edge-function payload bundles produced by scripts/build-edge-payload.mjs
+.tmp-deploy/
