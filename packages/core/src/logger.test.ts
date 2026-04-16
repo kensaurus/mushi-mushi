@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createLogger, noopLogger } from './logger';
-import type { Logger, LogEntry } from './logger';
+import type { LogEntry } from './logger';
 
 describe('createLogger', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
