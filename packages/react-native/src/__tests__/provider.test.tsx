@@ -56,9 +56,9 @@ vi.mock('../../src/capture/device-info', () => ({
 const mockEnqueue = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('../../src/storage/async-storage-queue', () => ({
-  AsyncStorageQueue: vi.fn().mockImplementation(() => ({
-    enqueue: mockEnqueue,
-  })),
+  AsyncStorageQueue: vi.fn().mockImplementation(function (this: { enqueue: typeof mockEnqueue }) {
+    this.enqueue = mockEnqueue
+  }),
 }))
 
 describe('MushiProvider module exports', () => {
@@ -77,7 +77,7 @@ describe('useMushiContext', () => {
   it('returns null when called outside provider (bare useContext)', async () => {
     const React = await import('react')
     const ctx = React.createContext<null>(null)
-    const value = ctx._currentValue
+    const value = (ctx as unknown as { _currentValue: null })._currentValue
     expect(value).toBeNull()
   })
 })

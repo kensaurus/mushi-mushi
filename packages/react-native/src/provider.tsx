@@ -37,6 +37,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
+import { createApiClient, type MushiReport, type MushiApiClient } from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -81,6 +82,7 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
   const consoleRef = useRef<ReturnType<typeof setupConsoleCapture> | null>(null)
   const networkRef = useRef<ReturnType<typeof setupNetworkCapture> | null>(null)
   const queueRef = useRef<AsyncStorageQueue | null>(null)
+  const apiClientRef = useRef<MushiApiClient | null>(null)
 
   const [sheetVisible, setSheetVisible] = useState(false)
 
@@ -93,11 +95,18 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     if (config.capture?.network !== false) {
       networkRef.current = setupNetworkCapture(config.capture?.maxNetworkEntries, apiEndpoint)
     }
+    apiClientRef.current = createApiClient({
+      projectId: config.projectId,
+      apiKey: config.apiKey,
+      apiEndpoint,
+    })
     queueRef.current = new AsyncStorageQueue({
       maxSize: config.storage?.maxQueueSize,
       apiEndpoint,
       apiKey: config.apiKey,
     })
+
+    queueRef.current.flush().catch(() => {})
 
     return () => {
       consoleRef.current?.restore()
@@ -110,21 +119,36 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
 
   const submitReport = useCallback(
     async (data: { description: string; category: string }) => {
-      const report = {
+      const deviceInfo = getDeviceInfo()
+      const report: MushiReport = {
+        id: `rn-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         projectId: config.projectId,
-        ...data,
-        environment: getDeviceInfo(),
-        console_logs: consoleRef.current?.getEntries() ?? [],
-        network_logs: networkRef.current?.getEntries() ?? [],
+        category: data.category as MushiReport['category'],
+        description: data.description,
+        environment: {
+          userAgent: deviceInfo.systemName ?? 'ReactNative',
+          platform: deviceInfo.platform ?? 'mobile',
+          language: deviceInfo.locale ?? 'en',
+          viewport: { width: deviceInfo.screenWidth ?? 0, height: deviceInfo.screenHeight ?? 0 },
+          url: '',
+          referrer: '',
+          timestamp: new Date().toISOString(),
+          timezone: deviceInfo.timezone ?? 'UTC',
+        },
+        consoleLogs: consoleRef.current?.getEntries() ?? [],
+        networkLogs:
+          networkRef.current?.getEntries().map((entry) => ({
+            ...entry,
+            status: entry.status ?? 0,
+          })) ?? [],
+        reporterToken: `rn-${config.projectId}-anon`,
+        createdAt: new Date().toISOString(),
       }
-      try {
-        const res = await fetch(`${apiEndpoint}/v1/reports`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Mushi-Api-Key': config.apiKey },
-          body: JSON.stringify(report),
-        })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      } catch {
+      const client = apiClientRef.current
+      if (!client) return
+
+      const result = await client.submitReport(report)
+      if (!result.ok) {
         await queueRef.current?.enqueue(report)
       }
     },

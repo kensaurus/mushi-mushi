@@ -20,15 +20,21 @@ const registeredResources = new Map<string, { handler: Function }>()
 const mockConnect = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
-  McpServer: vi.fn().mockImplementation(() => ({
-    tool: vi.fn((name: string, description: string, _schema: any, handler: Function) => {
+  McpServer: vi.fn().mockImplementation(function (
+    this: {
+      tool: ReturnType<typeof vi.fn>
+      resource: ReturnType<typeof vi.fn>
+      connect: typeof mockConnect
+    },
+  ) {
+    this.tool = vi.fn((name: string, description: string, _schema: any, handler: Function) => {
       registeredTools.set(name, { description, handler })
-    }),
-    resource: vi.fn((_name: string, uri: string, _opts: any, handler: Function) => {
+    })
+    this.resource = vi.fn((_name: string, uri: string, _opts: any, handler: Function) => {
       registeredResources.set(uri, { handler })
-    }),
-    connect: mockConnect,
-  })),
+    })
+    this.connect = mockConnect
+  }),
 }))
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({

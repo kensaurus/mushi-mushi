@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { initMushi as InitMushi, getMushi as GetMushi, createMushiErrorHandler as CreateMushiErrorHandler } from '../index'
 
 const mockSubmitReport = vi.fn().mockResolvedValue(undefined)
 const mockClient = { submitReport: mockSubmitReport }
@@ -38,9 +39,9 @@ const testConfig = {
   endpoint: 'https://test.api',
 }
 
-let initMushi: typeof import('../index').initMushi
-let getMushi: typeof import('../index').getMushi
-let createMushiErrorHandler: typeof import('../index').createMushiErrorHandler
+let initMushi: typeof InitMushi
+let getMushi: typeof GetMushi
+let createMushiErrorHandler: typeof CreateMushiErrorHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()

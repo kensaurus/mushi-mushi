@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "react": ">=18",
-    "react-native": ">=0.72",
+    "@react-native-async-storage/async-storage": ">=1.19",
     "@react-navigation/native": ">=6",
-    "@react-native-async-storage/async-storage": ">=1.19"
+    "react": ">=18",
+    "react-native": ">=0.72"
   },
   "peerDependenciesMeta": {
     "@react-navigation/native": {
@@ -25,14 +25,16 @@
       "optional": true
     }
   },
-  "dependencies": {},
+  "dependencies": {
+    "@mushi-mushi/core": "workspace:*"
+  },
   "devDependencies": {
     "@types/react": "^19.1.4",
     "react": "^19.1.0",
     "react-native": "^0.79.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.1"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

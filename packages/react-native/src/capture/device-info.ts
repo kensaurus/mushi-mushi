@@ -7,6 +7,9 @@ export interface DeviceInfo {
   screenHeight: number
   pixelRatio: number
   fontScale: number
+  systemName?: string
+  locale?: string
+  timezone?: string
 }
 
 export function getDeviceInfo(): DeviceInfo {

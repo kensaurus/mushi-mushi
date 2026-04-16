@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { createApp, defineComponent, h, ref } from 'vue'
+import { createApp, defineComponent, h } from 'vue'
 
 const mockSubmitReport = vi.fn().mockResolvedValue(undefined)
 const mockClient = { submitReport: mockSubmitReport }
