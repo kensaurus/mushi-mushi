@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
 export default defineConfig({
+  base: '/mushi-mushi/',
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
