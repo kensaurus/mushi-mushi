@@ -2,7 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6.svg)](https://typescriptlang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178c6.svg)](https://typescriptlang.org)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/kensaurus/mushi-mushi/issues)
 
@@ -158,6 +158,37 @@ Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
 
+<details>
+<summary><b>iOS</b> (Swift Package Manager — early development, API may change)</summary>
+
+```swift
+// Package.swift
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.1.0")
+
+// In your app
+import Mushi
+Mushi.configure(projectId: "proj_xxx", apiKey: "mushi_xxx")
+```
+See [`packages/ios`](./packages/ios) for full setup.
+</details>
+
+<details>
+<summary><b>Android</b> (Maven — early development, API may change)</summary>
+
+```kotlin
+// build.gradle.kts
+dependencies {
+    implementation("dev.mushimushi:mushi-android:0.1.0")
+}
+
+// In your Application class
+Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey = "mushi_xxx"))
+```
+See [`packages/android`](./packages/android) for full setup.
+</details>
+
+> Want a runnable example? Check [`examples/react-demo`](./examples/react-demo) — a minimal Vite + React app with test buttons for dead clicks, thrown errors, failed API calls, and console errors.
+
 ---
 
 ## What it catches vs. traditional monitoring
@@ -240,19 +271,26 @@ Mushi Mushi is designed as a **companion** to your existing monitoring, not a re
 | [`@mushi-mushi/cli`](./packages/cli) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/cli?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/cli) | CLI for project setup, report listing, and triage. Install globally: `npm i -g @mushi-mushi/cli` |
 | [`@mushi-mushi/mcp`](./packages/mcp) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/mcp?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp) | MCP server — lets AI coding agents (Cursor, Copilot, Claude) read and triage bug reports |
 
+### Native mobile SDKs (early development)
+
+| Package | Distribution | Status |
+|---------|--------------|--------|
+| [`packages/ios`](./packages/ios) | Swift Package Manager | Early development — API may change |
+| [`packages/android`](./packages/android) | Maven (`dev.mushimushi:mushi-android`) | Early development — API may change |
+
 ### Backend ([BSL 1.1](./packages/server/LICENSE) → Apache 2.0 in 2029)
 
-| Package | Purpose |
-|---------|---------|
-| `@mushi-mushi/server` | Supabase Edge Functions — 2-stage LLM pipeline, knowledge graph, enterprise features |
-| `@mushi-mushi/agents` | Agentic fix pipeline — Claude Code, Codex, generic MCP adapters for auto-generating PRs |
-| `@mushi-mushi/verify` | Playwright-based fix verification with screenshot visual diff |
+| Package | Purpose | Status |
+|---------|---------|--------|
+| `@mushi-mushi/server` | Supabase Edge Functions — 2-stage LLM classification pipeline, knowledge graph, enterprise scaffolding | Working classification pipeline; fix execution requires external agent |
+| `@mushi-mushi/agents` | Agentic fix pipeline — orchestrator + GitHub PR creation work; Claude Code and Codex adapters are **stubs** (awaiting API access); generic MCP adapter works with external server | Partial |
+| `@mushi-mushi/verify` | Playwright-based fix verification — screenshot visual diff works; step interpreter is proof-of-concept | Proof-of-concept |
 
 ---
 
 ## Connecting to the Backend
 
-### Option A: Hosted (easiest)
+### Option A: Hosted
 
 1. Sign up at **[kensaur.us/mushi-mushi](https://kensaur.us/mushi-mushi/)** (the admin console)
 2. Create a project → get your `projectId` and `apiKey`
@@ -260,20 +298,25 @@ Mushi Mushi is designed as a **companion** to your existing monitoring, not a re
 
 ### Option B: Self-hosted
 
-**Docker Compose:**
+> See [SELF_HOSTED.md](./SELF_HOSTED.md) for the recommended Supabase CLI deployment.
+>
+> **Security note:** Internal edge functions (`judge-batch`, `intelligence-report`, `generate-synthetic`) authenticate via the `SUPABASE_SERVICE_ROLE_KEY`. Never expose these functions without `--no-verify-jwt` in production. Only the public `api` function should be exposed to the internet; the others should be invoked server-side via cron or admin tooling with the service role key.
+
+### Option C: Docker Compose
+
 ```bash
 cd deploy
 cp .env.example .env   # fill in ANTHROPIC_API_KEY, Supabase credentials
 docker compose up -d
 ```
 
-**Kubernetes (Helm):**
+**Kubernetes (Helm):** *(incomplete — missing ConfigMap for migrations)*
 ```bash
 helm install mushimushi deploy/helm/ \
   --set secrets.anthropicApiKey=sk-ant-...
 ```
 
-### Option C: Supabase project
+### Option D: Supabase project (manual)
 
 ```bash
 cd packages/server/supabase
@@ -312,13 +355,27 @@ MushiProvider config={{
 - Natural language queries ("critical checkout bugs this week")
 - Weekly intelligence reports
 
-**For enterprise**
-- SSO (SAML 2.0, OIDC)
-- Audit logs
-- Jira, Linear, GitHub Issues, PagerDuty integrations
-- Plugin system for custom hooks
-- Data retention policies
-- Self-hosted deployment
+**For enterprise** *(schema + API scaffolding — not yet production-ready)*
+- SSO (SAML 2.0, OIDC) — config CRUD only, no OAuth/SAML flow
+- Audit logs — event recording works, no UI dashboard yet
+- Jira, Linear, GitHub Issues, PagerDuty integrations — webhook dispatch only, no bidirectional sync
+- Plugin system for custom hooks — registration + execution order, limited hook points
+- Data retention policies — configurable per-project, archival cron not yet implemented
+- Self-hosted deployment — see [SELF_HOSTED.md](./SELF_HOSTED.md)
+
+---
+
+## Known Limitations
+
+**Screenshot capture** uses canvas/SVG `foreignObject` serialization. This approach does not work with cross-origin iframes, tainted `<canvas>` elements, or pages with strict Content Security Policies. Consider it best-effort — it works well on most single-origin SPAs but will produce incomplete captures on pages with third-party embeds.
+
+**Streaming LLM reasoning** is not yet implemented. The admin console shows classification results after completion, not in real-time. All API calls are request/response.
+
+**Enterprise features** (SSO, audit logs, integrations, plugins) have schema and API scaffolding but are not production-ready. SSO stores config but does not implement OAuth/SAML flows. Audit logs record events but have no dedicated query UI. Integrations are webhook-dispatch only (no bidirectional sync). Built-in plugins are stub implementations.
+
+**Fix verification** (`@mushi-mushi/verify`) performs screenshot visual diff via Playwright and pixelmatch, but the reproduction step interpreter is a proof-of-concept — it handles navigation and click steps but skips most type/fill interactions.
+
+**Fix agent sandbox** (`packages/agents/src/sandbox.ts`) generates a security spec document describing the intended container constraints (gVisor, network isolation, resource limits). It does **not** enforce these constraints at runtime. The fix agent runs with the permissions of the host process. Implement your own container isolation if deploying fix agents in production.
 
 ---
 
@@ -392,6 +449,8 @@ packages/
   vue/             Vue 3 plugin
   svelte/          Svelte SDK
   angular/         Angular SDK
+  ios/             Native iOS SDK (Swift, early dev)
+  android/         Native Android SDK (Kotlin, early dev)
   cli/             CLI tool
   mcp/             MCP server for coding agents
   server/          Supabase Edge Functions + migrations
@@ -399,6 +458,9 @@ packages/
   verify/          Fix verification
 apps/
   admin/           Admin console (React + Tailwind)
+  docs/            Documentation site (stub — coming soon)
+examples/
+  react-demo/      Runnable Vite + React demo app
 deploy/            Docker Compose + Helm chart
 tooling/           Shared ESLint + TypeScript configs
 ```

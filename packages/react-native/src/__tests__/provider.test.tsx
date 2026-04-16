@@ -56,8 +56,8 @@ vi.mock('../../src/capture/device-info', () => ({
 const mockEnqueue = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('../../src/storage/async-storage-queue', () => ({
-  AsyncStorageQueue: vi.fn().mockImplementation(function (this: { enqueue: typeof mockEnqueue }) {
-    this.enqueue = mockEnqueue
+  AsyncStorageQueue: vi.fn(class {
+    enqueue = mockEnqueue
   }),
 }))
 

@@ -8,15 +8,20 @@
   "main": "src/index.ts",
   "scripts": {
     "verify": "tsx src/run.ts",
+    "typecheck": "tsc --noEmit",
     "test": "echo 'no tests yet'",
     "build": "echo 'verify: no build step — runs via tsx'"
   },
   "dependencies": {
     "@playwright/test": "^1.52.0",
+    "@supabase/supabase-js": "^2.103.3",
     "pixelmatch": "^6.0.0",
     "pngjs": "^7.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pixelmatch": "^5.2.6",
+    "@types/pngjs": "^6.0.5",
     "tsx": "^4.19.0",
     "typescript": "^6.0.2"
   },
