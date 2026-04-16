@@ -1,10 +1,10 @@
 {
   "name": "@mushi/react-native",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "description": "React Native SDK for Mushi Mushi — shake-to-report, bottom sheet widget, full context capture",
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
