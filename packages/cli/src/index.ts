@@ -9,6 +9,8 @@ async function apiCall(path: string, config: CliConfig, options: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
+      'X-Mushi-Api-Key': config.apiKey ?? '',
+      'X-Mushi-Project': config.projectId ?? '',
       ...options.headers,
     },
   })
@@ -121,7 +123,7 @@ deploy
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     const endpoint = config.endpoint ?? 'https://api.mushimushi.dev'
     try {
-      const res = await fetch(`${endpoint}/v1/health`)
+      const res = await fetch(`${endpoint}/health`)
       console.log(`Health: ${res.status === 200 ? 'OK' : 'FAIL'} (${res.status})`)
     } catch (err) {
       console.error('Failed:', err)
@@ -136,12 +138,22 @@ program
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     const data = await apiCall('/v1/reports', config, {
       method: 'POST',
-      headers: { 'X-Mushi-Api-Key': config.apiKey ?? '' },
       body: JSON.stringify({
         projectId: config.projectId,
         description: 'CLI test report — verifying pipeline',
         category: 'other',
-        environment: { url: 'cli://test', browser: 'mushi-cli' },
+        reporterToken: `cli-test-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        environment: {
+          url: 'cli://test',
+          userAgent: 'mushi-cli',
+          platform: process.platform,
+          language: 'en',
+          viewport: { width: 0, height: 0 },
+          referrer: '',
+          timestamp: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
       }),
     }) as Record<string, unknown>
     console.log('Test report submitted:', JSON.stringify(data, null, 2))

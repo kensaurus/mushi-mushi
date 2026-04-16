@@ -45,9 +45,17 @@ The orchestrator reads `autofix_agent` and `autofix_mcp_server_url` from the pro
 | `autofix_agent` | `claude_code`, `codex`, `generic_mcp` | `claude_code` |
 | `autofix_mcp_server_url` | URL of the MCP-compatible agent server | — |
 
+## Security: Sandbox
+
+`sandbox.ts` generates a JSON spec document describing intended container constraints (gVisor/Docker, no network, 10min timeout, 4GB RAM cap, scoped credentials). **This spec is not enforced at runtime.** The fix agent runs with whatever permissions the host process has.
+
+If deploying fix agents in production, you must implement your own container isolation. The generated spec can be used as a reference for configuring Docker/gVisor/Firecracker constraints.
+
 ## Status
 
-The `GenericMCPAgent` is the primary production adapter. `ClaudeCodeAgent` and `CodexAgent` are experimental stubs pending direct API integration.
+- **GenericMCPAgent** — production adapter; requires an external MCP-compatible agent server
+- **ClaudeCodeAgent** — stub (returns `success: false`); pending Channels API access
+- **CodexAgent** — stub (returns `success: false`); pending direct API integration
 
 ## License
 
