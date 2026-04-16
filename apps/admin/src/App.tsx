@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
@@ -21,6 +21,22 @@ const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.Sso
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const FineTuningPage = lazy(() => import('./pages/FineTuningPage').then(m => ({ default: m.FineTuningPage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
+
+function NotFoundPage() {
+  const { pathname } = useLocation()
+  return (
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <p className="text-5xl font-bold text-fg-faint mb-2">404</p>
+      <h2 className="text-lg font-semibold text-fg mb-1">Page not found</h2>
+      <p className="text-sm text-fg-muted mb-6">
+        <code className="text-2xs bg-surface-raised px-1.5 py-0.5 rounded">{pathname}</code> doesn't exist.
+      </p>
+      <Link to="/" className="text-sm text-brand hover:text-brand-hover transition-colors">
+        ← Back to Dashboard
+      </Link>
+    </div>
+  )
+}
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
@@ -56,6 +72,7 @@ export function App() {
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/fine-tuning" element={<FineTuningPage />} />
                   <Route path="/integrations" element={<IntegrationsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
                 </Routes>
                 </Suspense>
                 </ErrorBoundary>

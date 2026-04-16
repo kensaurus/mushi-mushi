@@ -73,16 +73,20 @@ export function DashboardPage() {
         <Card className="p-3">
           <h3 className="text-xs font-medium text-fg-muted mb-2.5 uppercase tracking-wider">By Severity</h3>
           <div className="space-y-1.5">
-            {['critical', 'high', 'medium', 'low'].map((sev) => {
-              const count = stats.bySeverity[sev] ?? 0
-              if (count === 0) return null
-              return (
-                <div key={sev} className="flex items-center justify-between">
-                  <Badge className={SEVERITY[sev]}>{sev}</Badge>
-                  <span className="text-xs font-mono tabular-nums text-fg-muted">{count}</span>
-                </div>
-              )
-            })}
+            {['critical', 'high', 'medium', 'low'].some((sev) => (stats.bySeverity[sev] ?? 0) > 0) ? (
+              ['critical', 'high', 'medium', 'low'].map((sev) => {
+                const count = stats.bySeverity[sev] ?? 0
+                if (count === 0) return null
+                return (
+                  <div key={sev} className="flex items-center justify-between">
+                    <Badge className={SEVERITY[sev]}>{sev}</Badge>
+                    <span className="text-xs font-mono tabular-nums text-fg-muted">{count}</span>
+                  </div>
+                )
+              })
+            ) : (
+              <p className="text-2xs text-fg-faint">No severity data — triage reports to assign severity levels.</p>
+            )}
           </div>
         </Card>
       </div>
