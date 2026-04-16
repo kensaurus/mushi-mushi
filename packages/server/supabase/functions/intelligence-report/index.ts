@@ -4,18 +4,23 @@ import { getServiceClient } from '../_shared/db.ts'
 import { sendSlackNotification } from '../_shared/slack.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log } from '../_shared/logger.ts'
+import { startCronRun, logLlmInvocation } from '../_shared/telemetry.ts'
 
 const intelLog = log.child('intelligence-report')
 
 Deno.serve(async (req) => {
   const auth = req.headers.get('Authorization')
-  if (!auth?.includes('service_role')) {
-    return new Response(JSON.stringify({ error: 'Requires service_role key' }), { status: 401 })
+  const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
+  if (!token || !expectedKey || token !== expectedKey) {
+    return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
   }
 
   const db = getServiceClient()
   const body = await req.json().catch(() => ({}))
   const projectId = body.projectId as string
+  const trigger = (body.trigger ?? 'http') as 'cron' | 'manual' | 'http'
+  const cronRun = await startCronRun(db, 'intelligence-report', trigger)
 
   const { data: projects } = projectId
     ? await db.from('projects').select('id, name').eq('id', projectId)
@@ -51,12 +56,27 @@ Judge scores: ${JSON.stringify(judgeData.slice(0, 2))}`
 
     const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
     const span = trace.span(`digest.${project.name}`)
+    const digestStart = Date.now()
     const { text: digest, usage } = await generateText({
       model: anthropic('claude-sonnet-4-20250514'),
       system: 'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and actionable recommendations. Be specific and data-driven.',
       prompt: statsContext,
     })
+    const digestLatency = Date.now() - digestStart
     span.end({ model: 'claude-sonnet-4-20250514', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+
+    await logLlmInvocation(db, {
+      projectId: project.id,
+      functionName: 'intelligence-report',
+      stage: 'digest',
+      primaryModel: 'claude-sonnet-4-20250514',
+      usedModel: 'claude-sonnet-4-20250514',
+      fallbackUsed: false,
+      status: 'success',
+      latencyMs: digestLatency,
+      inputTokens: usage?.promptTokens ?? null,
+      outputTokens: usage?.completionTokens ?? null,
+    })
 
     reports.push(`## ${project.name}\n\n${digest}`)
 
@@ -69,6 +89,7 @@ Judge scores: ${JSON.stringify(judgeData.slice(0, 2))}`
   }
 
   await trace.end()
+  await cronRun.finish({ rowsAffected: reports.length, metadata: { projectIds: (projects ?? []).map(p => p.id) } })
 
   return new Response(JSON.stringify({ ok: true, data: { reports: reports.length, digest: reports.join('\n\n---\n\n') } }), {
     status: 200,

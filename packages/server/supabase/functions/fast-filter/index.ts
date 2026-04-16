@@ -13,6 +13,7 @@ import { createNotification, buildNotificationMessage } from '../_shared/notific
 import { buildReportGraph, detectRegression } from '../_shared/knowledge-graph.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { logLlmInvocation } from '../_shared/telemetry.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -100,13 +101,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     const startTime = Date.now()
     let classification: Stage1Result
     const llmSpan = trace.span('stage1.classify')
-    let usedModel = 'claude-haiku-4-5-20241022'
+    const PRIMARY_MODEL = 'claude-haiku-4-5-20241022'
+    const FALLBACK_MODEL = 'gpt-4.1-mini'
+    let usedModel = PRIMARY_MODEL
+    let fallbackUsed = false
+    let fallbackReason: string | null = null
 
     let tokenUsage: { promptTokens?: number; completionTokens?: number } = {}
     try {
       const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
       const { object, usage } = await generateObject({
-        model: anthropic('claude-haiku-4-5-20241022'),
+        model: anthropic(PRIMARY_MODEL),
         schema: stage1Schema,
         messages: [
           {
@@ -124,12 +129,24 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     } catch (primaryErr) {
       log.warn('Anthropic Haiku failed, falling back to OpenAI', { err: String(primaryErr) })
       const openaiKey = Deno.env.get('OPENAI_API_KEY')
-      if (!openaiKey) throw primaryErr
-      usedModel = 'gpt-4.1-mini'
+      if (!openaiKey) {
+        await logLlmInvocation(db, {
+          projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
+          primaryModel: PRIMARY_MODEL, usedModel: PRIMARY_MODEL,
+          fallbackUsed: false, status: 'error',
+          errorMessage: `Primary failed and no OPENAI_API_KEY: ${String(primaryErr)}`,
+          latencyMs: Date.now() - startTime,
+          promptVersion: promptSelection.promptVersion,
+        })
+        throw primaryErr
+      }
+      usedModel = FALLBACK_MODEL
+      fallbackUsed = true
+      fallbackReason = String(primaryErr).slice(0, 500)
 
       const openai = createOpenAI({ apiKey: openaiKey })
       const { object, usage } = await generateObject({
-        model: openai('gpt-4.1-mini'),
+        model: openai(FALLBACK_MODEL),
         schema: stage1Schema,
         system: activeSystemPrompt,
         prompt: userPrompt,
@@ -140,6 +157,17 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
     const latencyMs = Date.now() - startTime
     llmSpan.end({ model: usedModel, latencyMs, inputTokens: tokenUsage.promptTokens, outputTokens: tokenUsage.completionTokens })
+
+    await logLlmInvocation(db, {
+      projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
+      primaryModel: PRIMARY_MODEL, usedModel,
+      fallbackUsed, fallbackReason,
+      status: 'success',
+      latencyMs,
+      inputTokens: tokenUsage.promptTokens ?? null,
+      outputTokens: tokenUsage.completionTokens ?? null,
+      promptVersion: promptSelection.promptVersion,
+    })
 
     await db.from('reports').update({
       extracted_symptoms: {

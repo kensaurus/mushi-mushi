@@ -6,6 +6,7 @@ import { createTrace } from '../_shared/observability.ts'
 import { sendSlackNotification } from '../_shared/slack.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { recordPromptResult, checkPromotionEligibility, promoteCandidate } from '../_shared/prompt-ab.ts'
+import { startCronRun } from '../_shared/telemetry.ts'
 
 const judgeSchema = z.object({
   accuracy: z.number().min(0).max(1).describe('Does the category match the described issue?'),
@@ -22,6 +23,11 @@ const judgeSchema = z.object({
 })
 
 Deno.serve(async (req) => {
+  // Declared outside the try so the catch can mark the run as failed instead
+  // of writing a duplicate cron_runs row.
+  let cronRun: Awaited<ReturnType<typeof startCronRun>> | null = null
+  let db: ReturnType<typeof getServiceClient> | null = null
+
   try {
     const auth = req.headers.get('Authorization')
     const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -30,9 +36,12 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
     }
 
-    const db = getServiceClient()
+    db = getServiceClient()
     const body = await req.json().catch(() => ({}))
     const projectId = body.projectId as string | undefined
+    const trigger = (body.trigger ?? 'http') as 'cron' | 'manual' | 'http'
+
+    cronRun = await startCronRun(db, 'judge-batch', trigger)
 
     const projectFilter = projectId
       ? db.from('projects').select('id, name').eq('id', projectId)
@@ -40,6 +49,7 @@ Deno.serve(async (req) => {
 
     const { data: projects } = await projectFilter
     if (!projects?.length) {
+      await cronRun.finish({ rowsAffected: 0, metadata: { reason: 'no projects' } })
       return new Response(JSON.stringify({ ok: true, message: 'No projects' }), { status: 200 })
     }
 
@@ -212,12 +222,32 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
       trace.end()
     }
 
+    await cronRun.finish({
+      rowsAffected: totalEvaluated,
+      metadata: { driftAlerts, projectsChecked: projects.length },
+    })
+
     return new Response(JSON.stringify({
       ok: true,
       data: { totalEvaluated, driftAlerts },
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err) {
     rootLog.child('judge-batch').fatal('Unhandled error', { err: String(err) })
+    try {
+      if (cronRun) {
+        await cronRun.fail(err)
+      } else if (db) {
+        // startCronRun never produced a handle (e.g. failed before running) —
+        // record a synthetic failed row so the admin console still sees it.
+        await db.from('cron_runs').insert({
+          job_name: 'judge-batch',
+          trigger: 'http',
+          finished_at: new Date().toISOString(),
+          status: 'error',
+          error_message: String(err),
+        })
+      }
+    } catch { /* best-effort */ }
     return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500 })
   }
 })

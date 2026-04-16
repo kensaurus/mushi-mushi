@@ -23,8 +23,10 @@ const syntheticSchema = z.object({
 
 Deno.serve(async (req) => {
   const auth = req.headers.get('Authorization')
-  if (!auth?.includes('service_role')) {
-    return new Response(JSON.stringify({ error: 'Requires service_role key' }), { status: 401 })
+  const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
+  if (!token || !expectedKey || token !== expectedKey) {
+    return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
   }
 
   const db = getServiceClient()

@@ -12,6 +12,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { getAvailableTags, formatTagsForPrompt, applyTags } from '../_shared/ontology.ts'
 import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { logLlmInvocation } from '../_shared/telemetry.ts'
 
 const stage2Schema = z.object({
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Refined bug category'),
@@ -129,9 +130,12 @@ ${ontologyContext}`
 
     const startTime = Date.now()
     const modelId = settings?.stage2_model ?? 'claude-sonnet-4-20250514'
+    const FALLBACK_MODEL = 'gpt-4.1'
     let classification: z.infer<typeof stage2Schema>
     const llmSpan = trace.span('stage2.analyze')
     let usedModel = modelId
+    let fallbackUsed = false
+    let fallbackReason: string | null = null
 
     let tokenUsage: { promptTokens?: number; completionTokens?: number } = {}
     try {
@@ -155,12 +159,24 @@ ${ontologyContext}`
     } catch (primaryErr) {
       log.warn('Anthropic Stage 2 failed, falling back to OpenAI', { err: String(primaryErr) })
       const openaiKey = Deno.env.get('OPENAI_API_KEY')
-      if (!openaiKey) throw primaryErr
-      usedModel = 'gpt-4.1'
+      if (!openaiKey) {
+        await logLlmInvocation(db, {
+          projectId, reportId, functionName: 'classify-report', stage: 'stage2',
+          primaryModel: modelId, usedModel: modelId,
+          fallbackUsed: false, status: 'error',
+          errorMessage: `Primary failed and no OPENAI_API_KEY: ${String(primaryErr)}`,
+          latencyMs: Date.now() - startTime,
+          promptVersion: promptSelection.promptVersion,
+        })
+        throw primaryErr
+      }
+      usedModel = FALLBACK_MODEL
+      fallbackUsed = true
+      fallbackReason = String(primaryErr).slice(0, 500)
 
       const openai = createOpenAI({ apiKey: openaiKey })
       const { object, usage } = await generateObject({
-        model: openai('gpt-4.1'),
+        model: openai(FALLBACK_MODEL),
         schema: stage2Schema,
         system: activeSystemPrompt,
         prompt,
@@ -171,6 +187,17 @@ ${ontologyContext}`
 
     const latencyMs = Date.now() - startTime
     llmSpan.end({ model: usedModel, latencyMs, inputTokens: tokenUsage.promptTokens, outputTokens: tokenUsage.completionTokens })
+
+    await logLlmInvocation(db, {
+      projectId, reportId, functionName: 'classify-report', stage: 'stage2',
+      primaryModel: modelId, usedModel,
+      fallbackUsed, fallbackReason,
+      status: 'success',
+      latencyMs,
+      inputTokens: tokenUsage.promptTokens ?? null,
+      outputTokens: tokenUsage.completionTokens ?? null,
+      promptVersion: promptSelection.promptVersion,
+    })
 
     // Apply ontology tags if present
     if (classification.bugOntologyTags?.length) {

@@ -12,7 +12,7 @@ supabase/functions/
   judge-batch/      Nightly LLM quality scoring + prompt A/B auto-promotion
   intelligence-report/  Automated weekly summary generation
   generate-synthetic/   Synthetic test data generator
-  _shared/          Shared modules (DB, auth, schemas, embeddings, notifications, prompt-ab)
+  _shared/          Shared modules (DB, auth, schemas, embeddings, notifications, prompt-ab, telemetry)
 
 supabase/templates/   Branded HTML email templates (confirmation, recovery)
 supabase/migrations/    PostgreSQL schema + RLS policies
@@ -98,6 +98,17 @@ Stages: `stage1` (fast-filter), `stage2` (classify-report), `judge`.
 ### Observability
 
 LLM traces are sent to Langfuse via direct REST API calls from `_shared/observability.ts`. Each pipeline stage logs input tokens, output tokens, latency, and model used.
+
+### Telemetry & Realtime
+
+The `_shared/telemetry.ts` module writes best-effort structured events to:
+
+- `llm_invocations` — every LLM call with model, fallback, latency, tokens
+- `cron_runs` — scheduled job outcomes (success/error, last run, duration)
+- `anti_gaming_events` — multi-account / velocity-anomaly / manual-flag events
+- `reporter_notifications` — classified / fixed / reward events surfaced to reporters
+
+Admin pages subscribe to these tables via Supabase Realtime (`apps/admin/src/lib/realtime.ts`) so the `/health`, `/anti-gaming`, and `/notifications` dashboards update live without polling. RLS for these tables is in `migrations/20260417000001_admin_realtime_policies.sql`.
 
 ## License
 
