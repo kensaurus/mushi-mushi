@@ -60,15 +60,16 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
     setRunning(true)
     setChecks((prev) => prev.map((c) => ({ ...c, status: 'running' as const, detail: undefined, latencyMs: undefined })))
 
-    // Check 1: Supabase REST
+    // Check 1: Supabase REST — any HTTP response (even 401) means the API is reachable
     update('supabase', { status: 'running' })
     const rest = await timedFetch(`${SUPABASE_URL}/rest/v1/`, {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     })
+    const restReachable = rest.status > 0
     update('supabase', {
-      status: rest.ok ? 'pass' : 'fail',
+      status: restReachable ? 'pass' : 'fail',
       latencyMs: rest.ms,
-      detail: rest.ok ? `${rest.ms}ms` : `HTTP ${rest.status || 'unreachable'} — ${rest.body?.slice(0, 100)}`,
+      detail: restReachable ? `${rest.ms}ms` : `Unreachable — ${rest.body?.slice(0, 100)}`,
     })
 
     // Check 2: Auth (GoTrue)

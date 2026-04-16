@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { SEVERITY, CATEGORY_LABELS } from '../lib/tokens'
-import { PageHeader, StatCard, Card, Badge, Btn, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, StatCard, Card, Badge, Btn, Loading } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 
 interface Stats {
@@ -34,8 +34,7 @@ function GettingStartedEmpty() {
   const onboardingDone = localStorage.getItem('mushi:onboarding_completed') === 'true'
 
   if (!onboardingDone && !hasProject) {
-    navigate('/onboarding', { replace: true })
-    return null
+    return <Navigate to="/onboarding" replace />
   }
 
   async function submitTest() {
@@ -128,21 +127,18 @@ function ChecklistItem({ done, label, action }: { done: boolean; label: string; 
 export function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
 
   function loadStats() {
     setLoading(true)
-    setError(false)
     apiFetch<Stats>('/v1/admin/stats').then((res) => {
       if (res.ok && res.data) setStats(res.data)
-      else setError(true)
-    }).catch(() => setError(true)).finally(() => setLoading(false))
+      else setStats(null)
+    }).catch(() => setStats(null)).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadStats() }, [])
 
   if (loading) return <Loading text="Loading dashboard..." />
-  if (error) return <ErrorAlert message="Failed to load dashboard stats." onRetry={loadStats} />
 
   if (!stats || stats.total === 0) {
     return <GettingStartedEmpty />
