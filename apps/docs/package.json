@@ -1,0 +1,13 @@
+{
+  "name": "@mushi/docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mushi Mushi documentation site",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'docs: stub — no build yet'",
+    "dev": "echo 'docs: stub — no dev yet'",
+    "clean": "rm -rf dist .turbo"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "name": "@mushi/server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Mushi Mushi backend — Supabase Edge Functions: API ingestion, LLM classification, Slack notifications",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'server: edge functions deploy via supabase CLI'",
+    "dev": "cd supabase && supabase functions serve --no-verify-jwt || echo 'server: skipped — Docker not running'",
+    "dev:db": "cd supabase && supabase start",
+    "deploy": "cd supabase && supabase functions deploy",
+    "deploy:api": "cd supabase && supabase functions deploy api",
+    "deploy:classify": "cd supabase && supabase functions deploy classify-report",
+    "db:push": "cd supabase && supabase db push",
+    "db:reset": "cd supabase && supabase db reset",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@mushi/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@mushi/tsconfig": "workspace:*",
+    "supabase": "^2.22.0",
+    "typescript": "^5.8.3"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/server"
+  }
+}

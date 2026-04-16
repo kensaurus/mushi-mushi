@@ -1,0 +1,40 @@
+# FILE: deployment-api.yaml
+# PURPOSE: Kubernetes Deployment for Mushi Mushi API service
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-api
+  labels:
+    app: mushimushi
+    component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app: mushimushi
+      component: api
+  template:
+    metadata:
+      labels:
+        app: mushimushi
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: "{{ .Values.api.image }}:{{ .Values.global.image.tag }}"
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: anthropic-api-key
+            - name: SUPABASE_SERVICE_ROLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Release.Name }}-secrets
+                  key: supabase-service-role-key
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}

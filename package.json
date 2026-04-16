@@ -1,0 +1,58 @@
+{
+  "name": "mushi-mushi",
+  "private": true,
+  "description": "Mushi Mushi (虫虫) — Your users find bugs your monitoring can't. AI-powered bug intelligence that captures user friction, classifies it, and fixes it autonomously.",
+  "license": "MIT",
+  "homepage": "https://github.com/kensaurus/mushi-mushi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git"
+  },
+  "keywords": [
+    "bug-tracking",
+    "user-feedback",
+    "ai-triage",
+    "developer-tools",
+    "sdk",
+    "error-monitoring",
+    "sentry-companion",
+    "knowledge-graph",
+    "agentic-fix",
+    "llm"
+  ],
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=10"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build": "turbo run build",
+    "predev": "node scripts/kill-port.mjs 6464 && turbo daemon stop",
+    "dev": "turbo run dev --force",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "size": "turbo run size",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "turbo run build && changeset publish"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "supabase"
+    ]
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.4",
+    "prettier": "^3.5.3",
+    "turbo": "^2.5.4"
+  },
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "author": "Kenji Sakuramoto"
+}

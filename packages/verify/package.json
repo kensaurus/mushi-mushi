@@ -1,0 +1,29 @@
+{
+  "name": "@mushi/verify",
+  "version": "0.0.1",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Playwright-based fix verification for Mushi Mushi reports",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "verify": "tsx src/run.ts",
+    "test": "echo 'no tests yet'",
+    "build": "echo 'verify: no build step — runs via tsx'"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.52.0",
+    "pixelmatch": "^6.0.0",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.3"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/verify"
+  }
+}

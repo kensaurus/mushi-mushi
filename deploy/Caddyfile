@@ -1,0 +1,24 @@
+# FILE: Caddyfile
+# PURPOSE: Reverse proxy for self-hosted Mushi Mushi
+
+{$DOMAIN:localhost} {
+    handle /functions/v1/* {
+        reverse_proxy edge-functions:8000
+    }
+
+    handle /auth/* {
+        reverse_proxy supabase-auth:9999
+    }
+
+    handle /rest/* {
+        reverse_proxy supabase-rest:3000
+    }
+
+    handle /storage/* {
+        reverse_proxy supabase-storage:5000
+    }
+
+    handle {
+        reverse_proxy admin:3000
+    }
+}

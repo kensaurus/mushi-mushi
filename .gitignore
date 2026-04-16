@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build
+dist/
+*.tsbuildinfo
+
+# Turbo
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+apps/admin/.env
+
+# Supabase local state
+**/supabase/.temp/
+
+# IDE
+.vscode/
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+coverage/
+.nyc_output/
+
+# Debug
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Playwright
+.playwright-mcp/
+test-results/
+playwright-report/
+
+# Misc
+*.tgz
+.eslintcache
+.cache/

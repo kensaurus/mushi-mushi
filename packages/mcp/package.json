@@ -1,0 +1,61 @@
+{
+  "name": "@mushi/mcp",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "MCP server exposing Mushi Mushi reports to coding agents",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mushi-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "test": "echo 'no tests yet'",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@mushi/core": "workspace:*",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@mushi/eslint-config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/mcp"
+  },
+  "author": "Kenji Sakuramoto",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/mcp#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "sideEffects": false,
+  "keywords": [
+    "mushi-mushi",
+    "bug-reporting",
+    "sdk"
+  ]
+}

@@ -1,0 +1,11 @@
+# FILE: Dockerfile.edge
+# PURPOSE: Container for Supabase Edge Functions (Deno runtime)
+
+FROM denoland/deno:2.0.0
+
+WORKDIR /app
+COPY supabase/functions /app/functions
+
+EXPOSE 8000
+
+CMD ["deno", "serve", "--allow-all", "--port=8000", "/app/functions/api/index.ts"]

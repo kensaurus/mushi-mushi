@@ -1,0 +1,9 @@
+# FILE: Chart.yaml
+# PURPOSE: Helm chart definition for Mushi Mushi Kubernetes deployment
+
+apiVersion: v2
+name: mushimushi
+description: Mushi Mushi — AI-powered bug reporting and classification platform
+type: application
+version: 0.1.0
+appVersion: "0.0.1"

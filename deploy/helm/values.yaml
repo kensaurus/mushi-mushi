@@ -1,0 +1,55 @@
+# FILE: values.yaml
+# PURPOSE: Default Helm values for Mushi Mushi deployment
+
+global:
+  image:
+    tag: "latest"
+  database:
+    host: postgres
+    port: 5432
+    name: mushimushi
+  llm:
+    provider: anthropic
+    model: claude-sonnet-4-20250514
+
+api:
+  replicas: 2
+  image: mushimushi/edge-functions
+  resources:
+    limits:
+      memory: 512Mi
+      cpu: 500m
+    requests:
+      memory: 256Mi
+      cpu: 250m
+
+classify:
+  replicas: 1
+  image: mushimushi/edge-functions
+  resources:
+    limits:
+      memory: 1Gi
+      cpu: 1000m
+    requests:
+      memory: 512Mi
+      cpu: 500m
+
+admin:
+  replicas: 1
+  image: mushimushi/admin
+  resources:
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+ingress:
+  enabled: true
+  host: mushi.example.com
+  tls: true
+  annotations: {}
+
+secrets:
+  anthropicApiKey: ""
+  supabaseServiceRoleKey: ""
+  jwtSecret: ""
+  postgresPassword: ""

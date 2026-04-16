@@ -1,0 +1,79 @@
+{
+  "name": "@mushi/web",
+  "version": "0.0.0",
+  "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/web"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/web#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "keywords": [
+    "bug-reporting",
+    "widget",
+    "browser-sdk",
+    "shadow-dom",
+    "user-feedback",
+    "screenshot"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "size": "size-limit"
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "30 KB"
+    }
+  ],
+  "dependencies": {
+    "@mushi/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@mushi/eslint-config": "workspace:*",
+    "@mushi/tsconfig": "workspace:*",
+    "@size-limit/file": "^12.1.0",
+    "eslint": "^9.26.0",
+    "jsdom": "^29.0.2",
+    "size-limit": "^12.1.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
+  },
+  "author": "Kenji Sakuramoto"
+}

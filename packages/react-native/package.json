@@ -1,0 +1,74 @@
+{
+  "name": "@mushi/react-native",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "React Native SDK for Mushi Mushi — shake-to-report, bottom sheet widget, full context capture",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "test": "echo 'no tests yet'",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.72",
+    "@react-navigation/native": ">=6",
+    "@react-native-async-storage/async-storage": ">=1.19"
+  },
+  "peerDependenciesMeta": {
+    "@react-navigation/native": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    }
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/react": "^19.1.4",
+    "react": "^19.1.0",
+    "react-native": "^0.79.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/react-native"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/react-native#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "mushi-mushi",
+    "bug-reporting",
+    "sdk"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "type": "module"
+}

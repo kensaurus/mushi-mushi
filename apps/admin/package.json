@@ -1,0 +1,39 @@
+{
+  "name": "@mushi/admin",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Mushi Mushi admin console — report triage, analytics dashboard, project settings",
+  "license": "SEE LICENSE IN LICENSE",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.5.0"
+  },
+  "devDependencies": {
+    "@mushi/eslint-config": "workspace:*",
+    "@mushi/tsconfig": "workspace:*",
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.0"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "apps/admin"
+  }
+}

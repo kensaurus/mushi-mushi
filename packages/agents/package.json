@@ -1,0 +1,31 @@
+{
+  "name": "@mushi/agents",
+  "version": "0.0.1",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Agentic fix pipeline — adapter layer for AI code agents",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@octokit/rest": "^21.0.0",
+    "@supabase/supabase-js": "^2.49.0"
+  },
+  "devDependencies": {
+    "@mushi/eslint-config": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.1"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/agents"
+  }
+}

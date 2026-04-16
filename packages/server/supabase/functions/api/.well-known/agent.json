@@ -1,0 +1,38 @@
+{
+  "name": "MushiMushi",
+  "description": "User-friction intelligence layer for software teams. Captures, classifies, and auto-fixes bugs reported by users.",
+  "url": "https://api.mushimushi.dev/.well-known/agent.json",
+  "version": "0.3.0",
+  "capabilities": {
+    "classify_bug": {
+      "description": "Classify a user-reported bug using dual-LLM pipeline (Haiku fast-filter + Sonnet deep analysis)",
+      "input": "Bug report with description, environment, console logs, network logs",
+      "output": "Classification with category, severity, root cause, reproduction steps, ontology tags"
+    },
+    "generate_fix": {
+      "description": "Generate a code fix for a classified bug using AI agents (Claude Code, Codex, or generic MCP)",
+      "input": "Report ID with classification context",
+      "output": "Git branch with fix, PR URL, files changed"
+    },
+    "verify_fix": {
+      "description": "Verify a fix via Playwright visual + interaction testing",
+      "input": "Report ID, deployment URL",
+      "output": "Pass/fail with visual diff score and interaction results"
+    },
+    "query_knowledge_graph": {
+      "description": "Query the bug knowledge graph for blast radius, regressions, and related issues",
+      "input": "Node ID or component name",
+      "output": "Graph traversal results with affected areas"
+    }
+  },
+  "protocols": {
+    "mcp": {
+      "transport": "stdio",
+      "package": "@mushi/mcp"
+    },
+    "rest": {
+      "baseUrl": "https://api.mushimushi.dev/v1",
+      "auth": "X-Mushi-Api-Key header"
+    }
+  }
+}

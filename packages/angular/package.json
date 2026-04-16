@@ -1,0 +1,64 @@
+{
+  "name": "@mushi/angular",
+  "version": "0.0.0",
+  "license": "MIT",
+  "description": "Angular SDK for Mushi Mushi — NgModule, injectable service, global ErrorHandler",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint src/",
+    "test": "echo 'no tests yet'",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@angular/core": ">=17"
+  },
+  "dependencies": {
+    "@mushi/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@mushi/eslint-config": "workspace:*",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/angular"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/angular#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "mushi-mushi",
+    "bug-reporting",
+    "sdk"
+  ],
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "type": "module"
+}

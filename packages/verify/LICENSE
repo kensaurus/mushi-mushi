@@ -1,0 +1,30 @@
+Business Source License 1.1
+
+Licensor:           Kenji Sakuramoto
+Licensed Work:      Mushi Mushi Server (packages/server, packages/agents, packages/verify)
+                    Copyright (c) 2026 Kenji Sakuramoto
+
+Additional Use Grant:
+
+  You may use the Licensed Work for any purpose, including production use,
+  provided that you do not use the Licensed Work to offer a commercial
+  bug reporting, bug intelligence, or user feedback service to third parties
+  as a managed service, hosted service, or software-as-a-service.
+
+  For clarity, the following uses ARE permitted:
+  - Self-hosting the Licensed Work for your own organization's internal use
+  - Modifying the Licensed Work for your own organization's internal use
+  - Using the Licensed Work in development, testing, and staging environments
+  - Integrating the Licensed Work into your product for your own bug tracking
+    (not resold as a service)
+
+  The following uses are NOT permitted without a separate commercial license:
+  - Offering the Licensed Work (or a substantially similar service) as a
+    hosted or managed service to third parties
+  - Embedding the Licensed Work into a product where bug reporting or user
+    feedback intelligence is a primary feature sold to customers
+
+Change Date:        April 15, 2029
+Change License:     Apache License, Version 2.0
+
+For the full BSL 1.1 license text, see: https://mariadb.com/bsl11/

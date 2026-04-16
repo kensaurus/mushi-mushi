@@ -1,0 +1,29 @@
+# FILE: deployment-admin.yaml
+# PURPOSE: Kubernetes Deployment for Mushi Mushi Admin console
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-admin
+  labels:
+    app: mushimushi
+    component: admin
+spec:
+  replicas: {{ .Values.admin.replicas }}
+  selector:
+    matchLabels:
+      app: mushimushi
+      component: admin
+  template:
+    metadata:
+      labels:
+        app: mushimushi
+        component: admin
+    spec:
+      containers:
+        - name: admin
+          image: "{{ .Values.admin.image }}:{{ .Values.global.image.tag }}"
+          ports:
+            - containerPort: 3000
+          resources:
+            {{- toYaml .Values.admin.resources | nindent 12 }}
