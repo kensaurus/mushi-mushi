@@ -27,6 +27,9 @@ const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m
 const FineTuningPage = lazy(() => import('./pages/FineTuningPage').then(m => ({ default: m.FineTuningPage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
+const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -91,6 +94,9 @@ export function App() {
                   <Route path="/fine-tuning" element={<FineTuningPage />} />
                   <Route path="/integrations" element={<IntegrationsPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route path="/health" element={<HealthPage />} />
+                  <Route path="/anti-gaming" element={<AntiGamingPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
                 </Suspense>

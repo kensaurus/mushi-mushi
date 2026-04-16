@@ -6,8 +6,8 @@ Admin console for Mushi Mushi — report triage, analytics dashboard, knowledge 
 
 - React 19 + React Router 7
 - Tailwind CSS v4 (CSS-first `@theme` tokens)
-- Vite 6
-- Supabase Auth
+- Vite 8
+- Supabase Auth + Realtime
 
 ## Live Demo
 
@@ -98,6 +98,7 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 | `/onboarding` | First-run setup wizard (project, API key, test, SDK snippet) |
 | `/reports` | Filterable report list |
 | `/reports/:id` | Report detail — triage, LLM classification, environment, logs |
+| `/queue` | Dead letter queue — failed pipeline jobs |
 | `/graph` | Knowledge graph visualization |
 | `/judge` | LLM self-improvement scores |
 | `/query` | Natural language data queries |
@@ -107,6 +108,9 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 | `/sso` | SAML/OIDC configuration |
 | `/audit` | Audit log with CSV export |
 | `/fine-tuning` | LLM fine-tuning jobs |
+| `/health` | LLM and cron job health — fallback rate, latency, last-run status (live via Realtime) |
+| `/anti-gaming` | Reporter-token abuse detection — flagged devices and event log |
+| `/notifications` | Reporter-facing notifications — classified, fixed, reward events |
 | `/settings` | Project configuration, connection health, pipeline test, debug toggle |
 
 ## Deployment

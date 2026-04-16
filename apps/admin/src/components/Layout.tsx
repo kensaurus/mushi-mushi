@@ -12,7 +12,7 @@ import {
   IconDashboard, IconReports, IconGraph, IconJudge, IconQuery,
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
-  IconSignOut,
+  IconSignOut, IconHealth, IconShield, IconBell,
 } from './icons'
 
 interface NavItem {
@@ -43,6 +43,14 @@ const NAV: NavSection[] = [
       { label: 'Fixes',      path: '/fixes',       icon: IconFixes },
       { label: 'Queue',      path: '/queue',        icon: IconQueue },
       { label: 'Fine-Tuning', path: '/fine-tuning', icon: IconFineTuning },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { label: 'Health',         path: '/health',        icon: IconHealth },
+      { label: 'Anti-Gaming',    path: '/anti-gaming',   icon: IconShield },
+      { label: 'Notifications',  path: '/notifications', icon: IconBell },
     ],
   },
   {

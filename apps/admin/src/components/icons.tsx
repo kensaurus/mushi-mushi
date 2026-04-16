@@ -171,3 +171,23 @@ export function IconSignOut(p: IconProps) {
     <line x1="14" y1="8" x2="6" y2="8" />
   </>)
 }
+
+export function IconHealth(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2 8h3l1.5-3 3 6 1.5-3H14" />
+  </>)
+}
+
+export function IconShield(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 1.5 3 3.5v4.2c0 3 2.1 5.6 5 6.3 2.9-.7 5-3.3 5-6.3V3.5L8 1.5z" />
+    <path d="M6 8.2l1.6 1.6L10.5 7" />
+  </>)
+}
+
+export function IconBell(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3.5 11h9l-1-1.5V7a3.5 3.5 0 0 0-7 0v2.5L3.5 11z" />
+    <path d="M6.5 13a1.5 1.5 0 0 0 3 0" />
+  </>)
+}

@@ -1,20 +1,22 @@
 import { Hono } from 'npm:hono@4'
 import { cors } from 'npm:hono@4/cors'
-import { getServiceClient, getUserClient } from '../_shared/db.ts'
+import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { apiKeyAuth, jwtAuth } from '../_shared/auth.ts'
 import { reportSubmissionSchema } from '../_shared/schemas.ts'
-import { scrubReport } from '../_shared/pii-scrubber.ts'
 import { checkAntiGaming } from '../_shared/anti-gaming.ts'
+import { logAntiGamingEvent } from '../_shared/telemetry.ts'
 import { awardPoints, getReputation } from '../_shared/reputation.ts'
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts'
-import { findOrCreateNode, createEdge, getBlastRadius, getNodeEdges } from '../_shared/knowledge-graph.ts'
+import { getBlastRadius } from '../_shared/knowledge-graph.ts'
 import { logAudit } from '../_shared/audit.ts'
 import { createExternalIssue } from '../_shared/integrations.ts'
-import { getActivePlugins, executePluginHook } from '../_shared/plugins.ts'
+import { getActivePlugins } from '../_shared/plugins.ts'
 import { getAvailableTags } from '../_shared/ontology.ts'
 import { executeNaturalLanguageQuery } from '../_shared/nl-query.ts'
 
+// basePath('/api') is required by Supabase Edge Functions: the function name
+// is included in the request URL path (https://supabase.com/docs/guides/functions/routing).
 const app = new Hono().basePath('/api')
 
 app.use('*', cors({
@@ -32,6 +34,7 @@ async function ingestReport(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   body: Record<string, any>,
+  options?: { ipAddress?: string; userAgent?: string },
 ): Promise<{ ok: boolean; reportId?: string; error?: string }> {
   const parsed = reportSubmissionSchema.safeParse(body)
   if (!parsed.success) {
@@ -45,6 +48,38 @@ async function ingestReport(
   const tokenHashBuffer = await crypto.subtle.digest('SHA-256', tokenData)
   const tokenHash = Array.from(new Uint8Array(tokenHashBuffer))
     .map(b => b.toString(16).padStart(2, '0')).join('')
+
+  // Build a weak device fingerprint from IP + User-Agent. This is intentionally
+  // coarse: it is meant to surface the obvious case of the same browser on the
+  // same network registering many reporter tokens. A stronger fingerprint would
+  // need to come from the SDK (e.g. FingerprintJS) and be added to the schema.
+  let deviceFingerprint: string | null = null
+  if (options?.ipAddress || options?.userAgent) {
+    const fpInput = encoder.encode(`${options?.ipAddress ?? ''}|${options?.userAgent ?? ''}`)
+    const fpBuffer = await crypto.subtle.digest('SHA-256', fpInput)
+    deviceFingerprint = Array.from(new Uint8Array(fpBuffer))
+      .map(b => b.toString(16).padStart(2, '0')).join('')
+  }
+
+  const antiGaming = await checkAntiGaming(db, projectId, tokenHash, deviceFingerprint ? {
+    fingerprint: deviceFingerprint,
+    ipAddress: options?.ipAddress,
+  } : null)
+  if (antiGaming.flagged) {
+    log.warn('Anti-gaming flagged report', { reporterToken: tokenHash, reason: antiGaming.reason })
+    const eventType = antiGaming.reason?.toLowerCase().startsWith('velocity')
+      ? 'velocity_anomaly' as const
+      : 'multi_account' as const
+    await logAntiGamingEvent(db, {
+      projectId,
+      reporterTokenHash: tokenHash,
+      deviceFingerprint,
+      ipAddress: options?.ipAddress ?? null,
+      userAgent: options?.userAgent ?? null,
+      eventType,
+      reason: antiGaming.reason ?? null,
+    })
+  }
 
   let screenshotUrl: string | null = null
   let screenshotPath: string | null = null
@@ -220,8 +255,10 @@ app.post('/v1/reports', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string
     const body = await c.req.json()
     const db = getServiceClient()
+    const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip')
+    const userAgent = c.req.header('user-agent')
 
-    const result = await ingestReport(db, projectId, body)
+    const result = await ingestReport(db, projectId, body, { ipAddress, userAgent })
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400)
     }
@@ -242,10 +279,12 @@ app.post('/v1/reports/batch', apiKeyAuth, async (c) => {
 
   const batch = reports.slice(0, 10)
   const db = getServiceClient()
+  const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip')
+  const userAgent = c.req.header('user-agent')
   const results: Array<{ reportId?: string; ok: boolean; error?: string }> = []
 
   const settled = await Promise.allSettled(
-    batch.map(report => ingestReport(db, projectId, report))
+    batch.map(report => ingestReport(db, projectId, report, { ipAddress, userAgent }))
   )
   for (const r of settled) {
     results.push(r.status === 'fulfilled' ? r.value : { ok: false, error: String((r as PromiseRejectedResult).reason) })
@@ -1221,6 +1260,208 @@ app.post('/v1/admin/intelligence', jwtAuth, async (c) => {
   })
   const result = await res.json()
   return c.json({ ok: true, data: result.data })
+})
+
+// ============================================================
+// Admin: telemetry & operational health
+// ============================================================
+
+app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: ownedProjects } = await db.from('projects').select('id').eq('owner_id', userId)
+  const projectIds = (ownedProjects ?? []).map(p => p.id)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { window: '24h', totalCalls: 0, fallbacks: 0, fallbackRate: 0, errors: 0, errorRate: 0, avgLatencyMs: 0, p95LatencyMs: 0, byModel: {}, recent: [] } })
+  }
+
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: invocations } = await db
+    .from('llm_invocations')
+    .select('function_name, used_model, primary_model, fallback_used, status, latency_ms, input_tokens, output_tokens, created_at')
+    .in('project_id', projectIds)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  const rows = invocations ?? []
+  const totalCalls = rows.length
+  const fallbacks = rows.filter(r => r.fallback_used).length
+  const errors = rows.filter(r => r.status !== 'success').length
+  const avgLatency = rows.length > 0
+    ? Math.round(rows.reduce((sum, r) => sum + (r.latency_ms ?? 0), 0) / rows.length)
+    : 0
+  const p95Latency = rows.length > 0
+    ? rows.map(r => r.latency_ms ?? 0).sort((a, b) => a - b)[Math.floor(rows.length * 0.95)] ?? 0
+    : 0
+
+  const byModel: Record<string, { calls: number; errors: number; tokens: number }> = {}
+  for (const r of rows) {
+    const key = r.used_model
+    byModel[key] ??= { calls: 0, errors: 0, tokens: 0 }
+    byModel[key].calls += 1
+    if (r.status !== 'success') byModel[key].errors += 1
+    byModel[key].tokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      window: '24h',
+      totalCalls,
+      fallbacks,
+      fallbackRate: totalCalls > 0 ? fallbacks / totalCalls : 0,
+      errors,
+      errorRate: totalCalls > 0 ? errors / totalCalls : 0,
+      avgLatencyMs: avgLatency,
+      p95LatencyMs: p95Latency,
+      byModel,
+      recent: rows.slice(0, 50),
+    },
+  })
+})
+
+app.get('/v1/admin/health/cron', jwtAuth, async (c) => {
+  const db = getServiceClient()
+  const { data: runs } = await db
+    .from('cron_runs')
+    .select('*')
+    .order('started_at', { ascending: false })
+    .limit(100)
+
+  const byJob: Record<string, { lastRun: string | null; lastStatus: string | null; successRate: number; avgDurationMs: number; runs: number }> = {}
+  for (const r of runs ?? []) {
+    byJob[r.job_name] ??= { lastRun: null, lastStatus: null, successRate: 0, avgDurationMs: 0, runs: 0 }
+    const j = byJob[r.job_name]
+    if (!j.lastRun) {
+      j.lastRun = r.started_at
+      j.lastStatus = r.status
+    }
+    j.runs += 1
+  }
+  for (const job of Object.keys(byJob)) {
+    const jobRuns = (runs ?? []).filter(r => r.job_name === job)
+    const successes = jobRuns.filter(r => r.status === 'success').length
+    byJob[job].successRate = jobRuns.length > 0 ? successes / jobRuns.length : 0
+    const durations = jobRuns.map(r => r.duration_ms ?? 0).filter(d => d > 0)
+    byJob[job].avgDurationMs = durations.length > 0
+      ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
+      : 0
+  }
+
+  return c.json({ ok: true, data: { byJob, recent: (runs ?? []).slice(0, 30) } })
+})
+
+app.post('/v1/admin/health/cron/:job/trigger', jwtAuth, async (c) => {
+  const job = c.req.param('job')
+  const allowed = ['judge-batch', 'intelligence-report'] as const
+  if (!allowed.includes(job as typeof allowed[number])) {
+    return c.json({ ok: false, error: { code: 'UNKNOWN_JOB', message: `Unknown job: ${job}` } }, 400)
+  }
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+
+  const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${job}`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ projectId: project?.id, trigger: 'manual' }),
+  })
+  const result = await res.json().catch(() => ({}))
+  return c.json({ ok: res.ok, data: result.data ?? result })
+})
+
+// Resolve the set of project ids owned by the authenticated user. Used by
+// every multi-tenant admin endpoint to scope queries — without this, any
+// authenticated user could read every other project's data.
+async function ownedProjectIds(db: ReturnType<typeof getServiceClient>, userId: string): Promise<string[]> {
+  const { data } = await db.from('projects').select('id').eq('owner_id', userId)
+  return (data ?? []).map(p => p.id)
+}
+
+app.get('/v1/admin/anti-gaming/devices', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { devices: [] } })
+
+  const flagged = c.req.query('flagged') === 'true'
+  let q = db
+    .from('reporter_devices')
+    .select('*')
+    .in('project_id', projectIds)
+    .order('updated_at', { ascending: false })
+    .limit(200)
+  if (flagged) q = q.eq('flagged_as_suspicious', true)
+  const { data, error } = await q
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { devices: data ?? [] } })
+})
+
+app.get('/v1/admin/anti-gaming/events', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { events: [] } })
+
+  const { data, error } = await db
+    .from('anti_gaming_events')
+    .select('*')
+    .in('project_id', projectIds)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { events: data ?? [] } })
+})
+
+app.post('/v1/admin/anti-gaming/devices/:id/unflag', jwtAuth, async (c) => {
+  const id = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Device not found' } }, 404)
+
+  const { data: device, error: fetchErr } = await db
+    .from('reporter_devices')
+    .select('project_id, device_fingerprint, reporter_tokens')
+    .eq('id', id)
+    .in('project_id', projectIds)
+    .single()
+  if (fetchErr || !device) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Device not found' } }, 404)
+
+  const { error } = await db
+    .from('reporter_devices')
+    .update({ flagged_as_suspicious: false, flag_reason: null })
+    .eq('id', id)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  await logAntiGamingEvent(db, {
+    projectId: device.project_id,
+    reporterTokenHash: device.reporter_tokens?.[0] ?? 'unknown',
+    deviceFingerprint: device.device_fingerprint,
+    eventType: 'unflag',
+    reason: 'Manual unflag from admin console',
+  })
+  return c.json({ ok: true, data: { id, unflagged: true } })
+})
+
+app.get('/v1/admin/notifications', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { notifications: [] } })
+
+  const { data, error } = await db
+    .from('reporter_notifications')
+    .select('*')
+    .in('project_id', projectIds)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { notifications: data ?? [] } })
 })
 
 Deno.serve(app.fetch)
