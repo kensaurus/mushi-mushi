@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@mushi/eslint-config": "workspace:*",
+    "eslint": "^9.39.4",
     "svelte": "^5.0.0",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3"

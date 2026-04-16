@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Badge, Btn, FilterSelect, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, Card, Badge, Btn, FilterSelect, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface AuditEntry {
   id: string
@@ -58,7 +58,9 @@ export function AuditPage() {
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV</Btn>
       </PageHeader>
 
-      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load audit logs." onRetry={() => setRetryKey(k => k + 1)} /> : (
+      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load audit logs." onRetry={() => setRetryKey(k => k + 1)} /> : logs.length === 0 ? (
+        <EmptyState title="No audit entries" description="Actions like report triage, settings changes, and key management will be logged here." />
+      ) : (
         <div className="space-y-0.5">
           {logs.map((entry) => (
             <Card key={entry.id} className="flex items-center gap-3 px-3 py-1.5">
