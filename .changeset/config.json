@@ -7,5 +7,11 @@
   "access": "public",
   "baseBranch": "master",
   "updateInternalDependencies": "patch",
-  "ignore": ["@mushi-mushi/server", "@mushi-mushi/admin", "@mushi-mushi/docs"]
+  "ignore": [
+    "@mushi-mushi/server",
+    "@mushi-mushi/agents",
+    "@mushi-mushi/verify",
+    "@mushi-mushi/admin",
+    "@mushi-mushi/docs"
+  ]
 }

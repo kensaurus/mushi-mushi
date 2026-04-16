@@ -36,6 +36,15 @@ const orchestrator = new FixOrchestrator(supabaseClient, {
 await orchestrator.run(reportId)
 ```
 
+## Agent Configuration
+
+The orchestrator reads `autofix_agent` and `autofix_mcp_server_url` from the project's `project_settings` row in Supabase. For `generic_mcp`, the MCP server URL is required:
+
+| Setting | Values | Default |
+|---------|--------|---------|
+| `autofix_agent` | `claude_code`, `codex`, `generic_mcp` | `claude_code` |
+| `autofix_mcp_server_url` | URL of the MCP-compatible agent server | — |
+
 ## Status
 
 The `GenericMCPAgent` is the primary production adapter. `ClaudeCodeAgent` and `CodexAgent` are experimental stubs pending direct API integration.

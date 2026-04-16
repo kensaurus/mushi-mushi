@@ -24,7 +24,7 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "lint": "eslint src/",
-    "test": "echo 'no tests yet'",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -37,7 +37,8 @@
     "@types/node": "^22.0.0",
     "eslint": "^9.39.4",
     "tsup": "^8.4.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^3.2.1"
   },
   "repository": {
     "type": "git",

@@ -52,6 +52,27 @@ Mushi.init({
 
 ### With Proactive Triggers
 
+Proactive triggers are wired into `Mushi.init()` automatically when `config.proactive` is provided. The SDK opens the widget when a trigger fires, gated by fatigue prevention:
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'your-api-key',
+  proactive: {
+    rageClick: true,
+    longTask: true,
+    apiCascade: true,
+    cooldown: {
+      maxProactivePerSession: 2,
+      dismissCooldownHours: 24,
+      suppressAfterDismissals: 3,
+    },
+  },
+});
+```
+
+For manual composition (advanced), the lower-level APIs are also exported:
+
 ```typescript
 import { createProactiveManager, setupProactiveTriggers } from '@mushi-mushi/web';
 
@@ -60,7 +81,7 @@ const manager = createProactiveManager({ maxProactivePerSession: 2 });
 setupProactiveTriggers({
   onTrigger: (type, context) => {
     if (manager.shouldShow(type)) {
-      // Open widget with pre-filled context
+      // Custom handling
     }
   },
 });

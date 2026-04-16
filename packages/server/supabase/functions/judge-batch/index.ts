@@ -5,6 +5,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { sendSlackNotification } from '../_shared/slack.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { recordPromptResult, checkPromotionEligibility, promoteCandidate } from '../_shared/prompt-ab.ts'
 
 const judgeSchema = z.object({
   accuracy: z.number().min(0).max(1).describe('Does the category match the described issue?'),
@@ -23,8 +24,10 @@ const judgeSchema = z.object({
 Deno.serve(async (req) => {
   try {
     const auth = req.headers.get('Authorization')
-    if (!auth?.includes('service_role')) {
-      return new Response(JSON.stringify({ error: 'Requires service_role key' }), { status: 401 })
+    const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
+    if (!token || !expectedKey || token !== expectedKey) {
+      return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
     }
 
     const db = getServiceClient()
@@ -57,7 +60,7 @@ Deno.serve(async (req) => {
 
       const { data: reports } = await db
         .from('reports')
-        .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs')
+        .select('id, description, user_category, category, severity, summary, component, confidence, stage1_classification, stage2_analysis, reproduction_steps, environment, console_logs, stage1_prompt_version, stage2_prompt_version')
         .eq('project_id', project.id)
         .in('status', ['classified', 'grouped', 'fixing', 'fixed'])
         .is('judge_evaluated_at', null)
@@ -78,8 +81,15 @@ Deno.serve(async (req) => {
           const { object: evaluation, usage } = await generateObject({
             model: anthropic(modelId),
             schema: judgeSchema,
-            system: `You are a senior QA engineer evaluating the quality of an automated bug classification. Be strict but fair.`,
-            prompt: `Evaluate this classification:
+            messages: [
+              {
+                role: 'system',
+                content: `You are a senior QA engineer evaluating the quality of an automated bug classification. Be strict but fair.`,
+                experimental_providerMetadata: {
+                  anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
+              },
+              { role: 'user', content: `Evaluate this classification:
 
 **Original Report:**
 Description: ${report.description}
@@ -99,7 +109,8 @@ ${JSON.stringify(report.stage2_analysis ?? {}).slice(0, 1000)}
 **Reproduction Steps:**
 ${JSON.stringify(report.reproduction_steps ?? []).slice(0, 500)}
 
-Score each dimension 0-1. Be critical of vague components, miscalibrated severity, and non-actionable repro steps.`,
+Score each dimension 0-1. Be critical of vague components, miscalibrated severity, and non-actionable repro steps.` },
+            ],
           })
 
           const compositeScore = (
@@ -129,6 +140,16 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             judge_evaluated_at: new Date().toISOString(),
           }).eq('id', report.id)
 
+          // Track prompt A/B scores per version
+          if (report.stage1_prompt_version) {
+            recordPromptResult(db, report.id, report.stage1_prompt_version, compositeScore)
+              .catch(e => rootLog.child('judge').error('recordPromptResult stage1 failed', { err: String(e) }))
+          }
+          if (report.stage2_prompt_version) {
+            recordPromptResult(db, report.id, report.stage2_prompt_version, compositeScore)
+              .catch(e => rootLog.child('judge').error('recordPromptResult stage2 failed', { err: String(e) }))
+          }
+
           totalEvaluated++
           span.end({ model: modelId, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         } catch (err) {
@@ -157,6 +178,34 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               }).catch(e => rootLog.child('judge').error('Slack drift alert failed', { err: String(e) }))
             }
           }
+        }
+      }
+
+      // Auto-promote candidate prompts if eligible
+      for (const stage of ['stage1', 'stage2', 'judge'] as const) {
+        try {
+          const eligibility = await checkPromotionEligibility(db, project.id, stage)
+          if (eligibility.shouldPromote) {
+            const { data: candidateRow } = await db
+              .from('prompt_versions')
+              .select('version')
+              .eq('project_id', project.id)
+              .eq('stage', stage)
+              .eq('is_candidate', true)
+              .single()
+
+            if (candidateRow) {
+              await promoteCandidate(db, project.id, stage, candidateRow.version)
+              rootLog.child('judge').info('Auto-promoted candidate prompt', {
+                projectId: project.id,
+                stage,
+                version: candidateRow.version,
+                reason: eligibility.reason,
+              })
+            }
+          }
+        } catch (e) {
+          rootLog.child('judge').error('Promotion check failed', { projectId: project.id, stage, err: String(e) })
         }
       }
 

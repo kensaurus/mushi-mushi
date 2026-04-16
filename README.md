@@ -1,5 +1,6 @@
 # Mushi Mushi 虫虫
 
+[![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6.svg)](https://typescriptlang.org)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
@@ -94,31 +95,46 @@ function App() {
 ### Other Frameworks
 
 <details>
-<summary><b>Vue 3</b></summary>
+<summary><b>Vue 3</b> (API-only — add <code>@mushi-mushi/web</code> for widget UI)</summary>
 
 ```ts
+// Error capture + API reporting (no widget)
 import { MushiPlugin } from '@mushi-mushi/vue'
 app.use(MushiPlugin, { projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
+
+// To also get the widget UI, add @mushi-mushi/web:
+import { Mushi } from '@mushi-mushi/web'
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
 
 <details>
-<summary><b>Svelte / SvelteKit</b></summary>
+<summary><b>Svelte / SvelteKit</b> (API-only — add <code>@mushi-mushi/web</code> for widget UI)</summary>
 
 ```ts
+// Error capture + API reporting (no widget)
 import { initMushi } from '@mushi-mushi/svelte'
 initMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
+
+// To also get the widget UI, add @mushi-mushi/web:
+import { Mushi } from '@mushi-mushi/web'
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
 
 <details>
-<summary><b>Angular</b></summary>
+<summary><b>Angular</b> (API-only — add <code>@mushi-mushi/web</code> for widget UI)</summary>
 
 ```ts
+// Error capture + API reporting (no widget)
 import { provideMushi } from '@mushi-mushi/angular'
 bootstrapApplication(AppComponent, {
   providers: [provideMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })]
 })
+
+// To also get the widget UI, add @mushi-mushi/web:
+import { Mushi } from '@mushi-mushi/web'
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
 
@@ -163,68 +179,74 @@ Mushi Mushi is designed as a **companion** to your existing monitoring, not a re
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Your App                             │
-│  ┌─────────┐  ┌──────────┐  ┌───────────┐  ┌───────────┐  │
-│  │ @mushi-mushi/ │  │ @mushi-mushi/  │  │ @mushi-mushi/   │  │ @mushi-mushi/   │  │
-│  │  react  │  │   vue    │  │  svelte   │  │  angular  │  │
-│  └────┬────┘  └────┬─────┘  └─────┬─────┘  └─────┬─────┘  │
-│       └─────────┬──┴──────────────┘               │        │
-│            ┌────▼────┐                             │        │
-│            │ @mushi-mushi/ │◄────────────────────────────┘        │
-│            │   web   │  Shadow DOM widget + capture          │
-│            └────┬────┘                                      │
-│            ┌────▼────┐                                      │
-│            │ @mushi-mushi/ │  Types, API client, offline queue     │
-│            │  core   │                                      │
-│            └────┬────┘                                      │
-└─────────────────┼───────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                          Your App                            │
+│                                                              │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌───────────────┐   │
+│  │  react   │ │   vue    │ │  svelte  │ │    angular    │   │
+│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬────────┘   │
+│       └─────────┬──┴────────────┘               │            │
+│            ┌────▼─────┐                         │            │
+│            │   web    │◄────────────────────────┘            │
+│            │ (widget) │  Shadow DOM widget + capture         │
+│            └────┬─────┘                                      │
+│            ┌────▼─────┐                                      │
+│            │   core   │  Types, API client, offline queue    │
+│            └────┬─────┘                                      │
+└─────────────────┼────────────────────────────────────────────┘
                   │ HTTPS
-┌─────────────────▼───────────────────────────────────────────┐
-│              Supabase Edge Functions                        │
-│                                                             │
-│  ┌───────────┐  ┌──────────────┐  ┌──────────────────────┐ │
-│  │   API     │  │ fast-filter  │  │  classify-report     │ │
-│  │  (Hono)   │  │  (Haiku)     │  │  (Sonnet + Vision)   │ │
-│  └───────────┘  └──────────────┘  └──────────────────────┘ │
-│                                                             │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │  Knowledge Graph · RAG · NL Queries · Dedup · Ontology │ │
-│  └────────────────────────────────────────────────────────┘ │
-│                                                             │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │  judge-batch  │  │  gen-synth   │  │ intel-report     │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
-│                                                             │
-│                    PostgreSQL (Supabase)                     │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────▼────────────────────────────────────────────┐
+│              Supabase Edge Functions                         │
+│                                                              │
+│  ┌───────────┐  ┌──────────────┐  ┌───────────────────────┐ │
+│  │   API     │  │ fast-filter  │  │  classify-report      │ │
+│  │  (Hono)   │  │  (Haiku)     │  │  (Sonnet + Vision)    │ │
+│  └───────────┘  └──────────────┘  └───────────────────────┘ │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  Knowledge Graph · RAG · NL Queries · Dedup · Ontology  │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│                                                              │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │  judge-batch  │  │  gen-synth   │  │ intel-report      │  │
+│  └──────────────┘  └──────────────┘  └───────────────────┘  │
+│                                                              │
+│                    PostgreSQL (Supabase)                      │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Packages
 
-### SDK (MIT — use freely)
+### Pick the SDK for your framework
 
-| Package | What | Size |
-|---------|------|------|
-| [`@mushi-mushi/core`](./packages/core) | Types, API client, pre-filter, offline queue, rate limiter | ~3 KB |
-| [`@mushi-mushi/web`](./packages/web) | Browser SDK — Shadow DOM widget, screenshot, console/network capture | ~6 KB |
-| [`@mushi-mushi/react`](./packages/react) | Provider, hooks, ErrorBoundary | ~1 KB |
-| [`@mushi-mushi/react-native`](./packages/react-native) | Shake-to-report, offline queue, navigation capture | — |
-| [`@mushi-mushi/vue`](./packages/vue) | Vue 3 plugin + composables | — |
-| [`@mushi-mushi/svelte`](./packages/svelte) | Context API + SvelteKit error hook | — |
-| [`@mushi-mushi/angular`](./packages/angular) | Injectable service + ErrorHandler | — |
-| [`@mushi-mushi/cli`](./packages/cli) | CLI for project management, report triage | — |
-| [`@mushi-mushi/mcp`](./packages/mcp) | MCP server — expose reports to coding agents | — |
+> **Most developers only need one package.** Install the one that matches your framework — it pulls in `core` and `web` automatically.
+
+| Install | Framework | What you get | npm |
+|---------|-----------|-------------|-----|
+| `npm i @mushi-mushi/react` | **React / Next.js** | `<MushiProvider>`, `useMushi()` hook, `<MushiErrorBoundary>` — drop-in for any React app | [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react) |
+| `npm i @mushi-mushi/vue` | **Vue 3 / Nuxt** | `MushiPlugin` for `app.use()`, `useMushi()` composable, error handler — API-only (no widget UI, use `@mushi-mushi/web` for the widget) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/vue?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/vue) |
+| `npm i @mushi-mushi/svelte` | **Svelte / SvelteKit** | `initMushi()`, SvelteKit error hook, report submission — API-only (no widget UI, use `@mushi-mushi/web` for the widget) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/svelte?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/svelte) |
+| `npm i @mushi-mushi/angular` | **Angular 17+** | `provideMushi()` factory, injectable `MushiService`, error handler — API-only (no widget UI, use `@mushi-mushi/web` for the widget) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/angular?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/angular) |
+| `npm i @mushi-mushi/react-native` | **React Native / Expo** | Shake-to-report, bottom sheet widget, navigation capture, offline queue | [![npm](https://img.shields.io/npm/v/@mushi-mushi/react-native?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react-native) |
+| `npm i @mushi-mushi/web` | **Vanilla JS / any framework** | Framework-agnostic browser SDK — Shadow DOM widget, screenshot, console/network capture | [![npm](https://img.shields.io/npm/v/@mushi-mushi/web?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/web) |
+
+### Internal packages (you probably don't need these directly)
+
+| Package | npm | Purpose |
+|---------|-----|---------|
+| [`@mushi-mushi/core`](./packages/core) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/core?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/core) | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, structured logger. Auto-installed as a dependency. |
+| [`@mushi-mushi/cli`](./packages/cli) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/cli?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/cli) | CLI for project setup, report listing, and triage. Install globally: `npm i -g @mushi-mushi/cli` |
+| [`@mushi-mushi/mcp`](./packages/mcp) | [![npm](https://img.shields.io/npm/v/@mushi-mushi/mcp?label=&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp) | MCP server — lets AI coding agents (Cursor, Copilot, Claude) read and triage bug reports |
 
 ### Backend ([BSL 1.1](./packages/server/LICENSE) → Apache 2.0 in 2029)
 
-| Package | What |
-|---------|------|
-| `@mushi-mushi/server` | Supabase Edge Functions — LLM pipeline, knowledge graph, enterprise features |
-| `@mushi-mushi/agents` | Agentic fix pipeline — Claude Code, Codex, generic MCP adapters |
-| `@mushi-mushi/verify` | Playwright-based fix verification with visual diff |
+| Package | Purpose |
+|---------|---------|
+| `@mushi-mushi/server` | Supabase Edge Functions — 2-stage LLM pipeline, knowledge graph, enterprise features |
+| `@mushi-mushi/agents` | Agentic fix pipeline — Claude Code, Codex, generic MCP adapters for auto-generating PRs |
+| `@mushi-mushi/verify` | Playwright-based fix verification with screenshot visual diff |
 
 ---
 
@@ -232,7 +254,7 @@ Mushi Mushi is designed as a **companion** to your existing monitoring, not a re
 
 ### Option A: Hosted (easiest)
 
-1. Sign up at the admin console
+1. Sign up at **[kensaur.us/mushi-mushi](https://kensaur.us/mushi-mushi/)** (the admin console)
 2. Create a project → get your `projectId` and `apiKey`
 3. Drop the SDK into your app (see Quick Start above)
 
@@ -322,6 +344,29 @@ git clone https://github.com/kensaurus/mushi-mushi.git
 cd mushi-mushi
 pnpm install
 pnpm build
+```
+
+### Admin Console
+
+The admin console works out of the box — no `.env` needed. It auto-connects to Mushi Mushi Cloud:
+
+```bash
+cd apps/admin
+pnpm dev    # → http://localhost:6464 — sign up and start using
+```
+
+To self-host with your own Supabase project, copy `.env.example` and fill in your credentials:
+
+```bash
+cp apps/admin/.env.example apps/admin/.env   # fill in your Supabase URL + anon key
+```
+
+### Backend / Edge Functions
+
+For backend development, copy the root `.env.example` and fill in API keys:
+
+```bash
+cp .env.example .env   # fill in Supabase + LLM provider keys
 ```
 
 Requires Node.js >= 22 and pnpm >= 10.

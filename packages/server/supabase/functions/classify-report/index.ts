@@ -11,6 +11,7 @@ import { createNotification, buildNotificationMessage } from '../_shared/notific
 import { log as rootLog } from '../_shared/logger.ts'
 import { getAvailableTags, formatTagsForPrompt, applyTags } from '../_shared/ontology.ts'
 import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
 const stage2Schema = z.object({
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Refined bug category'),
@@ -67,6 +68,11 @@ Deno.serve(async (req) => {
       .single()
 
     const trace = createTrace('classify-report', { reportId, projectId })
+
+    // Resolve prompt A/B test for stage2
+    const promptSelection = await getPromptForStage(db, projectId, 'stage2')
+    const activeSystemPrompt = promptSelection.promptTemplate ?? SYSTEM_PROMPT
+
     const scrubbedReport = scrubReport(report)
     const extraction = stage1Extraction ?? scrubbedReport.extracted_symptoms ?? scrubbedReport.stage1_classification
 
@@ -133,8 +139,16 @@ ${ontologyContext}`
       const { object, usage } = await generateObject({
         model: anthropic(modelId),
         schema: stage2Schema,
-        system: SYSTEM_PROMPT,
-        prompt,
+        messages: [
+          {
+            role: 'system',
+            content: activeSystemPrompt,
+            experimental_providerMetadata: {
+              anthropic: { cacheControl: { type: 'ephemeral' } },
+            },
+          },
+          { role: 'user', content: prompt },
+        ],
       })
       classification = object
       tokenUsage = usage ?? {}
@@ -148,7 +162,7 @@ ${ontologyContext}`
       const { object, usage } = await generateObject({
         model: openai('gpt-4.1'),
         schema: stage2Schema,
-        system: SYSTEM_PROMPT,
+        system: activeSystemPrompt,
         prompt,
       })
       classification = object
@@ -170,6 +184,7 @@ ${ontologyContext}`
       .update({
         stage2_analysis: classification,
         stage2_model: usedModel,
+        stage2_prompt_version: promptSelection.promptVersion,
         stage2_latency_ms: latencyMs,
         category: classification.category,
         severity: classification.severity,

@@ -111,10 +111,11 @@ program
     }
   })
 
-program
-  .command('deploy')
-  .description('Check edge function health')
+const deploy = program.command('deploy').description('Deployment management')
+
+deploy
   .command('check')
+  .description('Check edge function health')
   .action(async () => {
     const config = loadConfig()
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }

@@ -57,15 +57,23 @@ export class MushiWidget {
     this.render();
   }
 
-  open(): void {
+  open(options?: { category?: MushiReportCategory }): void {
     if (this.isOpen) return;
     this.isOpen = true;
-    this.step = 'category';
-    this.selectedCategory = null;
-    this.selectedIntent = null;
     this.screenshotAttached = false;
     this.elementSelected = false;
     this.submitting = false;
+
+    if (options?.category) {
+      this.selectedCategory = options.category;
+      this.selectedIntent = null;
+      this.step = 'intent';
+    } else {
+      this.selectedCategory = null;
+      this.selectedIntent = null;
+      this.step = 'category';
+    }
+
     this.render();
     this.callbacks.onOpen();
   }

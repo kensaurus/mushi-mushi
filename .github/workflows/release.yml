@@ -1,8 +1,20 @@
+# FILE: release.yml
+# PURPOSE: Version packages via Changesets PR and publish to npm on merge
+#
+# FLOW:
+#   1. Push with changesets → creates/updates "Version Packages" PR
+#   2. "Version Packages" PR merged → publishes all bumped packages to npm
+#
+# REQUIREMENTS:
+#   - NPM_TOKEN GitHub secret (Granular Access Token with "Bypass 2FA" enabled)
+#   - npm Trusted Publisher configured per package on npmjs.com (for provenance)
+#   - GITHUB_TOKEN auto-provided (needs contents:write + pull-requests:write)
+
 name: Release
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -12,8 +24,32 @@ permissions:
   id-token: write
 
 jobs:
+  ci:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm test
+
   release:
     name: Version & Publish
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +70,18 @@ jobs:
         with:
           version: pnpm version-packages
           publish: pnpm release
+          title: "chore: version packages"
+          commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+
+      - name: Published packages summary
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          echo "## 📦 Published packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.changesets.outputs.publishedPackages }}' | jq '.' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

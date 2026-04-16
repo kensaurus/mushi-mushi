@@ -100,10 +100,18 @@ export class FixOrchestrator {
     }
   }
 
-  selectAgent(agentName: string): FixAgent {
+  selectAgent(agentName: string, mcpServerUrl?: string): FixAgent {
     switch (agentName) {
       case 'codex': return new CodexAgent()
-      case 'generic_mcp': return new GenericMCPAgent('')
+      case 'generic_mcp': {
+        if (!mcpServerUrl) {
+          throw new Error(
+            'generic_mcp agent requires autofix_mcp_server_url in project_settings. ' +
+            'Set it to the URL of your MCP-compatible fix server (e.g., http://localhost:3100).'
+          )
+        }
+        return new GenericMCPAgent(mcpServerUrl)
+      }
       default: return new ClaudeCodeAgent()
     }
   }
@@ -123,11 +131,14 @@ export class FixOrchestrator {
     try {
       const { data: settings } = await this.db
         .from('project_settings')
-        .select('autofix_agent')
+        .select('autofix_agent, autofix_mcp_server_url')
         .eq('project_id', context.projectId)
         .single()
 
-      const agent = this.selectAgent(settings?.autofix_agent ?? 'claude_code')
+      const agent = this.selectAgent(
+        settings?.autofix_agent ?? 'claude_code',
+        settings?.autofix_mcp_server_url,
+      )
       const result = await agent.generateFix(context)
 
       let prUrl: string | undefined

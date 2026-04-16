@@ -12,6 +12,7 @@ import { awardPoints } from '../_shared/reputation.ts'
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts'
 import { buildReportGraph, detectRegression } from '../_shared/knowledge-graph.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -65,6 +66,10 @@ Deno.serve(async (req) => {
     const confidenceThreshold = settings?.stage1_confidence_threshold ?? 0.85
     const trace = createTrace('fast-filter', { reportId, projectId })
 
+    // Resolve prompt A/B test for stage1
+    const promptSelection = await getPromptForStage(db, projectId, 'stage1')
+    const activeSystemPrompt = promptSelection.promptTemplate ?? SYSTEM_PROMPT
+
     const scrubbedReport = scrubReport(report)
 
     const consoleErrors = (scrubbedReport.console_logs ?? [])
@@ -103,8 +108,16 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       const { object, usage } = await generateObject({
         model: anthropic('claude-haiku-4-5-20241022'),
         schema: stage1Schema,
-        system: SYSTEM_PROMPT,
-        prompt: userPrompt,
+        messages: [
+          {
+            role: 'system',
+            content: activeSystemPrompt,
+            experimental_providerMetadata: {
+              anthropic: { cacheControl: { type: 'ephemeral' } },
+            },
+          },
+          { role: 'user', content: userPrompt },
+        ],
       })
       classification = object
       tokenUsage = usage ?? {}
@@ -118,7 +131,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       const { object, usage } = await generateObject({
         model: openai('gpt-4.1-mini'),
         schema: stage1Schema,
-        system: SYSTEM_PROMPT,
+        system: activeSystemPrompt,
         prompt: userPrompt,
       })
       classification = object
@@ -138,6 +151,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       },
       stage1_classification: classification,
       stage1_model: usedModel,
+      stage1_prompt_version: promptSelection.promptVersion,
       stage1_latency_ms: latencyMs,
       category: classification.category,
       severity: classification.severity,

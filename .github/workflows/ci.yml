@@ -1,10 +1,14 @@
+# FILE: ci.yml
+# PURPOSE: Run build, typecheck, lint, tests, and bundle size checks on PRs
+#
+# NOTE: Pushes to master are handled by release.yml (which includes its own
+# CI job before the release step). This avoids duplicate CI runs.
+
 name: CI
 
 on:
-  push:
-    branches: [master, main]
   pull_request:
-    branches: [master, main]
+    branches: [master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

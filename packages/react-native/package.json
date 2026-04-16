@@ -8,7 +8,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
-    "test": "echo 'no tests yet'",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -31,7 +31,8 @@
     "react": "^19.1.0",
     "react-native": "^0.79.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.1"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

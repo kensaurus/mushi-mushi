@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Section, Input, SelectField, Btn, Loading, Checkbox, ErrorAlert } from '../components/ui'
+import { PageHeader, Section, Input, SelectField, Btn, Loading, Checkbox, ErrorAlert, Card, Toggle } from '../components/ui'
+import { ConnectionStatus } from '../components/ConnectionStatus'
+import { isDebugEnabled, setDebugEnabled } from '../lib/debug'
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -124,6 +126,77 @@ export function SettingsPage() {
         </Btn>
         {message && <span className="text-xs text-fg-muted">{message}</span>}
       </div>
+
+      {/* Connection Health */}
+      <Card className="p-4">
+        <ConnectionStatus />
+      </Card>
+
+      {/* SDK Endpoint Reference */}
+      <Section title="SDK Configuration Reference">
+        <p className="text-2xs text-fg-faint mb-2">Use these values when configuring the Mushi SDK in your app:</p>
+        <div className="space-y-1.5">
+          <div>
+            <span className="text-2xs text-fg-faint">API Endpoint</span>
+            <code className="block text-xs font-mono text-fg-secondary bg-surface-raised px-2 py-1 rounded-sm mt-0.5 select-all">
+              {import.meta.env.VITE_API_URL || `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/api`}
+            </code>
+          </div>
+        </div>
+      </Section>
+
+      {/* Quick Test */}
+      <QuickTestSection />
+
+      {/* Debug mode */}
+      <Section title="Developer Tools">
+        <Toggle
+          label="Debug mode — log all API calls, auth events, and timings to browser console"
+          checked={isDebugEnabled()}
+          onChange={(v) => { setDebugEnabled(v); window.location.reload() }}
+        />
+      </Section>
     </div>
+  )
+}
+
+function QuickTestSection() {
+  const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
+  const [detail, setDetail] = useState('')
+
+  async function runTest() {
+    setStatus('running')
+    setDetail('')
+    const res = await apiFetch<{ reportId: string }>('/v1/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        projectId: 'settings-test',
+        description: 'Settings page quick test — verifying pipeline',
+        category: 'other',
+        environment: { url: 'admin://settings-test', browser: 'mushi-admin', userAgent: navigator.userAgent, platform: navigator.platform, language: navigator.language, viewport: { width: window.innerWidth, height: window.innerHeight }, referrer: '', timestamp: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+        reporterToken: 'settings-test',
+      }),
+    })
+    if (res.ok) {
+      setStatus('pass')
+      setDetail(res.data?.reportId ? `Report ID: ${res.data.reportId}` : 'Report submitted')
+    } else {
+      setStatus('fail')
+      setDetail(res.error?.message ?? 'Submission failed')
+    }
+  }
+
+  return (
+    <Section title="Pipeline Quick Test">
+      <p className="text-2xs text-fg-faint mb-2">Submit a test report to verify the ingest pipeline works end-to-end.</p>
+      <div className="flex items-center gap-3">
+        <Btn size="sm" variant={status === 'pass' ? 'ghost' : 'primary'} onClick={runTest} disabled={status === 'running'}>
+          {status === 'running' ? 'Sending…' : status === 'pass' ? '✓ Passed' : 'Send test report'}
+        </Btn>
+        {detail && (
+          <span className={`text-2xs ${status === 'pass' ? 'text-ok' : 'text-danger'}`}>{detail}</span>
+        )}
+      </div>
+    </Section>
   )
 }
