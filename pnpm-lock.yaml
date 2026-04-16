@@ -33,10 +33,10 @@ importers:
         specifier: ^7.5.0
         version: 7.14.1(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
-      '@mushi/tsconfig':
+      '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@tailwindcss/vite':
@@ -75,7 +75,7 @@ importers:
         specifier: ^2.49.0
         version: 2.103.1
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
       eslint:
@@ -96,11 +96,11 @@ importers:
       '@angular/core':
         specifier: '>=17'
         version: 21.2.9(rxjs@7.8.2)
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
       eslint:
@@ -119,7 +119,7 @@ importers:
         specifier: ^13.1.0
         version: 13.1.0
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
       '@types/node':
@@ -140,10 +140,10 @@ importers:
 
   packages/core:
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
-      '@mushi/tsconfig':
+      '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@size-limit/file':
@@ -173,14 +173,14 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.1
         version: 1.29.0(zod@3.25.76)
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
       zod:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
       '@types/node':
@@ -198,17 +198,17 @@ importers:
 
   packages/react:
     dependencies:
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
-      '@mushi/web':
+      '@mushi-mushi/web':
         specifier: workspace:*
         version: link:../web
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
-      '@mushi/tsconfig':
+      '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@size-limit/file':
@@ -278,11 +278,11 @@ importers:
 
   packages/server:
     dependencies:
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@mushi/tsconfig':
+      '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       supabase:
@@ -294,11 +294,11 @@ importers:
 
   packages/svelte:
     dependencies:
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
       eslint:
@@ -335,11 +335,11 @@ importers:
 
   packages/vue:
     dependencies:
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
       eslint:
@@ -357,14 +357,14 @@ importers:
 
   packages/web:
     dependencies:
-      '@mushi/core':
+      '@mushi-mushi/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
-      '@mushi/eslint-config':
+      '@mushi-mushi/eslint-config':
         specifier: workspace:*
         version: link:../../tooling/eslint-config
-      '@mushi/tsconfig':
+      '@mushi-mushi/tsconfig':
         specifier: workspace:*
         version: link:../../tooling/tsconfig
       '@size-limit/file':

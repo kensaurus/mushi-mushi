@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
-import type { MushiSDKInstance, MushiReportCategory } from '@mushi/core';
-import { createLogger } from '@mushi/core';
+import type { MushiSDKInstance, MushiReportCategory } from '@mushi-mushi/core';
+import { createLogger } from '@mushi-mushi/core';
 import { useMushiContext } from './provider';
 
 const log = createLogger({ scope: 'mushi:react' });

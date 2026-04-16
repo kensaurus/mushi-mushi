@@ -1,11 +1,11 @@
-# @mushi/svelte
+# @mushi-mushi/svelte
 
 Svelte SDK for Mushi Mushi bug reporting.
 
 ## Usage
 
 ```ts
-import { initMushi, getMushi } from '@mushi/svelte'
+import { initMushi, getMushi } from '@mushi-mushi/svelte'
 
 initMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 
@@ -17,7 +17,7 @@ mushi.submitReport({ title: 'broken', description: '...' })
 ### SvelteKit error handler
 
 ```ts
-import { createMushiErrorHandler } from '@mushi/svelte'
+import { createMushiErrorHandler } from '@mushi-mushi/svelte'
 
 export const handleError = createMushiErrorHandler()
 ```

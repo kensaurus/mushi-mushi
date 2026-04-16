@@ -1,4 +1,4 @@
-import type { MushiSelectedElement } from '@mushi/core';
+import type { MushiSelectedElement } from '@mushi-mushi/core';
 
 export interface ElementSelector {
   activate(): Promise<MushiSelectedElement | null>;

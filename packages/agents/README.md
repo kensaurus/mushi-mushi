@@ -1,4 +1,4 @@
-# @mushi/agents
+# @mushi-mushi/agents
 
 Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-generate fix PRs from classified bug reports.
 
@@ -25,7 +25,7 @@ Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-gene
 ## Usage
 
 ```ts
-import { FixOrchestrator } from '@mushi/agents'
+import { FixOrchestrator } from '@mushi-mushi/agents'
 
 const orchestrator = new FixOrchestrator(supabaseClient, {
   githubToken: process.env.GITHUB_TOKEN,

@@ -1,11 +1,11 @@
-# @mushi/mcp
+# @mushi-mushi/mcp
 
 MCP (Model Context Protocol) server that exposes Mushi Mushi reports to coding agents.
 
 ## Usage
 
 ```bash
-MUSHI_API_KEY=key_xxx MUSHI_PROJECT_ID=proj_xxx npx @mushi/mcp
+MUSHI_API_KEY=key_xxx MUSHI_PROJECT_ID=proj_xxx npx @mushi-mushi/mcp
 ```
 
 ### Tools

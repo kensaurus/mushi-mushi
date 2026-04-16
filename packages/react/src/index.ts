@@ -3,7 +3,7 @@ export { useMushi, useMushiReady, useMushiReport } from './hooks';
 export { MushiErrorBoundary, type MushiErrorBoundaryProps } from './error-boundary';
 
 // Re-export main class and types for convenience
-export { Mushi } from '@mushi/web';
+export { Mushi } from '@mushi-mushi/web';
 export type {
   MushiConfig,
   MushiReport,
@@ -12,4 +12,4 @@ export type {
   MushiWidgetConfig,
   MushiEventType,
   MushiEventHandler,
-} from '@mushi/core';
+} from '@mushi-mushi/core';

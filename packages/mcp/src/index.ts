@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { createLogger } from '@mushi/core';
+import { createLogger } from '@mushi-mushi/core';
 
 const log = createLogger({ scope: 'mushi:mcp', level: 'info' });
 

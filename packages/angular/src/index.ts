@@ -1,11 +1,11 @@
 /**
  * FILE: packages/angular/src/index.ts
  * PURPOSE: Angular SDK for Mushi Mushi — injectable service, error handler,
- *          and provider factory via @mushi/core.
+ *          and provider factory via @mushi-mushi/core.
  */
 
-import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi/core'
-import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi/core'
+import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi-mushi/core'
+import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi-mushi/core'
 
 const log = createLogger({ scope: 'mushi:angular' })
 

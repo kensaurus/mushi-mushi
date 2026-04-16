@@ -1,11 +1,11 @@
-# @mushi/angular
+# @mushi-mushi/angular
 
 Angular SDK for Mushi Mushi bug reporting.
 
 ## Usage
 
 ```ts
-import { provideMushi } from '@mushi/angular'
+import { provideMushi } from '@mushi-mushi/angular'
 
 bootstrapApplication(AppComponent, {
   providers: [

@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Mushi } from '@mushi/web';
+import { Mushi } from '@mushi-mushi/web';
 
 export interface MushiErrorBoundaryProps {
   children: ReactNode;

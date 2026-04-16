@@ -9,7 +9,7 @@ export default defineConfig({
   treeshake: true,
   splitting: false,
   minify: false,
-  external: ['@mushi/core', '@mushi/web', 'react', 'react-dom', '@sentry/react', '@sentry/browser'],
+  external: ['@mushi-mushi/core', '@mushi-mushi/web', 'react', 'react-dom', '@sentry/react', '@sentry/browser'],
   esbuildOptions(options) {
     options.jsx = 'automatic';
   },

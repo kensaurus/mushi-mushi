@@ -10,7 +10,7 @@
  * - No external dependencies — safe to ship in any SDK bundle
  *
  * USAGE:
- *   import { createLogger } from '@mushi/core'
+ *   import { createLogger } from '@mushi-mushi/core'
  *   const log = createLogger({ scope: 'mushi:api' })
  *   log.info('Request received', { method: 'POST', path: '/v1/reports' })
  *   const child = log.child('ingest', { reportId: 'abc' })

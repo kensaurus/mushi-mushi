@@ -1,11 +1,11 @@
-# @mushi/vue
+# @mushi-mushi/vue
 
 Vue 3 plugin for Mushi Mushi bug reporting.
 
 ## Usage
 
 ```ts
-import { MushiPlugin } from '@mushi/vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
 
 app.use(MushiPlugin, {
   projectId: 'proj_xxx',
@@ -16,7 +16,7 @@ app.use(MushiPlugin, {
 ### Composables
 
 ```ts
-import { useMushi, useMushiReport, useMushiWidget } from '@mushi/vue'
+import { useMushi, useMushiReport, useMushiWidget } from '@mushi-mushi/vue'
 
 const mushi = useMushi()
 mushi.submitReport({ title: 'broken layout', description: '...' })

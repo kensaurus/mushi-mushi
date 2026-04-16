@@ -1,4 +1,4 @@
-import type { MushiReportCategory } from '@mushi/core';
+import type { MushiReportCategory } from '@mushi-mushi/core';
 
 export interface MushiLocale {
   widget: {

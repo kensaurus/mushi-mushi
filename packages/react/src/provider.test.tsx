@@ -3,7 +3,7 @@ import { render, screen, cleanup } from '@testing-library/react';
 import { MushiProvider } from './provider';
 import { useMushi, useMushiReady } from './hooks';
 
-vi.mock('@mushi/web', () => {
+vi.mock('@mushi-mushi/web', () => {
   const mockSdk = {
     report: vi.fn(),
     on: vi.fn(() => () => {}),

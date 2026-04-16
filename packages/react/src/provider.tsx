@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { MushiConfig, MushiSDKInstance } from '@mushi/core';
-import { createLogger } from '@mushi/core';
-import { Mushi } from '@mushi/web';
+import type { MushiConfig, MushiSDKInstance } from '@mushi-mushi/core';
+import { createLogger } from '@mushi-mushi/core';
+import { Mushi } from '@mushi-mushi/web';
 
 const log = createLogger({ scope: 'mushi:react' });
 

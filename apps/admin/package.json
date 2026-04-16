@@ -1,5 +1,5 @@
 {
-  "name": "@mushi/admin",
+  "name": "@mushi-mushi/admin",
   "version": "0.0.1",
   "private": true,
   "description": "Mushi Mushi admin console — report triage, analytics dashboard, project settings",
@@ -20,8 +20,8 @@
     "react-router-dom": "^7.5.0"
   },
   "devDependencies": {
-    "@mushi/eslint-config": "workspace:*",
-    "@mushi/tsconfig": "workspace:*",
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
     "@tailwindcss/vite": "^4.1.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

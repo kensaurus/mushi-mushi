@@ -6,7 +6,7 @@ export default defineConfig({
   dts: true,
   clean: true,
   target: 'node18',
-  external: ['@modelcontextprotocol/sdk', 'zod', '@mushi/core'],
+  external: ['@modelcontextprotocol/sdk', 'zod', '@mushi-mushi/core'],
   banner: {
     js: '#!/usr/bin/env node',
   },
