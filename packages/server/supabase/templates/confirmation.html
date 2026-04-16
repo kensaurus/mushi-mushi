@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Confirm your email — mushimushi</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f8f9fa; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f9fa; padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:480px; background-color:#ffffff; border-radius:8px; border:1px solid #e5e7eb; overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 32px 24px; text-align:center; border-bottom:1px solid #f0f0f0;">
+              <h1 style="margin:0; font-size:20px; font-weight:700; color:#18181b;">
+                <span style="color:#6366f1;">mushi</span>mushi
+              </h1>
+              <p style="margin:4px 0 0; font-size:11px; color:#a1a1aa;">admin console</p>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              <h2 style="margin:0 0 12px; font-size:18px; font-weight:600; color:#18181b;">
+                Confirm your email
+              </h2>
+              <p style="margin:0 0 24px; font-size:14px; line-height:1.6; color:#52525b;">
+                Thanks for signing up. Click the button below to confirm your email address and activate your account.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding:8px 0;">
+                    <a href="{{ .ConfirmationURL }}"
+                       style="display:inline-block; padding:12px 32px; background-color:#6366f1; color:#ffffff; font-size:14px; font-weight:600; text-decoration:none; border-radius:6px;">
+                      Confirm email address
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:24px 0 0; font-size:12px; line-height:1.5; color:#a1a1aa;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin:4px 0 0; font-size:12px; word-break:break-all; color:#6366f1;">
+                {{ .ConfirmationURL }}
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 32px; background-color:#fafafa; border-top:1px solid #f0f0f0;">
+              <p style="margin:0; font-size:11px; color:#a1a1aa; text-align:center;">
+                You received this email because someone signed up at mushimushi.
+                If this wasn't you, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
