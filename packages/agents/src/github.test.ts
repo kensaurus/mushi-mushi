@@ -20,8 +20,8 @@ describe('buildPRBody', () => {
     branch: 'fix/modal-escape',
     filesChanged: ['src/Modal.tsx', 'src/Modal.test.tsx'],
     linesChanged: 15,
+    success: true,
     summary: 'Added dirty-state guard to escape handler',
-    status: 'completed',
   }
 
   it('includes report metadata', () => {
