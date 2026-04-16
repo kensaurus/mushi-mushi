@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PIPELINE_STATUS } from '../lib/tokens'
-import { PageHeader, Card, Badge, Btn, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, Card, Badge, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface FineTuningJob {
   id: string
@@ -45,7 +45,9 @@ export function FineTuningPage() {
         <Btn onClick={startJob}>New Training Job</Btn>
       </PageHeader>
 
-      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load fine-tuning jobs." onRetry={fetchJobs} /> : (
+      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load fine-tuning jobs." onRetry={fetchJobs} /> : jobs.length === 0 ? (
+        <EmptyState title="No training jobs yet" description="Start a new training job to fine-tune a model on your classified reports." />
+      ) : (
         <Card className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
