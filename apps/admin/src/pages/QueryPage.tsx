@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Btn, Input } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, Input } from '../components/ui'
 
 interface QueryResult {
   sql: string
@@ -54,6 +54,17 @@ export function QueryPage() {
   return (
     <div className="space-y-4 max-w-4xl">
       <PageHeader title="Ask Your Data" />
+
+      <PageHelp
+        title="About Ask Your Data"
+        whatIsIt="A natural-language interface to your bug database. Type a question and the LLM converts it to read-only SQL, runs it, and summarizes the answer."
+        useCases={[
+          'Answer ad-hoc questions without writing SQL ("which component had the most P0s last week?")',
+          'Investigate trends without leaving the admin console',
+          'Hand off insight-gathering to non-technical teammates',
+        ]}
+        howToUse="Type a question or click a suggestion. Expand the SQL panel below each answer to verify the query and inspect the raw rows."
+      />
 
       <div className="flex gap-2">
         <div className="flex-1">

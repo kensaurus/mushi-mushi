@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { SEVERITY, STATUS, FILTER_OPTIONS } from '../lib/tokens'
-import { PageHeader, Badge, Card, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Badge, Card, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
 
 interface ReportRow {
   id: string
@@ -63,6 +63,17 @@ export function ReportsPage() {
       <PageHeader title="Reports">
         <span className="text-xs text-fg-muted font-mono tabular-nums">{total} total</span>
       </PageHeader>
+
+      <PageHelp
+        title="About Reports"
+        whatIsIt="The full inbox of bug reports submitted from your apps, games, or websites. Each report is auto-classified by the LLM pipeline with a category, severity, component, and confidence score."
+        useCases={[
+          'Triage incoming bugs by status, category, or severity',
+          'Drill into a specific report to see the original payload, attachments, and pipeline history',
+          'Confirm or override the LLM classification (which feeds back into fine-tuning)',
+        ]}
+        howToUse="Use the filters above to narrow the list. Click any row to open the report detail view with full pipeline context and actions."
+      />
 
       <div className="flex gap-2 mb-3 flex-wrap">
         <FilterSelect label="Status" value={status} options={FILTER_OPTIONS.statuses} onChange={(e) => setFilter('status', e.currentTarget.value)} />

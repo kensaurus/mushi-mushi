@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { SEVERITY, CATEGORY_LABELS } from '../lib/tokens'
-import { PageHeader, StatCard, Card, Badge, Btn, Loading } from '../components/ui'
+import { PageHeader, PageHelp, StatCard, Card, Badge, Btn, Loading } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 
 interface Stats {
@@ -151,6 +151,17 @@ export function DashboardPage() {
           View all reports &rarr;
         </Link>
       </PageHeader>
+
+      <PageHelp
+        title="About the Dashboard"
+        whatIsIt="A high-level snapshot of bug intake across all your projects: total reports, status breakdown, top categories, and severity distribution."
+        useCases={[
+          'See at a glance whether the pipeline is keeping up with incoming reports',
+          'Spot a sudden surge in P0 / P1 bugs after a release',
+          'Identify the noisiest category to investigate root causes',
+        ]}
+        howToUse="Click View all reports for the full inbox, or use the sidebar to drill into Graph, Judge, or Fixes for deeper analysis."
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-5">
         <StatCard label="Total Reports" value={stats.total} />

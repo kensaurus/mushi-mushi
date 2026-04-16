@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Btn, Loading, ErrorAlert, Input } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, EmptyState } from '../components/ui'
 
 interface Project {
   id: string
@@ -57,6 +57,17 @@ export function ProjectsPage() {
     <div className="space-y-4">
       <PageHeader title="Projects" />
 
+      <PageHelp
+        title="About Projects"
+        whatIsIt="A project is a logical grouping of bug reports — usually one per app, game, or service. Each project gets its own API keys so you can submit reports from multiple sources without mixing them."
+        useCases={[
+          'Separate reports from your iOS app, Android app, and backend API',
+          'Rotate credentials by revoking and re-issuing API keys without downtime',
+          'Scope per-project routing rules and SLAs in Settings',
+        ]}
+        howToUse="Create a project, then click Generate API Key to mint a key. Use the key in the X-API-Key header (or pass it to the SDK) when submitting reports to /v1/reports."
+      />
+
       <div className="flex gap-2">
         <div className="flex-1">
           <Input
@@ -72,6 +83,12 @@ export function ProjectsPage() {
         </Btn>
       </div>
 
+      {projects.length === 0 ? (
+        <EmptyState
+          title="No projects yet"
+          description="Create your first project above to start receiving bug reports. You'll get an API key to use with the SDK or REST endpoint."
+        />
+      ) : (
       <div className="space-y-2">
         {projects.map((project) => (
           <Card key={project.id} className="p-3">
@@ -106,6 +123,7 @@ export function ProjectsPage() {
           </Card>
         ))}
       </div>
+      )}
     </div>
   )
 }

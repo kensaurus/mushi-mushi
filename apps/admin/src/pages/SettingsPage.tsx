@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Section, Input, SelectField, Btn, Loading, Checkbox, ErrorAlert, Card, Toggle } from '../components/ui'
+import { PageHeader, PageHelp, Section, Input, SelectField, Btn, Loading, Checkbox, ErrorAlert, Card, Toggle } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { isDebugEnabled, setDebugEnabled } from '../lib/debug'
 
@@ -53,6 +53,17 @@ export function SettingsPage() {
   return (
     <div className="max-w-2xl space-y-4">
       <PageHeader title="Project Settings" />
+
+      <PageHelp
+        title="About Settings"
+        whatIsIt="Tunable knobs for the bug pipeline: which model classifies reports, how strict the dedup threshold is, where to send notifications, and which Sentry feedback to ingest."
+        useCases={[
+          'Swap in a fine-tuned model once Fine-Tuning produces one',
+          'Tighten the confidence threshold to reduce false positives, or loosen it to catch more',
+          'Pipe alerts into Slack and Sentry for unified incident response',
+        ]}
+        howToUse="Save persists changes immediately and writes an audit-log entry. Use Connection Status below to verify your config before relying on it in production."
+      />
 
       <Section title="Notifications" className="space-y-3">
         <Input

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PIPELINE_STATUS } from '../lib/tokens'
-import { PageHeader, Card, Badge, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface FineTuningJob {
   id: string
@@ -44,6 +44,17 @@ export function FineTuningPage() {
       <PageHeader title="Fine-Tuning">
         <Btn onClick={startJob}>New Training Job</Btn>
       </PageHeader>
+
+      <PageHelp
+        title="About Fine-Tuning"
+        whatIsIt="Trains a smaller, cheaper model on your own classified reports so the bug pipeline runs faster and at lower cost without sacrificing accuracy."
+        useCases={[
+          'Cut classification cost once you have ~500+ confirmed reports',
+          'Adapt the model to your domain vocabulary (game-specific bugs, internal product names)',
+          'Reduce latency for high-volume report streams',
+        ]}
+        howToUse="Click New Training Job to package recent confirmed classifications into a training set. Once complete, switch the model in Settings to start using your fine-tuned variant."
+      />
 
       {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load fine-tuning jobs." onRetry={fetchJobs} /> : jobs.length === 0 ? (
         <EmptyState title="No training jobs yet" description="Start a new training job to fine-tune a model on your classified reports." />

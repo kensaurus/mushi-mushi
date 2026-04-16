@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PIPELINE_STATUS } from '../lib/tokens'
-import { PageHeader, Card, Badge, EmptyState, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, EmptyState, Loading, ErrorAlert } from '../components/ui'
 
 interface FixAttempt {
   id: string
@@ -46,6 +46,17 @@ export function FixesPage() {
       <PageHeader title="Auto-Fix Pipeline">
         <span className="text-2xs text-fg-faint font-mono">{fixes.length} attempts</span>
       </PageHeader>
+
+      <PageHelp
+        title="About the Auto-Fix Pipeline"
+        whatIsIt="When a bug report is high-confidence and reproducible, an agent (Claude, Cursor, etc.) attempts a code fix on a feature branch and opens a pull request for review."
+        useCases={[
+          'Track which bugs are being auto-resolved versus needing human input',
+          'Audit which agent and model produced each fix attempt',
+          'Inspect failures to understand which bug categories are still beyond automation',
+        ]}
+        howToUse="Each card shows status, branch, lines/files changed, and a PR link. Review the PR before merging — passing the review check does not skip human approval."
+      />
 
       {fixes.length === 0 ? (
         <EmptyState
