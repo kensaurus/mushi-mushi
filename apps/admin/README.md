@@ -1,4 +1,4 @@
-# @mushi/admin
+# @mushi-mushi/admin
 
 Admin console for Mushi Mushi — report triage, analytics dashboard, knowledge graph visualization, and project settings.
 

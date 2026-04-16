@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   target: 'es2022',
-  external: ['@angular/core', '@mushi/core'],
+  external: ['@angular/core', '@mushi-mushi/core'],
 })

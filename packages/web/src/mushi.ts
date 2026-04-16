@@ -15,7 +15,7 @@ import {
   createPiiScrubber,
   createLogger,
   noopLogger,
-} from '@mushi/core';
+} from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
 import {

@@ -9,5 +9,5 @@ export default defineConfig({
   treeshake: true,
   splitting: false,
   minify: false,
-  external: ['@mushi/core', '@sentry/browser', '@sentry/react'],
+  external: ['@mushi-mushi/core', '@sentry/browser', '@sentry/react'],
 });

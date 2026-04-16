@@ -39,4 +39,4 @@ export type {
   MushiWidgetConfig,
   MushiEventType,
   MushiEventHandler,
-} from '@mushi/core';
+} from '@mushi-mushi/core';

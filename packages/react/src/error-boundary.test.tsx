@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { MushiErrorBoundary } from './error-boundary';
 
-vi.mock('@mushi/web', () => ({
+vi.mock('@mushi-mushi/web', () => ({
   Mushi: {
     getInstance: vi.fn(() => ({
       setMetadata: vi.fn(),

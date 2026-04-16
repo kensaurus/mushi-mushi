@@ -1,13 +1,13 @@
 /**
  * FILE: packages/vue/src/index.ts
  * PURPOSE: Vue 3 plugin for Mushi Mushi — provides report submission,
- *          error capture, and a global error handler via @mushi/core.
+ *          error capture, and a global error handler via @mushi-mushi/core.
  */
 
 import type { Plugin, InjectionKey, App } from 'vue'
 import { inject, ref } from 'vue'
-import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi/core'
-import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi/core'
+import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi-mushi/core'
+import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi-mushi/core'
 
 const log = createLogger({ scope: 'mushi:vue' })
 

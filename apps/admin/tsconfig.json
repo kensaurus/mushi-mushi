@@ -1,5 +1,5 @@
 {
-  "extends": "@mushi/tsconfig/react.json",
+  "extends": "@mushi-mushi/tsconfig/react.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",

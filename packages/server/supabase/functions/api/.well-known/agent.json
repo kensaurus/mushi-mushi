@@ -28,7 +28,7 @@
   "protocols": {
     "mcp": {
       "transport": "stdio",
-      "package": "@mushi/mcp"
+      "package": "@mushi-mushi/mcp"
     },
     "rest": {
       "baseUrl": "https://api.mushimushi.dev/v1",

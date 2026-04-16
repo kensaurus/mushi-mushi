@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   target: 'es2022',
-  external: ['svelte', '@mushi/core'],
+  external: ['svelte', '@mushi-mushi/core'],
 })

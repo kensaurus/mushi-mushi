@@ -1,4 +1,4 @@
-# @mushi/core
+# @mushi-mushi/core
 
 Core types, API client, and utilities for the Mushi Mushi SDK.
 
@@ -16,10 +16,10 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 ## Usage
 
 ```typescript
-import { createApiClient, createPreFilter, captureEnvironment, createRateLimiter } from '@mushi/core';
+import { createApiClient, createPreFilter, captureEnvironment, createRateLimiter } from '@mushi-mushi/core';
 ```
 
-This package is used internally by `@mushi/web` and `@mushi/react`. Most consumers should use those packages instead.
+This package is used internally by `@mushi-mushi/web` and `@mushi-mushi/react`. Most consumers should use those packages instead.
 
 ## Bundle Size
 

@@ -3,9 +3,9 @@
   "changelog": "@changesets/cli/changelog",
   "commit": false,
   "fixed": [],
-  "linked": [["@mushi/core", "@mushi/web", "@mushi/react"]],
+  "linked": [["@mushi-mushi/core", "@mushi-mushi/web", "@mushi-mushi/react"]],
   "access": "public",
   "baseBranch": "master",
   "updateInternalDependencies": "patch",
-  "ignore": ["@mushi/server", "@mushi/admin", "@mushi/docs"]
+  "ignore": ["@mushi-mushi/server", "@mushi-mushi/admin", "@mushi-mushi/docs"]
 }

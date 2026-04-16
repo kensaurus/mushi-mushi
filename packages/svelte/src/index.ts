@@ -1,11 +1,11 @@
 /**
  * FILE: packages/svelte/src/index.ts
  * PURPOSE: Svelte SDK for Mushi Mushi — init, report submission,
- *          and SvelteKit error handler via @mushi/core.
+ *          and SvelteKit error handler via @mushi-mushi/core.
  */
 
-import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi/core'
-import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi/core'
+import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi-mushi/core'
+import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi-mushi/core'
 
 const log = createLogger({ scope: 'mushi:svelte' })
 

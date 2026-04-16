@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   target: 'es2022',
-  external: ['vue', '@mushi/core'],
+  external: ['vue', '@mushi-mushi/core'],
 })

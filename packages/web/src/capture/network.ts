@@ -1,4 +1,4 @@
-import type { MushiNetworkEntry } from '@mushi/core';
+import type { MushiNetworkEntry } from '@mushi-mushi/core';
 
 const MAX_ENTRIES = 30;
 

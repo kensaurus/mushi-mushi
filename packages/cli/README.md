@@ -1,11 +1,11 @@
-# @mushi/cli
+# @mushi-mushi/cli
 
 CLI tool for Mushi Mushi project management and report triage.
 
 ## Install
 
 ```bash
-npm install -g @mushi/cli
+npm install -g @mushi-mushi/cli
 ```
 
 ## Usage

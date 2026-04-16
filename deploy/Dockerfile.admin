@@ -7,7 +7,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages/core/ packages/core/
 COPY apps/admin/ apps/admin/
 RUN corepack enable && pnpm install --frozen-lockfile
-RUN pnpm --filter @mushi/admin build
+RUN pnpm --filter @mushi-mushi/admin build
 
 FROM nginx:alpine
 COPY --from=builder /app/apps/admin/dist /usr/share/nginx/html
