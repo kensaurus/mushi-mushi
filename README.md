@@ -76,11 +76,11 @@ Mushi Mushi is a small SDK you drop into your app. Users shake their phone (or c
 ### React
 
 ```bash
-npm install @mushi/react
+npm install @mushi-mushi/react
 ```
 
 ```tsx
-import { MushiProvider } from '@mushi/react'
+import { MushiProvider } from '@mushi-mushi/react'
 
 function App() {
   return (
@@ -97,7 +97,7 @@ function App() {
 <summary><b>Vue 3</b></summary>
 
 ```ts
-import { MushiPlugin } from '@mushi/vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
 app.use(MushiPlugin, { projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
@@ -106,7 +106,7 @@ app.use(MushiPlugin, { projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 <summary><b>Svelte / SvelteKit</b></summary>
 
 ```ts
-import { initMushi } from '@mushi/svelte'
+import { initMushi } from '@mushi-mushi/svelte'
 initMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
@@ -115,7 +115,7 @@ initMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 <summary><b>Angular</b></summary>
 
 ```ts
-import { provideMushi } from '@mushi/angular'
+import { provideMushi } from '@mushi-mushi/angular'
 bootstrapApplication(AppComponent, {
   providers: [provideMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })]
 })
@@ -126,7 +126,7 @@ bootstrapApplication(AppComponent, {
 <summary><b>React Native</b></summary>
 
 ```tsx
-import { MushiProvider } from '@mushi/react-native'
+import { MushiProvider } from '@mushi-mushi/react-native'
 <MushiProvider projectId="proj_xxx" apiKey="mushi_xxx">
   <App />
 </MushiProvider>
@@ -137,7 +137,7 @@ import { MushiProvider } from '@mushi/react-native'
 <summary><b>Vanilla JS / any framework</b></summary>
 
 ```ts
-import { Mushi } from '@mushi/web'
+import { Mushi } from '@mushi-mushi/web'
 Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 </details>
@@ -166,16 +166,16 @@ Mushi Mushi is designed as a **companion** to your existing monitoring, not a re
 ┌─────────────────────────────────────────────────────────────┐
 │                        Your App                             │
 │  ┌─────────┐  ┌──────────┐  ┌───────────┐  ┌───────────┐  │
-│  │ @mushi/ │  │ @mushi/  │  │ @mushi/   │  │ @mushi/   │  │
+│  │ @mushi-mushi/ │  │ @mushi-mushi/  │  │ @mushi-mushi/   │  │ @mushi-mushi/   │  │
 │  │  react  │  │   vue    │  │  svelte   │  │  angular  │  │
 │  └────┬────┘  └────┬─────┘  └─────┬─────┘  └─────┬─────┘  │
 │       └─────────┬──┴──────────────┘               │        │
 │            ┌────▼────┐                             │        │
-│            │ @mushi/ │◄────────────────────────────┘        │
+│            │ @mushi-mushi/ │◄────────────────────────────┘        │
 │            │   web   │  Shadow DOM widget + capture          │
 │            └────┬────┘                                      │
 │            ┌────▼────┐                                      │
-│            │ @mushi/ │  Types, API client, offline queue     │
+│            │ @mushi-mushi/ │  Types, API client, offline queue     │
 │            │  core   │                                      │
 │            └────┬────┘                                      │
 └─────────────────┼───────────────────────────────────────────┘
@@ -208,23 +208,23 @@ Mushi Mushi is designed as a **companion** to your existing monitoring, not a re
 
 | Package | What | Size |
 |---------|------|------|
-| [`@mushi/core`](./packages/core) | Types, API client, pre-filter, offline queue, rate limiter | ~3 KB |
-| [`@mushi/web`](./packages/web) | Browser SDK — Shadow DOM widget, screenshot, console/network capture | ~6 KB |
-| [`@mushi/react`](./packages/react) | Provider, hooks, ErrorBoundary | ~1 KB |
-| [`@mushi/react-native`](./packages/react-native) | Shake-to-report, offline queue, navigation capture | — |
-| [`@mushi/vue`](./packages/vue) | Vue 3 plugin + composables | — |
-| [`@mushi/svelte`](./packages/svelte) | Context API + SvelteKit error hook | — |
-| [`@mushi/angular`](./packages/angular) | Injectable service + ErrorHandler | — |
-| [`@mushi/cli`](./packages/cli) | CLI for project management, report triage | — |
-| [`@mushi/mcp`](./packages/mcp) | MCP server — expose reports to coding agents | — |
+| [`@mushi-mushi/core`](./packages/core) | Types, API client, pre-filter, offline queue, rate limiter | ~3 KB |
+| [`@mushi-mushi/web`](./packages/web) | Browser SDK — Shadow DOM widget, screenshot, console/network capture | ~6 KB |
+| [`@mushi-mushi/react`](./packages/react) | Provider, hooks, ErrorBoundary | ~1 KB |
+| [`@mushi-mushi/react-native`](./packages/react-native) | Shake-to-report, offline queue, navigation capture | — |
+| [`@mushi-mushi/vue`](./packages/vue) | Vue 3 plugin + composables | — |
+| [`@mushi-mushi/svelte`](./packages/svelte) | Context API + SvelteKit error hook | — |
+| [`@mushi-mushi/angular`](./packages/angular) | Injectable service + ErrorHandler | — |
+| [`@mushi-mushi/cli`](./packages/cli) | CLI for project management, report triage | — |
+| [`@mushi-mushi/mcp`](./packages/mcp) | MCP server — expose reports to coding agents | — |
 
 ### Backend ([BSL 1.1](./packages/server/LICENSE) → Apache 2.0 in 2029)
 
 | Package | What |
 |---------|------|
-| `@mushi/server` | Supabase Edge Functions — LLM pipeline, knowledge graph, enterprise features |
-| `@mushi/agents` | Agentic fix pipeline — Claude Code, Codex, generic MCP adapters |
-| `@mushi/verify` | Playwright-based fix verification with visual diff |
+| `@mushi-mushi/server` | Supabase Edge Functions — LLM pipeline, knowledge graph, enterprise features |
+| `@mushi-mushi/agents` | Agentic fix pipeline — Claude Code, Codex, generic MCP adapters |
+| `@mushi-mushi/verify` | Playwright-based fix verification with visual diff |
 
 ---
 

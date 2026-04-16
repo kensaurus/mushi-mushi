@@ -1,4 +1,4 @@
-import type { MushiConsoleEntry } from '@mushi/core';
+import type { MushiConsoleEntry } from '@mushi-mushi/core';
 
 const MAX_ENTRIES = 50;
 const MAX_MESSAGE_LENGTH = 500;

@@ -24,7 +24,7 @@ We will acknowledge receipt within 48 hours and aim to release a patch within 7 
 
 ## Scope
 
-- All `@mushi/*` npm packages
+- All `@mushi-mushi/*` npm packages
 - Supabase Edge Functions (server-side)
 - Admin console application
 - CLI tool

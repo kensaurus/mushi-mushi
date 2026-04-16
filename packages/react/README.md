@@ -1,4 +1,4 @@
-# @mushi/react
+# @mushi-mushi/react
 
 React bindings for the Mushi Mushi bug reporting SDK.
 
@@ -13,7 +13,7 @@ React bindings for the Mushi Mushi bug reporting SDK.
 ## Quick Start
 
 ```tsx
-import { MushiProvider, useMushi } from '@mushi/react';
+import { MushiProvider, useMushi } from '@mushi-mushi/react';
 
 function App() {
   return (
@@ -31,7 +31,7 @@ function ReportButton() {
 
 ## Bundle Size
 
-~819 B brotli (limit: 5 KB). Requires `@mushi/core` and `@mushi/web` as dependencies (not bundled inline).
+~819 B brotli (limit: 5 KB). Requires `@mushi-mushi/core` and `@mushi-mushi/web` as dependencies (not bundled inline).
 
 ## Peer Dependencies
 

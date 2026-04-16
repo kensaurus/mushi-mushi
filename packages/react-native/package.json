@@ -1,5 +1,5 @@
 {
-  "name": "@mushi/react-native",
+  "name": "@mushi-mushi/react-native",
   "version": "0.1.0",
   "license": "MIT",
   "description": "React Native SDK for Mushi Mushi — shake-to-report, bottom sheet widget, full context capture",
@@ -44,8 +44,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "files": [
     "dist",

@@ -1,5 +1,5 @@
 {
-  "name": "@mushi/cli",
+  "name": "@mushi-mushi/cli",
   "version": "0.1.0",
   "license": "MIT",
   "description": "CLI tool for Mushi Mushi — project management, report triage, pipeline health",
@@ -16,7 +16,7 @@
     "commander": "^13.1.0"
   },
   "devDependencies": {
-    "@mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.15.3",
     "eslint": "^9.39.4",
     "tsup": "^8.5.1",
@@ -34,8 +34,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "files": [
     "dist",

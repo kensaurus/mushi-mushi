@@ -1,4 +1,4 @@
-# @mushi/server
+# @mushi-mushi/server
 
 Backend for Mushi Mushi — Supabase Edge Functions powering the LLM pipeline, knowledge graph, and admin API.
 

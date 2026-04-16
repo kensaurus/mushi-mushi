@@ -1,4 +1,4 @@
-import type { MushiSentryConfig } from '@mushi/core';
+import type { MushiSentryConfig } from '@mushi-mushi/core';
 
 export interface SentryContext {
   eventId?: string;

@@ -1,4 +1,4 @@
-import type { MushiPerformanceMetrics } from '@mushi/core';
+import type { MushiPerformanceMetrics } from '@mushi-mushi/core';
 
 export interface PerformanceCapture {
   getMetrics(): MushiPerformanceMetrics;

@@ -1,5 +1,5 @@
 {
-  "name": "@mushi/core",
+  "name": "@mushi-mushi/core",
   "version": "0.1.0",
   "description": "Core types, API client, and pre-filter for Mushi Mushi SDK",
   "license": "MIT",
@@ -42,8 +42,7 @@
     "api-client"
   ],
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "sideEffects": false,
   "scripts": {
@@ -62,8 +61,8 @@
     }
   ],
   "devDependencies": {
-    "@mushi/eslint-config": "workspace:*",
-    "@mushi/tsconfig": "workspace:*",
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
     "@size-limit/file": "^12.1.0",
     "eslint": "^9.26.0",
     "jsdom": "^29.0.2",

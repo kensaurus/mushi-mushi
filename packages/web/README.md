@@ -1,4 +1,4 @@
-# @mushi/web
+# @mushi-mushi/web
 
 Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM isolation.
 
@@ -35,12 +35,12 @@ Auto-detects conditions that should prompt the user:
 
 ## Bundle Size
 
-~6 KB brotli (limit: 30 KB). Requires `@mushi/core` as a dependency (not bundled inline).
+~6 KB brotli (limit: 30 KB). Requires `@mushi-mushi/core` as a dependency (not bundled inline).
 
 ## Quick Start
 
 ```typescript
-import { Mushi } from '@mushi/web';
+import { Mushi } from '@mushi-mushi/web';
 
 Mushi.init({
   projectId: 'proj_xxx',
@@ -53,7 +53,7 @@ Mushi.init({
 ### With Proactive Triggers
 
 ```typescript
-import { createProactiveManager, setupProactiveTriggers } from '@mushi/web';
+import { createProactiveManager, setupProactiveTriggers } from '@mushi-mushi/web';
 
 const manager = createProactiveManager({ maxProactivePerSession: 2 });
 

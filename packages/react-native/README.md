@@ -1,11 +1,11 @@
-# @mushi/react-native
+# @mushi-mushi/react-native
 
 React Native SDK for Mushi Mushi. Shake-to-report, bottom sheet widget, offline queue.
 
 ## Usage
 
 ```tsx
-import { MushiProvider } from '@mushi/react-native'
+import { MushiProvider } from '@mushi-mushi/react-native'
 
 export default function App() {
   return (
@@ -19,7 +19,7 @@ export default function App() {
 ### Hooks
 
 ```ts
-import { useMushi, useMushiReport } from '@mushi/react-native'
+import { useMushi, useMushiReport } from '@mushi-mushi/react-native'
 
 const { submitReport } = useMushiReport()
 ```

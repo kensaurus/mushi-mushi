@@ -1,4 +1,4 @@
-# @mushi/verify
+# @mushi-mushi/verify
 
 Playwright-based fix verification for Mushi Mushi — runs automated smoke tests on generated fixes and compares screenshots.
 
@@ -21,7 +21,7 @@ pnpm verify
 Or programmatically:
 
 ```ts
-import { verifyFix } from '@mushi/verify'
+import { verifyFix } from '@mushi-mushi/verify'
 
 const result = await verifyFix({
   fixAttemptId: 'fix_xxx',

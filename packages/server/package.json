@@ -1,5 +1,5 @@
 {
-  "name": "@mushi/server",
+  "name": "@mushi-mushi/server",
   "version": "0.0.0",
   "private": true,
   "description": "Mushi Mushi backend — Supabase Edge Functions: API ingestion, LLM classification, Slack notifications",
@@ -17,10 +17,10 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@mushi/core": "workspace:*"
+    "@mushi-mushi/core": "workspace:*"
   },
   "devDependencies": {
-    "@mushi/tsconfig": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
     "supabase": "^2.22.0",
     "typescript": "^5.8.3"
   },

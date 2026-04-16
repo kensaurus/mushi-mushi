@@ -1,5 +1,5 @@
 {
-  "name": "@mushi/mcp",
+  "name": "@mushi-mushi/mcp",
   "version": "0.1.0",
   "license": "MIT",
   "description": "MCP server exposing Mushi Mushi reports to coding agents",
@@ -29,11 +29,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "@mushi/core": "workspace:*",
+    "@mushi-mushi/core": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.0.0",
     "eslint": "^9.39.4",
     "tsup": "^8.4.0",
@@ -50,8 +50,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   },
   "sideEffects": false,
   "keywords": [

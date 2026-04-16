@@ -1,4 +1,4 @@
-import type { MushiReportCategory, MushiWidgetConfig } from '@mushi/core';
+import type { MushiReportCategory, MushiWidgetConfig } from '@mushi-mushi/core';
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 
