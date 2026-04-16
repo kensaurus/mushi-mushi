@@ -154,28 +154,38 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const hasAnyProactive = proactiveCfg
     && (proactiveCfg.rageClick !== false
       || proactiveCfg.longTask !== false
-      || proactiveCfg.apiCascade !== false);
+      || proactiveCfg.apiCascade !== false
+      || proactiveCfg.errorBoundary === true);
 
   if (hasAnyProactive && typeof document !== 'undefined') {
     proactiveManager = createProactiveManager(proactiveCfg?.cooldown);
 
-    proactiveTriggers = setupProactiveTriggers({
-      onTrigger: (type, context) => {
-        if (!proactiveManager!.shouldShow(type)) {
-          log.debug('Proactive trigger suppressed by fatigue prevention', { type });
-          return;
-        }
-        log.info('Proactive trigger fired', { type, context });
-        pendingProactiveTrigger = type;
-        emit('proactive:triggered', { type, context });
-        widget.open();
+    proactiveTriggers = setupProactiveTriggers(
+      {
+        onTrigger: (type, context) => {
+          if (!proactiveManager!.shouldShow(type)) {
+            log.debug('Proactive trigger suppressed by fatigue prevention', { type });
+            return;
+          }
+          log.info('Proactive trigger fired', { type, context });
+          pendingProactiveTrigger = type;
+          emit('proactive:triggered', { type, context });
+          widget.open();
+        },
       },
-    });
+      {
+        rageClick: proactiveCfg?.rageClick,
+        longTask: proactiveCfg?.longTask,
+        apiCascade: proactiveCfg?.apiCascade,
+        errorBoundary: proactiveCfg?.errorBoundary,
+      },
+    );
 
     log.debug('Proactive triggers enabled', {
       rageClick: proactiveCfg?.rageClick !== false,
       longTask: proactiveCfg?.longTask !== false,
       apiCascade: proactiveCfg?.apiCascade !== false,
+      errorBoundary: proactiveCfg?.errorBoundary === true,
     });
   }
 
