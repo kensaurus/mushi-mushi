@@ -1,10 +1,10 @@
 {
   "name": "@mushi/svelte",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "description": "Svelte SDK for Mushi Mushi — context-based init, SvelteKit error hook integration",
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
