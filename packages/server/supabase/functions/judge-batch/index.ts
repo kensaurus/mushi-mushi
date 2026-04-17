@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       if (!settings?.judge_enabled) continue
 
       const sampleSize = settings.judge_sample_size ?? 50
-      const modelId = settings.judge_model ?? 'claude-opus-4'
+      const modelId = settings.judge_model ?? 'claude-opus-4-6'
 
       const { data: reports } = await db
         .from('reports')

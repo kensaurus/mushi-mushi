@@ -98,10 +98,11 @@ export function SettingsPage() {
       <Section title="LLM Pipeline" className="space-y-3">
         <SelectField
           label="Stage 2 Model"
-          value={settings.stage2_model ?? 'claude-sonnet-4-20250514'}
+          value={settings.stage2_model ?? 'claude-sonnet-4-6'}
           onChange={(e) => setSettings({ ...settings, stage2_model: e.target.value })}
         >
-          <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+          <option value="claude-opus-4-6">Claude Opus 4.6</option>
           <option value="gpt-4.1">GPT-4.1</option>
         </SelectField>
         <label className="block">

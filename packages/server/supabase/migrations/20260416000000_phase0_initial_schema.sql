@@ -41,7 +41,7 @@ create table if not exists project_settings (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null unique references projects(id) on delete cascade,
   slack_webhook_url text,
-  classification_model text not null default 'claude-sonnet-4-20250514',
+  stage1_model text not null default 'claude-sonnet-4-6',
   auto_classify boolean not null default true,
   max_reports_per_hour integer not null default 100,
   created_at timestamptz not null default now(),

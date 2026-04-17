@@ -56,6 +56,12 @@ npx supabase functions deploy intelligence-report --no-verify-jwt
 npx supabase functions deploy generate-synthetic --no-verify-jwt
 ```
 
+> **Re-deploys overwrite source.** Supabase keeps the file bundle as the source
+> of truth; if a deploy uploads a stale `index.ts` (e.g. you forgot to save before
+> deploying) the function will silently miss new routes. After deploying, smoke
+> the endpoints with `curl` to catch this. We hit it during initial admin route
+> rollout — see commit history for the affected revision.
+
 ## 5. Create a Supabase storage bucket
 
 In your Supabase dashboard, create a storage bucket named `screenshots` with public access.
@@ -146,3 +152,16 @@ Or use an external cron service (GitHub Actions, cron-job.org, etc.) that POSTs 
 **PII scrubbing:** The built-in PII scrubber (`_shared/pii-scrubber.ts`) uses regex-based redaction for emails, SSNs, phone numbers, and credit card numbers. It is not a full DLP solution — review your compliance requirements and consider additional scrubbing for your use case.
 
 **Row-level security:** All tables have RLS enabled. However, the Edge Functions use the service role client which bypasses RLS. If you add custom Edge Functions or API routes, always scope queries by `project_id`.
+
+**Extensions in `public` schema:** `vector` and `pg_net` are installed in `public`
+on Supabase managed projects (the platform doesn't allow `ALTER EXTENSION ... SET
+SCHEMA` because the extensions are owned by an internal role you can't access).
+This is flagged as a `WARN` by the database linter but cannot be remediated
+without a destructive `DROP EXTENSION CASCADE`, which would drop every
+embedding column in `report_embeddings`. The functions still live in the
+correct namespaces (`vector.*`, `net.*`) so this has no functional impact.
+
+**Auth hardening:** Two further `WARN`s require dashboard configuration that
+isn't covered by migrations: enable HaveIBeenPwned-based leaked-password
+protection in **Authentication → Policies**, and turn on at least one
+additional MFA factor in **Authentication → Providers**.

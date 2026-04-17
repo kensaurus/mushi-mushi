@@ -1115,7 +1115,7 @@ app.post('/v1/admin/fine-tuning', jwtAuth, async (c) => {
 
   const { data: job, error } = await db.from('fine_tuning_jobs').insert({
     project_id: project.id,
-    base_model: body.baseModel ?? 'claude-sonnet-4-20250514',
+    base_model: body.baseModel ?? 'claude-sonnet-4-6',
     status: 'pending',
   }).select('id').single()
 

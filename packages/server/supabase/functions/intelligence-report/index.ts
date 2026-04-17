@@ -58,19 +58,19 @@ Judge scores: ${JSON.stringify(judgeData.slice(0, 2))}`
     const span = trace.span(`digest.${project.name}`)
     const digestStart = Date.now()
     const { text: digest, usage } = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
+      model: anthropic('claude-sonnet-4-6'),
       system: 'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and actionable recommendations. Be specific and data-driven.',
       prompt: statsContext,
     })
     const digestLatency = Date.now() - digestStart
-    span.end({ model: 'claude-sonnet-4-20250514', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+    span.end({ model: 'claude-sonnet-4-6', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
 
     await logLlmInvocation(db, {
       projectId: project.id,
       functionName: 'intelligence-report',
       stage: 'digest',
-      primaryModel: 'claude-sonnet-4-20250514',
-      usedModel: 'claude-sonnet-4-20250514',
+      primaryModel: 'claude-sonnet-4-6',
+      usedModel: 'claude-sonnet-4-6',
       fallbackUsed: false,
       status: 'success',
       latencyMs: digestLatency,

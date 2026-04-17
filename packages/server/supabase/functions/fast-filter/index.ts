@@ -101,7 +101,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     const startTime = Date.now()
     let classification: Stage1Result
     const llmSpan = trace.span('stage1.classify')
-    const PRIMARY_MODEL = 'claude-haiku-4-5-20241022'
+    const PRIMARY_MODEL = 'claude-haiku-4-5-20251001'
     const FALLBACK_MODEL = 'gpt-4.1-mini'
     let usedModel = PRIMARY_MODEL
     let fallbackUsed = false

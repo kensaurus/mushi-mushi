@@ -102,7 +102,7 @@ create index if not exists idx_reports_group on reports(report_group_id) where r
 -- ---------------------------------------------------------------------------
 -- Project Settings — new columns
 -- ---------------------------------------------------------------------------
-alter table project_settings add column if not exists stage2_model text default 'claude-sonnet-4-20250514';
+alter table project_settings add column if not exists stage2_model text default 'claude-sonnet-4-6';
 alter table project_settings add column if not exists stage1_confidence_threshold float default 0.85;
 alter table project_settings add column if not exists embedding_model text default 'text-embedding-3-small';
 alter table project_settings add column if not exists dedup_threshold float default 0.82;

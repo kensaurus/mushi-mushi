@@ -129,7 +129,7 @@ ${codeContext ? `\n## Relevant Code Files\n${codeContext}` : ''}
 ${ontologyContext}`
 
     const startTime = Date.now()
-    const modelId = settings?.stage2_model ?? 'claude-sonnet-4-20250514'
+    const modelId = settings?.stage2_model ?? 'claude-sonnet-4-6'
     const FALLBACK_MODEL = 'gpt-4.1'
     let classification: z.infer<typeof stage2Schema>
     const llmSpan = trace.span('stage2.analyze')

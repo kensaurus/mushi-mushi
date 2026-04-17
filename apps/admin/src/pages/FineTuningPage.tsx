@@ -35,7 +35,7 @@ export function FineTuningPage() {
   useEffect(() => { fetchJobs() }, [])
 
   const startJob = async () => {
-    await apiFetch('/v1/admin/fine-tuning', { method: 'POST', body: JSON.stringify({ baseModel: 'claude-sonnet-4-20250514' }) })
+    await apiFetch('/v1/admin/fine-tuning', { method: 'POST', body: JSON.stringify({ baseModel: 'claude-sonnet-4-6' }) })
     fetchJobs()
   }
 
