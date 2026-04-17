@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@octokit/rest": "^21.0.0",
-    "@supabase/supabase-js": "^2.49.0"
+    "@supabase/supabase-js": "^2.103.3"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
