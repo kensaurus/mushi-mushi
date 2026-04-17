@@ -1,10 +1,10 @@
 [
   {
-    "majorMinor": "0.8",
-    "headline": "v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK",
-    "pending": true,
+    "majorMinor": "0.3",
+    "headline": "7567cee: # v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK",
+    "pending": false,
     "versions": [
-      "0.8.0"
+      "0.3.0"
     ],
     "highlights": [
       {
@@ -54,17 +54,130 @@
       {
         "title": "BYOK",
         "description": "rotating a key is non-destructive — the old vault entry is"
-      },
-      {
-        "title": "SOC 2",
-        "description": "the nightly evidence sweep and retention sweep are scheduled"
-      },
-      {
-        "title": "A2A Agent Card",
-        "description": "is intentionally public (no auth) so peer agents can"
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/capacitor",
+        "version": "0.3.0"
+      }
+    ]
+  },
+  {
+    "majorMinor": "0.2",
+    "headline": "7567cee: # v0.6.0 — Wave A: hardening + agentic-fix orchestration",
+    "pending": false,
+    "versions": [
+      "0.2.0"
+    ],
+    "highlights": [
+      {
+        "title": "Vision air-gap",
+        "description": "Stage-2 vision analysis now sees the screenshot only with"
+      },
+      {
+        "title": "Judge OpenAI fallback",
+        "description": "`judge-batch` now falls back to OpenAI"
+      },
+      {
+        "title": "Blast-radius MV refresh",
+        "description": "`blast_radius_cache` is now refreshed every"
+      },
+      {
+        "title": "RAG codebase indexer",
+        "description": "GitHub App webhook + `mushi index <path>` CLI"
+      },
+      {
+        "title": "Fix dispatch end-to-end",
+        "description": "Admin can dispatch fixes from the report detail"
+      },
+      {
+        "title": "Sandbox provider abstraction",
+        "description": "`local-noop` (tests) and `e2b` (managed"
+      },
+      {
+        "title": "True MCP adapter",
+        "description": "`McpFixAgent` speaks JSON-RPC 2.0 with `tools/call`"
+      },
+      {
+        "title": "BYOK schema",
+        "description": "`byok_anthropic_key_ref` / `byok_openai_key_ref` columns"
+      },
+      {
+        "title": "On-device pre-classifier",
+        "description": "(`@mushi-mushi/wasm-classifier`, public 0.1.0):"
+      },
+      {
+        "title": "Real-time collaboration on reports",
+        "description": "`report_comments` (threaded,"
+      },
+      {
+        "title": "AG-UI streaming protocol",
+        "description": "(v0.4): the fix-dispatch SSE stream now emits"
+      },
+      {
+        "title": "Fine-tune pipeline",
+        "description": "extended `fine_tuning_jobs` with"
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/angular",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/core",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-linear",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-pagerduty",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-sdk",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-zapier",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/svelte",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/vue",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/wasm-classifier",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "0.2.0"
+      }
+    ]
   },
   {
     "majorMinor": "0.1",
