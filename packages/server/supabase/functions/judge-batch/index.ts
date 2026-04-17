@@ -1,4 +1,5 @@
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
+import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { generateObject } from 'npm:ai@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
@@ -7,6 +8,9 @@ import { sendSlackNotification } from '../_shared/slack.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { recordPromptResult, checkPromotionEligibility, promoteCandidate } from '../_shared/prompt-ab.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import { withSentry } from '../_shared/sentry.ts'
+import { resolveLlmKey } from '../_shared/byok.ts'
+import { dispatchPluginEvent } from '../_shared/plugins.ts'
 
 const judgeSchema = z.object({
   accuracy: z.number().min(0).max(1).describe('Does the category match the described issue?'),
@@ -22,7 +26,7 @@ const judgeSchema = z.object({
   }).optional().describe('If classification_agreed is false, suggest corrections'),
 })
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('judge-batch', async (req) => {
   // Declared outside the try so the catch can mark the run as failed instead
   // of writing a duplicate cron_runs row.
   let cronRun: Awaited<ReturnType<typeof startCronRun>> | null = null
@@ -59,7 +63,7 @@ Deno.serve(async (req) => {
     for (const project of projects) {
       const { data: settings } = await db
         .from('project_settings')
-        .select('judge_enabled, judge_model, judge_sample_size, slack_webhook_url, discord_webhook_url')
+        .select('judge_enabled, judge_model, judge_sample_size, slack_webhook_url, discord_webhook_url, judge_fallback_provider, judge_fallback_model')
         .eq('project_id', project.id)
         .single()
 
@@ -67,6 +71,8 @@ Deno.serve(async (req) => {
 
       const sampleSize = settings.judge_sample_size ?? 50
       const modelId = settings.judge_model ?? 'claude-opus-4-6'
+      const fallbackProvider = (settings.judge_fallback_provider ?? 'openai') as 'openai' | 'none'
+      const fallbackModelId = settings.judge_fallback_model ?? 'gpt-4.1'
 
       const { data: reports } = await db
         .from('reports')
@@ -86,20 +92,8 @@ Deno.serve(async (req) => {
         const start = Date.now()
 
         try {
-          const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
-
-          const { object: evaluation, usage } = await generateObject({
-            model: anthropic(modelId),
-            schema: judgeSchema,
-            messages: [
-              {
-                role: 'system',
-                content: `You are a senior QA engineer evaluating the quality of an automated bug classification. Be strict but fair.`,
-                experimental_providerMetadata: {
-                  anthropic: { cacheControl: { type: 'ephemeral' } },
-                },
-              },
-              { role: 'user', content: `Evaluate this classification:
+          const SYSTEM_PROMPT = `You are a senior QA engineer evaluating the quality of an automated bug classification. Be strict but fair.`
+          const USER_PROMPT = `Evaluate this classification:
 
 **Original Report:**
 Description: ${report.description}
@@ -119,9 +113,58 @@ ${JSON.stringify(report.stage2_analysis ?? {}).slice(0, 1000)}
 **Reproduction Steps:**
 ${JSON.stringify(report.reproduction_steps ?? []).slice(0, 500)}
 
-Score each dimension 0-1. Be critical of vague components, miscalibrated severity, and non-actionable repro steps.` },
-            ],
-          })
+Score each dimension 0-1. Be critical of vague components, miscalibrated severity, and non-actionable repro steps.`
+
+          let evaluation: z.infer<typeof judgeSchema>
+          let usage: { promptTokens?: number; completionTokens?: number } | undefined
+          let usedJudgeModel = modelId
+          let judgeFallbackUsed = false
+
+          // Wave C C9: per-project BYOK resolution.
+          const anthropicResolved = await resolveLlmKey(db, project.id, 'anthropic')
+          try {
+            const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
+            const result = await generateObject({
+              model: anthropic(modelId),
+              schema: judgeSchema,
+              messages: [
+                {
+                  role: 'system',
+                  content: SYSTEM_PROMPT,
+                  experimental_providerMetadata: {
+                    anthropic: { cacheControl: { type: 'ephemeral' } },
+                  },
+                },
+                { role: 'user', content: USER_PROMPT },
+              ],
+            })
+            evaluation = result.object
+            usage = result.usage
+          } catch (primaryErr) {
+            // M2 (V5.3 §2.7): OpenAI fallback when Anthropic is degraded
+            // (529 overloaded, 5xx). Same Zod schema; we never fail the whole
+            // batch just because one provider is down.
+            const openaiResolved = await resolveLlmKey(db, project.id, 'openai')
+            const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
+            if (fallbackProvider !== 'openai' || !openaiKey) {
+              throw primaryErr
+            }
+            rootLog.child('judge').warn('Anthropic judge failed; falling back to OpenAI', {
+              reportId: report.id,
+              err: String(primaryErr).slice(0, 200),
+            })
+            const openai = createOpenAI({ apiKey: openaiKey })
+            const result = await generateObject({
+              model: openai(fallbackModelId),
+              schema: judgeSchema,
+              system: SYSTEM_PROMPT,
+              prompt: USER_PROMPT,
+            })
+            evaluation = result.object
+            usage = result.usage
+            usedJudgeModel = fallbackModelId
+            judgeFallbackUsed = true
+          }
 
           const compositeScore = (
             evaluation.accuracy * 0.35 +
@@ -133,7 +176,8 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           await db.from('classification_evaluations').insert({
             project_id: project.id,
             report_id: report.id,
-            judge_model: modelId,
+            judge_model: usedJudgeModel,
+            judge_fallback_used: judgeFallbackUsed,
             judge_score: compositeScore,
             accuracy_score: evaluation.accuracy,
             severity_score: evaluation.severity_calibration,
@@ -146,22 +190,44 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
           await db.from('reports').update({
             judge_score: compositeScore,
-            judge_model: modelId,
+            judge_model: usedJudgeModel,
             judge_evaluated_at: new Date().toISOString(),
           }).eq('id', report.id)
 
-          // Track prompt A/B scores per version
+          // Wave D D1: surface judge scores to webhook plugins (e.g. low-score
+          // alerts to Slack/Linear). Async; failures must not affect batch.
+          void dispatchPluginEvent(db, project.id, 'judge.score_recorded', {
+            report: { id: report.id },
+            judge: {
+              model: usedJudgeModel,
+              fallback: judgeFallbackUsed,
+              score: compositeScore,
+              accuracy: evaluation.accuracy,
+              severity: evaluation.severity_calibration,
+              component: evaluation.component_tagging,
+              repro: evaluation.repro_quality,
+              classificationAgreed: evaluation.classification_agreed,
+            },
+          }).catch((e) => rootLog.child('judge').warn('Plugin dispatch failed', { event: 'judge.score_recorded', err: String(e) }))
+
+          // V5.3 §2.7 (M-cross-cutting): MUST scope by project_id and stage
+          // so two projects sharing a version string don't corrupt each other's
+          // running averages.
           if (report.stage1_prompt_version) {
-            recordPromptResult(db, report.id, report.stage1_prompt_version, compositeScore)
-              .catch(e => rootLog.child('judge').error('recordPromptResult stage1 failed', { err: String(e) }))
+            recordPromptResult(db, report.id, report.stage1_prompt_version, compositeScore, {
+              projectId: project.id,
+              stage: 'stage1',
+            }).catch(e => rootLog.child('judge').error('recordPromptResult stage1 failed', { err: String(e) }))
           }
           if (report.stage2_prompt_version) {
-            recordPromptResult(db, report.id, report.stage2_prompt_version, compositeScore)
-              .catch(e => rootLog.child('judge').error('recordPromptResult stage2 failed', { err: String(e) }))
+            recordPromptResult(db, report.id, report.stage2_prompt_version, compositeScore, {
+              projectId: project.id,
+              stage: 'stage2',
+            }).catch(e => rootLog.child('judge').error('recordPromptResult stage2 failed', { err: String(e) }))
           }
 
           totalEvaluated++
-          span.end({ model: modelId, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+          span.end({ model: usedJudgeModel, fallback: judgeFallbackUsed, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         } catch (err) {
           rootLog.child('judge').error('Failed to evaluate report', { reportId: report.id, err: String(err) })
           span.end({ error: String(err) })
@@ -250,4 +316,4 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
     } catch { /* best-effort */ }
     return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500 })
   }
-})
+}))

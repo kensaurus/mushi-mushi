@@ -1,0 +1,52 @@
+---
+title: MCP server quickstart
+---
+
+# MCP server
+
+Wire Mushi into Claude Desktop, Cursor, Codex CLI, or any
+[Model Context Protocol](https://modelcontextprotocol.io/) client. The
+server exposes Mushi reports as tools, letting an agent triage, comment,
+and dispatch fixes from your IDE.
+
+## Install
+
+```bash
+pnpm add -g @mushi-mushi/mcp
+```
+
+## Add to Claude Desktop
+
+```json filename="~/Library/Application Support/Claude/claude_desktop_config.json"
+{
+  "mcpServers": {
+    "mushi-mushi": {
+      "command": "mushi-mushi-mcp",
+      "env": {
+        "MUSHI_PROJECT_ID": "YOUR_PROJECT_ID",
+        "MUSHI_API_KEY": "YOUR_SERVICE_API_KEY"
+      }
+    }
+  }
+}
+```
+
+## Available tools
+
+| Tool                 | Purpose                                      |
+| -------------------- | -------------------------------------------- |
+| `list_reports`       | Filter by status, severity, component        |
+| `get_report`         | Full detail incl. screenshot + classification |
+| `comment_on_report`  | Post a triage note (audit-logged)            |
+| `transition_report`  | `new → fixing → fixed` etc.                  |
+| `dispatch_fix`       | Hand off to the agentic fix orchestrator     |
+| `query_knowledge_graph` | Ask "what other reports look like this?"  |
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info" emoji="🔁">
+  The MCP server speaks JSON-RPC 2.0 with `tools/call` semantics, and the
+  agent surface is also discoverable via the
+  [A2A Agent Card](/concepts/architecture#a2a-agent-card) at
+  `/.well-known/agent-card`.
+</Callout>

@@ -8,6 +8,7 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'user.logged_in' | 'user.logged_out'
   | 'fix.attempted' | 'fix.reviewed'
   | 'integration.synced' | 'plugin.executed'
+  | 'billing.checkout_started' | 'billing.subscription_changed' | 'billing.payment_failed'
 
 export async function logAudit(
   db: SupabaseClient,

@@ -124,25 +124,47 @@ export async function getPromptForStage(
 /**
  * Record a judge score against a prompt version using an incremental running average.
  * Formula: new_avg = ((old_avg * old_count) + new_score) / (old_count + 1)
+ *
+ * V5.3 §2.7 fix (M-cross-cutting): MUST filter by project_id and stage as well
+ * as version. Prior to this, two projects sharing a version string like "v1"
+ * would write to the wrong row, corrupting both projects' running averages.
+ * If projectId is omitted, we restrict to global rows (project_id IS NULL).
  */
 export async function recordPromptResult(
   db: SupabaseClient,
   _reportId: string,
   promptVersion: string,
   judgeScore: number,
+  scope?: { projectId?: string | null; stage?: string },
 ): Promise<void> {
   if (!promptVersion) return
 
-  const { data: row, error: fetchErr } = await db
+  let query = db
     .from('prompt_versions')
     .select('id, avg_judge_score, total_evaluations')
     .eq('version', promptVersion)
-    .single()
+  query = scope?.projectId ? query.eq('project_id', scope.projectId) : query.is('project_id', null)
+  if (scope?.stage) query = query.eq('stage', scope.stage)
 
-  if (fetchErr || !row) {
-    log.warn('prompt_versions row not found for version', { promptVersion, error: fetchErr?.message })
+  const { data: rows, error: fetchErr } = await query
+  if (fetchErr) {
+    log.warn('prompt_versions lookup failed', { promptVersion, error: fetchErr.message })
     return
   }
+  if (!rows || rows.length === 0) {
+    log.warn('prompt_versions row not found for scope', { promptVersion, projectId: scope?.projectId, stage: scope?.stage })
+    return
+  }
+  if (rows.length > 1) {
+    // Defensive: the (project_id, stage, version) unique constraint should make
+    // this impossible after migration 20260418000700 — keep the guard so older
+    // databases don't silently corrupt the running average.
+    log.error('Multiple prompt_versions rows match scope; refusing to update to avoid corruption', {
+      promptVersion, projectId: scope?.projectId, stage: scope?.stage, count: rows.length,
+    })
+    return
+  }
+  const row = rows[0]
 
   const oldAvg = row.avg_judge_score ?? 0
   const oldCount = row.total_evaluations ?? 0

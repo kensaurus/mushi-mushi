@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mushi Web Playground</title>
+    <style>
+      :root { color-scheme: light dark; font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #0b0b0d; color: #f5f5f7; }
+      main { max-width: 32rem; padding: 2rem; text-align: center; }
+      h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+      p { color: #a1a1aa; line-height: 1.6; }
+      kbd { background: #1f1f23; border: 1px solid #2e2e33; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace, SFMono-Regular, monospace; font-size: 0.85em; }
+      button { margin-top: 1.25rem; padding: 0.6rem 1.1rem; border: 0; border-radius: 8px; background: #6366f1; color: white; font-weight: 600; cursor: pointer; }
+      button:hover { background: #4f46e5; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Mushi Mushi 🪲</h1>
+      <p>
+        Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> to open the
+        bug-report widget — or click the button. The report goes to the
+        sandbox project on Mushi Cloud and resets nightly.
+      </p>
+      <button id="open">Report a bug</button>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

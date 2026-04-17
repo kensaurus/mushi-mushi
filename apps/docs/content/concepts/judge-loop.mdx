@@ -1,0 +1,57 @@
+---
+title: Judge & self-improvement
+---
+
+# Judge & self-improvement
+
+Mushi doesn't ship a static prompt. The classifier improves continuously
+via three loops:
+
+## 1. Judge
+
+`judge-batch` runs nightly on a sample of yesterday's classifications.
+A separate **judge model** (typically a different family from the
+classifier — by default Anthropic Sonnet judging Anthropic Haiku, with
+OpenAI gpt-4o as fallback) scores every component:
+
+| Score                  | Weight |
+| ---------------------- | ------ |
+| `accuracy`             | 0.35   |
+| `severity_calibration` | 0.25   |
+| `component_tagging`    | 0.20   |
+| `repro_quality`        | 0.20   |
+
+The composite lands on the report itself (`reports.judge_score`) and
+persists in `classification_evaluations` for audit.
+
+## 2. Prompt A/B testing
+
+Each classification stage carries a `stage1_prompt_version` and
+`stage2_prompt_version`. The candidate prompt runs on a slice of traffic
+(default 5%) for a configurable window. When the candidate's mean judge
+score wins by ≥ 0.05 with a 95% confidence interval that doesn't include
+zero, the candidate is **promoted** automatically and the active prompt is
+demoted. All this is project-scoped — your prompts never leak into
+another project's A/B counters.
+
+## 3. Fine-tune export
+
+The Fine-Tuning page in the admin console lets you export the best-scoring
+classifications, validate the export against an open-eval harness, and
+promote a fine-tuned variant to production with a single click. The full
+pipeline:
+
+```
+exporting → exported → training → trained → validating → validated → promoted
+                                                                  ↓
+                                                              rejected
+```
+
+Validation runs an offline benchmark and refuses to promote a candidate
+whose judge mean is below the current production prompt's mean.
+
+## 4. Drift detection
+
+If yesterday's mean composite drops > 0.10 vs. the trailing 7-day mean,
+`judge-batch` posts a `judge.drift` Slack alert. This is the first signal
+that an upstream model or the prompts themselves regressed.

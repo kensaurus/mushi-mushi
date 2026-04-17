@@ -28,6 +28,9 @@ export interface LlmInvocationRecord {
   inputTokens?: number | null
   outputTokens?: number | null
   promptVersion?: string | null
+  /** Wave C C9: where the API key came from. Audited so customers can prove
+   *  their BYOK key was actually used for billing/compliance reasons. */
+  keySource?: 'byok' | 'env' | null
 }
 
 export function logLlmInvocation(
@@ -49,6 +52,7 @@ export function logLlmInvocation(
     input_tokens: rec.inputTokens ?? null,
     output_tokens: rec.outputTokens ?? null,
     prompt_version: rec.promptVersion ?? null,
+    key_source: rec.keySource ?? null,
   }).then(({ error }) => {
     if (error) log.warn('llm_invocations insert failed', { error: error.message })
   })

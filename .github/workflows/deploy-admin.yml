@@ -13,7 +13,15 @@
 # - S3 bucket: kensaur.us-mushi-mushi (ap-northeast-1)
 # - CloudFront distribution: kensaur.us (E246VQ1C9QYZVB)
 # - GitHub Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
-#   CLOUDFRONT_DISTRIBUTION_ID, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+#   CLOUDFRONT_DISTRIBUTION_ID, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,
+#   VITE_SENTRY_DSN, SENTRY_AUTH_TOKEN
+#
+# SENTRY:
+# - VITE_SENTRY_DSN is baked into the bundle at build time (DSNs are public).
+# - SENTRY_AUTH_TOKEN is a maintainer-only secret used by @sentry/vite-plugin
+#   to upload sourcemaps and by getsentry/action-release to tag the release.
+# - Sourcemaps are deleted from dist after upload (see vite.config.ts) so the
+#   public S3 bucket never serves them.
 #
 # NOTES:
 # - This workflow is completely separate from the SDK release pipeline
@@ -86,6 +94,33 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # CloudFront serves this build under /mushi-mushi/, so all asset URLs
+          # and the React Router basename must be prefixed accordingly. Local
+          # dev and other deployments leave this unset and serve from /.
+          VITE_BASE_PATH: /mushi-mushi/
+          # Sentry — DSN baked into bundle, auth token + org/project let the
+          # Vite plugin upload sourcemaps. VITE_RELEASE tags the release so
+          # Sentry can group events by version and resolve them automatically.
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_RELEASE: ${{ steps.version.outputs.app_version }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: sakuramoto
+          SENTRY_PROJECT_ADMIN: mushi-mushi-admin
+
+      - name: Create Sentry release & associate commits
+        # Sentry tagging is nice-to-have — never block a deploy if it fails.
+        continue-on-error: true
+        uses: getsentry/action-release@5657c9e888b4e2cc85f4d29143ea4131fde4a73a  # v3.6.0
+        with:
+          environment: production
+          version: ${{ steps.version.outputs.app_version }}
+          # Sourcemaps were already uploaded by @sentry/vite-plugin during the
+          # build step (and deleted from dist). This step adds the release
+          # marker + commit association so Suspect Commits works in Sentry.
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: sakuramoto
+          SENTRY_PROJECT: mushi-mushi-admin
 
       - name: Generate version file
         env:

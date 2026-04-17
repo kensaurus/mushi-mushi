@@ -7,7 +7,12 @@
 
 import { useState, useCallback } from 'react'
 import { Btn } from './ui'
-import { isCloudMode } from '../lib/env'
+import {
+  isCloudMode,
+  RESOLVED_SUPABASE_URL as SUPABASE_URL,
+  RESOLVED_SUPABASE_ANON_KEY as SUPABASE_ANON_KEY,
+  RESOLVED_API_URL as API_URL,
+} from '../lib/env'
 
 interface Check {
   id: string
@@ -18,12 +23,7 @@ interface Check {
   latencyMs?: number
 }
 
-import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from '../lib/env'
-
 const cloud = isCloudMode()
-const SUPABASE_URL = ((import.meta.env.VITE_SUPABASE_URL ?? '').trim() || CLOUD_SUPABASE_URL).replace(/\/$/, '')
-const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() || CLOUD_SUPABASE_ANON_KEY
-const API_URL = ((import.meta.env.VITE_API_URL ?? '').trim() || `${SUPABASE_URL}/functions/v1/api`).replace(/\/$/, '')
 
 async function timedFetch(url: string, init?: RequestInit): Promise<{ ok: boolean; status: number; ms: number; body?: string }> {
   const t0 = performance.now()

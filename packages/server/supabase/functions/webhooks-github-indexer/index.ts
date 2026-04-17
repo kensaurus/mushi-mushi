@@ -1,0 +1,296 @@
+/**
+ * V5.3 §2.3.4: GitHub App webhook handler for the RAG codebase indexer.
+ *
+ * - Verifies X-Hub-Signature-256 against the webhook secret (timing-safe).
+ * - Mints a short-lived installation access token via the GitHub App private key.
+ * - Diff-walks the push (added + modified + removed paths), pulls file
+ *   contents via the contents API, chunks them, embeds, and upserts into
+ *   project_codebase_files. Removed paths are tombstoned, not hard-deleted.
+ *
+ * Env required:
+ *   GITHUB_APP_ID                — numeric App ID
+ *   GITHUB_APP_PRIVATE_KEY       — PEM (no passphrase)
+ *   GITHUB_APP_WEBHOOK_SECRET    — secret configured on the App
+ */
+
+import { Hono } from 'npm:hono@4'
+import { createClient } from 'npm:@supabase/supabase-js@2'
+import { chunk, shouldIndex, sha256Hex } from '../_shared/code-indexer.ts'
+import { createEmbedding } from '../_shared/embeddings.ts'
+import { log as rootLog } from '../_shared/logger.ts'
+import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
+
+ensureSentry('webhooks-github-indexer')
+
+const log = rootLog.child('webhooks-github-indexer')
+const app = new Hono()
+app.onError(sentryHonoErrorHandler)
+
+function getDb() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    { auth: { persistSession: false } },
+  )
+}
+
+async function verifySignature(req: Request, raw: string): Promise<boolean> {
+  const secret = Deno.env.get('GITHUB_APP_WEBHOOK_SECRET')
+  if (!secret) return false
+  const sig = req.headers.get('X-Hub-Signature-256') ?? ''
+  if (!sig.startsWith('sha256=')) return false
+  const expected = await hmacSha256Hex(secret, raw)
+  return timingSafeEqual(sig.slice(7), expected)
+}
+
+async function hmacSha256Hex(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message))
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let mismatch = 0
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return mismatch === 0
+}
+
+/**
+ * Mint a JWT for the App, exchange for an installation token. JWTs are tiny —
+ * we sign in-process via Web Crypto rather than pulling jose into the bundle.
+ */
+async function mintInstallationToken(installationId: number): Promise<string> {
+  const appId = Deno.env.get('GITHUB_APP_ID')
+  const pem = Deno.env.get('GITHUB_APP_PRIVATE_KEY')
+  if (!appId || !pem) throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY required')
+
+  const now = Math.floor(Date.now() / 1000)
+  const header = { alg: 'RS256', typ: 'JWT' }
+  const payload = { iat: now - 30, exp: now + 540, iss: appId }
+  const enc = (obj: unknown) =>
+    btoa(JSON.stringify(obj)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+  const data = `${enc(header)}.${enc(payload)}`
+
+  const key = await importPkcs8(pem)
+  const sig = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, key, new TextEncoder().encode(data))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
+  const jwt = `${data}.${sigB64}`
+
+  const res = await fetch(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`)
+  const body = await res.json() as { token: string }
+  return body.token
+}
+
+async function importPkcs8(pem: string): Promise<CryptoKey> {
+  const stripped = pem
+    .replace(/-----BEGIN [A-Z ]+-----/, '')
+    .replace(/-----END [A-Z ]+-----/, '')
+    .replace(/\s+/g, '')
+  const der = Uint8Array.from(atob(stripped), c => c.charCodeAt(0))
+  return await crypto.subtle.importKey(
+    'pkcs8',
+    der,
+    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+}
+
+/**
+ * Encode a repo-relative file path for the GitHub Contents API. Each segment
+ * is percent-encoded independently so characters like `#` or spaces are escaped
+ * but the path separators stay as literal `/` — `encodeURIComponent` on the
+ * whole string would convert `/` to `%2F` and turn every subdirectory file
+ * into a 404.
+ */
+function encodeRepoPath(path: string): string {
+  return path
+    .split('/')
+    .filter((seg) => seg.length > 0)
+    .map(encodeURIComponent)
+    .join('/')
+}
+
+async function fetchFileContents(
+  token: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  const res = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/contents/${encodeRepoPath(path)}?ref=${encodeURIComponent(ref)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github.raw',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (res.status === 404) return null
+  if (!res.ok) {
+    log.warn('contents fetch failed', { path, status: res.status })
+    return null
+  }
+  const text = await res.text()
+  if (text.length > 500_000) return null
+  return text
+}
+
+app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }))
+
+app.post('/webhooks-github-indexer', async (c) => {
+  const raw = await c.req.text()
+  if (!await verifySignature(c.req.raw, raw)) {
+    return c.json({ error: 'invalid signature' }, 401)
+  }
+  const event = c.req.header('X-GitHub-Event') ?? 'unknown'
+  if (event !== 'push' && event !== 'installation_repositories') {
+    return c.json({ ok: true, ignored: event }, 202)
+  }
+
+  const payload = JSON.parse(raw) as {
+    repository?: { full_name?: string; owner?: { login?: string }; name?: string }
+    installation?: { id?: number }
+    after?: string
+    commits?: Array<{ added?: string[]; modified?: string[]; removed?: string[] }>
+  }
+
+  const installationId = payload.installation?.id
+  const owner = payload.repository?.owner?.login
+  const repo = payload.repository?.name
+  const ref = payload.after
+  if (!installationId || !owner || !repo || !ref) {
+    return c.json({ error: 'missing webhook fields' }, 400)
+  }
+
+  const db = getDb()
+  const repoFullName = `${owner}/${repo}`
+  const { data: project } = await db
+    .from('project_integrations')
+    .select('project_id')
+    .eq('integration_type', 'github')
+    .contains('config', { repo: repoFullName })
+    .single()
+
+  if (!project?.project_id) {
+    return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName }, 202)
+  }
+
+  const token = await mintInstallationToken(installationId)
+  const projectId = project.project_id as string
+
+  const added = new Set<string>()
+  const removed = new Set<string>()
+  for (const commit of payload.commits ?? []) {
+    for (const p of [...(commit.added ?? []), ...(commit.modified ?? [])]) added.add(p)
+    for (const p of (commit.removed ?? [])) removed.add(p)
+  }
+
+  let inserted = 0
+  let tombstoned = 0
+  let upsertFailures = 0
+  let tombstoneFailures = 0
+  const languageCounts: Record<string, number> = {}
+
+  for (const path of removed) {
+    if (!shouldIndex(path)) continue
+    const { error } = await db.from('project_codebase_files')
+      .update({ tombstoned_at: new Date().toISOString() })
+      .eq('project_id', projectId)
+      .eq('file_path', path)
+    if (error) {
+      tombstoneFailures++
+      log.warn('tombstone failed', { projectId, path, error: error.message })
+      continue
+    }
+    tombstoned++
+  }
+
+  for (const path of added) {
+    if (!shouldIndex(path)) continue
+    const source = await fetchFileContents(token, owner, repo, path, ref)
+    if (!source) continue
+    const chunks = chunk(path, source)
+    for (const ch of chunks) {
+      const text = `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`
+      const embedding = await createEmbedding(text)
+      const contentHash = await sha256Hex(ch.body)
+      // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
+      // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.
+      const { error } = await db.from('project_codebase_files').upsert({
+        project_id: projectId,
+        file_path: path,
+        symbol_name: ch.symbolName,
+        signature: ch.signature,
+        line_start: ch.lineStart,
+        line_end: ch.lineEnd,
+        language: ch.language,
+        content_hash: contentHash,
+        content_preview: ch.body.slice(0, 600),
+        embedding,
+        embedding_model: 'text-embedding-3-small',
+        last_modified: new Date().toISOString(),
+        tombstoned_at: null,
+      }, { onConflict: 'project_id,file_path,symbol_name' })
+      if (error) {
+        upsertFailures++
+        log.error('chunk upsert failed', {
+          projectId,
+          path,
+          symbolName: ch.symbolName,
+          error: error.message,
+        })
+        continue
+      }
+      inserted++
+      languageCounts[ch.language] = (languageCounts[ch.language] ?? 0) + 1
+    }
+  }
+
+  log.info('indexed push', { projectId, repoFullName, ref, inserted, tombstoned, upsertFailures, tombstoneFailures })
+
+  // If every attempted write failed, fail loudly so the webhook is retried —
+  // a silent 200 here is what masked the original onConflict mismatch.
+  const attempted = inserted + upsertFailures
+  if (attempted > 0 && inserted === 0) {
+    return c.json({
+      ok: false,
+      error: { code: 'ALL_UPSERTS_FAILED', message: 'Every chunk upsert failed; check logs.' },
+      projectId,
+      attempted,
+    }, 500)
+  }
+
+  return c.json({
+    ok: true,
+    projectId,
+    inserted,
+    tombstoned,
+    upsertFailures,
+    tombstoneFailures,
+    languages: languageCounts,
+  })
+})
+
+Deno.serve(app.fetch)

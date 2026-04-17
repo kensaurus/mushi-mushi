@@ -1,0 +1,33 @@
+---
+title: Bring-your-own-key
+---
+
+# Bring-your-own-key (BYOK)
+
+Mushi supports project-scoped Anthropic and OpenAI keys. When set, every
+classifier, judge, fix orchestrator, and intelligence-report run for
+that project uses your key — usage shows up in your provider console, not
+ours.
+
+## Setup
+
+In the admin console: **Settings → BYOK**.
+
+Paste your `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY`. The values are
+written into Supabase Vault and only resolved at LLM-invocation time via
+`vault.resolve_secret()`. The DB row stores only the secret ID.
+
+```sql
+select * from public.project_llm_keys;
+-- project_id | provider  | key_source | secret_id | key_hash | …
+```
+
+`key_source` is `'tenant'` if the project supplied a key, `'platform'`
+otherwise. Langfuse traces record the source so you can audit billable
+usage per tenant.
+
+## Rotation + audit
+
+Every set/rotate/clear operation writes a row to `byok_audit_log` with
+the actor, action, and timestamp. The new key takes effect on the next
+LLM call — no Edge Function redeploy needed.

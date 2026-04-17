@@ -6,6 +6,7 @@
 
 import { Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
+import { Sentry } from '../lib/sentry'
 import { Card, Btn } from './ui'
 
 interface Props {
@@ -29,6 +30,10 @@ export class ErrorBoundary extends Component<Props, State> {
       error: error.message,
       stack: error.stack,
       componentStack: info.componentStack,
+    })
+    Sentry.captureException(error, {
+      contexts: { react: { componentStack: info.componentStack } },
+      tags: { source: 'react-error-boundary' },
     })
   }
 

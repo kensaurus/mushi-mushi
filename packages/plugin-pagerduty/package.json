@@ -1,0 +1,57 @@
+{
+  "name": "@mushi-mushi/plugin-pagerduty",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Reference Mushi Mushi plugin: page on-call via PagerDuty when a critical bug is reported.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mushi-plugin-pagerduty": "./dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mushi-mushi/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.2.0",
+    "tsup": "^8.4.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/plugin-pagerduty"
+  },
+  "author": "Kenji Sakuramoto",
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "keywords": [
+    "mushi-mushi",
+    "plugin",
+    "pagerduty",
+    "incident-response"
+  ]
+}

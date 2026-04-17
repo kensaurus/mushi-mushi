@@ -43,7 +43,7 @@ export const MushiPlugin: Plugin = {
     const client: MushiApiClient = createApiClient({
       projectId: config.projectId,
       apiKey: config.apiKey,
-      apiEndpoint: config.endpoint ?? 'https://api.mushimushi.dev',
+      ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
     })
 
     const instance: MushiInstance = {

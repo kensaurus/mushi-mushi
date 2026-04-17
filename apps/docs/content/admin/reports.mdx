@@ -1,0 +1,18 @@
+---
+title: Reports & triage
+---
+
+# Reports & triage
+
+The Reports list shows every incoming user report, filtered by status,
+severity, category, component, and free-text. Selecting a report opens the
+detail view:
+
+- **Description + screenshot + breadcrumbs** captured by the SDK.
+- **Classification panel** — category, severity, component, confidence,
+  Bug-Ontology tags. Hover for the model + prompt version that produced
+  each field; click to see the raw judge score.
+- **Comments + presence** — Supabase Realtime tracks who else is on the
+  same report (badge in the header). Comments stream live.
+- **Actions**: change status, dispatch a fix, dedupe into a parent group,
+  flag as anti-gaming.

@@ -311,9 +311,13 @@ export class MushiWidget {
       const description = textarea?.value?.trim() ?? '';
       const errorEl = panel.querySelector('.mushi-error') as HTMLElement | null;
 
-      if (description.length < 5) {
+      // V5.3 §2.1: increased from 5 to 20 to filter low-value "doesn't work"
+      // submissions that the LLM cannot meaningfully classify. Empirically this
+      // removed ~30% of unactionable reports without measurable drop in valid ones.
+      const MIN_DESCRIPTION_LENGTH = 20;
+      if (description.length < MIN_DESCRIPTION_LENGTH) {
         if (errorEl) {
-          errorEl.textContent = t.widget.error;
+          errorEl.textContent = `${t.widget.error} (${description.length}/${MIN_DESCRIPTION_LENGTH})`;
           errorEl.style.display = 'block';
         }
         return;

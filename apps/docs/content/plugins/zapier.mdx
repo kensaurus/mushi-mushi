@@ -1,0 +1,21 @@
+---
+title: Zapier
+---
+
+# Zapier plugin
+
+Fan every Mushi event out to Zapier so you can wire it into Slack,
+Notion, Google Sheets, HubSpot, or any of the 6,000+ Zapier
+integrations.
+
+## Setup
+
+1. Create a Zapier **Webhook by Zapier → Catch Hook** trigger and copy
+   the URL.
+2. In Mushi: **Marketplace → Zapier → Install**.
+3. Paste the URL. Optionally restrict to a subset of `events`.
+
+The plugin signs every payload with HMAC-SHA256 (header
+`x-mushi-signature`) using the secret you supply at install time —
+verify it inside Zapier with a Code-by-Zapier step before acting on the
+event.

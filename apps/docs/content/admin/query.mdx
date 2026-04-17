@@ -1,0 +1,13 @@
+---
+title: Natural-language query
+---
+
+# Natural-language query
+
+Ask "how many critical bugs touched the checkout component last week,
+grouped by browser?" and the query page translates it to SQL, validates
+the SQL against an allow-list of read-only tables, runs it, and renders
+the result as a chart.
+
+All queries land in the audit log with the user, the prompt, the
+generated SQL, and the result row count.

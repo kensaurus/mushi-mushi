@@ -14,6 +14,8 @@ import { buildReportGraph, detectRegression } from '../_shared/knowledge-graph.t
 import { log as rootLog } from '../_shared/logger.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { logLlmInvocation } from '../_shared/telemetry.ts'
+import { withSentry } from '../_shared/sentry.ts'
+import { resolveLlmKey } from '../_shared/byok.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -37,7 +39,7 @@ Rules:
 4. Set confidence based on how clear and specific the report is. Vague reports get lower confidence.
 5. Be concise. Each field should be 1-2 sentences max.`
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('fast-filter', async (req) => {
   try {
     const { reportId, projectId } = await req.json()
     if (!reportId || !projectId) {
@@ -108,8 +110,11 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     let fallbackReason: string | null = null
 
     let tokenUsage: { promptTokens?: number; completionTokens?: number } = {}
+    // Wave C C9: resolve BYOK first; falls back to env automatically.
+    const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic')
+    let keySource: 'byok' | 'env' | null = anthropicResolved?.source ?? null
     try {
-      const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+      const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
       const { object, usage } = await generateObject({
         model: anthropic(PRIMARY_MODEL),
         schema: stage1Schema,
@@ -128,7 +133,9 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       tokenUsage = usage ?? {}
     } catch (primaryErr) {
       log.warn('Anthropic Haiku failed, falling back to OpenAI', { err: String(primaryErr) })
-      const openaiKey = Deno.env.get('OPENAI_API_KEY')
+      const openaiResolved = await resolveLlmKey(db, projectId, 'openai')
+      const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
+      keySource = openaiResolved?.source ?? (openaiKey ? 'env' : keySource)
       if (!openaiKey) {
         await logLlmInvocation(db, {
           projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
@@ -167,6 +174,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       inputTokens: tokenUsage.promptTokens ?? null,
       outputTokens: tokenUsage.completionTokens ?? null,
       promptVersion: promptSelection.promptVersion,
+      keySource: keySource ?? 'env',
     })
 
     await db.from('reports').update({
@@ -312,4 +320,4 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     rootLog.child('fast-filter').error('Unhandled error', { err: String(err) })
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
   }
-})
+}))

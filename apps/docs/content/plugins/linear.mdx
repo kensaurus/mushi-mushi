@@ -1,0 +1,27 @@
+---
+title: Linear
+---
+
+# Linear plugin
+
+Files a Linear issue every time the classifier categorises a report.
+
+## Setup
+
+1. Create a Linear API key → **Settings → API → Personal API keys**.
+2. In Mushi: **Marketplace → Linear → Install**.
+3. Provide:
+   - `apiKey` — pasted into Vault, never echoed back
+   - `teamId` — the Linear team to file under
+   - `labelMap` *(optional)* — JSON object mapping
+     `taxonomy_path → label_id[]`
+
+## Behaviour
+
+- **`report.classified`** → creates a Linear issue with:
+  - title = the report title
+  - description = Markdown summary + report URL
+  - priority = `p0→1, p1→2, p2→3, p3→4`
+  - labels = `labelMap[taxonomy_path] ?? []`
+- **`report.status_changed → resolved`** → moves the linked Linear
+  issue to *Done*, leaving a comment with the merged PR URL.

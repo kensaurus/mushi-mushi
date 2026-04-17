@@ -2,12 +2,30 @@
   "name": "@mushi-mushi/docs",
   "version": "0.0.0",
   "private": true,
-  "description": "Mushi Mushi documentation site",
+  "description": "Mushi Mushi documentation site (Nextra v4 + Next.js App Router)",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "echo 'docs: stub — no build yet'",
-    "dev": "echo 'docs: stub — no dev yet'",
-    "clean": "rm -rf dist .turbo"
+    "dev": "next --turbopack",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "clean": "rm -rf .next .turbo"
+  },
+  "dependencies": {
+    "next": "^15.1.6",
+    "nextra": "^4.6.1",
+    "nextra-theme-docs": "^4.6.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "eslint": "^10.2.0",
+    "typescript": "^5.7.3"
   }
 }

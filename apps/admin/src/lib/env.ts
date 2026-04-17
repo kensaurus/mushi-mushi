@@ -14,6 +14,21 @@ export const CLOUD_SUPABASE_URL = 'https://dxptnwrhwsqckaftyymj.supabase.co'
 export const CLOUD_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM'
 export const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
 
+// Resolved env values with cloud fallback baked in. Use these everywhere
+// instead of reading `import.meta.env.VITE_SUPABASE_URL` directly — when no
+// .env is set (cloud mode default) the raw env var is `undefined`, which
+// silently produces broken strings like `"undefined/functions/v1/api"`.
+// Trailing slashes are normalized so `${url}/functions/v1/api` never produces `//`.
+const stripTrailingSlash = (s: string) => s.replace(/\/+$/, '')
+export const RESOLVED_SUPABASE_URL = stripTrailingSlash(
+  (import.meta.env.VITE_SUPABASE_URL ?? '').trim() || CLOUD_SUPABASE_URL,
+)
+export const RESOLVED_SUPABASE_ANON_KEY =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() || CLOUD_SUPABASE_ANON_KEY
+export const RESOLVED_API_URL = stripTrailingSlash(
+  (import.meta.env.VITE_API_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/api`,
+)
+
 export type InstanceMode = 'cloud' | 'self-hosted'
 
 export interface EnvStatus {

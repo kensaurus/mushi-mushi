@@ -4,6 +4,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log } from '../_shared/logger.ts'
+import { withSentry } from '../_shared/sentry.ts'
 
 const synthLog = log.child('synthetic')
 
@@ -21,7 +22,7 @@ const syntheticSchema = z.object({
   }),
 })
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('generate-synthetic', async (req) => {
   const auth = req.headers.get('Authorization')
   const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
@@ -78,4 +79,4 @@ Deno.serve(async (req) => {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })
-})
+}))

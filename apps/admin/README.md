@@ -42,6 +42,7 @@ The console detects a non-cloud `VITE_SUPABASE_URL` and switches to self-hosted 
 | `VITE_SUPABASE_ANON_KEY` | No | Supabase anonymous key. Defaults to cloud key |
 | `VITE_API_URL` | No | Override API base URL (defaults to Supabase functions) |
 | `VITE_INSTANCE_TYPE` | No | Force `self-hosted` mode (auto-detected otherwise) |
+| `VITE_BASE_PATH` | No | Public base path for the build. Defaults to `/`. The CloudFront deployment sets this to `/mushi-mushi/` in `.github/workflows/deploy-admin.yml` |
 
 ## Design System
 

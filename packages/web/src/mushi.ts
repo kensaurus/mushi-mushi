@@ -75,7 +75,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const apiClient = createApiClient({
     projectId: config.projectId,
     apiKey: config.apiKey,
-    apiEndpoint: config.apiEndpoint ?? 'https://api.mushimushi.dev',
+    ...(config.apiEndpoint ? { apiEndpoint: config.apiEndpoint } : {}),
   });
 
   const preFilter = createPreFilter(config.preFilter);
@@ -201,6 +201,35 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (!filterResult.passed) {
       log.info('Report blocked by pre-filter', { reason: filterResult.reason });
       return;
+    }
+
+    const wasm = config.preFilter?.wasmClassifier;
+    if (wasm) {
+      try {
+        const verdict = await wasm.classify({
+          description,
+          category,
+          url: typeof location !== 'undefined' ? location.href : undefined,
+          hasScreenshot: pendingScreenshot !== null,
+          hasSelectedElement: pendingElement !== null,
+          hasNetworkErrors: networkCap?.getEntries()?.some((e) => e.status >= 400 || !!e.error) ?? false,
+          hasConsoleErrors: consoleCap?.getEntries()?.some((e) => e.level === 'error') ?? false,
+          proactiveTrigger: pendingProactiveTrigger ?? undefined,
+        });
+        if (verdict.verdict === 'block') {
+          log.info('Report blocked by on-device classifier', {
+            modelId: verdict.modelId,
+            confidence: verdict.confidence,
+            reason: verdict.reason,
+          });
+          return;
+        }
+        log.debug('On-device classifier verdict', { ...verdict });
+      } catch (err) {
+        log.warn('On-device classifier threw — falling through to server', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     if (!rateLimiter.tryConsume()) {

@@ -25,6 +25,10 @@ const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const FineTuningPage = lazy(() => import('./pages/FineTuningPage').then(m => ({ default: m.FineTuningPage })))
+const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
+const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
+const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })))
+const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
@@ -97,6 +101,10 @@ export function App() {
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/fine-tuning" element={<FineTuningPage />} />
+                  <Route path="/intelligence" element={<IntelligencePage />} />
+                  <Route path="/compliance" element={<CompliancePage />} />
+                  <Route path="/storage" element={<StoragePage />} />
+                  <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations" element={<IntegrationsPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/health" element={<HealthPage />} />

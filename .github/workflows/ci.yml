@@ -44,5 +44,11 @@ jobs:
 
       - run: pnpm test
 
+      # Wave D D2: enforce that the public changelog is in sync with the
+      # per-package CHANGELOGs and pending changesets. If a PR touches
+      # changesets without regenerating, this fails with an actionable error.
+      - name: Verify public changelog is in sync
+        run: pnpm changelog:check
+
       - name: Check bundle sizes
         run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit

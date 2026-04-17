@@ -1,0 +1,28 @@
+---
+title: Fine-tuning
+---
+
+# Fine-tuning
+
+A guided pipeline to take your project's classification history and produce
+a fine-tuned variant that beats the current production prompt.
+
+## Pipeline
+
+```
+exporting → exported → training → trained → validating → validated → promoted
+                                                                  ↘
+                                                              rejected
+```
+
+Each stage is observable in the UI with a stepper. The Validation report
+includes:
+
+- **Eval accuracy** vs. baseline.
+- **Severity calibration delta**.
+- **Component tagging F1**.
+- **Cost-per-classification** projection.
+
+A candidate is **only promotable** if its judge-score mean wins the active
+prompt's mean by ≥ 0.05 with p < 0.05. Otherwise the UI offers Reject
+with a one-line reason, archived for future tuning runs.

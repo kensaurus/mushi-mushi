@@ -1,0 +1,16 @@
+---
+title: Real-time collaboration
+---
+
+# Real-time collaboration
+
+Reports are collaborative documents. Two tables back the experience:
+
+- **`report_comments`** — threaded, append-only, Markdown-aware.
+- **`report_presence`** — heartbeat row keyed on `(report_id, user_id)`.
+
+The admin SPA subscribes to both via Supabase Realtime. The header shows
+"3 viewing" with avatar bubbles, and incoming comments stream into the
+panel without a refresh. Comments can be deleted by their author or by an
+admin — the row is soft-deleted (`deleted_at`) so the audit log stays
+intact.

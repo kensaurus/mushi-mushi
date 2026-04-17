@@ -7,14 +7,11 @@
 
 import { createClient } from '@supabase/supabase-js'
 import { debugLog, debugWarn, debugError } from './debug'
-import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from './env'
+import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
 
-const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL ?? '').trim() || CLOUD_SUPABASE_URL
-const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim() || CLOUD_SUPABASE_ANON_KEY
+export const supabase = createClient(RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY)
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-const API_BASE = (import.meta.env.VITE_API_URL ?? '').trim() || `${SUPABASE_URL}/functions/v1/api`
+const API_BASE = RESOLVED_API_URL
 
 let _cachedToken: string | null = null
 let _tokenExpiresAt = 0

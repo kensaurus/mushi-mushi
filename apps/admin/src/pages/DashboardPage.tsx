@@ -33,7 +33,12 @@ function GettingStartedEmpty() {
   }, [])
 
   const hasProject = projects.length > 0
+  // `hasKey` drives the checklist tick — once the user has any key on any
+  // project, that step stays done. The displayed key (below) is scoped to the
+  // first project specifically, so we look it up safely instead of asserting.
   const hasKey = projects.some((p) => p.api_keys && p.api_keys.length > 0)
+  const firstProject = projects[0]
+  const firstProjectKey = firstProject?.api_keys?.[0]
   const onboardingDone = localStorage.getItem('mushi:onboarding_completed') === 'true'
 
   // Wait for the projects fetch to resolve before deciding whether to redirect.
@@ -46,16 +51,13 @@ function GettingStartedEmpty() {
   }
 
   async function submitTest() {
+    if (!firstProject) return
     setTestStatus('running')
-    const res = await apiFetch('/v1/reports', {
+    // Uses the JWT-authenticated admin endpoint (added in api/index.ts) instead
+    // of /v1/reports — that one requires X-Mushi-Api-Key, which the admin has
+    // no plaintext access to (keys are SHA-256 hashed at rest).
+    const res = await apiFetch(`/v1/admin/projects/${firstProject.id}/test-report`, {
       method: 'POST',
-      body: JSON.stringify({
-        projectId: projects[0]?.id ?? '',
-        description: 'Dashboard test report — verifying pipeline',
-        category: 'other',
-        environment: { url: 'admin://dashboard-test', browser: 'mushi-admin', userAgent: navigator.userAgent, platform: navigator.platform, language: navigator.language, viewport: { width: window.innerWidth, height: window.innerHeight }, referrer: '', timestamp: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-        reporterToken: 'dashboard-test',
-      }),
     })
     setTestStatus(res.ok ? 'pass' : 'fail')
   }
@@ -108,10 +110,10 @@ function GettingStartedEmpty() {
       </Card>
 
       {/* Project reference */}
-      {hasProject && (
+      {firstProject && (
         <div className="mt-4 text-2xs text-fg-faint space-y-0.5">
-          <p>Project: <span className="font-mono text-fg-secondary">{projects[0].name}</span> <span className="font-mono">({projects[0].id})</span></p>
-          {hasKey && <p>API Key: <span className="font-mono text-fg-secondary">{projects[0].api_keys![0].key_prefix}...</span></p>}
+          <p>Project: <span className="font-mono text-fg-secondary">{firstProject.name}</span> <span className="font-mono">({firstProject.id})</span></p>
+          {firstProjectKey && <p>API Key: <span className="font-mono text-fg-secondary">{firstProjectKey.key_prefix}...</span></p>}
         </div>
       )}
     </div>

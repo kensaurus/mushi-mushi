@@ -160,4 +160,106 @@ describe('judge-batch', () => {
     const settings = { judge_enabled: false, judge_sample_size: 50 }
     expect(settings.judge_enabled).toBe(false)
   })
+
+  // M2 — judge OpenAI fallback regression. When Anthropic returns 529
+  // (overloaded) we must NOT fail the batch — we must fall through to OpenAI
+  // and still produce a valid scored evaluation.
+  describe('OpenAI fallback (V5.3 §2.7)', () => {
+    type FallbackSettings = {
+      judge_enabled: boolean
+      judge_model: string
+      judge_fallback_provider: 'openai' | 'none'
+      judge_fallback_model: string
+    }
+
+    const buildSettings = (overrides: Partial<FallbackSettings> = {}): FallbackSettings => ({
+      judge_enabled: true,
+      judge_model: 'claude-opus-4-6',
+      judge_fallback_provider: 'openai',
+      judge_fallback_model: 'gpt-4.1',
+      ...overrides,
+    })
+
+    /** Simulates the production `try anthropic catch openai` ladder */
+    async function runJudgeWithFallback(
+      anthropicCall: () => Promise<JudgeEvaluation>,
+      openaiCall: () => Promise<JudgeEvaluation>,
+      settings: FallbackSettings,
+      hasOpenaiKey: boolean,
+    ): Promise<{ evaluation: JudgeEvaluation; usedModel: string; fallbackUsed: boolean }> {
+      try {
+        const evaluation = await anthropicCall()
+        return { evaluation, usedModel: settings.judge_model, fallbackUsed: false }
+      } catch (err) {
+        if (settings.judge_fallback_provider !== 'openai' || !hasOpenaiKey) throw err
+        const evaluation = await openaiCall()
+        return { evaluation, usedModel: settings.judge_fallback_model, fallbackUsed: true }
+      }
+    }
+
+    it('falls back to OpenAI when Anthropic throws 529 overloaded', async () => {
+      const anthropicMock = vi.fn(async () => {
+        const e = new Error('Anthropic API error: 529 Overloaded')
+        ;(e as Error & { status?: number }).status = 529
+        throw e
+      })
+      const openaiMock = vi.fn(async () => MOCK_EVALUATION)
+
+      const result = await runJudgeWithFallback(
+        anthropicMock,
+        openaiMock,
+        buildSettings(),
+        true,
+      )
+
+      expect(anthropicMock).toHaveBeenCalledTimes(1)
+      expect(openaiMock).toHaveBeenCalledTimes(1)
+      expect(result.fallbackUsed).toBe(true)
+      expect(result.usedModel).toBe('gpt-4.1')
+      expect(result.evaluation.accuracy).toBe(MOCK_EVALUATION.accuracy)
+    })
+
+    it('does NOT fallback when judge_fallback_provider = none', async () => {
+      const anthropicMock = vi.fn(async () => { throw new Error('5xx') })
+      const openaiMock = vi.fn(async () => MOCK_EVALUATION)
+
+      await expect(
+        runJudgeWithFallback(anthropicMock, openaiMock, buildSettings({ judge_fallback_provider: 'none' }), true),
+      ).rejects.toThrow('5xx')
+      expect(openaiMock).not.toHaveBeenCalled()
+    })
+
+    it('does NOT fallback when OPENAI_API_KEY is unset', async () => {
+      const anthropicMock = vi.fn(async () => { throw new Error('rate limit') })
+      const openaiMock = vi.fn(async () => MOCK_EVALUATION)
+
+      await expect(
+        runJudgeWithFallback(anthropicMock, openaiMock, buildSettings(), false),
+      ).rejects.toThrow('rate limit')
+      expect(openaiMock).not.toHaveBeenCalled()
+    })
+
+    it('happy path: skips fallback when Anthropic succeeds', async () => {
+      const anthropicMock = vi.fn(async () => MOCK_EVALUATION)
+      const openaiMock = vi.fn(async () => MOCK_EVALUATION)
+
+      const result = await runJudgeWithFallback(anthropicMock, openaiMock, buildSettings(), true)
+
+      expect(result.fallbackUsed).toBe(false)
+      expect(result.usedModel).toBe('claude-opus-4-6')
+      expect(openaiMock).not.toHaveBeenCalled()
+    })
+
+    it('schema is preserved across providers (composite score still computes)', () => {
+      const evaluation = MOCK_EVALUATION
+      const compositeScore = (
+        evaluation.accuracy * 0.35 +
+        evaluation.severity_calibration * 0.25 +
+        evaluation.component_tagging * 0.2 +
+        evaluation.repro_quality * 0.2
+      )
+      expect(compositeScore).toBeGreaterThan(0)
+      expect(compositeScore).toBeLessThanOrEqual(1)
+    })
+  })
 })

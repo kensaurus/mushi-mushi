@@ -1,0 +1,27 @@
+---
+title: Capacitor quickstart
+---
+
+# Capacitor quickstart
+
+The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
+and falls back to `@mushi-mushi/core` on the web.
+
+```bash
+pnpm add @mushi-mushi/capacitor
+npx cap sync
+```
+
+```ts filename="src/mushi.ts"
+import { MushiMushi } from '@mushi-mushi/capacitor'
+
+await MushiMushi.configure({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_PUBLIC_API_KEY',
+  enableShakeToReport: true,
+})
+```
+
+```ts
+await MushiMushi.submitReport({ description: 'Date picker is in UTC, not local' })
+```

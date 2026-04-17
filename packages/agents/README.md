@@ -14,15 +14,20 @@ Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-gene
 
 | Module | Purpose |
 |--------|---------|
-| `FixOrchestrator` | Main pipeline controller — assembles context, dispatches to agent, handles PR creation |
-| `GenericMCPAgent` | Adapter for MCP-compatible coding agents |
+| `FixOrchestrator` | Single-repo pipeline — assembles context, dispatches to agent, handles PR creation |
+| `MultiRepoFixOrchestrator` | Coordinates a fix across multiple repos in `project_repos` (FE+BE+infra), spawns one `FixOrchestrator` per repo, rolls up status, cross-links PRs |
+| `McpFixAgent` | True MCP adapter using `tools/call` + SEP-1686 Tasks |
+| `RestFixWorkerAgent` | Plain REST adapter for self-hosted fix workers |
+| `GenericMCPAgent` | Legacy MCP adapter (kept for back-compat; new integrations should use `McpFixAgent`) |
 | `ClaudeCodeAgent` | Claude Code adapter (experimental) |
 | `CodexAgent` | OpenAI Codex adapter (experimental) |
 | `checkFileScope` | Validates that fixes only touch allowed files |
 | `checkCircuitBreaker` | Prevents runaway fix attempts |
 | `createPR` / `buildPRBody` | GitHub PR creation via Octokit |
+| `resolveSandboxProvider` / `LocalNoopSandboxProvider` / `createE2BProvider` | Managed sandbox abstraction (V5.3 §2.10) |
+| `SandboxAuditWriter` | Persists per-step sandbox audit events |
 
-## Usage
+## Usage — single repo
 
 ```ts
 import { FixOrchestrator } from '@mushi-mushi/agents'
@@ -35,6 +40,28 @@ const orchestrator = new FixOrchestrator(supabaseClient, {
 
 await orchestrator.run(reportId)
 ```
+
+## Usage — multi-repo (Wave D D7)
+
+When a single bug spans multiple repos (FE + BE, monorepo + infra, etc.), register
+each repo in `project_repos` with `path_globs` and a `role` (`primary`,
+`frontend`, `backend`, `infra`, …), then drive the higher-level orchestrator:
+
+```ts
+import { MultiRepoFixOrchestrator } from '@mushi-mushi/agents'
+
+const multi = new MultiRepoFixOrchestrator(supabaseClient, {
+  githubToken: process.env.GITHUB_TOKEN,
+})
+
+const plan = await multi.plan(reportId)
+const result = await multi.execute(plan.coordinationId)
+await multi.linkPRs(plan.coordinationId)
+```
+
+Status rolls up to `succeeded` / `partial_success` / `failed` based on each
+child `fix_attempts` row stamped with `coordination_id` + `repo_id`. See
+`docs/content/concepts/multi-repo-fixes.mdx` for the full flow diagram.
 
 ## Agent Configuration
 
@@ -51,11 +78,32 @@ The orchestrator reads `autofix_agent` and `autofix_mcp_server_url` from the pro
 
 If deploying fix agents in production, you must implement your own container isolation. The generated spec can be used as a reference for configuring Docker/gVisor/Firecracker constraints.
 
+## Sandbox Provider (Wave A M6)
+
+Beyond the JSON spec, the package now ships a runtime provider abstraction:
+
+```ts
+import { resolveSandboxProvider, buildSandboxConfig } from '@mushi-mushi/agents'
+
+const provider = resolveSandboxProvider({
+  name: process.env.MUSHI_SANDBOX_PROVIDER ?? 'local-noop',
+  e2b: { apiKey: process.env.E2B_API_KEY },
+})
+const sandbox = await provider.create(buildSandboxConfig({ reportId }))
+```
+
+Available providers: `local-noop` (default, no isolation), `e2b` (managed
+microVMs via `createE2BProvider`). All exec/file events flow through
+`SandboxAuditWriter` into the `sandbox_runs` table for SOC 2 evidence.
+
 ## Status
 
-- **GenericMCPAgent** — production adapter; requires an external MCP-compatible agent server
+- **McpFixAgent** — production adapter; speaks MCP `tools/call` + SEP-1686 Tasks
+- **RestFixWorkerAgent** — production adapter for self-hosted REST workers
+- **GenericMCPAgent** — legacy adapter; new integrations should pick `McpFixAgent`
 - **ClaudeCodeAgent** — stub (returns `success: false`); pending Channels API access
 - **CodexAgent** — stub (returns `success: false`); pending direct API integration
+- **MultiRepoFixOrchestrator** — production; backed by `project_repos` + `fix_coordinations` migrations
 
 ## License
 

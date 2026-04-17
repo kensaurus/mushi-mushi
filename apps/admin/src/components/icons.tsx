@@ -191,3 +191,35 @@ export function IconBell(p: IconProps) {
     <path d="M6.5 13a1.5 1.5 0 0 0 3 0" />
   </>)
 }
+
+export function IconIntelligence(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2.5" y="2.5" width="11" height="11" rx="1" />
+    <path d="M5 10V7" />
+    <path d="M8 10V5" />
+    <path d="M11 10V8.5" />
+  </>)
+}
+
+export function IconCompliance(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 1.5l5 2v4c0 3.5-2.2 6-5 7-2.8-1-5-3.5-5-7v-4l5-2z" />
+    <path d="M5.5 8l1.8 1.8L11 6.5" />
+  </>)
+}
+
+export function IconStorage(p: IconProps) {
+  return wrap(p, <>
+    <ellipse cx="8" cy="3.5" rx="5.5" ry="1.5" />
+    <path d="M2.5 3.5v9c0 .8 2.5 1.5 5.5 1.5s5.5-.7 5.5-1.5v-9" />
+    <path d="M2.5 8c0 .8 2.5 1.5 5.5 1.5s5.5-.7 5.5-1.5" />
+  </>)
+}
+
+export function IconMarketplace(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2 5.5h12l-1 7.5a1 1 0 0 1-1 .9H4a1 1 0 0 1-1-.9L2 5.5Z" />
+    <path d="M5.5 5.5V4a2.5 2.5 0 0 1 5 0v1.5" />
+    <path d="M6 9h4" />
+  </>)
+}

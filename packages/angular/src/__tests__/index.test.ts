@@ -57,13 +57,15 @@ describe('MushiService', () => {
     })
   })
 
-  it('uses default endpoint when not provided', async () => {
+  it('defers to core default endpoint when not provided', async () => {
     new MushiService({ projectId: 'p', apiKey: 'k' })
 
     const { createApiClient } = await import('@mushi-mushi/core')
-    expect(createApiClient).toHaveBeenCalledWith(
-      expect.objectContaining({ apiEndpoint: 'https://api.mushimushi.dev' }),
-    )
+    // V5.3: angular no longer hardcodes the endpoint; it omits apiEndpoint so
+    // @mushi-mushi/core's DEFAULT_API_ENDPOINT applies. Verify the call did
+    // NOT include an apiEndpoint property at all.
+    const call = (createApiClient as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]
+    expect(call?.[0]).not.toHaveProperty('apiEndpoint')
   })
 
   it('submitReport calls client.submitReport with built report', async () => {

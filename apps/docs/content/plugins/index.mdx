@@ -1,0 +1,31 @@
+# Plugin marketplace
+
+Mushi events flow out as **HMAC-signed JSON webhooks** to any tool you
+hook up. The marketplace ships first-party plugins and lets you build
+your own with `@mushi-mushi/plugin-sdk`.
+
+## Available plugins
+
+| Plugin       | Triggers                                            |
+| ------------ | --------------------------------------------------- |
+| **PagerDuty** | `report.created` (P0/P1) → page on-call            |
+| **Linear**   | `report.classified` → file an issue with labels     |
+| **Zapier**   | All events → fan-out to 6,000+ Zapier integrations  |
+
+Browse and install from the admin console: **Marketplace**.
+
+## Webhook delivery contract
+
+Every dispatch is:
+
+- **POST** to your configured webhook URL
+- Body: `{ event, project_id, occurred_at, data }`
+- Header `x-mushi-signature: sha256=…` — HMAC-SHA256 of the raw body
+  using the per-plugin secret stored in Vault
+- Retried with exponential backoff on 5xx (3 attempts, 0/30/120s)
+- Logged to `plugin_dispatch_log` with status, latency, and response code
+
+## Build your own
+
+See [Building a plugin](/plugins/building) and
+[Webhook events](/plugins/events).

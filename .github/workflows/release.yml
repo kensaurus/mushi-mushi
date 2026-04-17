@@ -101,6 +101,28 @@ jobs:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: node scripts/verify-published-tarballs.mjs
 
+      # Wave D D2: regenerate the customer-facing changelog whenever Changesets
+      # has actually bumped versions (either on a publish or when refreshing
+      # the release PR). The script is deterministic, so committing it back is
+      # safe — it only changes if per-package CHANGELOGs or pending changesets
+      # changed in the same push.
+      - name: Aggregate public changelog
+        if: steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true'
+        run: pnpm changelog:aggregate
+
+      - name: Commit aggregated changelog
+        if: steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true'
+        run: |
+          if ! git diff --quiet -- CHANGELOG.md apps/docs/data/changelog.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md apps/docs/data/changelog.json
+            git commit -m "chore: refresh public changelog [skip ci]"
+            git push
+          else
+            echo "changelog: no drift to commit"
+          fi
+
       - name: Published packages summary
         if: steps.changesets.outputs.published == 'true'
         env:

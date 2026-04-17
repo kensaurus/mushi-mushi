@@ -1,0 +1,24 @@
+---
+title: Data residency
+---
+
+# Data residency
+
+Mushi Cloud runs three independent Supabase projects:
+
+| Region | Endpoint                          | Supabase region         |
+| ------ | --------------------------------- | ----------------------- |
+| US     | `us.api.mushimushi.dev`           | `us-east-1`             |
+| EU     | `eu.api.mushimushi.dev`           | `eu-central-1`          |
+| JP     | `jp.api.mushimushi.dev`           | `ap-northeast-1`        |
+
+Pick the region when creating the project. The choice is immutable —
+report ingestion, screenshots, embeddings, knowledge graph, and
+fine-tuning data all stay inside the chosen region.
+
+The SDK reads `MushiOptions.region` (or auto-detects from the
+`reporterToken` prefix) and routes to the correct DNS name. There is no
+inter-region replication.
+
+A nightly cron writes a "no row crossed regions" attestation into
+`soc2_evidence` so auditors get a clean trail.

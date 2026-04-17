@@ -1,0 +1,91 @@
+# ============================================================
+# Wave D D6: canonical label set, kept in sync by labels-sync.yml
+#
+# Labels are the indexes the public roadmap board groups by:
+#   * area:*    — which surface the change touches
+#   * wave:*    — release-train milestone bucket
+#   * status:*  — current lifecycle stage
+#   * type:*    — bug, enhancement, RFC, docs, ops
+#   * impact:*  — rough customer-impact tier
+# ============================================================
+
+# ----- type
+- name: type:bug
+  color: d73a4a
+  description: Something isn't working
+- name: type:enhancement
+  color: a2eeef
+  description: New feature or improvement
+- name: type:rfc
+  color: 0052cc
+  description: Architectural proposal — needs design conversation
+- name: type:docs
+  color: 0075ca
+  description: Documentation work
+- name: type:ops
+  color: 5319e7
+  description: CI, infra, release, tooling
+
+# ----- area
+- name: area:web-sdk
+  color: c5def5
+- name: area:mobile-sdk
+  color: c5def5
+- name: area:admin
+  color: c2e0c6
+- name: area:server
+  color: bfd4f2
+- name: area:llm-pipeline
+  color: f9d0c4
+- name: area:knowledge-graph
+  color: f9d0c4
+- name: area:fix-orchestrator
+  color: f9d0c4
+- name: area:plugins
+  color: fbca04
+- name: area:billing
+  color: fbca04
+- name: area:docs
+  color: 0075ca
+- name: area:security
+  color: b60205
+
+# ----- wave (release-train milestone)
+- name: wave:A
+  color: e6e6fa
+- name: wave:B
+  color: e6e6fa
+- name: wave:C
+  color: e6e6fa
+- name: wave:D
+  color: e6e6fa
+- name: wave:E
+  color: e6e6fa
+
+# ----- status
+- name: status:planning
+  color: ededed
+- name: status:in-flight
+  color: fbca04
+- name: status:in-review
+  color: 0e8a16
+- name: status:blocked
+  color: b60205
+- name: status:done
+  color: 0e8a16
+
+# ----- impact
+- name: impact:p0
+  color: b60205
+- name: impact:p1
+  color: d93f0b
+- name: impact:p2
+  color: fbca04
+- name: impact:p3
+  color: ededed
+
+# ----- contributor signals
+- name: good first issue
+  color: 7057ff
+- name: help wanted
+  color: 008672

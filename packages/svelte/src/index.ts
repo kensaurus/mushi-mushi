@@ -44,7 +44,7 @@ export function initMushi(config: MushiConfig): MushiInstance {
   _client = createApiClient({
     projectId: config.projectId,
     apiKey: config.apiKey,
-    apiEndpoint: config.endpoint ?? 'https://api.mushimushi.dev',
+    ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
   })
 
   _instance = {

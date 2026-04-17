@@ -1,0 +1,116 @@
+[
+  {
+    "majorMinor": "0.8",
+    "headline": "v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK",
+    "pending": true,
+    "versions": [
+      "0.8.0"
+    ],
+    "highlights": [
+      {
+        "title": "Native iOS SDK",
+        "description": "(`MushiMushi`, SwiftPM + CocoaPods): shake-to-report"
+      },
+      {
+        "title": "Native Android SDK",
+        "description": "(`dev.mushimushi:sdk`, Maven Central + AAR):"
+      },
+      {
+        "title": "Flutter SDK",
+        "description": "(`mushi_mushi` on pub.dev): pure-Dart with platform"
+      },
+      {
+        "title": "Capacitor plugin",
+        "description": "(`@mushi-mushi/capacitor`): web fallback delegates"
+      },
+      {
+        "title": "A2A Agent Card discovery",
+        "description": "public endpoints"
+      },
+      {
+        "title": "SOC 2 Type 1 readiness module",
+        "description": "new tables"
+      },
+      {
+        "title": "Data residency regions (US / EU / JP)",
+        "description": "opt-in pinning per project,"
+      },
+      {
+        "title": "BYO Storage abstraction",
+        "description": "(`s3` / `r2` / `gcs` / `minio` / `supabase`):"
+      },
+      {
+        "title": "BYOK Anthropic / OpenAI keys end-to-end",
+        "description": "`resolveLlmKey` now"
+      },
+      {
+        "title": "Region rollout",
+        "description": "a single-region deploy continues to work unchanged."
+      },
+      {
+        "title": "BYO Storage",
+        "description": "secrets MUST be loaded into Supabase Vault before being"
+      },
+      {
+        "title": "BYOK",
+        "description": "rotating a key is non-destructive — the old vault entry is"
+      },
+      {
+        "title": "SOC 2",
+        "description": "the nightly evidence sweep and retention sweep are scheduled"
+      },
+      {
+        "title": "A2A Agent Card",
+        "description": "is intentionally public (no auth) so peer agents can"
+      }
+    ],
+    "packages": []
+  },
+  {
+    "majorMinor": "0.1",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.1.0"
+    ],
+    "highlights": [],
+    "packages": [
+      {
+        "name": "@mushi-mushi/angular",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/core",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/svelte",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/vue",
+        "version": "0.1.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "0.1.0"
+      }
+    ]
+  }
+]

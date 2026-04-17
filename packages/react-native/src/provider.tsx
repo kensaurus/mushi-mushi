@@ -37,7 +37,7 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
-import { createApiClient, type MushiReport, type MushiApiClient } from '@mushi-mushi/core'
+import { createApiClient, DEFAULT_API_ENDPOINT, type MushiReport, type MushiApiClient } from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -86,7 +86,8 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
 
   const [sheetVisible, setSheetVisible] = useState(false)
 
-  const apiEndpoint = config.endpoint ?? 'https://api.mushimushi.dev'
+  // Defer to @mushi-mushi/core's DEFAULT_API_ENDPOINT when not provided
+  const apiEndpoint = config.endpoint ?? DEFAULT_API_ENDPOINT
 
   useEffect(() => {
     if (config.capture?.console !== false) {

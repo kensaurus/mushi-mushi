@@ -1,0 +1,23 @@
+---
+title: 'MushiMushi (iOS)'
+---
+
+# `MushiMushi` (iOS / macOS / tvOS)
+
+Native Swift SDK. SwiftPM-first, CocoaPods supported.
+
+```swift
+import MushiMushi
+
+Mushi.shared.configure(projectId: "…", apiKey: "…", enableShakeToReport: true)
+Mushi.shared.submitReport(description: "…")
+```
+
+Highlights:
+
+- **SQLite-backed offline queue** — survives crash + relaunch.
+- **`UIGraphicsImageRenderer`** screenshot capture (no third-party code).
+- **`Mushi.shared.attachSentryBridge(options)`** — forwards Mushi reports
+  as Sentry breadcrumbs so a single observability tool sees both.
+
+See [Quickstart → iOS](/quickstart/ios).
