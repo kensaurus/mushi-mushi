@@ -212,7 +212,7 @@ importers:
         specifier: '>=17'
         version: 21.2.9(rxjs@7.8.2)
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -234,7 +234,7 @@ importers:
   packages/capacitor:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@capacitor/core':
@@ -320,7 +320,7 @@ importers:
         specifier: ^1.12.1
         version: 1.29.0(zod@4.3.6)
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       zod:
         specifier: ^4.3.6
@@ -348,7 +348,7 @@ importers:
   packages/plugin-linear:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -373,7 +373,7 @@ importers:
   packages/plugin-pagerduty:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -429,7 +429,7 @@ importers:
   packages/plugin-zapier:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -454,10 +454,10 @@ importers:
   packages/react:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@mushi-mushi/web':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../web
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -509,7 +509,7 @@ importers:
   packages/react-native:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       '@react-native-async-storage/async-storage':
         specifier: '>=1.19'
@@ -559,7 +559,7 @@ importers:
   packages/svelte:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -615,7 +615,7 @@ importers:
   packages/vue:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -674,7 +674,7 @@ importers:
   packages/web:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@mushi-mushi/eslint-config':

@@ -23,7 +23,12 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SEARCH_DIRS = ['packages', 'apps']
-const PROTOCOL_RE = /^(workspace|link|file|portal|catalog):/
+// Block ONLY the unsafe specifiers. `workspace:^` and `workspace:~` are the
+// recommended pnpm syntax — pnpm replaces them with a real `^X.Y.Z` / `~X.Y.Z`
+// range in the published tarball at `pnpm publish` time. `workspace:*` and the
+// other protocols (link/file/portal/catalog) DO leak into tarballs and break
+// `npm install` for end users (see CVE-style incident in 2026-04, `ed64f7f`).
+const PROTOCOL_RE = /^(workspace:\*|link:|file:|portal:|catalog:)/
 
 async function findPackageManifests(rootDir) {
   const manifests = []
