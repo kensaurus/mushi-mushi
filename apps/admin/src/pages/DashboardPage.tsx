@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { SEVERITY, CATEGORY_LABELS } from '../lib/tokens'
-import { PageHeader, PageHelp, StatCard, Card, Badge, Btn, Loading } from '../components/ui'
+import { PageHeader, PageHelp, StatCard, Card, Badge, Btn, Loading, ErrorAlert } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 
 interface Stats {
@@ -21,17 +21,25 @@ interface Project {
 function GettingStartedEmpty() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
 
   useEffect(() => {
-    apiFetch<{ projects: Project[] }>('/v1/admin/projects').then((res) => {
-      if (res.ok && res.data) setProjects(res.data.projects ?? [])
-    })
+    apiFetch<{ projects: Project[] }>('/v1/admin/projects')
+      .then((res) => {
+        if (res.ok && res.data) setProjects(res.data.projects ?? [])
+      })
+      .finally(() => setProjectsLoading(false))
   }, [])
 
   const hasProject = projects.length > 0
   const hasKey = projects.some((p) => p.api_keys && p.api_keys.length > 0)
   const onboardingDone = localStorage.getItem('mushi:onboarding_completed') === 'true'
+
+  // Wait for the projects fetch to resolve before deciding whether to redirect.
+  // Otherwise a user with projects but no localStorage flag (different browser,
+  // cleared storage) gets bounced to onboarding before the fetch can populate state.
+  if (projectsLoading) return <Loading text="Checking your account..." />
 
   if (!onboardingDone && !hasProject) {
     return <Navigate to="/onboarding" replace />
@@ -127,18 +135,27 @@ function ChecklistItem({ done, label, action }: { done: boolean; label: string; 
 export function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   function loadStats() {
     setLoading(true)
+    setError(null)
     apiFetch<Stats>('/v1/admin/stats').then((res) => {
       if (res.ok && res.data) setStats(res.data)
-      else setStats(null)
-    }).catch(() => setStats(null)).finally(() => setLoading(false))
+      else setError(res.error?.message ?? 'Failed to load dashboard stats.')
+    }).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard stats.')
+    }).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadStats() }, [])
 
   if (loading) return <Loading text="Loading dashboard..." />
+
+  // Distinguish outage from "no data": only fall through to the empty/getting-started
+  // state when the API succeeded and explicitly returned zero reports. An outage must
+  // surface as an actionable error, never silently redirect existing users to onboarding.
+  if (error) return <ErrorAlert message={error} onRetry={loadStats} />
 
   if (!stats || stats.total === 0) {
     return <GettingStartedEmpty />

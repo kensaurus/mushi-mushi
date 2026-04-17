@@ -50,6 +50,7 @@ playwright-report/
 screenshots/
 qa-*.png
 fix-*.png
+smoke-*.png
 
 # Misc
 *.tgz

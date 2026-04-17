@@ -49,7 +49,12 @@ function NotFoundPage() {
 
 function PasswordRecoveryGate({ children }: { children: ReactNode }) {
   const { isPasswordRecovery } = useAuth()
-  if (isPasswordRecovery) return <Navigate to="/reset-password" replace />
+  const { pathname } = useLocation()
+  // Allow /reset-password through so the destination route can actually mount.
+  // Without this, the gate redirects in a loop and ResetPasswordPage never renders.
+  if (isPasswordRecovery && pathname !== '/reset-password') {
+    return <Navigate to="/reset-password" replace />
+  }
   return <>{children}</>
 }
 
