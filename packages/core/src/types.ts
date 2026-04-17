@@ -65,6 +65,37 @@ export interface MushiPreFilterConfig {
   blockObviousSpam?: boolean;
   minDescriptionLength?: number;
   maxDescriptionLength?: number;
+  /**
+   * V5.3 §2.12: optional on-device classifier (typically from
+   * `@mushi-mushi/wasm-classifier`). Consulted before the pattern pre-filter.
+   * Must conform to the `MushiOnDeviceClassifier` shape.
+   */
+  wasmClassifier?: MushiOnDeviceClassifier;
+}
+
+export interface MushiOnDeviceClassifierInput {
+  description: string;
+  category?: string;
+  url?: string;
+  hasScreenshot?: boolean;
+  hasSelectedElement?: boolean;
+  hasNetworkErrors?: boolean;
+  hasConsoleErrors?: boolean;
+  proactiveTrigger?: string;
+}
+
+export interface MushiOnDeviceClassifierResult {
+  verdict: 'pass' | 'block' | 'unsure';
+  confidence: number;
+  reason: string;
+  modelId: string;
+  durationMs: number;
+}
+
+export interface MushiOnDeviceClassifier {
+  readonly modelId: string;
+  classify(input: MushiOnDeviceClassifierInput): Promise<MushiOnDeviceClassifierResult>;
+  destroy(): void;
 }
 
 export interface MushiIntegrationsConfig {

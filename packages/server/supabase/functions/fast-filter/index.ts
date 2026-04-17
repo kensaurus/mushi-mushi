@@ -12,6 +12,10 @@ import { awardPoints } from '../_shared/reputation.ts'
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts'
 import { buildReportGraph, detectRegression } from '../_shared/knowledge-graph.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { logLlmInvocation } from '../_shared/telemetry.ts'
+import { withSentry } from '../_shared/sentry.ts'
+import { resolveLlmKey } from '../_shared/byok.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -35,7 +39,7 @@ Rules:
 4. Set confidence based on how clear and specific the report is. Vague reports get lower confidence.
 5. Be concise. Each field should be 1-2 sentences max.`
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('fast-filter', async (req) => {
   try {
     const { reportId, projectId } = await req.json()
     if (!reportId || !projectId) {
@@ -64,6 +68,10 @@ Deno.serve(async (req) => {
 
     const confidenceThreshold = settings?.stage1_confidence_threshold ?? 0.85
     const trace = createTrace('fast-filter', { reportId, projectId })
+
+    // Resolve prompt A/B test for stage1
+    const promptSelection = await getPromptForStage(db, projectId, 'stage1')
+    const activeSystemPrompt = promptSelection.promptTemplate ?? SYSTEM_PROMPT
 
     const scrubbedReport = scrubReport(report)
 
@@ -95,30 +103,59 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     const startTime = Date.now()
     let classification: Stage1Result
     const llmSpan = trace.span('stage1.classify')
-    let usedModel = 'claude-haiku-4-5-20241022'
+    const PRIMARY_MODEL = 'claude-haiku-4-5-20251001'
+    const FALLBACK_MODEL = 'gpt-4.1-mini'
+    let usedModel = PRIMARY_MODEL
+    let fallbackUsed = false
+    let fallbackReason: string | null = null
 
     let tokenUsage: { promptTokens?: number; completionTokens?: number } = {}
+    // Wave C C9: resolve BYOK first; falls back to env automatically.
+    const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic')
+    let keySource: 'byok' | 'env' | null = anthropicResolved?.source ?? null
     try {
-      const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+      const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
       const { object, usage } = await generateObject({
-        model: anthropic('claude-haiku-4-5-20241022'),
+        model: anthropic(PRIMARY_MODEL),
         schema: stage1Schema,
-        system: SYSTEM_PROMPT,
-        prompt: userPrompt,
+        messages: [
+          {
+            role: 'system',
+            content: activeSystemPrompt,
+            experimental_providerMetadata: {
+              anthropic: { cacheControl: { type: 'ephemeral' } },
+            },
+          },
+          { role: 'user', content: userPrompt },
+        ],
       })
       classification = object
       tokenUsage = usage ?? {}
     } catch (primaryErr) {
       log.warn('Anthropic Haiku failed, falling back to OpenAI', { err: String(primaryErr) })
-      const openaiKey = Deno.env.get('OPENAI_API_KEY')
-      if (!openaiKey) throw primaryErr
-      usedModel = 'gpt-4.1-mini'
+      const openaiResolved = await resolveLlmKey(db, projectId, 'openai')
+      const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
+      keySource = openaiResolved?.source ?? (openaiKey ? 'env' : keySource)
+      if (!openaiKey) {
+        await logLlmInvocation(db, {
+          projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
+          primaryModel: PRIMARY_MODEL, usedModel: PRIMARY_MODEL,
+          fallbackUsed: false, status: 'error',
+          errorMessage: `Primary failed and no OPENAI_API_KEY: ${String(primaryErr)}`,
+          latencyMs: Date.now() - startTime,
+          promptVersion: promptSelection.promptVersion,
+        })
+        throw primaryErr
+      }
+      usedModel = FALLBACK_MODEL
+      fallbackUsed = true
+      fallbackReason = String(primaryErr).slice(0, 500)
 
       const openai = createOpenAI({ apiKey: openaiKey })
       const { object, usage } = await generateObject({
-        model: openai('gpt-4.1-mini'),
+        model: openai(FALLBACK_MODEL),
         schema: stage1Schema,
-        system: SYSTEM_PROMPT,
+        system: activeSystemPrompt,
         prompt: userPrompt,
       })
       classification = object
@@ -127,6 +164,18 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
     const latencyMs = Date.now() - startTime
     llmSpan.end({ model: usedModel, latencyMs, inputTokens: tokenUsage.promptTokens, outputTokens: tokenUsage.completionTokens })
+
+    await logLlmInvocation(db, {
+      projectId, reportId, functionName: 'fast-filter', stage: 'stage1',
+      primaryModel: PRIMARY_MODEL, usedModel,
+      fallbackUsed, fallbackReason,
+      status: 'success',
+      latencyMs,
+      inputTokens: tokenUsage.promptTokens ?? null,
+      outputTokens: tokenUsage.completionTokens ?? null,
+      promptVersion: promptSelection.promptVersion,
+      keySource: keySource ?? 'env',
+    })
 
     await db.from('reports').update({
       extracted_symptoms: {
@@ -138,6 +187,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       },
       stage1_classification: classification,
       stage1_model: usedModel,
+      stage1_prompt_version: promptSelection.promptVersion,
       stage1_latency_ms: latencyMs,
       category: classification.category,
       severity: classification.severity,
@@ -270,4 +320,4 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     rootLog.child('fast-filter').error('Unhandled error', { err: String(err) })
     return new Response(JSON.stringify({ error: String(err) }), { status: 500 })
   }
-})
+}))

@@ -1,0 +1,21 @@
+---
+title: BYO storage
+---
+
+# Bring-your-own storage
+
+By default screenshots and crash dumps go to a Mushi-managed Supabase
+Storage bucket. You can pin them to your own bucket instead.
+
+| Backend         | Notes                                            |
+| --------------- | ------------------------------------------------ |
+| AWS S3          | Standard `accessKeyId` / `secretAccessKey`       |
+| Cloudflare R2   | S3-compatible; needs `endpoint` + `region=auto`  |
+| Google Cloud Storage | HMAC keys                                   |
+| MinIO (self-hosted) | Path-style addressing                        |
+| Supabase Storage | Default                                         |
+
+Configure under **Settings → Storage**. Credentials live in Vault.
+Existing assets stay where they are — only newly ingested reports land
+in the new bucket. The Edge Functions sign URLs server-side so the
+admin console renders identically regardless of backend.

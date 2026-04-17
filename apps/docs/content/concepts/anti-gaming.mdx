@@ -1,0 +1,53 @@
+---
+title: Anti-gaming & reputation
+---
+
+# Anti-gaming & reputation
+
+Bug-report platforms attract two failure modes:
+
+1. **Spam** — bots / disgruntled users firing off reports to game points.
+2. **Fatigue** — legitimate users overwhelmed by a "Report a bug" prompt
+   that follows them everywhere.
+
+Mushi defends against both.
+
+## Reporter reputation
+
+Each anonymous reporter is identified by a stable `reporter_token_hash`.
+Outcomes accrue to the token:
+
+| Outcome     | Points |
+| ----------- | -----: |
+| `confirmed` |    +50 |
+| `fixed`     |    +25 |
+| `dismissed` |    -10 |
+| `spam`      |    -50 |
+
+A token whose 30-day rolling balance drops below `-100` enters
+**rate-limited** status: their reports still ingest but skip
+classification (and therefore never reach the dashboard) until the
+balance recovers via positive outcomes.
+
+## Anti-gaming detection
+
+Patterns that trigger automated review:
+
+- > 10 reports per token per minute (rate limit)
+- > 50% reports from the same token classified as `dismissed` in 24h
+- A burst of reports immediately after a known marketing push
+  (correlated against an Operations event log)
+- Identical text + screenshot hash from > 5 different tokens
+
+Flagged tokens land on the **Anti-Gaming** page in the admin console with
+the evidence trail and a "Suspend / Allow / Investigate" action set.
+
+## Report fatigue prevention
+
+The widget enforces:
+
+- Maximum **1 prompt every 24h** per user, per project.
+- Minimum description length (default 10 chars; configurable per project)
+  to discourage low-effort drive-by reports.
+- A *quiet mode* the user can flip from the widget itself — Mushi remembers
+  it for 30 days via `localStorage`.

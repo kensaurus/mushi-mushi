@@ -1,0 +1,41 @@
+---
+title: React Native quickstart
+---
+
+# React Native quickstart
+
+```bash
+pnpm add @mushi-mushi/react-native react-native-shake react-native-view-shot
+cd ios && pod install
+```
+
+```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
+
+export default function App() {
+  return (
+    <MushiProvider
+      config={{
+        projectId: 'YOUR_PROJECT_ID',
+        apiKey: 'YOUR_PUBLIC_API_KEY',
+        enableShakeToReport: true,
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
+  )
+}
+```
+
+The shake gesture opens a bottom sheet with description, severity, and an
+auto-attached screenshot. Reports survive offline (queued via AsyncStorage)
+and replay when connectivity returns.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  For pure-native projects (no JS bundle), use the
+  [iOS](/quickstart/ios) or [Android](/quickstart/android) SDKs directly.
+  Capacitor users have a [dedicated plugin](/quickstart/capacitor) that
+  delegates to the native SDKs on each platform.
+</Callout>

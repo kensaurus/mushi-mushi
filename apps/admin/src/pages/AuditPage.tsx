@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Badge, Btn, FilterSelect, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, FilterSelect, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface AuditEntry {
   id: string
@@ -57,6 +57,17 @@ export function AuditPage() {
         />
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV</Btn>
       </PageHeader>
+
+      <PageHelp
+        title="About the Audit Log"
+        whatIsIt="An append-only history of consequential actions: who did what, to which resource, and when. Captures both human and agent actors."
+        useCases={[
+          'Investigate "who changed this setting" or "why was this report dismissed"',
+          'Satisfy SOC 2 / ISO 27001 audit evidence requirements',
+          'Detect suspicious activity from API keys or service accounts',
+        ]}
+        howToUse="Filter by action type, then export to CSV for offline analysis or compliance bundles. Entries are immutable once written."
+      />
 
       {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load audit logs." onRetry={() => setRetryKey(k => k + 1)} /> : logs.length === 0 ? (
         <EmptyState title="No audit entries" description="Actions like report triage, settings changes, and key management will be logged here." />

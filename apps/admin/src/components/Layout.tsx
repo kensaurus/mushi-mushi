@@ -12,7 +12,8 @@ import {
   IconDashboard, IconReports, IconGraph, IconJudge, IconQuery,
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
-  IconSignOut,
+  IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence,
+  IconCompliance, IconStorage, IconMarketplace,
 } from './icons'
 
 interface NavItem {
@@ -43,6 +44,15 @@ const NAV: NavSection[] = [
       { label: 'Fixes',      path: '/fixes',       icon: IconFixes },
       { label: 'Queue',      path: '/queue',        icon: IconQueue },
       { label: 'Fine-Tuning', path: '/fine-tuning', icon: IconFineTuning },
+      { label: 'Intelligence', path: '/intelligence', icon: IconIntelligence },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { label: 'Health',         path: '/health',        icon: IconHealth },
+      { label: 'Anti-Gaming',    path: '/anti-gaming',   icon: IconShield },
+      { label: 'Notifications',  path: '/notifications', icon: IconBell },
     ],
   },
   {
@@ -50,8 +60,11 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Projects',     path: '/projects',     icon: IconProjects },
       { label: 'Integrations', path: '/integrations', icon: IconIntegrations },
+      { label: 'Marketplace',  path: '/marketplace',  icon: IconMarketplace },
       { label: 'SSO',          path: '/sso',          icon: IconSSO },
       { label: 'Audit Log',    path: '/audit',        icon: IconAudit },
+      { label: 'Compliance',   path: '/compliance',   icon: IconCompliance },
+      { label: 'Storage',      path: '/storage',      icon: IconStorage },
       { label: 'Settings',     path: '/settings',     icon: IconSettings },
     ],
   },

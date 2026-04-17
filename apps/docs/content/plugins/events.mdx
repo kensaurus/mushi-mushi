@@ -1,0 +1,34 @@
+---
+title: Webhook events
+---
+
+# Webhook events
+
+Every event ships with this envelope:
+
+```ts
+interface MushiEvent<TName extends MushiEventName, TData> {
+  event: TName
+  project_id: string
+  occurred_at: string  // ISO 8601 UTC
+  data: TData
+}
+```
+
+## Event reference
+
+| Event                     | When                                              | `data` shape (subset)                       |
+| ------------------------- | ------------------------------------------------- | ------------------------------------------- |
+| `report.created`          | A new report row is inserted                      | `{ report_id, severity, title, url }`       |
+| `report.classified`       | `classify-report` finishes successfully           | `{ report_id, taxonomy_path, confidence }`  |
+| `report.status_changed`   | Status updated via API or admin                   | `{ report_id, from, to, actor_id }`         |
+| `fix.proposed`            | Orchestrator opens a draft PR                     | `{ report_id, attempt_id, pr_url }`         |
+| `fix.applied`             | Draft PR merged                                   | `{ report_id, attempt_id, pr_url, sha }`    |
+| `fix.failed`              | Orchestrator gives up after retry budget          | `{ report_id, attempt_id, reason }`         |
+| `judge.score_recorded`    | `judge-batch` records a score                     | `{ report_id, score, prompt_version }`      |
+
+## Subscribing to a subset
+
+Pass `events: ['report.created', 'fix.applied']` when installing the
+plugin and Mushi will only dispatch those. Empty array = subscribe to
+everything (default for first-party plugins).

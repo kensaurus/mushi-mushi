@@ -1,0 +1,86 @@
+---
+title: React quickstart
+---
+
+# React quickstart
+
+Get a Shake-to-Report widget into a React app in under five minutes.
+
+## Try it live
+
+<Playground scenario="react" file="src/App.tsx" title="React 19 + Vite" />
+
+## 1. Install
+
+```bash
+pnpm add @mushi-mushi/react
+# or: npm install @mushi-mushi/react
+```
+
+`@mushi-mushi/react` re-exports from `@mushi-mushi/core` and `@mushi-mushi/web`,
+so you only need this one dependency.
+
+## 2. Wrap your app
+
+```tsx filename="src/main.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
+import { App } from './App'
+
+export function Root() {
+  return (
+    <MushiProvider
+      config={{
+        projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+        apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+        // optional: pin a region — defaults to auto-routing
+        // region: 'eu',
+      }}
+    >
+      <App />
+    </MushiProvider>
+  )
+}
+```
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info" emoji="🔐">
+  The web SDK uses your **public** API key (safe to bundle). All sensitive
+  operations are gated server-side by RLS + the gateway. Never ship your
+  service-role key to the browser.
+</Callout>
+
+## 3. Trigger reports
+
+Add a hook anywhere in your tree to capture programmatic reports:
+
+```tsx filename="src/components/CrashFallback.tsx"
+import { useMushiReport } from '@mushi-mushi/react'
+
+export function CrashFallback({ error }: { error: Error }) {
+  const { submit } = useMushiReport()
+  return (
+    <div role="alert">
+      <p>Something broke.</p>
+      <button onClick={() => submit({ description: error.message, severity: 'high' })}>
+        Send a bug report
+      </button>
+    </div>
+  )
+}
+```
+
+Or rely on the built-in shake-to-report widget — no code required, just
+configure `enableWidget: true` (default) on the provider.
+
+## 4. Verify
+
+Open your admin console at `app.mushimushi.dev` (or your self-hosted
+instance) — your first report should appear in the Reports list within a
+second of submission, classified by the LLM pipeline within ~10s.
+
+## Next steps
+
+- [Concepts → Classification pipeline](/concepts/classification)
+- [SDK reference → @mushi-mushi/react](/sdks/react)
+- [Plugins → Receive a webhook in your own service](/plugins/build-your-own)

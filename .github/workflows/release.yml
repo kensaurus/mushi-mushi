@@ -1,8 +1,32 @@
+# FILE: release.yml
+# PURPOSE: Version packages via Changesets PR and publish to npm on merge
+#
+# FLOW:
+#   1. Push with changesets → creates/updates "Version Packages" PR
+#   2. "Version Packages" PR merged → publishes all bumped packages to npm
+#
+# REQUIREMENTS:
+#   - NPM_TOKEN GitHub secret (Granular Access Token with "Bypass 2FA" enabled)
+#   - npm Trusted Publisher configured per package on npmjs.com (for provenance)
+#   - GITHUB_TOKEN auto-provided (needs contents:write + pull-requests:write)
+#
+# SUPPLY-CHAIN HARDENING:
+#   All third-party actions are pinned to commit SHAs (with version comment for
+#   Dependabot bumps). Floating tags (@v4, @v1) are mutable and are the standard
+#   attack vector for malicious updates (cf. tj-actions/changed-files, 2024).
+#
+# DEFENCE-IN-DEPTH AGAINST workspace:* LEAKS:
+#   `pnpm release` runs `node scripts/check-workspace-protocol.mjs` before
+#   `changeset publish`. If `changeset version` did not rewrite workspace:* into
+#   real semver ranges, the guard fails and the publish aborts. This prevents a
+#   recurrence of the v0.1.0 incident where workspace:* leaked into all
+#   published tarballs and broke `npm install` for every external user.
+
 name: Release
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -12,15 +36,45 @@ permissions:
   id-token: write
 
 jobs:
+  ci:
+    name: Build & Verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm test
+
   release:
     name: Version & Publish
+    needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -30,10 +84,54 @@ jobs:
 
       - name: Create Release PR or Publish
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf  # v1.7.0
         with:
           version: pnpm version-packages
           publish: pnpm release
+          title: "chore: version packages"
+          commit: "chore: version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
+
+      - name: Verify published tarballs do not contain workspace:*
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+        run: node scripts/verify-published-tarballs.mjs
+
+      # Wave D D2: regenerate the customer-facing changelog whenever Changesets
+      # has actually bumped versions (either on a publish or when refreshing
+      # the release PR). The script is deterministic, so committing it back is
+      # safe — it only changes if per-package CHANGELOGs or pending changesets
+      # changed in the same push.
+      - name: Aggregate public changelog
+        if: steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true'
+        run: pnpm changelog:aggregate
+
+      - name: Commit aggregated changelog
+        if: steps.changesets.outputs.published == 'true' || steps.changesets.outputs.hasChangesets == 'true'
+        run: |
+          if ! git diff --quiet -- CHANGELOG.md apps/docs/data/changelog.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add CHANGELOG.md apps/docs/data/changelog.json
+            git commit -m "chore: refresh public changelog [skip ci]"
+            git push
+          else
+            echo "changelog: no drift to commit"
+          fi
+
+      - name: Published packages summary
+        if: steps.changesets.outputs.published == 'true'
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+        run: |
+          {
+            echo "## Published packages"
+            echo ""
+            echo '```json'
+            echo "$PUBLISHED" | jq '.'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

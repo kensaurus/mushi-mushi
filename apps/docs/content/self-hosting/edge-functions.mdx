@@ -1,0 +1,32 @@
+---
+title: Edge Functions deploy
+---
+
+# Edge Functions deploy
+
+```bash
+supabase functions deploy api
+supabase functions deploy fast-filter
+supabase functions deploy classify-report
+supabase functions deploy judge-batch
+supabase functions deploy fix-orchestrator
+supabase functions deploy intelligence-report
+supabase functions deploy soc2-evidence
+supabase functions deploy generate-synthetic
+```
+
+Set the per-function secrets:
+
+```bash
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
+supabase secrets set OPENAI_API_KEY=sk-…
+supabase secrets set LANGFUSE_PUBLIC_KEY=pk-…
+supabase secrets set LANGFUSE_SECRET_KEY=sk-…
+supabase secrets set SENTRY_DSN=https://…@sentry.io/…
+supabase secrets set GITHUB_APP_ID=…
+supabase secrets set GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"
+supabase secrets set E2B_API_KEY=…
+```
+
+Tenants can override `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` per project
+via [BYOK](/security/byok).

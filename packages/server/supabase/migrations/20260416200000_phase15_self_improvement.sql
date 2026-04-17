@@ -124,7 +124,7 @@ alter table reports add column if not exists prompt_version_id uuid references p
 -- ---------------------------------------------------------------------------
 -- Extend project_settings table
 -- ---------------------------------------------------------------------------
-alter table project_settings add column if not exists judge_model text default 'claude-opus-4';
+alter table project_settings add column if not exists judge_model text default 'claude-opus-4-6';
 alter table project_settings add column if not exists judge_enabled boolean default true;
 alter table project_settings add column if not exists judge_sample_size int default 50;
 alter table project_settings add column if not exists ab_test_traffic_pct int default 10;

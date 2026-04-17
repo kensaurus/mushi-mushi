@@ -64,12 +64,12 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@size-limit/file": "^12.1.0",
-    "eslint": "^9.26.0",
+    "eslint": "^10.2.0",
     "jsdom": "^29.0.2",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.1"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   },
   "author": "Kenji Sakuramoto"
 }

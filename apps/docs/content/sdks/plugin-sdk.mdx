@@ -1,0 +1,105 @@
+---
+title: '@mushi-mushi/plugin-sdk'
+---
+
+# `@mushi-mushi/plugin-sdk`
+
+Build a Mushi plugin in TypeScript. Plugins are HTTPS receivers that
+subscribe to lifecycle events; the SDK handles signature verification,
+delivery deduplication, and structured error responses.
+
+## Install
+
+```bash
+pnpm add @mushi-mushi/plugin-sdk
+```
+
+## Express adapter
+
+```ts
+import express from 'express'
+import { expressMiddleware } from '@mushi-mushi/plugin-sdk/express'
+import { createMushiClient } from '@mushi-mushi/plugin-sdk'
+
+const app = express()
+const mushi = createMushiClient({ apiKey: process.env.MUSHI_API_KEY! })
+
+app.post(
+  '/mushi/webhook',
+  expressMiddleware({
+    secret: process.env.MUSHI_PLUGIN_SECRET!,
+    handlers: {
+      'report.classified': async (envelope) => {
+        const { report, classification } = envelope.data
+        if (classification.severity === 'critical') {
+          await mushi.comment(report.id, '🚨 Triaged as critical — paging on-call.')
+        }
+      },
+    },
+  }),
+)
+
+app.listen(8080)
+```
+
+## Hono adapter
+
+```ts
+import { Hono } from 'hono'
+import { honoHandler } from '@mushi-mushi/plugin-sdk/hono'
+
+const app = new Hono()
+app.post('/mushi/webhook', honoHandler({
+  secret: Deno.env.get('MUSHI_PLUGIN_SECRET')!,
+  handlers: {
+    '*': async (envelope) => console.log(envelope.event, envelope.data),
+  },
+}))
+```
+
+## Verify a signature manually
+
+If you'd rather use your own framework, just call `verifySignature` with
+the raw body and the `Mushi-Signature` header:
+
+```ts
+import { verifySignature } from '@mushi-mushi/plugin-sdk'
+
+const result = await verifySignature({
+  payload: rawBodyString,
+  header: req.headers['mushi-signature'] as string,
+  secret: process.env.MUSHI_PLUGIN_SECRET!,
+})
+
+if (!result.valid) throw new Error(result.reason)
+```
+
+## Wire format
+
+Mushi POSTs JSON envelopes shaped like:
+
+```json
+{
+  "id": "evt_01HXY…",
+  "event": "report.classified",
+  "createdAt": "2026-04-17T18:42:00.000Z",
+  "data": {
+    "report": { "id": "rep_01HXY…", "status": "classified" },
+    "classification": { "category": "bug", "severity": "high", "confidence": 0.92, "tags": ["payments.stripe-3ds"] }
+  }
+}
+```
+
+The signature header is Stripe-style:
+
+```
+Mushi-Signature: t=1734460920,v1=hex(hmac_sha256(secret, "t=…,b=…"))
+```
+
+with a tolerance of 5 minutes (configurable per plugin).
+
+## See also
+
+- [Plugin marketplace overview](/plugins)
+- [Build your own plugin](/plugins/build-your-own)
+- Reference plugins: [PagerDuty](/plugins/pagerduty), [Linear](/plugins/linear), [Zapier](/plugins/zapier)

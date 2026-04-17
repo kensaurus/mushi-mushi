@@ -1,0 +1,17 @@
+---
+title: Knowledge graph
+---
+
+# Knowledge graph
+
+The Graph page renders the per-project bug graph as an interactive,
+force-directed layout. Nodes are reports (sized by severity), components
+(sized by blast radius), and fix attempts. Edges connect reports that
+share Bug-Ontology tags or land on the same component.
+
+Click a component node to see its **blast radius** (cached in
+`blast_radius_cache` and refreshed every 15 minutes by `pg_cron`). Click a
+report node to open its detail view.
+
+If you've enabled Apache AGE for the project, a **Cypher console** appears
+in the header — write any MATCH/RETURN against the same graph.

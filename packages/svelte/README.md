@@ -1,6 +1,6 @@
 # @mushi-mushi/svelte
 
-Svelte SDK for Mushi Mushi bug reporting.
+Svelte SDK for Mushi Mushi bug reporting. **API-only** — captures errors and submits reports but does not include the widget UI. Add `@mushi-mushi/web` alongside this package for the full Shadow DOM widget experience.
 
 ## Usage
 
@@ -12,6 +12,16 @@ initMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 // Later
 const mushi = getMushi()
 mushi.submitReport({ title: 'broken', description: '...' })
+```
+
+### With Widget UI
+
+```ts
+import { initMushi } from '@mushi-mushi/svelte'
+import { Mushi } from '@mushi-mushi/web'
+
+initMushi({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
+Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 ```
 
 ### SvelteKit error handler

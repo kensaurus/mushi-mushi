@@ -34,12 +34,12 @@ export async function executeNaturalLanguageQuery(
 
   const planSpan = trace.span('generate-sql')
   const { object: queryPlan, usage: planUsage } = await generateObject({
-    model: anthropic('claude-sonnet-4-20250514'),
+    model: anthropic('claude-sonnet-4-6'),
     schema: sqlSchema,
     system: `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.\n\n${SCHEMA_CONTEXT}`,
     prompt: question,
   })
-  planSpan.end({ model: 'claude-sonnet-4-20250514', inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
+  planSpan.end({ model: 'claude-sonnet-4-6', inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
 
   if (DANGEROUS_PATTERNS.test(queryPlan.sql)) {
     throw new Error('Query contains disallowed operations. Only SELECT queries are permitted.')
@@ -66,10 +66,10 @@ export async function executeNaturalLanguageQuery(
 
   const summarySpan = trace.span('summarize')
   const { text: summary, usage: summaryUsage } = await generateText({
-    model: anthropic('claude-haiku-4-5-20241022'),
+    model: anthropic('claude-haiku-4-5-20251001'),
     prompt: `Summarize these query results in 2-3 sentences for a developer.\n\nQuestion: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
   })
-  summarySpan.end({ model: 'claude-haiku-4-5-20241022', inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
+  summarySpan.end({ model: 'claude-haiku-4-5-20251001', inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
   await trace.end()
 
   return {

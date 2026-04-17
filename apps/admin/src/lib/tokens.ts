@@ -14,12 +14,20 @@ export const STATUS: Record<string, string> = {
 }
 
 export const PIPELINE_STATUS: Record<string, string> = {
-  pending:   'bg-warn-muted text-warn',
-  running:   'bg-info-muted text-info',
-  completed: 'bg-ok-muted text-ok',
-  failed:    'bg-danger-muted text-danger',
-  error:     'bg-danger-muted text-danger',
-  dead_letter: 'bg-danger-muted text-danger',
+  pending:    'bg-warn-muted text-warn',
+  running:    'bg-info-muted text-info',
+  exporting:  'bg-info-muted text-info',
+  exported:   'bg-info-muted text-info',
+  training:   'bg-accent-muted text-accent',
+  trained:    'bg-accent-muted text-accent',
+  validating: 'bg-info-muted text-info',
+  validated:  'bg-ok-muted text-ok',
+  promoted:   'bg-ok-muted text-ok',
+  rejected:   'bg-danger-muted text-danger',
+  completed:  'bg-ok-muted text-ok',
+  failed:     'bg-danger-muted text-danger',
+  error:      'bg-danger-muted text-danger',
+  dead_letter:'bg-danger-muted text-danger',
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {

@@ -1,0 +1,27 @@
+---
+title: Prompt-injection defence
+---
+
+# Prompt-injection defence
+
+Bug reports are user-supplied content that we feed into LLMs. That makes
+prompt injection a first-class threat.
+
+## Defenses
+
+1. **Vision-safe sanitizer** — every text field, console line, and
+   screenshot OCR pass goes through `sanitizeForLLM()` (in
+   `_shared/sanitize.ts`) which strips known injection patterns
+   ("ignore previous instructions", system-prompt mimicry, base64-decoded
+   instructions, control-char escapes).
+2. **Structural prompts** — user content is always wrapped in
+   `<user_report>…</user_report>` tags; the system prompt instructs the
+   model to treat anything inside the tags as data.
+3. **Output schemas** — every classifier returns Zod-validated JSON.
+   Free-form prose responses are rejected and re-prompted once.
+4. **Vision-channel sanitization** — screenshots are passed through a
+   pixel-level OCR scrub for embedded instruction text before being
+   forwarded to multimodal models.
+5. **Regression suite** — `packages/server/tests/injection.test.ts`
+   contains the OWASP LLM01 prompt-injection corpus. CI fails the build
+   if any new injection slips past `sanitizeForLLM()`.

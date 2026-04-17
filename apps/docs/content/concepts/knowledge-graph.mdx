@@ -1,0 +1,41 @@
+---
+title: Knowledge graph
+---
+
+# Knowledge graph
+
+Mushi maintains a per-project knowledge graph of reports, components, fixes,
+and the developers who touched them.
+
+## Storage
+
+| Backend       | Role                                  | Status                  |
+| ------------- | ------------------------------------- | ----------------------- |
+| **pgvector**  | Embedding-based dedup & similarity    | Primary, always-on      |
+| **Apache AGE**| True graph queries (Cypher, paths)    | Parallel-write (Phase 1)|
+| `blast_radius_cache` MV | Per-component blast radius  | Refreshed by `pg_cron`  |
+| `intelligence_benchmarks_mv` | Cross-customer (k≥5) benchmark | Refreshed nightly |
+
+## Why both pgvector and AGE?
+
+pgvector covers the 95% case (semantic dedup, "show me reports like this
+one") with no operational extra cost. AGE handles the 5% that requires true
+graph traversal — "every report on `<Checkout/>` from the last release that
+also touched the same Stripe webhook." AGE is opt-in via the
+`graph_backend` project setting; the parallel write keeps both in sync and
+an `age_drift_audit` table snapshots any divergence so we can repair it.
+
+## Indexing
+
+Embeddings use **HNSW** (built when a project crosses 50k reports; IVFFlat
+fallback below). All RLS-referenced columns (especially `user_id`) are
+explicitly indexed because RLS subqueries that match on un-indexed columns
+can be 100× slower.
+
+## Bug Ontology
+
+Tags are drawn from the cross-customer **Bug Ontology** (see
+Whitepaper §2.6 / Appendix A). Each tag is a versioned, reviewed enum that
+lets us surface "this looks like the same Stripe-3DS issue 11 other
+customers reported last month" — without exposing the other customers'
+data.

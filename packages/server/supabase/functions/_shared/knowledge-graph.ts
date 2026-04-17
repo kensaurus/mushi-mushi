@@ -1,4 +1,5 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { mirrorEdgeToAge, mirrorNodeToAge } from './age-graph.ts'
 
 export type NodeType = 'report_group' | 'component' | 'page' | 'version'
 export type EdgeType = 'causes' | 'related_to' | 'regression_of' | 'duplicate_of' | 'affects' | 'fix_attempted' | 'fix_applied' | 'fix_verified'
@@ -18,7 +19,12 @@ export async function findOrCreateNode(
     .eq('label', label)
     .single()
 
-  if (existing) return existing.id
+  if (existing) {
+    // Best-effort AGE mirror — covers the case where the project just
+    // opted into sql_age_parallel and existing nodes need backfilling.
+    void mirrorNodeToAge(db, { projectId, nodeId: existing.id, nodeType, label })
+    return existing.id
+  }
 
   const { data: created, error } = await db
     .from('graph_nodes')
@@ -27,7 +33,9 @@ export async function findOrCreateNode(
     .single()
 
   if (error) throw new Error(`Failed to create graph node: ${error.message}`)
-  return created!.id
+  const nodeId = created!.id as string
+  void mirrorNodeToAge(db, { projectId, nodeId, nodeType, label })
+  return nodeId
 }
 
 export async function createEdge(
@@ -49,6 +57,14 @@ export async function createEdge(
 
   if (existing) {
     await db.from('graph_edges').update({ weight, metadata }).eq('id', existing.id)
+    void mirrorEdgeToAge(db, {
+      projectId,
+      edgeId: existing.id,
+      sourceNodeId,
+      targetNodeId,
+      edgeType,
+      weight,
+    })
     return existing.id
   }
 
@@ -59,7 +75,16 @@ export async function createEdge(
     .single()
 
   if (error) throw new Error(`Failed to create graph edge: ${error.message}`)
-  return data!.id
+  const edgeId = data!.id as string
+  void mirrorEdgeToAge(db, {
+    projectId,
+    edgeId,
+    sourceNodeId,
+    targetNodeId,
+    edgeType,
+    weight,
+  })
+  return edgeId
 }
 
 export async function getBlastRadius(

@@ -4,74 +4,167 @@ import { getServiceClient } from '../_shared/db.ts'
 import { sendSlackNotification } from '../_shared/slack.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log } from '../_shared/logger.ts'
+import { startCronRun, logLlmInvocation } from '../_shared/telemetry.ts'
+import {
+  computeWeeklyStats,
+  fetchBenchmarks,
+  persistIntelligenceReport,
+  renderIntelligenceHtml,
+} from '../_shared/intelligence.ts'
+import { withSentry } from '../_shared/sentry.ts'
 
 const intelLog = log.child('intelligence-report')
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('intelligence-report', async (req) => {
   const auth = req.headers.get('Authorization')
-  if (!auth?.includes('service_role')) {
-    return new Response(JSON.stringify({ error: 'Requires service_role key' }), { status: 401 })
+  const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
+  if (!token || !expectedKey || token !== expectedKey) {
+    return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
   }
 
   const db = getServiceClient()
   const body = await req.json().catch(() => ({}))
-  const projectId = body.projectId as string
+  const projectId = body.projectId as string | undefined
+  const trigger = (body.trigger ?? 'http') as 'cron' | 'manual' | 'http'
+  const cronRun = await startCronRun(db, 'intelligence-report', trigger)
 
   const { data: projects } = projectId
     ? await db.from('projects').select('id, name').eq('id', projectId)
     : await db.from('projects').select('id, name')
 
   const trace = createTrace('intelligence-report', { projectId })
-  const reports: string[] = []
+  const reportIds: string[] = []
+  const digests: string[] = []
+
+  // Reporting week = the most recently completed Monday→Sunday window.
+  const weekStart = mostRecentMondayUtc()
 
   for (const project of projects ?? []) {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-
-    const [reportsRes, fixesRes, judgeRes] = await Promise.all([
-      db.from('reports').select('category, severity, component, status, created_at').eq('project_id', project.id).gte('created_at', weekAgo).limit(1000),
-      db.from('fix_attempts').select('status, agent, started_at, completed_at').eq('project_id', project.id).gte('started_at', weekAgo).limit(500),
-      db.rpc('weekly_judge_scores', { p_project_id: project.id, p_weeks: 2 }),
-    ])
-
-    const reportsData = reportsRes.data ?? []
-    const fixesData = fixesRes.data ?? []
-    const judgeData = judgeRes.data ?? []
-
-    const byCat = reportsData.reduce((acc: Record<string, number>, r) => { acc[r.category] = (acc[r.category] ?? 0) + 1; return acc }, {})
-    const bySev = reportsData.reduce((acc: Record<string, number>, r) => { acc[r.severity ?? 'unset'] = (acc[r.severity ?? 'unset'] ?? 0) + 1; return acc }, {})
-    const byComp = reportsData.reduce((acc: Record<string, number>, r) => { acc[r.component ?? 'unknown'] = (acc[r.component ?? 'unknown'] ?? 0) + 1; return acc }, {})
+    const stats = await computeWeeklyStats(db, project.id, weekStart)
+    const benchmarks = await fetchBenchmarks(db, project.id)
 
     const statsContext = `Project: ${project.name}
-New reports: ${reportsData.length}
-By category: ${JSON.stringify(byCat)}
-By severity: ${JSON.stringify(bySev)}
-Top components: ${JSON.stringify(byComp)}
-Fix attempts: ${fixesData.length} (${fixesData.filter(f => f.status === 'completed').length} completed)
-Judge scores: ${JSON.stringify(judgeData.slice(0, 2))}`
+Week start: ${stats.weekStart}
+New reports: ${stats.reports.total}
+By category: ${JSON.stringify(stats.reports.byCategory)}
+By severity: ${JSON.stringify(stats.reports.bySeverity)}
+Top components: ${JSON.stringify(topN(stats.reports.byComponent, 8))}
+Fix attempts: ${stats.fixes.total} (${stats.fixes.completed} completed, completion rate ${(stats.fixes.completionRate * 100).toFixed(0)}%)
+Judge scores: ${JSON.stringify(stats.judgeScores.slice(0, 2))}
+Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project not opted in or k-anonymity unmet)'}`
 
     const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
     const span = trace.span(`digest.${project.name}`)
+    const digestStart = Date.now()
     const { text: digest, usage } = await generateText({
-      model: anthropic('claude-sonnet-4-20250514'),
-      system: 'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and actionable recommendations. Be specific and data-driven.',
+      model: anthropic('claude-sonnet-4-6'),
+      system:
+        'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and 2-3 actionable recommendations. Be specific and data-driven. Use Markdown with short paragraphs and bullet lists. Do NOT mention other tenants by name; benchmarks are anonymised aggregates.',
       prompt: statsContext,
     })
-    span.end({ model: 'claude-sonnet-4-20250514', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+    const digestLatency = Date.now() - digestStart
+    span.end({
+      model: 'claude-sonnet-4-6',
+      inputTokens: usage?.promptTokens,
+      outputTokens: usage?.completionTokens,
+    })
 
-    reports.push(`## ${project.name}\n\n${digest}`)
+    await logLlmInvocation(db, {
+      projectId: project.id,
+      functionName: 'intelligence-report',
+      stage: 'digest',
+      primaryModel: 'claude-sonnet-4-6',
+      usedModel: 'claude-sonnet-4-6',
+      fallbackUsed: false,
+      status: 'success',
+      latencyMs: digestLatency,
+      inputTokens: usage?.promptTokens ?? null,
+      outputTokens: usage?.completionTokens ?? null,
+    })
 
-    const { data: settings } = await db.from('project_settings').select('slack_webhook_url').eq('project_id', project.id).single()
+    const renderedHtml = renderIntelligenceHtml({
+      projectName: project.name,
+      weekStart: stats.weekStart,
+      summaryMd: digest,
+      stats,
+      benchmarks,
+    })
+
+    try {
+      const { id } = await persistIntelligenceReport(db, {
+        projectId: project.id,
+        weekStart: stats.weekStart,
+        summaryMd: digest,
+        stats,
+        benchmarks: benchmarks.optedIn ? benchmarks : null,
+        llmModel: 'claude-sonnet-4-6',
+        llmTokensIn: usage?.promptTokens ?? null,
+        llmTokensOut: usage?.completionTokens ?? null,
+        generatedBy: trigger,
+        renderedHtml,
+      })
+      reportIds.push(id)
+    } catch (e) {
+      intelLog.error('Failed to persist intelligence report', {
+        err: String(e),
+        projectId: project.id,
+      })
+    }
+
+    digests.push(`## ${project.name}\n\n${digest}`)
+
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('slack_webhook_url')
+      .eq('project_id', project.id)
+      .single()
     if (settings?.slack_webhook_url) {
       await sendSlackNotification(settings.slack_webhook_url, {
         text: `Weekly Bug Intelligence — ${project.name}\n\n${digest.slice(0, 2000)}`,
-      }).catch(e => intelLog.error('Slack delivery failed', { err: String(e) }))
+      }).catch((e) => intelLog.error('Slack delivery failed', { err: String(e) }))
     }
   }
 
   await trace.end()
-
-  return new Response(JSON.stringify({ ok: true, data: { reports: reports.length, digest: reports.join('\n\n---\n\n') } }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
+  await cronRun.finish({
+    rowsAffected: reportIds.length,
+    metadata: {
+      projectIds: (projects ?? []).map((p) => p.id),
+      reportIds,
+      weekStart: weekStart.toISOString().slice(0, 10),
+    },
   })
-})
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      data: {
+        reports: reportIds.length,
+        reportIds,
+        digest: digests.join('\n\n---\n\n'),
+      },
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  )
+}))
+
+function mostRecentMondayUtc(): Date {
+  const now = new Date()
+  const dow = now.getUTCDay() // 0 = Sunday
+  const daysSinceMonday = (dow + 6) % 7 // Monday → 0
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+  monday.setUTCDate(monday.getUTCDate() - daysSinceMonday - 7)
+  return monday
+}
+
+function topN(map: Record<string, number>, n: number): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(map)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, n),
+  )
+}

@@ -1,7 +1,7 @@
 [api]
 enabled = true
 port = 54321
-schemas = ["public", "storage"]
+schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
@@ -15,8 +15,26 @@ port = 54323
 
 [auth]
 enabled = true
-site_url = "http://localhost:6464"
+site_url = "https://kensaur.us/mushi-mushi/"
+additional_redirect_urls = [
+  "http://localhost:5173/mushi-mushi/",
+  "http://localhost:3000",
+  "https://kensaur.us/mushi-mushi/**",
+]
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true
+max_frequency = "60s"
+
+[auth.email.template.confirmation]
+subject = "Confirm your email — mushimushi"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Reset your password — mushimushi"
+content_path = "./supabase/templates/recovery.html"
 
 [storage]
 enabled = true
-file_size_limit = "5MB"
+file_size_limit = "1GiB"

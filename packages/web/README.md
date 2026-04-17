@@ -32,6 +32,13 @@ Auto-detects conditions that should prompt the user:
 - **Rage click** — 3+ clicks in < 500ms on same element
 - **Long task** — > 5s main thread block (PerformanceObserver)
 - **API cascade** — 3+ failed requests in 10s window
+- **Error boundary** — global `window.error` and `unhandledrejection` events (opt-in via `errorBoundary: true`)
+
+Each trigger respects its config flag — set `rageClick: false` to disable rage click detection, etc.
+
+## Known Limitations
+
+**Screenshot capture** uses canvas/SVG `foreignObject` serialization. This does not work with cross-origin iframes, tainted `<canvas>` elements, or pages with strict CSP. Best-effort on single-origin SPAs.
 
 ## Bundle Size
 
@@ -52,6 +59,28 @@ Mushi.init({
 
 ### With Proactive Triggers
 
+Proactive triggers are wired into `Mushi.init()` automatically when `config.proactive` is provided. The SDK opens the widget when a trigger fires, gated by fatigue prevention:
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'your-api-key',
+  proactive: {
+    rageClick: true,
+    longTask: true,
+    apiCascade: true,
+    errorBoundary: true,
+    cooldown: {
+      maxProactivePerSession: 2,
+      dismissCooldownHours: 24,
+      suppressAfterDismissals: 3,
+    },
+  },
+});
+```
+
+For manual composition (advanced), the lower-level APIs are also exported:
+
 ```typescript
 import { createProactiveManager, setupProactiveTriggers } from '@mushi-mushi/web';
 
@@ -60,7 +89,7 @@ const manager = createProactiveManager({ maxProactivePerSession: 2 });
 setupProactiveTriggers({
   onTrigger: (type, context) => {
     if (manager.shouldShow(type)) {
-      // Open widget with pre-filled context
+      // Custom handling
     }
   },
 });

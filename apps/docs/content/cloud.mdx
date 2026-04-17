@@ -1,0 +1,40 @@
+---
+title: Mushi Cloud
+---
+
+# Mushi Cloud
+
+`mushimushi.dev` is the managed product. It runs the **same code as
+this repo** — there is no closed-source plus-tier. The cloud value
+prop is "we host it for you, you get a metered bill."
+
+## Plans
+
+| Plan        | Cost                              | Notes                                        |
+| ----------- | --------------------------------- | -------------------------------------------- |
+| **Free**    | $0 / 1,000 reports / month        | All SDKs, hosted admin, community Discord    |
+| **Cloud**   | $0.0025 per ingested report after | No seat tax, plugin marketplace, email support |
+| **Enterprise** | Talk to us                     | SOC 2 evidence pack, SAML SSO, BYOK / BYO storage / residency, optional self-host |
+
+## Sign-up flow
+
+1. `mushimushi.dev/signup` — Supabase Auth (email + password).
+2. Email confirmation → project + first reporter token auto-provisioned.
+3. `mushimushi.dev/dashboard` shows usage and a single button:
+   **Add a card via Stripe**.
+4. Stripe Checkout → on success, the metered subscription becomes
+   `active`. Usage flows out via Stripe Meter Events from the hourly
+   `usage-aggregator` Edge Function.
+
+## Why metered
+
+Bug reports are bursty. A free tier of 1,000 reports/month covers most
+side projects and small teams; usage-based pricing means the bill
+tracks the value (every report = a triaged, classified, auto-fixable
+unit of customer friction).
+
+## Self-hosting
+
+If you'd rather run Mushi on your own Supabase project, see
+[Self-hosting](/self-hosting) — every feature on Cloud is in the OSS
+repo.

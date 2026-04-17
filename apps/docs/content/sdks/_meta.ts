@@ -1,0 +1,18 @@
+export default {
+  index: 'Overview',
+  core: '@mushi-mushi/core',
+  web: '@mushi-mushi/web',
+  react: '@mushi-mushi/react',
+  vue: '@mushi-mushi/vue',
+  svelte: '@mushi-mushi/svelte',
+  angular: '@mushi-mushi/angular',
+  'react-native': '@mushi-mushi/react-native',
+  ios: 'MushiMushi (iOS)',
+  android: 'dev.mushimushi:sdk (Android)',
+  flutter: 'mushi_mushi (Flutter)',
+  capacitor: '@mushi-mushi/capacitor',
+  'wasm-classifier': '@mushi-mushi/wasm-classifier',
+  cli: '@mushi-mushi/cli',
+  mcp: '@mushi-mushi/mcp',
+  'plugin-sdk': '@mushi-mushi/plugin-sdk',
+}

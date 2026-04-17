@@ -3,12 +3,18 @@ import type { MushiApiClient, MushiApiResponse, MushiReport, MushiReportStatus }
 export interface ApiClientOptions {
   projectId: string;
   apiKey: string;
-  apiEndpoint: string;
+  /**
+   * Override the API endpoint. Defaults to the canonical Cloud URL
+   * (DEFAULT_API_ENDPOINT). Self-hosted users MUST set this.
+   */
+  apiEndpoint?: string;
   timeout?: number;
   maxRetries?: number;
 }
 
-const DEFAULT_API_ENDPOINT = 'https://api.mushimushi.dev';
+// V5.3 (M-cross-cutting): canonical Cloud URL — the older `api.mushimushi.dev`
+// hostname was never wired up. Self-hosted users MUST override `apiEndpoint`.
+export const DEFAULT_API_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api';
 const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_MAX_RETRIES = 2;
 
@@ -21,7 +27,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     maxRetries = DEFAULT_MAX_RETRIES,
   } = options;
 
-  const baseUrl = apiEndpoint.replace(/\/$/, '');
+  let baseUrl = apiEndpoint.replace(/\/$/, '');
 
   async function request<T>(
     method: string,
@@ -46,6 +52,20 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
       });
 
       clearTimeout(timer);
+
+      // Wave C C7: data residency — follow a one-shot redirect when the
+      // gateway tells us the project lives in a different region. Cache the
+      // new base URL so subsequent calls go straight to the right cluster.
+      if (response.status === 307 || response.status === 308) {
+        const target = response.headers.get('Location');
+        if (target && retries > 0) {
+          const targetBase = target.replace(/\/v1\/.*$/, '').replace(/\/$/, '');
+          if (targetBase !== baseUrl) {
+            baseUrl = targetBase;
+            return request<T>(method, path, body, retries - 1);
+          }
+        }
+      }
 
       if (!response.ok) {
         const errorBody = await response.json().catch(() => ({}));

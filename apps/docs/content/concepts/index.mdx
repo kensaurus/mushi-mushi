@@ -1,0 +1,29 @@
+# Concepts
+
+Mushi is more than a feedback widget. It's a four-layer system:
+
+1. **Capture** — SDKs across web, mobile, and AI agents collect structured
+   reports with screenshots, breadcrumbs, and device context.
+2. **Classify** — A two-stage LLM pipeline (`fast-filter` → `classify-report`)
+   tags severity, category, and component, with vision analysis on
+   screenshots when relevant.
+3. **Connect** — Every report is embedded into a knowledge graph
+   (pgvector + Apache AGE) so similar bugs deduplicate and component
+   hot-spots emerge.
+4. **Fix** — Approved triage decisions hand off to an agentic fix
+   orchestrator that runs in a sandboxed environment (E2B) and opens a
+   PR via a scoped GitHub App.
+
+Every layer is observable (Langfuse + OpenTelemetry), auditable (immutable
+audit log), and self-improving (judge loop with A/B-tested prompts).
+
+import { Cards } from 'nextra/components'
+
+<Cards>
+  <Cards.Card title="Architecture" href="/concepts/architecture" arrow />
+  <Cards.Card title="Classification pipeline" href="/concepts/classification" arrow />
+  <Cards.Card title="Knowledge graph" href="/concepts/knowledge-graph" arrow />
+  <Cards.Card title="Fix orchestrator" href="/concepts/fix-orchestrator" arrow />
+  <Cards.Card title="Judge & self-improvement" href="/concepts/judge-loop" arrow />
+  <Cards.Card title="Anti-gaming & reputation" href="/concepts/anti-gaming" arrow />
+</Cards>

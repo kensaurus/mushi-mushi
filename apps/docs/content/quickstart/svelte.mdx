@@ -1,0 +1,32 @@
+---
+title: Svelte quickstart
+---
+
+# Svelte quickstart
+
+```bash
+pnpm add @mushi-mushi/svelte
+```
+
+```svelte filename="src/routes/+layout.svelte"
+<script lang="ts">
+  import { setMushiContext } from '@mushi-mushi/svelte'
+  setMushiContext({
+    projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+  })
+</script>
+
+<slot />
+```
+
+```svelte filename="src/routes/help/+page.svelte"
+<script lang="ts">
+  import { getMushi } from '@mushi-mushi/svelte'
+  const mushi = getMushi()
+</script>
+
+<button on:click={() => mushi.submitReport({ description: 'Search broke' })}>
+  Report a bug
+</button>
+```

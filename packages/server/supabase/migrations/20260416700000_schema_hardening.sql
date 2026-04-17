@@ -335,9 +335,6 @@ create trigger trg_synthetic_reports_updated_at
 create index if not exists idx_queue_project
   on processing_queue(project_id);
 
-create index if not exists idx_projects_owner
-  on projects(owner_id);
-
 create index if not exists idx_report_groups_canonical
   on report_groups(canonical_report_id);
 

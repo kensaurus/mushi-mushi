@@ -1,0 +1,21 @@
+---
+title: Admin SPA deploy
+---
+
+# Admin SPA deploy
+
+Build with the canonical Supabase URL and your gateway URL baked in:
+
+```bash
+VITE_SUPABASE_URL=https://YOUR-REF.supabase.co \
+VITE_SUPABASE_ANON_KEY=eyJ… \
+VITE_API_BASE_URL=https://YOUR-REF.functions.supabase.co \
+pnpm --filter @mushi-mushi/admin build
+```
+
+Deploy `apps/admin/dist/` to any static host. Cloudflare Pages, Vercel, S3
++ CloudFront, Netlify all work — no server runtime required.
+
+The repo ships a reference deploy workflow at
+`.github/workflows/deploy-admin.yml` that pushes the build to S3 +
+CloudFront with the right SPA-routing headers.

@@ -1,50 +1,12 @@
-import type { FixAgent, FixContext, FixResult } from '../types.js'
+/**
+ * @deprecated Renamed to RestFixWorkerAgent (V5.3 §2.10, M7) — the previous
+ *             name was misleading because it spoke plain REST, not MCP.
+ *             Use {@link RestFixWorkerAgent} for HTTP/JSON workers, or
+ *             {@link McpFixAgent} for true Model Context Protocol clients.
+ *             This re-export will be removed in v1.0.
+ */
+import { RestFixWorkerAgent } from './rest-fix-worker.js'
 
-export class GenericMCPAgent implements FixAgent {
-  name = 'generic_mcp'
-  private serverUrl: string
-
-  constructor(serverUrl: string) {
-    this.serverUrl = serverUrl
-  }
-
-  async generateFix(context: FixContext): Promise<FixResult> {
-    const branch = `mushi/fix-mcp-${context.reportId.slice(0, 8)}`
-
-    try {
-      const res = await fetch(`${this.serverUrl}/tools/generate_fix`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          report: context.report,
-          reproductionSteps: context.reproductionSteps,
-          relevantCode: context.relevantCode,
-          config: { ...context.config, branch },
-        }),
-      })
-
-      if (!res.ok) {
-        return {
-          success: false,
-          branch,
-          filesChanged: [],
-          linesChanged: 0,
-          summary: 'MCP agent call failed',
-          error: `HTTP ${res.status}: ${await res.text()}`,
-        }
-      }
-
-      const result = await res.json() as FixResult
-      return { ...result, branch }
-    } catch (err) {
-      return {
-        success: false,
-        branch,
-        filesChanged: [],
-        linesChanged: 0,
-        summary: 'MCP agent connection failed',
-        error: String(err),
-      }
-    }
-  }
+export class GenericMCPAgent extends RestFixWorkerAgent {
+  override name = 'generic_mcp'
 }

@@ -1,0 +1,19 @@
+---
+title: '@mushi-mushi/react'
+---
+
+# `@mushi-mushi/react`
+
+React provider + hooks. Wraps `@mushi-mushi/web`.
+
+```tsx
+import { MushiProvider, useMushi, useMushiReport } from '@mushi-mushi/react'
+```
+
+| Export             | Purpose                                              |
+| ------------------ | ---------------------------------------------------- |
+| `<MushiProvider>`  | App-level boot — accepts the same config as core     |
+| `useMushi()`       | Access the singleton (rate-limit aware, suspense-safe)|
+| `useMushiReport()` | Returns `{ submit, isSubmitting, lastError }`        |
+
+See [Quickstart → React](/quickstart/react).

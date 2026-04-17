@@ -1,0 +1,37 @@
+---
+title: Supabase setup
+---
+
+# Supabase setup
+
+```bash
+supabase init
+supabase link --project-ref <your-ref>
+supabase db push          # applies every migration in packages/server/supabase/migrations/
+```
+
+## Required extensions
+
+Mushi expects these extensions enabled in your project:
+
+| Extension      | Purpose                                            |
+| -------------- | -------------------------------------------------- |
+| `pgvector`     | Embeddings for dedup + semantic search             |
+| `pg_cron`      | Scheduled MV refreshes + nightly judge runs        |
+| `pgcrypto`     | UUIDs and HMAC                                     |
+| `pgsodium`     | Field-level encryption (PII columns)               |
+| `pg_net`       | Async HTTP from triggers (plugin dispatcher v2)    |
+| `vault`        | BYOK + plugin-secret storage                       |
+| `age` *(opt.)* | Apache AGE graph backend (parallel write — Phase 1)|
+
+The `db push` step bootstraps everything in the right order.
+
+## Required RLS
+
+Every table ships with RLS enabled and project-scoped policies. The
+canonical pattern is `(SELECT auth.uid())` (subquery form, *not* bare
+`auth.uid()`) so Postgres can cache the subplan via initPlan.
+
+The `mushi_rls_coverage_snapshot()` function (called by the SOC 2
+evidence cron) verifies that every public table has at least one policy
+and writes the result to `soc2_evidence`.

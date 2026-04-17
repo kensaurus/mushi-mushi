@@ -26,6 +26,8 @@ import {
   createElementSelector,
 } from './capture';
 import { captureSentryContext } from './sentry';
+import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
+import { createProactiveManager, type ProactiveManager } from './proactive-manager';
 
 let instance: MushiSDKInstance | null = null;
 
@@ -73,7 +75,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const apiClient = createApiClient({
     projectId: config.projectId,
     apiKey: config.apiKey,
-    apiEndpoint: config.apiEndpoint ?? 'https://api.mushimushi.dev',
+    ...(config.apiEndpoint ? { apiEndpoint: config.apiEndpoint } : {}),
   });
 
   const preFilter = createPreFilter(config.preFilter);
@@ -95,10 +97,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const customMetadata: Record<string, unknown> = {};
   let pendingScreenshot: string | null = null;
   let pendingElement: { tagName: string; id?: string; className?: string; xpath?: string } | null = null;
+  let pendingProactiveTrigger: string | null = null;
 
   const widget = new MushiWidget(config.widget, {
     onSubmit: async ({ category, description, intent }) => {
       log.info('Report submitted', { category, intent });
+      proactiveManager?.recordSubmission();
       await submitReport(category, description, intent);
     },
     onOpen: () => {
@@ -107,8 +111,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     },
     onClose: () => {
       log.debug('Widget closed');
+      if (pendingProactiveTrigger) {
+        proactiveManager?.recordDismissal();
+        emit('proactive:dismissed', { type: pendingProactiveTrigger });
+      }
       pendingScreenshot = null;
       pendingElement = null;
+      pendingProactiveTrigger = null;
       emit('widget:closed');
     },
     onScreenshotRequest: async () => {
@@ -137,6 +146,49 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     }
   }
 
+  // --- Proactive triggers + fatigue prevention ---
+  let proactiveTriggers: ProactiveTriggerCleanup | null = null;
+  let proactiveManager: ProactiveManager | null = null;
+
+  const proactiveCfg = config.proactive;
+  const hasAnyProactive = proactiveCfg
+    && (proactiveCfg.rageClick !== false
+      || proactiveCfg.longTask !== false
+      || proactiveCfg.apiCascade !== false
+      || proactiveCfg.errorBoundary === true);
+
+  if (hasAnyProactive && typeof document !== 'undefined') {
+    proactiveManager = createProactiveManager(proactiveCfg?.cooldown);
+
+    proactiveTriggers = setupProactiveTriggers(
+      {
+        onTrigger: (type, context) => {
+          if (!proactiveManager!.shouldShow(type)) {
+            log.debug('Proactive trigger suppressed by fatigue prevention', { type });
+            return;
+          }
+          log.info('Proactive trigger fired', { type, context });
+          pendingProactiveTrigger = type;
+          emit('proactive:triggered', { type, context });
+          widget.open();
+        },
+      },
+      {
+        rageClick: proactiveCfg?.rageClick,
+        longTask: proactiveCfg?.longTask,
+        apiCascade: proactiveCfg?.apiCascade,
+        errorBoundary: proactiveCfg?.errorBoundary,
+      },
+    );
+
+    log.debug('Proactive triggers enabled', {
+      rageClick: proactiveCfg?.rageClick !== false,
+      longTask: proactiveCfg?.longTask !== false,
+      apiCascade: proactiveCfg?.apiCascade !== false,
+      errorBoundary: proactiveCfg?.errorBoundary === true,
+    });
+  }
+
   offlineQueue.startAutoSync(apiClient);
   offlineQueue.flush(apiClient).then((result) => {
     if (result.sent > 0) log.info('Synced offline reports', { sent: result.sent });
@@ -149,6 +201,35 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (!filterResult.passed) {
       log.info('Report blocked by pre-filter', { reason: filterResult.reason });
       return;
+    }
+
+    const wasm = config.preFilter?.wasmClassifier;
+    if (wasm) {
+      try {
+        const verdict = await wasm.classify({
+          description,
+          category,
+          url: typeof location !== 'undefined' ? location.href : undefined,
+          hasScreenshot: pendingScreenshot !== null,
+          hasSelectedElement: pendingElement !== null,
+          hasNetworkErrors: networkCap?.getEntries()?.some((e) => e.status >= 400 || !!e.error) ?? false,
+          hasConsoleErrors: consoleCap?.getEntries()?.some((e) => e.level === 'error') ?? false,
+          proactiveTrigger: pendingProactiveTrigger ?? undefined,
+        });
+        if (verdict.verdict === 'block') {
+          log.info('Report blocked by on-device classifier', {
+            modelId: verdict.modelId,
+            confidence: verdict.confidence,
+            reason: verdict.reason,
+          });
+          return;
+        }
+        log.debug('On-device classifier verdict', { ...verdict });
+      } catch (err) {
+        log.warn('On-device classifier threw — falling through to server', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     if (!rateLimiter.tryConsume()) {
@@ -180,6 +261,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       sessionId: getSessionId(),
       reporterToken: getReporterToken(),
       appVersion: config.integrations?.vercel?.analyticsId,
+      proactiveTrigger: pendingProactiveTrigger ?? undefined,
       sentryEventId: sentryCtx?.eventId,
       sentryReplayId: sentryCtx?.replayId,
       createdAt: new Date().toISOString(),
@@ -221,11 +303,12 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
     pendingScreenshot = null;
     pendingElement = null;
+    pendingProactiveTrigger = null;
   }
 
   const sdk: MushiSDKInstance = {
-    report() {
-      widget.open();
+    report(options) {
+      widget.open(options);
     },
 
     on(event: MushiEventType, handler: MushiEventHandler) {
@@ -255,6 +338,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     },
 
     destroy() {
+      proactiveTriggers?.destroy();
+      proactiveManager?.reset();
       widget.destroy();
       consoleCap?.destroy();
       networkCap?.destroy();

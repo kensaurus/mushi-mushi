@@ -1,0 +1,17 @@
+---
+title: Fix orchestrator
+---
+
+# Fix orchestrator
+
+The Fixes page lists every dispatched fix attempt. Each row shows agent
+type (`McpFixAgent` or `RestFixWorkerAgent`), sandbox provider, branch /
+PR URL, files changed, lines changed, and the AI summary of the diff.
+
+The **streaming view** (right rail) opens a Hono `streamSSE` connection
+into the orchestrator and renders AG-UI events live: tool calls,
+file writes, test runs, sandbox lifecycle. The transport sanitises CRs
+per [CVE-2026-29085](https://nvd.nist.gov/vuln/detail/CVE-2026-29085).
+
+When a fix completes successfully, a `fix.applied` webhook fires to every
+subscribed plugin. Failures fire `fix.failed` so on-call can intervene.

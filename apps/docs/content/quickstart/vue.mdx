@@ -1,0 +1,42 @@
+---
+title: Vue 3 quickstart
+---
+
+# Vue 3 quickstart
+
+## Try it live
+
+<Playground scenario="vue" file="src/App.vue" title="Vue 3 + Vite" />
+
+## Install
+
+```bash
+pnpm add @mushi-mushi/vue
+```
+
+```ts filename="src/main.ts"
+import { createApp } from 'vue'
+import { MushiPlugin } from '@mushi-mushi/vue'
+import App from './App.vue'
+
+createApp(App)
+  .use(MushiPlugin, {
+    projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+    apiKey: import.meta.env.VITE_MUSHI_API_KEY,
+  })
+  .mount('#app')
+```
+
+```vue filename="src/components/ReportButton.vue"
+<script setup lang="ts">
+import { useMushi } from '@mushi-mushi/vue'
+
+const { submitReport } = useMushi()
+</script>
+
+<template>
+  <button @click="submitReport({ description: 'Cart total is wrong' })">
+    Report a bug
+  </button>
+</template>
+```

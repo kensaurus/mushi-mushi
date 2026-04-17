@@ -17,8 +17,20 @@ export async function checkAntiGaming(
   reporterTokenHash: string,
   device: DeviceContext | null,
 ): Promise<AntiGamingResult> {
-  if (!device?.fingerprint) return { allowed: true, flagged: false }
+  if (device?.fingerprint) {
+    const multiAccountResult = await runMultiAccountCheck(db, projectId, reporterTokenHash, device)
+    if (multiAccountResult.flagged) return multiAccountResult
+  }
 
+  return runVelocityCheck(db, projectId, reporterTokenHash, device)
+}
+
+async function runMultiAccountCheck(
+  db: SupabaseClient,
+  projectId: string,
+  reporterTokenHash: string,
+  device: DeviceContext,
+): Promise<AntiGamingResult> {
   const { data: existing } = await db
     .from('reporter_devices')
     .select('*')
@@ -67,7 +79,15 @@ export async function checkAntiGaming(
     })
   }
 
-  // Velocity check: > 10 reports in 24h from same reporter
+  return { allowed: true, flagged: false }
+}
+
+async function runVelocityCheck(
+  db: SupabaseClient,
+  projectId: string,
+  reporterTokenHash: string,
+  device: DeviceContext | null,
+): Promise<AntiGamingResult> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const { count } = await db
     .from('reports')
@@ -77,11 +97,12 @@ export async function checkAntiGaming(
     .gte('created_at', since)
 
   if ((count ?? 0) > 10) {
-    await db.from('reporter_devices').update({
-      flagged_as_suspicious: true,
-      flag_reason: `Velocity anomaly: ${count} reports in 24h`,
-    }).eq('project_id', projectId).eq('device_fingerprint', device.fingerprint)
-
+    if (device?.fingerprint) {
+      await db.from('reporter_devices').update({
+        flagged_as_suspicious: true,
+        flag_reason: `Velocity anomaly: ${count} reports in 24h`,
+      }).eq('project_id', projectId).eq('device_fingerprint', device.fingerprint)
+    }
     return { allowed: true, flagged: true, reason: `Velocity anomaly: ${count} reports in 24h` }
   }
 
