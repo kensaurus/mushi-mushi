@@ -1,16 +1,25 @@
 {
   "name": "@mushi-mushi/plugin-zapier",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Reference Mushi Mushi plugin: fan out any Mushi event to a Zapier-style incoming webhook.",
   "type": "module",
   "exports": {
-    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "bin": { "mushi-plugin-zapier": "./dist/server.js" },
-  "files": ["dist", "README.md", "LICENSE"],
+  "bin": {
+    "mushi-plugin-zapier": "./dist/server.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -35,7 +44,15 @@
     "directory": "packages/plugin-zapier"
   },
   "author": "Kenji Sakuramoto",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
-  "keywords": ["mushi-mushi", "plugin", "zapier", "webhook", "automation"]
+  "keywords": [
+    "mushi-mushi",
+    "plugin",
+    "zapier",
+    "webhook",
+    "automation"
+  ]
 }

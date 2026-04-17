@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "TypeScript SDK for building third-party Mushi Mushi plugins (webhook handlers + signature verification + typed events).",
   "type": "module",
@@ -50,8 +50,12 @@
     "hono": ">=4"
   },
   "peerDependenciesMeta": {
-    "express": { "optional": true },
-    "hono": { "optional": true }
+    "express": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    }
   },
   "repository": {
     "type": "git",
