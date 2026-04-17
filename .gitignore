@@ -48,6 +48,7 @@ playwright-report/
 
 # Screenshots
 screenshots/
+!docs/screenshots/
 qa-*.png
 fix-*.png
 smoke-*.png
@@ -59,3 +60,10 @@ smoke-*.png
 
 # Temporary edge-function payload bundles produced by scripts/build-edge-payload.mjs
 .tmp-deploy/
+
+# Sentry
+.sentryclirc
+# Sourcemaps must never be served from the public S3 bucket. The Vite plugin
+# already deletes them after upload (apps/admin/vite.config.ts), this is
+# belt-and-suspenders so a stray local build can't accidentally commit one.
+apps/admin/dist/**/*.map
