@@ -1,5 +1,9 @@
 # FILE: verify-fix.yml
 # PURPOSE: Verify Mushi Mushi bug fixes after deployment via Playwright
+#
+# SECURITY: report_id and deployment URLs are passed via env, never interpolated
+# directly into shell. This blocks script-injection attacks via crafted
+# deployment payloads.
 
 name: Verify Fix
 
@@ -15,6 +19,10 @@ on:
         description: 'Deployment URL to test against'
         required: true
 
+permissions:
+  contents: read
+  deployments: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -22,13 +30,13 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event.deployment_status.state == 'success' && github.event.deployment.payload.report_id)
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
         with:
           version: 10
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '22'
       - run: pnpm install --filter @mushi-mushi/verify
       - run: npx playwright install chromium
 
@@ -36,8 +44,8 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          REPORT_ID: ${{ github.event.inputs.report_id || github.event.deployment.payload.report_id }}
+          DEPLOY_URL: ${{ github.event.inputs.deployment_url || github.event.deployment.environment_url }}
         run: |
-          REPORT_ID="${{ github.event.inputs.report_id || github.event.deployment.payload.report_id }}"
-          DEPLOY_URL="${{ github.event.inputs.deployment_url || github.event.deployment.environment_url }}"
           cd packages/verify
           npx tsx src/run.ts --report-id="$REPORT_ID" --deployment-url="$DEPLOY_URL"

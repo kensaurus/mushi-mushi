@@ -18,6 +18,10 @@
 # NOTES:
 # - This workflow is completely separate from the SDK release pipeline
 # - Only builds apps/admin — never touches npm packages or changesets
+# - VITE_SUPABASE_ANON_KEY is publicly visible in the built bundle (Supabase
+#   anon keys are designed to be public; RLS protects the data). It is stored
+#   as a secret only to keep it out of source.
+# - Third-party actions are pinned to commit SHAs (Dependabot bumps them).
 ##
 
 name: Deploy Admin Console
@@ -34,6 +38,9 @@ concurrency:
   group: deploy-admin
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 env:
   AWS_REGION: ap-northeast-1
   S3_BUCKET: kensaur.us-mushi-mushi
@@ -47,29 +54,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           fetch-depth: 0
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache pnpm dependencies
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-pnpm-
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -92,11 +88,20 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Generate version file
+        env:
+          APP_VERSION: ${{ steps.version.outputs.app_version }}
+          BUILD_DATE: ${{ steps.version.outputs.build_date }}
         run: |
-          echo '{"version":"${{ steps.version.outputs.app_version }}","buildDate":"${{ steps.version.outputs.build_date }}","commit":"'"$(git rev-parse --short HEAD)"'"}' > apps/admin/dist/version.json
+          COMMIT=$(git rev-parse --short HEAD)
+          jq -n \
+            --arg version "$APP_VERSION" \
+            --arg buildDate "$BUILD_DATE" \
+            --arg commit "$COMMIT" \
+            '{version: $version, buildDate: $buildDate, commit: $commit}' \
+            > apps/admin/dist/version.json
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.2.1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -173,7 +178,7 @@ jobs:
           aws cloudfront publish-function \
             --name "$FUNC_NAME" \
             --if-match "$ETAG" \
-            --region us-east-1 || true
+            --region us-east-1
 
       - name: Deploy CloudFront SPA response function
         run: |
@@ -204,7 +209,7 @@ jobs:
           aws cloudfront publish-function \
             --name "$FUNC_NAME" \
             --if-match "$ETAG" \
-            --region us-east-1 || true
+            --region us-east-1
 
       - name: Invalidate CloudFront cache
         run: |
@@ -219,10 +224,7 @@ jobs:
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://kensaur.us/mushi-mushi/version.json" || echo "000")
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::warning::Health check returned HTTP $HTTP_CODE — CloudFront may still be propagating"
-          else
-            DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/version.json" | node -e "
-              let d=''; process.stdin.on('data',c=>d+=c);
-              process.stdin.on('end',()=>{try{console.log(JSON.parse(d).version)}catch{console.log('unknown')}});
-            ")
-            echo "Deployed version: $DEPLOYED"
+            exit 0
           fi
+          DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/version.json" | jq -r '.version // "unknown"')
+          echo "Deployed version: $DEPLOYED"

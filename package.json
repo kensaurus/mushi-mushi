@@ -38,7 +38,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "turbo run build && changeset publish"
+    "check:publish": "node scripts/check-workspace-protocol.mjs",
+    "release": "turbo run build && pnpm check:publish && changeset publish"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
