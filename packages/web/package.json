@@ -61,7 +61,7 @@
     }
   ],
   "dependencies": {
-    "@mushi-mushi/core": "workspace:*"
+    "@mushi-mushi/core": "workspace:^"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",

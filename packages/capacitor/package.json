@@ -64,7 +64,7 @@
     "@capacitor/core": ">=6.0.0"
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:*"
+    "@mushi-mushi/core": "workspace:^"
   },
   "devDependencies": {
     "@capacitor/core": "^6.2.0",
