@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsup",
     "lint": "eslint src/",
-    "test": "echo 'no tests yet'",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -20,10 +20,11 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
-    "eslint": "^9.39.4",
+    "eslint": "^10.2.0",
     "svelte": "^5.0.0",
     "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

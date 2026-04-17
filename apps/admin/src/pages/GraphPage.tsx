@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { NODE_COLORS } from '../lib/tokens'
-import { PageHeader, Card, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Card, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface GraphNode {
   id: string
@@ -151,25 +151,44 @@ export function GraphPage() {
         <span className="text-2xs text-fg-faint font-mono">{nodes.length} nodes · {edges.length} edges</span>
       </PageHeader>
 
-      <div className="flex gap-2 text-2xs text-fg-muted">
-        {Object.entries(NODE_COLORS).map(([type, color]) => (
-          <span key={type} className="flex items-center gap-1">
-            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color }} />
-            {type}
-          </span>
-        ))}
-      </div>
+      <PageHelp
+        title="About the Knowledge Graph"
+        whatIsIt="A visual map connecting bug reports to the components, pages, and versions they affect. Edges show relationships like causes, regressions, duplicates, and fix attempts."
+        useCases={[
+          'Find regressions: bugs that started after a specific release',
+          'See blast radius: which pages or components are most fragile',
+          'Spot duplicates and related issues that should be triaged together',
+          'Understand which fix attempts succeeded or failed for a bug group',
+        ]}
+        howToUse="Click any node to see its blast radius — the related entities reachable via edges. The graph populates automatically as reports are classified by the LLM pipeline."
+      />
 
-      <div className="flex gap-3">
-        <canvas
-          ref={canvasRef}
-          width={800}
-          height={460}
-          className="border border-edge rounded-md bg-surface-root cursor-pointer"
-          onClick={handleCanvasClick}
+      {nodes.length === 0 ? (
+        <EmptyState
+          title="The graph is empty"
+          description="Nodes and edges appear automatically once the classification pipeline processes bug reports. Submit a report from the dashboard to seed the graph."
         />
+      ) : (
+        <>
+          <div className="flex gap-2 text-2xs text-fg-muted">
+            {Object.entries(NODE_COLORS).map(([type, color]) => (
+              <span key={type} className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: color }} />
+                {type}
+              </span>
+            ))}
+          </div>
 
-        {selectedNode && (
+          <div className="flex gap-3">
+            <canvas
+              ref={canvasRef}
+              width={800}
+              height={460}
+              className="border border-edge rounded-md bg-surface-root cursor-pointer"
+              onClick={handleCanvasClick}
+            />
+
+            {selectedNode && (
           <Card className="w-56 p-3 space-y-2 self-start">
             <h3 className="text-sm font-medium text-fg">{selectedNode.label}</h3>
             <p className="text-2xs text-fg-muted">Type: {selectedNode.node_type}</p>
@@ -190,7 +209,9 @@ export function GraphPage() {
             )}
           </Card>
         )}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

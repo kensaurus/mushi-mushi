@@ -5,6 +5,12 @@ export { useMushi } from './hooks/useMushi'
 export { useMushiReport } from './hooks/useMushiReport'
 export { useMushiWidget } from './hooks/useMushiWidget'
 
+export { MushiBottomSheet } from './components/MushiBottomSheet'
+export type { MushiBottomSheetProps } from './components/MushiBottomSheet'
+
+export { MushiFloatingButton } from './components/MushiFloatingButton'
+export type { MushiFloatingButtonProps } from './components/MushiFloatingButton'
+
 export { getDeviceInfo } from './capture/device-info'
 export type { DeviceInfo } from './capture/device-info'
 

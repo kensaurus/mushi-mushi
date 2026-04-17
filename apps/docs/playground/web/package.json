@@ -1,0 +1,17 @@
+{
+  "name": "mushi-playground-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@mushi-mushi/web": "^0.8.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

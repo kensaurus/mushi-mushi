@@ -4,6 +4,7 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log } from '../_shared/logger.ts'
+import { withSentry } from '../_shared/sentry.ts'
 
 const synthLog = log.child('synthetic')
 
@@ -21,10 +22,12 @@ const syntheticSchema = z.object({
   }),
 })
 
-Deno.serve(async (req) => {
+Deno.serve(withSentry('generate-synthetic', async (req) => {
   const auth = req.headers.get('Authorization')
-  if (!auth?.includes('service_role')) {
-    return new Response(JSON.stringify({ error: 'Requires service_role key' }), { status: 401 })
+  const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
+  if (!token || !expectedKey || token !== expectedKey) {
+    return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
   }
 
   const db = getServiceClient()
@@ -50,12 +53,12 @@ Deno.serve(async (req) => {
       batchItems.map(async (i) => {
         const span = trace.span(`generate.${i}`)
         const { object, usage } = await generateObject({
-          model: anthropic('claude-sonnet-4-20250514'),
+          model: anthropic('claude-sonnet-4-6'),
           schema: syntheticSchema,
           system: 'Generate a realistic bug report for a web application. Vary the complexity — some obvious, some ambiguous. Include realistic console errors and URLs.',
           prompt: `Generate bug report #${i + 1} of ${count}. Make each unique in category and complexity.`,
         })
-        span.end({ model: 'claude-sonnet-4-20250514', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+        span.end({ model: 'claude-sonnet-4-6', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         await db.from('synthetic_reports').insert({
           project_id: projectId,
           generated_report: { description: object.description, category: object.category, severity: object.severity, component: object.component, console_errors: object.console_errors, url: object.url },
@@ -76,4 +79,4 @@ Deno.serve(async (req) => {
     status: 200,
     headers: { 'Content-Type': 'application/json' },
   })
-})
+}))

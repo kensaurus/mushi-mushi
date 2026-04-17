@@ -16,13 +16,13 @@ export class AsyncStorageQueue {
     this.apiKey = config.apiKey
   }
 
-  async enqueue(report: Record<string, unknown>): Promise<void> {
+  async enqueue(report: object): Promise<void> {
     const AsyncStorage = await this.getAsyncStorage()
     if (!AsyncStorage) return
 
     const queue = await this.getQueue(AsyncStorage)
     if (queue.length >= this.maxSize) queue.shift()
-    queue.push({ report, enqueuedAt: Date.now() })
+    queue.push({ report: report as Record<string, unknown>, enqueuedAt: Date.now() })
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
   }
 

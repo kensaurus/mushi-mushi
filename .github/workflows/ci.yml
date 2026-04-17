@@ -1,25 +1,35 @@
+# FILE: ci.yml
+# PURPOSE: Run build, typecheck, lint, tests, and bundle size checks on PRs
+#
+# NOTE: Pushes to master are handled by release.yml (which includes its own
+# CI job before the release step). This avoids duplicate CI runs.
+#
+# SUPPLY-CHAIN HARDENING: third-party actions pinned to commit SHAs (Dependabot
+# updates them via PR). See release.yml header for context.
+
 name: CI
 
 on:
-  push:
-    branches: [master, main]
   pull_request:
-    branches: [master, main]
+    branches: [master]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: 22
           cache: pnpm
@@ -33,6 +43,12 @@ jobs:
       - run: pnpm lint
 
       - run: pnpm test
+
+      # Wave D D2: enforce that the public changelog is in sync with the
+      # per-package CHANGELOGs and pending changesets. If a PR touches
+      # changesets without regenerating, this fails with an actionable error.
+      - name: Verify public changelog is in sync
+        run: pnpm changelog:check
 
       - name: Check bundle sizes
         run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit

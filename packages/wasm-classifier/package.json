@@ -1,0 +1,84 @@
+{
+  "name": "@mushi-mushi/wasm-classifier",
+  "version": "0.1.0",
+  "description": "On-device pre-classification for Mushi Mushi reports using a quantized small language model running in onnxruntime-web (WASM/WebGPU). Filters obvious junk before reports leave the browser, cutting LLM cost and protecting user privacy.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/wasm-classifier"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/wasm-classifier#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "keywords": [
+    "wasm",
+    "onnx",
+    "phi-3-mini",
+    "on-device-ai",
+    "bug-reporting",
+    "pre-classification",
+    "privacy",
+    "edge-inference"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "size": "size-limit"
+  },
+  "size-limit": [
+    {
+      "path": "dist/index.js",
+      "limit": "8 KB"
+    }
+  ],
+  "peerDependencies": {
+    "onnxruntime-web": ">=1.20.0"
+  },
+  "peerDependenciesMeta": {
+    "onnxruntime-web": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "@size-limit/file": "^12.1.0",
+    "eslint": "^10.2.0",
+    "size-limit": "^12.1.0",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "author": "Kenji Sakuramoto"
+}

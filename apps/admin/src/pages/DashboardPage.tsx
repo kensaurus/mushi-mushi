@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { SEVERITY, CATEGORY_LABELS } from '../lib/tokens'
-import { PageHeader, StatCard, Card, Badge, EmptyState, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, StatCard, Card, Badge, Btn, Loading, ErrorAlert } from '../components/ui'
+import { ConnectionStatus } from '../components/ConnectionStatus'
 
 interface Stats {
   total: number
@@ -11,35 +12,155 @@ interface Stats {
   bySeverity: Record<string, number>
 }
 
+interface Project {
+  id: string
+  name: string
+  api_keys?: Array<{ key_prefix: string }>
+}
+
+function GettingStartedEmpty() {
+  const navigate = useNavigate()
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectsLoading, setProjectsLoading] = useState(true)
+  const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
+
+  useEffect(() => {
+    apiFetch<{ projects: Project[] }>('/v1/admin/projects')
+      .then((res) => {
+        if (res.ok && res.data) setProjects(res.data.projects ?? [])
+      })
+      .finally(() => setProjectsLoading(false))
+  }, [])
+
+  const hasProject = projects.length > 0
+  // `hasKey` drives the checklist tick — once the user has any key on any
+  // project, that step stays done. The displayed key (below) is scoped to the
+  // first project specifically, so we look it up safely instead of asserting.
+  const hasKey = projects.some((p) => p.api_keys && p.api_keys.length > 0)
+  const firstProject = projects[0]
+  const firstProjectKey = firstProject?.api_keys?.[0]
+  const onboardingDone = localStorage.getItem('mushi:onboarding_completed') === 'true'
+
+  // Wait for the projects fetch to resolve before deciding whether to redirect.
+  // Otherwise a user with projects but no localStorage flag (different browser,
+  // cleared storage) gets bounced to onboarding before the fetch can populate state.
+  if (projectsLoading) return <Loading text="Checking your account..." />
+
+  if (!onboardingDone && !hasProject) {
+    return <Navigate to="/onboarding" replace />
+  }
+
+  async function submitTest() {
+    if (!firstProject) return
+    setTestStatus('running')
+    // Uses the JWT-authenticated admin endpoint (added in api/index.ts) instead
+    // of /v1/reports — that one requires X-Mushi-Api-Key, which the admin has
+    // no plaintext access to (keys are SHA-256 hashed at rest).
+    const res = await apiFetch(`/v1/admin/projects/${firstProject.id}/test-report`, {
+      method: 'POST',
+    })
+    setTestStatus(res.ok ? 'pass' : 'fail')
+  }
+
+  return (
+    <div>
+      <PageHeader title="Dashboard" description="Welcome to Mushi Mushi. Here's how to get your first report." />
+
+      {/* Getting Started checklist */}
+      <Card className="p-4 mb-4">
+        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider mb-3">Getting Started</h3>
+        <div className="space-y-2">
+          <ChecklistItem done={hasProject} label="Create a project" action={!hasProject ? () => navigate('/projects') : undefined} />
+          <ChecklistItem done={hasKey} label="Generate an API key" action={!hasKey && hasProject ? () => navigate('/projects') : undefined} />
+          <ChecklistItem done={false} label="Install the SDK in your app" action={() => navigate('/onboarding')} />
+          <ChecklistItem done={false} label="Receive your first bug report" />
+        </div>
+      </Card>
+
+      {/* Action cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <Card className="p-4">
+          <h4 className="text-xs font-semibold text-fg mb-1">Install the SDK</h4>
+          <p className="text-2xs text-fg-muted mb-3">
+            Add the Mushi Mushi widget to your app in under 5 minutes.
+          </p>
+          <Btn size="sm" onClick={() => navigate('/onboarding')}>Setup guide</Btn>
+        </Card>
+
+        <Card className="p-4">
+          <h4 className="text-xs font-semibold text-fg mb-1">Submit a test report</h4>
+          <p className="text-2xs text-fg-muted mb-3">
+            Send a test report to verify your pipeline works end-to-end.
+          </p>
+          <Btn
+            size="sm"
+            variant={testStatus === 'pass' ? 'ghost' : 'primary'}
+            disabled={!hasProject || testStatus === 'running'}
+            onClick={submitTest}
+          >
+            {testStatus === 'running' ? 'Sending…' : testStatus === 'pass' ? '✓ Sent' : 'Send test report'}
+          </Btn>
+          {testStatus === 'fail' && <p className="text-2xs text-danger mt-1">Failed — check connection.</p>}
+        </Card>
+      </div>
+
+      {/* Connection health */}
+      <Card className="p-4">
+        <ConnectionStatus />
+      </Card>
+
+      {/* Project reference */}
+      {firstProject && (
+        <div className="mt-4 text-2xs text-fg-faint space-y-0.5">
+          <p>Project: <span className="font-mono text-fg-secondary">{firstProject.name}</span> <span className="font-mono">({firstProject.id})</span></p>
+          {firstProjectKey && <p>API Key: <span className="font-mono text-fg-secondary">{firstProjectKey.key_prefix}...</span></p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ChecklistItem({ done, label, action }: { done: boolean; label: string; action?: () => void }) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={`text-sm ${done ? 'text-ok' : 'text-fg-faint'}`}>{done ? '✓' : '○'}</span>
+      <span className={`text-xs flex-1 ${done ? 'text-fg-secondary line-through' : 'text-fg'}`}>{label}</span>
+      {action && !done && (
+        <button onClick={action} className="text-2xs text-brand hover:text-brand-hover">
+          Do this →
+        </button>
+      )}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   function loadStats() {
     setLoading(true)
-    setError(false)
+    setError(null)
     apiFetch<Stats>('/v1/admin/stats').then((res) => {
       if (res.ok && res.data) setStats(res.data)
-      else setError(true)
-    }).catch(() => setError(true)).finally(() => setLoading(false))
+      else setError(res.error?.message ?? 'Failed to load dashboard stats.')
+    }).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard stats.')
+    }).finally(() => setLoading(false))
   }
 
   useEffect(() => { loadStats() }, [])
 
   if (loading) return <Loading text="Loading dashboard..." />
-  if (error) return <ErrorAlert message="Failed to load dashboard stats." onRetry={loadStats} />
+
+  // Distinguish outage from "no data": only fall through to the empty/getting-started
+  // state when the API succeeded and explicitly returned zero reports. An outage must
+  // surface as an actionable error, never silently redirect existing users to onboarding.
+  if (error) return <ErrorAlert message={error} onRetry={loadStats} />
 
   if (!stats || stats.total === 0) {
-    return (
-      <div>
-        <PageHeader title="Dashboard" />
-        <EmptyState
-          title="No reports yet"
-          description="Reports will appear here once users start submitting feedback through the SDK."
-        />
-      </div>
-    )
+    return <GettingStartedEmpty />
   }
 
   return (
@@ -49,6 +170,17 @@ export function DashboardPage() {
           View all reports &rarr;
         </Link>
       </PageHeader>
+
+      <PageHelp
+        title="About the Dashboard"
+        whatIsIt="A high-level snapshot of bug intake across all your projects: total reports, status breakdown, top categories, and severity distribution."
+        useCases={[
+          'See at a glance whether the pipeline is keeping up with incoming reports',
+          'Spot a sudden surge in P0 / P1 bugs after a release',
+          'Identify the noisiest category to investigate root causes',
+        ]}
+        howToUse="Click View all reports for the full inbox, or use the sidebar to drill into Graph, Judge, or Fixes for deeper analysis."
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-5">
         <StatCard label="Total Reports" value={stats.total} />

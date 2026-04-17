@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Badge, Btn, Input, SelectField, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface SsoConfig {
   id: string
@@ -41,6 +41,17 @@ export function SsoPage() {
     <div className="space-y-4">
       <PageHeader title="SSO Configuration" />
 
+      <PageHelp
+        title="About SSO"
+        whatIsIt="Single Sign-On lets your team log in via your corporate identity provider (Okta, Azure AD, Google Workspace, etc.) instead of email + password."
+        useCases={[
+          'Centrally enforce MFA, password policy, and offboarding',
+          'Automatically provision new admins when they join your IdP group',
+          'Pass an enterprise security review (SAML 2.0 or OIDC)',
+        ]}
+        howToUse="Add your IdP's metadata URL and entity ID below. Then in your IdP, configure the ACS URL and audience as shown in the docs. Test with a non-admin user first."
+      />
+
       <Card className="p-3 space-y-3">
         <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Add Identity Provider</h3>
         <div className="grid grid-cols-2 gap-2">
@@ -55,7 +66,12 @@ export function SsoPage() {
         <Btn onClick={addProvider}>Add Provider</Btn>
       </Card>
 
-      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load SSO configs." onRetry={fetchConfigs} /> : (
+      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load SSO configs." onRetry={fetchConfigs} /> : configs.length === 0 ? (
+        <EmptyState
+          title="No identity providers configured"
+          description="Add a provider above. Until at least one is active, all admins continue to log in via email and password."
+        />
+      ) : (
         <Card className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>

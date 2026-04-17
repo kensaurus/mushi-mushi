@@ -43,7 +43,7 @@ export const MushiPlugin: Plugin = {
     const client: MushiApiClient = createApiClient({
       projectId: config.projectId,
       apiKey: config.apiKey,
-      apiEndpoint: config.endpoint ?? 'https://api.mushimushi.dev',
+      ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
     })
 
     const instance: MushiInstance = {
@@ -82,6 +82,12 @@ export function useMushiReport() {
   }
 }
 
+/**
+ * Reactive widget state helper.
+ * This does NOT render a widget — use `@mushi-mushi/web` for the actual
+ * widget UI.  This composable provides a reactive `isOpen` ref that can
+ * drive a custom Vue overlay if you prefer to build your own.
+ */
 export function useMushiWidget() {
   const isOpen = ref(false)
   return {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Input, Btn, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Card, Input, Btn, Loading, ErrorAlert } from '../components/ui'
 
 interface Integration {
   id: string
@@ -52,6 +52,17 @@ export function IntegrationsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Integrations" />
+
+      <PageHelp
+        title="About Integrations"
+        whatIsIt="Wire bug reports out to your existing tools. When a report is triaged, an issue or alert is created automatically in the connected system."
+        useCases={[
+          'Auto-create Jira / Linear / GitHub issues for confirmed bugs above a severity threshold',
+          'Page on-call via PagerDuty when a P0 is detected',
+          'Keep ticketing systems in sync without manual copy-paste',
+        ]}
+        howToUse="Click a provider tile, fill in credentials (tokens are stored encrypted), and save. Connected providers show a green border. Routing rules are configured in Settings."
+      />
 
       <div className="grid grid-cols-4 gap-2">
         {PROVIDERS.map((p) => {

@@ -9,6 +9,10 @@ export interface CodeContext {
   preview: string
   componentTag?: string
   similarity: number
+  symbolName?: string | null
+  signature?: string | null
+  lineStart?: number | null
+  lineEnd?: number | null
 }
 
 export async function getRelevantCode(
@@ -44,6 +48,10 @@ export async function getRelevantCode(
       preview: f.content_preview as string,
       componentTag: f.component_tag as string | undefined,
       similarity: f.similarity as number,
+      symbolName: (f.symbol_name as string | null | undefined) ?? null,
+      signature: (f.signature as string | null | undefined) ?? null,
+      lineStart: (f.line_start as number | null | undefined) ?? null,
+      lineEnd: (f.line_end as number | null | undefined) ?? null,
     }))
   } catch (err) {
     ragLog.error('Failed to retrieve code context', { err: String(err) })
@@ -55,6 +63,11 @@ export function formatCodeContext(files: CodeContext[]): string {
   if (!files.length) return ''
 
   return files
-    .map(f => `--- ${f.filePath} (similarity: ${f.similarity.toFixed(2)}) ---\n${f.preview}`)
+    .map(f => {
+      const head = f.symbolName
+        ? `--- ${f.filePath}:${f.lineStart ?? '?'}-${f.lineEnd ?? '?'} :: ${f.symbolName} (similarity: ${f.similarity.toFixed(2)}) ---`
+        : `--- ${f.filePath} (similarity: ${f.similarity.toFixed(2)}) ---`
+      return `${head}\n${f.signature ? `${f.signature}\n` : ''}${f.preview}`
+    })
     .join('\n\n')
 }

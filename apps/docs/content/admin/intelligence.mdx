@@ -1,0 +1,17 @@
+---
+title: Intelligence reports
+---
+
+# Intelligence reports
+
+A weekly cron generates an HTML+PDF "bug intelligence" digest per project:
+
+- Top 10 components by report volume + week-over-week delta.
+- Top 10 emerging Bug-Ontology tags.
+- Top 5 longest-open critical bugs.
+- Optional cross-customer benchmarks (k≥5 anonymity enforced) — opt-in
+  only via the **Benchmarking** toggle.
+
+The current week's draft is regenerable on demand. PDFs render directly
+from the persisted `rendered_html` (no re-fetch required) and are stored
+in your configured BYO Storage bucket.

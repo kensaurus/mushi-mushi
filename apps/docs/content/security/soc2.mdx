@@ -1,0 +1,29 @@
+---
+title: SOC 2 readiness
+---
+
+# SOC 2 readiness
+
+Mushi ships a SOC 2 Type 1 readiness module. It is *not* a certification
+on its own — but it gives auditors the evidence they need.
+
+## What's automated
+
+| Concern                     | Mechanism                                          |
+| --------------------------- | -------------------------------------------------- |
+| Access — who/what/when      | `audit_log` table, append-only, RLS on by user     |
+| RLS policy coverage         | `mushi_rls_coverage_snapshot()` cron, daily        |
+| Data retention              | `data_retention_policies` per project; nightly cron|
+| DSAR (data subject access)  | `request_dsar()` SQL fn → tarball signed URL       |
+| Evidence pack               | `soc2-evidence` Edge Function → quarterly snapshot |
+| Encryption-in-transit       | TLS-only (Supabase enforces)                       |
+| Encryption-at-rest          | pgsodium for PII columns; Supabase disk encryption |
+| Backup / DR                 | Supabase point-in-time recovery                    |
+
+## Audit dashboard
+
+In the admin console: **Compliance → SOC 2**.
+
+Lists the latest evidence pack, RLS coverage delta, retention cron
+status, and outstanding DSAR requests. A single button regenerates the
+quarterly evidence pack on demand.

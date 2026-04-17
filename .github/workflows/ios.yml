@@ -1,0 +1,69 @@
+name: iOS SDK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packages/ios/**'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths:
+      - 'packages/ios/**'
+      - '.github/workflows/ios.yml'
+
+jobs:
+  test:
+    name: swift test (macOS)
+    runs-on: macos-14
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Print toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build (MushiMushi only)
+        run: swift build --target MushiMushi
+
+      - name: Build (MushiMushiSentry)
+        run: swift build --target MushiMushiSentry
+
+      - name: Run tests
+        run: swift test --parallel
+
+      - name: Lint podspec
+        run: |
+          gem install cocoapods --no-document
+          pod lib lint MushiMushi.podspec --allow-warnings --skip-tests
+
+  build-ios-app-shell:
+    name: xcodebuild (iPhone simulator)
+    runs-on: macos-14
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/ios
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Build for iOS Simulator
+        run: |
+          xcodebuild \
+            -scheme MushiMushi \
+            -destination 'platform=iOS Simulator,name=iPhone 15' \
+            -derivedDataPath build/DerivedData \
+            build | xcpretty

@@ -9,6 +9,8 @@ async function apiCall(path: string, config: CliConfig, options: RequestInit = {
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${config.apiKey}`,
+      'X-Mushi-Api-Key': config.apiKey ?? '',
+      'X-Mushi-Project': config.projectId ?? '',
       ...options.headers,
     },
   })
@@ -111,20 +113,77 @@ program
     }
   })
 
-program
-  .command('deploy')
-  .description('Check edge function health')
+const deploy = program.command('deploy').description('Deployment management')
+
+deploy
   .command('check')
+  .description('Check edge function health')
   .action(async () => {
     const config = loadConfig()
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     const endpoint = config.endpoint ?? 'https://api.mushimushi.dev'
     try {
-      const res = await fetch(`${endpoint}/v1/health`)
+      const res = await fetch(`${endpoint}/health`)
       console.log(`Health: ${res.status === 200 ? 'OK' : 'FAIL'} (${res.status})`)
     } catch (err) {
       console.error('Failed:', err)
     }
+  })
+
+program
+  .command('index <path>')
+  .description('Walk a local repo and upload code chunks to the RAG indexer (non-GitHub fallback for V5.3 §2.3.4)')
+  .option('--language <lang>', 'Limit to one language (ts, tsx, js, py, go, rs)')
+  .option('--dry-run', 'Show what would be uploaded without sending')
+  .action(async (path, opts) => {
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.projectId) { console.error('Set projectId via `mushi config projectId <id>`'); process.exit(1) }
+
+    const { readdir, readFile, stat } = await import('node:fs/promises')
+    const nodePath = await import('node:path')
+
+    const SKIP = /node_modules|\.git|dist|build|\.next|\.turbo|coverage/
+    const EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs'])
+
+    async function* walk(dir: string): AsyncGenerator<string> {
+      const entries = await readdir(dir, { withFileTypes: true })
+      for (const e of entries) {
+        const full = nodePath.join(dir, e.name)
+        if (SKIP.test(full)) continue
+        if (e.isDirectory()) yield* walk(full)
+        else if (EXTS.has(nodePath.extname(e.name))) yield full
+      }
+    }
+
+    let count = 0
+    let bytes = 0
+    const root = nodePath.resolve(path)
+    for await (const file of walk(root)) {
+      const lang = nodePath.extname(file).slice(1)
+      if (opts.language && opts.language !== lang) continue
+      const stats = await stat(file)
+      if (stats.size > 500_000) continue
+      const source = await readFile(file, 'utf8')
+      const relative = nodePath.relative(root, file).replaceAll('\\', '/')
+      count++
+      bytes += source.length
+      if (opts.dryRun) {
+        console.log(`  ${relative} (${source.length} bytes)`)
+        continue
+      }
+      const res = await apiCall('/v1/admin/codebase/upload', config, {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: config.projectId,
+          filePath: relative,
+          source,
+        }),
+      }) as { ok?: boolean; chunks?: number; error?: string }
+      if (!res.ok) console.error(`  FAIL ${relative}: ${res.error ?? 'unknown'}`)
+      else process.stdout.write(`  ${relative} → ${res.chunks ?? 0} chunks\n`)
+    }
+    console.log(`Indexed ${count} files (${(bytes / 1024).toFixed(1)} KB) into project ${config.projectId}`)
   })
 
 program
@@ -135,12 +194,22 @@ program
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
     const data = await apiCall('/v1/reports', config, {
       method: 'POST',
-      headers: { 'X-Mushi-Api-Key': config.apiKey ?? '' },
       body: JSON.stringify({
         projectId: config.projectId,
         description: 'CLI test report — verifying pipeline',
         category: 'other',
-        environment: { url: 'cli://test', browser: 'mushi-cli' },
+        reporterToken: `cli-test-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        environment: {
+          url: 'cli://test',
+          userAgent: 'mushi-cli',
+          platform: process.platform,
+          language: 'en',
+          viewport: { width: 0, height: 0 },
+          referrer: '',
+          timestamp: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
       }),
     }) as Record<string, unknown>
     console.log('Test report submitted:', JSON.stringify(data, null, 2))

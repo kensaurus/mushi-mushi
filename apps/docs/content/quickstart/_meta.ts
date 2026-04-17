@@ -1,0 +1,15 @@
+export default {
+  index: 'Choose your stack',
+  react: 'React',
+  web: 'Vanilla JS',
+  vue: 'Vue 3',
+  svelte: 'Svelte',
+  angular: 'Angular',
+  'react-native': 'React Native',
+  ios: 'iOS (Swift)',
+  android: 'Android (Kotlin)',
+  flutter: 'Flutter',
+  capacitor: 'Capacitor',
+  mobile: { title: 'Mobile (overview)', display: 'hidden' },
+  mcp: 'MCP server',
+}

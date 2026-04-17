@@ -1,0 +1,32 @@
+---
+title: Langfuse + Sentry
+---
+
+# Observability
+
+## Langfuse
+
+Every LLM invocation is wrapped in a Langfuse trace with the prompt
+version, model, token usage, latency, and key source. Set:
+
+```bash
+LANGFUSE_PUBLIC_KEY=pk-…
+LANGFUSE_SECRET_KEY=sk-…
+LANGFUSE_HOST=https://cloud.langfuse.com   # or your self-hosted instance
+```
+
+## Sentry
+
+The shared `withSentry()` wrapper instruments every Edge Function. Set:
+
+```bash
+SENTRY_DSN=https://…@sentry.io/…
+SENTRY_ENVIRONMENT=production
+SENTRY_RELEASE=$GIT_SHA
+```
+
+## OpenTelemetry
+
+The fix orchestrator emits OTel spans for every sandbox lifecycle event,
+agent tool call, and PR creation. Point your collector at the standard
+`OTEL_EXPORTER_OTLP_ENDPOINT`.

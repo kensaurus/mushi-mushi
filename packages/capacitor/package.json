@@ -1,0 +1,86 @@
+{
+  "name": "@mushi-mushi/capacitor",
+  "version": "0.2.0",
+  "description": "Capacitor plugin for Mushi Mushi — shake-to-report, screenshot capture, offline queue, and bottom-sheet widget for iOS/Android Capacitor apps.",
+  "license": "MIT",
+  "author": "Kenji Sakuramoto",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/capacitor#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/capacitor"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "ios/Plugin",
+    "android/src/main",
+    "android/build.gradle",
+    "MushiMushiCapacitor.podspec",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "verify:ios": "cd ios && pod install --silent && xcodebuild -workspace Plugin.xcworkspace -scheme Plugin -destination 'generic/platform=iOS Simulator' build",
+    "verify:android": "cd android && ./gradlew clean build"
+  },
+  "keywords": [
+    "capacitor",
+    "capacitor-plugin",
+    "mushi-mushi",
+    "bug-reporting",
+    "sdk",
+    "ionic"
+  ],
+  "peerDependencies": {
+    "@capacitor/core": ">=6.0.0"
+  },
+  "dependencies": {
+    "@mushi-mushi/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@capacitor/core": "^6.2.0",
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "eslint": "^10.2.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+name: Flutter SDK
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packages/flutter/**'
+      - '.github/workflows/flutter.yml'
+  pull_request:
+    paths:
+      - 'packages/flutter/**'
+      - '.github/workflows/flutter.yml'
+
+jobs:
+  analyze-test:
+    name: analyze + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/flutter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.x'
+          channel: stable
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --reporter expanded
+
+      - name: pub.dev publish dry-run
+        run: flutter pub publish --dry-run

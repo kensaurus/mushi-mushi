@@ -16,6 +16,8 @@ mushi status             # Project overview
 mushi reports list       # List recent reports
 mushi reports show <id>  # View report details
 mushi reports triage <id> --priority high --assign @dev
+mushi deploy check       # Check edge function health
+mushi test               # Submit a test report to verify pipeline
 ```
 
 ## License

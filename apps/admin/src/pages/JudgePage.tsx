@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, Card, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Card, Loading, ErrorAlert, EmptyState } from '../components/ui'
 import { SCORE_COLORS } from '../lib/tokens'
 
 interface WeekData {
@@ -60,6 +60,17 @@ export function JudgePage() {
     <div className="space-y-4">
       <PageHeader title="Self-Improvement Dashboard" />
 
+      <PageHelp
+        title="About the Judge"
+        whatIsIt="A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores are aggregated weekly to track model drift over time."
+        useCases={[
+          'Detect when the classifier silently degrades after a model or prompt change',
+          'Decide whether to roll back a prompt update or trigger a new fine-tuning run',
+          'Justify the quality of automated triage to stakeholders with hard numbers',
+        ]}
+        howToUse="Run the judge-batch worker on a schedule. The current week summary highlights week-over-week drift; the history table shows the full trend."
+      />
+
       {latest ? (
         <Card className="p-3 space-y-2">
           <div className="flex justify-between items-center mb-1">
@@ -90,7 +101,10 @@ export function JudgePage() {
           )}
         </Card>
       ) : (
-        <p className="text-fg-muted text-xs">No evaluations yet. Run the judge-batch to start scoring.</p>
+        <EmptyState
+          title="No evaluations yet"
+          description="Run the judge-batch worker to score recent classifications. Scores will appear here weekly."
+        />
       )}
 
       {weeks.length > 0 && (

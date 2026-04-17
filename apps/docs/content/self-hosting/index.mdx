@@ -1,0 +1,31 @@
+# Self-hosting
+
+Mushi is **OSS-first**. The cloud product at `app.mushimushi.dev` runs the
+exact same code in this repo — there is no closed-source plus-tier.
+
+## What you'll deploy
+
+| Layer            | Technology                          | License |
+| ---------------- | ----------------------------------- | ------- |
+| Database         | Supabase (Postgres 15 + pgvector + AGE) | Open |
+| Edge Functions   | Hono on Supabase Edge (Deno)        | BSL     |
+| Admin SPA        | React + Vite, deployed to any static host | BSL |
+| Observability    | Langfuse + OpenTelemetry collector  | Open    |
+| Sandbox          | E2B managed (or self-hosted Modal)  | External|
+
+## Quick path
+
+```bash
+git clone https://github.com/kensaurus/mushi-mushi.git
+cd mushi-mushi
+pnpm install
+pnpm --filter @mushi-mushi/server supabase:up   # starts a local stack
+pnpm --filter @mushi-mushi/admin dev             # admin at http://localhost:5173
+```
+
+See:
+
+- [Supabase setup](/self-hosting/supabase)
+- [Edge Functions deploy](/self-hosting/edge-functions)
+- [Admin SPA deploy](/self-hosting/admin-spa)
+- [Observability (Langfuse + Sentry)](/self-hosting/observability)

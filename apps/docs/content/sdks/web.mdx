@@ -1,0 +1,21 @@
+---
+title: '@mushi-mushi/web'
+---
+
+# `@mushi-mushi/web`
+
+Browser SDK with session-replay-style breadcrumbs, console / network /
+click capture, on-device pre-classifier (via `@mushi-mushi/wasm-classifier`),
+and the Shake-to-Report widget rendered in a Shadow DOM (so your CSS never
+leaks in or out).
+
+See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
+
+- **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects
+  user friction (rage clicks, repeated navigation, console errors during
+  the same interaction). Use it to surface the report widget contextually.
+- **`onBeforeSubmit((report) => report | null)`** — last-mile transform.
+  Return `null` to drop the report client-side.
+- **`pii`** — built-in scrubber masks emails, phones, SSNs,
+  credit-card-shaped strings, and JWTs by default. Add custom regex via
+  `pii.customPatterns`.

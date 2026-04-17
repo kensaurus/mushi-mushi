@@ -1,0 +1,16 @@
+---
+title: 'mushi_mushi (Flutter)'
+---
+
+# `mushi_mushi` (Flutter)
+
+Pure-Dart SDK on pub.dev. `RepaintBoundary`-driven screenshot capture,
+shake detection via `sensors_plus`, same offline-queue contract as the JS
+core SDK.
+
+```dart
+await Mushi.instance.configure(projectId: '…', apiKey: '…', enableShakeToReport: true);
+await Mushi.instance.submitReport(description: '…');
+```
+
+See [Quickstart → Flutter](/quickstart/flutter).

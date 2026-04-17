@@ -14,6 +14,7 @@
     "deploy:classify": "cd supabase && supabase functions deploy classify-report",
     "db:push": "cd supabase && supabase db push",
     "db:reset": "cd supabase && supabase db reset",
+    "test": "vitest run",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
@@ -22,7 +23,8 @@
   "devDependencies": {
     "@mushi-mushi/tsconfig": "workspace:*",
     "supabase": "^2.22.0",
-    "typescript": "^5.8.3"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

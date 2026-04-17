@@ -1,0 +1,48 @@
+name: Auto-add to public roadmap
+
+on:
+  issues:
+    types: [opened, reopened, labeled]
+  pull_request_target:
+    types: [opened, reopened, labeled, ready_for_review]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    if: ${{ !github.event.issue.pull_request }}
+    steps:
+      - name: Add issue / PR to roadmap project
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: https://github.com/users/kensaurus/projects/1
+          github-token: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+
+      - name: Set initial Status field
+        if: ${{ github.event.action == 'opened' || github.event.action == 'reopened' }}
+        env:
+          GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+        run: |
+          # No-op placeholder. The default Status column ("Backlog") is set
+          # by add-to-project. We only ever override Status here when
+          # someone explicitly labels with status:* (handled below).
+          echo "Issue ${{ github.event.issue.number }} added to roadmap"
+
+      - name: Checkout (needed for sync-roadmap-status.mjs)
+        if: ${{ github.event.action == 'labeled' && startsWith(github.event.label.name, 'status:') }}
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Mirror status:* label → Status field
+        if: ${{ github.event.action == 'labeled' && startsWith(github.event.label.name, 'status:') }}
+        env:
+          GH_TOKEN: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
+          LABEL: ${{ github.event.label.name }}
+          ITEM_NODE: ${{ github.event.issue.node_id || github.event.pull_request.node_id }}
+        run: node .github/scripts/sync-roadmap-status.mjs

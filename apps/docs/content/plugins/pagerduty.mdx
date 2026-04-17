@@ -1,0 +1,26 @@
+---
+title: PagerDuty
+---
+
+# PagerDuty plugin
+
+Pages your on-call rotation when a P0 or P1 report lands.
+
+## Setup
+
+1. Install the **PagerDuty Events API v2** integration on your service →
+   copy the **Integration Key**.
+2. In Mushi: **Marketplace → PagerDuty → Install**.
+3. Paste the integration key into `routing_key` and pick the severities
+   you care about (default: `p0,p1`).
+
+## Behaviour
+
+- **`report.created`** with `severity ∈ subscribed_severities` triggers
+  a PagerDuty event with:
+  - `dedup_key = report_id` so retries don't double-page
+  - `summary = title`
+  - `source = url`
+  - Severity mapped: `p0/p1 → critical`, `p2 → error`, `p3 → warning`
+- **`report.status_changed → resolved`** sends a `resolve` action with
+  the same `dedup_key`, auto-closing the incident.

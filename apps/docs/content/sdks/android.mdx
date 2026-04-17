@@ -1,0 +1,21 @@
+---
+title: 'dev.mushimushi:sdk (Android)'
+---
+
+# `dev.mushimushi:sdk` (Android)
+
+Native Kotlin SDK on Maven Central.
+
+```kotlin
+Mushi.configure(this, projectId = "…", apiKey = "…", enableShakeToReport = true)
+Mushi.submitReport(description = "…")
+```
+
+Highlights:
+
+- Shake detection via `SensorManager` (no third-party gesture lib).
+- Bottom-sheet capture UI rendered with Compose.
+- `WorkManager`-style retry queue.
+- Optional Sentry breadcrumb bridge.
+
+See [Quickstart → Android](/quickstart/android).

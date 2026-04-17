@@ -15,6 +15,8 @@
  *   child.error('Insert failed', { table: 'reports' })
  */
 
+import { reportMessage } from './sentry.ts'
+
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal'
 
 const LEVEL_VALUE: Record<LogLevel, number> = {
@@ -74,6 +76,16 @@ function buildLogger(
     }
 
     emit(level, JSON.stringify(entry))
+
+    // Forward errors and fatals to Sentry as a single chokepoint — every
+    // call site that already does `log.error(...)` gets monitoring for free.
+    // No-op when Sentry isn't initialized (local dev, self-hosted forks).
+    if (level === 'error' || level === 'fatal') {
+      reportMessage(msg, level === 'fatal' ? 'fatal' : 'error', {
+        tags: { scope },
+        extra: { ...baseMeta, ...meta },
+      })
+    }
   }
 
   return {

@@ -3,9 +3,14 @@ import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
+import { SetupGatePage } from './pages/SetupGatePage'
+import { checkEnv } from './lib/env'
 import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
+
+const envStatus = checkEnv()
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(m => ({ default: m.DashboardPage })))
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then(m => ({ default: m.ReportsPage })))
@@ -20,7 +25,15 @@ const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const FineTuningPage = lazy(() => import('./pages/FineTuningPage').then(m => ({ default: m.FineTuningPage })))
+const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
+const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
+const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })))
+const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
+const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
+const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -38,6 +51,17 @@ function NotFoundPage() {
   )
 }
 
+function PasswordRecoveryGate({ children }: { children: ReactNode }) {
+  const { isPasswordRecovery } = useAuth()
+  const { pathname } = useLocation()
+  // Allow /reset-password through so the destination route can actually mount.
+  // Without this, the gate redirects in a loop and ResetPasswordPage never renders.
+  if (isPasswordRecovery && pathname !== '/reset-password') {
+    return <Navigate to="/reset-password" replace />
+  }
+  return <>{children}</>
+}
+
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
   if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
@@ -46,10 +70,16 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 }
 
 export function App() {
+  if (envStatus.mode === 'self-hosted' && !envStatus.ready) {
+    return <SetupGatePage env={envStatus} />
+  }
+
   return (
     <AuthProvider>
+      <PasswordRecoveryGate>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
           path="/*"
           element={
@@ -71,7 +101,15 @@ export function App() {
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/fine-tuning" element={<FineTuningPage />} />
+                  <Route path="/intelligence" element={<IntelligencePage />} />
+                  <Route path="/compliance" element={<CompliancePage />} />
+                  <Route path="/storage" element={<StoragePage />} />
+                  <Route path="/marketplace" element={<MarketplacePage />} />
                   <Route path="/integrations" element={<IntegrationsPage />} />
+                  <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route path="/health" element={<HealthPage />} />
+                  <Route path="/anti-gaming" element={<AntiGamingPage />} />
+                  <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
                 </Suspense>
@@ -81,6 +119,7 @@ export function App() {
           }
         />
       </Routes>
+      </PasswordRecoveryGate>
     </AuthProvider>
   )
 }

@@ -1,0 +1,38 @@
+---
+title: Angular quickstart
+---
+
+# Angular quickstart
+
+```bash
+pnpm add @mushi-mushi/angular
+```
+
+```ts filename="src/app/app.config.ts"
+import { provideMushi } from '@mushi-mushi/angular'
+
+export const appConfig = {
+  providers: [
+    provideMushi({
+      projectId: 'YOUR_PROJECT_ID',
+      apiKey: 'YOUR_PUBLIC_API_KEY',
+    }),
+  ],
+}
+```
+
+```ts filename="src/app/report.component.ts"
+import { Component, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
+
+@Component({
+  selector: 'app-report',
+  template: `<button (click)="report()">Report a bug</button>`,
+})
+export class ReportComponent {
+  private mushi = inject(MushiService)
+  report() {
+    this.mushi.submitReport({ description: 'Calendar shows wrong week' })
+  }
+}
+```

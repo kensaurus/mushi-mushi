@@ -23,9 +23,13 @@ export type {
   MushiSDKInstance,
   MushiApiClient,
   MushiApiResponse,
+  MushiOnDeviceClassifier,
+  MushiOnDeviceClassifierInput,
+  MushiOnDeviceClassifierResult,
 } from './types';
 
-export { createApiClient, type ApiClientOptions } from './api-client';
+export { createApiClient, DEFAULT_API_ENDPOINT, type ApiClientOptions } from './api-client';
+export { resolveRegionEndpoint, REGION_ENDPOINTS, type MushiRegion } from './region';
 export { createPreFilter, type PreFilterResult } from './pre-filter';
 export { createOfflineQueue, type OfflineQueue } from './queue';
 export { captureEnvironment } from './environment';

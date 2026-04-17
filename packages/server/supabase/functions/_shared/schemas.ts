@@ -7,7 +7,7 @@ export const reportSubmissionSchema = z.object({
   id: z.string().optional(),
   projectId: z.string(),
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']),
-  description: z.string().min(5).max(5000),
+  description: z.string().min(20, 'Description must be at least 20 characters').max(5000),
   userIntent: z.string().optional(),
 
   environment: z.object({
@@ -87,3 +87,20 @@ export const classificationSchema = z.object({
 })
 
 export type Classification = z.infer<typeof classificationSchema>
+
+// ---------------------------------------------------------------------------
+// Vision analysis (V5.3 air-gap): image-only output schema. The fields
+// `visible_text_in_image` and `untrusted_image_instructions_detected` are the
+// trust boundary — text seen in screenshots is captured here as DATA and
+// never as instruction.
+// ---------------------------------------------------------------------------
+export const visionAnalysisSchema = z.object({
+  visual_issues: z.array(z.string()),
+  ui_state: z.string(),
+  matches_description: z.boolean(),
+  visible_text_in_image: z.array(z.string()),
+  untrusted_image_instructions_detected: z.boolean(),
+  additional_context: z.string().optional(),
+})
+
+export type VisionAnalysis = z.infer<typeof visionAnalysisSchema>

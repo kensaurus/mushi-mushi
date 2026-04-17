@@ -84,6 +84,10 @@ create index if not exists idx_queue_report on processing_queue(report_id);
 -- Reports — new columns
 -- ---------------------------------------------------------------------------
 alter table reports add column if not exists extracted_symptoms jsonb;
+alter table reports add column if not exists stage1_classification jsonb;
+alter table reports add column if not exists stage1_model text;
+alter table reports add column if not exists stage1_prompt_version text;
+alter table reports add column if not exists stage1_latency_ms int;
 alter table reports add column if not exists stage2_analysis jsonb;
 alter table reports add column if not exists stage2_model text;
 alter table reports add column if not exists stage2_latency_ms int;
@@ -91,13 +95,14 @@ alter table reports add column if not exists reproduction_steps jsonb;
 alter table reports add column if not exists report_group_id uuid references report_groups(id);
 alter table reports add column if not exists sentry_seer_analysis jsonb;
 alter table reports add column if not exists sentry_issue_url text;
+alter table reports add column if not exists processing_attempts int default 0;
 
 create index if not exists idx_reports_group on reports(report_group_id) where report_group_id is not null;
 
 -- ---------------------------------------------------------------------------
 -- Project Settings — new columns
 -- ---------------------------------------------------------------------------
-alter table project_settings add column if not exists stage2_model text default 'claude-sonnet-4-20250514';
+alter table project_settings add column if not exists stage2_model text default 'claude-sonnet-4-6';
 alter table project_settings add column if not exists stage1_confidence_threshold float default 0.85;
 alter table project_settings add column if not exists embedding_model text default 'text-embedding-3-small';
 alter table project_settings add column if not exists dedup_threshold float default 0.82;

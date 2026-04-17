@@ -10,10 +10,11 @@ const API_KEY = process.env.MUSHI_API_KEY ?? '';
 const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? '';
 
 async function apiCall(path: string, options?: RequestInit): Promise<unknown> {
-  const res = await fetch(`${API_ENDPOINT}/api${path}`, {
+  const res = await fetch(`${API_ENDPOINT}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`,
       'X-Mushi-Api-Key': API_KEY,
       'X-Mushi-Project': PROJECT_ID,
       ...(options?.headers ?? {}),

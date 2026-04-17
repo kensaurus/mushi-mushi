@@ -1,0 +1,67 @@
+---
+title: '@mushi-mushi/core'
+---
+
+# `@mushi-mushi/core`
+
+The universal foundation every SDK builds on. Framework-agnostic.
+
+## Install
+
+```bash
+pnpm add @mushi-mushi/core
+```
+
+## API
+
+### `initMushi(config)`
+
+```ts
+interface MushiConfig {
+  projectId: string
+  apiKey: string                  // public API key
+  region?: 'us' | 'eu' | 'jp'     // optional pin; defaults to auto
+  apiUrl?: string                 // override (self-hosted)
+  enableOfflineQueue?: boolean    // default true
+  rateLimit?: { perMinute?: number }
+  scrubPii?: boolean              // default true
+  logger?: MushiLogger
+}
+```
+
+### `submitReport(input)`
+
+```ts
+interface MushiReport {
+  description: string
+  severity?: 'low' | 'medium' | 'high' | 'critical'
+  category?: 'bug' | 'feature_request' | 'usage_question' | 'other'
+  component?: string
+  screenshot?: Blob | string      // base64 or Blob
+  metadata?: Record<string, unknown>
+}
+```
+
+### `flushOfflineQueueNow()`
+
+Force any queued reports out before page unload or app suspend. The web,
+React-Native, iOS, Android, Flutter, and Capacitor SDKs all wire this into
+the appropriate lifecycle hook automatically.
+
+### Region resolution
+
+```ts
+import { resolveRegionEndpoint, REGION_ENDPOINTS } from '@mushi-mushi/core'
+
+const url = await resolveRegionEndpoint({ projectId: 'p_…', region: 'eu' })
+```
+
+`REGION_ENDPOINTS` contains the canonical URLs:
+
+```ts
+const REGION_ENDPOINTS = {
+  us: 'https://us.api.mushimushi.dev',
+  eu: 'https://eu.api.mushimushi.dev',
+  jp: 'https://jp.api.mushimushi.dev',
+}
+```

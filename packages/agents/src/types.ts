@@ -46,6 +46,11 @@ export interface FixResult {
 export interface FixAgent {
   name: string
   generateFix(context: FixContext): Promise<FixResult>
+  /**
+   * Optional last-line guard. If implemented, the orchestrator MUST call this
+   * before pushing a PR and refuse on validation failure (V5.3 §2.10).
+   */
+  validateResult?(context: FixContext, result: FixResult): { valid: boolean; errors: string[] }
 }
 
 export interface ScopeCheck {
@@ -56,4 +61,43 @@ export interface ScopeCheck {
 export interface ReviewResult {
   approved: boolean
   reasoning: string
+}
+
+// ============================================================
+// Wave D D7: Multi-repo coordination types
+// ============================================================
+export type RepoRole = 'frontend' | 'backend' | 'mobile' | 'ai' | 'infra' | 'docs' | 'monorepo' | 'other'
+
+export interface ProjectRepo {
+  id: string
+  repoUrl: string
+  role: RepoRole
+  defaultBranch: string
+  pathGlobs: string[]
+  isPrimary: boolean
+}
+
+export interface CoordinationTask {
+  repoId: string
+  role: RepoRole
+  description: string
+  pathHints: string[]
+}
+
+export interface CoordinationPlan {
+  tasks: CoordinationTask[]
+  rationale: string
+}
+
+export interface CoordinatedFixResult {
+  coordinationId: string
+  status: 'succeeded' | 'partial_success' | 'failed' | 'cancelled'
+  attempts: Array<{
+    fixId: string
+    repoId: string
+    role: RepoRole
+    success: boolean
+    prUrl?: string
+    error?: string
+  }>
 }

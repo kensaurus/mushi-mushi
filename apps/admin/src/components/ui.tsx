@@ -131,6 +131,70 @@ export function PageHeader({ title, description, children }: PageHeaderProps) {
   )
 }
 
+/* ── PageHelp (collapsible "About this page") ──────────────────────────── */
+
+interface PageHelpProps {
+  title: string
+  whatIsIt: string
+  useCases?: string[]
+  howToUse?: string
+  defaultOpen?: boolean
+}
+
+export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen = false }: PageHelpProps) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group mb-4 rounded-md border border-edge-subtle bg-surface-raised/30 open:bg-surface-raised/50"
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs text-fg-muted hover:text-fg-secondary motion-safe:transition-colors">
+        <svg
+          className="h-3 w-3 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          aria-hidden="true"
+        >
+          <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <svg
+          className="h-3.5 w-3.5 text-fg-faint"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
+        </svg>
+        <span className="font-medium">{title}</span>
+      </summary>
+      <div className="space-y-2.5 border-t border-edge-subtle px-3 py-2.5 text-2xs leading-relaxed text-fg-secondary">
+        <div>
+          <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">What it is</p>
+          <p>{whatIsIt}</p>
+        </div>
+        {useCases && useCases.length > 0 && (
+          <div>
+            <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">When to use it</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {useCases.map((u, i) => <li key={i}>{u}</li>)}
+            </ul>
+          </div>
+        )}
+        {howToUse && (
+          <div>
+            <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">How to use it</p>
+            <p>{howToUse}</p>
+          </div>
+        )}
+      </div>
+    </details>
+  )
+}
+
 /* ── FilterSelect ───────────────────────────────────────────────────────── */
 
 interface FilterSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {

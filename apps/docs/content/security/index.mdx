@@ -1,0 +1,20 @@
+# Security overview
+
+Mushi handles raw bug reports — screenshots, console logs, source code
+hints, sometimes user PII. The security model is layered and documented:
+
+- **[Bring-your-own-key](/security/byok)** — keep model keys in your own
+  Anthropic / OpenAI account. We never see them in plaintext.
+- **[Data residency](/security/data-residency)** — pick US, EU, or JP at
+  project creation; the SDK auto-routes via DNS.
+- **[BYO storage](/security/byo-storage)** — pin screenshots into your
+  own S3 / R2 / GCS / MinIO bucket.
+- **[SOC 2 readiness](/security/soc2)** — retention, DSAR, evidence
+  snapshots, audit log all built in.
+- **[Prompt-injection defence](/security/prompt-injection)** — the
+  vision-safe multimodal sanitizer + the regression suite that keeps it
+  honest.
+
+Every Edge Function uses the **`(SELECT auth.uid())` subquery form** in
+RLS, indexes every policy column, and verifies coverage nightly via
+`mushi_rls_coverage_snapshot()`.

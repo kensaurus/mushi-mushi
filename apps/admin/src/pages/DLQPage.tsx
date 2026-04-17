@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PIPELINE_STATUS } from '../lib/tokens'
-import { PageHeader, Card, Badge, Btn, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
 
 interface QueueItem {
   id: string
@@ -59,6 +59,17 @@ export function DLQPage() {
           <Btn size="sm" onClick={retryAll}>Retry All ({items.length})</Btn>
         )}
       </PageHeader>
+
+      <PageHelp
+        title="About the Dead Letter Queue"
+        whatIsIt="Pipeline jobs that failed all their retry attempts land here. Each item shows the stage that failed (classify, judge, fix, etc.), the last error, and the attempt count."
+        useCases={[
+          'Recover from transient outages (LLM rate limits, network blips) by retrying in bulk',
+          'Identify systematic failures — a stage that fails repeatedly usually means a bug or bad config',
+          'Avoid silent data loss when reports get stuck mid-pipeline',
+        ]}
+        howToUse="Switch between failed (still inside retry budget) and dead_letter (exhausted). Use Retry All after fixing a root cause; otherwise inspect the error and patch the upstream stage first."
+      />
 
       {loading ? (
         <Loading text="Loading queue..." />

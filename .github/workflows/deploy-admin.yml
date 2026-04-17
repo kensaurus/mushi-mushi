@@ -1,0 +1,265 @@
+##
+# FILE: deploy-admin.yml
+# PURPOSE: Build and deploy the Mushi Mushi admin console to S3 + CloudFront
+#          at kensaur.us/mushi-mushi
+#
+# OVERVIEW:
+# - Builds the Vite SPA with cloud Supabase credentials
+# - Syncs immutable assets (JS/CSS) with long cache, HTML with no-cache
+# - Deploys CloudFront Functions for SPA routing and security headers
+# - Invalidates CloudFront cache and runs a health check
+#
+# DEPENDENCIES:
+# - S3 bucket: kensaur.us-mushi-mushi (ap-northeast-1)
+# - CloudFront distribution: kensaur.us (E246VQ1C9QYZVB)
+# - GitHub Secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+#   CLOUDFRONT_DISTRIBUTION_ID, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY,
+#   VITE_SENTRY_DSN, SENTRY_AUTH_TOKEN
+#
+# SENTRY:
+# - VITE_SENTRY_DSN is baked into the bundle at build time (DSNs are public).
+# - SENTRY_AUTH_TOKEN is a maintainer-only secret used by @sentry/vite-plugin
+#   to upload sourcemaps and by getsentry/action-release to tag the release.
+# - Sourcemaps are deleted from dist after upload (see vite.config.ts) so the
+#   public S3 bucket never serves them.
+#
+# NOTES:
+# - This workflow is completely separate from the SDK release pipeline
+# - Only builds apps/admin — never touches npm packages or changesets
+# - VITE_SUPABASE_ANON_KEY is publicly visible in the built bundle (Supabase
+#   anon keys are designed to be public; RLS protects the data). It is stored
+#   as a secret only to keep it out of source.
+# - Third-party actions are pinned to commit SHAs (Dependabot bumps them).
+##
+
+name: Deploy Admin Console
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'apps/admin/**'
+      - 'scripts/cloudfront-mushi-*'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-admin
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+  S3_BUCKET: kensaur.us-mushi-mushi
+  S3_PREFIX: mushi-mushi
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Compute version
+        id: version
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BUILD_DATE=$(date -u +"%Y%m%d%H%M")
+          COMMIT_COUNT=$(git rev-list --count HEAD)
+          APP_VERSION="0.1.${COMMIT_COUNT}"
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "::notice::Version ${APP_VERSION} (${SHORT_SHA}) built ${BUILD_DATE}"
+
+      - name: Build admin console
+        run: pnpm --filter @mushi-mushi/admin build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # CloudFront serves this build under /mushi-mushi/, so all asset URLs
+          # and the React Router basename must be prefixed accordingly. Local
+          # dev and other deployments leave this unset and serve from /.
+          VITE_BASE_PATH: /mushi-mushi/
+          # Sentry — DSN baked into bundle, auth token + org/project let the
+          # Vite plugin upload sourcemaps. VITE_RELEASE tags the release so
+          # Sentry can group events by version and resolve them automatically.
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_RELEASE: ${{ steps.version.outputs.app_version }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: sakuramoto
+          SENTRY_PROJECT_ADMIN: mushi-mushi-admin
+
+      - name: Create Sentry release & associate commits
+        # Sentry tagging is nice-to-have — never block a deploy if it fails.
+        continue-on-error: true
+        uses: getsentry/action-release@5657c9e888b4e2cc85f4d29143ea4131fde4a73a  # v3.6.0
+        with:
+          environment: production
+          version: ${{ steps.version.outputs.app_version }}
+          # Sourcemaps were already uploaded by @sentry/vite-plugin during the
+          # build step (and deleted from dist). This step adds the release
+          # marker + commit association so Suspect Commits works in Sentry.
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: sakuramoto
+          SENTRY_PROJECT: mushi-mushi-admin
+
+      - name: Generate version file
+        env:
+          APP_VERSION: ${{ steps.version.outputs.app_version }}
+          BUILD_DATE: ${{ steps.version.outputs.build_date }}
+        run: |
+          COMMIT=$(git rev-parse --short HEAD)
+          jq -n \
+            --arg version "$APP_VERSION" \
+            --arg buildDate "$BUILD_DATE" \
+            --arg commit "$COMMIT" \
+            '{version: $version, buildDate: $buildDate, commit: $commit}' \
+            > apps/admin/dist/version.json
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a  # v4.2.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sync immutable assets to S3 (JS)
+        run: |
+          aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "application/javascript" \
+            --no-guess-mime-type \
+            --exclude "*" \
+            --include "*.js"
+
+      - name: Sync immutable assets to S3 (CSS)
+        run: |
+          aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --content-type "text/css" \
+            --no-guess-mime-type \
+            --exclude "*" \
+            --include "*.css"
+
+      - name: Sync immutable assets to S3 (other static)
+        run: |
+          aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "*.html" \
+            --exclude "*.js" \
+            --exclude "*.css" \
+            --exclude "version.json"
+
+      - name: Sync HTML to S3 (no cache)
+        run: |
+          aws s3 sync apps/admin/dist/ s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/ \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --content-type "text/html" \
+            --no-guess-mime-type \
+            --exclude "*" \
+            --include "*.html"
+
+      - name: Sync version.json to S3 (no cache)
+        run: |
+          aws s3 cp apps/admin/dist/version.json s3://${{ env.S3_BUCKET }}/${{ env.S3_PREFIX }}/version.json \
+            --cache-control "public, max-age=0, must-revalidate" \
+            --content-type "application/json"
+
+      - name: Deploy CloudFront SPA router function
+        run: |
+          FUNC_NAME="mushi-mushi-spa-router"
+
+          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text 2>/dev/null || echo "")
+
+          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
+            echo "Creating new CloudFront Function: $FUNC_NAME"
+            aws cloudfront create-function \
+              --name "$FUNC_NAME" \
+              --function-config '{"Comment":"SPA routing for mushi-mushi admin console","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --region us-east-1
+          else
+            echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
+            aws cloudfront update-function \
+              --name "$FUNC_NAME" \
+              --if-match "$EXISTING_ETAG" \
+              --function-config '{"Comment":"SPA routing for mushi-mushi admin console","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-router.js \
+              --region us-east-1
+          fi
+
+          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text)
+          aws cloudfront publish-function \
+            --name "$FUNC_NAME" \
+            --if-match "$ETAG" \
+            --region us-east-1
+
+      - name: Deploy CloudFront SPA response function
+        run: |
+          FUNC_NAME="mushi-mushi-spa-response"
+
+          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text 2>/dev/null || echo "")
+
+          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
+            echo "Creating new CloudFront Function: $FUNC_NAME"
+            aws cloudfront create-function \
+              --name "$FUNC_NAME" \
+              --function-config '{"Comment":"Security headers and 404 handling for mushi-mushi","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-response.js \
+              --region us-east-1
+          else
+            echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
+            aws cloudfront update-function \
+              --name "$FUNC_NAME" \
+              --if-match "$EXISTING_ETAG" \
+              --function-config '{"Comment":"Security headers and 404 handling for mushi-mushi","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-spa-response.js \
+              --region us-east-1
+          fi
+
+          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text)
+          aws cloudfront publish-function \
+            --name "$FUNC_NAME" \
+            --if-match "$ETAG" \
+            --region us-east-1
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/mushi-mushi/*" \
+            --region us-east-1
+
+      - name: Post-deploy health check
+        run: |
+          sleep 10
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://kensaur.us/mushi-mushi/version.json" || echo "000")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::Health check returned HTTP $HTTP_CODE — CloudFront may still be propagating"
+            exit 0
+          fi
+          DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/version.json" | jq -r '.version // "unknown"')
+          echo "Deployed version: $DEPLOYED"

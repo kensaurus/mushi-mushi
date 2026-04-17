@@ -1,0 +1,52 @@
+---
+title: Building a plugin
+---
+
+# Building a plugin
+
+```bash
+pnpm add @mushi-mushi/plugin-sdk hono
+```
+
+A plugin is just an HTTP handler that verifies the HMAC signature, then
+does whatever you like with the event payload. The SDK gives you typed
+event helpers and a one-liner verifier.
+
+```ts
+import { Hono } from 'hono'
+import { verifyMushiSignature, type MushiEvent } from '@mushi-mushi/plugin-sdk'
+
+const app = new Hono()
+
+app.post('/webhook', async (c) => {
+  const raw = await c.req.text()
+  const ok = await verifyMushiSignature({
+    secret: process.env.MUSHI_WEBHOOK_SECRET!,
+    signatureHeader: c.req.header('x-mushi-signature') ?? '',
+    body: raw,
+  })
+  if (!ok) return c.text('bad signature', 401)
+
+  const event = JSON.parse(raw) as MushiEvent
+  switch (event.event) {
+    case 'report.created':
+      // ...
+      break
+    case 'fix.applied':
+      // ...
+      break
+  }
+  return c.text('ok')
+})
+
+export default app
+```
+
+## Publishing to the marketplace
+
+1. Open a PR to `packages/server/supabase/migrations/` adding a row to
+   the `plugin_registry` seed migration. Required fields: `slug`, `name`,
+   `description`, `homepage_url`, `icon_url`, `default_events`.
+2. Document setup in `apps/docs/content/plugins/<slug>.mdx`.
+3. Once merged, the plugin shows up under **Marketplace** for every
+   tenant.

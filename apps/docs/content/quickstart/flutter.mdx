@@ -1,0 +1,39 @@
+---
+title: Flutter quickstart
+---
+
+# Flutter quickstart
+
+```yaml filename="pubspec.yaml"
+dependencies:
+  mushi_mushi: ^0.8.0
+```
+
+```dart filename="lib/main.dart"
+import 'package:flutter/material.dart';
+import 'package:mushi_mushi/mushi_mushi.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Mushi.instance.configure(
+    projectId: 'YOUR_PROJECT_ID',
+    apiKey: 'YOUR_PUBLIC_API_KEY',
+    enableShakeToReport: true,
+  );
+  runApp(const MyApp());
+}
+```
+
+```dart
+final captureKey = GlobalKey();
+
+ScreenshotCapture(
+  captureKey: captureKey,
+  child: ElevatedButton(
+    onPressed: () => Mushi.instance.submitReport(
+      description: 'Bottom nav cuts off on iPhone SE',
+    ),
+    child: const Text('Report a bug'),
+  ),
+);
+```

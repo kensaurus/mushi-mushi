@@ -1,0 +1,18 @@
+---
+title: '@mushi-mushi/capacitor'
+---
+
+# `@mushi-mushi/capacitor`
+
+Capacitor plugin. Web fallback uses `@mushi-mushi/core`; native iOS/Android
+delegate to the standalone native SDKs so a hybrid app gets the same
+shake/screenshot UX as a pure native app.
+
+```ts
+import { MushiMushi } from '@mushi-mushi/capacitor'
+
+await MushiMushi.configure({ projectId: '…', apiKey: '…', enableShakeToReport: true })
+await MushiMushi.submitReport({ description: '…' })
+```
+
+See [Quickstart → Capacitor](/quickstart/capacitor).
