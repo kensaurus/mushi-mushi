@@ -7,8 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiFetch, supabase } from '../lib/supabase'
-import { RESOLVED_API_URL } from '../lib/env'
+import { apiFetch, apiFetchRaw } from '../lib/supabase'
 import {
   PageHeader,
   PageHelp,
@@ -225,15 +224,7 @@ export function IntelligencePage() {
 
   const downloadPdf = async (id: string, weekStart: string) => {
     try {
-      const { data: sess } = await supabase.auth.getSession()
-      const token = sess.session?.access_token
-      if (!token) {
-        toast.push({ tone: 'error', message: 'Not authenticated' })
-        return
-      }
-      const res = await fetch(`${RESOLVED_API_URL}/v1/admin/intelligence/${id}/html`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const res = await apiFetchRaw(`/v1/admin/intelligence/${id}/html`)
       if (!res.ok) {
         toast.push({ tone: 'error', message: `Failed to load report (${res.status})` })
         return

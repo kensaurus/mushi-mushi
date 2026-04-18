@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import {
   PageHeader,
   PageHelp,
@@ -92,39 +93,29 @@ function ScorePill({ value }: { value: number | null }) {
 
 export function JudgePage() {
   const toast = useToast()
-  const [weeks, setWeeks] = useState<WeekData[]>([])
-  const [evals, setEvals] = useState<EvalRow[]>([])
-  const [prompts, setPrompts] = useState<PromptRow[]>([])
-  const [dist, setDist] = useState<Distribution | null>(null)
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
   const [running, setRunning] = useState(false)
 
-  const loadAll = useCallback(() => {
-    setLoading(true)
-    setError(false)
-    Promise.all([
-      apiFetch<{ weeks: WeekData[] }>('/v1/admin/judge-scores'),
-      apiFetch<{ evaluations: EvalRow[] }>(`/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}`),
-      apiFetch<{ prompts: PromptRow[] }>('/v1/admin/judge/prompts'),
-      apiFetch<Distribution>('/v1/admin/judge/distribution'),
-    ])
-      .then(([w, e, p, d]) => {
-        if (w.ok && e.ok && p.ok && d.ok) {
-          setWeeks(w.data?.weeks ?? [])
-          setEvals(e.data?.evaluations ?? [])
-          setPrompts(p.data?.prompts ?? [])
-          setDist(d.data ?? null)
-        } else setError(true)
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }, [sort])
+  const weeksQuery = usePageData<{ weeks: WeekData[] }>('/v1/admin/judge-scores')
+  const evalsQuery = usePageData<{ evaluations: EvalRow[] }>(
+    `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}`,
+  )
+  const promptsQuery = usePageData<{ prompts: PromptRow[] }>('/v1/admin/judge/prompts')
+  const distQuery = usePageData<Distribution>('/v1/admin/judge/distribution')
 
-  useEffect(() => {
-    loadAll()
-  }, [loadAll])
+  const weeks = weeksQuery.data?.weeks ?? []
+  const evals = evalsQuery.data?.evaluations ?? []
+  const prompts = promptsQuery.data?.prompts ?? []
+  const dist = distQuery.data ?? null
+  const loading = weeksQuery.loading || evalsQuery.loading || promptsQuery.loading || distQuery.loading
+  const error = weeksQuery.error ?? evalsQuery.error ?? promptsQuery.error ?? distQuery.error
+
+  const loadAll = useCallback(() => {
+    weeksQuery.reload()
+    evalsQuery.reload()
+    promptsQuery.reload()
+    distQuery.reload()
+  }, [weeksQuery, evalsQuery, promptsQuery, distQuery])
 
   async function runNow() {
     setRunning(true)
@@ -139,7 +130,7 @@ export function JudgePage() {
   }
 
   if (loading) return <Loading text="Loading judge…" />
-  if (error) return <ErrorAlert message="Failed to load judge data." onRetry={loadAll} />
+  if (error) return <ErrorAlert message={`Failed to load judge data: ${error}`} onRetry={loadAll} />
 
   const latest = weeks[0]
   const previous = weeks[1]

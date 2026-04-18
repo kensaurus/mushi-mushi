@@ -9,8 +9,9 @@
  *          autocomplete by report id.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import {
   PageHeader,
   PageHelp,
@@ -60,24 +61,15 @@ export function ResearchPage() {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [active, setActive] = useState<SearchResponse | null>(null)
-  const [sessions, setSessions] = useState<SessionRow[] | null>(null)
-  const [historyLoading, setHistoryLoading] = useState(true)
-  const [historyError, setHistoryError] = useState(false)
   const [attachInput, setAttachInput] = useState<Record<string, string>>({})
 
-  function loadHistory() {
-    setHistoryLoading(true)
-    setHistoryError(false)
-    apiFetch<{ sessions: SessionRow[] }>('/v1/admin/research/sessions?limit=20')
-      .then((res) => {
-        if (res.ok && res.data) setSessions(res.data.sessions)
-        else setHistoryError(true)
-      })
-      .catch(() => setHistoryError(true))
-      .finally(() => setHistoryLoading(false))
-  }
-
-  useEffect(() => { loadHistory() }, [])
+  const {
+    data: historyData,
+    loading: historyLoading,
+    error: historyError,
+    reload: loadHistory,
+  } = usePageData<{ sessions: SessionRow[] }>('/v1/admin/research/sessions?limit=20')
+  const sessions = historyData?.sessions ?? null
 
   async function runSearch(q: string) {
     const trimmed = q.trim()
@@ -244,7 +236,7 @@ export function ResearchPage() {
 
       <Section title="Recent sessions" className="space-y-2">
         {historyLoading && <Loading text="Loading history..." />}
-        {historyError && <ErrorAlert message="Failed to load history." onRetry={loadHistory} />}
+        {historyError && <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />}
         {sessions && sessions.length === 0 && (
           <div className="text-2xs text-fg-muted">No sessions yet — your first search will land here.</div>
         )}
