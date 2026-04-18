@@ -156,7 +156,10 @@ export function ReportsPage() {
       next.set('dir', dir === 'asc' ? 'desc' : 'asc')
     } else {
       next.set('sort', field)
-      next.set('dir', field === 'created_at' ? 'desc' : 'desc')
+      // created_at defaults to newest-first; everything else (status, severity,
+      // component, confidence) defaults to ascending so the lowest/earliest
+      // value sorts to the top on first click.
+      next.set('dir', field === 'created_at' ? 'desc' : 'asc')
     }
     next.delete('page')
     setSearchParams(next)
@@ -372,7 +375,11 @@ export function ReportsPage() {
                       className="h-3.5 w-3.5 accent-brand"
                     />
                   </th>
-                  <SortHeader label="Summary" field="component" current={sort} dir={dir} onSort={setSort} className="text-left" />
+                  {/* Summary text isn't a sortable field — the column shows the
+                      free-form summary as primary content with component as a
+                      secondary label. Use the Component filter chip to slice
+                      by component instead. */}
+                  <th scope="col" className="px-2 py-2 font-medium text-left text-fg-faint">Summary</th>
                   <SortHeader label="Status" field="status" current={sort} dir={dir} onSort={setSort} className="text-left w-28" />
                   <SortHeader label="Severity" field="severity" current={sort} dir={dir} onSort={setSort} className="text-left w-24" />
                   <SortHeader label="Conf." field="confidence" current={sort} dir={dir} onSort={setSort} className="text-right w-16" />

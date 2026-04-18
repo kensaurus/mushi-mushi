@@ -42,10 +42,18 @@ export function useHotkeys(bindings: HotkeyBinding[], enabled = true): void {
       const typing = isTypingTarget(e.target)
       for (const b of ref.current) {
         if (b.key.toLowerCase() !== e.key.toLowerCase()) continue
-        if (b.ctrl && !e.ctrlKey) continue
+        // Strict match on ctrl/meta/alt — a binding for `a` must NOT fire on
+        // Ctrl+A (browser select-all), Cmd+A, or Alt+A. Without this the
+        // shortcut runs alongside the browser's native handler and produces
+        // confusing double behaviour.
+        if (!!b.ctrl !== e.ctrlKey) continue
+        if (!!b.meta !== e.metaKey) continue
+        if (!!b.alt !== e.altKey) continue
+        // Shift is intentionally lenient: many bindings (e.g. `?`, which is
+        // Shift+/ on US layouts) include shift implicitly to produce the
+        // character. Only enforce that shift is held when the binding asks
+        // for it; do not reject when shift happens to be down.
         if (b.shift && !e.shiftKey) continue
-        if (b.alt && !e.altKey) continue
-        if (b.meta && !e.metaKey) continue
         if (typing && !b.allowInInputs) continue
         b.handler(e)
         break
