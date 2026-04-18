@@ -24,7 +24,9 @@ let inited = false
 
 export function ensureSentry(functionName?: string): void {
   if (inited) return
-  const dsn = Deno.env.get('SENTRY_DSN_SERVER')
+  // Accept both SENTRY_DSN_SERVER (preferred, server-specific) and SENTRY_DSN
+  // (fallback, useful for self-hosters who only set one DSN env var).
+  const dsn = Deno.env.get('SENTRY_DSN_SERVER') ?? Deno.env.get('SENTRY_DSN')
   if (!dsn) return
   Sentry.init({
     dsn,

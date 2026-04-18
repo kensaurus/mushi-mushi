@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn, Card, Input } from '../components/ui'
+import { Btn, Card, Input, PageHelp } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 
 type WizardStep = 1 | 2 | 3 | 4
@@ -163,9 +163,20 @@ export function OnboardingPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
       <div>
-        <h2 className="text-base font-semibold text-fg">Get started with Mushi Mushi</h2>
+        <h2 className="text-lg font-semibold text-fg">Get started with Mushi Mushi</h2>
         <p className="text-xs text-fg-muted mt-0.5">Set up your first project in a few steps.</p>
       </div>
+
+      <PageHelp
+        title="About this wizard"
+        whatIsIt="A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. You only run it once."
+        useCases={[
+          'Create the project that will receive bug reports from your app',
+          'Mint and copy the API key that authenticates SDK requests',
+          'Confirm the ingest pipeline is reachable before shipping any code',
+        ]}
+        howToUse="Complete each step in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings."
+      />
 
       {/* Step indicator */}
       <div className="flex items-center gap-1">
@@ -230,7 +241,7 @@ export function OnboardingPage() {
           </div>
           {project && (
             <div className="bg-surface-raised/50 border border-edge-subtle rounded-sm px-3 py-2">
-              <span className="text-2xs text-fg-faint">Project:</span>{' '}
+              <span className="text-2xs text-fg-muted">Project:</span>{' '}
               <span className="text-xs font-medium text-fg">{project.name}</span>
               <span className="text-2xs text-fg-faint ml-2 font-mono">{project.id}</span>
             </div>
@@ -246,7 +257,7 @@ export function OnboardingPage() {
             <div className="space-y-3">
               <div className="bg-surface-raised border border-ok/30 rounded-sm px-3 py-2">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-2xs text-fg-faint uppercase tracking-wider font-medium">Your API Key</span>
+                  <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
                   <button
                     onClick={() => copyToClipboard(apiKey.key, setKeyCopied)}
                     className="text-2xs text-brand hover:text-brand-hover"
@@ -335,7 +346,7 @@ export function OnboardingPage() {
 
           {/* Install command */}
           <div>
-            <span className="text-2xs text-fg-faint uppercase tracking-wider font-medium">Install</span>
+            <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Install</span>
             <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-xs font-mono text-fg-secondary">
               npm install @mushi-mushi/{framework === 'vanilla' ? 'web' : framework}{framework !== 'react' && framework !== 'vanilla' ? ' @mushi-mushi/web' : ''}
             </pre>
@@ -344,7 +355,7 @@ export function OnboardingPage() {
           {/* Code snippet */}
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-2xs text-fg-faint uppercase tracking-wider font-medium">Code</span>
+              <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Code</span>
               <button
                 onClick={() => copyToClipboard(
                   SDK_SNIPPETS[framework](project?.id ?? 'proj_xxx', apiKey?.key ?? 'mushi_xxx'),

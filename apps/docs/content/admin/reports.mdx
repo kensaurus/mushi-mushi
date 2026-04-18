@@ -5,14 +5,25 @@ title: Reports & triage
 # Reports & triage
 
 The Reports list shows every incoming user report, filtered by status,
-severity, category, component, and free-text. Selecting a report opens the
-detail view:
+severity, category, component, reporter (token hash), and free-text. The
+list also surfaces a **status-aware "Recommended action"** card above the
+filters — e.g. "X critical reports need triage" with a one-click filter
+shortcut. Selecting a report opens the detail view:
 
-- **Description + screenshot + breadcrumbs** captured by the SDK.
+- **Recommended next action** — single-sentence guidance derived from the
+  report's status, severity, and elapsed time, with one CTA. Replaces the
+  "what should I do?" guesswork on a fresh page load.
+- **Description + screenshot + breadcrumbs** captured by the SDK. The
+  screenshot is click-to-zoom.
 - **Classification panel** — category, severity, component, confidence,
   Bug-Ontology tags. Hover for the model + prompt version that produced
   each field; click to see the raw judge score.
+- **Console / network / performance** — always rendered, with informative
+  empty states when the SDK didn't capture data (so silence is visible).
 - **Comments + presence** — Supabase Realtime tracks who else is on the
-  same report (badge in the header). Comments stream live.
+  same report (badge in the header). Comments stream live with relative
+  timestamps that expose the full ISO time on hover.
 - **Actions**: change status, dispatch a fix, dedupe into a parent group,
   flag as anti-gaming.
+- **Related cross-links** — jump to other reports from the same component
+  or reporter, the knowledge-graph node, and the dispatched fix / PR.

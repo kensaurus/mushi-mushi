@@ -22,7 +22,10 @@ export function useRealtime(opts: UseRealtimeOptions, onChange: () => void): voi
 
   useEffect(() => {
     if (!enabled) return
-    const channelName = `mushi:${schema}:${table}:${filter ?? 'all'}`
+    const uid = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const channelName = `mushi:${schema}:${table}:${filter ?? 'all'}:${uid}`
     const channel = supabase
       .channel(channelName)
       .on(

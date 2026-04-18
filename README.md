@@ -200,6 +200,10 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 Released today: `v0.8.0`. Next: `v1.0.0` — see [HANDOVER.md](./HANDOVER.md) for the release checklist and the two deferred follow-ups (Node mirror of `sanitize.ts` and the demo video).
 
+**Latest dogfood:** end-to-end PDCA loop validated on a real production webapp ([glot.it](https://github.com/kensaurus/glot.it)) with my own OpenRouter key. Report → Stage 1 + Stage 2 LLM triage → admin "Dispatch fix" → `fix-worker` → draft GitHub PR → live in `/fixes`. Sentry, Langfuse and GitHub all probe **Healthy** from the Integrations page. Full writeup with screenshots: [`docs/dogfood-glotit-pdca-2026-04-17.md`](./docs/dogfood-glotit-pdca-2026-04-17.md).
+
+**Admin console overhaul (Apr 2026):** every analytical page now shares the same `charts.tsx` primitives (`KpiTile`, `LineSparkline`, `SeverityStackedBars`, `Histogram`, `StatusPill`, `HealthPill`). Knowledge graph is a real React Flow canvas with cluster layout + side-panel. Judge has live KPIs, distribution histogram and a prompt leaderboard. NL Query has persistent per-user history and sanitised SQL output. Fixes shows a per-attempt Git branch graph plus a 30-day KPI summary. Queue (formerly DLQ) gets pagination, throughput sparkline and stage breakdown. Fine-Tuning was retired in favour of **Prompt Lab** (A/B traffic, dataset preview, clone/activate/delete) — `/fine-tuning` redirects there. Bug Intelligence runs **async** through `intelligence_generation_jobs` so the page no longer hangs on slow LLM calls. Cross-cutting: global `useToast`, StrictMode-safe `usePageData`, paused polling on hidden tabs, and an `IntegrationHealthDot` that reflects real `/v1/admin/health/history` status.
+
 ### Honest status — what works, what's still partial
 
 | Area                 | Working                                                                                             | Still partial                                                  |

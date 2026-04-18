@@ -38,3 +38,35 @@ content_path = "./supabase/templates/recovery.html"
 [storage]
 enabled = true
 file_size_limit = "1GiB"
+
+# fix-worker is invoked via service-role from the api function. It re-validates
+# the dispatchId against fix_dispatch_jobs before doing any work, so JWT
+# verification at the platform edge is unnecessary and would force the api
+# function to mint a user JWT for every dispatch.
+[functions.fix-worker]
+verify_jwt = false
+
+# api function does its own JWT validation in the jwtAuth middleware via
+# db.auth.getUser(token), which works with any algorithm. Disabling gateway-
+# level JWT verification avoids the platform gateway rejecting ES256-signed
+# tokens (issued when the project's JWT signing key is ECC).
+[functions.api]
+verify_jwt = false
+
+# Internal pipeline functions invoked server-to-server from `api` using the
+# service-role key. After Supabase rotated to the new sb_secret_* key format,
+# the platform gateway started rejecting these inter-function calls with
+# UNAUTHORIZED_INVALID_JWT_FORMAT. Each of these functions:
+#   - re-validates reportId / projectId in the body before doing work,
+#   - reads via service-role client (bypasses RLS),
+#   - is never exposed publicly.
+# Gateway-level JWT verification is therefore unnecessary and was actively
+# breaking the pipeline.
+[functions.fast-filter]
+verify_jwt = false
+
+[functions.classify-report]
+verify_jwt = false
+
+[functions.judge-batch]
+verify_jwt = false

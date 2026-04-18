@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import type { EnvStatus } from '../lib/env'
 import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from '../lib/env'
+import { PageHelp } from '../components/ui'
 
 const CLOUD_ENV_TEMPLATE = `VITE_SUPABASE_URL=${CLOUD_SUPABASE_URL}
 VITE_SUPABASE_ANON_KEY=${CLOUD_SUPABASE_ANON_KEY}`
@@ -38,7 +39,19 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
           <h1 className="text-xl font-bold">
             <span className="text-brand">mushi</span>mushi
           </h1>
-          <p className="text-2xs text-fg-faint mt-0.5">admin console</p>
+          <p className="text-2xs text-fg-muted mt-0.5">admin console</p>
+        </div>
+
+        <div className="mb-3">
+          <PageHelp
+            title="Why am I seeing this?"
+            whatIsIt="The admin console can't reach a Supabase backend. You either haven't created the .env file yet, or one of the required variables is missing or empty."
+            useCases={[
+              'Connect to the shared Mushi Mushi Cloud (zero setup, recommended for trying it out)',
+              'Bring your own Supabase project for full data sovereignty (self-hosted)',
+            ]}
+            howToUse="Pick one of the two options below, copy the .env values into apps/admin/.env, and restart the dev server."
+          />
         </div>
 
         <div className="bg-surface border border-edge rounded-md p-5 space-y-4">
@@ -52,7 +65,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
             </p>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-2xs text-fg-faint uppercase tracking-wider font-medium">.env (cloud)</span>
+                <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">.env (cloud)</span>
                 <button
                   onClick={() => copy(CLOUD_ENV_TEMPLATE, 'cloud')}
                   className="text-2xs text-brand hover:text-brand-hover transition-colors"
@@ -109,7 +122,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
               {/* .env template */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-2xs text-fg-faint uppercase tracking-wider font-medium">.env (self-hosted)</span>
+                  <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">.env (self-hosted)</span>
                   <button
                     onClick={() => copy(SELF_HOSTED_TEMPLATE, 'self')}
                     className="text-2xs text-brand hover:text-brand-hover transition-colors"
@@ -143,7 +156,7 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
 
           {/* Refresh */}
           <div className="flex items-center justify-between pt-2 border-t border-edge-subtle">
-            <p className="text-2xs text-fg-faint">
+            <p className="text-2xs text-fg-muted">
               After creating <code className="bg-surface-raised px-1 py-0.5 rounded">.env</code>, restart the dev server.
             </p>
             <button
