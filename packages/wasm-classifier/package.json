@@ -74,7 +74,7 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@size-limit/file": "^12.1.0",
-    "eslint": "^10.2.0",
+    "eslint": "^10.2.1",
     "size-limit": "^12.1.0",
     "tsup": "^8.5.0",
     "typescript": "^6.0.2",

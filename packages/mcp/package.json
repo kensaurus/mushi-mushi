@@ -35,7 +35,7 @@
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.0.0",
-    "eslint": "^10.2.0",
+    "eslint": "^10.2.1",
     "tsup": "^8.4.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
