@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { useSetupStatus } from '../lib/useSetupStatus'
 import { SEVERITY, CATEGORY_LABELS } from '../lib/tokens'
 import { PageHeader, PageHelp, Card, Badge, Btn, Loading, ErrorAlert } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
+import { SetupChecklist } from '../components/SetupChecklist'
 import { useToast } from '../lib/toast'
 import {
   KpiTile,
@@ -88,60 +90,41 @@ interface DashboardData {
   integrations?: IntegrationStatus[]
 }
 
-interface Project {
-  id: string
-  name: string
-  api_keys?: Array<{ key_prefix: string }>
-}
-
 function GettingStartedEmpty() {
   const navigate = useNavigate()
   const toast = useToast()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [projectsLoading, setProjectsLoading] = useState(true)
+  const setup = useSetupStatus()
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
 
-  useEffect(() => {
-    apiFetch<{ projects: Project[] }>('/v1/admin/projects')
-      .then((res) => {
-        if (res.ok && res.data) setProjects(res.data.projects ?? [])
-      })
-      .finally(() => setProjectsLoading(false))
-  }, [])
+  if (setup.loading) return <Loading text="Checking your account..." />
 
-  const hasProject = projects.length > 0
-  const hasKey = projects.some((p) => p.api_keys && p.api_keys.length > 0)
-  const firstProject = projects[0]
-  const firstProjectKey = firstProject?.api_keys?.[0]
-  const onboardingDone = localStorage.getItem('mushi:onboarding_completed') === 'true'
+  // First-time visitors with no project at all are sent to the wizard. Once at
+  // least one project + key exists, the dashboard takes over and the redirect
+  // stops happening — the SetupChecklist banner finishes the journey inline.
+  if (!setup.hasAnyProject) return <Navigate to="/onboarding" replace />
 
-  if (projectsLoading) return <Loading text="Checking your account..." />
-  if (!onboardingDone && !hasProject) return <Navigate to="/onboarding" replace />
+  const project = setup.activeProject
+  if (!project) return <Loading text="Loading projects..." />
 
   async function submitTest() {
-    if (!firstProject) return
+    if (!project) return
     setTestStatus('running')
-    const res = await apiFetch(`/v1/admin/projects/${firstProject.id}/test-report`, { method: 'POST' })
+    const res = await apiFetch(`/v1/admin/projects/${project.project_id}/test-report`, { method: 'POST' })
     setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
       toast.success('Test report queued', 'Watch it land in Reports within a few seconds.')
+      setup.reload()
     } else {
       toast.error('Test report failed', res.error?.message ?? 'Check your project keys and try again.')
     }
   }
 
+  const hasKey = !setup.isStepIncomplete('api_key_generated')
+
   return (
     <div>
-      <PageHeader title="Dashboard" description="Welcome to Mushi Mushi. Here's how to get your first report." />
-      <Card className="p-4 mb-4">
-        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider mb-3">Getting Started</h3>
-        <div className="space-y-2">
-          <ChecklistItem done={hasProject} label="Create a project" action={!hasProject ? () => navigate('/projects') : undefined} />
-          <ChecklistItem done={hasKey} label="Generate an API key" action={!hasKey && hasProject ? () => navigate('/projects') : undefined} />
-          <ChecklistItem done={false} label="Install the SDK in your app" action={() => navigate('/onboarding')} />
-          <ChecklistItem done={false} label="Receive your first bug report" />
-        </div>
-      </Card>
+      <PageHeader title="Dashboard" description="Welcome to Mushi Mushi. Finish setup to start receiving reports." />
+      <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
         <Card className="p-4">
           <h4 className="text-xs font-semibold text-fg mb-1">Install the SDK</h4>
@@ -151,7 +134,7 @@ function GettingStartedEmpty() {
         <Card className="p-4">
           <h4 className="text-xs font-semibold text-fg mb-1">Submit a test report</h4>
           <p className="text-2xs text-fg-muted mb-3">Send a test report to verify your pipeline works end-to-end.</p>
-          <Btn size="sm" variant={testStatus === 'pass' ? 'ghost' : 'primary'} disabled={!hasProject || testStatus === 'running'} onClick={submitTest}>
+          <Btn size="sm" variant={testStatus === 'pass' ? 'ghost' : 'primary'} disabled={!hasKey || testStatus === 'running'} onClick={submitTest}>
             {testStatus === 'running' ? 'Sending…' : testStatus === 'pass' ? '✓ Sent' : 'Send test report'}
           </Btn>
           {testStatus === 'fail' && <p className="text-2xs text-danger mt-1">Failed — check connection.</p>}
@@ -160,24 +143,15 @@ function GettingStartedEmpty() {
       <Card className="p-4">
         <ConnectionStatus />
       </Card>
-      {firstProject && (
-        <div className="mt-4 text-2xs text-fg-faint space-y-0.5">
-          <p>Project: <span className="font-mono text-fg-secondary">{firstProject.name}</span> <span className="font-mono">({firstProject.id})</span></p>
-          {firstProjectKey && <p>API Key: <span className="font-mono text-fg-secondary">{firstProjectKey.key_prefix}...</span></p>}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ChecklistItem({ done, label, action }: { done: boolean; label: string; action?: () => void }) {
-  return (
-    <div className="flex items-center gap-2.5">
-      <span className={`text-sm ${done ? 'text-ok' : 'text-fg-faint'}`}>{done ? '✓' : '○'}</span>
-      <span className={`text-xs flex-1 ${done ? 'text-fg-secondary line-through' : 'text-fg'}`}>{label}</span>
-      {action && !done && (
-        <button onClick={action} className="text-2xs text-brand hover:text-brand-hover">Do this →</button>
-      )}
+      <div className="mt-4 text-2xs text-fg-faint space-y-0.5">
+        <p>
+          Project: <span className="font-mono text-fg-secondary">{project.project_name}</span>{' '}
+          <span className="font-mono">({project.project_id})</span>
+        </p>
+        <p>
+          {project.report_count} report{project.report_count === 1 ? '' : 's'} · {project.fix_count} fix{project.fix_count === 1 ? '' : 'es'} dispatched
+        </p>
+      </div>
     </div>
   )
 }
@@ -192,6 +166,7 @@ function relTime(iso: string): string {
 
 export function DashboardPage() {
   const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
+  const setup = useSetupStatus()
 
   // 7d vs prior-7d delta on report intake. Direction is the actual change;
   // tone reflects whether that change is good for ops (more reports = warn).
@@ -241,6 +216,10 @@ export function DashboardPage() {
         ]}
         howToUse="Click any KPI or row to drill in. Hover the chart bars for per-day totals."
       />
+
+      {setup.activeProject && (
+        <SetupChecklist project={setup.activeProject} mode="banner" onRefresh={setup.reload} />
+      )}
 
       <QuotaBanner />
 

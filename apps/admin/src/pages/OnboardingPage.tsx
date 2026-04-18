@@ -1,36 +1,28 @@
 /**
  * FILE: apps/admin/src/pages/OnboardingPage.tsx
- * PURPOSE: First-run setup wizard shown when a user has no projects.
- *          Guides through: create project → generate API key → test connection → copy SDK snippet.
- *          Follows NN/g wizard guidelines: step indicators, linear flow, self-sufficient steps.
+ * PURPOSE: Wizard-mode setup view. Renders the shared SetupChecklist primitive
+ *          and adds the contextual UX needed for the very first project (create
+ *          form + API key reveal + test report + SDK snippet).
+ *
+ *          State source-of-truth is `useSetupStatus()` (DB-backed). The wizard
+ *          drives next-step focus off `activeProject.steps`, so progress survives
+ *          across browsers/devices and stays in sync with what the rest of the
+ *          admin sees.
  */
 
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn, Card, Input, PageHelp } from '../components/ui'
+import { Btn, Card, Input, PageHelp, Loading, ErrorAlert } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
+import { SetupChecklist } from '../components/SetupChecklist'
+import { useSetupStatus } from '../lib/useSetupStatus'
 import { useToast } from '../lib/toast'
 
-type WizardStep = 1 | 2 | 3 | 4
-
-interface Project {
-  id: string
-  name: string
-}
-
 interface ApiKey {
-  id: string
   key: string
-  key_prefix: string
+  prefix: string
 }
-
-const STEP_LABELS = [
-  'Create Project',
-  'API Key',
-  'Test Connection',
-  'Integrate SDK',
-]
 
 const SDK_SNIPPETS = {
   react: (projectId: string, apiKey: string) => `import { MushiProvider } from '@mushi-mushi/react'
@@ -73,50 +65,60 @@ type Framework = keyof typeof SDK_SNIPPETS
 export function OnboardingPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const [step, setStep] = useState<WizardStep>(1)
+  const setup = useSetupStatus()
+
   const [projectName, setProjectName] = useState('')
   const [creating, setCreating] = useState(false)
-  const [project, setProject] = useState<Project | null>(null)
   const [apiKey, setApiKey] = useState<ApiKey | null>(null)
   const [generatingKey, setGeneratingKey] = useState(false)
   const [keyCopied, setKeyCopied] = useState(false)
-  const [testResult, setTestResult] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
+  const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [error, setError] = useState('')
 
+  const project = setup.activeProject
+
+  // What's the next required step? We use it to highlight the right card.
+  const nextRequired = useMemo(
+    () => project?.steps.find(s => s.required && !s.complete) ?? null,
+    [project],
+  )
+
+  // When the user completes the basics + lands here from the dashboard banner,
+  // they shouldn't be stuck on a wizard with nothing to do — redirect home.
   useEffect(() => {
-    apiFetch<{ projects: Project[] }>('/v1/admin/projects').then((res) => {
-      if (res.ok && res.data?.projects?.length) {
-        setProject(res.data.projects[0])
-        setStep(2)
-      }
-    })
-  }, [])
+    if (!setup.loading && project?.done && !apiKey && testStatus !== 'pass') {
+      // Only auto-bounce when there's truly nothing left to do AND the user
+      // didn't just generate a one-time-revealable API key (so they can copy it).
+      const allOptionalDoneToo = project.complete >= project.total
+      if (allOptionalDoneToo) navigate('/', { replace: true })
+    }
+  }, [setup.loading, project, apiKey, testStatus, navigate])
+
+  if (setup.loading) return <Loading text="Loading setup status…" />
+  if (setup.error) return <ErrorAlert message={setup.error} onRetry={setup.reload} />
 
   async function createProject() {
     if (!projectName.trim()) return
     setCreating(true)
     setError('')
-    const res = await apiFetch<{ project: Project }>('/v1/admin/projects', {
+    // Backend returns `data: { id, slug }` — not `data: { project: { ... } }`.
+    // The previous code keyed off `res.data?.project` and silently fell back to
+    // a GET on every success, masking the actual happy path.
+    const res = await apiFetch<{ id: string; slug: string }>('/v1/admin/projects', {
       method: 'POST',
       body: JSON.stringify({ name: projectName.trim() }),
     })
     setCreating(false)
-    if (res.ok && res.data?.project) {
-      setProject(res.data.project)
-      setStep(2)
-      toast.success('Project created', res.data.project.name)
+    if (res.ok && res.data?.id) {
+      toast.success('Project created', projectName.trim())
+      setProjectName('')
+      setup.reload()
     } else {
-      const fallback = await apiFetch<{ projects: Project[] }>('/v1/admin/projects')
-      if (fallback.ok && fallback.data?.projects?.length) {
-        setProject(fallback.data.projects[fallback.data.projects.length - 1])
-        setStep(2)
-      } else {
-        const msg = res.error?.message ?? 'Failed to create project'
-        setError(msg)
-        toast.error('Could not create project', msg)
-      }
+      const msg = res.error?.message ?? 'Failed to create project'
+      setError(msg)
+      toast.error('Could not create project', msg)
     }
   }
 
@@ -124,12 +126,12 @@ export function OnboardingPage() {
     if (!project) return
     setGeneratingKey(true)
     setError('')
-    const res = await apiFetch<ApiKey>(`/v1/admin/projects/${project.id}/keys`, { method: 'POST' })
+    const res = await apiFetch<ApiKey>(`/v1/admin/projects/${project.project_id}/keys`, { method: 'POST' })
     setGeneratingKey(false)
     if (res.ok && res.data) {
       setApiKey(res.data)
-      setStep(3)
       toast.success('API key generated', 'Copy it now \u2014 it will not be shown again.')
+      setup.reload()
     } else {
       const msg = res.error?.message ?? 'Failed to generate API key'
       setError(msg)
@@ -138,22 +140,15 @@ export function OnboardingPage() {
   }
 
   async function submitTestReport() {
-    if (!project || !apiKey) return
-    setTestResult('running')
-    const res = await apiFetch('/v1/reports', {
-      method: 'POST',
-      headers: { 'X-Mushi-Api-Key': apiKey.key },
-      body: JSON.stringify({
-        projectId: project.id,
-        description: 'Onboarding test report — verifying pipeline connectivity',
-        category: 'other',
-        environment: { url: 'admin://onboarding', browser: 'mushi-admin', userAgent: navigator.userAgent, platform: navigator.platform, language: navigator.language, viewport: { width: window.innerWidth, height: window.innerHeight }, referrer: '', timestamp: new Date().toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-        reporterToken: 'onboarding-test',
-      }),
-    })
-    setTestResult(res.ok ? 'pass' : 'fail')
+    if (!project) return
+    setTestStatus('running')
+    // Use the admin pipeline-test endpoint so we don't need the user to have
+    // copied the key yet — we're already JWT-authenticated as the owner.
+    const res = await apiFetch(`/v1/admin/projects/${project.project_id}/test-report`, { method: 'POST' })
+    setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
       toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
+      setup.reload()
     } else {
       const msg = res.error?.message ?? 'Test report submission failed'
       setError(msg)
@@ -168,56 +163,30 @@ export function OnboardingPage() {
     })
   }
 
-  function finishOnboarding() {
-    localStorage.setItem('mushi:onboarding_completed', 'true')
-    navigate('/')
-  }
-
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h2 className="text-lg font-semibold text-fg">Get started with Mushi Mushi</h2>
-        <p className="text-xs text-fg-muted mt-0.5">Set up your first project in a few steps.</p>
+        <p className="text-xs text-fg-muted mt-0.5">
+          Live progress — every step is verified against your project's data, not local cache.
+        </p>
       </div>
 
       <PageHelp
         title="About this wizard"
-        whatIsIt="A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. You only run it once."
+        whatIsIt="A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices."
         useCases={[
           'Create the project that will receive bug reports from your app',
           'Mint and copy the API key that authenticates SDK requests',
           'Confirm the ingest pipeline is reachable before shipping any code',
         ]}
-        howToUse="Complete each step in order. The API key is only shown once — copy it before continuing. You can rerun the test report any time from Settings."
+        howToUse="Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings."
       />
 
-      {/* Step indicator */}
-      <div className="flex items-center gap-1">
-        {STEP_LABELS.map((label, i) => {
-          const stepNum = (i + 1) as WizardStep
-          const isActive = step === stepNum
-          const isDone = step > stepNum
-          return (
-            <div key={label} className="flex items-center gap-1 flex-1">
-              <div className={`flex items-center justify-center w-6 h-6 rounded-full text-2xs font-bold shrink-0 ${
-                isDone ? 'bg-ok text-ok-fg' : isActive ? 'bg-brand text-brand-fg' : 'bg-surface-raised text-fg-faint border border-edge-subtle'
-              }`}>
-                {isDone ? '✓' : stepNum}
-              </div>
-              <span className={`text-2xs truncate hidden sm:inline ${isActive ? 'text-fg font-medium' : 'text-fg-faint'}`}>
-                {label}
-              </span>
-              {i < STEP_LABELS.length - 1 && (
-                <div className={`flex-1 h-px mx-1 ${isDone ? 'bg-ok' : 'bg-edge-subtle'}`} />
-              )}
-            </div>
-          )
-        })}
-      </div>
+      {project && <SetupChecklist project={project} mode="wizard" />}
 
-      {/* Step 1: Create Project */}
-      {step === 1 && (
+      {/* Card 1: Create Project (only when no project yet) */}
+      {!setup.hasAnyProject && (
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Create your first project</h3>
@@ -243,23 +212,15 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {/* Step 2: Generate API Key */}
-      {step === 2 && (
+      {/* Card 2: API Key (only when project exists but no key) */}
+      {project && nextRequired?.id === 'api_key_generated' && (
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Generate an API key</h3>
             <p className="text-xs text-fg-muted mt-1">
-              Your SDK uses this key to authenticate report submissions.
-              The full key is shown <strong>only once</strong> — copy it now.
+              Your SDK uses this key to authenticate report submissions. The full key is shown <strong>only once</strong> — copy it before navigating away.
             </p>
           </div>
-          {project && (
-            <div className="bg-surface-raised/50 border border-edge-subtle rounded-sm px-3 py-2">
-              <span className="text-2xs text-fg-muted">Project:</span>{' '}
-              <span className="text-xs font-medium text-fg">{project.name}</span>
-              <span className="text-2xs text-fg-faint ml-2 font-mono">{project.id}</span>
-            </div>
-          )}
           {!apiKey ? (
             <>
               <Btn onClick={generateKey} disabled={generatingKey}>
@@ -268,32 +229,13 @@ export function OnboardingPage() {
               {error && <p className="text-xs text-danger">{error}</p>}
             </>
           ) : (
-            <div className="space-y-3">
-              <div className="bg-surface-raised border border-ok/30 rounded-sm px-3 py-2">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
-                  <button
-                    onClick={() => copyToClipboard(apiKey.key, setKeyCopied)}
-                    className="text-2xs text-brand hover:text-brand-hover"
-                  >
-                    {keyCopied ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-                <code className="text-sm font-mono text-ok break-all select-all">{apiKey.key}</code>
-              </div>
-              <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
-                <p className="text-2xs text-warn">
-                  Save this key securely. It will not be shown again after you leave this page.
-                </p>
-              </div>
-              <Btn onClick={() => setStep(3)}>Continue</Btn>
-            </div>
+            <KeyReveal apiKey={apiKey} copied={keyCopied} onCopy={() => copyToClipboard(apiKey.key, setKeyCopied)} />
           )}
         </Card>
       )}
 
-      {/* Step 3: Test Connection */}
-      {step === 3 && (
+      {/* Card 3: Test connection */}
+      {project && !setup.isStepIncomplete('api_key_generated') && setup.isStepIncomplete('first_report_received') && (
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Test your connection</h3>
@@ -301,47 +243,36 @@ export function OnboardingPage() {
               Verify that the backend is reachable and the pipeline can accept reports.
             </p>
           </div>
-
           <ConnectionStatus />
-
           <div className="border-t border-edge-subtle pt-3">
             <p className="text-xs text-fg-muted mb-2">Submit a test report to verify the full pipeline:</p>
             <div className="flex items-center gap-3">
               <Btn
                 onClick={submitTestReport}
-                disabled={testResult === 'running'}
-                variant={testResult === 'pass' ? 'ghost' : 'primary'}
+                disabled={testStatus === 'running'}
+                variant={testStatus === 'pass' ? 'ghost' : 'primary'}
               >
-                {testResult === 'running' ? 'Submitting…' : testResult === 'pass' ? '✓ Test passed' : 'Submit test report'}
+                {testStatus === 'running' ? 'Submitting…' : testStatus === 'pass' ? '✓ Test passed' : 'Submit test report'}
               </Btn>
-              {testResult === 'pass' && (
-                <span className="text-xs text-ok">Pipeline is working.</span>
-              )}
-              {testResult === 'fail' && (
-                <span className="text-xs text-danger">{error || 'Submission failed'}</span>
-              )}
+              {testStatus === 'pass' && <span className="text-xs text-ok">Pipeline is working.</span>}
+              {testStatus === 'fail' && <span className="text-xs text-danger">{error || 'Submission failed'}</span>}
             </div>
-          </div>
-
-          <div className="flex gap-2 pt-2">
-            <Btn variant="ghost" onClick={() => setStep(2)}>Back</Btn>
-            <Btn onClick={() => setStep(4)}>Continue</Btn>
           </div>
         </Card>
       )}
 
-      {/* Step 4: SDK Integration */}
-      {step === 4 && (
+      {/* Card 4: SDK snippet — always available once a key exists */}
+      {project && !setup.isStepIncomplete('api_key_generated') && (
         <Card className="p-5 space-y-4">
           <div>
             <h3 className="text-sm font-semibold text-fg">Integrate the SDK</h3>
             <p className="text-xs text-fg-muted mt-1">
-              Install the package for your framework and drop in this snippet.
-              Your project ID and API key are pre-filled.
+              Install the package for your framework and drop in this snippet. Your project ID is pre-filled; replace
+              <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
+              with the API key above (or generate a new one in Projects).
             </p>
           </div>
 
-          {/* Framework tabs */}
           <div className="flex gap-1 border-b border-edge-subtle pb-2">
             {(Object.keys(SDK_SNIPPETS) as Framework[]).map((fw) => (
               <button
@@ -358,7 +289,6 @@ export function OnboardingPage() {
             ))}
           </div>
 
-          {/* Install command */}
           <div>
             <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Install</span>
             <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-xs font-mono text-fg-secondary">
@@ -366,13 +296,12 @@ export function OnboardingPage() {
             </pre>
           </div>
 
-          {/* Code snippet */}
           <div>
             <div className="flex items-center justify-between">
               <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Code</span>
               <button
                 onClick={() => copyToClipboard(
-                  SDK_SNIPPETS[framework](project?.id ?? 'proj_xxx', apiKey?.key ?? 'mushi_xxx'),
+                  SDK_SNIPPETS[framework](project.project_id, apiKey?.key ?? 'mushi_xxx'),
                   setSnippetCopied,
                 )}
                 className="text-2xs text-brand hover:text-brand-hover"
@@ -381,26 +310,45 @@ export function OnboardingPage() {
               </button>
             </div>
             <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
-              {SDK_SNIPPETS[framework](project?.id ?? 'proj_xxx', apiKey?.key ?? 'mushi_xxx')}
+              {SDK_SNIPPETS[framework](project.project_id, apiKey?.key ?? 'mushi_xxx')}
             </pre>
           </div>
 
           <div className="flex gap-2 pt-2">
-            <Btn variant="ghost" onClick={() => setStep(3)}>Back</Btn>
-            <Btn onClick={finishOnboarding}>Go to Dashboard</Btn>
+            <Btn variant="ghost" onClick={() => navigate('/')}>Go to Dashboard</Btn>
           </div>
         </Card>
       )}
 
-      {/* Skip link */}
       <p className="text-center">
         <button
-          onClick={finishOnboarding}
+          onClick={() => navigate('/')}
           className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
         >
           Skip setup — go to dashboard
         </button>
       </p>
+    </div>
+  )
+}
+
+function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean; onCopy: () => void }) {
+  return (
+    <div className="space-y-3">
+      <div className="bg-surface-raised border border-ok/30 rounded-sm px-3 py-2">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
+          <button onClick={onCopy} className="text-2xs text-brand hover:text-brand-hover">
+            {copied ? 'Copied!' : 'Copy'}
+          </button>
+        </div>
+        <code className="text-sm font-mono text-ok break-all select-all">{apiKey.key}</code>
+      </div>
+      <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
+        <p className="text-2xs text-warn">
+          Save this key securely. It will not be shown again after you leave this page.
+        </p>
+      </div>
     </div>
   )
 }
