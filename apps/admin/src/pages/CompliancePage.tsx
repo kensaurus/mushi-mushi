@@ -132,6 +132,7 @@ export function CompliancePage() {
       toast.error('Could not update retention policy', res.error?.message)
       return
     }
+    toast.success('Retention policy updated')
     await fetchAll()
   }
 

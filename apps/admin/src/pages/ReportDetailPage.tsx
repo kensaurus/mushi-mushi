@@ -123,6 +123,8 @@ export function ReportDetailPage() {
     })
     if (res.ok) {
       setSavedAt(Date.now())
+      const summary = describeTriageUpdate(updates)
+      if (summary) toast.success('Triage saved', summary)
     } else {
       setReport(previous)
       toast.error(
@@ -608,6 +610,15 @@ function NetworkLogs({ logs }: { logs: ReportDetail['network_logs'] }) {
 
 function EmptySectionMessage({ text }: { text: string }) {
   return <div className="text-xs text-fg-muted italic py-1">{text}</div>
+}
+
+function describeTriageUpdate(updates: Record<string, string>): string | null {
+  const parts: string[] = []
+  if (updates.status) parts.push(`status \u2192 ${statusLabel(updates.status)}`)
+  if (updates.severity !== undefined) {
+    parts.push(updates.severity ? `severity \u2192 ${severityLabel(updates.severity)}` : 'severity cleared')
+  }
+  return parts.length > 0 ? parts.join(' \u00b7 ') : null
 }
 
 /* ── RelatedFooter ────────────────────────────────────────────────────── */

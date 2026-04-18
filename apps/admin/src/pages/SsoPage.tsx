@@ -102,9 +102,9 @@ export function SsoPage() {
         useCases={[
           'Centrally enforce MFA, password policy, and offboarding',
           'Automatically provision new admins when they join your IdP group',
-          'Pass an enterprise security review (SAML 2.0 or OIDC)',
+          'Pass an enterprise security review (SAML 2.0)',
         ]}
-        howToUse="Add your IdP's metadata URL and entity ID below. Then in your IdP, configure the ACS URL and audience as shown in the docs. Test with a non-admin user first."
+        howToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered \u2014 it requires Supabase enterprise tier; contact support if you need it."
       />
 
       <Card className="p-3 space-y-3">
@@ -132,7 +132,7 @@ export function SsoPage() {
         <p className="text-2xs text-fg-faint">
           {form.providerType === 'saml'
             ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
-            : 'OIDC is recorded but not yet auto-registered (Supabase enterprise tier required). Use SAML for self-service.'}
+            : 'OIDC providers are recorded for audit but not yet auto-registered with Supabase Auth (requires the Supabase enterprise tier). Use SAML 2.0 for self-service today, or contact support to enable OIDC.'}
         </p>
       </Card>
 

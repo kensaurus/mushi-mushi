@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { Btn, Card, Input, PageHelp } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
+import { useToast } from '../lib/toast'
 
 type WizardStep = 1 | 2 | 3 | 4
 
@@ -71,6 +72,7 @@ type Framework = keyof typeof SDK_SNIPPETS
 
 export function OnboardingPage() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [step, setStep] = useState<WizardStep>(1)
   const [projectName, setProjectName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -104,13 +106,16 @@ export function OnboardingPage() {
     if (res.ok && res.data?.project) {
       setProject(res.data.project)
       setStep(2)
+      toast.success('Project created', res.data.project.name)
     } else {
       const fallback = await apiFetch<{ projects: Project[] }>('/v1/admin/projects')
       if (fallback.ok && fallback.data?.projects?.length) {
         setProject(fallback.data.projects[fallback.data.projects.length - 1])
         setStep(2)
       } else {
-        setError(res.error?.message ?? 'Failed to create project')
+        const msg = res.error?.message ?? 'Failed to create project'
+        setError(msg)
+        toast.error('Could not create project', msg)
       }
     }
   }
@@ -124,8 +129,11 @@ export function OnboardingPage() {
     if (res.ok && res.data) {
       setApiKey(res.data)
       setStep(3)
+      toast.success('API key generated', 'Copy it now \u2014 it will not be shown again.')
     } else {
-      setError(res.error?.message ?? 'Failed to generate API key')
+      const msg = res.error?.message ?? 'Failed to generate API key'
+      setError(msg)
+      toast.error('Could not generate API key', msg)
     }
   }
 
@@ -144,7 +152,13 @@ export function OnboardingPage() {
       }),
     })
     setTestResult(res.ok ? 'pass' : 'fail')
-    if (!res.ok) setError(res.error?.message ?? 'Test report submission failed')
+    if (res.ok) {
+      toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
+    } else {
+      const msg = res.error?.message ?? 'Test report submission failed'
+      setError(msg)
+      toast.error('Test report failed', msg)
+    }
   }
 
   function copyToClipboard(text: string, setter: (v: boolean) => void) {

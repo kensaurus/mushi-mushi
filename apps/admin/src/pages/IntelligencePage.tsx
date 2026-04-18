@@ -215,6 +215,11 @@ export function IntelligencePage() {
     if (!res.ok) {
       setBenchmark(prev)
       toast.push({ tone: 'error', message: 'Failed to update benchmarking opt-in' })
+    } else {
+      toast.push({
+        tone: 'success',
+        message: next ? 'Benchmarking opted in' : 'Benchmarking opted out',
+      })
     }
   }
 

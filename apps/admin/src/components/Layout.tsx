@@ -13,7 +13,7 @@ import {
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
   IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
-  IconCompliance, IconStorage, IconMarketplace, IconGlobe,
+  IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconSparkle,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 
@@ -60,6 +60,7 @@ const NAV: NavSection[] = [
   {
     title: 'Configuration',
     items: [
+      { label: 'Get started',  path: '/onboarding',   icon: IconSparkle },
       { label: 'Projects',     path: '/projects',     icon: IconProjects },
       { label: 'Integrations', path: '/integrations', icon: IconIntegrations },
       { label: 'Marketplace',  path: '/marketplace',  icon: IconMarketplace },

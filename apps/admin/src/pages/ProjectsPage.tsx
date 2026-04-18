@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, EmptyState } from '../components/ui'
 import { useToast } from '../lib/toast'
 
@@ -12,23 +13,11 @@ interface Project {
 }
 
 export function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
   const toast = useToast()
-
-  useEffect(() => { loadProjects() }, [])
-
-  async function loadProjects() {
-    setLoading(true)
-    setError(false)
-    const res = await apiFetch<{ projects: Project[] }>('/v1/admin/projects')
-    if (res.ok && res.data) setProjects(res.data.projects)
-    else setError(true)
-    setLoading(false)
-  }
+  const { data, loading, error, reload } = usePageData<{ projects: Project[] }>('/v1/admin/projects')
+  const projects = data?.projects ?? []
 
   async function createProject() {
     if (!newName.trim()) return
@@ -41,7 +30,7 @@ export function ProjectsPage() {
     if (res.ok) {
       toast.success('Project created', newName.trim())
       setNewName('')
-      await loadProjects()
+      reload()
     } else {
       toast.error('Failed to create project', res.error?.message)
     }
@@ -50,8 +39,8 @@ export function ProjectsPage() {
   async function generateKey(projectId: string) {
     const res = await apiFetch(`/v1/admin/projects/${projectId}/keys`, { method: 'POST' })
     if (res.ok) {
-      toast.success('API key generated', 'Copy it now — it will not be shown again.')
-      await loadProjects()
+      toast.success('API key generated', 'Copy it now \u2014 it will not be shown again.')
+      reload()
     } else {
       toast.error('Failed to generate key', res.error?.message)
     }
@@ -62,14 +51,14 @@ export function ProjectsPage() {
     const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, { method: 'DELETE' })
     if (res.ok) {
       toast.success('API key revoked')
-      await loadProjects()
+      reload()
     } else {
       toast.error('Failed to revoke key', res.error?.message)
     }
   }
 
   if (loading) return <Loading text="Loading projects..." />
-  if (error) return <ErrorAlert message="Failed to load projects." onRetry={loadProjects} />
+  if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reload} />
 
   return (
     <div className="space-y-4">

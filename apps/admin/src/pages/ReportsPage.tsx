@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import { SEVERITY, STATUS, FILTER_OPTIONS, statusLabel, severityLabel } from '../lib/tokens'
 import { PageHeader, PageHelp, Badge, Card, FilterSelect, EmptyState, Loading, ErrorAlert, RecommendedAction } from '../components/ui'
 
@@ -20,11 +19,6 @@ interface ReportRow {
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const [reports, setReports] = useState<ReportRow[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [retryKey, setRetryKey] = useState(0)
 
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -32,28 +26,23 @@ export function ReportsPage() {
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
 
-  useEffect(() => {
-    setLoading(true)
-    setError(false)
+  const queryString = (() => {
     const params = new URLSearchParams()
     if (status) params.set('status', status)
     if (category) params.set('category', category)
     if (severity) params.set('severity', severity)
     if (component) params.set('component', component)
     if (reporter) params.set('reporter', reporter)
+    return params.toString()
+  })()
 
-    apiFetch<{ reports: ReportRow[]; total: number }>(`/v1/admin/reports?${params}`)
-      .then((res) => {
-        if (res.ok && res.data) {
-          setReports(res.data.reports)
-          setTotal(res.data.total)
-        } else {
-          setError(true)
-        }
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }, [status, category, severity, component, reporter, retryKey])
+  const { data, loading, error, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
+    `/v1/admin/reports${queryString ? `?${queryString}` : ''}`,
+    { deps: [queryString] },
+  )
+
+  const reports = data?.reports ?? []
+  const total = data?.total ?? 0
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
@@ -160,7 +149,7 @@ export function ReportsPage() {
       {loading ? (
         <Loading text="Loading reports..." />
       ) : error ? (
-        <ErrorAlert message="Failed to load reports." onRetry={() => setRetryKey(k => k + 1)} />
+        <ErrorAlert message={`Failed to load reports: ${error}`} onRetry={reload} />
       ) : reports.length === 0 ? (
         <EmptyState title="No reports match the selected filters." />
       ) : (

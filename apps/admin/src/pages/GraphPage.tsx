@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ReactFlow,
@@ -12,6 +12,7 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import { NODE_COLORS } from '../lib/tokens'
 import {
   PageHeader,
@@ -180,10 +181,18 @@ function NodeChip({ node, selected }: { node: GraphNode; selected: boolean }) {
 }
 
 export function GraphPage() {
-  const [rawNodes, setRawNodes] = useState<GraphNode[]>([])
-  const [rawEdges, setRawEdges] = useState<GraphEdge[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
+  const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
+
+  const rawNodes = nodesQuery.data?.nodes ?? []
+  const rawEdges = edgesQuery.data?.edges ?? []
+  const loading = nodesQuery.loading || edgesQuery.loading
+  const error = nodesQuery.error ?? edgesQuery.error
+  const reloadGraph = useCallback(() => {
+    nodesQuery.reload()
+    edgesQuery.reload()
+  }, [nodesQuery, edgesQuery])
+
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [blastRadius, setBlastRadius] = useState<BlastRadiusItem[]>([])
   const [blastLoading, setBlastLoading] = useState(false)
@@ -195,33 +204,7 @@ export function GraphPage() {
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(
     new Set(EDGE_TYPES),
   )
-  // a11y: React Flow canvas is keyboard-trap-prone for screen readers because
-  // node positions are computed visually. The "table" view exposes the same
-  // graph as a flat node + edge list — keyboard-navigable and announced by AT.
   const [view, setView] = useState<'graph' | 'table'>('graph')
-
-  const loadGraph = useCallback(() => {
-    setLoading(true)
-    setError(false)
-    Promise.all([
-      apiFetch<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes'),
-      apiFetch<{ edges: GraphEdge[] }>('/v1/admin/graph/edges'),
-    ])
-      .then(([nodesRes, edgesRes]) => {
-        if (nodesRes.ok && edgesRes.ok) {
-          setRawNodes(nodesRes.data?.nodes ?? [])
-          setRawEdges(edgesRes.data?.edges ?? [])
-        } else {
-          setError(true)
-        }
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    loadGraph()
-  }, [loadGraph])
 
   const filteredNodes = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -361,8 +344,8 @@ export function GraphPage() {
   if (error)
     return (
       <ErrorAlert
-        message="Failed to load knowledge graph."
-        onRetry={loadGraph}
+        message={`Failed to load knowledge graph: ${error}`}
+        onRetry={reloadGraph}
       />
     )
 

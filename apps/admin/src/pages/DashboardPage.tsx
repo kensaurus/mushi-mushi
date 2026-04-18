@@ -5,6 +5,7 @@ import { usePageData } from '../lib/usePageData'
 import { SEVERITY, CATEGORY_LABELS } from '../lib/tokens'
 import { PageHeader, PageHelp, Card, Badge, Btn, Loading, ErrorAlert } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
+import { useToast } from '../lib/toast'
 import {
   KpiTile,
   SeverityStackedBars,
@@ -95,6 +96,7 @@ interface Project {
 
 function GettingStartedEmpty() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [projects, setProjects] = useState<Project[]>([])
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
@@ -121,6 +123,11 @@ function GettingStartedEmpty() {
     setTestStatus('running')
     const res = await apiFetch(`/v1/admin/projects/${firstProject.id}/test-report`, { method: 'POST' })
     setTestStatus(res.ok ? 'pass' : 'fail')
+    if (res.ok) {
+      toast.success('Test report queued', 'Watch it land in Reports within a few seconds.')
+    } else {
+      toast.error('Test report failed', res.error?.message ?? 'Check your project keys and try again.')
+    }
   }
 
   return (
@@ -184,22 +191,7 @@ function relTime(iso: string): string {
 }
 
 export function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  function load() {
-    setLoading(true)
-    setError(null)
-    apiFetch<DashboardData>('/v1/admin/dashboard').then((res) => {
-      if (res.ok && res.data) setData(res.data)
-      else setError(res.error?.message ?? 'Failed to load dashboard.')
-    }).catch((err: unknown) => {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard.')
-    }).finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [])
+  const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
 
   // 7d vs prior-7d delta on report intake. Direction is the actual change;
   // tone reflects whether that change is good for ops (more reports = warn).
@@ -219,7 +211,7 @@ export function DashboardPage() {
   }, [data])
 
   if (loading) return <Loading text="Loading dashboard..." />
-  if (error) return <ErrorAlert message={error} onRetry={load} />
+  if (error) return <ErrorAlert message={error} onRetry={reload} />
   if (!data || data.empty) return <GettingStartedEmpty />
 
   const counts = data.counts!
@@ -234,7 +226,7 @@ export function DashboardPage() {
   return (
     <div>
       <PageHeader title="Dashboard">
-        <Btn size="sm" variant="ghost" onClick={load}>Refresh</Btn>
+        <Btn size="sm" variant="ghost" onClick={reload}>Refresh</Btn>
         <Link to="/reports" className="text-xs text-brand hover:text-brand-hover">View all reports →</Link>
       </PageHeader>
 

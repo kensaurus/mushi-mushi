@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { apiFetch } from '../lib/supabase'
+import { useState } from 'react'
 import { useRealtime } from '../lib/realtime'
+import { usePageData } from '../lib/usePageData'
 import { PageHeader, PageHelp, Card, Badge, EmptyState, Loading, ErrorAlert, FilterSelect } from '../components/ui'
 
 interface ReporterNotification {
@@ -23,24 +23,15 @@ const TYPE_BADGE: Record<string, string> = {
 }
 
 export function NotificationsPage() {
-  const [notifications, setNotifications] = useState<ReporterNotification[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
+  const { data, loading, error, reload } = usePageData<{ notifications: ReporterNotification[] }>(
+    '/v1/admin/notifications',
+  )
+  useRealtime({ table: 'reporter_notifications' }, reload)
 
-  const load = useCallback(async () => {
-    setError(false)
-    const res = await apiFetch<{ notifications: ReporterNotification[] }>('/v1/admin/notifications')
-    if (res.ok && res.data) setNotifications(res.data.notifications)
-    else setError(true)
-    setLoading(false)
-  }, [])
-
-  useEffect(() => { load() }, [load])
-  useRealtime({ table: 'reporter_notifications' }, load)
-
+  const notifications = data?.notifications ?? []
   const visible = filter === 'unread'
-    ? notifications.filter(n => !n.read_at)
+    ? notifications.filter((n) => !n.read_at)
     : notifications
 
   return (
@@ -62,13 +53,13 @@ export function NotificationsPage() {
           'Audit which reporters were notified about a specific report',
           'Spot stale unread notifications that suggest the SDK polling is broken on the client',
         ]}
-        howToUse="This list is read-only. To send notifications, set reporter_notifications_enabled in project_settings. The widget should fetch /v1/notifications?token=… (not yet exposed) to display them."
+        howToUse="This list is read-only. To send notifications, enable reporter_notifications_enabled in project_settings. The SDK widget polls GET /v1/notifications with the reporter token (and POSTs to /v1/notifications/:id/read once shown) to surface them in-app."
       />
 
       {loading ? (
         <Loading text="Loading notifications..." />
       ) : error ? (
-        <ErrorAlert message="Failed to load notifications." onRetry={load} />
+        <ErrorAlert message={`Failed to load notifications: ${error}`} onRetry={reload} />
       ) : visible.length === 0 ? (
         <EmptyState
           title={filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
