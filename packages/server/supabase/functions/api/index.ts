@@ -3269,9 +3269,11 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
   const projectIds = (projects ?? []).map(p => p.id)
   if (projectIds.length === 0) return c.json({ ok: true, data: { projects: [] } })
 
-  const [reportCounts, allKeys] = await Promise.all([
+  const [reportCounts, allKeys, members, latestReports] = await Promise.all([
     db.from('reports').select('project_id', { count: 'exact', head: false }).in('project_id', projectIds),
     db.from('project_api_keys').select('id, project_id, key_prefix, created_at, is_active').in('project_id', projectIds).order('created_at', { ascending: false }),
+    db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
+    db.from('reports').select('project_id, created_at').in('project_id', projectIds).order('created_at', { ascending: false }).limit(projectIds.length * 2),
   ])
 
   const countMap: Record<string, number> = {}
@@ -3283,11 +3285,29 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
     keyMap[k.project_id].push({ id: k.id, key_prefix: k.key_prefix, created_at: k.created_at, is_active: k.is_active, revoked: !k.is_active })
   }
 
-  const enriched = (projects ?? []).map(p => ({
-    ...p,
-    report_count: countMap[p.id] ?? 0,
-    api_keys: keyMap[p.id] ?? [],
-  }))
+  const memberMap: Record<string, Array<{ user_id: string; role: string }>> = {}
+  for (const m of members.data ?? []) {
+    if (!memberMap[m.project_id]) memberMap[m.project_id] = []
+    memberMap[m.project_id].push({ user_id: m.user_id, role: m.role })
+  }
+
+  const lastReportMap: Record<string, string> = {}
+  for (const r of latestReports.data ?? []) {
+    if (!lastReportMap[r.project_id]) lastReportMap[r.project_id] = r.created_at
+  }
+
+  const enriched = (projects ?? []).map(p => {
+    const keys = keyMap[p.id] ?? []
+    return {
+      ...p,
+      report_count: countMap[p.id] ?? 0,
+      api_keys: keys,
+      active_key_count: keys.filter(k => k.is_active).length,
+      member_count: (memberMap[p.id] ?? []).length,
+      members: memberMap[p.id] ?? [],
+      last_report_at: lastReportMap[p.id] ?? null,
+    }
+  })
 
   return c.json({ ok: true, data: { projects: enriched } })
 })
@@ -4431,13 +4451,28 @@ app.get('/v1/admin/audit', jwtAuth, async (c) => {
   const projectIds = projects?.map(p => p.id) ?? []
 
   const action = c.req.query('action')
+  const resourceType = c.req.query('resource_type')
+  const actor = c.req.query('actor')
+  const since = c.req.query('since')
+  const q = c.req.query('q')?.trim()
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200)
+  const offset = Math.max(Number(c.req.query('offset') ?? 0), 0)
 
-  let query = db.from('audit_logs').select('id, project_id, actor_id, actor_email, action, resource_type, resource_id, metadata, created_at').in('project_id', projectIds).order('created_at', { ascending: false }).limit(limit)
+  let query = db
+    .from('audit_logs')
+    .select('id, project_id, actor_id, actor_email, action, resource_type, resource_id, metadata, created_at', { count: 'exact' })
+    .in('project_id', projectIds)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1)
+
   if (action) query = query.eq('action', action)
+  if (resourceType) query = query.eq('resource_type', resourceType)
+  if (actor) query = query.ilike('actor_email', `%${actor}%`)
+  if (since) query = query.gte('created_at', since)
+  if (q) query = query.or(`action.ilike.%${q}%,resource_type.ilike.%${q}%,resource_id.ilike.%${q}%`)
 
-  const { data } = await query
-  return c.json({ ok: true, data: { logs: data ?? [] } })
+  const { data, count } = await query
+  return c.json({ ok: true, data: { logs: data ?? [], count: count ?? 0 } })
 })
 
 app.get('/v1/admin/fine-tuning', jwtAuth, async (c) => {
@@ -5278,11 +5313,20 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
   const db = getServiceClient()
   const { data: ownedProjects } = await db.from('projects').select('id').eq('owner_id', userId)
   const projectIds = (ownedProjects ?? []).map(p => p.id)
+
+  const windowParam = c.req.query('window') ?? '24h'
+  const windowMs: Record<string, number> = {
+    '1h': 60 * 60 * 1000,
+    '24h': 24 * 60 * 60 * 1000,
+    '7d': 7 * 24 * 60 * 60 * 1000,
+  }
+  const ms = windowMs[windowParam] ?? windowMs['24h']
+
   if (projectIds.length === 0) {
-    return c.json({ ok: true, data: { window: '24h', totalCalls: 0, fallbacks: 0, fallbackRate: 0, errors: 0, errorRate: 0, avgLatencyMs: 0, p95LatencyMs: 0, byModel: {}, recent: [] } })
+    return c.json({ ok: true, data: { window: windowParam, totalCalls: 0, fallbacks: 0, fallbackRate: 0, errors: 0, errorRate: 0, avgLatencyMs: 0, p95LatencyMs: 0, byModel: {}, byFunction: {}, recent: [] } })
   }
 
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const since = new Date(Date.now() - ms).toISOString()
   const { data: invocations } = await db
     .from('llm_invocations')
     .select('function_name, used_model, primary_model, fallback_used, status, latency_ms, input_tokens, output_tokens, created_at, langfuse_trace_id, report_id, key_source')
@@ -5303,18 +5347,34 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     : 0
 
   const byModel: Record<string, { calls: number; errors: number; tokens: number }> = {}
+  const byFunction: Record<string, { calls: number; errors: number; fallbacks: number; avgLatencyMs: number }> = {}
+  const fnLatency: Record<string, number[]> = {}
   for (const r of rows) {
-    const key = r.used_model
-    byModel[key] ??= { calls: 0, errors: 0, tokens: 0 }
-    byModel[key].calls += 1
-    if (r.status !== 'success') byModel[key].errors += 1
-    byModel[key].tokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
+    const modelKey = r.used_model
+    byModel[modelKey] ??= { calls: 0, errors: 0, tokens: 0 }
+    byModel[modelKey].calls += 1
+    if (r.status !== 'success') byModel[modelKey].errors += 1
+    byModel[modelKey].tokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
+
+    const fnKey = r.function_name
+    byFunction[fnKey] ??= { calls: 0, errors: 0, fallbacks: 0, avgLatencyMs: 0 }
+    byFunction[fnKey].calls += 1
+    if (r.status !== 'success') byFunction[fnKey].errors += 1
+    if (r.fallback_used) byFunction[fnKey].fallbacks += 1
+    fnLatency[fnKey] ??= []
+    fnLatency[fnKey].push(r.latency_ms ?? 0)
+  }
+  for (const fn of Object.keys(byFunction)) {
+    const arr = fnLatency[fn]
+    byFunction[fn].avgLatencyMs = arr.length > 0
+      ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
+      : 0
   }
 
   return c.json({
     ok: true,
     data: {
-      window: '24h',
+      window: windowParam,
       totalCalls,
       fallbacks,
       fallbackRate: totalCalls > 0 ? fallbacks / totalCalls : 0,
@@ -5323,7 +5383,8 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
       avgLatencyMs: avgLatency,
       p95LatencyMs: p95Latency,
       byModel,
-      recent: rows.slice(0, 50),
+      byFunction,
+      recent: rows.slice(0, 100),
     },
   })
 })
@@ -5414,14 +5475,53 @@ app.get('/v1/admin/anti-gaming/events', jwtAuth, async (c) => {
   const projectIds = await ownedProjectIds(db, userId)
   if (projectIds.length === 0) return c.json({ ok: true, data: { events: [] } })
 
-  const { data, error } = await db
+  const eventType = c.req.query('event_type')
+  const limit = Math.min(Number(c.req.query('limit') ?? 200), 500)
+
+  let query = db
     .from('anti_gaming_events')
     .select('*')
     .in('project_id', projectIds)
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(limit)
+  if (eventType) query = query.eq('event_type', eventType)
+
+  const { data, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
   return c.json({ ok: true, data: { events: data ?? [] } })
+})
+
+app.post('/v1/admin/anti-gaming/devices/:id/flag', jwtAuth, async (c) => {
+  const id = c.req.param('id')
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => ({}))
+  const reason = (body.reason as string | undefined)?.trim() ?? 'Manual flag from admin console'
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Device not found' } }, 404)
+
+  const { data: device, error: fetchErr } = await db
+    .from('reporter_devices')
+    .select('project_id, device_fingerprint, reporter_tokens')
+    .eq('id', id)
+    .in('project_id', projectIds)
+    .single()
+  if (fetchErr || !device) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Device not found' } }, 404)
+
+  const { error } = await db
+    .from('reporter_devices')
+    .update({ flagged_as_suspicious: true, flag_reason: reason })
+    .eq('id', id)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  await logAntiGamingEvent(db, {
+    projectId: device.project_id,
+    reporterTokenHash: device.reporter_tokens?.[0] ?? 'unknown',
+    deviceFingerprint: device.device_fingerprint,
+    eventType: 'manual_flag',
+    reason,
+  })
+  return c.json({ ok: true, data: { id, flagged: true } })
 })
 
 app.post('/v1/admin/anti-gaming/devices/:id/unflag', jwtAuth, async (c) => {
@@ -5461,14 +5561,54 @@ app.get('/v1/admin/notifications', jwtAuth, async (c) => {
   const projectIds = await ownedProjectIds(db, userId)
   if (projectIds.length === 0) return c.json({ ok: true, data: { notifications: [] } })
 
-  const { data, error } = await db
+  const type = c.req.query('type')
+  const onlyUnread = c.req.query('unread') === '1'
+  const limit = Math.min(Number(c.req.query('limit') ?? 200), 500)
+
+  let query = db
     .from('reporter_notifications')
     .select('*')
     .in('project_id', projectIds)
     .order('created_at', { ascending: false })
-    .limit(200)
+    .limit(limit)
+  if (type) query = query.eq('notification_type', type)
+  if (onlyUnread) query = query.is('read_at', null)
+
+  const { data, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
   return c.json({ ok: true, data: { notifications: data ?? [] } })
+})
+
+app.post('/v1/admin/notifications/:id/read', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const notifId = c.req.param('id')
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No projects' } }, 404)
+
+  const { error } = await db
+    .from('reporter_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', notifId)
+    .in('project_id', projectIds)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true })
+})
+
+app.post('/v1/admin/notifications/read-all', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No projects' } }, 404)
+
+  const { error, count } = await db
+    .from('reporter_notifications')
+    .update({ read_at: new Date().toISOString() }, { count: 'exact' })
+    .in('project_id', projectIds)
+    .is('read_at', null)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  await logAudit(db, projectIds[0], userId, 'settings.updated', 'notifications', undefined, { marked_read: count ?? 0 })
+  return c.json({ ok: true, data: { marked_read: count ?? 0 } })
 })
 
 // ============================================================
