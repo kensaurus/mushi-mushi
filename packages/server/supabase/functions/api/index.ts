@@ -38,7 +38,7 @@ app.onError(sentryHonoErrorHandler)
 app.use('*', cors({
   origin: '*',
   allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Sentry-Hook-Signature'],
-  allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 
 app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', region: currentRegion() }))
@@ -507,6 +507,109 @@ app.post('/v1/webhooks/sentry', async (c) => {
 })
 
 // ============================================================
+// GITHUB CHECK-RUN WEBHOOK (V5.3 §2.10 — closes the PDCA loop)
+// ============================================================
+// Configure in GitHub: Settings → Webhooks → Add webhook
+//   Payload URL: <api>/v1/webhooks/github
+//   Content type: application/json
+//   Secret: same value as project_settings.github_webhook_secret
+//   Events: "Check runs" + "Check suites"
+
+app.post('/v1/webhooks/github', async (c) => {
+  const event = c.req.header('X-GitHub-Event')
+  const sig = c.req.header('X-Hub-Signature-256') ?? ''
+  const body = await c.req.text()
+
+  if (event !== 'check_run' && event !== 'check_suite') {
+    return c.json({ ok: true, data: { event, action: 'ignored' } })
+  }
+
+  let payload: Record<string, unknown>
+  try {
+    payload = JSON.parse(body)
+  } catch {
+    return c.json({ ok: false, error: 'Invalid JSON body' }, 400)
+  }
+
+  const repo = payload.repository as { full_name?: string } | undefined
+  const checkRun = (payload.check_run ?? payload.check_suite) as
+    | { head_sha?: string; status?: string; conclusion?: string | null }
+    | undefined
+
+  if (!repo?.full_name || !checkRun?.head_sha) {
+    return c.json({ ok: true, data: { reason: 'missing repo or sha' } })
+  }
+
+  const db = getServiceClient()
+
+  // Match by commit_sha — the fix-worker persists this on PR creation.
+  const { data: candidates } = await db
+    .from('fix_attempts')
+    .select('id, project_id')
+    .eq('commit_sha', checkRun.head_sha)
+    .limit(5)
+
+  if (!candidates || candidates.length === 0) {
+    return c.json({ ok: true, data: { reason: 'no matching fix_attempt' } })
+  }
+
+  // Verify against any matched project's secret. If no project has a secret
+  // configured (dev fallback), we accept the event but mark as unverified.
+  let verified = false
+  let verifiedProjectId: string | null = null
+  let anySecretConfigured = false
+  for (const cand of candidates) {
+    const { data: settings } = await db
+      .from('project_settings')
+      .select('github_webhook_secret')
+      .eq('project_id', cand.project_id)
+      .single()
+    const secret = settings?.github_webhook_secret as string | undefined
+    if (!secret) continue
+    anySecretConfigured = true
+    if (await verifyGithubSignature(sig, body, secret)) {
+      verified = true
+      verifiedProjectId = cand.project_id
+      break
+    }
+  }
+
+  if (anySecretConfigured && !verified) {
+    return c.json({ ok: false, error: { code: 'INVALID_SIGNATURE' } }, 401)
+  }
+
+  const updates = {
+    check_run_status: checkRun.status ?? null,
+    check_run_conclusion: checkRun.conclusion ?? null,
+    check_run_updated_at: new Date().toISOString(),
+  }
+
+  const targetIds = verifiedProjectId
+    ? candidates.filter(x => x.project_id === verifiedProjectId).map(x => x.id)
+    : candidates.map(x => x.id)
+
+  await db.from('fix_attempts').update(updates).in('id', targetIds)
+
+  return c.json({ ok: true, data: { updated: targetIds.length, verified } })
+})
+
+async function verifyGithubSignature(headerSig: string, body: string, secret: string): Promise<boolean> {
+  const expected = headerSig.startsWith('sha256=') ? headerSig.slice('sha256='.length) : ''
+  if (!expected) return false
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(body))
+  const computed = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+  if (computed.length !== expected.length) return false
+  let diff = 0
+  for (let i = 0; i < computed.length; i++) diff |= computed.charCodeAt(i) ^ expected.charCodeAt(i)
+  return diff === 0
+}
+
+// ============================================================
 // SDK STATUS
 // ============================================================
 
@@ -640,8 +743,38 @@ app.post('/v1/admin/fixes/dispatch', jwtAuth, async (c) => {
     return c.json({ ok: false, error: { code: 'DISPATCH_FAILED', message: insertErr?.message ?? 'Could not enqueue' } }, 500)
   }
 
+  // Fire-and-forget invoke of the fix-worker Edge Function. We deliberately
+  // do not await — the SSE stream above is the channel the UI uses to track
+  // progress. EdgeRuntime.waitUntil keeps the worker alive after the
+  // dispatch response returns. If the worker invocation fails, the dispatch
+  // row sits in 'queued' until a future cron-driven retry picks it up.
+  invokeFixWorker(job.id).catch(err => {
+    console.warn('[fix-dispatch] worker invocation failed', { dispatchId: job.id, err: String(err) })
+  })
+
   return c.json({ ok: true, data: { dispatchId: job.id, status: job.status, createdAt: job.created_at } })
 })
+
+async function invokeFixWorker(dispatchId: string): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !serviceRoleKey) return
+
+  // Local dev: the functions endpoint sits on localhost:54321/functions/v1.
+  // Production: <project>.supabase.co/functions/v1. SUPABASE_URL is the
+  // base of either. We never await this — the worker reports back via the
+  // fix_dispatch_jobs row that the SSE endpoint subscribes to.
+  await fetch(`${supabaseUrl}/functions/v1/fix-worker`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ dispatchId }),
+    // Don't block the dispatch response on the worker booting.
+    signal: AbortSignal.timeout(2_000),
+  }).catch(() => { /* worker is fire-and-forget */ })
+}
 
 app.get('/v1/admin/fixes/dispatches', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
@@ -873,6 +1006,8 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   const status = c.req.query('status')
   const category = c.req.query('category')
   const severity = c.req.query('severity')
+  const component = c.req.query('component')
+  const reporter = c.req.query('reporter')
   const limit = Math.min(Number(c.req.query('limit')) || 50, 100)
   const offset = Number(c.req.query('offset')) || 0
 
@@ -886,6 +1021,8 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   if (status) query = query.eq('status', status)
   if (category) query = query.eq('category', category)
   if (severity) query = query.eq('severity', severity)
+  if (component) query = query.eq('component', component)
+  if (reporter) query = query.eq('reporter_token_hash', reporter)
 
   const { data: reports, count, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
@@ -902,7 +1039,18 @@ app.get('/v1/admin/reports/:id', jwtAuth, async (c) => {
 
   const { data, error } = await db.from('reports').select('*').eq('id', reportId).in('project_id', projectIds).single()
   if (error || !data) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404)
-  return c.json({ ok: true, data })
+
+  // Attach the LLM invocation timeline for this report so the detail page can
+  // deep-link to Langfuse traces for each pipeline stage (fast-filter, classify-report,
+  // judge-batch). Cheaper to fetch alongside the report than as a separate round-trip.
+  const { data: invocations } = await db
+    .from('llm_invocations')
+    .select('id, function_name, stage, used_model, primary_model, fallback_used, fallback_reason, status, error_message, latency_ms, input_tokens, output_tokens, key_source, langfuse_trace_id, prompt_version, created_at')
+    .eq('report_id', reportId)
+    .order('created_at', { ascending: true })
+    .limit(20)
+
+  return c.json({ ok: true, data: { ...data, llm_invocations: invocations ?? [] } })
 })
 
 app.patch('/v1/admin/reports/:id', jwtAuth, async (c) => {
@@ -988,19 +1136,518 @@ app.get('/v1/admin/stats', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { total: total ?? 0, byStatus: toMap(statusRows), byCategory: toMap(categoryRows), bySeverity: toMap(severityRows) } })
 })
 
-// Judge scores / drift data
-app.get('/v1/admin/judge-scores', jwtAuth, async (c) => {
+// Richer dashboard data: 14-day trends, fix pipeline state, LLM cost,
+// triage backlog, top components, and recent activity. Powers the rebuilt
+// DashboardPage. Single round-trip so the page hydrates quickly without N
+// chained requests.
+app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
-  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
-  if (!project) return c.json({ ok: true, data: { weeks: [] } })
 
-  const { data: weeks } = await db.rpc('weekly_judge_scores', {
-    p_project_id: project.id,
-    p_weeks: 12,
+  const { data: projects } = await db
+    .from('projects')
+    .select('id, name')
+    .eq('owner_id', userId)
+  const projectIds = (projects ?? []).map(p => p.id)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { empty: true } })
+  }
+
+  const since = new Date()
+  since.setUTCDate(since.getUTCDate() - 13)
+  since.setUTCHours(0, 0, 0, 0)
+  const sinceIso = since.toISOString()
+
+  // Reports — richer slice for triage backlog, top components, trend
+  const { data: recentReports } = await db
+    .from('reports')
+    .select('id, project_id, summary, description, status, severity, category, component, created_at, stage1_latency_ms, stage2_latency_ms')
+    .in('project_id', projectIds)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
+  // Fix attempts — for the auto-fix pipeline tile
+  const { data: recentFixes } = await db
+    .from('fix_attempts')
+    .select('id, report_id, project_id, status, agent, pr_url, pr_number, llm_model, llm_input_tokens, llm_output_tokens, started_at, completed_at, created_at')
+    .in('project_id', projectIds)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(100)
+
+  // LLM invocations — for cost / latency trend
+  const { data: recentLlm } = await db
+    .from('llm_invocations')
+    .select('id, project_id, function_name, used_model, status, latency_ms, input_tokens, output_tokens, created_at, key_source')
+    .in('project_id', projectIds)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(2000)
+
+  // Integration health — last 14 days, used to render a global "platform health" sparkline
+  const { data: healthRows } = await db
+    .from('integration_health_history')
+    .select('kind, status, latency_ms, checked_at')
+    .in('project_id', projectIds)
+    .gte('checked_at', sinceIso)
+    .order('checked_at', { ascending: true })
+    .limit(2000)
+
+  // Bucket helpers
+  const dayKey = (iso: string) => iso.slice(0, 10)
+  const days: string[] = []
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(since)
+    d.setUTCDate(since.getUTCDate() + i)
+    days.push(d.toISOString().slice(0, 10))
+  }
+
+  // Per-day report intake by severity (for stacked sparkline)
+  const reportsByDay: Record<string, { total: number; critical: number; high: number; medium: number; low: number; unscored: number }> = {}
+  for (const d of days) reportsByDay[d] = { total: 0, critical: 0, high: 0, medium: 0, low: 0, unscored: 0 }
+  for (const r of recentReports ?? []) {
+    const d = dayKey(String(r.created_at))
+    if (!reportsByDay[d]) continue
+    const bucket = reportsByDay[d]
+    bucket.total++
+    const sev = (r.severity ?? '').toLowerCase()
+    if (sev === 'critical' || sev === 'high' || sev === 'medium' || sev === 'low') {
+      bucket[sev as 'critical' | 'high' | 'medium' | 'low']++
+    } else {
+      bucket.unscored++
+    }
+  }
+
+  // Per-day LLM cost (token-based proxy: input + output tokens / 1k)
+  const llmByDay: Record<string, { calls: number; tokens: number; latencyMs: number; failures: number }> = {}
+  for (const d of days) llmByDay[d] = { calls: 0, tokens: 0, latencyMs: 0, failures: 0 }
+  let totalTokens = 0
+  let totalLlmCalls = 0
+  let totalLlmFailures = 0
+  for (const inv of recentLlm ?? []) {
+    const d = dayKey(String(inv.created_at))
+    if (!llmByDay[d]) continue
+    llmByDay[d].calls++
+    const tok = (inv.input_tokens ?? 0) + (inv.output_tokens ?? 0)
+    llmByDay[d].tokens += tok
+    llmByDay[d].latencyMs += inv.latency_ms ?? 0
+    if (inv.status !== 'success') llmByDay[d].failures++
+    totalTokens += tok
+    totalLlmCalls++
+    if (inv.status !== 'success') totalLlmFailures++
+  }
+
+  // Triage SLA — mean minutes from created_at -> first stage classification
+  // (proxied as stage2_latency_ms presence). For "open" backlog, count anything
+  // still status='new' or 'queued' beyond 1h.
+  const now = Date.now()
+  const openBacklog = (recentReports ?? []).filter(r => {
+    const status = String(r.status ?? '')
+    if (status !== 'new' && status !== 'queued') return false
+    return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000
+  }).length
+
+  // Top components by report count
+  const componentCounts = new Map<string, number>()
+  for (const r of recentReports ?? []) {
+    const comp = (r.component ?? '').trim()
+    if (!comp) continue
+    componentCounts.set(comp, (componentCounts.get(comp) ?? 0) + 1)
+  }
+  const topComponents = [...componentCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([component, count]) => ({ component, count }))
+
+  // Auto-fix pipeline summary
+  const fixSummary = {
+    total: (recentFixes ?? []).length,
+    completed: (recentFixes ?? []).filter(f => f.status === 'completed').length,
+    failed: (recentFixes ?? []).filter(f => f.status === 'failed').length,
+    inProgress: (recentFixes ?? []).filter(f => f.status === 'queued' || f.status === 'running').length,
+    openPrs: (recentFixes ?? []).filter(f => f.pr_number != null && f.status === 'completed').length,
+  }
+
+  // Triage queue — top 5 most recent reports needing attention
+  const triageQueue = (recentReports ?? [])
+    .filter(r => r.status === 'new' || r.status === 'queued' || r.status === 'classified')
+    .slice(0, 5)
+    .map(r => ({
+      id: r.id,
+      summary: r.summary ?? r.description?.slice(0, 140) ?? '(no summary)',
+      severity: r.severity,
+      category: r.category,
+      status: r.status,
+      created_at: r.created_at,
+    }))
+
+  // Recent activity — last 8 events across reports + fixes
+  const activity = [
+    ...(recentReports ?? []).slice(0, 6).map(r => ({
+      kind: 'report' as const,
+      id: r.id,
+      label: r.summary ?? r.description?.slice(0, 100) ?? '(no summary)',
+      meta: r.severity ?? r.category ?? r.status,
+      at: r.created_at,
+    })),
+    ...(recentFixes ?? []).slice(0, 4).map(f => ({
+      kind: 'fix' as const,
+      id: f.report_id,
+      label: `Auto-fix ${f.status}`,
+      meta: f.llm_model ?? f.agent ?? null,
+      at: f.created_at,
+    })),
+  ]
+    .sort((a, b) => new Date(String(b.at)).getTime() - new Date(String(a.at)).getTime())
+    .slice(0, 8)
+
+  // Integration health — group by kind, derive last status + uptime ratio
+  const healthByKind = new Map<string, { last: string | null; lastAt: string | null; ok: number; total: number }>()
+  for (const row of healthRows ?? []) {
+    const k = String(row.kind)
+    if (!healthByKind.has(k)) healthByKind.set(k, { last: null, lastAt: null, ok: 0, total: 0 })
+    const entry = healthByKind.get(k)!
+    entry.total++
+    if (row.status === 'ok') entry.ok++
+    entry.last = String(row.status)
+    entry.lastAt = String(row.checked_at)
+  }
+  const integrations = [...healthByKind.entries()].map(([kind, v]) => ({
+    kind,
+    lastStatus: v.last,
+    lastAt: v.lastAt,
+    uptime: v.total > 0 ? v.ok / v.total : null,
+  }))
+
+  return c.json({
+    ok: true,
+    data: {
+      empty: false,
+      projects: (projects ?? []).map(p => ({ id: p.id, name: p.name })),
+      window: { days, since: sinceIso },
+      counts: {
+        reports14d: (recentReports ?? []).length,
+        openBacklog,
+        fixesTotal: fixSummary.total,
+        openPrs: fixSummary.openPrs,
+        llmCalls14d: totalLlmCalls,
+        llmTokens14d: totalTokens,
+        llmFailures14d: totalLlmFailures,
+      },
+      reportsByDay: days.map(d => ({ day: d, ...reportsByDay[d] })),
+      llmByDay: days.map(d => ({ day: d, ...llmByDay[d] })),
+      fixSummary,
+      topComponents,
+      triageQueue,
+      activity,
+      integrations,
+    },
   })
+})
 
-  return c.json({ ok: true, data: { weeks: weeks ?? [] } })
+// Judge scores / drift data
+app.get('/v1/admin/judge-scores', jwtAuth, async (c) => {
+  // Aggregates across all owned projects so multi-project accounts see the
+  // full picture, not the first project only. We call weekly_judge_scores
+  // per project then bucket-merge in JS — RPC isn't variadic over project_ids.
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { weeks: [] } })
+
+  const perProject = await Promise.all(
+    projectIds.map((pid) => db.rpc('weekly_judge_scores', { p_project_id: pid, p_weeks: 12 })),
+  )
+  const buckets = new Map<string, { week_start: string; sum_score: number; sum_acc: number; sum_sev: number; sum_comp: number; sum_repro: number; eval_count: number }>()
+  for (const r of perProject) {
+    for (const w of r.data ?? []) {
+      const key = String(w.week_start)
+      const prev = buckets.get(key) ?? { week_start: key, sum_score: 0, sum_acc: 0, sum_sev: 0, sum_comp: 0, sum_repro: 0, eval_count: 0 }
+      const n = Number(w.eval_count ?? 0)
+      prev.sum_score += Number(w.avg_score ?? 0) * n
+      prev.sum_acc   += Number(w.avg_accuracy ?? 0) * n
+      prev.sum_sev   += Number(w.avg_severity ?? 0) * n
+      prev.sum_comp  += Number(w.avg_component ?? 0) * n
+      prev.sum_repro += Number(w.avg_repro ?? 0) * n
+      prev.eval_count += n
+      buckets.set(key, prev)
+    }
+  }
+  const weeks = [...buckets.values()]
+    .sort((a, b) => (a.week_start < b.week_start ? 1 : -1))
+    .map(b => ({
+      week_start: b.week_start,
+      avg_score: b.eval_count ? b.sum_score / b.eval_count : 0,
+      avg_accuracy: b.eval_count ? b.sum_acc / b.eval_count : 0,
+      avg_severity: b.eval_count ? b.sum_sev / b.eval_count : 0,
+      avg_component: b.eval_count ? b.sum_comp / b.eval_count : 0,
+      avg_repro: b.eval_count ? b.sum_repro / b.eval_count : 0,
+      eval_count: b.eval_count,
+    }))
+  return c.json({ ok: true, data: { weeks } })
+})
+
+// Per-report judge evaluations — paginated table for the Judge page.
+app.get('/v1/admin/judge/evaluations', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { evaluations: [] } })
+
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200)
+  const sort = c.req.query('sort') === 'score_asc' ? { col: 'judge_score', asc: true } : { col: 'created_at', asc: false }
+
+  const { data, error } = await db
+    .from('classification_evaluations')
+    .select('id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used')
+    .in('project_id', projectIds)
+    .order(sort.col, { ascending: sort.asc })
+    .limit(limit)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { evaluations: data ?? [] } })
+})
+
+// Score distribution histogram (bucketed into 10 deciles).
+app.get('/v1/admin/judge/distribution', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { buckets: Array(10).fill(0), total: 0 } })
+
+  const { data } = await db
+    .from('classification_evaluations')
+    .select('judge_score')
+    .in('project_id', projectIds)
+    .not('judge_score', 'is', null)
+    .limit(2000)
+  const buckets = Array(10).fill(0) as number[]
+  for (const row of data ?? []) {
+    const s = Math.max(0, Math.min(0.9999, Number(row.judge_score ?? 0)))
+    const bin = Math.floor(s * 10)
+    buckets[bin] = (buckets[bin] ?? 0) + 1
+  }
+  return c.json({ ok: true, data: { buckets, total: (data ?? []).length } })
+})
+
+// Trigger judge-batch on demand for the user's projects (fire-and-forget).
+app.post('/v1/admin/judge/run', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404)
+  }
+  // Fire-and-forget per project; we don't await — the page polls or uses
+  // realtime to pick up new evaluations.
+  const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/judge-batch`
+  const headers = {
+    'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+    'Content-Type': 'application/json',
+  }
+  for (const pid of projectIds) {
+    fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ projectId: pid, trigger: 'manual' }),
+    }).catch(() => { /* best-effort */ })
+  }
+  return c.json({ ok: true, data: { dispatched: projectIds.length } })
+})
+
+// Prompt-version leaderboard — joins prompt_versions with eval counts.
+app.get('/v1/admin/judge/prompts', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { prompts: [] } })
+
+  const { data } = await db
+    .from('prompt_versions')
+    .select('id, project_id, stage, version, is_active, is_candidate, traffic_percentage, avg_judge_score, total_evaluations, created_at')
+    .or(`project_id.is.null,project_id.in.(${projectIds.join(',')})`)
+    .order('avg_judge_score', { ascending: false, nullsFirst: false })
+    .order('total_evaluations', { ascending: false })
+    .limit(50)
+  return c.json({ ok: true, data: { prompts: data ?? [] } })
+})
+
+// ============================================================
+// PROMPT LAB — manage prompt versions + view eval dataset.
+// Replaces the old "Fine-Tuning" page that nobody could complete.
+// ============================================================
+
+app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+
+  // Prompts: include global defaults (project_id IS NULL) + this user's own.
+  let promptsQuery = db
+    .from('prompt_versions')
+    .select('id, project_id, stage, version, prompt_template, is_active, is_candidate, traffic_percentage, avg_judge_score, total_evaluations, created_at, updated_at')
+    .order('stage', { ascending: true })
+    .order('version', { ascending: true })
+    .limit(100)
+  promptsQuery = projectIds.length === 0
+    ? promptsQuery.is('project_id', null)
+    : promptsQuery.or(`project_id.is.null,project_id.in.(${projectIds.join(',')})`)
+  const { data: prompts } = await promptsQuery
+
+  // Dataset stats — what reports could the next experiment be evaluated on?
+  let totalReports = 0
+  let labelledReports = 0
+  let recentSamples: Array<{ id: string; description: string; category: string | null; severity: string | null; component: string | null; created_at: string }> = []
+  let fineTuningJobs: Array<{ id: string; status: string; base_model: string | null; training_samples: number | null; created_at: string; project_id: string }> = []
+  if (projectIds.length > 0) {
+    const { count: total } = await db
+      .from('reports')
+      .select('id', { count: 'exact', head: true })
+      .in('project_id', projectIds)
+    totalReports = total ?? 0
+    const { count: labelled } = await db
+      .from('reports')
+      .select('id', { count: 'exact', head: true })
+      .in('project_id', projectIds)
+      .eq('status', 'classified')
+      .not('category', 'is', null)
+    labelledReports = labelled ?? 0
+    const { data: recent } = await db
+      .from('reports')
+      .select('id, description, category, severity, component, created_at')
+      .in('project_id', projectIds)
+      .eq('status', 'classified')
+      .order('created_at', { ascending: false })
+      .limit(8)
+    recentSamples = recent ?? []
+
+    // Surface legacy fine-tuning jobs so operators can clean up the
+    // pre-Prompt-Lab "pending" rows that are otherwise orphaned in the DB.
+    const { data: ft } = await db
+      .from('fine_tuning_jobs')
+      .select('id, project_id, status, base_model, training_samples, created_at')
+      .in('project_id', projectIds)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    fineTuningJobs = ft ?? []
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      prompts: prompts ?? [],
+      dataset: {
+        total: totalReports,
+        labelled: labelledReports,
+        recentSamples,
+      },
+      fineTuningJobs,
+    },
+  })
+})
+
+app.post('/v1/admin/prompt-lab/prompts', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => ({}))
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'You need at least one project to author prompts.' } }, 400)
+  }
+  const stage = body.stage === 'stage1' || body.stage === 'stage2' ? body.stage : null
+  if (!stage) return c.json({ ok: false, error: { code: 'BAD_INPUT', message: 'stage must be stage1 or stage2' } }, 400)
+  const version = String(body.version ?? '').trim()
+  const promptTemplate = String(body.promptTemplate ?? '').trim()
+  if (!version) return c.json({ ok: false, error: { code: 'BAD_INPUT', message: 'version required' } }, 400)
+  if (!promptTemplate) return c.json({ ok: false, error: { code: 'BAD_INPUT', message: 'promptTemplate required' } }, 400)
+  const projectId = body.projectId && projectIds.includes(body.projectId) ? body.projectId : projectIds[0]
+
+  const { data, error } = await db.from('prompt_versions').insert({
+    project_id: projectId,
+    stage,
+    version,
+    prompt_template: promptTemplate,
+    is_candidate: true,
+    is_active: false,
+    traffic_percentage: Math.max(0, Math.min(100, Number(body.trafficPercentage ?? 0))),
+  }).select('id').single()
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
+  await logAudit(db, projectId, userId, 'settings.updated', 'prompt_version', data!.id, { stage, version })
+  return c.json({ ok: true, data: { id: data!.id } })
+})
+
+app.patch('/v1/admin/prompt-lab/prompts/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const id = c.req.param('id')
+  const body = await c.req.json().catch(() => ({}))
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  const { data: existing } = await db
+    .from('prompt_versions')
+    .select('id, project_id, stage')
+    .eq('id', id)
+    .maybeSingle()
+  if (!existing) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+  if (existing.project_id && !projectIds.includes(existing.project_id)) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+  }
+  if (!existing.project_id) {
+    // Global defaults are read-only from the UI to prevent shared corruption.
+    return c.json({ ok: false, error: { code: 'READONLY', message: 'Global default prompts are read-only — clone first.' } }, 409)
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (typeof body.promptTemplate === 'string') updates.prompt_template = body.promptTemplate
+  if (typeof body.trafficPercentage === 'number') updates.traffic_percentage = Math.max(0, Math.min(100, body.trafficPercentage))
+  if (typeof body.isCandidate === 'boolean') updates.is_candidate = body.isCandidate
+
+  // Activating a prompt is exclusive: only one active per (project_id, stage).
+  if (body.isActive === true) {
+    await db
+      .from('prompt_versions')
+      .update({ is_active: false, traffic_percentage: 0 })
+      .eq('project_id', existing.project_id)
+      .eq('stage', existing.stage)
+    updates.is_active = true
+    updates.is_candidate = false
+    if (updates.traffic_percentage == null) updates.traffic_percentage = 100
+  } else if (body.isActive === false) {
+    updates.is_active = false
+  }
+
+  const { error } = await db.from('prompt_versions').update(updates).eq('id', id)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
+  await logAudit(db, existing.project_id, userId, 'settings.updated', 'prompt_version', id, updates)
+  return c.json({ ok: true })
+})
+
+app.delete('/v1/admin/prompt-lab/prompts/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const id = c.req.param('id')
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+  const { data: existing } = await db
+    .from('prompt_versions')
+    .select('id, project_id, is_active')
+    .eq('id', id)
+    .maybeSingle()
+  if (!existing) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+  if (!existing.project_id) {
+    return c.json({ ok: false, error: { code: 'READONLY', message: 'Global default prompts cannot be deleted.' } }, 409)
+  }
+  if (!projectIds.includes(existing.project_id)) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+  }
+  if (existing.is_active) {
+    return c.json({ ok: false, error: { code: 'IN_USE', message: 'Deactivate before deleting.' } }, 409)
+  }
+  const { error } = await db.from('prompt_versions').delete().eq('id', id)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
+  await logAudit(db, existing.project_id, userId, 'settings.updated', 'prompt_version_delete', id, {})
+  return c.json({ ok: true })
 })
 
 // Settings admin endpoints
@@ -1072,17 +1719,21 @@ app.get('/v1/admin/byok', jwtAuth, async (c) => {
   const { data } = await db
     .from('project_settings')
     .select(
-      'byok_anthropic_key_ref, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, ' +
-      'byok_openai_key_ref, byok_openai_key_added_at, byok_openai_key_last_used_at',
+      'byok_anthropic_key_ref, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, byok_anthropic_test_status, byok_anthropic_tested_at, ' +
+      'byok_openai_key_ref, byok_openai_key_added_at, byok_openai_key_last_used_at, byok_openai_base_url, byok_openai_test_status, byok_openai_tested_at',
     )
     .eq('project_id', project.id)
     .single()
 
+  const row = (data as Record<string, unknown> | null) ?? {}
   const keys = BYOK_PROVIDERS.map((provider) => ({
     provider,
-    configured: Boolean((data as Record<string, unknown> | null)?.[`byok_${provider}_key_ref`]),
-    addedAt: (data as Record<string, string | null> | null)?.[`byok_${provider}_key_added_at`] ?? null,
-    lastUsedAt: (data as Record<string, string | null> | null)?.[`byok_${provider}_key_last_used_at`] ?? null,
+    configured: Boolean(row[`byok_${provider}_key_ref`]),
+    addedAt: (row[`byok_${provider}_key_added_at`] as string | null) ?? null,
+    lastUsedAt: (row[`byok_${provider}_key_last_used_at`] as string | null) ?? null,
+    testStatus: (row[`byok_${provider}_test_status`] as string | null) ?? null,
+    testedAt: (row[`byok_${provider}_tested_at`] as string | null) ?? null,
+    baseUrl: provider === 'openai' ? ((row.byok_openai_base_url as string | null) ?? null) : null,
   }))
 
   return c.json({ ok: true, data: { projectId: project.id, keys } })
@@ -1094,10 +1745,28 @@ app.put('/v1/admin/byok/:provider', jwtAuth, async (c) => {
   if (!BYOK_PROVIDERS.includes(provider)) {
     return c.json({ ok: false, error: { code: 'BAD_PROVIDER', message: `Unknown provider: ${provider}` } }, 400)
   }
-  const body = await c.req.json().catch(() => ({}))
+  const body = await c.req.json().catch(() => ({})) as { key?: string; baseUrl?: string | null }
   const key = typeof body?.key === 'string' ? body.key.trim() : ''
   if (key.length < 8) {
     return c.json({ ok: false, error: { code: 'KEY_TOO_SHORT', message: 'Provide the full provider API key.' } }, 400)
+  }
+
+  // baseUrl is OpenAI-only — schema constraint, also a defence against any
+  // request smuggling a surprise field for `anthropic`.
+  const rawBaseUrl = provider === 'openai' && typeof body?.baseUrl === 'string'
+    ? body.baseUrl.trim()
+    : ''
+  let baseUrl: string | null = null
+  if (rawBaseUrl) {
+    try {
+      const u = new URL(rawBaseUrl)
+      if (u.protocol !== 'https:') {
+        return c.json({ ok: false, error: { code: 'BAD_BASE_URL', message: 'baseUrl must be https://' } }, 400)
+      }
+      baseUrl = u.toString().replace(/\/$/, '')
+    } catch {
+      return c.json({ ok: false, error: { code: 'BAD_BASE_URL', message: 'baseUrl is not a valid URL' } }, 400)
+    }
   }
 
   const db = getServiceClient()
@@ -1116,6 +1785,13 @@ app.put('/v1/admin/byok/:provider', jwtAuth, async (c) => {
     [`byok_${provider}_key_ref`]: `vault://${secretName}`,
     [`byok_${provider}_key_added_at`]: now,
     [`byok_${provider}_key_last_used_at`]: null,
+    // Reset the connectivity test cache on every key change — stale "ok"
+    // chips are dangerous; require an explicit re-test after rotation.
+    [`byok_${provider}_test_status`]: null,
+    [`byok_${provider}_tested_at`]: null,
+  }
+  if (provider === 'openai') {
+    update.byok_openai_base_url = baseUrl
   }
   const { error: upsertErr } = await db
     .from('project_settings')
@@ -1167,6 +1843,265 @@ app.delete('/v1/admin/byok/:provider', jwtAuth, async (c) => {
 
   return c.json({ ok: true })
 })
+
+/**
+ * POST /v1/admin/byok/:provider/test
+ *
+ * Probe the BYOK key with the cheapest possible call to confirm:
+ *   1. The key authenticates (not 401/403).
+ *   2. The endpoint is reachable (no DNS/CORS/baseUrl typo).
+ *   3. There's quota left (not 429).
+ *
+ * Persists the outcome (ok / error_auth / error_network / error_quota) to
+ * project_settings so the chip stays accurate across reloads. Never logs the
+ * key, only the last 4 chars (the BYOK resolver hint).
+ *
+ * Cost: ~ $0.0001 — uses Anthropic /v1/models or OpenAI /v1/models, both of
+ * which are free metadata calls.
+ */
+app.post('/v1/admin/byok/:provider/test', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const provider = c.req.param('provider') as ByokProvider
+  if (!BYOK_PROVIDERS.includes(provider)) {
+    return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400)
+  }
+
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  // Reuse the same resolver path the LLM pipeline takes. If this returns null
+  // the user has no BYOK and no env fallback — surface that as 'untested'.
+  const { resolveLlmKey } = await import('../_shared/byok.ts')
+  const resolved = await resolveLlmKey(db, project.id, provider)
+  if (!resolved) {
+    return c.json({ ok: false, error: { code: 'NO_KEY', message: 'No BYOK key set and no platform default available.' } }, 400)
+  }
+
+  const startedAt = Date.now()
+  let status: 'ok' | 'error_auth' | 'error_network' | 'error_quota' = 'ok'
+  let detail = ''
+  let httpStatus = 0
+
+  try {
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/models', {
+        method: 'GET',
+        headers: {
+          'x-api-key': resolved.key,
+          'anthropic-version': '2023-06-01',
+        },
+        signal: AbortSignal.timeout(8_000),
+      })
+      httpStatus = res.status
+      if (res.status === 401 || res.status === 403) status = 'error_auth'
+      else if (res.status === 429) status = 'error_quota'
+      else if (!res.ok) {
+        status = 'error_network'
+        detail = `HTTP ${res.status}`
+      }
+    } else {
+      // BYOK base URLs come in two flavors:
+      //   - "https://api.openai.com" (no version) → append "/v1/models"
+      //   - "https://openrouter.ai/api/v1" (already versioned) → append "/models"
+      // Detect either form so OpenRouter / Together / Fireworks all probe
+      // their actual /models endpoint instead of /v1/v1/models (404).
+      const rawBase = (resolved.baseUrl ?? 'https://api.openai.com').replace(/\/$/, '')
+      const modelsUrl = /\/v\d+$/.test(rawBase) ? `${rawBase}/models` : `${rawBase}/v1/models`
+      const res = await fetch(modelsUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${resolved.key}` },
+        signal: AbortSignal.timeout(8_000),
+      })
+      httpStatus = res.status
+      if (res.status === 401 || res.status === 403) status = 'error_auth'
+      else if (res.status === 429) status = 'error_quota'
+      else if (!res.ok) {
+        status = 'error_network'
+        detail = `HTTP ${res.status}`
+      }
+    }
+  } catch (err) {
+    status = 'error_network'
+    detail = String(err).slice(0, 200)
+  }
+
+  const latencyMs = Date.now() - startedAt
+  const now = new Date().toISOString()
+  await db
+    .from('project_settings')
+    .upsert({
+      project_id: project.id,
+      [`byok_${provider}_test_status`]: status,
+      [`byok_${provider}_tested_at`]: now,
+    }, { onConflict: 'project_id' })
+
+  // Mirror to integration_health_history so the IntegrationsPage sparkline
+  // shows BYOK key probes alongside Sentry/Langfuse/GitHub.
+  await db.from('integration_health_history').insert({
+    project_id: project.id,
+    kind: provider,
+    status: status === 'ok' ? 'ok' : (status === 'error_quota' ? 'degraded' : 'down'),
+    latency_ms: latencyMs,
+    message: detail || `HTTP ${httpStatus}`,
+    source: 'manual',
+  })
+
+  return c.json({
+    ok: true,
+    data: {
+      provider,
+      status,
+      hint: resolved.hint,
+      source: resolved.source,
+      baseUrl: resolved.baseUrl ?? null,
+      httpStatus,
+      latencyMs,
+      detail,
+      testedAt: now,
+    },
+  })
+})
+
+// ============================================================
+// INTEGRATION HEALTH (V5.3 §2.18) — admin probe + history
+// ============================================================
+//
+// One endpoint per non-LLM integration. Each test does the smallest possible
+// authenticated request against the provider, records the result in
+// integration_health_history, and returns a structured payload for the UI.
+//
+// Why per-provider rather than a generic /v1/admin/health/:kind: every
+// provider has a different "is alive" call (Sentry needs the org slug,
+// Langfuse needs the public key as a basic-auth header, GitHub needs a
+// bearer token + repo). Generic adapters end up as a giant switch
+// statement anyway — keeping them named makes the code grep-friendly.
+
+const INTEGRATION_KINDS = ['sentry', 'langfuse', 'github'] as const
+type IntegrationKind = typeof INTEGRATION_KINDS[number]
+
+app.post('/v1/admin/health/integration/:kind', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const kind = c.req.param('kind') as IntegrationKind
+  if (!INTEGRATION_KINDS.includes(kind)) {
+    return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400)
+  }
+
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const { data: settings } = await db
+    .from('project_settings')
+    .select('sentry_org_slug, sentry_project_slug, sentry_auth_token_ref, sentry_dsn, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref')
+    .eq('project_id', project.id)
+    .single()
+
+  const startedAt = Date.now()
+  let healthStatus: 'ok' | 'degraded' | 'down' | 'unknown' = 'unknown'
+  let detail = ''
+  let httpStatus = 0
+
+  try {
+    if (kind === 'sentry') {
+      const token = await dereferenceMaybeVault(db, settings?.sentry_auth_token_ref ?? null)
+      const org = settings?.sentry_org_slug
+      if (!token || !org) {
+        healthStatus = 'unknown'
+        detail = 'Set sentry_org_slug and sentry_auth_token in Integrations to enable health checks.'
+      } else {
+        const res = await fetch(`https://sentry.io/api/0/organizations/${encodeURIComponent(org)}/`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        healthStatus = res.ok ? 'ok' : (res.status === 401 || res.status === 403 ? 'down' : 'degraded')
+        if (!res.ok) detail = `HTTP ${res.status}`
+      }
+    } else if (kind === 'langfuse') {
+      const host = settings?.langfuse_host || Deno.env.get('LANGFUSE_BASE_URL') || 'https://cloud.langfuse.com'
+      const pub = await dereferenceMaybeVault(db, settings?.langfuse_public_key_ref ?? null) || Deno.env.get('LANGFUSE_PUBLIC_KEY') || ''
+      const sec = await dereferenceMaybeVault(db, settings?.langfuse_secret_key_ref ?? null) || Deno.env.get('LANGFUSE_SECRET_KEY') || ''
+      if (!pub || !sec) {
+        healthStatus = 'unknown'
+        detail = 'Add Langfuse public + secret keys (or set env vars on the host).'
+      } else {
+        const auth = btoa(`${pub}:${sec}`)
+        const res = await fetch(`${host.replace(/\/$/, '')}/api/public/health`, {
+          headers: { 'Authorization': `Basic ${auth}` },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        healthStatus = res.ok ? 'ok' : (res.status === 401 ? 'down' : 'degraded')
+        if (!res.ok) detail = `HTTP ${res.status}`
+      }
+    } else if (kind === 'github') {
+      const token = await dereferenceMaybeVault(db, settings?.github_installation_token_ref ?? null) || Deno.env.get('GITHUB_TOKEN') || ''
+      const url = settings?.github_repo_url ?? ''
+      // Repo names can contain dots (e.g. glot.it). Strip optional trailing
+      // `.git` and capture everything up to the next `/` or end-of-string.
+      const match = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/)
+      if (!token || !match) {
+        healthStatus = 'unknown'
+        detail = 'Add github_repo_url and a GitHub App / PAT installation token.'
+      } else {
+        const [, owner, repo] = match
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'mushi-mushi-health-probe/1.0',
+          },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        healthStatus = res.ok ? 'ok' : (res.status === 401 || res.status === 403 || res.status === 404 ? 'down' : 'degraded')
+        if (!res.ok) detail = `HTTP ${res.status}`
+      }
+    }
+  } catch (err) {
+    healthStatus = 'down'
+    detail = String(err).slice(0, 200)
+  }
+
+  const latencyMs = Date.now() - startedAt
+  await db.from('integration_health_history').insert({
+    project_id: project.id,
+    kind,
+    status: healthStatus,
+    latency_ms: latencyMs,
+    message: detail || (httpStatus ? `HTTP ${httpStatus}` : null),
+    source: 'manual',
+  })
+
+  return c.json({ ok: true, data: { kind, status: healthStatus, httpStatus, latencyMs, detail } })
+})
+
+app.get('/v1/admin/health/history', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: true, data: { history: [] } })
+
+  const { data } = await db
+    .from('integration_health_history')
+    .select('id, kind, status, latency_ms, message, source, checked_at')
+    .eq('project_id', project.id)
+    .order('checked_at', { ascending: false })
+    .limit(200)
+
+  return c.json({ ok: true, data: { history: data ?? [] } })
+})
+
+async function dereferenceMaybeVault(db: ReturnType<typeof getServiceClient>, ref: string | null): Promise<string | null> {
+  if (!ref) return null
+  if (!ref.startsWith('vault://')) return ref
+  const id = ref.slice('vault://'.length)
+  const { data, error } = await db.rpc('vault_get_secret', { secret_id: id })
+  if (error) return null
+  return typeof data === 'string' ? data : null
+}
 
 // Projects admin endpoints
 app.get('/v1/admin/projects', jwtAuth, async (c) => {
@@ -1224,6 +2159,13 @@ app.post('/v1/admin/projects', jwtAuth, async (c) => {
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
 
   await db.from('project_settings').insert({ project_id: data.id })
+  // Membership is the source-of-truth for "can this user dispatch fixes /
+  // see traces / etc". Without this row the owner can read via owner_id but
+  // member-gated endpoints (fixes/dispatch) reject them. Always seed.
+  await db.from('project_members').upsert(
+    { project_id: data.id, user_id: userId, role: 'owner' },
+    { onConflict: 'project_id,user_id' },
+  )
 
   return c.json({ ok: true, data: { id: data.id, slug } }, 201)
 })
@@ -1331,20 +2273,94 @@ app.get('/v1/admin/queue', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
 
-  const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
-  const projectIds = projects?.map(p => p.id) ?? []
-  if (projectIds.length === 0) return c.json({ ok: true, data: { items: [], total: 0 } })
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { items: [], total: 0, page: 1, pageSize: 50 } })
+  }
 
   const status = c.req.query('status') ?? 'dead_letter'
-  const { data: items, count } = await db
+  const stage = c.req.query('stage')
+  const page = Math.max(1, Number(c.req.query('page') ?? 1))
+  const pageSize = Math.min(100, Math.max(10, Number(c.req.query('pageSize') ?? 25)))
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  let query = db
     .from('processing_queue')
     .select('*, reports(description, user_category, created_at)', { count: 'exact' })
     .in('project_id', projectIds)
     .eq('status', status)
     .order('created_at', { ascending: false })
-    .limit(50)
+    .range(from, to)
+  if (stage) query = query.eq('stage', stage)
 
-  return c.json({ ok: true, data: { items: items ?? [], total: count ?? 0 } })
+  const { data: items, count } = await query
+  return c.json({
+    ok: true,
+    data: { items: items ?? [], total: count ?? 0, page, pageSize },
+  })
+})
+
+// Counts per stage/status so the queue page can show "where is the
+// backlog" at a glance without paginating through everything.
+app.get('/v1/admin/queue/summary', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { byStatus: {}, byStage: {}, stages: [] } })
+  }
+  const { data } = await db
+    .from('processing_queue')
+    .select('stage, status')
+    .in('project_id', projectIds)
+    .limit(5000)
+  const byStatus: Record<string, number> = {}
+  const byStage: Record<string, Record<string, number>> = {}
+  for (const r of data ?? []) {
+    byStatus[r.status] = (byStatus[r.status] ?? 0) + 1
+    byStage[r.stage] ??= {}
+    byStage[r.stage][r.status] = (byStage[r.stage][r.status] ?? 0) + 1
+  }
+  return c.json({
+    ok: true,
+    data: { byStatus, byStage, stages: Object.keys(byStage).sort() },
+  })
+})
+
+// 14-day daily throughput across all stages — Pending/Completed/Failed.
+// Drives the sparkline at the top of the queue page.
+app.get('/v1/admin/queue/throughput', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { days: [] } })
+  const since = new Date()
+  since.setUTCDate(since.getUTCDate() - 13)
+  since.setUTCHours(0, 0, 0, 0)
+  const { data } = await db
+    .from('processing_queue')
+    .select('status, created_at, completed_at')
+    .in('project_id', projectIds)
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: true })
+    .limit(5000)
+  const days: { day: string; created: number; completed: number; failed: number }[] = []
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(since)
+    d.setUTCDate(since.getUTCDate() + i)
+    days.push({ day: d.toISOString().slice(0, 10), created: 0, completed: 0, failed: 0 })
+  }
+  const byDay = new Map(days.map((d) => [d.day, d]))
+  for (const r of data ?? []) {
+    const k = String(r.created_at).slice(0, 10)
+    const bucket = byDay.get(k)
+    if (!bucket) continue
+    bucket.created++
+    if (r.status === 'completed') bucket.completed++
+    if (r.status === 'failed' || r.status === 'dead_letter') bucket.failed++
+  }
+  return c.json({ ok: true, data: { days } })
 })
 
 app.post('/v1/admin/queue/:id/retry', jwtAuth, async (c) => {
@@ -1384,13 +2400,54 @@ app.get('/v1/admin/graph/nodes', jwtAuth, async (c) => {
   const db = getServiceClient()
   const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
   const projectIds = projects?.map(p => p.id) ?? []
+  if (projectIds.length === 0) return c.json({ ok: true, data: { nodes: [] } })
 
   const nodeType = c.req.query('type')
-  let query = db.from('graph_nodes').select('id, project_id, node_type, label, metadata, last_traversed_at, created_at').in('project_id', projectIds).limit(200)
+  let query = db
+    .from('graph_nodes')
+    .select('id, project_id, node_type, label, metadata, last_traversed_at, created_at')
+    .in('project_id', projectIds)
+    .limit(200)
   if (nodeType) query = query.eq('node_type', nodeType)
 
-  const { data } = await query.order('created_at', { ascending: false })
-  return c.json({ ok: true, data: { nodes: data ?? [] } })
+  const { data: nodes } = await query.order('created_at', { ascending: false })
+  if (!nodes || nodes.length === 0) return c.json({ ok: true, data: { nodes: [] } })
+
+  // Compute occurrence_count for component / page nodes by joining against
+  // reports. Done in JS to avoid an N+1 — single SELECT, in-memory bucketing.
+  // The graph page uses this to size and rank nodes.
+  const componentLabels = nodes.filter(n => n.node_type === 'component').map(n => n.label)
+  const pageLabels = nodes.filter(n => n.node_type === 'page').map(n => n.label)
+
+  const counts = new Map<string, number>()
+  if (componentLabels.length > 0 || pageLabels.length > 0) {
+    const { data: reportRows } = await db
+      .from('reports')
+      .select('component, url, project_id')
+      .in('project_id', projectIds)
+    for (const r of reportRows ?? []) {
+      if (r.component) counts.set(`component:${r.component}`, (counts.get(`component:${r.component}`) ?? 0) + 1)
+      if (r.url) {
+        try {
+          const path = new URL(r.url).pathname
+          counts.set(`page:${path}`, (counts.get(`page:${path}`) ?? 0) + 1)
+        } catch {
+          // url may be relative; just use it as-is
+          counts.set(`page:${r.url}`, (counts.get(`page:${r.url}`) ?? 0) + 1)
+        }
+      }
+    }
+  }
+
+  const enriched = nodes.map(n => {
+    const occ = counts.get(`${n.node_type}:${n.label}`) ?? 0
+    const meta = (n.metadata && typeof n.metadata === 'object' && !Array.isArray(n.metadata))
+      ? { ...(n.metadata as Record<string, unknown>), occurrence_count: occ }
+      : { occurrence_count: occ }
+    return { ...n, metadata: meta }
+  })
+
+  return c.json({ ok: true, data: { nodes: enriched } })
 })
 
 app.get('/v1/admin/graph/edges', jwtAuth, async (c) => {
@@ -1465,12 +2522,59 @@ app.post('/v1/admin/query', jwtAuth, async (c) => {
   const projectIds = projects?.map(p => p.id) ?? []
   if (!projectIds.length) return c.json({ ok: true, data: { results: [], summary: 'No projects found.' } })
 
+  const startedAt = Date.now()
   try {
     const result = await executeNaturalLanguageQuery(db, projectIds, question)
-    return c.json({ ok: true, data: result })
+    const latencyMs = Date.now() - startedAt
+    // Persist on success — best-effort; if the insert fails we still return
+    // the answer so the user isn't blocked on telemetry.
+    db.from('nl_query_history').insert({
+      project_id: projectIds[0] ?? null,
+      user_id: userId,
+      prompt: question,
+      sql: result.sql,
+      summary: result.summary,
+      explanation: result.explanation,
+      row_count: Array.isArray(result.results) ? result.results.length : 0,
+      latency_ms: latencyMs,
+    }).then(({ error }) => { if (error) console.warn('[nl_query_history] insert failed:', error.message) })
+
+    return c.json({ ok: true, data: { ...result, latencyMs } })
   } catch (err) {
-    return c.json({ ok: false, error: { code: 'QUERY_ERROR', message: String(err) } }, 400)
+    const message = err instanceof Error ? err.message : String(err)
+    const latencyMs = Date.now() - startedAt
+    db.from('nl_query_history').insert({
+      project_id: projectIds[0] ?? null,
+      user_id: userId,
+      prompt: question,
+      error: message,
+      latency_ms: latencyMs,
+    }).then(({ error }) => { if (error) console.warn('[nl_query_history] insert failed:', error.message) })
+    return c.json({ ok: false, error: { code: 'QUERY_ERROR', message } }, 400)
   }
+})
+
+app.get('/v1/admin/query/history', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 20), 1), 100)
+  const { data, error } = await db
+    .from('nl_query_history')
+    .select('id, project_id, prompt, sql, summary, explanation, row_count, error, latency_ms, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { history: data ?? [] } })
+})
+
+app.delete('/v1/admin/query/history/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const id = c.req.param('id')
+  const db = getServiceClient()
+  const { error } = await db.from('nl_query_history').delete().eq('id', id).eq('user_id', userId)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { deleted: id } })
 })
 
 // ============================================================
@@ -1542,12 +2646,20 @@ app.get('/v1/admin/verifications', jwtAuth, async (c) => {
 app.get('/v1/admin/fixes', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
-  const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
-  const projectIds = projects?.map(p => p.id) ?? []
+  // Use project_members so collaborators (not just owner_id) see fixes for
+  // projects they belong to. Mirrors the membership pattern in dispatches.
+  const { data: memberships } = await db
+    .from('project_members')
+    .select('project_id')
+    .eq('user_id', userId)
+  const projectIds = (memberships ?? []).map(m => m.project_id)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } })
 
   const { data } = await db
     .from('fix_attempts')
-    .select('id, report_id, project_id, agent, branch, pr_url, commit_sha, status, files_changed, lines_changed, summary, review_passed, started_at, completed_at, created_at')
+    .select(
+      'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, error',
+    )
     .in('project_id', projectIds)
     .order('started_at', { ascending: false })
     .limit(50)
@@ -1583,6 +2695,65 @@ app.post('/v1/admin/fixes', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { fixId: fix!.id } })
 })
 
+// Aggregate KPIs for the Fixes page header — last 30 days.
+// MUST be registered before /v1/admin/fixes/:id so Hono doesn't match
+// the literal "summary" segment as a fix id.
+app.get('/v1/admin/fixes/summary', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { total: 0, completed: 0, failed: 0, inProgress: 0, prsOpen: 0, prsMerged: 0, days: [] } })
+  }
+  const since = new Date()
+  since.setUTCDate(since.getUTCDate() - 29)
+  since.setUTCHours(0, 0, 0, 0)
+
+  const { data: rows } = await db
+    .from('fix_attempts')
+    .select('id, status, pr_url, pr_number, check_run_conclusion, started_at, completed_at, created_at')
+    .in('project_id', projectIds)
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: true })
+    .limit(500)
+
+  const list = rows ?? []
+  const completed = list.filter(r => r.status === 'completed').length
+  const failed = list.filter(r => r.status === 'failed').length
+  const inProgress = list.filter(r => r.status === 'queued' || r.status === 'running' || r.status === 'pending').length
+  const prsOpen = list.filter(r => r.pr_url && r.status === 'completed' && r.check_run_conclusion !== 'merged').length
+  const prsMerged = list.filter(r => r.check_run_conclusion === 'success').length
+
+  const days: { day: string; total: number; completed: number; failed: number }[] = []
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(since)
+    d.setUTCDate(since.getUTCDate() + i)
+    days.push({ day: d.toISOString().slice(0, 10), total: 0, completed: 0, failed: 0 })
+  }
+  const byDay = new Map(days.map(d => [d.day, d]))
+  for (const r of list) {
+    const k = String(r.created_at).slice(0, 10)
+    const bucket = byDay.get(k)
+    if (!bucket) continue
+    bucket.total++
+    if (r.status === 'completed') bucket.completed++
+    if (r.status === 'failed') bucket.failed++
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      total: list.length,
+      completed,
+      failed,
+      inProgress,
+      prsOpen,
+      prsMerged,
+      days,
+    },
+  })
+})
+
 app.get('/v1/admin/fixes/:id', jwtAuth, async (c) => {
   const fixId = c.req.param('id')
   const userId = c.get('userId') as string
@@ -1592,6 +2763,125 @@ app.get('/v1/admin/fixes/:id', jwtAuth, async (c) => {
   const { data } = await db.from('fix_attempts').select('id, report_id, project_id, agent, branch, pr_url, commit_sha, status, files_changed, lines_changed, summary, review_passed, review_reasoning, error, started_at, completed_at, created_at').eq('id', fixId).in('project_id', projectIds).single()
   if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404)
   return c.json({ ok: true, data })
+})
+
+// PDCA timeline for a single fix attempt — merges fix_dispatch_jobs +
+// fix_attempts + check-run signals into an ordered event stream so the UI
+// can render a real branch graph.
+app.get('/v1/admin/fixes/:id/timeline', jwtAuth, async (c) => {
+  const fixId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404)
+
+  const { data: fix } = await db
+    .from('fix_attempts')
+    .select('id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, lines_changed, files_changed, llm_model, started_at, completed_at, created_at, check_run_status, check_run_conclusion, check_run_updated_at, error')
+    .eq('id', fixId)
+    .in('project_id', projectIds)
+    .single()
+  if (!fix) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Fix not found' } }, 404)
+
+  const { data: dispatch } = await db
+    .from('fix_dispatch_jobs')
+    .select('id, status, created_at, started_at, finished_at, error')
+    .eq('fix_attempt_id', fixId)
+    .maybeSingle()
+
+  type EventKind = 'dispatched' | 'started' | 'branch' | 'commit' | 'pr_opened' | 'ci_started' | 'ci_resolved' | 'completed' | 'failed'
+  interface TimelineEvent {
+    kind: EventKind
+    at: string
+    label: string
+    detail?: string | null
+    status?: 'ok' | 'fail' | 'pending' | null
+  }
+  const events: TimelineEvent[] = []
+
+  if (dispatch) {
+    events.push({
+      kind: 'dispatched',
+      at: dispatch.created_at,
+      label: 'Dispatch requested',
+      status: 'pending',
+    })
+    if (dispatch.started_at) {
+      events.push({ kind: 'started', at: dispatch.started_at, label: 'Worker started', status: 'pending' })
+    }
+  } else if (fix.created_at) {
+    events.push({ kind: 'dispatched', at: fix.created_at, label: 'Fix attempt created', status: 'pending' })
+  }
+
+  if (fix.started_at) {
+    events.push({
+      kind: 'started',
+      at: fix.started_at,
+      label: 'Agent started',
+      detail: fix.llm_model,
+      status: 'pending',
+    })
+  }
+  if (fix.branch) {
+    events.push({
+      kind: 'branch',
+      at: fix.started_at ?? fix.created_at,
+      label: 'Branch created',
+      detail: fix.branch,
+      status: 'ok',
+    })
+  }
+  if (fix.commit_sha) {
+    events.push({
+      kind: 'commit',
+      at: fix.completed_at ?? fix.started_at ?? fix.created_at,
+      label: `Commit ${fix.commit_sha.slice(0, 7)}`,
+      detail: `${fix.files_changed?.length ?? 0} files · ${fix.lines_changed ?? 0} lines`,
+      status: 'ok',
+    })
+  }
+  if (fix.pr_url) {
+    events.push({
+      kind: 'pr_opened',
+      at: fix.completed_at ?? fix.started_at ?? fix.created_at,
+      label: `PR opened${fix.pr_number ? ` #${fix.pr_number}` : ''}`,
+      detail: fix.pr_url,
+      status: 'ok',
+    })
+  }
+  if (fix.check_run_status || fix.check_run_conclusion) {
+    const conclusion = (fix.check_run_conclusion ?? '').toLowerCase()
+    const ciStatus: 'ok' | 'fail' | 'pending' =
+      conclusion === 'success' ? 'ok' : conclusion === 'failure' || conclusion === 'cancelled' ? 'fail' : 'pending'
+    events.push({
+      kind: ciStatus === 'pending' ? 'ci_started' : 'ci_resolved',
+      at: fix.check_run_updated_at ?? fix.completed_at ?? fix.started_at ?? fix.created_at,
+      label: ciStatus === 'pending'
+        ? `CI ${fix.check_run_status?.replace(/_/g, ' ') ?? 'running'}`
+        : `CI ${conclusion}`,
+      status: ciStatus,
+    })
+  }
+  if (fix.status === 'completed') {
+    events.push({
+      kind: 'completed',
+      at: fix.completed_at ?? new Date().toISOString(),
+      label: 'Fix completed',
+      status: 'ok',
+    })
+  } else if (fix.status === 'failed') {
+    events.push({
+      kind: 'failed',
+      at: fix.completed_at ?? new Date().toISOString(),
+      label: 'Fix failed',
+      detail: fix.error,
+      status: 'fail',
+    })
+  }
+
+  events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+
+  return c.json({ ok: true, data: { fix, dispatch, events } })
 })
 
 app.patch('/v1/admin/fixes/:id', jwtAuth, async (c) => {
@@ -1878,6 +3168,29 @@ app.post('/v1/admin/fine-tuning/:id/reject', jwtAuth, async (c) => {
   return c.json({ ok: true })
 })
 
+// Allow operators to nuke an aborted/stuck row (e.g. the three "pending" rows
+// created before the export pipeline was wired up). Safe to delete because
+// fine-tuning artifacts live in storage, not on this row.
+app.delete('/v1/admin/fine-tuning/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const jobId = c.req.param('id')
+  const db = getServiceClient()
+
+  const { data: job } = await db.from('fine_tuning_jobs').select('id, project_id, status').eq('id', jobId).single()
+  if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: project } = await db.from('projects').select('id').eq('id', job.project_id).eq('owner_id', userId).single()
+  if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  const { error } = await db.from('fine_tuning_jobs').delete().eq('id', jobId)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  await logAudit(db, job.project_id, userId, 'settings.updated', 'fine_tuning_delete', jobId, {
+    previous_status: job.status,
+  }).catch(() => {})
+  return c.json({ ok: true })
+})
+
 // ============================================================
 // PHASE 5: INTEGRATIONS, PLUGINS, SYNTHETIC, INTELLIGENCE
 // ============================================================
@@ -1910,6 +3223,123 @@ app.post('/v1/admin/integrations', jwtAuth, async (c) => {
 
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
   await logAudit(db, project.id, userId, 'settings.updated', 'integration', undefined, { type: body.type })
+  return c.json({ ok: true })
+})
+
+// ----- Platform integrations (Sentry / Langfuse / GitHub) ---------------
+// These are V5.3 §2.18 first-party integrations. Unlike Jira/Linear (which
+// live in project_integrations as routing destinations), Sentry/Langfuse/GH
+// are observability/code surfaces that the LLM pipeline + fix-worker need
+// directly. They live in project_settings so the existing readers
+// (resolveLlmKey, fix-worker, fast-filter) pick them up without joins.
+
+const PLATFORM_KIND_FIELDS: Record<IntegrationKind, string[]> = {
+  sentry: ['sentry_org_slug', 'sentry_project_slug', 'sentry_auth_token_ref', 'sentry_dsn', 'sentry_seer_enabled', 'sentry_webhook_secret', 'sentry_consume_user_feedback'],
+  langfuse: ['langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref'],
+  github: ['github_repo_url', 'github_default_branch', 'github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
+}
+
+app.get('/v1/admin/integrations/platform', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: true, data: { platform: null } })
+
+  const allFields = Object.values(PLATFORM_KIND_FIELDS).flat().join(', ')
+  const { data: settings } = await db
+    .from('project_settings')
+    .select(allFields)
+    .eq('project_id', project.id)
+    .maybeSingle()
+
+  // Mask secret-shaped values; we only return whether a credential is set,
+  // never the value itself. The UI shows "configured" badges, not secrets.
+  const maskField = (k: string, v: unknown): unknown => {
+    if (v == null) return null
+    if (k.endsWith('_ref') || k.endsWith('_secret') || k.endsWith('_token') || k.endsWith('_key')) {
+      return typeof v === 'string' ? `…${v.slice(-4)}` : '****'
+    }
+    return v
+  }
+
+  const platform: Record<string, Record<string, unknown>> = {}
+  for (const kind of INTEGRATION_KINDS) {
+    platform[kind] = {}
+    for (const f of PLATFORM_KIND_FIELDS[kind]) {
+      platform[kind][f] = maskField(f, (settings as Record<string, unknown> | null)?.[f])
+    }
+  }
+
+  return c.json({ ok: true, data: { platform } })
+})
+
+// Fields that should be auto-vaulted: when the user submits a raw secret
+// value, write it to Supabase Vault and persist `vault://<name>` instead.
+// This matches the BYOK pattern and prevents secrets from sitting plaintext
+// in project_settings.
+const VAULTED_FIELDS_BY_KIND: Record<IntegrationKind, string[]> = {
+  sentry: ['sentry_auth_token_ref', 'sentry_webhook_secret'],
+  langfuse: ['langfuse_public_key_ref', 'langfuse_secret_key_ref'],
+  github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
+}
+
+app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const kind = c.req.param('kind') as IntegrationKind
+  if (!INTEGRATION_KINDS.includes(kind)) {
+    return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400)
+  }
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>
+
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const allowed = PLATFORM_KIND_FIELDS[kind]
+  const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? [])
+  // Only persist whitelisted fields. Empty strings clear the value (so the
+  // UI can offer a "remove" affordance without a separate DELETE endpoint).
+  // Masked values from GET ("…abcd") are silently ignored so a partial form
+  // submit doesn't replace a real key with a masked one.
+  const updates: Record<string, unknown> = { project_id: project.id }
+  for (const k of allowed) {
+    if (!(k in body)) continue
+    const v = body[k]
+    if (typeof v === 'string' && v.startsWith('…') && v.length <= 6) continue
+
+    if (v === '' || v === null) {
+      updates[k] = null
+      continue
+    }
+
+    if (vaulted.has(k) && typeof v === 'string' && !v.startsWith('vault://')) {
+      // Auto-vault: write the raw secret to Supabase Vault and store the ref.
+      const secretName = `mushi/integration/${project.id}/${kind}/${k}`
+      const { error: vaultErr } = await db.rpc('vault_store_secret', { secret_name: secretName, secret_value: v })
+      if (vaultErr) {
+        // Vault may not be installed in dev — degrade gracefully but warn.
+        console.warn('[integrations] vault_store_secret failed; persisting raw value', { kind, field: k, err: vaultErr.message })
+        updates[k] = v
+      } else {
+        updates[k] = `vault://${secretName}`
+      }
+    } else {
+      updates[k] = v
+    }
+  }
+
+  if (Object.keys(updates).length === 1) {
+    return c.json({ ok: false, error: { code: 'NO_FIELDS', message: 'No editable fields supplied for this integration kind.' } }, 400)
+  }
+
+  const { error } = await db
+    .from('project_settings')
+    .upsert(updates, { onConflict: 'project_id' })
+
+  if (error) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
+  }
+  await logAudit(db, project.id, userId, 'settings.updated', 'integration_platform', undefined, { kind })
   return c.json({ ok: true })
 })
 
@@ -2063,22 +3493,137 @@ app.get('/v1/admin/synthetic', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { reports: data ?? [] } })
 })
 
+// Async generation: enqueue a job, kick the worker fire-and-forget, return
+// the job id immediately. The page polls /v1/admin/intelligence/jobs and
+// shows a progress card. Avoids the 30s+ "spinner forever" symptom users hit
+// when the call was synchronous.
 app.post('/v1/admin/intelligence', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
   if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404)
 
-  const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/intelligence-report`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ projectId: project.id, trigger: 'manual' }),
-  })
-  const result = await res.json()
-  return c.json({ ok: true, data: result.data })
+  // De-dupe: if there's already a queued/running job for this user+project,
+  // return it instead of stacking duplicates that would burn LLM credits.
+  const { data: existing } = await db
+    .from('intelligence_generation_jobs')
+    .select('id, status')
+    .eq('project_id', project.id)
+    .in('status', ['queued', 'running'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (existing) {
+    return c.json({ ok: true, data: { jobId: existing.id, deduplicated: true } })
+  }
+
+  const { data: job, error: insertErr } = await db
+    .from('intelligence_generation_jobs')
+    .insert({
+      project_id: project.id,
+      requested_by: userId,
+      trigger: 'manual',
+      status: 'queued',
+    })
+    .select('id')
+    .single()
+  if (insertErr || !job) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: insertErr?.message ?? 'Failed to enqueue' } }, 500)
+  }
+
+  // Kick the worker without awaiting — it does its own status updates.
+  // We deliberately don't `await` here so the user doesn't wait for the LLM.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (supabaseUrl && serviceKey) {
+    void (async () => {
+      const startedAt = new Date().toISOString()
+      await db.from('intelligence_generation_jobs').update({ status: 'running', started_at: startedAt }).eq('id', job.id)
+      try {
+        const ctrl = new AbortController()
+        // Hard ceiling so a misconfigured BYOK key never wedges the job row.
+        const timeout = setTimeout(() => ctrl.abort(), 90_000)
+        const res = await fetch(`${supabaseUrl}/functions/v1/intelligence-report`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ projectId: project.id, trigger: 'manual', jobId: job.id }),
+          signal: ctrl.signal,
+        })
+        clearTimeout(timeout)
+        const finishedAt = new Date().toISOString()
+        if (!res.ok) {
+          const errText = await res.text().catch(() => `HTTP ${res.status}`)
+          await db.from('intelligence_generation_jobs').update({
+            status: 'failed',
+            error: errText.slice(0, 500),
+            finished_at: finishedAt,
+          }).eq('id', job.id)
+          return
+        }
+        const payload = await res.json().catch(() => ({}))
+        const firstReportId = Array.isArray(payload?.data?.reportIds)
+          ? payload.data.reportIds[0] ?? null
+          : null
+        await db.from('intelligence_generation_jobs').update({
+          status: 'completed',
+          report_id: firstReportId,
+          finished_at: finishedAt,
+        }).eq('id', job.id)
+      } catch (err) {
+        await db.from('intelligence_generation_jobs').update({
+          status: 'failed',
+          error: err instanceof Error ? err.message.slice(0, 500) : String(err).slice(0, 500),
+          finished_at: new Date().toISOString(),
+        }).eq('id', job.id)
+      }
+    })()
+  }
+
+  return c.json({ ok: true, data: { jobId: job.id } })
+})
+
+app.get('/v1/admin/intelligence/jobs', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { jobs: [] } })
+  const { data } = await db
+    .from('intelligence_generation_jobs')
+    .select('id, project_id, status, trigger, report_id, error, created_at, started_at, finished_at')
+    .in('project_id', projectIds)
+    .order('created_at', { ascending: false })
+    .limit(20)
+  return c.json({ ok: true, data: { jobs: data ?? [] } })
+})
+
+app.post('/v1/admin/intelligence/jobs/:id/cancel', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const id = c.req.param('id')
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+  const { data: job } = await db
+    .from('intelligence_generation_jobs')
+    .select('id, project_id, status')
+    .eq('id', id)
+    .maybeSingle()
+  if (!job || !projectIds.includes(job.project_id)) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+  }
+  if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+    return c.json({ ok: false, error: { code: 'TERMINAL', message: `Job is already ${job.status}` } }, 409)
+  }
+  // We can't actually halt the in-flight LLM call (Supabase Edge Functions
+  // don't expose process control), but flipping the row to cancelled stops
+  // the UI from polling and prevents any further enqueue dedupe.
+  await db
+    .from('intelligence_generation_jobs')
+    .update({ status: 'cancelled', finished_at: new Date().toISOString() })
+    .eq('id', id)
+  return c.json({ ok: true })
 })
 
 // V5.3 §2.16 — list & download persisted intelligence reports.
@@ -2225,7 +3770,7 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
   const { data: invocations } = await db
     .from('llm_invocations')
-    .select('function_name, used_model, primary_model, fallback_used, status, latency_ms, input_tokens, output_tokens, created_at')
+    .select('function_name, used_model, primary_model, fallback_used, status, latency_ms, input_tokens, output_tokens, created_at, langfuse_trace_id, report_id, key_source')
     .in('project_id', projectIds)
     .gte('created_at', since)
     .order('created_at', { ascending: false })
@@ -2598,7 +4143,16 @@ app.get('/v1/admin/residency', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const projectIds = await ownedProjectIds(db, userId)
-  if (projectIds.length === 0) return c.json({ ok: true, projects: [], currentRegion: currentRegion() })
+  if (projectIds.length === 0) {
+    // Keep both shapes for backward-compat with any client that read the
+    // top-level fields, plus the canonical `data` envelope apiFetch expects.
+    return c.json({
+      ok: true,
+      projects: [],
+      currentRegion: currentRegion(),
+      data: { projects: [], currentRegion: currentRegion() },
+    })
+  }
 
   const { data, error } = await db
     .from('projects')
@@ -2606,7 +4160,12 @@ app.get('/v1/admin/residency', jwtAuth, async (c) => {
     .in('id', projectIds)
 
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  return c.json({ ok: true, projects: data, currentRegion: currentRegion() })
+  return c.json({
+    ok: true,
+    projects: data ?? [],
+    currentRegion: currentRegion(),
+    data: { projects: data ?? [], currentRegion: currentRegion() },
+  })
 })
 
 // Pin a project to a specific region. Pinning is one-way at runtime — flipping
@@ -2665,13 +4224,17 @@ app.get('/v1/admin/storage', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const projectIds = await ownedProjectIds(db, userId)
-  if (projectIds.length === 0) return c.json({ ok: true, settings: [] })
+  if (projectIds.length === 0) {
+    // Keep both shapes for backward-compat: top-level `settings` for any old
+    // client, and the canonical `data` envelope that apiFetch expects.
+    return c.json({ ok: true, settings: [], data: { settings: [] } })
+  }
   const { data, error } = await db
     .from('project_storage_settings')
     .select('*')
     .in('project_id', projectIds)
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  return c.json({ ok: true, settings: data })
+  return c.json({ ok: true, settings: data ?? [], data: { settings: data ?? [] } })
 })
 
 app.put('/v1/admin/storage/:projectId', jwtAuth, async (c) => {

@@ -31,6 +31,10 @@ export interface LlmInvocationRecord {
   /** Wave C C9: where the API key came from. Audited so customers can prove
    *  their BYOK key was actually used for billing/compliance reasons. */
   keySource?: 'byok' | 'env' | null
+  /** Langfuse trace UUID, when observability is configured. Persisted so the
+   *  admin UI can deep-link straight to the trace + cost + token breakdown
+   *  without having to search Langfuse by metadata. */
+  langfuseTraceId?: string | null
 }
 
 export function logLlmInvocation(
@@ -53,6 +57,7 @@ export function logLlmInvocation(
     output_tokens: rec.outputTokens ?? null,
     prompt_version: rec.promptVersion ?? null,
     key_source: rec.keySource ?? null,
+    langfuse_trace_id: rec.langfuseTraceId ?? null,
   }).then(({ error }) => {
     if (error) log.warn('llm_invocations insert failed', { error: error.message })
   })

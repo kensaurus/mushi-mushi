@@ -30,6 +30,12 @@ export interface ResolvedKey {
   source: 'byok' | 'env'
   /** Last 4 chars of the key — safe to log. */
   hint: string
+  /**
+   * Optional base URL for OpenAI-compatible providers (OpenRouter, Together,
+   * Fireworks). Only set for `openai` when `byok_openai_base_url` is configured.
+   * The Vercel AI SDK's `createOpenAI` accepts this as `baseURL`.
+   */
+  baseUrl?: string
 }
 
 const ENV_VAR: Record<LlmProvider, string> = {
@@ -53,26 +59,38 @@ export async function resolveLlmKey(
   provider: LlmProvider,
 ): Promise<ResolvedKey | null> {
   const refCol = REF_COL[provider]
+  // Pull base URL alongside the ref so the OpenRouter / OpenAI-compatible
+  // gateway path is a single round-trip. The column doesn't exist on the
+  // anthropic side; the select tolerates missing columns by selecting only
+  // what each provider needs.
+  const selectCols = provider === 'openai'
+    ? `${refCol}, byok_openai_base_url`
+    : refCol
   const { data: settings, error } = await db
     .from('project_settings')
-    .select(refCol)
+    .select(selectCols)
     .eq('project_id', projectId)
     .single()
 
   if (error) log.warn('Failed to read project_settings for BYOK', { projectId, provider, error: error.message })
 
-  const ref = (settings as Record<string, string | null> | null)?.[refCol]
+  const row = settings as Record<string, string | null> | null
+  const ref = row?.[refCol]
+  const baseUrl = provider === 'openai'
+    ? (row?.byok_openai_base_url ?? Deno.env.get('OPENAI_BASE_URL') ?? undefined)
+    : undefined
+
   if (ref) {
     const dereffed = await dereferenceKey(db, ref)
     if (dereffed) {
       void recordUsage(db, projectId, provider).catch(() => { /* tolerate */ })
-      return { key: dereffed, source: 'byok', hint: hint(dereffed) }
+      return { key: dereffed, source: 'byok', hint: hint(dereffed), baseUrl }
     }
     log.warn('BYOK ref present but dereference failed; falling back to env', { projectId, provider })
   }
 
   const env = Deno.env.get(ENV_VAR[provider])
-  if (env) return { key: env, source: 'env', hint: hint(env) }
+  if (env) return { key: env, source: 'env', hint: hint(env), baseUrl }
   return null
 }
 

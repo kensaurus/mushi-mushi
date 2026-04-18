@@ -7,7 +7,7 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate } from 'react-router-dom'
-import { Input, Btn } from '../components/ui'
+import { Input, Btn, PageHelp } from '../components/ui'
 
 export function ResetPasswordPage() {
   const { isPasswordRecovery, updatePassword, session } = useAuth()
@@ -51,8 +51,22 @@ export function ResetPasswordPage() {
           <h1 className="text-xl font-bold">
             <span className="text-brand">mushi</span>mushi
           </h1>
-          <p className="text-2xs text-fg-faint mt-0.5">admin console</p>
+          <p className="text-2xs text-fg-muted mt-0.5">admin console</p>
         </div>
+
+        {!done && (
+          <div className="mb-3">
+            <PageHelp
+              title="About this page"
+              whatIsIt="Set a new password for your admin account. You're seeing this because you opened the password recovery link from your email."
+              useCases={[
+                'Choose a strong password (minimum 6 characters)',
+                'Confirm the password to catch typos before submitting',
+              ]}
+              howToUse="Once you submit, you'll be signed in automatically and taken to the dashboard. The recovery link can only be used once."
+            />
+          </div>
+        )}
 
         {done ? (
           <div className="bg-surface border border-edge rounded-md p-5 space-y-3">

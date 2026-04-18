@@ -28,7 +28,7 @@
   "scripts": {
     "build": "turbo run build",
     "predev": "node scripts/kill-port.mjs 6464 && turbo daemon stop",
-    "dev": "turbo run dev --force",
+    "dev": "turbo run dev --force --concurrency=30",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",

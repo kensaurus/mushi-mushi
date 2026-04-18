@@ -49,14 +49,17 @@ export function useReportComments(opts: UseReportCommentsOptions): {
   useEffect(() => {
     if (!reportId) return
     void refresh()
+    const uid = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     const channel = supabase
-      .channel(`mushi:report-comments:${reportId}`)
+      .channel(`mushi:report-comments:${reportId}:${uid}`)
       .on('postgres_changes' as never,
         { event: '*', schema: 'public', table: 'report_comments', filter: `report_id=eq.${reportId}` } as never,
         () => { void refresh() },
       )
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    return () => { void supabase.removeChannel(channel) }
   }, [reportId, refresh])
 
   const postComment = useCallback(async (body: string, options?: { visibleToReporter?: boolean; parentId?: number }) => {

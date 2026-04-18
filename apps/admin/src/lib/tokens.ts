@@ -38,6 +38,53 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other:     'Other',
 }
 
+export const STATUS_LABELS: Record<string, string> = {
+  new:        'New',
+  classified: 'Classified',
+  fixing:     'Fixing',
+  fixed:      'Fixed',
+  dismissed:  'Dismissed',
+}
+
+export const SEVERITY_LABELS: Record<string, string> = {
+  critical: 'Critical',
+  high:     'High',
+  medium:   'Medium',
+  low:      'Low',
+}
+
+export const PIPELINE_STATUS_LABELS: Record<string, string> = {
+  pending:     'Pending',
+  running:     'Running',
+  exporting:   'Exporting',
+  exported:    'Exported',
+  training:    'Training',
+  trained:     'Trained',
+  validating:  'Validating',
+  validated:   'Validated',
+  promoted:    'Promoted',
+  rejected:    'Rejected',
+  completed:   'Completed',
+  failed:      'Failed',
+  error:       'Error',
+  dead_letter: 'Dead letter',
+}
+
+export function statusLabel(s: string | null | undefined): string {
+  if (!s) return 'Unset'
+  return STATUS_LABELS[s] ?? s
+}
+
+export function severityLabel(s: string | null | undefined): string {
+  if (!s) return 'Unset'
+  return SEVERITY_LABELS[s] ?? s
+}
+
+export function pipelineStatusLabel(s: string | null | undefined): string {
+  if (!s) return '—'
+  return PIPELINE_STATUS_LABELS[s] ?? s
+}
+
 export const FILTER_OPTIONS = {
   categories: ['', 'bug', 'slow', 'visual', 'confusing', 'other'],
   statuses:   ['', 'new', 'classified', 'fixing', 'fixed', 'dismissed'],

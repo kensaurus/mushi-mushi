@@ -49,10 +49,24 @@ export async function executeNaturalLanguageQuery(
     throw new Error('Query must include project_id filter ($1)')
   }
 
+  // Sanitise: strip inline SQL comments and trailing semicolons. The RPC
+  // wraps the query as `from (...) t`, so a stray `;` breaks parsing with
+  // "syntax error at or near ';'". Hard-fail on intra-statement `;` to
+  // catch attempts at multi-statement execution.
+  const cleanedSql = queryPlan.sql
+    .split('\n')
+    .map((line) => line.replace(/--.*$/, ''))
+    .join('\n')
+    .replace(/;\s*$/g, '')
+    .trim()
+  if (cleanedSql.includes(';')) {
+    throw new Error('Multi-statement queries are not allowed.')
+  }
+
   const results: unknown[] = []
   for (const projectId of projectIds) {
     const { data, error } = await db.rpc('execute_readonly_query', {
-      query_text: queryPlan.sql,
+      query_text: cleanedSql,
       project_id_param: projectId,
     })
 
@@ -73,7 +87,7 @@ export async function executeNaturalLanguageQuery(
   await trace.end()
 
   return {
-    sql: queryPlan.sql,
+    sql: cleanedSql,
     explanation: queryPlan.explanation,
     results: results.slice(0, 100),
     summary,
