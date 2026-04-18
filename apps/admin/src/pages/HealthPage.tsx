@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
-import { PageHeader, PageHelp, Card, Badge, Btn, EmptyState, Loading, ErrorAlert, StatCard } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, EmptyState, Loading, ErrorAlert, StatCard, RecommendedAction } from '../components/ui'
 
 interface LlmHealth {
   window: string
@@ -101,6 +101,56 @@ export function HealthPage() {
         ]}
         howToUse="No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below."
       />
+
+      {(() => {
+        const failingCron = KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error')
+        if (llm.errorRate > 0.05) {
+          return (
+            <RecommendedAction
+              tone="urgent"
+              title={`LLM error rate is ${errorPct}% over the last 24h`}
+              description="Anything above 5% usually points to an upstream provider outage or an expired API key. Check provider status pages and rotate keys if needed."
+              cta={{ label: 'Check Anthropic status', href: 'https://status.anthropic.com' }}
+            />
+          )
+        }
+        if (llm.fallbackRate > 0.1) {
+          return (
+            <RecommendedAction
+              tone="urgent"
+              title={`Fallback rate spiked to ${fallbackPct}%`}
+              description="More than 10% of calls are falling back to the secondary provider. Primary may be rate-limiting or returning errors."
+              cta={{ label: 'Check Anthropic status', href: 'https://status.anthropic.com' }}
+            />
+          )
+        }
+        if (failingCron.length > 0) {
+          return (
+            <RecommendedAction
+              tone="urgent"
+              title={`${failingCron.length} cron ${failingCron.length === 1 ? 'job is' : 'jobs are'} failing`}
+              description={`Last ${failingCron.length === 1 ? 'run of' : 'runs of'} ${failingCron.join(', ')} ended in error. Trigger manually to confirm it's reproducible, then open the cron logs.`}
+            />
+          )
+        }
+        if (llm.totalCalls === 0) {
+          return (
+            <RecommendedAction
+              tone="info"
+              title="No LLM activity in the last 24 hours"
+              description="The pipeline is idle. Submit a test report from the onboarding wizard to verify routing end-to-end."
+              cta={{ label: 'Open setup wizard', to: '/onboarding' }}
+            />
+          )
+        }
+        return (
+          <RecommendedAction
+            tone="success"
+            title="All systems nominal"
+            description={`${llm.totalCalls} LLM calls · ${errorPct}% errors · ${fallbackPct}% fallbacks. No action needed.`}
+          />
+        )
+      })()}
 
       <section>
         <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">LLM Health (24h)</h2>

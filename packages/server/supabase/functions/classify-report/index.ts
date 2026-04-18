@@ -16,6 +16,7 @@ import { logLlmInvocation } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
+import { buildReportGraph } from '../_shared/knowledge-graph.ts'
 
 const stage2Schema = z.object({
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Refined bug category'),
@@ -176,6 +177,7 @@ ${ontologyContext}`
           latencyMs: Date.now() - startTime,
           promptVersion: promptSelection.promptVersion,
           keySource,
+          langfuseTraceId: trace.id,
         })
         throw primaryErr
       }
@@ -183,7 +185,13 @@ ${ontologyContext}`
       fallbackUsed = true
       fallbackReason = String(primaryErr).slice(0, 500)
 
-      const openai = createOpenAI({ apiKey: openaiKey })
+      // V5.3 §2.7 BYOK extension: OpenAI-compatible base URL routes the same
+      // SDK at any gateway (OpenRouter, Together, Fireworks…). Falls back to
+      // api.openai.com when unset.
+      const openai = createOpenAI({
+        apiKey: openaiKey,
+        ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+      })
       const { object, usage } = await generateObject({
         model: openai(FALLBACK_MODEL),
         schema: stage2Schema,
@@ -207,6 +215,7 @@ ${ontologyContext}`
       outputTokens: tokenUsage.completionTokens ?? null,
       promptVersion: promptSelection.promptVersion,
       keySource,
+      langfuseTraceId: trace.id,
     })
 
     // Apply ontology tags if present
@@ -235,7 +244,9 @@ ${ontologyContext}`
       .eq('id', reportId)
 
     if (updateError) {
-      log.error('Failed to update Stage 2', { error: updateError.message })
+      // Throw loudly: a silent UPDATE here means the customer paid for the
+      // Sonnet call but sees status='new'. See dogfood-glotit-2026-04-17.md.
+      throw new Error(`Stage 2 writeback failed: ${updateError.message}`)
     }
 
     log.info('Stage 2 analyzed', {
@@ -245,6 +256,21 @@ ${ontologyContext}`
       latencyMs,
       model: usedModel,
     })
+
+    // Knowledge graph (Stage 2): now that we have a real component label
+    // (Stage 1 only had the category), wire the component node + affects
+    // edge from the report group. Fire-and-forget; graph quality must not
+    // gate classification persistence.
+    if (classification.component) {
+      buildReportGraph(
+        db,
+        projectId,
+        reportId,
+        classification.component,
+        report.url ?? undefined,
+        report.report_group_id ?? undefined,
+      ).catch((err) => log.warn('Knowledge graph (stage 2) build failed', { err: String(err) }))
+    }
 
     // Wave D D1: notify webhook plugins. Async + tolerant: plugins must not
     // affect classification latency.

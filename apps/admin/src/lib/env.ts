@@ -29,6 +29,30 @@ export const RESOLVED_API_URL = stripTrailingSlash(
   (import.meta.env.VITE_API_URL ?? '').trim() || `${RESOLVED_SUPABASE_URL}/functions/v1/api`,
 )
 
+// Langfuse host used to build click-through URLs from fix attempts and LLM
+// invocation rows. Defaults to the public cloud — self-hosted Langfuse users
+// can override via VITE_LANGFUSE_HOST (e.g. https://langfuse.example.com).
+export const RESOLVED_LANGFUSE_HOST = stripTrailingSlash(
+  (import.meta.env.VITE_LANGFUSE_HOST ?? '').trim() || 'https://cloud.langfuse.com',
+)
+
+/**
+ * Build a deep-link to a Langfuse trace. Returns null when no traceId is set
+ * so the caller can render a disabled badge instead of a dead link.
+ *
+ * Optional `host` overrides the resolved env-level default. Pass the per-project
+ * `langfuse_host` from the integrations API so Mushi tenants on US/EU/self-hosted
+ * Langfuse all get correct deep-links without rebuilding the bundle.
+ */
+export function langfuseTraceUrl(
+  traceId: string | null | undefined,
+  host?: string | null,
+): string | null {
+  if (!traceId) return null
+  const base = stripTrailingSlash((host ?? '').trim() || RESOLVED_LANGFUSE_HOST)
+  return `${base}/trace/${encodeURIComponent(traceId)}`
+}
+
 export type InstanceMode = 'cloud' | 'self-hosted'
 
 export interface EnvStatus {

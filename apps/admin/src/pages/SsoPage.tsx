@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { useToast } from '../lib/toast'
 
 interface SsoConfig {
   id: string
@@ -16,6 +17,8 @@ export function SsoPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [form, setForm] = useState({ providerType: 'saml', providerName: '', metadataUrl: '', entityId: '' })
+  const [submitting, setSubmitting] = useState(false)
+  const toast = useToast()
 
   const fetchConfigs = () => {
     setLoading(true)
@@ -32,9 +35,20 @@ export function SsoPage() {
   useEffect(() => { fetchConfigs() }, [])
 
   const addProvider = async () => {
-    await apiFetch('/v1/admin/sso', { method: 'POST', body: JSON.stringify(form) })
-    setForm({ providerType: 'saml', providerName: '', metadataUrl: '', entityId: '' })
-    fetchConfigs()
+    if (!form.providerName.trim() || !form.metadataUrl.trim() || !form.entityId.trim()) {
+      toast.error('Missing fields', 'Provider name, metadata URL, and entity ID are required.')
+      return
+    }
+    setSubmitting(true)
+    const res = await apiFetch('/v1/admin/sso', { method: 'POST', body: JSON.stringify(form) })
+    setSubmitting(false)
+    if (res.ok) {
+      toast.success('Identity provider added', form.providerName)
+      setForm({ providerType: 'saml', providerName: '', metadataUrl: '', entityId: '' })
+      fetchConfigs()
+    } else {
+      toast.error('Failed to add provider', res.error?.message)
+    }
   }
 
   return (
@@ -63,7 +77,7 @@ export function SsoPage() {
           <Input placeholder="Metadata URL" value={form.metadataUrl} onChange={(e) => setForm({ ...form, metadataUrl: e.target.value })} />
           <Input placeholder="Entity ID" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} />
         </div>
-        <Btn onClick={addProvider}>Add Provider</Btn>
+        <Btn onClick={addProvider} disabled={submitting}>{submitting ? 'Adding…' : 'Add Provider'}</Btn>
       </Card>
 
       {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load SSO configs." onRetry={fetchConfigs} /> : configs.length === 0 ? (
