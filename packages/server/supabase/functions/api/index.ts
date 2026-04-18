@@ -1253,14 +1253,25 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   const severity = c.req.query('severity')
   const component = c.req.query('component')
   const reporter = c.req.query('reporter')
-  const limit = Math.min(Number(c.req.query('limit')) || 50, 100)
+  const search = c.req.query('q')?.trim()
+  const limit = Math.min(Number(c.req.query('limit')) || 50, 200)
   const offset = Number(c.req.query('offset')) || 0
+  const sortField = c.req.query('sort') ?? 'created_at'
+  const sortDir = c.req.query('dir') === 'asc' ? 'asc' : 'desc'
+  const allowedSorts: Record<string, string> = {
+    created_at: 'created_at',
+    severity: 'severity',
+    confidence: 'confidence',
+    status: 'status',
+    component: 'component',
+  }
+  const orderColumn = allowedSorts[sortField] ?? 'created_at'
 
   let query = db
     .from('reports')
     .select('id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id', { count: 'exact' })
     .in('project_id', projectIds)
-    .order('created_at', { ascending: false })
+    .order(orderColumn, { ascending: sortDir === 'asc', nullsFirst: false })
     .range(offset, offset + limit - 1)
 
   if (status) query = query.eq('status', status)
@@ -1268,6 +1279,11 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   if (severity) query = query.eq('severity', severity)
   if (component) query = query.eq('component', component)
   if (reporter) query = query.eq('reporter_token_hash', reporter)
+  if (search) {
+    // Bilateral OR — summary or description matches the search prefix.
+    const escaped = search.replace(/[%,]/g, '')
+    query = query.or(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`)
+  }
 
   const { data: reports, count, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
@@ -1360,6 +1376,125 @@ app.patch('/v1/admin/reports/:id', jwtAuth, async (c) => {
   }
 
   return c.json({ ok: true })
+})
+
+// Bulk mutations on reports — drives the triage table's checkbox toolbar.
+// Limit batch size so a single request can't touch thousands of rows;
+// front-end sends ids in chunks if needed. Same allow-listed fields as the
+// per-row PATCH so we don't widen the attack surface.
+app.post('/v1/admin/reports/bulk', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => null) as
+    | { ids?: unknown; action?: unknown; value?: unknown }
+    | null
+  if (!body || !Array.isArray(body.ids) || body.ids.length === 0) {
+    return c.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'ids[] required' } }, 400)
+  }
+  const ids = body.ids.filter((x): x is string => typeof x === 'string').slice(0, 200)
+  if (ids.length === 0) {
+    return c.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'No valid ids' } }, 400)
+  }
+  const action = String(body.action ?? '')
+  const allowedActions = new Set(['set_status', 'set_severity', 'set_category', 'dismiss'])
+  if (!allowedActions.has(action)) {
+    return c.json({ ok: false, error: { code: 'INVALID_ACTION', message: `Unsupported action: ${action}` } }, 400)
+  }
+
+  const db = getServiceClient()
+  const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
+  const projectIds = (projects ?? []).map((p) => p.id)
+  if (projectIds.length === 0) {
+    return c.json({ ok: false, error: { code: 'NO_PROJECTS', message: 'No projects owned by user' } }, 403)
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (action === 'dismiss') {
+    updates.status = 'dismissed'
+  } else if (action === 'set_status') {
+    const allowed = new Set(['new', 'classified', 'fixing', 'fixed', 'dismissed'])
+    if (!allowed.has(String(body.value))) {
+      return c.json({ ok: false, error: { code: 'INVALID_VALUE', message: 'Invalid status value' } }, 400)
+    }
+    updates.status = String(body.value)
+  } else if (action === 'set_severity') {
+    const allowed = new Set(['critical', 'high', 'medium', 'low'])
+    if (!allowed.has(String(body.value))) {
+      return c.json({ ok: false, error: { code: 'INVALID_VALUE', message: 'Invalid severity value' } }, 400)
+    }
+    updates.severity = String(body.value)
+  } else if (action === 'set_category') {
+    const allowed = new Set(['bug', 'slow', 'visual', 'confusing', 'other'])
+    if (!allowed.has(String(body.value))) {
+      return c.json({ ok: false, error: { code: 'INVALID_VALUE', message: 'Invalid category value' } }, 400)
+    }
+    updates.category = String(body.value)
+  }
+
+  // Snapshot pre-update rows so we can fan out reputation events for status
+  // transitions, identical to the per-row PATCH path.
+  const { data: before } = await db
+    .from('reports')
+    .select('id, project_id, reporter_token_hash, status')
+    .in('id', ids)
+    .in('project_id', projectIds)
+  const beforeMap = new Map((before ?? []).map((r) => [r.id, r]))
+  const allowedIds = [...beforeMap.keys()]
+  if (allowedIds.length === 0) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'No reports matched' } }, 404)
+  }
+
+  const { error: updErr } = await db
+    .from('reports')
+    .update(updates)
+    .in('id', allowedIds)
+    .in('project_id', projectIds)
+  if (updErr) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: updErr.message } }, 500)
+  }
+
+  // Side effects mirror PATCH: reputation, notifications, plugin dispatch on
+  // status changes. Done sequentially per row but each kicked off without await
+  // so the bulk endpoint stays snappy.
+  if (typeof updates.status === 'string') {
+    const newStatus = updates.status
+    for (const id of allowedIds) {
+      const prev = beforeMap.get(id)
+      if (!prev || prev.status === newStatus) continue
+      void dispatchPluginEvent(db, prev.project_id, 'report.status_changed', {
+        report: { id, status: newStatus },
+        previousStatus: prev.status,
+        actor: { kind: 'admin', userId },
+      }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.status_changed', err: String(e) }))
+      const reputationAction =
+        newStatus === 'fixing' ? 'confirmed'
+          : newStatus === 'fixed' ? 'fixed'
+            : newStatus === 'dismissed' ? 'dismissed'
+              : null
+      if (reputationAction) {
+        const points = reputationAction === 'confirmed' ? 50 : reputationAction === 'fixed' ? 25 : 0
+        awardPoints(db, prev.project_id, prev.reporter_token_hash, { action: reputationAction })
+          .catch((e) => log.error('Reputation award failed', { action: reputationAction, err: String(e) }))
+        createNotification(db, prev.project_id, id, prev.reporter_token_hash, reputationAction, {
+          message: buildNotificationMessage(reputationAction, points ? { points } : {}),
+          ...(points ? { points } : {}),
+          reportId: id,
+        }).catch((e) => log.error('Notification failed', { type: reputationAction, err: String(e) }))
+      }
+    }
+  }
+
+  const firstProjectId = beforeMap.values().next().value?.project_id ?? ''
+  await logAudit(
+    db,
+    firstProjectId,
+    userId,
+    'report.triaged',
+    'report',
+    undefined,
+    { action, value: body.value ?? null, count: allowedIds.length, ids: allowedIds },
+  )
+
+  return c.json({ ok: true, data: { updated: allowedIds.length, ids: allowedIds } })
 })
 
 app.get('/v1/admin/stats', jwtAuth, async (c) => {

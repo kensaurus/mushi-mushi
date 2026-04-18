@@ -1,10 +1,13 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
+  Panel,
+  Handle,
+  Position,
   type Edge,
   type Node,
   type NodeMouseHandler,
@@ -86,8 +89,9 @@ const NODE_TYPE_LABELS: Record<string, string> = {
 
 // Force-directed layout: simple deterministic positioning via spectral seed +
 // iterative repulsion. Pure function so reactflow can re-layout on filter
-// changes without state churn.
-function layoutNodes(nodes: GraphNode[], edges: GraphEdge[]): Map<string, { x: number; y: number }> {
+// changes without state churn. The `seed` argument lets the "Re-layout"
+// button shake the graph into a new arrangement without changing data.
+function layoutNodes(nodes: GraphNode[], edges: GraphEdge[], seed = 0): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>()
   if (nodes.length === 0) return positions
 
@@ -102,16 +106,17 @@ function layoutNodes(nodes: GraphNode[], edges: GraphEdge[]): Map<string, { x: n
   const center = { x: 0, y: 0 }
   const ringRadius = 420
   const groupKeys = [...groupBy.keys()]
+  const seedOffset = (seed * Math.PI) / 7
   groupKeys.forEach((key, gi) => {
     const groupNodes = groupBy.get(key)!
-    const groupAngle = (2 * Math.PI * gi) / Math.max(1, groupKeys.length)
+    const groupAngle = (2 * Math.PI * gi) / Math.max(1, groupKeys.length) + seedOffset
     const groupCenter = {
       x: center.x + ringRadius * Math.cos(groupAngle),
       y: center.y + ringRadius * Math.sin(groupAngle),
     }
     const innerRadius = Math.max(60, Math.min(220, groupNodes.length * 22))
     groupNodes.forEach((n, ni) => {
-      const a = (2 * Math.PI * ni) / Math.max(1, groupNodes.length)
+      const a = (2 * Math.PI * ni) / Math.max(1, groupNodes.length) + seedOffset * 0.3
       positions.set(n.id, {
         x: groupCenter.x + innerRadius * Math.cos(a),
         y: groupCenter.y + innerRadius * Math.sin(a),
@@ -165,6 +170,8 @@ function NodeChip({ node, selected }: { node: GraphNode; selected: boolean }) {
       className={`px-2.5 py-1 text-2xs leading-tight font-medium text-fg bg-surface-raised ${shape} ${ring} max-w-[200px]`}
       title={`${NODE_TYPE_LABELS[node.node_type] ?? node.node_type}: ${node.label}`}
     >
+      <Handle type="target" position={Position.Top} className="!bg-transparent !border-0 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} className="!bg-transparent !border-0 !w-2 !h-2" />
       <div className="flex items-center gap-1.5 min-w-0">
         <span
           className="inline-block w-2 h-2 rounded-full shrink-0"
@@ -205,15 +212,73 @@ export function GraphPage() {
     new Set(EDGE_TYPES),
   )
   const [view, setView] = useState<'graph' | 'table'>('graph')
+  const [hideSingletons, setHideSingletons] = useState(true)
+  const [layoutSeed, setLayoutSeed] = useState(0)
+  const [hintDismissed, setHintDismissed] = useState(false)
+
+  // Auto-fade the pan/zoom hint after 6s. Stored in localStorage so it doesn't
+  // re-appear every refresh once the user has seen it.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.localStorage.getItem('mushi.graph.hintSeen') === '1') {
+      setHintDismissed(true)
+      return
+    }
+    const t = setTimeout(() => {
+      setHintDismissed(true)
+      window.localStorage.setItem('mushi.graph.hintSeen', '1')
+    }, 6000)
+    return () => clearTimeout(t)
+  }, [])
+
+  const dismissHint = () => {
+    setHintDismissed(true)
+    if (typeof window !== 'undefined') window.localStorage.setItem('mushi.graph.hintSeen', '1')
+  }
+
+  // Pre-baked filter views — flip filter sets to highlight a specific story.
+  // Reset selection so the side-panel doesn't show a stale node from a
+  // different filter context.
+  const applyView = (preset: 'all' | 'regressions' | 'fragile' | 'fixes') => {
+    setSelectedNode(null)
+    setBlastRadius([])
+    if (preset === 'all') {
+      setEnabledEdgeTypes(new Set(EDGE_TYPES))
+      setEnabledNodeTypes(new Set(NODE_TYPES))
+    } else if (preset === 'regressions') {
+      setEnabledEdgeTypes(new Set(['regression_of', 'duplicate_of', 'related_to']))
+      setEnabledNodeTypes(new Set(NODE_TYPES))
+    } else if (preset === 'fragile') {
+      setEnabledEdgeTypes(new Set(['affects', 'causes']))
+      setEnabledNodeTypes(new Set(['component', 'page', 'report_group']))
+    } else if (preset === 'fixes') {
+      setEnabledEdgeTypes(new Set(['fix_attempted', 'fix_applied', 'fix_verified']))
+      setEnabledNodeTypes(new Set(NODE_TYPES))
+    }
+  }
 
   const filteredNodes = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return rawNodes.filter((n) => {
+    const typeFiltered = rawNodes.filter((n) => {
       if (!enabledNodeTypes.has(n.node_type as NodeType)) return false
       if (q && !n.label.toLowerCase().includes(q)) return false
       return true
     })
-  }, [rawNodes, enabledNodeTypes, search])
+    if (!hideSingletons) return typeFiltered
+    // A node is a singleton if no enabled edge connects to it. We have to
+    // compute connections against the type-filtered set to keep the result
+    // stable when only edge filters change.
+    const visible = new Set(typeFiltered.map((n) => n.id))
+    const connected = new Set<string>()
+    for (const e of rawEdges) {
+      if (!enabledEdgeTypes.has(e.edge_type as EdgeType)) continue
+      if (visible.has(e.source_node_id) && visible.has(e.target_node_id)) {
+        connected.add(e.source_node_id)
+        connected.add(e.target_node_id)
+      }
+    }
+    return typeFiltered.filter((n) => connected.has(n.id))
+  }, [rawNodes, rawEdges, enabledNodeTypes, enabledEdgeTypes, search, hideSingletons])
 
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id))
@@ -225,9 +290,15 @@ export function GraphPage() {
     )
   }, [rawEdges, filteredNodes, enabledEdgeTypes])
 
+  const singletonCount = useMemo(() => {
+    if (!hideSingletons) return 0
+    const typeFiltered = rawNodes.filter((n) => enabledNodeTypes.has(n.node_type as NodeType))
+    return typeFiltered.length - filteredNodes.length
+  }, [rawNodes, filteredNodes, enabledNodeTypes, hideSingletons])
+
   const positions = useMemo(
-    () => layoutNodes(filteredNodes, filteredEdges),
-    [filteredNodes, filteredEdges],
+    () => layoutNodes(filteredNodes, filteredEdges, layoutSeed),
+    [filteredNodes, filteredEdges, layoutSeed],
   )
 
   const blastRadiusIds = useMemo(() => {
@@ -383,12 +454,50 @@ export function GraphPage() {
         whatIsIt="A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts."
         useCases={[
           'See blast radius: click any node to highlight everything it can affect',
-          'Find regressions: red-tinted edges flag bugs that reappeared after a fix',
-          'Spot fragile components: nodes with the most incoming "affects" edges',
-          'Audit fix coverage: green "fix_verified" edges trace successful repairs',
+          'Find regressions: pick the Regressions view to focus on bugs that reappeared after a fix',
+          'Spot fragile components: pick the Fragile components view to surface high-incoming-affects nodes',
+          'Audit fix coverage: pick the Fix coverage view to trace fix_verified edges',
         ]}
-        howToUse="Filter by node or edge type with the chips below. Click a node to load its blast radius. Use the minimap to navigate; scroll to zoom; drag the canvas to pan."
+        howToUse="Use the quick views to focus on a story, or filter manually with the chips. Drag the canvas to pan, scroll to zoom, click any node for its blast radius. Re-layout shakes the graph into a fresh arrangement."
       />
+
+      <div className="flex flex-wrap gap-1.5 mb-2 items-center">
+        <span className="text-2xs text-fg-faint uppercase tracking-wider mr-1">Quick views:</span>
+        {([
+          { key: 'all', label: 'All' },
+          { key: 'regressions', label: 'Regressions' },
+          { key: 'fragile', label: 'Fragile components' },
+          { key: 'fixes', label: 'Fix coverage' },
+        ] as const).map((v) => (
+          <button
+            key={v.key}
+            type="button"
+            onClick={() => applyView(v.key)}
+            className="px-2 py-0.5 rounded-sm text-2xs border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+          >
+            {v.label}
+          </button>
+        ))}
+        <span className="ml-auto inline-flex items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 cursor-pointer text-2xs text-fg-muted">
+            <input
+              type="checkbox"
+              checked={hideSingletons}
+              onChange={(e) => setHideSingletons(e.target.checked)}
+              className="h-3 w-3 accent-brand"
+            />
+            Hide isolated nodes{singletonCount > 0 ? ` (${singletonCount})` : ''}
+          </label>
+          <button
+            type="button"
+            onClick={() => setLayoutSeed((s) => s + 1)}
+            className="px-2 py-0.5 rounded-sm text-2xs border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg"
+            title="Shuffle node positions"
+          >
+            ↻ Re-layout
+          </button>
+        </span>
+      </div>
 
       {rawNodes.length === 0 ? (
         <EmptyState
@@ -452,7 +561,7 @@ export function GraphPage() {
 
             <div
               className="border border-edge rounded-md bg-surface-root"
-              style={{ height: 520, display: view === 'graph' ? 'block' : 'none' }}
+              style={{ height: 'calc(100vh - 280px)', minHeight: 520, display: view === 'graph' ? 'block' : 'none' }}
               role="region"
               aria-label={`Knowledge graph visualization with ${filteredNodes.length} nodes and ${filteredEdges.length} edges. Switch to Table view for a screen-reader-friendly list.`}
               tabIndex={0}
@@ -463,12 +572,16 @@ export function GraphPage() {
                 onNodeClick={onNodeClick}
                 onPaneClick={clearSelection}
                 fitView
-                minZoom={0.2}
-                maxZoom={1.6}
+                fitViewOptions={{ padding: 0.2 }}
+                minZoom={0.15}
+                maxZoom={2}
                 proOptions={{ hideAttribution: true }}
-                nodesDraggable={false}
+                nodesDraggable
                 nodesConnectable={false}
                 elementsSelectable
+                panOnDrag
+                panOnScroll={false}
+                zoomOnScroll
                 nodeOrigin={[0.5, 0.5]}
                 nodeTypes={{ default: ReactFlowChip }}
                 aria-label="Knowledge graph nodes and edges. Use Tab to focus, Enter or Space to select a node and load its blast radius."
@@ -485,6 +598,35 @@ export function GraphPage() {
                   maskColor="oklch(0.10 0 0 / 0.6)"
                   style={{ background: 'oklch(0.14 0 0)' }}
                 />
+                {!hintDismissed && (
+                  <Panel position="top-center">
+                    <div className="flex items-center gap-2 rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary shadow-raised">
+                      <span aria-hidden="true">🖱️</span>
+                      <span>Drag to pan · scroll to zoom · click a node for blast radius</span>
+                      <button
+                        type="button"
+                        onClick={dismissHint}
+                        className="ml-2 text-fg-faint hover:text-fg text-xs leading-none"
+                        aria-label="Dismiss hint"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </Panel>
+                )}
+                <Panel position="bottom-left">
+                  <GraphLegend />
+                </Panel>
+                {filteredNodes.length === 0 && (
+                  <Panel position="top-center">
+                    <div className="rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-2 text-2xs text-fg-secondary shadow-raised max-w-sm text-center">
+                      <div className="font-medium text-fg mb-0.5">No nodes match these filters</div>
+                      <div className="text-fg-muted">
+                        Try the <button type="button" onClick={() => applyView('all')} className="underline hover:text-fg">All</button> view, enable more node/edge types, or uncheck "Hide isolated nodes".
+                      </div>
+                    </div>
+                  </Panel>
+                )}
               </ReactFlow>
             </div>
 
@@ -525,6 +667,80 @@ export function GraphPage() {
 
 function ReactFlowChip({ data }: { data: { node: GraphNode; isSelected: boolean } }) {
   return <NodeChip node={data.node} selected={data.isSelected} />
+}
+
+const LEGEND_EDGE_COLORS: Array<{ key: string; label: string; color: string }> = [
+  { key: 'regression_of', label: 'regression', color: 'oklch(0.65 0.22 25)' },
+  { key: 'fix_verified', label: 'fix verified', color: 'oklch(0.72 0.19 155)' },
+  { key: 'related', label: 'other', color: 'oklch(0.50 0 0)' },
+]
+
+// In-canvas legend so a first-time visitor can decode the colors without
+// opening the help drawer. Collapsed by default to stay out of the way; the
+// summary line still shows the highest-signal info (node-type swatches).
+function GraphLegend() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-md border border-edge-subtle bg-surface-raised/95 backdrop-blur shadow-raised text-2xs">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 px-2.5 py-1.5 text-fg-secondary hover:text-fg w-full"
+        aria-expanded={open}
+      >
+        <span className="font-medium">Legend</span>
+        <span className="inline-flex items-center gap-1">
+          {NODE_TYPES.map((nt) => (
+            <span
+              key={nt}
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ backgroundColor: NODE_COLORS[nt] }}
+              aria-hidden="true"
+            />
+          ))}
+        </span>
+        <span className="text-fg-faint">{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="px-2.5 pb-2 pt-0 space-y-1.5 border-t border-edge-subtle">
+          <div>
+            <div className="text-3xs uppercase tracking-wider text-fg-faint mt-1.5 mb-0.5">Nodes</div>
+            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+              {NODE_TYPES.map((nt) => (
+                <div key={nt} className="flex items-center gap-1.5 text-fg-muted">
+                  <span
+                    className="w-2 h-2 rounded-full inline-block"
+                    style={{ backgroundColor: NODE_COLORS[nt] }}
+                    aria-hidden="true"
+                  />
+                  {NODE_TYPE_LABELS[nt]}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-3xs uppercase tracking-wider text-fg-faint mb-0.5">Edges</div>
+            <div className="space-y-0.5">
+              {LEGEND_EDGE_COLORS.map((e) => (
+                <div key={e.key} className="flex items-center gap-1.5 text-fg-muted">
+                  <span
+                    className="inline-block h-px w-4"
+                    style={{ backgroundColor: e.color, height: 2 }}
+                    aria-hidden="true"
+                  />
+                  {e.label}
+                </div>
+              ))}
+              <div className="flex items-center gap-1.5 text-fg-muted">
+                <span className="text-3xs font-mono text-fg-faint">∿</span>
+                animated = fix attempted
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 interface GraphTableViewProps {
