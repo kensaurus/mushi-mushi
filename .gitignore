@@ -47,12 +47,20 @@ yarn-error.log*
 test-results/
 playwright-report/
 
-# Screenshots
+# Screenshots — never commit ad-hoc test screenshots into the repo root.
+# Real product screenshots belong in docs/screenshots/ and are explicitly
+# allow-listed below.
 screenshots/
 !docs/screenshots/
-qa-*.png
-fix-*.png
-smoke-*.png
+*.png
+!docs/**/*.png
+!apps/docs/public/**/*.png
+!apps/admin/public/**/*.png
+!packages/**/assets/**/*.png
+
+# Windows shells sometimes leave behind a literal `nul` file when commands
+# redirect to NUL on the wrong shell. Always ignore it.
+nul
 
 # Misc
 *.tgz

@@ -33,6 +33,10 @@ export function useReportPresence(opts: UseReportPresenceOptions): {
   const [others, setOthers] = useState<ReportPresenceRow[]>([])
   const intentRef = useRef(intent)
   const meIdRef = useRef<string | null>(null)
+  // Generation counter used to absorb React StrictMode's double-mount in dev.
+  // Each effect mount bumps `generationRef`; the cleanup only deletes the
+  // presence row if no newer generation has started since.
+  const generationRef = useRef(0)
 
   intentRef.current = intent
 
@@ -69,6 +73,7 @@ export function useReportPresence(opts: UseReportPresenceOptions): {
   useEffect(() => {
     if (!reportId || !projectId) return
     let cancelled = false
+    const myGeneration = ++generationRef.current
 
     void upsert(intentRef.current)
 
@@ -94,8 +99,11 @@ export function useReportPresence(opts: UseReportPresenceOptions): {
       void upsert(intentRef.current)
     }, heartbeatMs)
 
+    const uid = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
     const channel = supabase
-      .channel(`mushi:report-presence:${reportId}`)
+      .channel(`mushi:report-presence:${reportId}:${uid}`)
       .on('postgres_changes' as never,
         { event: '*', schema: 'public', table: 'report_presence', filter: `report_id=eq.${reportId}` } as never,
         () => { void refreshList() },
@@ -106,6 +114,10 @@ export function useReportPresence(opts: UseReportPresenceOptions): {
       cancelled = true
       clearInterval(heartbeat)
       supabase.removeChannel(channel)
+      // If a newer mount has already started (StrictMode dev double-fire,
+      // or rapid prop change), skip the delete — otherwise we'd race the
+      // new mount's upsert and end up with no presence row at all.
+      if (myGeneration !== generationRef.current) return
       if (meIdRef.current) {
         await supabase
           .from('report_presence')

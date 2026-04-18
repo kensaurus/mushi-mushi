@@ -226,7 +226,7 @@ export function MarketplacePage() {
                           </span>
                         ) : null}
                       </div>
-                      <p className="text-3xs opacity-60">
+                      <p className="text-2xs text-fg-muted">
                         {p.publisher} · {CATEGORY_LABEL[p.category] ?? p.category}
                       </p>
                     </div>
@@ -255,7 +255,7 @@ export function MarketplacePage() {
                         href={p.source_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-3xs text-brand hover:underline"
+                        className="text-2xs text-brand hover:underline"
                       >
                         Source ↗
                       </a>
@@ -291,7 +291,7 @@ export function MarketplacePage() {
               <Card key={(p.plugin_slug ?? p.plugin_name)} className="p-3 flex items-center justify-between gap-2">
                 <div>
                   <p className="text-xs font-semibold">{p.plugin_name}</p>
-                  <p className="text-3xs opacity-60">{p.webhook_url ?? '(built-in)'}</p>
+                  <p className="text-2xs text-fg-muted font-mono break-all">{p.webhook_url ?? '(built-in)'}</p>
                   <div className="flex flex-wrap gap-1 mt-1">
                     {p.subscribed_events.length === 0 ? (
                       <code className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">all events</code>
@@ -307,7 +307,7 @@ export function MarketplacePage() {
                     </span>
                   ) : null}
                   {p.last_delivery_at ? (
-                    <span className="text-3xs opacity-60">{new Date(p.last_delivery_at).toLocaleString()}</span>
+                    <span className="text-2xs text-fg-muted">{new Date(p.last_delivery_at).toLocaleString()}</span>
                   ) : null}
                 </div>
               </Card>
@@ -324,7 +324,7 @@ export function MarketplacePage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-3xs">
+            <table className="w-full text-2xs">
               <thead className="text-left opacity-60">
                 <tr>
                   <th className="px-2 py-1.5">When</th>

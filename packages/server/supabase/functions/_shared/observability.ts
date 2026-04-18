@@ -33,7 +33,10 @@ function getLangfuseConfig() {
   return {
     secretKey: Deno.env.get('LANGFUSE_SECRET_KEY'),
     publicKey: Deno.env.get('LANGFUSE_PUBLIC_KEY'),
-    baseUrl: Deno.env.get('LANGFUSE_BASE_URL') ?? 'https://cloud.langfuse.com',
+    baseUrl:
+      Deno.env.get('LANGFUSE_BASE_URL') ??
+      Deno.env.get('LANGFUSE_HOST') ??
+      'https://cloud.langfuse.com',
   }
 }
 

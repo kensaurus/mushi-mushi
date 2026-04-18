@@ -80,7 +80,7 @@ All routes are served from the `api` function under `/v1/`:
 
 - `POST /v1/reports` — SDK report submission
 - `POST /v1/reports/batch` — Batch report submission (up to 10)
-- `GET/PATCH /v1/admin/reports` — Report management
+- `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console
 - `GET /v1/admin/stats` — Dashboard statistics
 - `GET /v1/admin/graph/*` — Knowledge graph queries
 - `POST /v1/admin/query` — Natural language data queries

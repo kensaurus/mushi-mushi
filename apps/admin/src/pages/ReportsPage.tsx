@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { SEVERITY, STATUS, FILTER_OPTIONS } from '../lib/tokens'
-import { PageHeader, PageHelp, Badge, Card, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
+import { SEVERITY, STATUS, FILTER_OPTIONS, statusLabel, severityLabel } from '../lib/tokens'
+import { PageHeader, PageHelp, Badge, Card, FilterSelect, EmptyState, Loading, ErrorAlert, RecommendedAction } from '../components/ui'
 
 interface ReportRow {
   id: string
@@ -29,6 +29,8 @@ export function ReportsPage() {
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
   const severity = searchParams.get('severity') ?? ''
+  const component = searchParams.get('component') ?? ''
+  const reporter = searchParams.get('reporter') ?? ''
 
   useEffect(() => {
     setLoading(true)
@@ -37,6 +39,8 @@ export function ReportsPage() {
     if (status) params.set('status', status)
     if (category) params.set('category', category)
     if (severity) params.set('severity', severity)
+    if (component) params.set('component', component)
+    if (reporter) params.set('reporter', reporter)
 
     apiFetch<{ reports: ReportRow[]; total: number }>(`/v1/admin/reports?${params}`)
       .then((res) => {
@@ -49,7 +53,7 @@ export function ReportsPage() {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
-  }, [status, category, severity, retryKey])
+  }, [status, category, severity, component, reporter, retryKey])
 
   const setFilter = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
@@ -57,6 +61,56 @@ export function ReportsPage() {
     else next.delete(key)
     setSearchParams(next)
   }
+
+  const clearFilter = (key: string) => setFilter(key, '')
+
+  const contextChips: Array<{ key: string; label: string; value: string }> = []
+  if (component) contextChips.push({ key: 'component', label: 'Component', value: component })
+  if (reporter) contextChips.push({ key: 'reporter', label: 'Reporter', value: `${reporter.slice(0, 12)}…` })
+
+  const hasFilters = Boolean(status || category || severity || component || reporter)
+  const queuedCount = reports.filter((r) => r.status === 'queued').length
+  const criticalQueuedCount = reports.filter((r) => r.status === 'queued' && r.severity === 'critical').length
+
+  const recommendation = (() => {
+    if (loading || error) return null
+    if (total === 0 && !hasFilters) {
+      return {
+        title: 'No reports yet',
+        description: 'Install the SDK in your app and trigger a test report to see the pipeline come alive.',
+        cta: { label: 'Open setup wizard', to: '/onboarding' },
+        tone: 'info' as const,
+      }
+    }
+    if (criticalQueuedCount > 0) {
+      return {
+        title: `${criticalQueuedCount} critical ${criticalQueuedCount === 1 ? 'report' : 'reports'} need triage`,
+        description: 'High-severity reports are still queued. Open them to confirm classification and dispatch a fix.',
+        cta: {
+          label: 'Show critical queued',
+          onClick: () => {
+            const next = new URLSearchParams(searchParams)
+            next.set('status', 'queued')
+            next.set('severity', 'critical')
+            setSearchParams(next)
+          },
+        },
+        tone: 'urgent' as const,
+      }
+    }
+    if (queuedCount > 0 && status !== 'queued') {
+      return {
+        title: `${queuedCount} ${queuedCount === 1 ? 'report is' : 'reports are'} waiting for triage`,
+        description: 'Filter to the queued bucket to confirm classification and decide who fixes them.',
+        cta: {
+          label: 'Filter to queued',
+          onClick: () => setFilter('status', 'queued'),
+        },
+        tone: 'info' as const,
+      }
+    }
+    return null
+  })()
 
   return (
     <div>
@@ -75,10 +129,32 @@ export function ReportsPage() {
         howToUse="Use the filters above to narrow the list. Click any row to open the report detail view with full pipeline context and actions."
       />
 
-      <div className="flex gap-2 mb-3 flex-wrap">
+      {recommendation && (
+        <RecommendedAction
+          title={recommendation.title}
+          description={recommendation.description}
+          cta={recommendation.cta}
+          tone={recommendation.tone}
+        />
+      )}
+
+      <div className="flex gap-2 mb-3 flex-wrap items-center">
         <FilterSelect label="Status" value={status} options={FILTER_OPTIONS.statuses} onChange={(e) => setFilter('status', e.currentTarget.value)} />
         <FilterSelect label="Category" value={category} options={FILTER_OPTIONS.categories} onChange={(e) => setFilter('category', e.currentTarget.value)} />
         <FilterSelect label="Severity" value={severity} options={FILTER_OPTIONS.severities} onChange={(e) => setFilter('severity', e.currentTarget.value)} />
+        {contextChips.map((chip) => (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={() => clearFilter(chip.key)}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-accent/30 bg-accent-muted/30 px-2 py-1 text-2xs text-accent hover:bg-accent-muted/50 motion-safe:transition-colors"
+            title={`Clear ${chip.label} filter`}
+          >
+            <span className="font-medium">{chip.label}:</span>
+            <span className="font-mono">{chip.value}</span>
+            <span aria-hidden="true" className="text-fg-faint">×</span>
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -106,9 +182,9 @@ export function ReportsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>{report.status}</Badge>
+                    <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>{statusLabel(report.status)}</Badge>
                     {report.severity && (
-                      <Badge className={SEVERITY[report.severity] ?? ''}>{report.severity}</Badge>
+                      <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
                     )}
                     <span className="text-2xs text-fg-faint tabular-nums font-mono ml-1">
                       {new Date(report.created_at).toLocaleDateString()}

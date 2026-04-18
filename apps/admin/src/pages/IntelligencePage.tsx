@@ -1,7 +1,27 @@
-import { useEffect, useState } from 'react'
+/**
+ * FILE: apps/admin/src/pages/IntelligencePage.tsx
+ * PURPOSE: V5.3 §2.16 — weekly LLM-authored bug intelligence digests.
+ *          Generation is async (jobs queue) so the UI no longer hangs
+ *          for 30s+ when the LLM call is slow. Shows live progress card
+ *          and lets the user cancel a stuck job.
+ */
+
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, supabase } from '../lib/supabase'
 import { RESOLVED_API_URL } from '../lib/env'
-import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, EmptyState, Toggle } from '../components/ui'
+import {
+  PageHeader,
+  PageHelp,
+  Card,
+  Btn,
+  Loading,
+  ErrorAlert,
+  EmptyState,
+  Toggle,
+  Badge,
+  RelativeTime,
+} from '../components/ui'
+import { useToast } from '../lib/toast'
 
 interface IntelligenceReport {
   id: string
@@ -18,24 +38,47 @@ interface IntelligenceReport {
   created_at: string
 }
 
+interface IntelligenceJob {
+  id: string
+  project_id: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  trigger: string
+  report_id: string | null
+  error: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
 interface BenchmarkSettings {
   optIn: boolean
   optInAt: string | null
 }
 
+const JOB_STATUS_TONE: Record<IntelligenceJob['status'], string> = {
+  queued: 'bg-info/15 text-info border border-info/30',
+  running: 'bg-brand/15 text-brand border border-brand/30',
+  completed: 'bg-ok/15 text-ok border border-ok/30',
+  failed: 'bg-danger/15 text-danger border border-danger/30',
+  cancelled: 'bg-fg-faint/15 text-fg-muted border border-edge-subtle',
+}
+
 export function IntelligencePage() {
   const [reports, setReports] = useState<IntelligenceReport[]>([])
+  const [jobs, setJobs] = useState<IntelligenceJob[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [benchmark, setBenchmark] = useState<BenchmarkSettings>({ optIn: false, optInAt: null })
+  const toast = useToast()
+  const pollRef = useRef<number | null>(null)
 
-  const fetchData = async () => {
-    setLoading(true)
+  const fetchData = useCallback(async () => {
     setError(false)
-    const [reportsRes, settingsRes] = await Promise.all([
+    const [reportsRes, settingsRes, jobsRes] = await Promise.all([
       apiFetch<{ reports: IntelligenceReport[] }>('/v1/admin/intelligence'),
       apiFetch<{ benchmarking_optin?: boolean; benchmarking_optin_at?: string | null }>('/v1/admin/settings'),
+      apiFetch<{ jobs: IntelligenceJob[] }>('/v1/admin/intelligence/jobs'),
     ])
     if (reportsRes.ok && reportsRes.data) setReports(reportsRes.data.reports)
     else setError(true)
@@ -45,24 +88,72 @@ export function IntelligencePage() {
         optInAt: settingsRes.data.benchmarking_optin_at ?? null,
       })
     }
+    if (jobsRes.ok && jobsRes.data) setJobs(jobsRes.data.jobs)
     setLoading(false)
-  }
+  }, [])
 
-  useEffect(() => { void fetchData() }, [])
+  useEffect(() => {
+    void fetchData()
+  }, [fetchData])
+
+  // Auto-poll while any job is queued/running so the progress card stays
+  // honest. Stop polling when nothing is in flight to avoid wasted requests.
+  useEffect(() => {
+    const inFlight = jobs.some((j) => j.status === 'queued' || j.status === 'running')
+    if (!inFlight) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+      return
+    }
+    if (pollRef.current) return
+    pollRef.current = window.setInterval(() => {
+      void fetchData()
+    }, 3000)
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [jobs, fetchData])
 
   const generateNow = async () => {
     setGenerating(true)
     try {
-      await apiFetch('/v1/admin/intelligence', { method: 'POST' })
+      const res = await apiFetch<{ jobId: string; deduplicated?: boolean }>(
+        '/v1/admin/intelligence',
+        { method: 'POST' },
+      )
+      if (res.ok && res.data) {
+        if (res.data.deduplicated) {
+          toast.push({ tone: 'info', message: 'A generation job is already running' })
+        } else {
+          toast.push({ tone: 'success', message: 'Generation started — watch the progress card below' })
+        }
+      } else {
+        toast.push({ tone: 'error', message: res.error?.message ?? 'Failed to enqueue job' })
+      }
       await fetchData()
     } finally {
       setGenerating(false)
     }
   }
 
+  const cancelJob = async (id: string) => {
+    const res = await apiFetch(`/v1/admin/intelligence/jobs/${id}/cancel`, {
+      method: 'POST',
+    })
+    if (res.ok) {
+      toast.push({ tone: 'info', message: 'Job cancelled' })
+      await fetchData()
+    } else {
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Cancel failed' })
+    }
+  }
+
   const toggleOptIn = async (next: boolean) => {
-    // Snapshot the whole state — restoring only the boolean would clobber
-    // optInAt, breaking the "Opted in {date}" display when the call fails.
     const prev = benchmark
     setBenchmark({ optIn: next, optInAt: next ? new Date().toISOString() : null })
     const res = await apiFetch('/v1/admin/settings/benchmarking', {
@@ -71,7 +162,7 @@ export function IntelligencePage() {
     })
     if (!res.ok) {
       setBenchmark(prev)
-      alert('Failed to update benchmarking opt-in.')
+      toast.push({ tone: 'error', message: 'Failed to update benchmarking opt-in' })
     }
   }
 
@@ -80,14 +171,14 @@ export function IntelligencePage() {
       const { data: sess } = await supabase.auth.getSession()
       const token = sess.session?.access_token
       if (!token) {
-        alert('Not authenticated.')
+        toast.push({ tone: 'error', message: 'Not authenticated' })
         return
       }
       const res = await fetch(`${RESOLVED_API_URL}/v1/admin/intelligence/${id}/html`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) {
-        alert(`Failed to load report (${res.status}).`)
+        toast.push({ tone: 'error', message: `Failed to load report (${res.status})` })
         return
       }
       const html = await res.text()
@@ -100,20 +191,22 @@ export function IntelligencePage() {
         a.download = `bug-intelligence-${weekStart}.html`
         a.click()
       } else {
-        // Wait for content to load, then trigger print so the user can save as PDF.
         win.addEventListener('load', () => setTimeout(() => win.print(), 200))
       }
       setTimeout(() => URL.revokeObjectURL(url), 60_000)
     } catch (e) {
-      alert(`Could not open report: ${String(e)}`)
+      toast.push({ tone: 'error', message: `Could not open report: ${String(e)}` })
     }
   }
+
+  const activeJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
+  const recentJobs = jobs.slice(0, 5)
 
   return (
     <div className="space-y-3">
       <PageHeader title="Bug Intelligence">
-        <Btn onClick={generateNow} disabled={generating}>
-          {generating ? 'Generating…' : 'Generate this week'}
+        <Btn onClick={generateNow} disabled={generating || !!activeJob}>
+          {activeJob ? 'Generating…' : generating ? 'Enqueuing…' : 'Generate this week'}
         </Btn>
       </PageHeader>
 
@@ -125,8 +218,48 @@ export function IntelligencePage() {
           'Spot regressions early — week-over-week category and severity drift',
           'Compare your fix velocity against anonymised industry benchmarks (opt-in)',
         ]}
-        howToUse="Reports are generated automatically by the cron job every Monday. Click Generate to run for the current week on demand. Click Download PDF to open a printable view — your browser's print dialog handles the actual PDF export."
+        howToUse="Reports are generated automatically every Monday by cron. Click Generate to run for the current week — the job runs in the background and the progress card below stays live. If a job is wedged you can cancel it."
       />
+
+      {activeJob && (
+        <Card elevated className="p-3 border border-brand/30">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-semibold text-fg">
+                  Generation in progress
+                </span>
+                <Badge className={JOB_STATUS_TONE[activeJob.status]}>
+                  {activeJob.status}
+                </Badge>
+              </div>
+              <p className="text-2xs text-fg-muted">
+                Started <RelativeTime value={activeJob.started_at ?? activeJob.created_at} />
+                {' · '}LLM call typically takes 20–60s
+              </p>
+              <div className="mt-2 h-1 rounded-full bg-edge-subtle overflow-hidden">
+                <div className="h-full w-1/3 bg-brand animate-pulse rounded-full" />
+              </div>
+            </div>
+            <Btn variant="ghost" size="sm" onClick={() => void cancelJob(activeJob.id)}>
+              Cancel
+            </Btn>
+          </div>
+        </Card>
+      )}
+
+      {!activeJob && recentJobs.some((j) => j.status === 'failed') && (
+        <Card className="p-3 border border-danger/30 bg-danger/5">
+          <div className="text-xs font-semibold text-danger mb-1">
+            Last generation failed
+          </div>
+          <p className="text-2xs text-fg-muted">
+            {recentJobs.find((j) => j.status === 'failed')?.error ??
+              'Unknown error.'}
+            {' '}Check Settings → LLM Keys to confirm your BYOK key is valid, then retry.
+          </p>
+        </Card>
+      )}
 
       <Card className="p-3">
         <div className="flex items-start justify-between gap-3">
@@ -146,6 +279,49 @@ export function IntelligencePage() {
           <Toggle checked={benchmark.optIn} onChange={toggleOptIn} label={benchmark.optIn ? 'Sharing on' : 'Sharing off'} />
         </div>
       </Card>
+
+      {recentJobs.length > 0 && (
+        <Card className="p-3">
+          <div className="flex items-baseline justify-between mb-1.5">
+            <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
+              Recent generation jobs
+            </h3>
+          </div>
+          <ul className="space-y-1 text-2xs">
+            {recentJobs.map((j) => (
+              <li
+                key={j.id}
+                className="flex items-center justify-between gap-2 border-t border-edge-subtle pt-1 first:border-0 first:pt-0"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Badge className={JOB_STATUS_TONE[j.status]}>{j.status}</Badge>
+                  <span className="text-fg-muted">
+                    Started <RelativeTime value={j.started_at ?? j.created_at} />
+                  </span>
+                  {j.finished_at && j.started_at && (
+                    <span className="text-fg-faint font-mono">
+                      {Math.round(
+                        (new Date(j.finished_at).getTime() -
+                          new Date(j.started_at).getTime()) /
+                          1000,
+                      )}
+                      s
+                    </span>
+                  )}
+                </div>
+                {j.error && (
+                  <span
+                    className="text-danger truncate max-w-md"
+                    title={j.error}
+                  >
+                    {j.error}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load intelligence reports." onRetry={fetchData} /> : reports.length === 0 ? (
         <EmptyState

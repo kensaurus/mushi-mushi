@@ -4,19 +4,24 @@
  *          Compact, dark-themed, data-dense design system components.
  */
 
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import { Link } from 'react-router-dom'
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
 interface BadgeProps {
   children: ReactNode
   className?: string
+  title?: string
 }
 
-export function Badge({ children, className = '' }: BadgeProps) {
+export function Badge({ children, className = '', title }: BadgeProps) {
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${className}`}>
+    <span
+      title={title}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-2xs leading-tight font-medium ${className}`}
+    >
       {children}
     </span>
   )
@@ -29,18 +34,44 @@ interface CardProps {
   className?: string
   interactive?: boolean
   elevated?: boolean
+  onClick?: (e: React.MouseEvent<HTMLDivElement>) => void
+  title?: string
 }
 
-export function Card({ children, className = '', interactive, elevated }: CardProps) {
+export function Card({ children, className = '', interactive, elevated, onClick, title }: CardProps) {
+  // When the card has an onClick handler we promote it to button semantics so
+  // the keyboard story is honest — a div with a click handler isn't reachable.
+  const interactiveProps = onClick
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick(e as unknown as React.MouseEvent<HTMLDivElement>)
+          }
+        },
+      }
+    : {}
   if (elevated) {
     return (
-      <div className={`card-elevated ${interactive ? 'hover:brightness-110 motion-safe:transition-all motion-safe:duration-150' : ''} ${className}`}>
+      <div
+        className={`card-elevated ${interactive || onClick ? 'hover:brightness-110 motion-safe:transition-all motion-safe:duration-150' : ''} ${className}`}
+        onClick={onClick}
+        title={title}
+        {...interactiveProps}
+      >
         {children}
       </div>
     )
   }
   return (
-    <div className={`bg-surface-raised/50 border border-edge-subtle rounded-md shadow-card ${interactive ? 'hover:bg-surface-overlay motion-safe:transition-colors motion-safe:duration-150' : ''} ${className}`}>
+    <div
+      className={`bg-surface-raised/50 border border-edge-subtle rounded-md shadow-card ${interactive || onClick ? 'hover:bg-surface-overlay motion-safe:transition-colors motion-safe:duration-150' : ''} ${className}`}
+      onClick={onClick}
+      title={title}
+      {...interactiveProps}
+    >
       {children}
     </div>
   )
@@ -53,13 +84,17 @@ interface SectionProps {
   children: ReactNode
   className?: string
   action?: ReactNode
+  icon?: ReactNode
 }
 
-export function Section({ title, children, className = '', action }: SectionProps) {
+export function Section({ title, children, className = '', action, icon }: SectionProps) {
   return (
     <Card className={`p-3 ${className}`}>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">{title}</h3>
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+          {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
+          <span>{title}</span>
+        </h3>
         {action}
       </div>
       {children}
@@ -73,14 +108,277 @@ interface FieldProps {
   label: string
   value: string
   mono?: boolean
+  tooltip?: string
+  copyable?: boolean
+  valueClassName?: string
 }
 
-export function Field({ label, value, mono }: FieldProps) {
+export function Field({ label, value, mono, tooltip, copyable, valueClassName = '' }: FieldProps) {
   return (
-    <div className="mb-1.5 last:mb-0">
-      <span className="text-2xs text-fg-faint">{label}</span>
-      <p className={`text-sm text-fg-secondary break-all ${mono ? 'font-mono' : ''}`}>{value}</p>
+    <div className="mb-2 last:mb-0">
+      <span className="flex items-center gap-1 text-xs text-fg-muted font-medium">
+        {label}
+        {tooltip && <InfoHint content={tooltip} />}
+      </span>
+      <div className="flex items-start gap-1.5 mt-0.5">
+        <p className={`text-sm text-fg break-all ${mono ? 'font-mono' : ''} ${valueClassName}`}>{value}</p>
+        {copyable && <CopyButton value={value} />}
+      </div>
     </div>
+  )
+}
+
+/* ── InfoHint (i icon that reveals a tooltip) ───────────────────────────── */
+
+export function InfoHint({ content }: { content: string }) {
+  return (
+    <Tooltip content={content}>
+      <button
+        type="button"
+        aria-label={content}
+        className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-3xs text-fg-faint hover:text-fg-muted hover:border-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 cursor-help"
+      >
+        <span aria-hidden="true" className="leading-none italic font-serif">i</span>
+      </button>
+    </Tooltip>
+  )
+}
+
+/* ── CopyButton ─────────────────────────────────────────────────────────── */
+
+export function CopyButton({ value, className = '' }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard write can fail in insecure contexts (http://) or when the user
+      // denies permission — silently no-op rather than throw, matching CommandPalette
+      // pattern. The user will see the unchanged icon and try again.
+    }
+  }
+  return (
+    <Tooltip content={copied ? 'Copied' : 'Copy to clipboard'}>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={copied ? 'Copied' : 'Copy to clipboard'}
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-colors ${className}`}
+      >
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+          {copied ? (
+            <polyline points="3,8.5 6.5,12 13,4.5" strokeLinecap="round" strokeLinejoin="round" />
+          ) : (
+            <>
+              <rect x="5" y="5" width="8.5" height="8.5" rx="1" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M11 5V3.5a1 1 0 0 0-1-1H3.5a1 1 0 0 0-1 1V10a1 1 0 0 0 1 1H5" strokeLinecap="round" strokeLinejoin="round" />
+            </>
+          )}
+        </svg>
+      </button>
+    </Tooltip>
+  )
+}
+
+/* ── IdField (UUID / hash / session id with copy + full-value tooltip) ─── */
+
+interface IdFieldProps {
+  label: string
+  value: string
+  prefixLength?: number
+  tooltip?: string
+}
+
+export function IdField({ label, value, prefixLength = 12, tooltip }: IdFieldProps) {
+  const display = value.length > prefixLength ? `${value.slice(0, prefixLength)}…` : value
+  return (
+    <div className="mb-2 last:mb-0">
+      <span className="flex items-center gap-1 text-xs text-fg-muted font-medium">
+        {label}
+        {tooltip && <InfoHint content={tooltip} />}
+      </span>
+      <div className="flex items-center gap-1 mt-0.5">
+        <Tooltip content={value}>
+          <span className="text-sm font-mono text-fg-secondary cursor-help">{display}</span>
+        </Tooltip>
+        <CopyButton value={value} />
+      </div>
+    </div>
+  )
+}
+
+/* ── RelativeTime (humanised time + ISO tooltip) ────────────────────────── */
+
+const RTF = typeof Intl !== 'undefined' ? new Intl.RelativeTimeFormat('en', { numeric: 'auto' }) : null
+
+function formatRelative(input: string | Date): string {
+  const date = typeof input === 'string' ? new Date(input) : input
+  const diffSec = (date.getTime() - Date.now()) / 1000
+  const abs = Math.abs(diffSec)
+  if (!RTF) return date.toLocaleString()
+  if (abs < 60) return RTF.format(Math.round(diffSec), 'second')
+  if (abs < 3600) return RTF.format(Math.round(diffSec / 60), 'minute')
+  if (abs < 86400) return RTF.format(Math.round(diffSec / 3600), 'hour')
+  if (abs < 604800) return RTF.format(Math.round(diffSec / 86400), 'day')
+  if (abs < 2_592_000) return RTF.format(Math.round(diffSec / 604800), 'week')
+  if (abs < 31_536_000) return RTF.format(Math.round(diffSec / 2_592_000), 'month')
+  return RTF.format(Math.round(diffSec / 31_536_000), 'year')
+}
+
+export function RelativeTime({ value, className = '' }: { value: string | Date; className?: string }) {
+  const date = typeof value === 'string' ? new Date(value) : value
+  return (
+    <Tooltip content={date.toLocaleString()}>
+      <span className={`cursor-help ${className}`}>{formatRelative(date)}</span>
+    </Tooltip>
+  )
+}
+
+/* ── RecommendedAction (status-aware suggestion card) ──────────────────── */
+
+interface RecommendedActionCta {
+  label: string
+  onClick?: () => void
+  href?: string
+  to?: string
+  disabled?: boolean
+}
+
+interface RecommendedActionProps {
+  title: string
+  description?: string
+  cta?: RecommendedActionCta
+  tone?: 'urgent' | 'info' | 'success' | 'neutral'
+}
+
+const RECOMMENDED_TONES = {
+  urgent:  'border-danger/30 bg-danger-muted/15',
+  info:    'border-info/30 bg-info-muted/15',
+  success: 'border-ok/30 bg-ok-muted/15',
+  neutral: 'border-edge bg-surface-raised/40',
+} as const
+
+const RECOMMENDED_ACCENTS = {
+  urgent: 'text-danger',
+  info: 'text-info',
+  success: 'text-ok',
+  neutral: 'text-fg-muted',
+} as const
+
+const CTA_BTN_CLASS =
+  'shrink-0 inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors disabled:opacity-50 disabled:cursor-not-allowed'
+
+function RecommendedActionCtaEl({ cta }: { cta: RecommendedActionCta }) {
+  if (cta.to) {
+    return (
+      <Link to={cta.to} className={CTA_BTN_CLASS} aria-disabled={cta.disabled}>
+        {cta.label}
+      </Link>
+    )
+  }
+  if (cta.href) {
+    return (
+      <a
+        href={cta.href}
+        target={cta.href.startsWith('http') ? '_blank' : undefined}
+        rel={cta.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+        className={CTA_BTN_CLASS}
+      >
+        {cta.label}
+      </a>
+    )
+  }
+  return (
+    <button type="button" onClick={cta.onClick} disabled={cta.disabled} className={CTA_BTN_CLASS}>
+      {cta.label}
+    </button>
+  )
+}
+
+export function RecommendedAction({ title, description, cta, tone = 'info' }: RecommendedActionProps) {
+  return (
+    <div className={`flex items-start gap-3 rounded-md border p-3 mb-3 ${RECOMMENDED_TONES[tone]}`}>
+      <div className={`mt-0.5 shrink-0 ${RECOMMENDED_ACCENTS[tone]}`}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+          <circle cx="8" cy="8" r="6" />
+          <path d="M8 5v3.5M8 11h.01" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-fg leading-tight">{title}</p>
+        {description && <p className="text-xs text-fg-muted mt-1 leading-snug">{description}</p>}
+      </div>
+      {cta && <RecommendedActionCtaEl cta={cta} />}
+    </div>
+  )
+}
+
+/* ── ImageZoom (click-to-zoom modal for screenshots) ───────────────────── */
+
+interface ImageZoomProps {
+  src: string
+  alt: string
+  thumbClassName?: string
+}
+
+export function ImageZoom({ src, alt, thumbClassName = '' }: ImageZoomProps) {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={`group relative block overflow-hidden rounded-sm border border-edge cursor-zoom-in focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${thumbClassName}`}
+        aria-label={`Open ${alt} full-size`}
+      >
+        <img src={src} alt={alt} className="block w-full object-contain" />
+        <span className="absolute inset-0 flex items-center justify-center bg-overlay/60 opacity-0 group-hover:opacity-100 motion-safe:transition-opacity text-2xs text-fg font-medium">
+          Click to enlarge
+        </span>
+      </button>
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm p-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label={alt}
+          onClick={() => setOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setOpen(false) }}
+            aria-label="Close"
+            className="absolute top-3 right-3 inline-flex h-8 w-8 items-center justify-center rounded-sm text-fg-secondary hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+              <line x1="4" y1="4" x2="12" y2="12" strokeLinecap="round" />
+              <line x1="12" y1="4" x2="4" y2="12" strokeLinecap="round" />
+            </svg>
+          </button>
+          <img
+            src={src}
+            alt={alt}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[90vh] max-w-[95vw] object-contain rounded-sm shadow-raised"
+          />
+        </div>
+      )}
+    </>
   )
 }
 

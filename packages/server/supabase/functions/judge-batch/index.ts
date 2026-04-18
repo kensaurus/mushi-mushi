@@ -12,6 +12,34 @@ import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
 
+/**
+ * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
+ * commonly type bare names (`gpt-4.1`, `claude-opus-4-6`) inherited from the
+ * direct-API config. This helper prefixes the most common families so the
+ * call doesn't 400 with "model not found" the first time someone enables a
+ * gateway. If the model already contains a `/`, we leave it alone.
+ */
+function normalizeGatewayModel(model: string): string {
+  if (!model || model.includes('/')) return model
+  const m = model.toLowerCase()
+  if (m.startsWith('gpt') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
+    return `openai/${model}`
+  }
+  if (m.startsWith('claude')) return `anthropic/${model}`
+  if (m.startsWith('gemini')) return `google/${model}`
+  if (m.startsWith('llama')) return `meta-llama/${model}`
+  if (m.startsWith('mistral') || m.startsWith('mixtral')) return `mistralai/${model}`
+  if (m.startsWith('qwen')) return `qwen/${model}`
+  if (m.startsWith('deepseek')) return `deepseek/${model}`
+  return model
+}
+
+// OpenAI's "strict" structured-outputs mode rejects optional fields — every
+// property must appear in `required` and use `nullable` instead of `optional`.
+// Use `.nullable()` everywhere so the schema is portable across:
+//   - Anthropic (tolerant of optional)
+//   - OpenAI strict mode (the original failure)
+//   - OpenRouter (passes the schema through to upstream verbatim)
 const judgeSchema = z.object({
   accuracy: z.number().min(0).max(1).describe('Does the category match the described issue?'),
   severity_calibration: z.number().min(0).max(1).describe('Is severity proportional to impact?'),
@@ -20,10 +48,10 @@ const judgeSchema = z.object({
   classification_agreed: z.boolean().describe('Would you agree with the overall classification?'),
   reasoning: z.string().max(500).describe('Brief justification for scores'),
   suggested_correction: z.object({
-    category: z.string().optional(),
-    severity: z.string().optional(),
-    component: z.string().optional(),
-  }).optional().describe('If classification_agreed is false, suggest corrections'),
+    category: z.string().nullable().describe('Suggested category, or null if no change'),
+    severity: z.string().nullable().describe('Suggested severity, or null if no change'),
+    component: z.string().nullable().describe('Suggested component, or null if no change'),
+  }).nullable().describe('If classification_agreed is false, suggest corrections; otherwise null'),
 })
 
 Deno.serve(withSentry('judge-batch', async (req) => {
@@ -59,6 +87,9 @@ Deno.serve(withSentry('judge-batch', async (req) => {
 
     let totalEvaluated = 0
     const driftAlerts: string[] = []
+    // Capture per-report failures so the operator can see WHY rows_affected=0
+    // without fishing through edge-function stdout. Surfaced on cron_runs.metadata.
+    const evalErrors: Array<{ reportId: string; err: string }> = []
 
     for (const project of projects) {
       const { data: settings } = await db
@@ -122,48 +153,77 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
           // Wave C C9: per-project BYOK resolution.
           const anthropicResolved = await resolveLlmKey(db, project.id, 'anthropic')
-          try {
-            const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
-            const result = await generateObject({
-              model: anthropic(modelId),
-              schema: judgeSchema,
-              messages: [
-                {
-                  role: 'system',
-                  content: SYSTEM_PROMPT,
-                  experimental_providerMetadata: {
-                    anthropic: { cacheControl: { type: 'ephemeral' } },
+          // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
+          // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
+          // direct Anthropic key. If we have no Anthropic key at all, skip the
+          // primary path entirely — going through `createAnthropic` without a
+          // key throws a noisy 401 that pollutes the judge log and wastes a
+          // round-trip on every report.
+          const tryAnthropic = !!(anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY'))
+          let primaryErr: unknown = tryAnthropic ? null : new Error('No Anthropic key — skipping primary path')
+
+          if (tryAnthropic) {
+            try {
+              const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
+              const result = await generateObject({
+                model: anthropic(modelId),
+                schema: judgeSchema,
+                messages: [
+                  {
+                    role: 'system',
+                    content: SYSTEM_PROMPT,
+                    experimental_providerMetadata: {
+                      anthropic: { cacheControl: { type: 'ephemeral' } },
+                    },
                   },
-                },
-                { role: 'user', content: USER_PROMPT },
-              ],
-            })
-            evaluation = result.object
-            usage = result.usage
-          } catch (primaryErr) {
+                  { role: 'user', content: USER_PROMPT },
+                ],
+              })
+              evaluation = result.object
+              usage = result.usage
+            } catch (err) {
+              primaryErr = err
+            }
+          }
+
+          if (primaryErr) {
             // M2 (V5.3 §2.7): OpenAI fallback when Anthropic is degraded
-            // (529 overloaded, 5xx). Same Zod schema; we never fail the whole
-            // batch just because one provider is down.
+            // (529 overloaded, 5xx) OR the deployment is BYOK-only on
+            // OpenRouter / Together / Fireworks. Same Zod schema; we never
+            // fail the whole batch just because the primary provider is down.
             const openaiResolved = await resolveLlmKey(db, project.id, 'openai')
             const openaiKey = openaiResolved?.key ?? Deno.env.get('OPENAI_API_KEY')
             if (fallbackProvider !== 'openai' || !openaiKey) {
               throw primaryErr
             }
-            rootLog.child('judge').warn('Anthropic judge failed; falling back to OpenAI', {
+            // OpenRouter (and most OpenAI-compatible gateways) require a
+            // `vendor/model` slug. If the operator wrote `gpt-4.1` we map it
+            // to `openai/gpt-4.1`; `claude-opus-4-6` -> `anthropic/claude-…`.
+            // Only applied when a baseURL is set (i.e., not direct OpenAI).
+            const isGateway = !!openaiResolved?.baseUrl
+            const normalizedModel = isGateway
+              ? normalizeGatewayModel(fallbackModelId)
+              : fallbackModelId
+            rootLog.child('judge').info('Using OpenAI fallback judge', {
               reportId: report.id,
-              err: String(primaryErr).slice(0, 200),
+              gateway: isGateway ? openaiResolved!.baseUrl : null,
+              model: normalizedModel,
+              skippedPrimary: !tryAnthropic,
             })
-            const openai = createOpenAI({ apiKey: openaiKey })
+            const openai = createOpenAI({
+              apiKey: openaiKey,
+              ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+            })
             const result = await generateObject({
-              model: openai(fallbackModelId),
+              model: openai(normalizedModel),
               schema: judgeSchema,
               system: SYSTEM_PROMPT,
               prompt: USER_PROMPT,
             })
             evaluation = result.object
             usage = result.usage
-            usedJudgeModel = fallbackModelId
-            judgeFallbackUsed = true
+            usedJudgeModel = normalizedModel
+            judgeFallbackUsed = tryAnthropic // only "fallback" if primary actually attempted
           }
 
           const compositeScore = (
@@ -186,6 +246,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             judge_reasoning: evaluation.reasoning,
             classification_agreed: evaluation.classification_agreed,
             suggested_correction: evaluation.suggested_correction ?? null,
+            langfuse_trace_id: trace.id,
           })
 
           await db.from('reports').update({
@@ -229,8 +290,15 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           totalEvaluated++
           span.end({ model: usedJudgeModel, fallback: judgeFallbackUsed, latencyMs: Date.now() - start, score: compositeScore, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         } catch (err) {
-          rootLog.child('judge').error('Failed to evaluate report', { reportId: report.id, err: String(err) })
-          span.end({ error: String(err) })
+          // AI SDK wraps provider errors in AI_APICallError — pull the raw
+          // response body / status when available so the operator can see
+          // "model not found" vs "rate limit" vs "invalid key" at a glance.
+          const e = err as { responseBody?: string; statusCode?: number; cause?: unknown; message?: string }
+          const detail = e.responseBody?.slice(0, 300) ?? e.message ?? String(err)
+          const errMsg = `${e.statusCode ? `[${e.statusCode}] ` : ''}${detail}`.slice(0, 400)
+          rootLog.child('judge').error('Failed to evaluate report', { reportId: report.id, err: errMsg })
+          evalErrors.push({ reportId: report.id, err: errMsg })
+          span.end({ error: errMsg })
         }
       }
 
@@ -290,7 +358,14 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
     await cronRun.finish({
       rowsAffected: totalEvaluated,
-      metadata: { driftAlerts, projectsChecked: projects.length },
+      metadata: {
+        driftAlerts,
+        projectsChecked: projects.length,
+        // Trim to first few — we only need a fingerprint, not 50 copies of the
+        // same error.
+        evalErrors: evalErrors.slice(0, 3),
+        evalErrorCount: evalErrors.length,
+      },
     })
 
     return new Response(JSON.stringify({

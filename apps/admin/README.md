@@ -56,6 +56,43 @@ Tokens are defined in `src/index.css` using Tailwind v4's `@theme` directive. Sh
 
 `brand` (amber), `accent` (violet), `ok` (green), `warn` (amber), `danger` (red), `info` (blue)
 
+### UI primitives (`src/components/ui.tsx`)
+
+Layout & content:
+
+- `PageHeader`, `PageHelp` — consistent page chrome with collapsible "what / when / how" help block
+- `Section` — titled section with optional leading `icon` (e.g. `IconUser`, `IconSparkle`, `IconCamera` from `icons.tsx`)
+- `Card`, `Divider`, `EmptyState`, `Loading`, `Skeleton`, `ErrorAlert`, `StatCard`
+
+Field rendering:
+
+- `Field` — label / value pair; supports `tooltip` (jargon hint), `copyable`, and a custom `valueClassName`
+- `IdField` — UUID/hash renderer with truncated prefix, copy-on-click, and a tooltip showing the full value
+- `RelativeTime` — "3h ago" with the full ISO timestamp on hover
+- `CopyButton`, `InfoHint` — one-click copy and an `i`-icon tooltip for inline use
+
+Status-aware guidance:
+
+- `RecommendedAction` — single-sentence "what to do next" card with one CTA, used on the Report Detail page and across `Reports`, `DLQ`, `Fixes`, and `Health`. Tones: `urgent` / `info` / `success` / `neutral`. CTA accepts `to` (router link), `href` (external), or `onClick`.
+
+Media:
+
+- `ImageZoom` — click-to-zoom modal for screenshots (Esc to close, no library dependency)
+
+Forms & controls:
+
+- `Btn`, `Input`, `Textarea`, `Checkbox`, `Toggle`, `SelectField`, `FilterSelect`, `Tooltip`, `Kbd`, `Badge`
+
+### Label helpers (`src/lib/tokens.ts`)
+
+Always render statuses, severities, and pipeline states through the helper functions instead of raw snake_case strings:
+
+- `statusLabel(status)` — `"queued" → "Queued"`, `"ready_for_review" → "Ready for review"`, etc.
+- `severityLabel(severity)` — `"critical" → "Critical"`
+- `pipelineStatusLabel(stage)` — `"dead_letter" → "Dead letter"`, `"in_progress" → "In progress"`
+
+Color tokens for the same dimensions live in `STATUS`, `SEVERITY`, and `PIPELINE_STATUS`.
+
 ## First-Run Experience
 
 The console operates in two modes — auto-detected from env vars:
@@ -97,22 +134,53 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 | `/reset-password` | Set new password after recovery link |
 | `/` | Dashboard — stat cards, category/severity breakdowns; getting started cards when empty |
 | `/onboarding` | First-run setup wizard (project, API key, test, SDK snippet) |
-| `/reports` | Filterable report list |
-| `/reports/:id` | Report detail — triage, LLM classification, environment, logs |
-| `/queue` | Dead letter queue — failed pipeline jobs |
-| `/graph` | Knowledge graph visualization |
-| `/judge` | LLM self-improvement scores |
-| `/query` | Natural language data queries |
-| `/fixes` | Auto-fix pipeline status |
-| `/projects` | Project management + API keys |
-| `/integrations` | Jira, Linear, GitHub, PagerDuty |
-| `/sso` | SAML/OIDC configuration |
+| `/reports` | Filterable report list (status / category / severity / `component` / `reporter`); status-aware "what to do next" card above the filters |
+| `/reports/:id` | Report detail — recommended next action, triage bar, LLM classification, environment, console / network / performance (always rendered with empty states), zoomable screenshot, related cross-links (component, reporter, graph, fix) |
+| `/queue` | Pipeline queue — paginated backlog by stage/status, throughput sparkline, retry actions, DLQ inspector |
+| `/graph` | Knowledge graph — interactive React Flow canvas (component / page / reporter / category clusters, search, blast-radius highlight, side-panel detail) |
+| `/judge` | Judge dashboard — KPI row, score-over-time trend, score distribution histogram, prompt-version leaderboard, "Run judge now" button |
+| `/query` | Ask Your Data — natural-language → SQL with persistent history (per user), sanitised LLM output (trailing `;` and inline comments stripped), explanation, generated SQL, and result table |
+| `/fixes` | Auto-fix PDCA — KPI summary (last 30d), daily volume sparkline, per-fix branch graph (`FixGitGraph`) overlaying dispatch → branch → commit → PR → CI → merge, retry button |
+| `/projects` | Project management + API keys, with toast feedback for create / generate / revoke |
+| `/integrations` | Sentry, Langfuse, GitHub App, Jira, Linear, PagerDuty — health-history-aware status dot in the sidebar |
+| `/sso` | SAML/OIDC configuration with validated submit + toast feedback |
 | `/audit` | Audit log with CSV export |
-| `/fine-tuning` | LLM fine-tuning jobs |
+| `/prompt-lab` | Prompt Lab (replaces `/fine-tuning`) — leaderboard of prompt versions, A/B traffic split, dataset preview, clone / activate / delete. `/fine-tuning` redirects here |
 | `/health` | LLM and cron job health — fallback rate, latency, last-run status (live via Realtime) |
 | `/anti-gaming` | Reporter-token abuse detection — flagged devices and event log |
 | `/notifications` | Reporter-facing notifications — classified, fixed, reward events |
+| `/intelligence` | Bug Intelligence — async generation queue with progress card (cancellable), recent reports |
+| `/storage` | Per-project storage overrides (S3 / R2 / GCS / MinIO / Supabase) with health check + toast feedback |
 | `/settings` | Project configuration, connection health, pipeline test, debug toggle |
+
+### Page primitives
+
+Every analytical page reuses the same visual vocabulary from `src/components/charts.tsx`:
+
+- `KpiRow` + `KpiTile` — clickable KPIs with `accent`, `delta` ({ value, direction, tone }), and optional `to` deep link
+- `LineSparkline`, `BarSparkline`, `Histogram`, `SeverityStackedBars` — minimal SVG/HTML charts that respect the design tokens
+- `StatusPill`, `HealthPill`, `LegendDot` — semantic status rendering shared between Dashboard, Judge, Queue, Fixes, and Prompt Lab
+- `FixGitGraph` (`src/components/FixGitGraph.tsx`) — inline SVG branch graph for a single fix attempt's PDCA timeline
+
+Async UX & reliability:
+
+- `useToast` (`src/lib/toast.tsx`) — global toast provider with `success / error / warn / info` tones; accepts `message` as an alias for `title` for ergonomic call sites
+- `usePageData` (`src/lib/usePageData.ts`) — StrictMode-safe GET hook (per-mount abort flag, stable `reload` callback, optional `deps`)
+- `IntegrationHealthDot` — sidebar health indicator that polls `/v1/admin/health/history` and degrades to yellow/red on the worst latest status per kind
+- `FixesPage` polling pauses while the tab is hidden and guards against overlapping in-flight requests
+
+### New admin endpoints (server)
+
+These were added to support the page rebuilds and live in `packages/server/supabase/functions/api/index.ts`:
+
+- `GET  /v1/admin/dashboard` — single-call payload for the dashboard
+- `GET  /v1/admin/judge/evaluations | /distribution | /prompts`, `POST /v1/admin/judge/run`
+- `POST /v1/admin/query`, `GET /v1/admin/query/history`, `DELETE /v1/admin/query/history/:id`
+- `GET  /v1/admin/fixes/:id/timeline`, `GET /v1/admin/fixes/summary`
+- `GET  /v1/admin/queue` (paginated), `GET /v1/admin/queue/summary`, `GET /v1/admin/queue/throughput`
+- `GET  /v1/admin/prompt-lab`, `POST | PATCH | DELETE /v1/admin/prompt-lab/prompts[/:id]`
+- `POST /v1/admin/intelligence` (async, enqueues a job), `GET /v1/admin/intelligence/jobs`, `POST /v1/admin/intelligence/jobs/:id/cancel`
+- `GET  /v1/admin/health/history`
 
 ## Deployment
 

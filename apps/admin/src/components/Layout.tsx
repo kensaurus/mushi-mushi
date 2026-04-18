@@ -15,6 +15,7 @@ import {
   IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence,
   IconCompliance, IconStorage, IconMarketplace,
 } from './icons'
+import { IntegrationHealthDot } from './IntegrationHealthDot'
 
 interface NavItem {
   label: string
@@ -43,7 +44,7 @@ const NAV: NavSection[] = [
       { label: 'Query',      path: '/query',       icon: IconQuery },
       { label: 'Fixes',      path: '/fixes',       icon: IconFixes },
       { label: 'Queue',      path: '/queue',        icon: IconQueue },
-      { label: 'Fine-Tuning', path: '/fine-tuning', icon: IconFineTuning },
+      { label: 'Prompt Lab',  path: '/prompt-lab',   icon: IconFineTuning },
       { label: 'Intelligence', path: '/intelligence', icon: IconIntelligence },
     ],
   },
@@ -88,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="text-brand">mushi</span>
           <span className="text-fg-secondary">mushi</span>
         </h1>
-        <p className="text-3xs text-fg-faint mt-1 tracking-wide uppercase">Admin Console</p>
+        <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
       </div>
 
       {/* Navigation */}
@@ -109,6 +110,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   >
                     <Icon className="nav-link-icon" />
                     <span>{label}</span>
+                    {path === '/integrations' && <IntegrationHealthDot />}
                   </Link>
                 )
               })}
@@ -119,7 +121,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* User footer */}
       <div className="px-3 py-2.5 border-t border-edge/60">
-        <div className="text-3xs text-fg-faint truncate mb-2 px-1">{user?.email}</div>
+        <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
         <button
           onClick={signOut}
           className="nav-link w-full text-xs"

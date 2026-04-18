@@ -185,7 +185,7 @@ export function CompliancePage() {
                         </td>
                         <td className="opacity-70">{new Date(ev.generated_at).toLocaleString()}</td>
                         <td className="opacity-80 max-w-xs truncate">
-                          <code className="text-3xs">{JSON.stringify(ev.payload).slice(0, 120)}</code>
+                          <code className="text-2xs">{JSON.stringify(ev.payload).slice(0, 120)}</code>
                         </td>
                       </tr>
                     ))}
@@ -198,9 +198,9 @@ export function CompliancePage() {
           <Card className="p-3">
             <div className="flex items-baseline justify-between mb-2">
               <div className="text-xs font-medium uppercase tracking-wider">Data residency</div>
-              <span className="text-3xs opacity-60">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
+              <span className="text-2xs opacity-70">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
             </div>
-            <p className="text-3xs text-fg-muted mb-3 max-w-2xl leading-relaxed">
+            <p className="text-2xs text-fg-muted mb-3 max-w-2xl leading-relaxed">
               Pin a project to a specific regional cluster (US / EU / JP). Once set, the gateway transparently
               307-redirects cross-region calls. Changing the region of a project that already has data requires
               an export+restore migration — contact support.
@@ -213,7 +213,7 @@ export function CompliancePage() {
                   <div key={p.id} className="flex items-center justify-between gap-3 rounded border border-edge-subtle p-2">
                     <div className="min-w-0">
                       <div className="text-xs font-medium truncate">{p.name}</div>
-                      <code className="text-3xs opacity-60">{p.id}</code>
+                      <code className="text-2xs opacity-70 font-mono">{p.id}</code>
                     </div>
                     <div className="flex items-center gap-1">
                       {(['us', 'eu', 'jp', 'self'] as const).map((r) => (
@@ -248,7 +248,7 @@ export function CompliancePage() {
                 {policies.map((p) => (
                   <div key={p.project_id} className="rounded border border-edge-subtle p-2">
                     <div className="flex items-center justify-between mb-2">
-                      <code className="text-3xs opacity-70">{p.project_id}</code>
+                      <code className="text-2xs opacity-70 font-mono">{p.project_id}</code>
                       <Btn
                         size="sm"
                         variant={p.legal_hold ? 'danger' : 'ghost'}
@@ -306,7 +306,7 @@ export function CompliancePage() {
                       <tr key={d.id} className="border-b border-edge-subtle/40">
                         <td className="py-1.5">{d.request_type}</td>
                         <td>{d.subject_email}</td>
-                        <td className="uppercase tracking-wider text-3xs">{d.status}</td>
+                        <td className="uppercase tracking-wider text-2xs font-medium">{d.status}</td>
                         <td className="opacity-70">{new Date(d.created_at).toLocaleString()}</td>
                         <td>
                           {d.status !== 'completed' && d.status !== 'rejected' ? (

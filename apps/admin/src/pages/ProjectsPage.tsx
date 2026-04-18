@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, EmptyState } from '../components/ui'
+import { useToast } from '../lib/toast'
 
 interface Project {
   id: string
@@ -16,6 +17,7 @@ export function ProjectsPage() {
   const [error, setError] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const toast = useToast()
 
   useEffect(() => { loadProjects() }, [])
 
@@ -31,23 +33,39 @@ export function ProjectsPage() {
   async function createProject() {
     if (!newName.trim()) return
     setCreating(true)
-    await apiFetch('/v1/admin/projects', {
+    const res = await apiFetch('/v1/admin/projects', {
       method: 'POST',
       body: JSON.stringify({ name: newName.trim() }),
     })
-    setNewName('')
     setCreating(false)
-    await loadProjects()
+    if (res.ok) {
+      toast.success('Project created', newName.trim())
+      setNewName('')
+      await loadProjects()
+    } else {
+      toast.error('Failed to create project', res.error?.message)
+    }
   }
 
   async function generateKey(projectId: string) {
-    await apiFetch(`/v1/admin/projects/${projectId}/keys`, { method: 'POST' })
-    await loadProjects()
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/keys`, { method: 'POST' })
+    if (res.ok) {
+      toast.success('API key generated', 'Copy it now — it will not be shown again.')
+      await loadProjects()
+    } else {
+      toast.error('Failed to generate key', res.error?.message)
+    }
   }
 
   async function revokeKey(projectId: string, keyId: string) {
-    await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, { method: 'DELETE' })
-    await loadProjects()
+    if (!confirm('Revoke this API key? Any client using it will start failing immediately.')) return
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, { method: 'DELETE' })
+    if (res.ok) {
+      toast.success('API key revoked')
+      await loadProjects()
+    } else {
+      toast.error('Failed to revoke key', res.error?.message)
+    }
   }
 
   if (loading) return <Loading text="Loading projects..." />

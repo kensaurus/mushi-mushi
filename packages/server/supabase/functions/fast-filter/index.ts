@@ -144,6 +144,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
           errorMessage: `Primary failed and no OPENAI_API_KEY: ${String(primaryErr)}`,
           latencyMs: Date.now() - startTime,
           promptVersion: promptSelection.promptVersion,
+          langfuseTraceId: trace.id,
         })
         throw primaryErr
       }
@@ -151,7 +152,13 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       fallbackUsed = true
       fallbackReason = String(primaryErr).slice(0, 500)
 
-      const openai = createOpenAI({ apiKey: openaiKey })
+      // OpenAI-compatible base URL (OpenRouter, Together, Fireworks…) is the
+      // V5.3 §2.7 BYOK extension: a single `openai` ref pointed at any
+      // gateway. Falls back to the SDK default (api.openai.com) when unset.
+      const openai = createOpenAI({
+        apiKey: openaiKey,
+        ...(openaiResolved?.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+      })
       const { object, usage } = await generateObject({
         model: openai(FALLBACK_MODEL),
         schema: stage1Schema,
@@ -175,9 +182,10 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       outputTokens: tokenUsage.completionTokens ?? null,
       promptVersion: promptSelection.promptVersion,
       keySource: keySource ?? 'env',
+      langfuseTraceId: trace.id,
     })
 
-    await db.from('reports').update({
+    const { error: stage1WriteError } = await db.from('reports').update({
       extracted_symptoms: {
         symptom: classification.symptom,
         action: classification.action,
@@ -195,6 +203,14 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       processing_attempts: (report.processing_attempts ?? 0) + 1,
     }).eq('id', reportId)
 
+    // Throw loudly on write failure: a silent UPDATE here means we billed the
+    // customer for the LLM call but the report stays status='new' with no
+    // visible AI value. See docs/dogfood-glotit-2026-04-17.md for the P0 we
+    // shipped because this was just a log.warn.
+    if (stage1WriteError) {
+      throw new Error(`Stage 1 writeback failed: ${stage1WriteError.message}`)
+    }
+
     log.info('Stage 1 classified', {
       category: classification.category,
       severity: classification.severity,
@@ -211,8 +227,11 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         if (group.similarCount > 0) {
           log.info('Similar reports found', { similarCount: group.similarCount, groupId: group.groupId })
         }
-        // Build knowledge graph relationships
-        await buildReportGraph(db, projectId, reportId, classification.category, env.url, group.groupId)
+        // Stage-1 only knows the category and the page URL. The actual
+        // `component` is resolved by Stage 2 (classify-report), so we deliberately
+        // pass `undefined` here to avoid creating bogus "component" nodes
+        // labelled with bug categories like "visual" or "confusing".
+        await buildReportGraph(db, projectId, reportId, undefined, env.url, group.groupId)
         // Regression detection
         const regression = await detectRegression(db, projectId, reportId, embeddingText)
         if (regression.isRegression) {

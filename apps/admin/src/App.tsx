@@ -9,6 +9,7 @@ import { checkEnv } from './lib/env'
 import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { ToastProvider } from './lib/toast'
 
 const envStatus = checkEnv()
 
@@ -24,7 +25,7 @@ const QueryPage = lazy(() => import('./pages/QueryPage').then(m => ({ default: m
 const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m.FixesPage })))
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
-const FineTuningPage = lazy(() => import('./pages/FineTuningPage').then(m => ({ default: m.FineTuningPage })))
+const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage').then(m => ({ default: m.IntelligencePage })))
 const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ default: m.CompliancePage })))
 const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })))
@@ -76,6 +77,7 @@ export function App() {
 
   return (
     <AuthProvider>
+      <ToastProvider>
       <PasswordRecoveryGate>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
@@ -100,7 +102,8 @@ export function App() {
                   <Route path="/fixes" element={<FixesPage />} />
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
-                  <Route path="/fine-tuning" element={<FineTuningPage />} />
+                  <Route path="/prompt-lab" element={<PromptLabPage />} />
+                  <Route path="/fine-tuning" element={<Navigate to="/prompt-lab" replace />} />
                   <Route path="/intelligence" element={<IntelligencePage />} />
                   <Route path="/compliance" element={<CompliancePage />} />
                   <Route path="/storage" element={<StoragePage />} />
@@ -120,6 +123,7 @@ export function App() {
         />
       </Routes>
       </PasswordRecoveryGate>
+      </ToastProvider>
     </AuthProvider>
   )
 }
