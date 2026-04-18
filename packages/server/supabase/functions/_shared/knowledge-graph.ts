@@ -155,12 +155,20 @@ export async function detectRegression(
   const { createEmbedding } = await import('./embeddings.ts')
   const embedding = await createEmbedding(embeddingText, { projectId })
 
-  const { data: matches } = await db.rpc('match_report_embeddings', {
-    query_embedding: embedding,
-    match_project: projectId,
-    match_count: 5,
+  // The pgvector RPC expects `[v1,v2,...]` literal text. Pass numeric arrays
+  // through PostgREST as that string form so it casts cleanly to `vector`.
+  const embeddingLiteral = `[${embedding.join(',')}]`
+
+  const { data: matches, error: matchError } = await db.rpc('match_report_embeddings', {
+    query_embedding: embeddingLiteral,
     match_threshold: 0.85,
+    match_count: 5,
+    p_project_id: projectId,
   })
+
+  if (matchError) {
+    throw new Error(`match_report_embeddings RPC failed: ${matchError.message}`)
+  }
 
   if (!matches?.length) return { isRegression: false }
 

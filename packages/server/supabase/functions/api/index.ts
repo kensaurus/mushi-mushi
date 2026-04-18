@@ -167,11 +167,20 @@ async function ingestReport(
       .map(b => b.toString(16).padStart(2, '0')).join('')
   }
 
-  const antiGaming = await checkAntiGaming(db, projectId, tokenHash, deviceFingerprint ? {
-    fingerprint: deviceFingerprint,
-    ipAddress: options?.ipAddress,
-    fingerprintHash: report.fingerprintHash,
-  } : null)
+  const antiGaming = await checkAntiGaming(
+    db,
+    projectId,
+    tokenHash,
+    deviceFingerprint || report.fingerprintHash
+      ? {
+          // Synthesize a placeholder when only the SDK hash is available so the
+          // legacy multi-account/velocity checks still have something to key on.
+          fingerprint: deviceFingerprint ?? `sdk:${report.fingerprintHash}`,
+          ipAddress: options?.ipAddress,
+          fingerprintHash: report.fingerprintHash,
+        }
+      : null,
+  )
   if (antiGaming.flagged) {
     log.warn('Anti-gaming flagged report', { reporterToken: tokenHash, reason: antiGaming.reason })
     const eventType = antiGaming.reason?.toLowerCase().startsWith('velocity')
@@ -3224,6 +3233,94 @@ app.post('/v1/admin/queue/flush-queued', jwtAuth, async (c) => {
   }
 
   return c.json({ ok: true, data: { flushed: items.length, scanned: items.length } })
+})
+
+// Pipeline recovery: broader scope than flush-queued. Re-fires fast-filter
+// for `status IN ('new','queued')` reports older than 5min that never got
+// past stage1, plus pending queue items past their SLA, plus failed queue
+// items with attempts left. Mirrors what the `mushi-pipeline-recovery-5m`
+// pg_cron does, but scoped to the requesting admin's projects.
+app.post('/v1/admin/queue/recover', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { reports: 0, queue: 0, reconciled: 0 } })
+  }
+
+  const cutoff = new Date(Date.now() - 5 * 60_000).toISOString()
+  const { data: stranded } = await db
+    .from('reports')
+    .select('id, project_id')
+    .in('project_id', projectIds)
+    .in('status', ['new', 'queued'])
+    .lt('created_at', cutoff)
+    .lt('processing_attempts', 3)
+    .order('created_at', { ascending: true })
+    .limit(50)
+
+  const items = stranded ?? []
+  for (const r of items) {
+    if (r.status === 'queued') {
+      await db.from('reports').update({ status: 'new' }).eq('id', r.id)
+    }
+    triggerClassification(r.id, r.project_id)
+  }
+
+  const { data: failed } = await db
+    .from('processing_queue')
+    .select('id, report_id, project_id, attempts, max_attempts')
+    .in('project_id', projectIds)
+    .eq('status', 'failed')
+    .order('created_at', { ascending: true })
+    .limit(50)
+
+  const retryable = (failed ?? []).filter((f) => (f.attempts ?? 0) < (f.max_attempts ?? 3))
+  for (const q of retryable) {
+    await db.from('processing_queue').update({
+      status: 'pending',
+      scheduled_at: new Date().toISOString(),
+    }).eq('id', q.id)
+    triggerClassification(q.report_id, q.project_id)
+  }
+
+  const { data: stale } = await db
+    .from('processing_queue')
+    .select('id, reports!inner(status)')
+    .in('project_id', projectIds)
+    .eq('status', 'pending')
+    .in('reports.status', ['classified', 'dispatched', 'completed'])
+    .limit(100)
+
+  const reconcileIds = (stale ?? []).map((s) => s.id)
+  if (reconcileIds.length > 0) {
+    await db.from('processing_queue').update({
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+    }).in('id', reconcileIds)
+  }
+
+  for (const projectId of [...new Set(items.map((i) => i.project_id))]) {
+    await logAudit(
+      db,
+      projectId,
+      userId,
+      'settings.updated',
+      'queue',
+      undefined,
+      { kind: 'recover_stranded', reports: items.filter((i) => i.project_id === projectId).length, queue: retryable.length },
+    ).catch(() => {})
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      reports: items.length,
+      queue: retryable.length,
+      reconciled: reconcileIds.length,
+    },
+  })
 })
 
 // ============================================================

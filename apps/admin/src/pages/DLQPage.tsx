@@ -146,24 +146,25 @@ export function DLQPage() {
     }
   }
 
-  async function flushQueued() {
+  async function recoverStranded() {
     setFlushing(true)
-    const res = await apiFetch<{ flushed: number; scanned: number }>(
-      '/v1/admin/queue/flush-queued',
+    const res = await apiFetch<{ reports: number; queue: number; reconciled: number }>(
+      '/v1/admin/queue/recover',
       { method: 'POST' },
     )
     setFlushing(false)
     if (res.ok && res.data) {
+      const total = res.data.reports + res.data.queue + res.data.reconciled
       toast.push({
-        tone: res.data.flushed > 0 ? 'success' : 'info',
+        tone: total > 0 ? 'success' : 'info',
         message:
-          res.data.flushed > 0
-            ? `Re-queued ${res.data.flushed} circuit-breaker held report${res.data.flushed === 1 ? '' : 's'}`
-            : 'Nothing in the queued holding area.',
+          total > 0
+            ? `Recovered ${res.data.reports} report${res.data.reports === 1 ? '' : 's'} · retried ${res.data.queue} queue item${res.data.queue === 1 ? '' : 's'} · reconciled ${res.data.reconciled}`
+            : 'Pipeline is healthy — nothing stranded.',
       })
       await loadAll()
     } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Flush failed' })
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Recovery failed' })
     }
   }
 
@@ -213,8 +214,8 @@ export function DLQPage() {
             Retry page ({items.length})
           </Btn>
         )}
-        <Btn size="sm" variant="ghost" onClick={flushQueued} disabled={flushing}>
-          {flushing ? 'Flushing…' : 'Force-process queued'}
+        <Btn size="sm" variant="ghost" onClick={recoverStranded} disabled={flushing}>
+          {flushing ? 'Recovering…' : 'Recover stranded'}
         </Btn>
       </PageHeader>
 

@@ -324,7 +324,9 @@ interface StageResult {
   candidateId?: string
 }
 
-app.post('/', async (c) => {
+app.get('/prompt-auto-tune/health', (c) => c.json({ ok: true }))
+
+app.post('/prompt-auto-tune', async (c) => {
   if (!authorized(c.req.raw)) return c.json({ ok: false, error: 'unauthorized' }, 401)
 
   const db = getDb()
