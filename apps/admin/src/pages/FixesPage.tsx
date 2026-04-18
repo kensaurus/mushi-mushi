@@ -198,6 +198,31 @@ export function FixesPage() {
     return summary.completed / finished
   }, [summary])
 
+  const failedFixes = useMemo(() => fixes.filter((f) => f.status === 'failed'), [fixes])
+  const [retryingAll, setRetryingAll] = useState(false)
+
+  const retryAllFailed = useCallback(async () => {
+    if (failedFixes.length === 0) return
+    setRetryingAll(true)
+    const results = await Promise.allSettled(
+      failedFixes.map((f) =>
+        apiFetch('/v1/admin/fixes/dispatch', {
+          method: 'POST',
+          body: JSON.stringify({ reportId: f.report_id }),
+        }),
+      ),
+    )
+    setRetryingAll(false)
+    const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
+    const failed = results.length - ok
+    if (failed === 0) {
+      toast.push({ tone: 'success', message: `Re-dispatched ${ok} failed ${ok === 1 ? 'fix' : 'fixes'}` })
+    } else {
+      toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
+    }
+    void loadFixes()
+  }, [failedFixes, loadFixes, toast])
+
   if (loading) return <Loading text="Loading fixes..." />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
 
@@ -205,6 +230,17 @@ export function FixesPage() {
     <div className="space-y-3">
       <PageHeader title="Auto-Fix Pipeline">
         <span className="text-2xs text-fg-faint font-mono">{fixes.length} attempts</span>
+        {failedFixes.length > 0 && (
+          <button
+            type="button"
+            onClick={retryAllFailed}
+            disabled={retryingAll}
+            className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+            title={`Re-dispatch every fix attempt currently in failed state (${failedFixes.length} job${failedFixes.length === 1 ? '' : 's'}).`}
+          >
+            {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} failed`}
+          </button>
+        )}
       </PageHeader>
 
       <PageHelp

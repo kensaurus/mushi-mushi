@@ -74,6 +74,7 @@ export function DLQPage() {
   const [error, setError] = useState(false)
   const [retrying, setRetrying] = useState<Record<string, boolean>>({})
   const [flushing, setFlushing] = useState(false)
+  const [flushingQueued, setFlushingQueued] = useState(false)
   // Start with `dead_letter` so urgent failures lead. Once the summary loads
   // we fall back to the first non-empty status (in priority order) so a
   // healthy pipeline lands the user on the populated `completed` lane
@@ -146,6 +147,27 @@ export function DLQPage() {
     }
   }
 
+  async function flushCircuitBreakerQueue() {
+    setFlushingQueued(true)
+    const res = await apiFetch<{ flushed: number; scanned: number }>(
+      '/v1/admin/queue/flush-queued',
+      { method: 'POST' },
+    )
+    setFlushingQueued(false)
+    if (res.ok && res.data) {
+      toast.push({
+        tone: res.data.flushed > 0 ? 'success' : 'info',
+        message:
+          res.data.flushed > 0
+            ? `Flushed ${res.data.flushed} circuit-breaker queued report${res.data.flushed === 1 ? '' : 's'}`
+            : 'No reports were stuck behind the circuit breaker.',
+      })
+      await loadAll()
+    } else {
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Flush failed' })
+    }
+  }
+
   async function recoverStranded() {
     setFlushing(true)
     const res = await apiFetch<{ reports: number; queue: number; reconciled: number }>(
@@ -214,7 +236,22 @@ export function DLQPage() {
             Retry page ({items.length})
           </Btn>
         )}
-        <Btn size="sm" variant="ghost" onClick={recoverStranded} disabled={flushing}>
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={flushCircuitBreakerQueue}
+          disabled={flushingQueued}
+          title="Replays reports parked because the circuit breaker tripped (rate limits, LLM outages)."
+        >
+          {flushingQueued ? 'Flushing…' : 'Flush queued'}
+        </Btn>
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={recoverStranded}
+          disabled={flushing}
+          title="Re-fires fast-filter for any report stuck older than 5 minutes plus pending queue items past their SLA."
+        >
           {flushing ? 'Recovering…' : 'Recover stranded'}
         </Btn>
       </PageHeader>
