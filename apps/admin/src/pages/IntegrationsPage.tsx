@@ -32,6 +32,8 @@ import {
 import { HealthPill } from '../components/charts'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
+import { SetupNudge } from '../components/SetupNudge'
+import { useSetupStatus } from '../lib/useSetupStatus'
 
 type Kind = 'sentry' | 'langfuse' | 'github'
 
@@ -173,6 +175,7 @@ const platformStatusMap: Record<HealthRow['status'], string | null | undefined> 
 
 export function IntegrationsPage() {
   const toast = useToast()
+  const setup = useSetupStatus()
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   const historyQuery = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
@@ -329,6 +332,14 @@ export function IntegrationsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Integrations" />
+
+      {!setup.hasAnyProject && (
+        <SetupNudge
+          requires={['project_created']}
+          emptyTitle="Create a project before wiring integrations"
+          emptyDescription="Integrations are scoped to a project. Once you have one, you can wire Sentry, Langfuse, GitHub, and your routing destinations."
+        />
+      )}
 
       <PageHelp
         title="About Integrations"

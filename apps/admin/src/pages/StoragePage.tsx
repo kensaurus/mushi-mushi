@@ -9,8 +9,9 @@
  *          first save creates the override automatically.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, SelectField } from '../components/ui'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
@@ -72,31 +73,23 @@ function defaultsFor(projectId: string): StorageSetting {
 }
 
 export function StoragePage() {
-  const [settings, setSettings] = useState<StorageSetting[]>([])
-  const [projects, setProjects] = useState<OwnedProject[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const settingsQuery = usePageData<{ settings: StorageSetting[] }>('/v1/admin/storage')
+  const projectsQuery = usePageData<{ projects: OwnedProject[] }>('/v1/admin/projects')
+  const settings = settingsQuery.data?.settings ?? []
+  const projects = projectsQuery.data?.projects ?? []
+  const loading = settingsQuery.loading || projectsQuery.loading
+  const error = settingsQuery.error ?? projectsQuery.error
+  const reloadAll = useCallback(() => {
+    settingsQuery.reload()
+    projectsQuery.reload()
+  }, [settingsQuery, projectsQuery])
+
   // Drafts only carry fields the user has touched. We merge them on top of the
   // existing setting (or the defaults for un-configured projects) at render.
   const [drafts, setDrafts] = useState<Record<string, Partial<StorageSetting>>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
   const toast = useToast()
-
-  const fetchAll = async () => {
-    setLoading(true)
-    setError(null)
-    const [settingsRes, projectsRes] = await Promise.all([
-      apiFetch<{ settings: StorageSetting[] }>('/v1/admin/storage'),
-      apiFetch<{ projects: OwnedProject[] }>('/v1/admin/projects'),
-    ])
-    if (settingsRes.ok && settingsRes.data) setSettings(settingsRes.data.settings)
-    else setError(settingsRes.error?.message ?? 'Failed to load storage settings.')
-    if (projectsRes.ok && projectsRes.data) setProjects(projectsRes.data.projects ?? [])
-    setLoading(false)
-  }
-
-  useEffect(() => { void fetchAll() }, [])
 
   // Show one card per owned project. Projects with an existing row use their
   // saved values; the rest get a synthesised "default" row that the user can
@@ -138,7 +131,7 @@ export function StoragePage() {
     }
     toast.success(isFirstSave ? 'Storage configured' : 'Storage settings saved')
     setDrafts((prev) => ({ ...prev, [projectId]: {} }))
-    await fetchAll()
+    reloadAll()
   }
 
   const checkHealth = async (projectId: string) => {
@@ -153,11 +146,11 @@ export function StoragePage() {
     } else {
       toast.error('Health check failed', res.error?.message)
     }
-    await fetchAll()
+    reloadAll()
   }
 
   if (loading) return <Loading />
-  if (error) return <ErrorAlert message={error} onRetry={fetchAll} />
+  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
   return (
     <div className="space-y-3">

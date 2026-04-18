@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { usePageData } from '../lib/usePageData'
+import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
 import { useToast } from '../lib/toast'
 
 interface RetentionPolicy {
@@ -52,33 +53,46 @@ const STATUS_CHIP: Record<Evidence['status'], string> = {
 
 export function CompliancePage() {
   const toast = useToast()
-  const [policies, setPolicies] = useState<RetentionPolicy[]>([])
-  const [dsars, setDsars] = useState<Dsar[]>([])
-  const [evidence, setEvidence] = useState<Evidence[]>([])
-  const [residency, setResidency] = useState<ResidencyProject[]>([])
-  const [currentRegion, setCurrentRegion] = useState<string>('us')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
+  const policiesQuery = usePageData<{ policies: RetentionPolicy[] }>('/v1/admin/compliance/retention')
+  const dsarsQuery = usePageData<{ requests: Dsar[] }>('/v1/admin/compliance/dsars')
+  const evidenceQuery = usePageData<{ evidence: Evidence[] }>('/v1/admin/compliance/evidence')
+  const residencyQuery = usePageData<{ projects: ResidencyProject[]; currentRegion: string }>(
+    '/v1/admin/residency',
+  )
 
-  const fetchAll = async () => {
-    setLoading(true); setError(false)
-    const [pRes, dRes, eRes, rRes] = await Promise.all([
-      apiFetch<{ policies: RetentionPolicy[] }>('/v1/admin/compliance/retention'),
-      apiFetch<{ requests: Dsar[] }>('/v1/admin/compliance/dsars'),
-      apiFetch<{ evidence: Evidence[] }>('/v1/admin/compliance/evidence'),
-      apiFetch<{ projects: ResidencyProject[]; currentRegion: string }>('/v1/admin/residency'),
-    ])
-    if (pRes.ok && pRes.data) setPolicies(pRes.data.policies)
-    if (dRes.ok && dRes.data) setDsars(dRes.data.requests)
-    if (eRes.ok && eRes.data) setEvidence(eRes.data.evidence)
-    if (rRes.ok && rRes.data) {
-      setResidency(rRes.data.projects)
-      setCurrentRegion(rRes.data.currentRegion)
-    }
-    if (!pRes.ok || !dRes.ok || !eRes.ok || !rRes.ok) setError(true)
-    setLoading(false)
-  }
+  const policies = policiesQuery.data?.policies ?? []
+  const dsars = dsarsQuery.data?.requests ?? []
+  const evidence = evidenceQuery.data?.evidence ?? []
+  const residency = residencyQuery.data?.projects ?? []
+  const currentRegion = residencyQuery.data?.currentRegion ?? 'us'
+
+  const loading =
+    policiesQuery.loading ||
+    dsarsQuery.loading ||
+    evidenceQuery.loading ||
+    residencyQuery.loading
+  const error =
+    policiesQuery.error ?? dsarsQuery.error ?? evidenceQuery.error ?? residencyQuery.error
+  const reloadAll = useCallback(() => {
+    policiesQuery.reload()
+    dsarsQuery.reload()
+    evidenceQuery.reload()
+    residencyQuery.reload()
+  }, [policiesQuery, dsarsQuery, evidenceQuery, residencyQuery])
+
+  const [refreshing, setRefreshing] = useState(false)
+  const [filing, setFiling] = useState(false)
+  const [dsarForm, setDsarForm] = useState<{
+    requestType: Dsar['request_type']
+    subjectEmail: string
+    subjectId: string
+    notes: string
+  }>({
+    requestType: 'access',
+    subjectEmail: '',
+    subjectId: '',
+    notes: '',
+  })
 
   const setProjectRegion = async (projectId: string, region: ResidencyProject['data_residency_region']) => {
     if (!region) return
@@ -91,10 +105,8 @@ export function CompliancePage() {
       return
     }
     toast.success(`Region pinned to ${region.toUpperCase()}`)
-    await fetchAll()
+    reloadAll()
   }
-
-  useEffect(() => { void fetchAll() }, [])
 
   const latestEvidenceByControl = useMemo(() => {
     const map = new Map<string, Evidence>()
@@ -117,7 +129,7 @@ export function CompliancePage() {
         return
       }
       toast.success('Evidence snapshot generated')
-      await fetchAll()
+      reloadAll()
     } finally {
       setRefreshing(false)
     }
@@ -133,7 +145,7 @@ export function CompliancePage() {
       return
     }
     toast.success('Retention policy updated')
-    await fetchAll()
+    reloadAll()
   }
 
   const setDsarStatus = async (id: string, status: Dsar['status']) => {
@@ -146,7 +158,32 @@ export function CompliancePage() {
       return
     }
     toast.success(`DSAR marked ${status}`)
-    await fetchAll()
+    dsarsQuery.reload()
+  }
+
+  const fileDsar = async () => {
+    if (!dsarForm.subjectEmail.trim()) {
+      toast.error('Subject email is required')
+      return
+    }
+    setFiling(true)
+    const res = await apiFetch('/v1/admin/compliance/dsars', {
+      method: 'POST',
+      body: JSON.stringify({
+        requestType: dsarForm.requestType,
+        subjectEmail: dsarForm.subjectEmail.trim(),
+        subjectId: dsarForm.subjectId.trim() || undefined,
+        notes: dsarForm.notes.trim() || undefined,
+      }),
+    })
+    setFiling(false)
+    if (!res.ok) {
+      toast.error('Could not file DSAR', res.error?.message)
+      return
+    }
+    toast.success('DSAR filed', 'Auditor evidence row was created')
+    setDsarForm({ requestType: 'access', subjectEmail: '', subjectId: '', notes: '' })
+    dsarsQuery.reload()
   }
 
   return (
@@ -169,7 +206,7 @@ export function CompliancePage() {
       />
 
       {loading ? <Loading /> : error ? (
-        <ErrorAlert message="Failed to load compliance data." onRetry={fetchAll} />
+        <ErrorAlert message={`Failed to load compliance data: ${error}`} onRetry={reloadAll} />
       ) : (
         <>
           <Card className="p-3">
@@ -304,7 +341,50 @@ export function CompliancePage() {
           </Card>
 
           <Card className="p-3">
-            <div className="text-xs font-medium uppercase tracking-wider mb-2">Data subject requests</div>
+            <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+              <div className="text-xs font-medium uppercase tracking-wider">Data subject requests</div>
+              <p className="text-2xs text-fg-muted max-w-md">
+                File a request when a user invokes their GDPR/CCPA right to access, export, deletion, or rectification.
+                Mark it complete within 30 days to stay compliant.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3 border border-edge-subtle rounded-sm p-2 bg-surface-overlay">
+              <SelectField
+                label="Request type"
+                value={dsarForm.requestType}
+                onChange={(e) => setDsarForm((f) => ({ ...f, requestType: e.target.value as Dsar['request_type'] }))}
+              >
+                <option value="access">Access</option>
+                <option value="export">Export</option>
+                <option value="deletion">Deletion</option>
+                <option value="rectification">Rectification</option>
+              </SelectField>
+              <Input
+                label="Subject email"
+                placeholder="user@example.com"
+                value={dsarForm.subjectEmail}
+                onChange={(e) => setDsarForm((f) => ({ ...f, subjectEmail: e.target.value }))}
+              />
+              <Input
+                label="Subject user ID (optional)"
+                placeholder="auth-user-uuid"
+                value={dsarForm.subjectId}
+                onChange={(e) => setDsarForm((f) => ({ ...f, subjectId: e.target.value }))}
+              />
+              <Input
+                label="Notes (optional)"
+                placeholder="Channel, ticket ref, etc."
+                value={dsarForm.notes}
+                onChange={(e) => setDsarForm((f) => ({ ...f, notes: e.target.value }))}
+              />
+              <div className="md:col-span-4 flex justify-end">
+                <Btn size="sm" onClick={fileDsar} disabled={filing}>
+                  {filing ? 'Filing…' : 'File DSAR'}
+                </Btn>
+              </div>
+            </div>
+
             {dsars.length === 0 ? (
               <EmptyState title="No DSARs filed yet" />
             ) : (

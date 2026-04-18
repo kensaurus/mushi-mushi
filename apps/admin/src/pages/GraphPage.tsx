@@ -16,6 +16,7 @@ import '@xyflow/react/dist/style.css'
 
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { useToast } from '../lib/toast'
 import { NODE_COLORS } from '../lib/tokens'
 import {
   PageHeader,
@@ -28,6 +29,9 @@ import {
   RelativeTime,
 } from '../components/ui'
 import { SetupNudge } from '../components/SetupNudge'
+import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
+import { OntologyPanel } from '../components/graph/OntologyPanel'
+import { GroupsPanel } from '../components/graph/GroupsPanel'
 
 interface GraphNode {
   id: string
@@ -188,6 +192,7 @@ function NodeChip({ node, selected }: { node: GraphNode; selected: boolean }) {
 }
 
 export function GraphPage() {
+  const toast = useToast()
   const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
 
@@ -366,6 +371,37 @@ export function GraphPage() {
     })
   }, [filteredEdges, blastRadiusIds, blastRadius.length])
 
+  const fetchBlastRadius = useCallback(
+    async (node: GraphNode) => {
+      setBlastLoading(true)
+      try {
+        const res = await apiFetch<{ affected: BlastRadiusItem[] }>(
+          `/v1/admin/graph/blast-radius/${node.id}`,
+        )
+        if (res.ok) {
+          setBlastRadius(res.data?.affected ?? [])
+        } else {
+          setBlastRadius([])
+          toast.push({
+            tone: 'error',
+            message: `Couldn't compute blast radius for "${node.label}"`,
+            description: res.error?.message ?? 'Unknown error from /v1/admin/graph/blast-radius',
+          })
+        }
+      } catch (err) {
+        setBlastRadius([])
+        toast.push({
+          tone: 'error',
+          message: `Couldn't reach blast-radius API for "${node.label}"`,
+          description: err instanceof Error ? err.message : String(err),
+        })
+      } finally {
+        setBlastLoading(false)
+      }
+    },
+    [toast],
+  )
+
   const onNodeClick: NodeMouseHandler = useCallback(
     (_evt, node) => {
       const original = filteredNodes.find((n) => n.id === node.id) ?? null
@@ -374,18 +410,9 @@ export function GraphPage() {
         setBlastRadius([])
         return
       }
-      setBlastLoading(true)
-      apiFetch<{ affected: BlastRadiusItem[] }>(
-        `/v1/admin/graph/blast-radius/${original.id}`,
-      )
-        .then((res) => {
-          if (res.ok) setBlastRadius(res.data?.affected ?? [])
-          else setBlastRadius([])
-        })
-        .catch(() => setBlastRadius([]))
-        .finally(() => setBlastLoading(false))
+      void fetchBlastRadius(original)
     },
-    [filteredNodes],
+    [filteredNodes, fetchBlastRadius],
   )
 
   const clearSelection = () => {
@@ -639,16 +666,7 @@ export function GraphPage() {
                 blastRadiusIds={blastRadiusIds}
                 onSelect={(node) => {
                   setSelectedNode(node)
-                  setBlastLoading(true)
-                  apiFetch<{ affected: BlastRadiusItem[] }>(
-                    `/v1/admin/graph/blast-radius/${node.id}`,
-                  )
-                    .then((res) => {
-                      if (res.ok) setBlastRadius(res.data?.affected ?? [])
-                      else setBlastRadius([])
-                    })
-                    .catch(() => setBlastRadius([]))
-                    .finally(() => setBlastLoading(false))
+                  void fetchBlastRadius(node)
                 }}
               />
             )}
@@ -662,6 +680,13 @@ export function GraphPage() {
           />
         </div>
       )}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <GraphBackendPanel />
+        <OntologyPanel />
+      </div>
+
+      <GroupsPanel />
     </div>
   )
 }
