@@ -24,10 +24,10 @@ import {
   Badge,
   Loading,
   ErrorAlert,
-  EmptyState,
   Input,
   RelativeTime,
 } from '../components/ui'
+import { SetupNudge } from '../components/SetupNudge'
 
 interface GraphNode {
   id: string
@@ -500,9 +500,10 @@ export function GraphPage() {
       </div>
 
       {rawNodes.length === 0 ? (
-        <EmptyState
-          title="The graph is empty"
-          description="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."
+        <SetupNudge
+          requires={['first_report_received']}
+          emptyTitle="The graph is empty"
+          emptyDescription="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-[1fr_18rem]">

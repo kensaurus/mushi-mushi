@@ -11,7 +11,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, SelectField } from '../components/ui'
+import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
@@ -173,9 +174,10 @@ export function StoragePage() {
       />
 
       {cards.length === 0 ? (
-        <EmptyState
-          title="No projects yet"
-          description="Create a project on the Projects page first — every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
+        <SetupNudge
+          requires={['project_created']}
+          emptyTitle="No projects yet"
+          emptyDescription="Create a project first \u2014 every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
         />
       ) : null}
 

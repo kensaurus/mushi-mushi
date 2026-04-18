@@ -4,6 +4,7 @@ import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { PageHeader, PageHelp, Card, Badge, Btn, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
+import { SetupNudge } from '../components/SetupNudge'
 
 interface ReporterDevice {
   id: string
@@ -101,10 +102,18 @@ export function AntiGamingPage() {
         ) : error ? (
           <ErrorAlert message={`Failed to load devices: ${error}`} onRetry={devicesQuery.reload} />
         ) : devices.length === 0 ? (
-          <EmptyState
-            title={filter === 'flagged' ? 'No flagged devices' : 'No tracked devices yet'}
-            description="Devices appear here once a reporter submits at least one report from them."
-          />
+          filter === 'flagged' ? (
+            <EmptyState
+              title="No flagged devices"
+              description="Switch to \u201cAll\u201d to inspect every tracked device."
+            />
+          ) : (
+            <SetupNudge
+              requires={['first_report_received']}
+              emptyTitle="No tracked devices yet"
+              emptyDescription="Devices appear here once a reporter submits at least one report from them."
+            />
+          )
         ) : (
           <div className="space-y-1.5">
             {devices.map(d => (

@@ -16,6 +16,7 @@ import {
   IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconSparkle,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
+import { ProjectSwitcher } from './ProjectSwitcher'
 
 interface NavItem {
   label: string
@@ -188,6 +189,14 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className="text-brand">mushi</span>
             <span className="text-fg-secondary">mushi</span>
           </span>
+          <div className="ml-auto">
+            <ProjectSwitcher />
+          </div>
+        </header>
+
+        {/* Desktop sub-header — project switcher pinned to the right */}
+        <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
+          <ProjectSwitcher />
         </header>
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">

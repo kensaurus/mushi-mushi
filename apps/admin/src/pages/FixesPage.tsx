@@ -15,9 +15,10 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../lib/tokens'
-import { PageHeader, PageHelp, Card, Badge, EmptyState, Loading, ErrorAlert, RelativeTime, RecommendedAction } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Loading, ErrorAlert, RelativeTime, RecommendedAction } from '../components/ui'
 import { KpiRow, KpiTile, BarSparkline, formatTokens, type Tone } from '../components/charts'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
+import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 
 interface FixAttempt {
@@ -325,9 +326,10 @@ export function FixesPage() {
       )}
 
       {fixes.length === 0 ? (
-        <EmptyState
-          title="No fix attempts yet"
-          description="Fix attempts appear here when an admin dispatches a fix from a classified report. Configure your LLM key in Settings → LLM Keys first."
+        <SetupNudge
+          requires={['github_connected', 'first_report_received', 'byok_anthropic']}
+          emptyTitle="No fix attempts yet"
+          emptyDescription="Open a classified report and click \u201cDispatch fix\u201d to start the auto-fix loop."
         />
       ) : (
         <div className="space-y-1.5">

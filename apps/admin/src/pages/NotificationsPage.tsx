@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { PageHeader, PageHelp, Card, Badge, EmptyState, Loading, ErrorAlert, FilterSelect } from '../components/ui'
+import { SetupNudge } from '../components/SetupNudge'
 
 interface ReporterNotification {
   id: string
@@ -61,10 +62,18 @@ export function NotificationsPage() {
       ) : error ? (
         <ErrorAlert message={`Failed to load notifications: ${error}`} onRetry={reload} />
       ) : visible.length === 0 ? (
-        <EmptyState
-          title={filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
-          description="Notifications appear when the pipeline classifies, fixes, or rewards a report."
-        />
+        filter === 'unread' ? (
+          <EmptyState
+            title="No unread notifications"
+            description="Switch to \u201cAll\u201d to see read notifications."
+          />
+        ) : (
+          <SetupNudge
+            requires={['first_report_received']}
+            emptyTitle="No notifications yet"
+            emptyDescription="Notifications appear when the pipeline classifies, fixes, or rewards a report."
+          />
+        )
       ) : (
         <div className="space-y-1.5">
           {visible.map(n => (
