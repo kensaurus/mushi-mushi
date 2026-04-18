@@ -55,6 +55,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts'
+import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 
@@ -203,6 +204,48 @@ Deno.serve(withSentry('fix-worker', async (req) => {
     const codeContext = formatCodeContext(codeFiles)
     ctxSpan.end({ codeFileCount: codeFiles.length, repo: `${repo.owner}/${repo.repo}` })
 
+    // ---- 3b. Wave E: Firecrawl auto-augment when local RAG is sparse OR
+    //          the report has a poor prior judge score (a "stubborn" report).
+    //          The whole block is best-effort: if Firecrawl is missing the key,
+    //          rate-limited, or otherwise unhappy, the worker proceeds with
+    //          local-only context. We persist the trace id + URLs onto
+    //          fix_attempts so the Fixes page shows what the agent saw.
+    const judgeScore = typeof report.judge_score === 'number' ? report.judge_score : null
+    const augmentReason: 'rag_sparse' | 'low_judge_score' | null =
+      codeFiles.length < 3 ? 'rag_sparse'
+      : (judgeScore !== null && judgeScore < 0.6 ? 'low_judge_score' : null)
+
+    let webSnippets: FirecrawlSearchResult[] = []
+    let augmentTraceId: string | null = null
+    if (augmentReason) {
+      try {
+        const symptom = report.summary
+          ?? report.description?.slice(0, 200)
+          ?? report.component
+          ?? ''
+        if (symptom.length > 0) {
+          const augSpan = trace.span('fix.augment.firecrawl')
+          webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 })
+          augSpan.end({ resultCount: webSnippets.length })
+          if (webSnippets.length > 0) {
+            augmentTraceId = trace.id
+            await db.from('fix_attempts').update({
+              augment_trace_id: augmentTraceId,
+              augment_sources: webSnippets.map((s) => ({ url: s.url, title: s.title, snippet: s.snippet.slice(0, 240) })),
+              augment_reason: augmentReason,
+            }).eq('id', fixAttemptId)
+          }
+        }
+      } catch (err) {
+        // FIRECRAWL_NOT_CONFIGURED is expected on most projects — silent.
+        // Other errors get logged but never fail the fix.
+        const msg = err instanceof Error ? err.message : String(err)
+        if (msg !== 'FIRECRAWL_NOT_CONFIGURED') {
+          log.warn('Firecrawl augment failed (non-fatal)', { reportId: dispatch.report_id, reason: augmentReason, error: msg })
+        }
+      }
+    }
+
     // ---- 4. Resolve LLM key (BYOK first, env fallback) --------------------
     const anthropicResolved = await resolveLlmKey(db, dispatch.project_id, 'anthropic')
     const openaiResolved = await resolveLlmKey(db, dispatch.project_id, 'openai')
@@ -214,7 +257,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
       )
     }
 
-    const userPrompt = buildUserPrompt(report, settings, codeContext, repo)
+    const userPrompt = buildUserPrompt(report, settings, codeContext, repo, webSnippets)
 
     // ---- 5. Call LLM with structured output -------------------------------
     const llmSpan = trace.span('llm.fix')
@@ -517,6 +560,7 @@ function buildUserPrompt(
   settings: Record<string, unknown> | null,
   codeContext: string,
   repo: ResolvedRepo,
+  webSnippets: FirecrawlSearchResult[] = [],
 ): string {
   const env = (report.environment ?? {}) as Record<string, unknown>
   const consoleErrors = ((report.console_logs ?? []) as Array<{ level: string; message: string }>)
@@ -564,6 +608,11 @@ ${failedRequests ? `## Failed network requests\n${failedRequests}\n` : ''}
 ## Relevant Code (RAG-retrieved)
 ${codeContext || '(No code context retrieved — propose what files to look at and set needsHumanReview=true.)'}
 
+${webSnippets.length > 0 ? `## Web Context (Firecrawl auto-augment)
+The local RAG was sparse OR this report has been judged "stubborn" in the past, so we pulled the top ${webSnippets.length} web result${webSnippets.length === 1 ? '' : 's'} matching the symptom. Treat these as hints — verify against the actual code before relying on them, and never copy/paste verbatim if it would conflict with the project's existing style.
+
+${webSnippets.map((s, i) => `### [${i + 1}] ${s.title}\n<${s.url}>\n${s.snippet}`).join('\n\n')}
+` : ''}
 ## Your Task
 Output a structured fix plan. Touch the minimum number of files. Match the existing code style. If you change behavior, add or update a test. If you are not confident, set needsHumanReview=true.`
 }

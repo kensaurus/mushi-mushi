@@ -73,6 +73,7 @@ export function DLQPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [retrying, setRetrying] = useState<Record<string, boolean>>({})
+  const [flushing, setFlushing] = useState(false)
   // Start with `dead_letter` so urgent failures lead. Once the summary loads
   // we fall back to the first non-empty status (in priority order) so a
   // healthy pipeline lands the user on the populated `completed` lane
@@ -145,6 +146,27 @@ export function DLQPage() {
     }
   }
 
+  async function flushQueued() {
+    setFlushing(true)
+    const res = await apiFetch<{ flushed: number; scanned: number }>(
+      '/v1/admin/queue/flush-queued',
+      { method: 'POST' },
+    )
+    setFlushing(false)
+    if (res.ok && res.data) {
+      toast.push({
+        tone: res.data.flushed > 0 ? 'success' : 'info',
+        message:
+          res.data.flushed > 0
+            ? `Re-queued ${res.data.flushed} circuit-breaker held report${res.data.flushed === 1 ? '' : 's'}`
+            : 'Nothing in the queued holding area.',
+      })
+      await loadAll()
+    } else {
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Flush failed' })
+    }
+  }
+
   async function retryAll() {
     if (items.length === 0) return
     const results = await Promise.allSettled(
@@ -191,6 +213,9 @@ export function DLQPage() {
             Retry page ({items.length})
           </Btn>
         )}
+        <Btn size="sm" variant="ghost" onClick={flushQueued} disabled={flushing}>
+          {flushing ? 'Flushing…' : 'Force-process queued'}
+        </Btn>
       </PageHeader>
 
       <PageHelp

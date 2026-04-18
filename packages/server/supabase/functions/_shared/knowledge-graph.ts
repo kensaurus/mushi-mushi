@@ -153,7 +153,7 @@ export async function detectRegression(
   embeddingText: string,
 ): Promise<{ isRegression: boolean; originalGroupId?: string; originalReportId?: string }> {
   const { createEmbedding } = await import('./embeddings.ts')
-  const embedding = await createEmbedding(embeddingText)
+  const embedding = await createEmbedding(embeddingText, { projectId })
 
   const { data: matches } = await db.rpc('match_report_embeddings', {
     query_embedding: embedding,

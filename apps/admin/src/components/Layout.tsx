@@ -12,8 +12,8 @@ import {
   IconDashboard, IconReports, IconGraph, IconJudge, IconQuery,
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
-  IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence,
-  IconCompliance, IconStorage, IconMarketplace,
+  IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
+  IconCompliance, IconStorage, IconMarketplace, IconGlobe,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 
@@ -42,6 +42,7 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Judge',      path: '/judge',       icon: IconJudge },
       { label: 'Query',      path: '/query',       icon: IconQuery },
+      { label: 'Research',   path: '/research',    icon: IconGlobe },
       { label: 'Fixes',      path: '/fixes',       icon: IconFixes },
       { label: 'Queue',      path: '/queue',        icon: IconQueue },
       { label: 'Prompt Lab',  path: '/prompt-lab',   icon: IconFineTuning },
@@ -66,6 +67,7 @@ const NAV: NavSection[] = [
       { label: 'Audit Log',    path: '/audit',        icon: IconAudit },
       { label: 'Compliance',   path: '/compliance',   icon: IconCompliance },
       { label: 'Storage',      path: '/storage',      icon: IconStorage },
+      { label: 'Billing',      path: '/billing',      icon: IconBilling },
       { label: 'Settings',     path: '/settings',     icon: IconSettings },
     ],
   },

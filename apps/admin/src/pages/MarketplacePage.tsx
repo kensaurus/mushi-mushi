@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
+import { useToast } from '../lib/toast'
 import {
   PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert,
   EmptyState, Input, Section,
@@ -59,32 +61,28 @@ const CATEGORY_LABEL: Record<string, string> = {
 }
 
 export function MarketplacePage() {
-  const [catalog, setCatalog] = useState<MarketplacePlugin[]>([])
-  const [installed, setInstalled] = useState<InstalledPlugin[]>([])
-  const [dispatchLog, setDispatchLog] = useState<DispatchEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const toast = useToast()
+  const catalogQuery = usePageData<{ plugins: MarketplacePlugin[] }>('/v1/marketplace/plugins')
+  const installedQuery = usePageData<{ plugins: InstalledPlugin[] }>('/v1/admin/plugins')
+  const dispatchQuery = usePageData<{ entries: DispatchEntry[] }>('/v1/admin/plugins/dispatch-log')
+
+  const catalog = catalogQuery.data?.plugins ?? []
+  const installed = installedQuery.data?.plugins ?? []
+  const dispatchLog = dispatchQuery.data?.entries ?? []
+  const loading = catalogQuery.loading || installedQuery.loading || dispatchQuery.loading
+  const error = catalogQuery.error
+
+  const reloadAll = useCallback(() => {
+    catalogQuery.reload()
+    installedQuery.reload()
+    dispatchQuery.reload()
+  }, [catalogQuery, installedQuery, dispatchQuery])
+
   const [installing, setInstalling] = useState<string | null>(null)
   const [installTarget, setInstallTarget] = useState<MarketplacePlugin | null>(null)
   const [draftWebhookUrl, setDraftWebhookUrl] = useState('')
   const [draftWebhookSecret, setDraftWebhookSecret] = useState('')
   const [draftEvents, setDraftEvents] = useState<string>('')
-
-  const fetchAll = async () => {
-    setLoading(true); setError(false)
-    const [cat, inst, log] = await Promise.all([
-      apiFetch<{ plugins: MarketplacePlugin[] }>('/v1/marketplace/plugins'),
-      apiFetch<{ plugins: InstalledPlugin[] }>('/v1/admin/plugins'),
-      apiFetch<{ entries: DispatchEntry[] }>('/v1/admin/plugins/dispatch-log'),
-    ])
-    if (cat.ok && cat.data) setCatalog(cat.data.plugins)
-    else setError(true)
-    if (inst.ok && inst.data) setInstalled(inst.data.plugins)
-    if (log.ok && log.data) setDispatchLog(log.data.entries)
-    setLoading(false)
-  }
-
-  useEffect(() => { void fetchAll() }, [])
 
   const installedBySlug = useMemo(() => {
     const map = new Map<string, InstalledPlugin>()
@@ -112,11 +110,11 @@ export function MarketplacePage() {
   const submitInstall = async () => {
     if (!installTarget) return
     if (!draftWebhookUrl.startsWith('https://')) {
-      alert('Webhook URL must start with https://')
+      toast.error('Invalid webhook URL', 'Webhook URL must start with https://')
       return
     }
     if (draftWebhookSecret.length < 16) {
-      alert('Signing secret must be at least 16 characters')
+      toast.error('Signing secret too short', 'The signing secret must be at least 16 characters.')
       return
     }
     setInstalling(installTarget.slug)
@@ -135,11 +133,12 @@ export function MarketplacePage() {
     })
     setInstalling(null)
     if (!res.ok) {
-      alert(res.error?.message ?? 'Install failed')
+      toast.error('Install failed', res.error?.message)
       return
     }
+    toast.success(`Installed ${installTarget.name}`)
     cancelInstall()
-    await fetchAll()
+    reloadAll()
   }
 
   const uninstall = async (slug: string, name: string) => {
@@ -148,14 +147,15 @@ export function MarketplacePage() {
     const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, { method: 'DELETE' })
     setInstalling(null)
     if (!res.ok) {
-      alert(res.error?.message ?? 'Uninstall failed')
+      toast.error('Uninstall failed', res.error?.message)
       return
     }
-    await fetchAll()
+    toast.success(`Removed ${name}`)
+    reloadAll()
   }
 
   if (loading) return <Loading />
-  if (error) return <ErrorAlert message="Failed to load marketplace." onRetry={fetchAll} />
+  if (error) return <ErrorAlert message={`Failed to load marketplace: ${error}`} onRetry={reloadAll} />
 
   return (
     <div className="space-y-3">
@@ -208,7 +208,7 @@ export function MarketplacePage() {
         {catalog.length === 0 ? (
           <EmptyState
             title="No plugins listed"
-            description="Run the plugin_marketplace migration to seed the reference catalog (PagerDuty, Linear, Zapier)."
+            description="No plugins are listed yet. Seed the plugin_registry table with the reference catalog (PagerDuty, Linear, Zapier) or check that is_listed = true."
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

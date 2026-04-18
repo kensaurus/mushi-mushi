@@ -22,6 +22,7 @@ const DLQPage = lazy(() => import('./pages/DLQPage').then(m => ({ default: m.DLQ
 const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })))
 const JudgePage = lazy(() => import('./pages/JudgePage').then(m => ({ default: m.JudgePage })))
 const QueryPage = lazy(() => import('./pages/QueryPage').then(m => ({ default: m.QueryPage })))
+const ResearchPage = lazy(() => import('./pages/ResearchPage').then(m => ({ default: m.ResearchPage })))
 const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m.FixesPage })))
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
@@ -35,6 +36,7 @@ const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ 
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
+const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -99,6 +101,7 @@ export function App() {
                   <Route path="/graph" element={<GraphPage />} />
                   <Route path="/judge" element={<JudgePage />} />
                   <Route path="/query" element={<QueryPage />} />
+                  <Route path="/research" element={<ResearchPage />} />
                   <Route path="/fixes" element={<FixesPage />} />
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
@@ -113,6 +116,7 @@ export function App() {
                   <Route path="/health" element={<HealthPage />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
+                  <Route path="/billing" element={<BillingPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
                 </Suspense>

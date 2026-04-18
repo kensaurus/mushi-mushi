@@ -132,18 +132,18 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 |-------|------|
 | `/login` | Sign in / Sign up / Forgot password |
 | `/reset-password` | Set new password after recovery link |
-| `/` | Dashboard — stat cards, category/severity breakdowns; getting started cards when empty |
+| `/` | Dashboard — stat cards, category/severity breakdowns; **`QuotaBanner`** above KPIs surfaces any project ≥50% of its monthly free-tier report quota (warn / danger tones, deep-links to `/billing`); getting started cards when empty |
 | `/onboarding` | First-run setup wizard (project, API key, test, SDK snippet) |
 | `/reports` | Filterable report list (status / category / severity / `component` / `reporter`); status-aware "what to do next" card above the filters |
 | `/reports/:id` | Report detail — recommended next action, triage bar, LLM classification, environment, console / network / performance (always rendered with empty states), zoomable screenshot, related cross-links (component, reporter, graph, fix) |
-| `/queue` | Pipeline queue — paginated backlog by stage/status, throughput sparkline, retry actions, DLQ inspector |
-| `/graph` | Knowledge graph — interactive React Flow canvas (component / page / reporter / category clusters, search, blast-radius highlight, side-panel detail) |
+| `/queue` | Pipeline queue — paginated backlog by stage/status, throughput sparkline, retry actions, **Force-process queued** button (kicks `POST /v1/admin/queue/flush-queued` to drain stuck `status='queued'` reports), DLQ inspector |
+| `/graph` | Knowledge graph — interactive React Flow canvas (component / page / reporter / category clusters, search, blast-radius highlight, side-panel detail). Toggleable "Table" view renders nodes + edges as accessible HTML tables for screen readers; React Flow canvas has `role="region"` + descriptive `aria-label` |
 | `/judge` | Judge dashboard — KPI row, score-over-time trend, score distribution histogram, prompt-version leaderboard, "Run judge now" button |
 | `/query` | Ask Your Data — natural-language → SQL with persistent history (per user), sanitised LLM output (trailing `;` and inline comments stripped), explanation, generated SQL, and result table |
 | `/fixes` | Auto-fix PDCA — KPI summary (last 30d), daily volume sparkline, per-fix branch graph (`FixGitGraph`) overlaying dispatch → branch → commit → PR → CI → merge, retry button |
 | `/projects` | Project management + API keys, with toast feedback for create / generate / revoke |
-| `/integrations` | Sentry, Langfuse, GitHub App, Jira, Linear, PagerDuty — health-history-aware status dot in the sidebar |
-| `/sso` | SAML/OIDC configuration with validated submit + toast feedback |
+| `/integrations` | Sentry, Langfuse, GitHub App + routing destinations (Jira, Linear, GitHub Issues, PagerDuty) — `HealthPill` per integration, full CRUD editor for routing credentials with masked-secret pass-through, sidebar health dot |
+| `/sso` | SAML / OIDC self-service — provider name, metadata URL, entity ID, email domains. SAML registers via Supabase Auth Admin API and surfaces ACS URL + Entity ID for the IdP; OIDC currently writes config and shows a "register in dashboard" hint pending GoTrue admin support. Disconnect drops the row + the registered provider |
 | `/audit` | Audit log with CSV export |
 | `/prompt-lab` | Prompt Lab (replaces `/fine-tuning`) — leaderboard of prompt versions, A/B traffic split, dataset preview, clone / activate / delete. `/fine-tuning` redirects here |
 | `/health` | LLM and cron job health — fallback rate, latency, last-run status (live via Realtime) |
@@ -151,6 +151,8 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 | `/notifications` | Reporter-facing notifications — classified, fixed, reward events |
 | `/intelligence` | Bug Intelligence — async generation queue with progress card (cancellable), recent reports |
 | `/storage` | Per-project storage overrides (S3 / R2 / GCS / MinIO / Supabase) with health check + toast feedback |
+| `/billing` | Per-project Stripe billing — plan badge, monthly usage bars, Upgrade / Manage Subscription, recent invoices list |
+| `/marketplace` | Plugin marketplace — install / uninstall, dispatch log, severity / event filters |
 | `/settings` | Project configuration, connection health, pipeline test, debug toggle |
 
 ### Page primitives
@@ -167,7 +169,9 @@ Async UX & reliability:
 - `useToast` (`src/lib/toast.tsx`) — global toast provider with `success / error / warn / info` tones; accepts `message` as an alias for `title` for ergonomic call sites
 - `usePageData` (`src/lib/usePageData.ts`) — StrictMode-safe GET hook (per-mount abort flag, stable `reload` callback, optional `deps`)
 - `IntegrationHealthDot` — sidebar health indicator that polls `/v1/admin/health/history` and degrades to yellow/red on the worst latest status per kind
+- `HealthPill` is shared across `Dashboard`, `Judge`, `Queue`, `Fixes`, `Prompt Lab`, **and now both core platform integrations + routing destinations on `/integrations`**
 - `FixesPage` polling pauses while the tab is hidden and guards against overlapping in-flight requests
+- `usePageData` is the standard data-load hook for `Dashboard`, `Reports`, `ReportDetail`, `Queue`, `DLQ`, `Audit`, `AntiGaming`, `Health`, `Sso`, `Settings`, `Marketplace`, `Integrations`, and `Billing`. `useToast` is the standard mutation-feedback channel for the same set
 
 ### New admin endpoints (server)
 
@@ -177,10 +181,13 @@ These were added to support the page rebuilds and live in `packages/server/supab
 - `GET  /v1/admin/judge/evaluations | /distribution | /prompts`, `POST /v1/admin/judge/run`
 - `POST /v1/admin/query`, `GET /v1/admin/query/history`, `DELETE /v1/admin/query/history/:id`
 - `GET  /v1/admin/fixes/:id/timeline`, `GET /v1/admin/fixes/summary`
-- `GET  /v1/admin/queue` (paginated), `GET /v1/admin/queue/summary`, `GET /v1/admin/queue/throughput`
+- `GET  /v1/admin/queue` (paginated), `GET /v1/admin/queue/summary`, `GET /v1/admin/queue/throughput`, `POST /v1/admin/queue/:id/retry`, `POST /v1/admin/queue/flush-queued`
 - `GET  /v1/admin/prompt-lab`, `POST | PATCH | DELETE /v1/admin/prompt-lab/prompts[/:id]`
 - `POST /v1/admin/intelligence` (async, enqueues a job), `GET /v1/admin/intelligence/jobs`, `POST /v1/admin/intelligence/jobs/:id/cancel`
 - `GET  /v1/admin/health/history`
+- `GET  /v1/admin/billing` (per-project plan + usage + quota), `GET /v1/admin/billing/invoices`, `POST /v1/admin/billing/checkout`, `POST /v1/admin/billing/portal`
+- `GET | POST | DELETE /v1/admin/integrations` — credentials are masked in `GET`; `POST` merges with masked secrets so partial updates don't blow away tokens
+- `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — provisions / removes Supabase Auth Admin API SAML providers
 
 ## Deployment
 

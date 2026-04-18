@@ -195,6 +195,10 @@ export function GraphPage() {
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(
     new Set(EDGE_TYPES),
   )
+  // a11y: React Flow canvas is keyboard-trap-prone for screen readers because
+  // node positions are computed visually. The "table" view exposes the same
+  // graph as a flat node + edge list — keyboard-navigable and announced by AT.
+  const [view, setView] = useState<'graph' | 'table'>('graph')
 
   const loadGraph = useCallback(() => {
     setLoading(true)
@@ -365,10 +369,30 @@ export function GraphPage() {
   return (
     <div className="space-y-3">
       <PageHeader title="Knowledge Graph">
-        <span className="text-2xs text-fg-faint font-mono">
-          {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
-          {filteredEdges.length}/{rawEdges.length} edges
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-2xs text-fg-faint font-mono">
+            {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
+            {filteredEdges.length}/{rawEdges.length} edges
+          </span>
+          <div role="group" aria-label="Graph view mode" className="inline-flex border border-edge rounded-sm overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setView('graph')}
+              aria-pressed={view === 'graph'}
+              className={`px-2 py-0.5 text-2xs ${view === 'graph' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
+            >
+              Graph
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('table')}
+              aria-pressed={view === 'table'}
+              className={`px-2 py-0.5 text-2xs border-l border-edge ${view === 'table' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
+            >
+              Table
+            </button>
+          </div>
+        </div>
       </PageHeader>
 
       <PageHelp
@@ -445,7 +469,10 @@ export function GraphPage() {
 
             <div
               className="border border-edge rounded-md bg-surface-root"
-              style={{ height: 520 }}
+              style={{ height: 520, display: view === 'graph' ? 'block' : 'none' }}
+              role="region"
+              aria-label={`Knowledge graph visualization with ${filteredNodes.length} nodes and ${filteredEdges.length} edges. Switch to Table view for a screen-reader-friendly list.`}
+              tabIndex={0}
             >
               <ReactFlow
                 nodes={flowNodes}
@@ -461,6 +488,7 @@ export function GraphPage() {
                 elementsSelectable
                 nodeOrigin={[0.5, 0.5]}
                 nodeTypes={{ default: ReactFlowChip }}
+                aria-label="Knowledge graph nodes and edges. Use Tab to focus, Enter or Space to select a node and load its blast radius."
               >
                 <Background gap={24} color="oklch(0.30 0 0)" />
                 <Controls position="bottom-right" showInteractive={false} />
@@ -476,6 +504,28 @@ export function GraphPage() {
                 />
               </ReactFlow>
             </div>
+
+            {view === 'table' && (
+              <GraphTableView
+                nodes={filteredNodes}
+                edges={filteredEdges}
+                selectedNodeId={selectedNode?.id ?? null}
+                blastRadiusIds={blastRadiusIds}
+                onSelect={(node) => {
+                  setSelectedNode(node)
+                  setBlastLoading(true)
+                  apiFetch<{ affected: BlastRadiusItem[] }>(
+                    `/v1/admin/graph/blast-radius/${node.id}`,
+                  )
+                    .then((res) => {
+                      if (res.ok) setBlastRadius(res.data?.affected ?? [])
+                      else setBlastRadius([])
+                    })
+                    .catch(() => setBlastRadius([]))
+                    .finally(() => setBlastLoading(false))
+                }}
+              />
+            )}
           </div>
 
           <SidePanel
@@ -492,6 +542,101 @@ export function GraphPage() {
 
 function ReactFlowChip({ data }: { data: { node: GraphNode; isSelected: boolean } }) {
   return <NodeChip node={data.node} selected={data.isSelected} />
+}
+
+interface GraphTableViewProps {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  selectedNodeId: string | null
+  blastRadiusIds: Set<string>
+  onSelect: (node: GraphNode) => void
+}
+
+// Screen-reader-friendly fallback for the React Flow canvas. Renders the
+// graph as two paired tables (nodes + edges) keyed by stable IDs so AT can
+// announce relationships and keyboard users can focus and select nodes.
+function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, onSelect }: GraphTableViewProps) {
+  const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
+  return (
+    <div className="grid gap-3 md:grid-cols-2" role="region" aria-label="Knowledge graph table view">
+      <Card className="p-2">
+        <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
+          Nodes ({nodes.length})
+        </h3>
+        <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+          <table className="w-full text-2xs" aria-label="Graph nodes">
+            <thead className="text-fg-faint sticky top-0 bg-surface-raised">
+              <tr>
+                <th scope="col" className="text-left font-medium px-1 py-1">Type</th>
+                <th scope="col" className="text-left font-medium px-1 py-1">Label</th>
+                <th scope="col" className="text-right font-medium px-1 py-1">Occ.</th>
+                <th scope="col" className="sr-only">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nodes.map((n) => {
+                const occ = nodeMetadataValue(n, 'occurrence_count')
+                const isSelected = selectedNodeId === n.id
+                const inBlast = blastRadiusIds.has(n.id)
+                return (
+                  <tr
+                    key={n.id}
+                    className={`border-t border-edge-subtle ${isSelected ? 'bg-surface-overlay' : inBlast ? 'bg-warn/5' : ''}`}
+                  >
+                    <td className="px-1 py-1 text-fg-muted">{NODE_TYPE_LABELS[n.node_type] ?? n.node_type}</td>
+                    <td className="px-1 py-1 text-fg break-words">{n.label}</td>
+                    <td className="px-1 py-1 text-right font-mono text-fg-faint">{occ ?? '—'}</td>
+                    <td className="px-1 py-1 text-right">
+                      <button
+                        type="button"
+                        onClick={() => onSelect(n)}
+                        aria-pressed={isSelected}
+                        className="text-2xs text-brand hover:text-brand-hover px-1"
+                      >
+                        Select
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card className="p-2">
+        <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
+          Edges ({edges.length})
+        </h3>
+        <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+          <table className="w-full text-2xs" aria-label="Graph edges">
+            <thead className="text-fg-faint sticky top-0 bg-surface-raised">
+              <tr>
+                <th scope="col" className="text-left font-medium px-1 py-1">From</th>
+                <th scope="col" className="text-left font-medium px-1 py-1">Relation</th>
+                <th scope="col" className="text-left font-medium px-1 py-1">To</th>
+                <th scope="col" className="text-right font-medium px-1 py-1">Wt.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {edges.map((e) => {
+                const src = nodesById.get(e.source_node_id)
+                const tgt = nodesById.get(e.target_node_id)
+                return (
+                  <tr key={e.id} className="border-t border-edge-subtle">
+                    <td className="px-1 py-1 text-fg break-words">{src?.label ?? e.source_node_id}</td>
+                    <td className="px-1 py-1 text-fg-muted font-mono">{EDGE_LABELS[e.edge_type] ?? e.edge_type}</td>
+                    <td className="px-1 py-1 text-fg break-words">{tgt?.label ?? e.target_node_id}</td>
+                    <td className="px-1 py-1 text-right font-mono text-fg-faint">{e.weight}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </div>
+  )
 }
 
 interface SidePanelProps {

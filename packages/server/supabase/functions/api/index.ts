@@ -1,4 +1,4 @@
-import { Hono } from 'npm:hono@4'
+import { Hono, type Context } from 'npm:hono@4'
 import { cors } from 'npm:hono@4/cors'
 import { streamSSE } from 'npm:hono@4/streaming'
 import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../_shared/sse.ts'
@@ -7,6 +7,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { apiKeyAuth, jwtAuth } from '../_shared/auth.ts'
+import { checkIngestQuota } from '../_shared/quota.ts'
 import { regionRouter, currentRegion, lookupProjectRegion, regionEndpoint } from '../_shared/region.ts'
 import { getStorageAdapter, invalidateStorageCache } from '../_shared/storage.ts'
 import { reportSubmissionSchema } from '../_shared/schemas.ts'
@@ -24,6 +25,7 @@ import {
   createBillingPortalSession,
   createCheckoutSession,
   createCustomer,
+  listInvoices,
   stripeFromEnv,
 } from '../_shared/stripe.ts'
 
@@ -168,6 +170,7 @@ async function ingestReport(
   const antiGaming = await checkAntiGaming(db, projectId, tokenHash, deviceFingerprint ? {
     fingerprint: deviceFingerprint,
     ipAddress: options?.ipAddress,
+    fingerprintHash: report.fingerprintHash,
   } : null)
   if (antiGaming.flagged) {
     log.warn('Anti-gaming flagged report', { reporterToken: tokenHash, reason: antiGaming.reason })
@@ -384,6 +387,21 @@ app.post('/v1/reports', apiKeyAuth, async (c) => {
     const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip')
     const userAgent = c.req.header('user-agent')
 
+    const quota = await checkIngestQuota(db, projectId)
+    if (!quota.allowed) {
+      c.header('Retry-After', String(quota.retryAfterSeconds ?? 3600))
+      return c.json({
+        ok: false,
+        error: {
+          code: 'QUOTA_EXCEEDED',
+          message: `Free tier quota of ${quota.limit} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+          used: quota.used,
+          limit: quota.limit,
+          periodResetsAt: quota.periodResetsAt,
+        },
+      }, 402)
+    }
+
     const result = await ingestReport(db, projectId, body, { ipAddress, userAgent })
     if (!result.ok) {
       return c.json({ ok: false, error: { code: 'INGEST_ERROR', message: result.error } }, 400)
@@ -407,6 +425,22 @@ app.post('/v1/reports/batch', apiKeyAuth, async (c) => {
   const db = getServiceClient()
   const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? c.req.header('x-real-ip')
   const userAgent = c.req.header('user-agent')
+
+  const quota = await checkIngestQuota(db, projectId)
+  if (!quota.allowed) {
+    c.header('Retry-After', String(quota.retryAfterSeconds ?? 3600))
+    return c.json({
+      ok: false,
+      error: {
+        code: 'QUOTA_EXCEEDED',
+        message: `Free tier quota of ${quota.limit} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+        used: quota.used,
+        limit: quota.limit,
+        periodResetsAt: quota.periodResetsAt,
+      },
+    }, 402)
+  }
+
   const results: Array<{ reportId?: string; ok: boolean; error?: string }> = []
 
   const settled = await Promise.allSettled(
@@ -504,6 +538,110 @@ app.post('/v1/webhooks/sentry', async (c) => {
   }
 
   return c.json({ ok: true, data: { action: 'ignored' } })
+})
+
+// ============================================================
+// SENTRY SEER WEBHOOK (Wave E §3b — push complement to /sentry-seer-poll)
+// ============================================================
+//
+// Configure in Sentry: Settings → Developer Settings → Internal Integration
+//   Webhook URL:   <api>/v1/webhooks/sentry/seer?projectId=<mushi-project-id>
+//   Webhook secret: same value as project_settings.sentry_webhook_secret
+//   Resources:     Issue (for seer-fixability changes)
+//
+// Auth: HMAC-SHA256 hex digest of the *raw* body, sent in
+// `Sentry-Hook-Signature`. We must verify before parsing JSON to avoid
+// re-encoding altering bytes. Project is identified via querystring
+// because Sentry doesn't propagate custom headers to internal integrations.
+
+app.post('/v1/webhooks/sentry/seer', async (c) => {
+  const { verifySentryHookSignature, parseIssueWebhookBody, parseSeerAutofixBody, applySeerAnalysis } =
+    await import('../_shared/seer.ts')
+
+  const projectId = c.req.query('projectId')
+    ?? c.req.header('X-Mushi-Project')
+    ?? ''
+  if (!projectId) {
+    return c.json({ ok: false, error: { code: 'MISSING_PROJECT', message: 'projectId query param or X-Mushi-Project header is required' } }, 400)
+  }
+
+  const rawBody = await c.req.text()
+  const signature = c.req.header('Sentry-Hook-Signature') ?? c.req.header('X-Sentry-Hook-Signature')
+
+  const db = getServiceClient()
+  const { data: settings } = await db
+    .from('project_settings')
+    .select('sentry_webhook_secret, sentry_seer_enabled')
+    .eq('project_id', projectId)
+    .maybeSingle()
+
+  if (!settings?.sentry_webhook_secret) {
+    return c.json({ ok: false, error: { code: 'NO_SECRET', message: 'Sentry webhook secret not configured for this project' } }, 403)
+  }
+  if (!settings.sentry_seer_enabled) {
+    return c.json({ ok: true, data: { ignored: 'seer_disabled' } }, 202)
+  }
+
+  const valid = await verifySentryHookSignature(rawBody, signature ?? null, settings.sentry_webhook_secret)
+  if (!valid) {
+    return c.json({ ok: false, error: { code: 'BAD_SIGNATURE', message: 'Invalid HMAC signature' } }, 401)
+  }
+
+  let body: unknown
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    return c.json({ ok: false, error: { code: 'BAD_JSON' } }, 400)
+  }
+
+  const issue = parseIssueWebhookBody(body)
+  if (!issue) {
+    return c.json({ ok: true, data: { ignored: 'no_issue_in_payload' } }, 202)
+  }
+
+  // Sentry sends two flavours of seer payload: (a) issue-event with the
+  // analysis embedded under data.seer_analysis or data.autofix, (b) thin
+  // notification with just the issue id, expecting us to pull. We try
+  // (a) first to avoid an extra round-trip; fall back to (b) if missing.
+  const dataObj = (body as Record<string, unknown>).data as Record<string, unknown> | undefined
+  let parsed = parseSeerAutofixBody(dataObj?.autofix ? dataObj : { autofix: dataObj?.seer_analysis })
+  if (!parsed && dataObj?.seer_analysis) {
+    const sa = dataObj.seer_analysis as Record<string, unknown>
+    parsed = {
+      rootCause: sa.rootCause ?? sa.root_cause ?? null,
+      fixSuggestion: sa.fixSuggestion ?? sa.fix_suggestion ?? sa.solution ?? null,
+    }
+  }
+
+  if (!parsed) {
+    // Thin notification: enqueue a one-shot fetch via the existing poll fn.
+    // Cheap fire-and-forget — if it fails the next 15-min cron will still
+    // catch it. We don't await so the webhook response stays under Sentry's
+    // 10s timeout budget.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+    if (supabaseUrl && serviceRoleKey) {
+      void fetch(`${supabaseUrl}/functions/v1/sentry-seer-poll`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${serviceRoleKey}` },
+        signal: AbortSignal.timeout(2_000),
+      }).catch(() => { /* best-effort */ })
+    }
+    return c.json({ ok: true, data: { issueId: issue.id, deferred: true } }, 202)
+  }
+
+  const result = await applySeerAnalysis(db, projectId, {
+    issueId: issue.id,
+    shortId: issue.shortId,
+    permalink: issue.permalink,
+    rootCause: parsed.rootCause,
+    fixSuggestion: parsed.fixSuggestion,
+    fixabilityScore: issue.seerFixability?.fixabilityScore ?? null,
+    fetchedAt: new Date().toISOString(),
+    source: 'webhook',
+  })
+
+  return c.json({ ok: true, data: { issueId: issue.id, ...result } })
 })
 
 // ============================================================
@@ -647,40 +785,138 @@ app.get('/v1/reputation', apiKeyAuth, async (c) => {
 })
 
 // Reporter notifications
+//
+// Auth model (Wave 2.8): two flows are accepted, in priority order:
+//
+//   (A) HMAC-signed (preferred). The SDK proves possession of the reporter
+//       token without sending it on the wire:
+//
+//         X-Reporter-Token-Hash: <sha256(token) hex>
+//         X-Reporter-Ts:         <unix ms>
+//         X-Reporter-Hmac:       hex(HMAC-SHA256(
+//                                  secret = projectApiKey,
+//                                  msg    = `${projectId}.${ts}.${tokenHash}`))
+//
+//       Server enforces `|now - ts| < 5 min` to defeat replay, then recomputes
+//       the HMAC against the API key already validated by apiKeyAuth.
+//
+//   (B) Legacy raw-token. Accepted for backwards compatibility but logged as a
+//       deprecation warning by the SDK. Token can be passed as
+//       `X-Reporter-Token` header (preferred over query so it doesn't leak
+//       into proxy logs) or `?reporterToken=...`.
+//
+// Both flows resolve to a stable `reporter_token_hash` for table lookup.
+async function resolveReporterTokenHash(c: Context, projectId: string): Promise<
+  | { ok: true; tokenHash: string }
+  | { ok: false; status: number; code: string; message: string }
+> {
+  const headerHash = c.req.header('X-Reporter-Token-Hash')
+  const ts = c.req.header('X-Reporter-Ts')
+  const sig = c.req.header('X-Reporter-Hmac')
+  const apiKey = c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project')
+
+  if (headerHash && ts && sig && apiKey) {
+    const parsedTs = Number(ts)
+    if (!Number.isFinite(parsedTs)) {
+      return { ok: false, status: 400, code: 'BAD_TIMESTAMP', message: 'X-Reporter-Ts must be a unix-ms integer' }
+    }
+    const skewMs = Math.abs(Date.now() - parsedTs)
+    if (skewMs > 5 * 60 * 1000) {
+      return { ok: false, status: 401, code: 'STALE_REQUEST', message: 'X-Reporter-Ts outside 5-minute window' }
+    }
+    const enc = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw',
+      enc.encode(apiKey),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    )
+    const expected = await crypto.subtle.sign(
+      'HMAC',
+      key,
+      enc.encode(`${projectId}.${parsedTs}.${headerHash.toLowerCase()}`),
+    )
+    const expectedHex = Array.from(new Uint8Array(expected)).map(b => b.toString(16).padStart(2, '0')).join('')
+    if (!constantTimeEqualHex(expectedHex, sig)) {
+      return { ok: false, status: 401, code: 'INVALID_HMAC', message: 'X-Reporter-Hmac signature mismatch' }
+    }
+    return { ok: true, tokenHash: headerHash.toLowerCase() }
+  }
+
+  const rawToken =
+    c.req.header('X-Reporter-Token') ?? c.req.query('reporterToken') ?? null
+  if (!rawToken) {
+    return {
+      ok: false,
+      status: 400,
+      code: 'MISSING_TOKEN',
+      message: 'Pass X-Reporter-Token-Hash + X-Reporter-Hmac (preferred) or X-Reporter-Token / ?reporterToken=',
+    }
+  }
+  const enc = new TextEncoder()
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(rawToken))
+  const tokenHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('')
+  return { ok: true, tokenHash }
+}
+
+function constantTimeEqualHex(a: string, b: string): boolean {
+  if (a.length !== b.length) return false
+  let diff = 0
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
+  return diff === 0
+}
+
 app.get('/v1/notifications', apiKeyAuth, async (c) => {
   const projectId = c.get('projectId') as string
-  const reporterToken = c.req.query('reporterToken')
-  if (!reporterToken) return c.json({ ok: false, error: { code: 'MISSING_TOKEN', message: 'reporterToken query required' } }, 400)
+  const auth = await resolveReporterTokenHash(c, projectId)
+  if (!auth.ok) return c.json({ ok: false, error: { code: auth.code, message: auth.message } }, auth.status as 400 | 401)
 
-  const encoder = new TextEncoder()
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(reporterToken))
-  const tokenHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+  const sinceParam = c.req.query('since')
+  const since = sinceParam && !Number.isNaN(Date.parse(sinceParam)) ? new Date(sinceParam).toISOString() : null
+  const includeRead = c.req.query('includeRead') === '1'
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? '20'), 1), 100)
 
   const db = getServiceClient()
-  const { data: notifications } = await db
+  let query = db
     .from('reporter_notifications')
     .select('id, notification_type, payload, read_at, created_at')
     .eq('project_id', projectId)
-    .eq('reporter_token_hash', tokenHash)
-    .is('read_at', null)
+    .eq('reporter_token_hash', auth.tokenHash)
     .order('created_at', { ascending: false })
-    .limit(20)
+    .limit(limit)
+  if (!includeRead) query = query.is('read_at', null)
+  if (since) query = query.gt('created_at', since)
 
-  return c.json({ ok: true, data: { notifications: notifications ?? [] } })
+  const { data: notifications, error } = await query
+  if (error) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  }
+
+  c.header('Cache-Control', 'no-store')
+  return c.json({
+    ok: true,
+    data: {
+      notifications: notifications ?? [],
+      server_time: new Date().toISOString(),
+    },
+  })
 })
 
 app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
   const notifId = c.req.param('id')
   const projectId = c.get('projectId') as string
-  const reporterToken = c.req.query('reporterToken')
-  if (!reporterToken) return c.json({ ok: false, error: { code: 'MISSING_TOKEN', message: 'reporterToken query required' } }, 400)
-
-  const encoder = new TextEncoder()
-  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(reporterToken))
-  const tokenHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
+  const auth = await resolveReporterTokenHash(c, projectId)
+  if (!auth.ok) return c.json({ ok: false, error: { code: auth.code, message: auth.message } }, auth.status as 400 | 401)
 
   const db = getServiceClient()
-  await db.from('reporter_notifications').update({ read_at: new Date().toISOString() }).eq('id', notifId).eq('project_id', projectId).eq('reporter_token_hash', tokenHash)
+  const { error } = await db
+    .from('reporter_notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', notifId)
+    .eq('project_id', projectId)
+    .eq('reporter_token_hash', auth.tokenHash)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
   return c.json({ ok: true })
 })
 
@@ -965,7 +1201,7 @@ app.post('/v1/admin/codebase/upload', apiKeyAuth, async (c) => {
   for (const ch of chunks) {
     try {
       const text = `${body.filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`
-      const embedding = await createEmbedding(text)
+      const embedding = await createEmbedding(text, { projectId })
       const contentHash = await sha256Hex(ch.body)
       await db.from('project_codebase_files').upsert({
         project_id: projectId,
@@ -1483,9 +1719,11 @@ app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
   const projectIds = await ownedProjectIds(db, userId)
 
   // Prompts: include global defaults (project_id IS NULL) + this user's own.
+  // Wave E §4: also expose auto-generated metadata + parent_version_id so the
+  // Prompt Lab UI can surface auto candidates and diff them against parent.
   let promptsQuery = db
     .from('prompt_versions')
-    .select('id, project_id, stage, version, prompt_template, is_active, is_candidate, traffic_percentage, avg_judge_score, total_evaluations, created_at, updated_at')
+    .select('id, project_id, stage, version, prompt_template, is_active, is_candidate, traffic_percentage, avg_judge_score, total_evaluations, created_at, updated_at, auto_generated, auto_generation_metadata, parent_version_id')
     .order('stage', { ascending: true })
     .order('version', { ascending: true })
     .limit(100)
@@ -1964,6 +2202,482 @@ app.post('/v1/admin/byok/:provider/test', jwtAuth, async (c) => {
 })
 
 // ============================================================
+// Wave E: Firecrawl BYOK admin endpoints
+//
+// Firecrawl is a non-LLM provider (web scraping / search) used by the new
+// research page, fix-worker auto-augmentation, and the library-modernizer
+// cron. Same vault-indirection pattern as the LLM keys but its own column
+// set so the LLM resolver stays single-purpose.
+// ============================================================
+
+function firecrawlSecretName(projectId: string): string {
+  return `mushi/byok/${projectId}/firecrawl`
+}
+
+app.get('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: true, data: null })
+
+  const { data } = await db
+    .from('project_settings')
+    .select('byok_firecrawl_key_ref, byok_firecrawl_key_added_at, byok_firecrawl_key_last_used_at, byok_firecrawl_test_status, byok_firecrawl_tested_at, firecrawl_allowed_domains, firecrawl_max_pages_per_call')
+    .eq('project_id', project.id)
+    .maybeSingle()
+
+  return c.json({
+    ok: true,
+    data: {
+      configured: Boolean(data?.byok_firecrawl_key_ref),
+      addedAt: (data?.byok_firecrawl_key_added_at as string | null) ?? null,
+      lastUsedAt: (data?.byok_firecrawl_key_last_used_at as string | null) ?? null,
+      testStatus: (data?.byok_firecrawl_test_status as string | null) ?? null,
+      testedAt: (data?.byok_firecrawl_tested_at as string | null) ?? null,
+      allowedDomains: (data?.firecrawl_allowed_domains as string[] | null) ?? [],
+      maxPagesPerCall: (data?.firecrawl_max_pages_per_call as number | null) ?? 5,
+    },
+  })
+})
+
+app.put('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => ({})) as {
+    key?: string
+    allowedDomains?: string[]
+    maxPagesPerCall?: number
+  }
+
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const update: Record<string, unknown> = { project_id: project.id }
+
+  if (typeof body.key === 'string' && body.key.trim().length > 0) {
+    const key = body.key.trim()
+    if (key.length < 8) {
+      return c.json({ ok: false, error: { code: 'KEY_TOO_SHORT', message: 'Provide the full Firecrawl API key.' } }, 400)
+    }
+    const secretName = firecrawlSecretName(project.id)
+    const { error: vaultErr } = await db.rpc('vault_store_secret', { secret_name: secretName, secret_value: key })
+    if (vaultErr) {
+      log.error('vault_store_secret failed for firecrawl', { error: vaultErr.message })
+      return c.json({ ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } }, 500)
+    }
+    update.byok_firecrawl_key_ref = `vault://${secretName}`
+    update.byok_firecrawl_key_added_at = new Date().toISOString()
+    update.byok_firecrawl_key_last_used_at = null
+    update.byok_firecrawl_test_status = null
+    update.byok_firecrawl_tested_at = null
+  }
+
+  if (Array.isArray(body.allowedDomains)) {
+    update.firecrawl_allowed_domains = body.allowedDomains
+      .filter((d): d is string => typeof d === 'string')
+      .map((d) => d.trim().toLowerCase())
+      .filter((d) => d.length > 0 && d.length < 254)
+      .slice(0, 50)
+  }
+
+  if (typeof body.maxPagesPerCall === 'number' && Number.isFinite(body.maxPagesPerCall)) {
+    update.firecrawl_max_pages_per_call = Math.max(1, Math.min(50, Math.floor(body.maxPagesPerCall)))
+  }
+
+  const { error } = await db
+    .from('project_settings')
+    .upsert(update, { onConflict: 'project_id' })
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  if (update.byok_firecrawl_key_ref) {
+    await db
+      .from('byok_audit_log')
+      .insert({ project_id: project.id, provider: 'firecrawl', action: 'rotated', actor_user_id: userId })
+      .catch(() => {})
+    await logAudit(db, project.id, userId, 'settings.updated', 'byok', 'firecrawl', { provider: 'firecrawl' }).catch(() => {})
+  }
+
+  return c.json({ ok: true })
+})
+
+app.delete('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const secretName = firecrawlSecretName(project.id)
+  await db.rpc('vault_delete_secret', { secret_name: secretName }).catch((err) => {
+    log.warn('vault_delete_secret failed for firecrawl (non-fatal)', { error: String(err) })
+  })
+
+  const { error } = await db
+    .from('project_settings')
+    .upsert({
+      project_id: project.id,
+      byok_firecrawl_key_ref: null,
+      byok_firecrawl_key_added_at: null,
+      byok_firecrawl_key_last_used_at: null,
+      byok_firecrawl_test_status: null,
+      byok_firecrawl_tested_at: null,
+    }, { onConflict: 'project_id' })
+
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  await db.from('byok_audit_log').insert({ project_id: project.id, provider: 'firecrawl', action: 'removed', actor_user_id: userId }).catch(() => {})
+  await logAudit(db, project.id, userId, 'settings.updated', 'byok', 'firecrawl', { provider: 'firecrawl', cleared: true }).catch(() => {})
+
+  return c.json({ ok: true })
+})
+
+app.post('/v1/admin/byok/firecrawl/test', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const { probeFirecrawl } = await import('../_shared/firecrawl.ts')
+  const probe = await probeFirecrawl(db, project.id)
+
+  const now = new Date().toISOString()
+  await db
+    .from('project_settings')
+    .upsert({
+      project_id: project.id,
+      byok_firecrawl_test_status: probe.status,
+      byok_firecrawl_tested_at: now,
+    }, { onConflict: 'project_id' })
+
+  await db.from('integration_health_history').insert({
+    project_id: project.id,
+    kind: 'firecrawl',
+    status: probe.status === 'ok' ? 'ok' : (probe.status === 'error_quota' ? 'degraded' : 'down'),
+    latency_ms: probe.latencyMs,
+    message: probe.detail,
+    source: 'manual',
+  }).catch(() => {})
+
+  return c.json({
+    ok: true,
+    data: {
+      status: probe.status,
+      hint: probe.hint,
+      source: probe.source,
+      latencyMs: probe.latencyMs,
+      detail: probe.detail,
+      testedAt: now,
+    },
+  })
+})
+
+// ============================================================
+// Wave E: Research page admin endpoints
+//
+// Manual web research powered by Firecrawl. Admin types a query, we hit
+// Firecrawl, persist the session + snippets, and let the user attach any
+// snippet to a specific report as triage evidence.
+// ============================================================
+
+app.post('/v1/admin/research/search', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => ({})) as { query?: string; domains?: string[]; limit?: number }
+  const query = typeof body.query === 'string' ? body.query.trim() : ''
+  if (query.length < 2 || query.length > 500) {
+    return c.json({ ok: false, error: { code: 'BAD_QUERY', message: 'Query must be between 2 and 500 characters.' } }, 400)
+  }
+
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const { firecrawlSearch } = await import('../_shared/firecrawl.ts')
+
+  let results: Array<{ url: string; title: string; snippet: string; markdown?: string }> = []
+  let errCode: string | null = null
+  try {
+    results = await firecrawlSearch(db, project.id, query, {
+      domains: Array.isArray(body.domains) ? body.domains.filter((d): d is string => typeof d === 'string') : undefined,
+      limit: typeof body.limit === 'number' ? body.limit : 5,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg === 'FIRECRAWL_NOT_CONFIGURED') {
+      return c.json({ ok: false, error: { code: 'FIRECRAWL_NOT_CONFIGURED', message: 'Add a Firecrawl API key in Settings → BYOK first.' } }, 412)
+    }
+    if (msg === 'FIRECRAWL_AUTH_FAILED') {
+      return c.json({ ok: false, error: { code: 'FIRECRAWL_AUTH_FAILED', message: 'Firecrawl rejected the key. Check Settings → BYOK.' } }, 401)
+    }
+    if (msg === 'FIRECRAWL_RATE_LIMITED') {
+      return c.json({ ok: false, error: { code: 'RATE_LIMITED', message: 'Firecrawl rate-limited. Try again shortly.' } }, 429)
+    }
+    errCode = msg
+    log.warn('research search failed', { projectId: project.id, error: msg })
+    return c.json({ ok: false, error: { code: 'SEARCH_FAILED', message: msg } }, 502)
+  }
+
+  const { data: session, error: sErr } = await db
+    .from('research_sessions')
+    .insert({
+      project_id: project.id,
+      query,
+      mode: 'search',
+      domains: Array.isArray(body.domains) ? body.domains : [],
+      result_count: results.length,
+      created_by: userId,
+    })
+    .select('id, created_at')
+    .single()
+
+  if (sErr || !session) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: sErr?.message ?? 'Failed to persist session' } }, 500)
+  }
+
+  if (results.length > 0) {
+    await db.from('research_snippets').insert(
+      results.map((r) => ({
+        session_id: session.id,
+        project_id: project.id,
+        url: r.url,
+        title: r.title,
+        snippet: r.snippet,
+        markdown: r.markdown ?? null,
+      })),
+    )
+  }
+
+  await logAudit(db, project.id, userId, 'settings.updated', 'research', session.id, { query: query.slice(0, 120), results: results.length }).catch(() => {})
+
+  const { data: snippets } = await db
+    .from('research_snippets')
+    .select('id, url, title, snippet, attached_to_report_id')
+    .eq('session_id', session.id)
+    .order('created_at', { ascending: true })
+
+  return c.json({
+    ok: true,
+    data: {
+      sessionId: session.id,
+      createdAt: session.created_at,
+      query,
+      results: snippets ?? [],
+      errCode,
+    },
+  })
+})
+
+app.get('/v1/admin/research/sessions', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10), 100)
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: true, data: { sessions: [] } })
+
+  const { data: sessions, error } = await db
+    .from('research_sessions')
+    .select('id, query, mode, result_count, created_at, created_by')
+    .eq('project_id', project.id)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { sessions: sessions ?? [] } })
+})
+
+app.get('/v1/admin/research/sessions/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const sessionId = c.req.param('id')
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const { data: session, error: sErr } = await db
+    .from('research_sessions')
+    .select('id, query, mode, domains, result_count, created_at')
+    .eq('id', sessionId)
+    .eq('project_id', project.id)
+    .maybeSingle()
+  if (sErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: sErr.message } }, 500)
+  if (!session) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: snippets } = await db
+    .from('research_snippets')
+    .select('id, url, title, snippet, attached_to_report_id, attached_at')
+    .eq('session_id', session.id)
+    .order('created_at', { ascending: true })
+
+  return c.json({ ok: true, data: { session, snippets: snippets ?? [] } })
+})
+
+app.post('/v1/admin/research/snippets/:id/attach', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const snippetId = c.req.param('id')
+  const body = await c.req.json().catch(() => ({})) as { reportId?: string }
+  const reportId = typeof body.reportId === 'string' ? body.reportId : ''
+  if (!reportId) {
+    return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'reportId is required' } }, 400)
+  }
+
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const { data: report } = await db
+    .from('reports')
+    .select('id')
+    .eq('id', reportId)
+    .eq('project_id', project.id)
+    .maybeSingle()
+  if (!report) return c.json({ ok: false, error: { code: 'REPORT_NOT_FOUND' } }, 404)
+
+  const { error } = await db
+    .from('research_snippets')
+    .update({ attached_to_report_id: reportId, attached_at: new Date().toISOString(), attached_by: userId })
+    .eq('id', snippetId)
+    .eq('project_id', project.id)
+
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  await logAudit(db, project.id, userId, 'report.triaged', 'research_snippet', snippetId, { reportId }).catch(() => {})
+  return c.json({ ok: true })
+})
+
+// ============================================================
+// LIBRARY MODERNIZATION (Wave E §2c)
+// ============================================================
+//
+// Read-only listing + dispatch/dismiss for findings produced by the weekly
+// library-modernizer cron. "Dispatch" simply forwards the synthetic report
+// (created at finding-time for major/security/deprecated severities) into
+// the existing fix_dispatch_jobs queue, so the entire fix pipeline stays
+// on one code path.
+
+app.get('/v1/admin/modernization', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const status = c.req.query('status') ?? 'pending'
+  const db = getServiceClient()
+
+  const { data: memberships } = await db
+    .from('project_members')
+    .select('project_id')
+    .eq('user_id', userId)
+  const projectIds = (memberships ?? []).map((m) => m.project_id)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { findings: [] } })
+
+  let q = db
+    .from('modernization_findings')
+    .select('id, project_id, repo_id, dep_name, current_version, suggested_version, manifest_path, summary, severity, changelog_url, related_report_id, status, detected_at')
+    .in('project_id', projectIds)
+    .order('detected_at', { ascending: false })
+    .limit(100)
+  if (status !== 'all') q = q.eq('status', status)
+
+  const { data, error } = await q
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { findings: data ?? [] } })
+})
+
+app.post('/v1/admin/modernization/:id/dispatch', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const findingId = c.req.param('id')
+  const db = getServiceClient()
+
+  const { data: finding } = await db
+    .from('modernization_findings')
+    .select('id, project_id, related_report_id, dep_name, status')
+    .eq('id', findingId)
+    .maybeSingle()
+  if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: membership } = await db
+    .from('project_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('project_id', finding.project_id)
+    .maybeSingle()
+  if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  if (!finding.related_report_id) {
+    return c.json({ ok: false, error: { code: 'NO_REPORT', message: 'This finding has no synthetic report attached (low-severity findings are info-only).' } }, 400)
+  }
+
+  const { data: settings } = await db
+    .from('project_settings')
+    .select('autofix_enabled')
+    .eq('project_id', finding.project_id)
+    .maybeSingle()
+  if (!settings?.autofix_enabled) {
+    return c.json({ ok: false, error: { code: 'AUTOFIX_DISABLED', message: 'Enable Autofix in project settings first' } }, 400)
+  }
+
+  const { data: existing } = await db
+    .from('fix_dispatch_jobs')
+    .select('id, status')
+    .eq('project_id', finding.project_id)
+    .eq('report_id', finding.related_report_id)
+    .in('status', ['queued', 'running'])
+    .limit(1)
+  if (existing?.length) {
+    return c.json({ ok: true, data: { dispatchId: existing[0].id, status: existing[0].status, deduplicated: true } })
+  }
+
+  const { data: job, error: insertErr } = await db
+    .from('fix_dispatch_jobs')
+    .insert({
+      project_id: finding.project_id,
+      report_id: finding.related_report_id,
+      requested_by: userId,
+      status: 'queued',
+    })
+    .select('id, status, created_at')
+    .single()
+  if (insertErr || !job) {
+    return c.json({ ok: false, error: { code: 'DISPATCH_FAILED', message: insertErr?.message ?? 'enqueue failed' } }, 500)
+  }
+
+  await db
+    .from('modernization_findings')
+    .update({ status: 'dispatched' })
+    .eq('id', finding.id)
+
+  invokeFixWorker(job.id).catch((err) => {
+    console.warn('[modernization] worker invocation failed', { dispatchId: job.id, err: String(err) })
+  })
+
+  await logAudit(db, finding.project_id, userId, 'fix.attempted', 'modernization_finding', finding.id, { dep: finding.dep_name, dispatchId: job.id, source: 'modernization' }).catch(() => {})
+  return c.json({ ok: true, data: { dispatchId: job.id, status: job.status, createdAt: job.created_at } })
+})
+
+app.post('/v1/admin/modernization/:id/dismiss', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const findingId = c.req.param('id')
+  const db = getServiceClient()
+
+  const { data: finding } = await db
+    .from('modernization_findings')
+    .select('project_id, dep_name')
+    .eq('id', findingId)
+    .maybeSingle()
+  if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: membership } = await db
+    .from('project_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('project_id', finding.project_id)
+    .maybeSingle()
+  if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  const { error } = await db
+    .from('modernization_findings')
+    .update({ status: 'dismissed' })
+    .eq('id', findingId)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+  await logAudit(db, finding.project_id, userId, 'report.triaged', 'modernization_finding', findingId, { dep: finding.dep_name, action: 'dismissed' }).catch(() => {})
+  return c.json({ ok: true })
+})
+
+// ============================================================
 // INTEGRATION HEALTH (V5.3 §2.18) — admin probe + history
 // ============================================================
 //
@@ -2104,6 +2818,80 @@ async function dereferenceMaybeVault(db: ReturnType<typeof getServiceClient>, re
 }
 
 // Projects admin endpoints
+// Wave 4.2: billing summary for the admin /billing page.
+// Returns plan, current-period usage, and quota state for every project the
+// user owns. Free-tier projects show used/limit; subscribed projects show
+// metered usage with no hard cap.
+app.get('/v1/admin/billing', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const { data: projects } = await db
+    .from('projects')
+    .select('id, name')
+    .eq('owner_id', userId)
+
+  if (!projects || projects.length === 0) {
+    return c.json({ ok: true, data: { projects: [] } })
+  }
+
+  const periodStart = new Date()
+  periodStart.setUTCDate(1)
+  periodStart.setUTCHours(0, 0, 0, 0)
+
+  const projectIds = projects.map(p => p.id)
+  const [{ data: subs }, { data: customers }, { data: usage }] = await Promise.all([
+    db.from('billing_subscriptions')
+      .select('project_id, status, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end')
+      .in('project_id', projectIds),
+    db.from('billing_customers')
+      .select('project_id, stripe_customer_id, default_payment_ok, email')
+      .in('project_id', projectIds),
+    db.from('usage_events')
+      .select('project_id, event_name, quantity, occurred_at')
+      .in('project_id', projectIds)
+      .gte('occurred_at', periodStart.toISOString()),
+  ])
+
+  const subByProject = new Map<string, any>()
+  for (const s of subs ?? []) {
+    if (!subByProject.has(s.project_id)) subByProject.set(s.project_id, s)
+  }
+  const customerByProject = new Map<string, any>()
+  for (const c of customers ?? []) customerByProject.set(c.project_id, c)
+
+  const usageByProject = new Map<string, { reports: number; fixes: number; tokens: number }>()
+  for (const u of usage ?? []) {
+    const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, tokens: 0 }
+    if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity)
+    else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity)
+    else if (u.event_name === 'classifier_tokens') cur.tokens += Number(u.quantity)
+    usageByProject.set(u.project_id, cur)
+  }
+
+  const freeLimit = Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000')
+
+  const items = projects.map(p => {
+    const sub = subByProject.get(p.id) ?? null
+    const cust = customerByProject.get(p.id) ?? null
+    const u = usageByProject.get(p.id) ?? { reports: 0, fixes: 0, tokens: 0 }
+    const subscribed = !!sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    return {
+      project_id: p.id,
+      project_name: p.name,
+      plan: subscribed ? sub.stripe_price_id : 'free',
+      subscription: sub,
+      customer: cust,
+      period_start: periodStart.toISOString(),
+      usage: u,
+      limit_reports: subscribed ? null : freeLimit,
+      over_quota: !subscribed && u.reports >= freeLimit,
+    }
+  })
+
+  return c.json({ ok: true, data: { projects: items, free_limit_reports_per_month: freeLimit } })
+})
+
 app.get('/v1/admin/projects', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
@@ -2389,6 +3177,53 @@ app.post('/v1/admin/queue/:id/retry', jwtAuth, async (c) => {
 
   triggerClassification(item.report_id, item.project_id)
   return c.json({ ok: true })
+})
+
+// Wave 2.2: bulk flush for circuit-breaker queued reports.
+// When `checkCircuitBreaker` trips, ingestReport sets `reports.status='queued'`
+// and skips the per-report fast-filter invoke. Once the breaker clears, those
+// reports stay queued until manually rerun. This endpoint replays them in a
+// single click. Bounded at 50/call to avoid runaway invocations.
+app.post('/v1/admin/queue/flush-queued', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { flushed: 0, scanned: 0 } })
+  }
+
+  const { data: queued, error } = await db
+    .from('reports')
+    .select('id, project_id')
+    .in('project_id', projectIds)
+    .eq('status', 'queued')
+    .order('created_at', { ascending: true })
+    .limit(50)
+
+  if (error) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  }
+
+  const items = queued ?? []
+  for (const r of items) {
+    await db.from('reports').update({ status: 'new' }).eq('id', r.id)
+    triggerClassification(r.id, r.project_id)
+  }
+
+  for (const projectId of [...new Set(items.map(i => i.project_id))]) {
+    await logAudit(
+      db,
+      projectId,
+      userId,
+      'settings.updated',
+      'queue',
+      undefined,
+      { kind: 'flush_queued', flushed: items.filter(i => i.project_id === projectId).length },
+    ).catch(() => {})
+  }
+
+  return c.json({ ok: true, data: { flushed: items.length, scanned: items.length } })
 })
 
 // ============================================================
@@ -2945,29 +3780,195 @@ app.get('/v1/admin/sso', jwtAuth, async (c) => {
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
   if (!project) return c.json({ ok: true, data: { configs: [] } })
   const { data } = await db.from('enterprise_sso_configs')
-    .select('id, project_id, provider_type, provider_name, metadata_url, entity_id, acs_url, is_active, created_at')
+    .select('id, project_id, provider_type, provider_name, metadata_url, entity_id, acs_url, is_active, sso_provider_id, registration_status, registration_error, registered_at, domains, created_at')
     .eq('project_id', project.id)
     .limit(50)
   return c.json({ ok: true, data: { configs: data ?? [] } })
 })
 
+// Register a SAML/OIDC provider against the Supabase Auth Admin API and
+// persist a row that mirrors the canonical `auth.sso_providers` entry.
+//
+// SAML: ships the IdP metadata URL straight to GoTrue, which fetches +
+// caches it, then mints an ACS URL the user must configure on their IdP.
+// OIDC: stored in our table and surfaced to the UI; OIDC support in
+// supabase-go-true admin API is gated to enterprise tiers, so we record it
+// as 'pending' and let the operator wire it manually if their plan allows.
+//
+// Returns the canonical Auth provider ID + status so the UI can show the
+// admin which step they're on (config saved → registered → active).
 app.post('/v1/admin/sso', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
-  const body = await c.req.json()
+  const body = await c.req.json() as {
+    providerType: 'saml' | 'oidc'
+    providerName: string
+    metadataUrl?: string
+    metadataXml?: string
+    entityId?: string
+    acsUrl?: string
+    domains?: string[]
+  }
   const db = getServiceClient()
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
   if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404)
 
-  const { error } = await db.from('enterprise_sso_configs').insert({
+  if (!['saml', 'oidc'].includes(body.providerType)) {
+    return c.json({ ok: false, error: { code: 'BAD_PROVIDER', message: 'providerType must be saml or oidc' } }, 400)
+  }
+  if (!body.providerName?.trim()) {
+    return c.json({ ok: false, error: { code: 'MISSING_NAME', message: 'providerName is required' } }, 400)
+  }
+
+  // First persist a row in 'pending' so the UI sees state immediately even if
+  // the GoTrue call fails. We update the row to 'registered' on success.
+  const { data: configRow, error: insertErr } = await db.from('enterprise_sso_configs').insert({
     project_id: project.id,
     provider_type: body.providerType,
     provider_name: body.providerName,
-    metadata_url: body.metadataUrl,
-    entity_id: body.entityId,
-    acs_url: body.acsUrl,
+    metadata_url: body.metadataUrl ?? null,
+    entity_id: body.entityId ?? null,
+    acs_url: body.acsUrl ?? null,
+    domains: body.domains ?? [],
+    registration_status: 'pending',
+  }).select('id').single()
+
+  if (insertErr || !configRow) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: insertErr?.message ?? 'insert failed' } }, 400)
+  }
+
+  // SAML registration via GoTrue Admin API. We POST to /auth/v1/admin/sso/providers
+  // with the metadata URL; GoTrue fetches + parses it server-side and
+  // returns the canonical provider ID + ACS URL.
+  if (body.providerType === 'saml') {
+    if (!body.metadataUrl && !body.metadataXml) {
+      await db.from('enterprise_sso_configs').update({
+        registration_status: 'failed',
+        registration_error: 'SAML requires either metadataUrl or metadataXml',
+      }).eq('id', configRow.id)
+      return c.json({ ok: false, error: { code: 'MISSING_METADATA', message: 'SAML registration requires metadataUrl or metadataXml' } }, 400)
+    }
+
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const goTrueRes = await fetch(`${supabaseUrl}/auth/v1/admin/sso/providers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+        },
+        body: JSON.stringify({
+          type: 'saml',
+          metadata_url: body.metadataUrl,
+          metadata_xml: body.metadataXml,
+          domains: body.domains ?? [],
+          attribute_mapping: {
+            keys: {
+              email: { name: 'email' },
+              name: { name: 'displayName' },
+            },
+          },
+        }),
+      })
+      const text = await goTrueRes.text()
+      if (!goTrueRes.ok) {
+        await db.from('enterprise_sso_configs').update({
+          registration_status: 'failed',
+          registration_error: `GoTrue ${goTrueRes.status}: ${text.slice(0, 500)}`,
+        }).eq('id', configRow.id)
+        await logAudit(db, project.id, userId, 'settings.updated', 'sso', configRow.id, {
+          action: 'sso_register_failed', providerType: body.providerType, status: goTrueRes.status,
+        })
+        return c.json({ ok: false, error: { code: 'GOTRUE_ERROR', message: text.slice(0, 200) } }, goTrueRes.status >= 500 ? 502 : 400)
+      }
+      const provider = JSON.parse(text) as { id: string; saml?: { entity_id?: string; metadata_url?: string } }
+      await db.from('enterprise_sso_configs').update({
+        sso_provider_id: provider.id,
+        entity_id: provider.saml?.entity_id ?? body.entityId ?? null,
+        acs_url: `${supabaseUrl}/auth/v1/sso/saml/acs`,
+        registration_status: 'registered',
+        registration_error: null,
+        registered_at: new Date().toISOString(),
+        is_active: true,
+      }).eq('id', configRow.id)
+
+      await logAudit(db, project.id, userId, 'settings.updated', 'sso', configRow.id, {
+        action: 'sso_registered', providerType: 'saml', providerId: provider.id,
+      })
+
+      return c.json({
+        ok: true,
+        data: {
+          id: configRow.id,
+          providerId: provider.id,
+          acsUrl: `${supabaseUrl}/auth/v1/sso/saml/acs`,
+          entityId: provider.saml?.entity_id,
+          status: 'registered',
+        },
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      await db.from('enterprise_sso_configs').update({
+        registration_status: 'failed',
+        registration_error: msg.slice(0, 500),
+      }).eq('id', configRow.id)
+      return c.json({ ok: false, error: { code: 'NETWORK_ERROR', message: msg } }, 502)
+    }
+  }
+
+  // OIDC: GoTrue Admin SSO API only supports SAML today. We persist the
+  // config so the operator sees their intent recorded, with a clear
+  // pending-status hint in the UI.
+  await logAudit(db, project.id, userId, 'settings.updated', 'sso', configRow.id, {
+    action: 'sso_added', providerType: body.providerType,
   })
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
-  await logAudit(db, project.id, userId, 'settings.updated', 'sso', undefined, { action: 'sso_added' })
+  return c.json({
+    ok: true,
+    data: {
+      id: configRow.id,
+      status: 'pending',
+      hint: 'OIDC is recorded but not yet auto-registered. Contact support to enable OIDC for your tenant, or use SAML for self-service.',
+    },
+  })
+})
+
+// Allow disconnecting an SSO provider. We deregister from GoTrue first,
+// then mark the config row 'disabled'. We never hard-delete rows because the
+// audit log + sso_state attempts reference them.
+app.delete('/v1/admin/sso/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const configId = c.req.param('id')
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404)
+
+  const { data: config } = await db.from('enterprise_sso_configs')
+    .select('id, sso_provider_id')
+    .eq('id', configId)
+    .eq('project_id', project.id)
+    .maybeSingle()
+  if (!config) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  if (config.sso_provider_id) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const res = await fetch(`${supabaseUrl}/auth/v1/admin/sso/providers/${config.sso_provider_id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` },
+    })
+    if (!res.ok && res.status !== 404) {
+      const text = await res.text()
+      return c.json({ ok: false, error: { code: 'GOTRUE_ERROR', message: text.slice(0, 200) } }, 502)
+    }
+  }
+
+  await db.from('enterprise_sso_configs').update({
+    is_active: false,
+    registration_status: 'disabled',
+  }).eq('id', configId)
+
+  await logAudit(db, project.id, userId, 'settings.deleted', 'sso', configId, { action: 'sso_disabled' })
   return c.json({ ok: true })
 })
 
@@ -3204,25 +4205,87 @@ app.get('/v1/admin/integrations', jwtAuth, async (c) => {
     .select('id, project_id, integration_type, config, is_active, last_synced_at, created_at')
     .eq('project_id', project.id)
     .limit(50)
-  return c.json({ ok: true, data: { integrations: data ?? [] } })
+
+  // Routing destination configs hold secrets (API tokens, signing keys). The
+  // UI only needs to know which fields are set, so we mask anything that
+  // looks token-shaped before returning. Same heuristic as the platform GET.
+  const maskRoutingConfig = (cfg: Record<string, unknown> | null): Record<string, unknown> => {
+    if (!cfg || typeof cfg !== 'object') return {}
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(cfg)) {
+      if (v == null) { out[k] = null; continue }
+      const lower = k.toLowerCase()
+      const looksSensitive = lower.endsWith('token') || lower.endsWith('apikey')
+        || lower.endsWith('secret') || lower.endsWith('key') || lower === 'routingkey'
+      if (looksSensitive && typeof v === 'string') {
+        out[k] = v.length > 4 ? `…${v.slice(-4)}` : '****'
+      } else {
+        out[k] = v
+      }
+    }
+    return out
+  }
+
+  const integrations = (data ?? []).map(row => ({
+    ...row,
+    config: maskRoutingConfig(row.config as Record<string, unknown> | null),
+  }))
+  return c.json({ ok: true, data: { integrations } })
 })
 
 app.post('/v1/admin/integrations', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
-  const body = await c.req.json()
+  const body = await c.req.json() as { type: string; config: Record<string, unknown>; isActive?: boolean }
   const db = getServiceClient()
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
   if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404)
 
+  // Pull existing config so we can preserve secret fields the UI re-sent as
+  // masked placeholders (e.g. "…abcd"). Without this, re-saving from the
+  // editor without retyping a token would silently nuke it.
+  const { data: existing } = await db.from('project_integrations')
+    .select('config')
+    .eq('project_id', project.id)
+    .eq('integration_type', body.type)
+    .maybeSingle()
+  const prev = (existing?.config ?? {}) as Record<string, unknown>
+
+  const merged: Record<string, unknown> = { ...prev }
+  for (const [k, v] of Object.entries(body.config ?? {})) {
+    if (typeof v === 'string' && v.startsWith('…') && v.length <= 6) continue
+    merged[k] = v === '' ? null : v
+  }
+
   const { error } = await db.from('project_integrations').upsert({
     project_id: project.id,
     integration_type: body.type,
-    config: body.config,
+    config: merged,
     is_active: body.isActive ?? true,
   }, { onConflict: 'project_id,integration_type' })
 
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
   await logAudit(db, project.id, userId, 'settings.updated', 'integration', undefined, { type: body.type })
+  return c.json({ ok: true })
+})
+
+// DELETE a routing destination (Jira/Linear/GitHub Issues/PagerDuty) so the
+// CRUD editor on IntegrationsPage can fully unwire a target without leaving
+// stale rows. Auditable; only the project owner can delete their own rows.
+app.delete('/v1/admin/integrations/:type', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const integrationType = c.req.param('type')
+  const db = getServiceClient()
+  const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
+  if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404)
+
+  const { error } = await db
+    .from('project_integrations')
+    .delete()
+    .eq('project_id', project.id)
+    .eq('integration_type', integrationType)
+
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 400)
+  await logAudit(db, project.id, userId, 'settings.deleted', 'integration', undefined, { type: integrationType })
   return c.json({ ok: true })
 })
 
@@ -3926,7 +4989,7 @@ app.post('/v1/admin/anti-gaming/devices/:id/unflag', jwtAuth, async (c) => {
 
   const { error } = await db
     .from('reporter_devices')
-    .update({ flagged_as_suspicious: false, flag_reason: null })
+    .update({ flagged_as_suspicious: false, flag_reason: null, cross_account_flagged: false })
     .eq('id', id)
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
 
@@ -4290,47 +5353,12 @@ app.post('/v1/admin/storage/:projectId/health', jwtAuth, async (c) => {
 // ----------------------------------------------------------------
 // Wave D D5: Cloud billing endpoints
 //   * GET    /v1/admin/billing             — current customer + subscription state
+//                                             (defined earlier — aggregate per-owner)
 //   * POST   /v1/admin/billing/checkout    — create Stripe Checkout Session, return URL
 //   * POST   /v1/admin/billing/portal      — create Billing Portal session, return URL
+//   * GET    /v1/admin/billing/invoices    — list recent invoices for a project
 // All require JWT auth + project ownership.
 // ----------------------------------------------------------------
-app.get('/v1/admin/billing', jwtAuth, async (c) => {
-  const userId = c.get('userId') as string
-  const projectId = c.req.query('project_id')
-  if (!projectId) return c.json({ ok: false, error: { code: 'PROJECT_ID_REQUIRED' } }, 400)
-  const db = getServiceClient()
-  const owned = await ownedProjectIds(db, userId)
-  if (!owned.includes(projectId)) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
-
-  const { data: customer } = await db
-    .from('billing_customers')
-    .select('stripe_customer_id, email, default_payment_ok, created_at')
-    .eq('project_id', projectId)
-    .maybeSingle()
-  const { data: subscription } = await db
-    .from('billing_subscriptions')
-    .select('stripe_subscription_id, status, current_period_end, cancel_at_period_end, stripe_price_id')
-    .eq('project_id', projectId)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  const { data: usage } = await db
-    .from('usage_events')
-    .select('quantity')
-    .eq('project_id', projectId)
-    .eq('event_name', 'reports_ingested')
-    .gte('occurred_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-  const last30dReports = (usage ?? []).reduce((sum, r: { quantity: number }) => sum + (r.quantity ?? 0), 0)
-
-  return c.json({
-    ok: true,
-    customer: customer ?? null,
-    subscription: subscription ?? null,
-    usage: { reports_last_30d: last30dReports },
-  })
-})
-
 app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json().catch(() => null) as { project_id?: string; email?: string } | null
@@ -4400,6 +5428,43 @@ app.post('/v1/admin/billing/portal', jwtAuth, async (c) => {
   const cfg = stripeFromEnv()
   const session = await createBillingPortalSession(cfg, customer.stripe_customer_id)
   return c.json({ ok: true, url: session.url })
+})
+
+// List Stripe invoices for a project. Wraps Stripe's /v1/invoices and
+// returns the trimmed view the UI needs (number, status, amount, links).
+// Returns an empty array — never an error — when Stripe isn't configured
+// or the project hasn't started billing yet, so the UI can render gracefully.
+app.get('/v1/admin/billing/invoices', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const projectId = c.req.query('project_id')
+  if (!projectId) return c.json({ ok: false, error: { code: 'PROJECT_ID_REQUIRED' } }, 400)
+  const db = getServiceClient()
+  const owned = await ownedProjectIds(db, userId)
+  if (!owned.includes(projectId)) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  const { data: customer } = await db
+    .from('billing_customers')
+    .select('stripe_customer_id')
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (!customer?.stripe_customer_id) {
+    return c.json({ ok: true, data: { invoices: [] } })
+  }
+
+  const cfg = stripeFromEnv()
+  if (!cfg.secretKey) {
+    return c.json({ ok: true, data: { invoices: [] } })
+  }
+
+  try {
+    const result = await listInvoices(cfg, customer.stripe_customer_id, 20)
+    return c.json({ ok: true, data: { invoices: result.data } })
+  } catch (err) {
+    return c.json({
+      ok: false,
+      error: { code: 'STRIPE_ERROR', message: err instanceof Error ? err.message : 'unknown' },
+    }, 502)
+  }
 })
 
 Deno.serve(app.fetch)

@@ -42,7 +42,8 @@
     "release": "turbo run build && pnpm check:publish && changeset publish",
     "changelog:aggregate": "node scripts/aggregate-changelogs.mjs",
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",
-    "roadmap:bootstrap": "node scripts/bootstrap-roadmap.mjs"
+    "roadmap:bootstrap": "node scripts/bootstrap-roadmap.mjs",
+    "pdca:loop": "node scripts/pdca-bounded-loop.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

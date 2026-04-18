@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
+import { useToast } from '../lib/toast'
 import {
   Section,
   Field,
@@ -15,6 +17,9 @@ import {
   InfoHint,
   CopyButton,
   Tooltip,
+  EmptyState,
+  ErrorAlert,
+  Btn,
 } from '../components/ui'
 import {
   STATUS,
@@ -96,38 +101,72 @@ const PERF_TOOLTIPS: Record<string, string> = {
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const toast = useToast()
+  const path = id ? `/v1/admin/reports/${id}` : null
+  const { data: serverReport, loading, error, reload } = usePageData<ReportDetail>(path)
   const [report, setReport] = useState<ReportDetail | null>(null)
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
 
   useEffect(() => {
-    if (!id) {
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    apiFetch<ReportDetail>(`/v1/admin/reports/${id}`).then((res) => {
-      if (res.ok && res.data) setReport(res.data)
-    }).catch(() => {}).finally(() => setLoading(false))
-  }, [id])
+    if (serverReport) setReport(serverReport)
+  }, [serverReport])
 
   const handleTriage = async (updates: Record<string, string>) => {
-    if (!id) return
+    if (!id || !report) return
     setSaving(true)
+    const previous = report
+    setReport({ ...report, ...updates })
     const res = await apiFetch(`/v1/admin/reports/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
     })
-    if (res.ok && report) {
-      setReport({ ...report, ...updates })
+    if (res.ok) {
       setSavedAt(Date.now())
+    } else {
+      setReport(previous)
+      toast.error(
+        'Could not save triage update',
+        res.error?.message ?? 'The server rejected the change. Try again or check your connection.',
+      )
     }
     setSaving(false)
   }
 
+  if (!id) {
+    return (
+      <EmptyState
+        title="No report selected"
+        description="Open a report from the Reports list."
+        action={<Btn variant="ghost" size="sm" onClick={() => history.back()}>Back</Btn>}
+      />
+    )
+  }
+
   if (loading) return <Loading text="Loading report..." />
-  if (!report) return <div className="text-fg-muted text-sm">Report not found.</div>
+
+  if (error) {
+    const isNotFound = /not_?found|404/i.test(error)
+    if (isNotFound) {
+      return (
+        <EmptyState
+          title="Report not found"
+          description="It may have been deleted, or you don't have access to it."
+          action={
+            <Link
+              to="/reports"
+              className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent-hover"
+            >
+              Back to reports
+            </Link>
+          }
+        />
+      )
+    }
+    return <ErrorAlert message={`Could not load report: ${error}`} onRetry={reload} />
+  }
+
+  if (!report) return <Loading text="Loading report..." />
 
   return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} />
 }

@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
+import { usePageData } from '../lib/usePageData'
+import { useToast } from '../lib/toast'
 import { PageHeader, PageHelp, Card, Badge, Btn, EmptyState, Loading, ErrorAlert, StatCard, RecommendedAction } from '../components/ui'
 
 interface LlmHealth {
@@ -52,37 +54,36 @@ interface CronHealth {
 const KNOWN_JOBS = ['judge-batch', 'intelligence-report', 'data-retention'] as const
 
 export function HealthPage() {
-  const [llm, setLlm] = useState<LlmHealth | null>(null)
-  const [cron, setCron] = useState<CronHealth | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const toast = useToast()
+  const llmQuery = usePageData<LlmHealth>('/v1/admin/health/llm')
+  const cronQuery = usePageData<CronHealth>('/v1/admin/health/cron')
   const [triggering, setTriggering] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setError(false)
-    const [llmRes, cronRes] = await Promise.all([
-      apiFetch<LlmHealth>('/v1/admin/health/llm'),
-      apiFetch<CronHealth>('/v1/admin/health/cron'),
-    ])
-    if (llmRes.ok && llmRes.data) setLlm(llmRes.data)
-    else setError(true)
-    if (cronRes.ok && cronRes.data) setCron(cronRes.data)
-    setLoading(false)
-  }, [])
+  const llm = llmQuery.data
+  const cron = cronQuery.data
 
-  useEffect(() => { load() }, [load])
-  useRealtime({ table: 'llm_invocations' }, load)
-  useRealtime({ table: 'cron_runs' }, load)
+  const reloadAll = useCallback(() => {
+    llmQuery.reload()
+    cronQuery.reload()
+  }, [llmQuery, cronQuery])
+
+  useRealtime({ table: 'llm_invocations' }, llmQuery.reload)
+  useRealtime({ table: 'cron_runs' }, cronQuery.reload)
 
   async function triggerJob(job: 'judge-batch' | 'intelligence-report') {
     setTriggering(job)
-    await apiFetch(`/v1/admin/health/cron/${job}/trigger`, { method: 'POST' })
+    const res = await apiFetch(`/v1/admin/health/cron/${job}/trigger`, { method: 'POST' })
     setTriggering(null)
-    await load()
+    if (!res.ok) {
+      toast.error(`Could not trigger ${job}`, res.error?.message)
+      return
+    }
+    toast.success(`Triggered ${job}`)
+    reloadAll()
   }
 
-  if (loading) return <Loading text="Loading health metrics..." />
-  if (error || !llm) return <ErrorAlert message="Failed to load health metrics." onRetry={load} />
+  if (llmQuery.loading || cronQuery.loading) return <Loading text="Loading health metrics..." />
+  if (llmQuery.error || !llm) return <ErrorAlert message={`Failed to load health metrics: ${llmQuery.error ?? 'no data'}`} onRetry={reloadAll} />
 
   const fallbackPct = (llm.fallbackRate * 100).toFixed(1)
   const errorPct = (llm.errorRate * 100).toFixed(1)

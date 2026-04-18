@@ -121,6 +121,30 @@ export const createBillingPortalSession = (
     body: form({ customer, return_url: cfg.portalReturnUrl }),
   })
 
+export interface StripeInvoice {
+  id: string
+  number: string | null
+  status: string
+  amount_due: number
+  amount_paid: number
+  currency: string
+  created: number
+  hosted_invoice_url: string | null
+  invoice_pdf: string | null
+  period_start: number
+  period_end: number
+}
+
+// List the most recent invoices for a customer. Used by the /billing UI to
+// show payment history without making the user click through to Stripe.
+// Limit defaults to 10 — the customer portal handles "show all" cases.
+export const listInvoices = (
+  cfg: StripeConfig,
+  customer: string,
+  limit = 10,
+): Promise<{ data: StripeInvoice[] }> =>
+  stripeFetch(cfg, `/invoices?customer=${encodeURIComponent(customer)}&limit=${limit}`)
+
 // ----------------------------------------------------------------
 // Meter Events — Stripe's per-record usage reporting API
 // (https://docs.stripe.com/billing/subscriptions/usage-based/recording-usage)

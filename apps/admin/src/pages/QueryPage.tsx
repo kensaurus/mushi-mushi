@@ -121,11 +121,20 @@ export function QueryPage() {
     setHistoryLoading(true)
     apiFetch<{ history: HistoryRow[] }>('/v1/admin/query/history?limit=25')
       .then((res) => {
-        if (res.ok) setHistory(res.data?.history ?? [])
+        if (res.ok) {
+          setHistory(res.data?.history ?? [])
+        } else {
+          toast.error(
+            'Could not load query history',
+            res.error?.message ?? 'The history sidebar will stay empty until the next successful fetch.',
+          )
+        }
       })
-      .catch(() => {/* noop */})
+      .catch((err) => {
+        toast.error('Could not load query history', err instanceof Error ? err.message : String(err))
+      })
       .finally(() => setHistoryLoading(false))
-  }, [])
+  }, [toast])
 
   useEffect(() => {
     loadHistory()

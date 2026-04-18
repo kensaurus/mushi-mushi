@@ -1,16 +1,21 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
+import { usePageData } from '../lib/usePageData'
+import { useToast } from '../lib/toast'
 import { PageHeader, PageHelp, Card, Badge, Btn, FilterSelect, EmptyState, Loading, ErrorAlert } from '../components/ui'
 
 interface ReporterDevice {
   id: string
   project_id: string
   device_fingerprint: string
+  fingerprint_hash: string | null
   reporter_tokens: string[]
   ip_addresses: string[]
   report_count: number
+  distinct_user_count: number
   flagged_as_suspicious: boolean
+  cross_account_flagged: boolean
   flag_reason: string | null
   updated_at: string
   created_at: string
@@ -35,31 +40,34 @@ const EVENT_BADGE: Record<AntiGamingEvent['event_type'], string> = {
 }
 
 export function AntiGamingPage() {
-  const [devices, setDevices] = useState<ReporterDevice[]>([])
-  const [events, setEvents] = useState<AntiGamingEvent[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const toast = useToast()
   const [filter, setFilter] = useState<'flagged' | 'all'>('flagged')
 
-  const load = useCallback(async () => {
-    setError(false)
-    const [devRes, evRes] = await Promise.all([
-      apiFetch<{ devices: ReporterDevice[] }>(`/v1/admin/anti-gaming/devices${filter === 'flagged' ? '?flagged=true' : ''}`),
-      apiFetch<{ events: AntiGamingEvent[] }>('/v1/admin/anti-gaming/events'),
-    ])
-    if (devRes.ok && devRes.data) setDevices(devRes.data.devices)
-    else setError(true)
-    if (evRes.ok && evRes.data) setEvents(evRes.data.events)
-    setLoading(false)
-  }, [filter])
+  const devicesPath = `/v1/admin/anti-gaming/devices${filter === 'flagged' ? '?flagged=true' : ''}`
+  const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter] })
+  const eventsQuery = usePageData<{ events: AntiGamingEvent[] }>('/v1/admin/anti-gaming/events')
 
-  useEffect(() => { load() }, [load])
-  useRealtime({ table: 'reporter_devices' }, load)
-  useRealtime({ table: 'anti_gaming_events' }, load)
+  const devices = devicesQuery.data?.devices ?? []
+  const events = eventsQuery.data?.events ?? []
+  const loading = devicesQuery.loading || eventsQuery.loading
+  const error = devicesQuery.error
+
+  const reloadAll = useCallback(() => {
+    devicesQuery.reload()
+    eventsQuery.reload()
+  }, [devicesQuery, eventsQuery])
+
+  useRealtime({ table: 'reporter_devices' }, devicesQuery.reload)
+  useRealtime({ table: 'anti_gaming_events' }, eventsQuery.reload)
 
   async function unflag(deviceId: string) {
-    await apiFetch(`/v1/admin/anti-gaming/devices/${deviceId}/unflag`, { method: 'POST' })
-    await load()
+    const res = await apiFetch(`/v1/admin/anti-gaming/devices/${deviceId}/unflag`, { method: 'POST' })
+    if (!res.ok) {
+      toast.error('Could not unflag device', res.error?.message)
+      return
+    }
+    toast.success('Device unflagged')
+    reloadAll()
   }
 
   return (
@@ -91,7 +99,7 @@ export function AntiGamingPage() {
         {loading ? (
           <Loading text="Loading devices..." />
         ) : error ? (
-          <ErrorAlert message="Failed to load devices." onRetry={load} />
+          <ErrorAlert message={`Failed to load devices: ${error}`} onRetry={devicesQuery.reload} />
         ) : devices.length === 0 ? (
           <EmptyState
             title={filter === 'flagged' ? 'No flagged devices' : 'No tracked devices yet'}
@@ -104,14 +112,23 @@ export function AntiGamingPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {d.flagged_as_suspicious && (
+                      {d.cross_account_flagged && (
+                        <Badge className="bg-danger-muted text-danger">cross-account</Badge>
+                      )}
+                      {d.flagged_as_suspicious && !d.cross_account_flagged && (
                         <Badge className="bg-danger-muted text-danger">flagged</Badge>
                       )}
                       <code className="text-2xs font-mono text-fg-secondary truncate">
                         fp:{d.device_fingerprint.slice(0, 16)}…
                       </code>
+                      {d.fingerprint_hash && (
+                        <code className="text-2xs font-mono text-fg-faint truncate" title="SDK-supplied stable fingerprint hash">
+                          sdk:{d.fingerprint_hash.slice(0, 12)}…
+                        </code>
+                      )}
                       <span className="text-2xs text-fg-faint">
                         {d.reporter_tokens.length} token{d.reporter_tokens.length !== 1 ? 's' : ''} · {d.ip_addresses.length} IP{d.ip_addresses.length !== 1 ? 's' : ''} · {d.report_count} reports
+                        {d.distinct_user_count > 0 ? ` · ${d.distinct_user_count} distinct users` : ''}
                       </span>
                     </div>
                     {d.flag_reason && (

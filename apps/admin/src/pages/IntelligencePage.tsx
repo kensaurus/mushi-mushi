@@ -55,6 +55,29 @@ interface BenchmarkSettings {
   optInAt: string | null
 }
 
+interface ModernizationFinding {
+  id: string
+  project_id: string
+  repo_id: string | null
+  dep_name: string
+  current_version: string | null
+  suggested_version: string | null
+  manifest_path: string | null
+  summary: string
+  severity: 'major' | 'minor' | 'security' | 'deprecated'
+  changelog_url: string | null
+  related_report_id: string | null
+  status: 'pending' | 'dispatched' | 'dismissed'
+  detected_at: string
+}
+
+const SEVERITY_TONE: Record<ModernizationFinding['severity'], string> = {
+  security: 'bg-danger/15 text-danger border border-danger/30',
+  deprecated: 'bg-warn/15 text-warn border border-warn/30',
+  major: 'bg-warn/10 text-warn border border-warn/30',
+  minor: 'bg-fg-faint/10 text-fg-muted border border-edge-subtle',
+}
+
 const JOB_STATUS_TONE: Record<IntelligenceJob['status'], string> = {
   queued: 'bg-info/15 text-info border border-info/30',
   running: 'bg-brand/15 text-brand border border-brand/30',
@@ -70,15 +93,18 @@ export function IntelligencePage() {
   const [error, setError] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [benchmark, setBenchmark] = useState<BenchmarkSettings>({ optIn: false, optInAt: null })
+  const [findings, setFindings] = useState<ModernizationFinding[]>([])
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null)
   const toast = useToast()
   const pollRef = useRef<number | null>(null)
 
   const fetchData = useCallback(async () => {
     setError(false)
-    const [reportsRes, settingsRes, jobsRes] = await Promise.all([
+    const [reportsRes, settingsRes, jobsRes, findingsRes] = await Promise.all([
       apiFetch<{ reports: IntelligenceReport[] }>('/v1/admin/intelligence'),
       apiFetch<{ benchmarking_optin?: boolean; benchmarking_optin_at?: string | null }>('/v1/admin/settings'),
       apiFetch<{ jobs: IntelligenceJob[] }>('/v1/admin/intelligence/jobs'),
+      apiFetch<{ findings: ModernizationFinding[] }>('/v1/admin/modernization?status=pending'),
     ])
     if (reportsRes.ok && reportsRes.data) setReports(reportsRes.data.reports)
     else setError(true)
@@ -89,8 +115,34 @@ export function IntelligencePage() {
       })
     }
     if (jobsRes.ok && jobsRes.data) setJobs(jobsRes.data.jobs)
+    if (findingsRes.ok && findingsRes.data) setFindings(findingsRes.data.findings)
     setLoading(false)
   }, [])
+
+  const dispatchFinding = async (id: string) => {
+    setDispatchingId(id)
+    try {
+      const res = await apiFetch<{ dispatchId: string }>(`/v1/admin/modernization/${id}/dispatch`, { method: 'POST' })
+      if (res.ok) {
+        toast.push({ tone: 'success', message: 'Modernization fix dispatched — track on Fixes page' })
+        await fetchData()
+      } else {
+        toast.push({ tone: 'error', message: res.error?.message ?? 'Dispatch failed' })
+      }
+    } finally {
+      setDispatchingId(null)
+    }
+  }
+
+  const dismissFinding = async (id: string) => {
+    const res = await apiFetch(`/v1/admin/modernization/${id}/dismiss`, { method: 'POST' })
+    if (res.ok) {
+      setFindings((prev) => prev.filter((f) => f.id !== id))
+      toast.push({ tone: 'info', message: 'Dismissed' })
+    } else {
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Dismiss failed' })
+    }
+  }
 
   useEffect(() => {
     void fetchData()
@@ -279,6 +331,76 @@ export function IntelligencePage() {
           <Toggle checked={benchmark.optIn} onChange={toggleOptIn} label={benchmark.optIn ? 'Sharing on' : 'Sharing off'} />
         </div>
       </Card>
+
+      {findings.length > 0 && (
+        <Card className="p-3">
+          <div className="flex items-baseline justify-between mb-2">
+            <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
+              Library Modernization
+              <span className="ml-2 text-fg-faint normal-case tracking-normal">
+                {findings.length} pending finding{findings.length === 1 ? '' : 's'}
+              </span>
+            </h3>
+            <span className="text-2xs text-fg-faint">Weekly cron · Firecrawl-augmented</span>
+          </div>
+          <ul className="space-y-1.5">
+            {findings.map((f) => (
+              <li
+                key={f.id}
+                className="flex items-start justify-between gap-3 border-t border-edge-subtle pt-1.5 first:border-0 first:pt-0"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <Badge className={SEVERITY_TONE[f.severity]}>{f.severity}</Badge>
+                    <span className="text-xs font-mono text-fg">{f.dep_name}</span>
+                    {f.current_version && f.suggested_version && (
+                      <span className="text-2xs text-fg-muted font-mono">
+                        {f.current_version} → {f.suggested_version}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-2xs text-fg-secondary leading-relaxed">{f.summary}</p>
+                  <div className="mt-1 flex items-center gap-2 text-2xs text-fg-faint">
+                    <RelativeTime value={f.detected_at} />
+                    {f.changelog_url && (
+                      <>
+                        <span>·</span>
+                        <a
+                          href={f.changelog_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:text-fg-secondary underline"
+                        >
+                          changelog
+                        </a>
+                      </>
+                    )}
+                    {f.manifest_path && (
+                      <>
+                        <span>·</span>
+                        <span className="font-mono">{f.manifest_path}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Btn
+                    size="sm"
+                    onClick={() => void dispatchFinding(f.id)}
+                    disabled={!f.related_report_id || dispatchingId === f.id}
+                    title={f.related_report_id ? 'Dispatch fix-worker' : 'Minor finding — no auto-dispatch'}
+                  >
+                    {dispatchingId === f.id ? 'Dispatching…' : 'Dispatch fix'}
+                  </Btn>
+                  <Btn size="sm" variant="ghost" onClick={() => void dismissFinding(f.id)}>
+                    Dismiss
+                  </Btn>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {recentJobs.length > 0 && (
         <Card className="p-3">

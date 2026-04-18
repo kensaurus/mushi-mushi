@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { apiFetch } from '../lib/supabase'
+import { useState } from 'react'
+import { usePageData } from '../lib/usePageData'
 import { PageHeader, PageHelp, Card, Badge, Btn, FilterSelect, Loading, ErrorAlert, EmptyState } from '../components/ui'
 
 interface AuditEntry {
@@ -16,24 +16,10 @@ interface AuditEntry {
 const ACTION_OPTIONS = ['', 'report.created', 'report.classified', 'report.triaged', 'settings.updated', 'fix.attempted']
 
 export function AuditPage() {
-  const [logs, setLogs] = useState<AuditEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
   const [filter, setFilter] = useState('')
-  const [retryKey, setRetryKey] = useState(0)
-
-  useEffect(() => {
-    setLoading(true)
-    setError(false)
-    const params = filter ? `?action=${filter}` : ''
-    apiFetch<{ logs: AuditEntry[] }>(`/v1/admin/audit${params}`)
-      .then((d) => {
-        if (d.ok && d.data) setLogs(d.data.logs)
-        else setError(true)
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }, [filter, retryKey])
+  const path = `/v1/admin/audit${filter ? `?action=${filter}` : ''}`
+  const { data, loading, error, reload } = usePageData<{ logs: AuditEntry[] }>(path, { deps: [filter] })
+  const logs = data?.logs ?? []
 
   const exportCsv = () => {
     const headers = ['Time', 'Action', 'Actor', 'Type', 'Resource', 'Resource ID']
@@ -69,7 +55,7 @@ export function AuditPage() {
         howToUse="Filter by action type, then export to CSV for offline analysis or compliance bundles. Entries are immutable once written."
       />
 
-      {loading ? <Loading /> : error ? <ErrorAlert message="Failed to load audit logs." onRetry={() => setRetryKey(k => k + 1)} /> : logs.length === 0 ? (
+      {loading ? <Loading /> : error ? <ErrorAlert message={`Failed to load audit logs: ${error}`} onRetry={reload} /> : logs.length === 0 ? (
         <EmptyState title="No audit entries" description="Actions like report triage, settings changes, and key management will be logged here." />
       ) : (
         <div className="space-y-0.5">

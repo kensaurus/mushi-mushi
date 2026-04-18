@@ -159,8 +159,154 @@ async function fetchFileContents(
 
 app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }))
 
+/**
+ * Sweep mode: invoked hourly by pg_cron (see migration
+ * 20260418003200_repo_indexer_cron.sql). Re-indexes every project_repos row
+ * whose `last_indexed_at` is older than `staleAfterHours` (default 24h).
+ *
+ * Authenticated via Authorization: Bearer <service_role_key>; we never accept
+ * external sweep requests.
+ */
+async function handleSweep(req: Request): Promise<Response> {
+  const auth = req.headers.get('Authorization') ?? ''
+  const expected = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
+  if (!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || auth !== expected) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), {
+      status: 401, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const db = getDb()
+  const staleAfterHours = Number(Deno.env.get('MUSHI_REPO_INDEX_STALE_HOURS') ?? '24')
+  const cutoff = new Date(Date.now() - staleAfterHours * 3_600_000).toISOString()
+  const limit = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_BATCH') ?? '5')
+
+  const { data: repos, error } = await db
+    .from('project_repos')
+    .select('id, project_id, repo_url, default_branch, github_app_installation_id, last_indexed_at')
+    .eq('indexing_enabled', true)
+    .or(`last_indexed_at.is.null,last_indexed_at.lt.${cutoff}`)
+    .order('last_indexed_at', { ascending: true, nullsFirst: true })
+    .limit(limit)
+
+  if (error) {
+    log.error('sweep: project_repos query failed', { error: error.message })
+    return new Response(JSON.stringify({ ok: false, error: error.message }), {
+      status: 500, headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  const summary: Array<{ repo: string; ok: boolean; error?: string }> = []
+  for (const repo of repos ?? []) {
+    if (!repo.github_app_installation_id) {
+      summary.push({ repo: repo.repo_url, ok: false, error: 'no_installation' })
+      continue
+    }
+    const [owner, name] = String(repo.repo_url).split('/').slice(-2)
+    if (!owner || !name) {
+      summary.push({ repo: repo.repo_url, ok: false, error: 'bad_repo_url' })
+      continue
+    }
+    try {
+      const stats = await sweepIndexRepo(db, repo.project_id, Number(repo.github_app_installation_id), owner, name, repo.default_branch ?? 'main')
+      await db.from('project_repos').update({
+        last_indexed_at: new Date().toISOString(),
+        last_index_attempt_at: new Date().toISOString(),
+        last_index_error: null,
+      }).eq('id', repo.id)
+      summary.push({ repo: repo.repo_url, ok: true, ...stats })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg })
+      await db.from('project_repos').update({
+        last_index_attempt_at: new Date().toISOString(),
+        last_index_error: msg.slice(0, 500),
+      }).eq('id', repo.id)
+      summary.push({ repo: repo.repo_url, ok: false, error: msg })
+    }
+  }
+
+  return new Response(JSON.stringify({ ok: true, swept: summary.length, results: summary }), {
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+/**
+ * Index every indexable file at HEAD for `ref`. Used by sweep mode for repos
+ * that have never been indexed (or are stale). Push events stick with the
+ * narrower diff-walk path because it's much cheaper.
+ */
+async function sweepIndexRepo(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+  installationId: number,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<{ inserted: number; skipped: number }> {
+  const token = await mintInstallationToken(installationId)
+  const treeRes = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  )
+  if (!treeRes.ok) throw new Error(`tree fetch ${treeRes.status}`)
+  const tree = await treeRes.json() as {
+    tree?: Array<{ path: string; type: string }>
+    truncated?: boolean
+  }
+  const files = (tree.tree ?? []).filter(t => t.type === 'blob' && shouldIndex(t.path))
+  let inserted = 0
+  let skipped = 0
+  const cap = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300')
+  for (const f of files.slice(0, cap)) {
+    const source = await fetchFileContents(token, owner, repo, f.path, branch)
+    if (!source) { skipped++; continue }
+    const chunks = chunk(f.path, source)
+    for (const ch of chunks) {
+      const text = `${f.path}::${ch.symbolName ?? 'whole'}\n${ch.body}`
+      const embedding = await createEmbedding(text, { projectId })
+      const contentHash = await sha256Hex(ch.body)
+      const { error } = await db.from('project_codebase_files').upsert({
+        project_id: projectId,
+        file_path: f.path,
+        symbol_name: ch.symbolName,
+        signature: ch.signature,
+        line_start: ch.lineStart,
+        line_end: ch.lineEnd,
+        language: ch.language,
+        content_hash: contentHash,
+        content_preview: ch.body.slice(0, 600),
+        embedding,
+        embedding_model: 'text-embedding-3-small',
+        last_modified: new Date().toISOString(),
+        tombstoned_at: null,
+      }, { onConflict: 'project_id,file_path,symbol_name' })
+      if (error) { skipped++; continue }
+      inserted++
+    }
+  }
+  return { inserted, skipped }
+}
+
 app.post('/webhooks-github-indexer', async (c) => {
   const raw = await c.req.text()
+
+  // Sweep mode: cron-invoked, no GitHub signature; auth via service-role bearer.
+  if (raw.length > 0) {
+    try {
+      const peek = JSON.parse(raw) as { mode?: string }
+      if (peek?.mode === 'sweep') {
+        return await handleSweep(c.req.raw)
+      }
+    } catch { /* fall through to webhook handling */ }
+  }
+
   if (!await verifySignature(c.req.raw, raw)) {
     return c.json({ error: 'invalid signature' }, 401)
   }
@@ -234,7 +380,7 @@ app.post('/webhooks-github-indexer', async (c) => {
     const chunks = chunk(path, source)
     for (const ch of chunks) {
       const text = `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`
-      const embedding = await createEmbedding(text)
+      const embedding = await createEmbedding(text, { projectId })
       const contentHash = await sha256Hex(ch.body)
       // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
       // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.

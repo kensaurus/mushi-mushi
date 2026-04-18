@@ -70,3 +70,29 @@ verify_jwt = false
 
 [functions.judge-batch]
 verify_jwt = false
+
+# webhooks-github-indexer authenticates GitHub via X-Hub-Signature-256 (HMAC),
+# and the hourly sweep cron POSTs with the service-role bearer + signed body.
+# Both auth paths happen inside the function, so the platform gateway must
+# not require its own JWT.
+[functions.webhooks-github-indexer]
+verify_jwt = false
+
+# sentry-seer-poll is invoked exclusively by pg_cron with the service-role
+# bearer; it re-checks projects.sentry_seer_enabled before doing any work.
+[functions.sentry-seer-poll]
+verify_jwt = false
+
+# library-modernizer is invoked weekly by pg_cron (Wave E) with the
+# service-role bearer; it scrapes upstream release notes via Firecrawl and
+# files modernization findings + synthetic enhancement reports.
+[functions.library-modernizer]
+verify_jwt = false
+
+# prompt-auto-tune is invoked weekly by pg_cron (Wave E §4) with the
+# service-role bearer; it inspects judge failures, asks the LLM for a
+# revised prompt, and files it as an auto-generated candidate in
+# prompt_versions. Never auto-promotes — the Prompt Lab UI surfaces the
+# candidate diff for human approval.
+[functions.prompt-auto-tune]
+verify_jwt = false

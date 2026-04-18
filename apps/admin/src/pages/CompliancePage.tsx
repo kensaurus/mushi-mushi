@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { useToast } from '../lib/toast'
 
 interface RetentionPolicy {
   project_id: string
@@ -50,6 +51,7 @@ const STATUS_CHIP: Record<Evidence['status'], string> = {
 }
 
 export function CompliancePage() {
+  const toast = useToast()
   const [policies, setPolicies] = useState<RetentionPolicy[]>([])
   const [dsars, setDsars] = useState<Dsar[]>([])
   const [evidence, setEvidence] = useState<Evidence[]>([])
@@ -85,9 +87,10 @@ export function CompliancePage() {
       body: JSON.stringify({ region }),
     })
     if (!res.ok) {
-      alert(res.error?.message ?? 'Failed to update region')
+      toast.error('Failed to update region', res.error?.message)
       return
     }
+    toast.success(`Region pinned to ${region.toUpperCase()}`)
     await fetchAll()
   }
 
@@ -108,7 +111,12 @@ export function CompliancePage() {
   const refreshEvidence = async () => {
     setRefreshing(true)
     try {
-      await apiFetch('/v1/admin/compliance/evidence/refresh', { method: 'POST' })
+      const res = await apiFetch('/v1/admin/compliance/evidence/refresh', { method: 'POST' })
+      if (!res.ok) {
+        toast.error('Could not refresh evidence', res.error?.message)
+        return
+      }
+      toast.success('Evidence snapshot generated')
       await fetchAll()
     } finally {
       setRefreshing(false)
@@ -120,7 +128,11 @@ export function CompliancePage() {
       method: 'PUT',
       body: JSON.stringify(patch),
     })
-    if (res.ok) await fetchAll()
+    if (!res.ok) {
+      toast.error('Could not update retention policy', res.error?.message)
+      return
+    }
+    await fetchAll()
   }
 
   const setDsarStatus = async (id: string, status: Dsar['status']) => {
@@ -128,7 +140,12 @@ export function CompliancePage() {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     })
-    if (res.ok) await fetchAll()
+    if (!res.ok) {
+      toast.error('Could not update DSAR', res.error?.message)
+      return
+    }
+    toast.success(`DSAR marked ${status}`)
+    await fetchAll()
   }
 
   return (

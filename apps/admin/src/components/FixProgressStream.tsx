@@ -71,9 +71,14 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
   const [loading, setLoading] = useState(true)
   const platform = usePlatformIntegrations()
 
-  // Poll the fix_attempts list for this report so we get the rationale and
-  // PR metadata as soon as the worker writes them. Five seconds is the same
-  // cadence as FixesPage — keeps the perceived refresh consistent.
+  // Hydrate the fix_attempts row for this report whenever the live SSE
+  // dispatch stream advances. The dispatch SSE (consumed by useDispatchFix)
+  // already pushes status updates in real time — so we only need to reload
+  // the rich attempt metadata (rationale, files changed, tokens) on each
+  // status transition, plus once on mount for any historic attempt. This
+  // replaces the previous 5s poll, which kept hammering /v1/admin/fixes for
+  // every visitor to a report page even when nothing was happening.
+  const dispatchStatus = dispatchState.status
   useEffect(() => {
     let cancelled = false
     const fetchLatest = async () => {
@@ -85,10 +90,9 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
       }
       setLoading(false)
     }
-    fetchLatest()
-    const t = setInterval(fetchLatest, 5_000)
-    return () => { cancelled = true; clearInterval(t) }
-  }, [reportId])
+    void fetchLatest()
+    return () => { cancelled = true }
+  }, [reportId, dispatchStatus])
 
   const stage = dispatchState.status
   // Hide entirely if there's nothing to show — keeps the report page clean
@@ -121,7 +125,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
 
       {isInFlight && (
         <p className="text-xs text-fg-secondary">
-          The fix-worker is generating a structured patch with your BYOK key. This page refreshes every 5s; you can close it without losing progress — the work continues server-side.
+          The fix-worker is generating a structured patch with your BYOK key. Status updates stream in live; you can close this page without losing progress — the work continues server-side.
         </p>
       )}
 
