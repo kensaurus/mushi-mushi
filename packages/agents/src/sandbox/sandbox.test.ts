@@ -47,8 +47,18 @@ describe('resolveSandboxProvider (V5.3 §2.10)', () => {
     expect(() => resolveSandboxProvider({ name: 'local-noop', allowLocalInProduction: true })).not.toThrow()
   })
 
-  it('refuses providers not yet implemented', () => {
-    expect(() => resolveSandboxProvider({ name: 'modal' as never })).toThrow(/not yet implemented/)
+  it('refuses unrecognised providers', () => {
+    expect(() => resolveSandboxProvider({ name: 'firecracker' as never })).toThrow(/not recognised/)
+  })
+
+  it('returns the modal provider when requested', () => {
+    const p = resolveSandboxProvider({ name: 'modal' })
+    expect(p.name).toBe('modal')
+  })
+
+  it('returns the cloudflare provider when requested', () => {
+    const p = resolveSandboxProvider({ name: 'cloudflare' })
+    expect(p.name).toBe('cloudflare')
   })
 })
 
@@ -126,6 +136,154 @@ describe('LocalNoopSandbox lifecycle (V5.3 §2.10)', () => {
     expect(events.some(e => e.type === 'file_write')).toBe(true)
     expect(events.some(e => e.type === 'file_read')).toBe(true)
     await sb.destroy()
+  })
+})
+
+describe('Modal sandbox provider (V5.3 §2.10)', () => {
+  let events: SandboxAuditEvent[]
+  const cfg = (() => {
+    return {
+      ...buildSandboxConfig(baseContext, { gitToken: 'ghs_modaltoken' }),
+    }
+  })()
+
+  beforeEach(() => {
+    events = []
+  })
+
+  function fakeFetch(handlers: Record<string, (init: RequestInit) => Response | Promise<Response>>) {
+    return vi.fn(async (url: string | URL, init: RequestInit = {}) => {
+      const path = String(url).replace(/^https:\/\/api\.modal\.com/, '')
+      for (const [pattern, handler] of Object.entries(handlers)) {
+        const [method, route] = pattern.split(' ')
+        if ((init.method ?? 'GET') !== method) continue
+        if (path === route || path.startsWith(route + '?') || (route.endsWith('*') && path.startsWith(route.slice(0, -1)))) {
+          return handler(init)
+        }
+      }
+      return new Response('not mocked', { status: 500 })
+    }) as unknown as typeof fetch
+  }
+
+  it('refuses to spawn without an API token', async () => {
+    const { createModalProvider } = await import('./modal.js')
+    const provider = createModalProvider({ apiKey: undefined, fetchImpl: vi.fn() as unknown as typeof fetch })
+    await expect(provider.createSandbox(cfg, e => events.push(e))).rejects.toThrow(/MODAL_API_TOKEN/)
+  })
+
+  it('creates a sandbox, executes a command, redacts secrets, and tears down', async () => {
+    const { createModalProvider } = await import('./modal.js')
+    const fetchImpl = fakeFetch({
+      'POST /v1/sandboxes': () => new Response(JSON.stringify({ sandbox_id: 'sb_modal_1' }), { status: 200 }),
+      'POST /v1/sandboxes/sb_modal_1/exec': () =>
+        new Response(JSON.stringify({ exit_code: 0, stdout: 'ran with MUSHI_GIT_TOKEN=ghs_supersecret_value_xyz', stderr: '' }), { status: 200 }),
+      'DELETE /v1/sandboxes/sb_modal_1': () => new Response('', { status: 204 }),
+    })
+    const provider = createModalProvider({ apiKey: 'modal_test_token', fetchImpl })
+    const sb = await provider.createSandbox(cfg, e => events.push(e))
+    const res = await sb.exec('echo ghs_supersecret_value_xyz')
+    expect(res.exitCode).toBe(0)
+    expect(res.stdout).toContain('[REDACTED]')
+    expect(res.stdout).not.toContain('ghs_supersecret_value_xyz')
+    await sb.destroy()
+    expect(events.map(e => e.type)).toEqual(['spawn', 'exec', 'destroy'])
+  })
+
+  it('maps HTTP 451 to NETWORK_BLOCKED on exec', async () => {
+    const { createModalProvider } = await import('./modal.js')
+    const fetchImpl = fakeFetch({
+      'POST /v1/sandboxes': () => new Response(JSON.stringify({ sandbox_id: 'sb_modal_2' }), { status: 200 }),
+      'POST /v1/sandboxes/sb_modal_2/exec': () => new Response('blocked', { status: 451 }),
+    })
+    const provider = createModalProvider({ apiKey: 'modal_test_token', fetchImpl })
+    const sb = await provider.createSandbox(cfg, e => events.push(e))
+    await expect(sb.exec('curl https://leak.example.com')).rejects.toMatchObject({ code: 'NETWORK_BLOCKED' })
+  })
+
+  it('blocks writes outside the writable scope before hitting the network', async () => {
+    const { createModalProvider } = await import('./modal.js')
+    const fetchImpl = fakeFetch({
+      'POST /v1/sandboxes': () => new Response(JSON.stringify({ sandbox_id: 'sb_modal_3' }), { status: 200 }),
+    })
+    const provider = createModalProvider({ apiKey: 'modal_test_token', fetchImpl })
+    const sb = await provider.createSandbox(cfg, e => events.push(e))
+    await expect(sb.writeFile({ path: '/etc/passwd', content: 'pwned' })).rejects.toMatchObject({ code: 'POLICY_VIOLATION' })
+  })
+})
+
+describe('Cloudflare sandbox provider (V5.3 §2.10)', () => {
+  let events: SandboxAuditEvent[]
+  const cfg = buildSandboxConfig(baseContext, { gitToken: 'ghs_cftoken' })
+
+  beforeEach(() => {
+    events = []
+  })
+
+  function fakeFetch(handlers: Record<string, (init: RequestInit) => Response | Promise<Response>>) {
+    return vi.fn(async (url: string | URL, init: RequestInit = {}) => {
+      const path = String(url).replace(/^https:\/\/sb\.example\.workers\.dev/, '')
+      for (const [pattern, handler] of Object.entries(handlers)) {
+        const [method, route] = pattern.split(' ')
+        if ((init.method ?? 'GET') !== method) continue
+        if (path === route || path.startsWith(route + '?')) return handler(init)
+      }
+      return new Response('not mocked', { status: 500 })
+    }) as unknown as typeof fetch
+  }
+
+  it('refuses to spawn without endpoint or token', async () => {
+    const { createCloudflareProvider } = await import('./cloudflare.js')
+    const provider = createCloudflareProvider({ apiKey: 'tok', endpoint: undefined, fetchImpl: vi.fn() as unknown as typeof fetch })
+    await expect(provider.createSandbox(cfg, e => events.push(e))).rejects.toThrow(/CLOUDFLARE_SANDBOX_TOKEN/)
+  })
+
+  it('creates, execs with redaction, and destroys', async () => {
+    const { createCloudflareProvider } = await import('./cloudflare.js')
+    const fetchImpl = fakeFetch({
+      'POST /sandbox': () => new Response(JSON.stringify({ id: 'sb_cf_1' }), { status: 200 }),
+      'POST /sandbox/sb_cf_1/process': () =>
+        new Response(JSON.stringify({ exit_code: 0, stdout: 'auth=MUSHI_GIT_TOKEN=ghs_supersecret_value_xyz', stderr: '' }), { status: 200 }),
+      'DELETE /sandbox/sb_cf_1': () => new Response('', { status: 204 }),
+    })
+    const provider = createCloudflareProvider({
+      apiKey: 'cf_test_token',
+      endpoint: 'https://sb.example.workers.dev',
+      fetchImpl,
+    })
+    const sb = await provider.createSandbox(cfg, e => events.push(e))
+    const r = await sb.exec('cat /tmp/secret')
+    expect(r.exitCode).toBe(0)
+    expect(r.stdout).toContain('[REDACTED]')
+    expect(r.stdout).not.toContain('ghs_supersecret_value_xyz')
+    await sb.destroy()
+    expect(events.map(e => e.type)).toEqual(['spawn', 'exec', 'destroy'])
+  })
+
+  it('blocks reads outside the readable scope', async () => {
+    const { createCloudflareProvider } = await import('./cloudflare.js')
+    const fetchImpl = fakeFetch({
+      'POST /sandbox': () => new Response(JSON.stringify({ id: 'sb_cf_2' }), { status: 200 }),
+    })
+    const provider = createCloudflareProvider({
+      apiKey: 'cf_test_token',
+      endpoint: 'https://sb.example.workers.dev',
+      fetchImpl,
+    })
+    const sb = await provider.createSandbox(cfg, e => events.push(e))
+    await expect(sb.readFile('/etc/shadow')).rejects.toMatchObject({ code: 'POLICY_VIOLATION' })
+  })
+
+  it('maps 401 from create to PROVIDER_UNAVAILABLE', async () => {
+    const { createCloudflareProvider } = await import('./cloudflare.js')
+    const fetchImpl = fakeFetch({
+      'POST /sandbox': () => new Response('unauthorized', { status: 401 }),
+    })
+    const provider = createCloudflareProvider({
+      apiKey: 'cf_bad_token',
+      endpoint: 'https://sb.example.workers.dev',
+      fetchImpl,
+    })
+    await expect(provider.createSandbox(cfg, e => events.push(e))).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
   })
 })
 

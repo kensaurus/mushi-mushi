@@ -2,6 +2,10 @@
 
 React Native SDK for Mushi Mushi — built-in bottom-sheet widget, floating bug button, offline queue.
 
+> **One-command setup:** `npx mushi-mushi` auto-detects React Native / Expo and installs this package.
+>
+> **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor) (Ionic) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
+
 ## Usage
 
 ```tsx

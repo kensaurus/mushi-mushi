@@ -34,12 +34,23 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "keywords": [
+    "mushi-mushi",
     "bug-reporting",
-    "widget",
-    "browser-sdk",
-    "shadow-dom",
     "user-feedback",
-    "screenshot"
+    "browser-sdk",
+    "widget",
+    "shadow-dom",
+    "screenshot",
+    "session-replay",
+    "shake-to-report",
+    "vanilla-js",
+    "vue",
+    "svelte",
+    "angular",
+    "rage-click",
+    "sentry-companion",
+    "error-tracking",
+    "sdk"
   ],
   "publishConfig": {
     "access": "public"

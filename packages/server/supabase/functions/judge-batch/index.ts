@@ -52,6 +52,23 @@ const judgeSchema = z.object({
     severity: z.string().nullable().describe('Suggested severity, or null if no change'),
     component: z.string().nullable().describe('Suggested component, or null if no change'),
   }).nullable().describe('If classification_agreed is false, suggest corrections; otherwise null'),
+  // Wave E §4: short failure-mode tag for prompt-auto-tune bucketing.
+  // Constrained to a small vocabulary so the auto-tuner can group failures
+  // numerically rather than re-running the full reasoning blob through an LLM.
+  disagreement_reason: z
+    .enum([
+      'wrong_category',
+      'wrong_severity',
+      'wrong_component',
+      'missing_component',
+      'overconfident',
+      'underconfident',
+      'vague_repro',
+      'noise',
+      'other',
+    ])
+    .nullable()
+    .describe('When classification_agreed is false, the dominant failure mode. NULL when agreed.'),
 })
 
 Deno.serve(withSentry('judge-batch', async (req) => {
@@ -246,6 +263,13 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             judge_reasoning: evaluation.reasoning,
             classification_agreed: evaluation.classification_agreed,
             suggested_correction: evaluation.suggested_correction ?? null,
+            // Wave E §4: link the eval back to the prompt that was used so
+            // prompt-auto-tune can bucket failures by prompt version. Stage 2
+            // wins when both are present (it's the deciding classification).
+            prompt_version: report.stage2_prompt_version ?? report.stage1_prompt_version ?? null,
+            // Only meaningful when classification_agreed is false; the judge
+            // schema enforces null otherwise.
+            disagreement_reason: evaluation.classification_agreed ? null : (evaluation.disagreement_reason ?? null),
             langfuse_trace_id: trace.id,
           })
 

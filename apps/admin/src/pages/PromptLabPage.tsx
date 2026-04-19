@@ -6,94 +6,35 @@
  *            - clone a global default into a project-specific candidate
  *            - edit, A/B (traffic %), promote, or delete candidates
  *            - inspect the eval dataset (recent classified reports)
- *          The legacy fine-tuning JSONL export is kept as a side panel
- *          for the rare case where a vendor-side fine-tune is needed.
+ *            - run vendor-side fine-tuning (export → validate → promote)
+ *            - generate synthetic reports to validate prompt changes
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { apiFetch } from '../lib/supabase'
+import { useMemo, useState } from 'react'
 import {
   PageHeader,
   PageHelp,
-  Card,
-  Badge,
-  Btn,
-  EmptyState,
   Loading,
   ErrorAlert,
-  RelativeTime,
 } from '../components/ui'
 import { KpiRow, KpiTile, formatPct } from '../components/charts'
 import { useToast } from '../lib/toast'
-
-interface PromptVersion {
-  id: string
-  project_id: string | null
-  stage: 'stage1' | 'stage2'
-  version: string
-  prompt_template: string
-  is_active: boolean
-  is_candidate: boolean
-  traffic_percentage: number
-  avg_judge_score: number | null
-  total_evaluations: number
-  created_at: string
-  updated_at: string
-}
-
-interface DatasetSample {
-  id: string
-  description: string
-  category: string | null
-  severity: string | null
-  component: string | null
-  created_at: string
-}
-
-interface FineTuningJob {
-  id: string
-  project_id: string
-  status: string
-  base_model: string | null
-  training_samples: number | null
-  created_at: string
-}
-
-interface PromptLabData {
-  prompts: PromptVersion[]
-  dataset: {
-    total: number
-    labelled: number
-    recentSamples: DatasetSample[]
-  }
-  fineTuningJobs?: FineTuningJob[]
-}
-
-const STAGE_LABELS: Record<string, string> = {
-  stage1: 'Stage 1 · Fast filter',
-  stage2: 'Stage 2 · Classify',
-}
+import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
+import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
+import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
+import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
+import { PromptDiffModal } from '../components/prompt-lab/PromptDiffModal'
+import { EvalDatasetCard } from '../components/prompt-lab/EvalDatasetCard'
+import { FineTuningJobsCard } from '../components/prompt-lab/FineTuningJobsCard'
+import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsCard'
 
 export function PromptLabPage() {
-  const [data, setData] = useState<PromptLabData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
   const [editing, setEditing] = useState<PromptVersion | null>(null)
+  const [diffing, setDiffing] = useState<PromptVersion | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const toast = useToast()
-
-  const load = useCallback(async () => {
-    setError(false)
-    const res = await apiFetch<PromptLabData>('/v1/admin/prompt-lab')
-    if (res.ok && res.data) setData(res.data)
-    else setError(true)
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
 
   const grouped = useMemo(() => {
     const out: Record<string, PromptVersion[]> = { stage1: [], stage2: [] }
@@ -127,13 +68,13 @@ export function PromptLabPage() {
     setBusy(null)
     if (res.ok) {
       toast.push({ tone: 'success', message: `Cloned to ${newVersion}` })
-      await load()
+      reload()
     } else {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Clone failed' })
     }
   }
 
-  async function activate(p: PromptVersion) {
+  async function activatePrompt(p: PromptVersion) {
     setBusy(p.id)
     const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, {
       method: 'PATCH',
@@ -142,13 +83,18 @@ export function PromptLabPage() {
     setBusy(null)
     if (res.ok) {
       toast.push({ tone: 'success', message: `${p.version} is now serving 100% of ${p.stage}` })
-      await load()
+      reload()
     } else {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Activation failed' })
     }
   }
 
-  async function setTraffic(p: PromptVersion, pct: number) {
+  async function setTraffic(p: PromptVersion) {
+    const next = window.prompt('A/B traffic % (0–100):', String(p.traffic_percentage))
+    if (next == null) return
+    const n = Number(next)
+    if (!Number.isFinite(n)) return
+    const pct = Math.max(0, Math.min(100, Math.round(n)))
     setBusy(p.id)
     const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, {
       method: 'PATCH',
@@ -157,33 +103,20 @@ export function PromptLabPage() {
     setBusy(null)
     if (res.ok) {
       toast.push({ tone: 'success', message: `Traffic set to ${pct}%` })
-      await load()
+      reload()
     } else {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Update failed' })
     }
   }
 
   async function deletePrompt(p: PromptVersion) {
-    if (!confirm(`Delete prompt "${p.version}"? This cannot be undone.`)) return
+    if (!window.confirm(`Delete prompt "${p.version}"? This cannot be undone.`)) return
     setBusy(p.id)
     const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, { method: 'DELETE' })
     setBusy(null)
     if (res.ok) {
       toast.push({ tone: 'success', message: 'Prompt deleted' })
-      await load()
-    } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Delete failed' })
-    }
-  }
-
-  async function deleteFineTuningJob(job: FineTuningJob) {
-    if (!confirm(`Delete fine-tuning job ${job.id.slice(0, 8)}…? This removes the row only — any uploaded export stays in storage.`)) return
-    setBusy(job.id)
-    const res = await apiFetch(`/v1/admin/fine-tuning/${job.id}`, { method: 'DELETE' })
-    setBusy(null)
-    if (res.ok) {
-      toast.push({ tone: 'success', message: 'Fine-tuning job deleted' })
-      await load()
+      reload()
     } else {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Delete failed' })
     }
@@ -200,14 +133,14 @@ export function PromptLabPage() {
     if (res.ok) {
       toast.push({ tone: 'success', message: 'Prompt saved' })
       setEditing(null)
-      await load()
+      reload()
     } else {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Save failed' })
     }
   }
 
   if (loading) return <Loading text="Loading prompt lab..." />
-  if (error) return <ErrorAlert message="Failed to load prompt lab." onRetry={load} />
+  if (error) return <ErrorAlert message={error} onRetry={reload} />
   if (!data) return null
 
   const totalEvals = data.prompts.reduce((s, p) => s + p.total_evaluations, 0)
@@ -215,6 +148,9 @@ export function PromptLabPage() {
     .filter((p) => p.avg_judge_score != null)
     .sort((a, b) => (b.avg_judge_score ?? 0) - (a.avg_judge_score ?? 0))[0]
   const candidates = data.prompts.filter((p) => p.is_candidate).length
+  const parentForDiff = diffing
+    ? data.prompts.find((p) => p.id === diffing.parent_version_id)
+    : undefined
 
   return (
     <div className="space-y-3">
@@ -231,6 +167,7 @@ export function PromptLabPage() {
           'A/B test a sharper Stage 2 prompt before flipping it on for everyone',
           'Iterate on category rules without redeploying — prompts hot-reload from the DB',
           'Audit who changed what, when, and what the judge thought of it',
+          'Validate prompt changes against synthetic reports before they reach real users',
         ]}
         howToUse="Pick a baseline → Clone → Edit → set Traffic % to a small number (e.g. 10) → wait for the judge to score it → Promote if it beats the active prompt. Global defaults are read-only; clone first."
       />
@@ -260,300 +197,43 @@ export function PromptLabPage() {
         />
       </KpiRow>
 
-      {(['stage1', 'stage2'] as const).map((stage) => {
-        const list = grouped[stage] ?? []
-        return (
-          <Card key={stage} elevated className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-fg-secondary">
-                {STAGE_LABELS[stage]}
-              </h3>
-              <span className="text-2xs text-fg-faint font-mono">
-                {list.length} versions
-              </span>
-            </div>
-            {list.length === 0 ? (
-              <p className="text-2xs text-fg-faint">No prompts registered for this stage.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-2xs">
-                  <thead className="text-fg-faint">
-                    <tr>
-                      <th className="text-left font-normal px-2 py-1">Version</th>
-                      <th className="text-left font-normal px-2 py-1">State</th>
-                      <th className="text-right font-normal px-2 py-1">Traffic</th>
-                      <th className="text-right font-normal px-2 py-1">Judge score</th>
-                      <th className="text-right font-normal px-2 py-1">Evals</th>
-                      <th className="text-left font-normal px-2 py-1">Updated</th>
-                      <th className="text-right font-normal px-2 py-1">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {list.map((p) => {
-                      const isGlobal = p.project_id == null
-                      const score = p.avg_judge_score
-                      return (
-                        <tr key={p.id} className="border-t border-edge-subtle">
-                          <td className="px-2 py-1.5 font-mono text-fg-secondary truncate max-w-[10rem]">
-                            {p.version}
-                          </td>
-                          <td className="px-2 py-1.5">
-                            {p.is_active ? (
-                              <Badge className="bg-ok/15 text-ok border border-ok/30">
-                                Active
-                              </Badge>
-                            ) : p.is_candidate ? (
-                              <Badge className="bg-info/15 text-info border border-info/30">
-                                Candidate
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-fg-faint/15 text-fg-muted border border-edge-subtle">
-                                Idle
-                              </Badge>
-                            )}
-                            {isGlobal && (
-                              <Badge className="ml-1 bg-warn/15 text-warn border border-warn/30">
-                                Global
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                            {p.traffic_percentage}%
-                          </td>
-                          <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                            {score != null ? formatPct(score) : '—'}
-                          </td>
-                          <td className="px-2 py-1.5 text-right font-mono text-fg-muted tabular-nums">
-                            {p.total_evaluations}
-                          </td>
-                          <td className="px-2 py-1.5 text-fg-muted">
-                            <RelativeTime value={p.updated_at} />
-                          </td>
-                          <td className="px-2 py-1.5 text-right space-x-1 whitespace-nowrap">
-                            <Btn
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy === p.id}
-                              onClick={() => clonePrompt(p)}
-                              title="Create an editable copy"
-                            >
-                              Clone
-                            </Btn>
-                            {!isGlobal && (
-                              <>
-                                <Btn
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={busy === p.id}
-                                  onClick={() => setEditing(p)}
-                                >
-                                  Edit
-                                </Btn>
-                                {!p.is_active && (
-                                  <Btn
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={busy === p.id}
-                                    onClick={() => activate(p)}
-                                    title="Make this the live prompt for this stage"
-                                  >
-                                    Activate
-                                  </Btn>
-                                )}
-                                {!p.is_active && (
-                                  <Btn
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={busy === p.id}
-                                    onClick={() => {
-                                      const next = prompt(
-                                        'A/B traffic % (0–100):',
-                                        String(p.traffic_percentage),
-                                      )
-                                      if (next == null) return
-                                      const n = Number(next)
-                                      if (!Number.isFinite(n)) return
-                                      void setTraffic(p, Math.max(0, Math.min(100, Math.round(n))))
-                                    }}
-                                  >
-                                    Traffic
-                                  </Btn>
-                                )}
-                                <Btn
-                                  size="sm"
-                                  variant="danger"
-                                  disabled={busy === p.id || p.is_active}
-                                  onClick={() => deletePrompt(p)}
-                                >
-                                  Delete
-                                </Btn>
-                              </>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        )
-      })}
+      {(['stage1', 'stage2'] as const).map((stage) => (
+        <PromptStageTable
+          key={stage}
+          stage={stage}
+          prompts={grouped[stage] ?? []}
+          busy={busy}
+          onClone={clonePrompt}
+          onEdit={setEditing}
+          onDiff={setDiffing}
+          onActivate={activatePrompt}
+          onTraffic={setTraffic}
+          onDelete={deletePrompt}
+        />
+      ))}
 
-      {data.fineTuningJobs && data.fineTuningJobs.length > 0 && (
-        <Card elevated className="p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold text-fg-secondary">
-              Legacy fine-tuning jobs
-            </h3>
-            <span className="text-2xs text-fg-faint font-mono">
-              {data.fineTuningJobs.length} jobs
-            </span>
-          </div>
-          <p className="text-2xs text-fg-faint mb-2">
-            These rows were created by the old "Fine-Tuning" page (now retired). Hit Delete on any "pending" row that never got past export — Prompt Lab is the supported workflow now.
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-2xs">
-              <thead className="text-fg-faint">
-                <tr>
-                  <th className="text-left font-normal px-2 py-1">Job</th>
-                  <th className="text-left font-normal px-2 py-1">Status</th>
-                  <th className="text-left font-normal px-2 py-1">Model</th>
-                  <th className="text-right font-normal px-2 py-1">Samples</th>
-                  <th className="text-left font-normal px-2 py-1">Created</th>
-                  <th className="text-right font-normal px-2 py-1">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.fineTuningJobs.map((job) => (
-                  <tr key={job.id} className="border-t border-edge-subtle">
-                    <td className="px-2 py-1.5 font-mono text-fg-muted">{job.id.slice(0, 8)}…</td>
-                    <td className="px-2 py-1.5">
-                      <Badge
-                        className={
-                          job.status === 'pending'
-                            ? 'bg-warn/15 text-warn border border-warn/30'
-                            : job.status === 'rejected'
-                              ? 'bg-danger/15 text-danger border border-danger/30'
-                              : 'bg-fg-faint/15 text-fg-muted border border-edge-subtle'
-                        }
-                      >
-                        {job.status}
-                      </Badge>
-                    </td>
-                    <td className="px-2 py-1.5 font-mono text-fg-muted">{job.base_model ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{job.training_samples ?? '—'}</td>
-                    <td className="px-2 py-1.5 text-fg-muted"><RelativeTime value={job.created_at} /></td>
-                    <td className="px-2 py-1.5 text-right">
-                      <Btn
-                        size="sm"
-                        variant="danger"
-                        disabled={busy === job.id}
-                        onClick={() => deleteFineTuningJob(job)}
-                      >
-                        Delete
-                      </Btn>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+      <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
+
+      <SyntheticReportsCard />
+
+      <EvalDatasetCard
+        total={data.dataset.total}
+        labelled={data.dataset.labelled}
+        recentSamples={data.dataset.recentSamples}
+      />
+
+      {diffing && (
+        <PromptDiffModal prompt={diffing} parent={parentForDiff} onClose={() => setDiffing(null)} />
       )}
 
-      <Card elevated className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-xs font-semibold text-fg-secondary">
-            Eval dataset · recent classified reports
-          </h3>
-          <span className="text-2xs text-fg-faint font-mono">
-            {data.dataset.labelled.toLocaleString()} labelled
-          </span>
-        </div>
-        {data.dataset.recentSamples.length === 0 ? (
-          <EmptyState
-            title="No labelled reports yet"
-            description="Once Stage 2 classifies reports, they appear here as the eval dataset for your next prompt experiment."
-          />
-        ) : (
-          <ul className="space-y-1.5 text-xs">
-            {data.dataset.recentSamples.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-start gap-2 border-t border-edge-subtle pt-1.5 first:border-0 first:pt-0"
-              >
-                <div className="flex-1 min-w-0">
-                  <Link
-                    to={`/reports/${s.id}`}
-                    className="text-fg-secondary hover:text-fg underline-offset-2 hover:underline"
-                  >
-                    {s.description?.slice(0, 140) ?? '(no description)'}
-                  </Link>
-                  <div className="mt-0.5 flex flex-wrap gap-1.5 text-2xs font-mono text-fg-muted">
-                    {s.category && <span>cat: {s.category}</span>}
-                    {s.severity && <span>sev: {s.severity}</span>}
-                    {s.component && <span>cmp: {s.component}</span>}
-                  </div>
-                </div>
-                <RelativeTime
-                  value={s.created_at}
-                  className="text-2xs text-fg-faint shrink-0"
-                />
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-
       {editing && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3"
-          onClick={() => setEditing(null)}
-        >
-          <Card
-            elevated
-            className="w-full max-w-3xl p-4 space-y-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-fg">
-                Edit prompt · {editing.stage} / {editing.version}
-              </h3>
-              <button
-                type="button"
-                className="text-fg-muted hover:text-fg text-lg leading-none"
-                onClick={() => setEditing(null)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <p className="text-2xs text-fg-faint">
-              The prompt is hot-reloaded by the pipeline within seconds. Use{' '}
-              <code className="font-mono text-fg-secondary">{'{{report_text}}'}</code>{' '}
-              and other template variables that the worker substitutes.
-            </p>
-            <textarea
-              className="w-full h-72 bg-surface-overlay border border-edge-subtle rounded-sm p-2 text-2xs font-mono text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand/40"
-              value={editing.prompt_template}
-              onChange={(e) =>
-                setEditing({ ...editing, prompt_template: e.currentTarget.value })
-              }
-              spellCheck={false}
-            />
-            <div className="flex justify-end gap-1.5">
-              <Btn variant="ghost" onClick={() => setEditing(null)}>
-                Cancel
-              </Btn>
-              <Btn onClick={saveEdit} disabled={busy === editing.id}>
-                {busy === editing.id ? 'Saving…' : 'Save'}
-              </Btn>
-            </div>
-          </Card>
-        </div>
+        <PromptEditorModal
+          prompt={editing}
+          onChange={setEditing}
+          onClose={() => setEditing(null)}
+          onSave={saveEdit}
+          saving={busy === editing.id}
+        />
       )}
     </div>
   )

@@ -34,12 +34,22 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "keywords": [
+    "mushi-mushi",
     "bug-reporting",
+    "user-feedback",
     "react",
+    "next.js",
+    "nextjs",
     "provider",
     "hooks",
     "error-boundary",
-    "user-feedback"
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage",
+    "sdk"
   ],
   "publishConfig": {
     "access": "public"
