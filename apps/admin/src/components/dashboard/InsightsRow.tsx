@@ -26,7 +26,10 @@ export function InsightsRow({ topComponents, integrations, activity }: Props) {
 }
 
 function TopComponentsCard({ topComponents }: { topComponents: Props['topComponents'] }) {
-  const max = topComponents[0]?.count ?? 1
+  // `?? 1` only catches null/undefined — a `count` of 0 (which the server
+  // can legitimately emit on an empty project) would set max=0 and produce
+  // NaN-width bars. Match the `Math.max(1, …)` guard used in QuotaBanner.
+  const max = Math.max(1, topComponents[0]?.count ?? 1)
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2.5">

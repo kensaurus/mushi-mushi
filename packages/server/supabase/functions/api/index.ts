@@ -4010,7 +4010,7 @@ app.get('/v1/admin/fixes/summary', jwtAuth, async (c) => {
   const db = getServiceClient()
   const projectIds = await ownedProjectIds(db, userId)
   if (projectIds.length === 0) {
-    return c.json({ ok: true, data: { total: 0, completed: 0, failed: 0, inProgress: 0, prsOpen: 0, prsMerged: 0, days: [] } })
+    return c.json({ ok: true, data: { total: 0, completed: 0, failed: 0, inProgress: 0, prsOpen: 0, prsCiPassing: 0, prsMerged: 0, days: [] } })
   }
   const since = new Date()
   since.setUTCDate(since.getUTCDate() - 29)
@@ -4028,8 +4028,12 @@ app.get('/v1/admin/fixes/summary', jwtAuth, async (c) => {
   const completed = list.filter(r => r.status === 'completed').length
   const failed = list.filter(r => r.status === 'failed').length
   const inProgress = list.filter(r => r.status === 'queued' || r.status === 'running' || r.status === 'pending').length
-  const prsOpen = list.filter(r => r.pr_url && r.status === 'completed' && r.check_run_conclusion !== 'merged').length
-  const prsMerged = list.filter(r => r.check_run_conclusion === 'success').length
+  // GitHub's `check_run.conclusion` enum is success | failure | neutral |
+  // cancelled | skipped | timed_out | action_required | stale — there is no
+  // `merged` value, so the old `!== 'merged'` filter was a no-op. Use the
+  // attempt's own status as the "open" gate; merge state lives elsewhere.
+  const prsOpen = list.filter(r => r.pr_url && r.status === 'completed').length
+  const prsCiPassing = list.filter(r => r.check_run_conclusion === 'success').length
 
   const days: { day: string; total: number; completed: number; failed: number }[] = []
   for (let i = 0; i < 30; i++) {
@@ -4055,7 +4059,10 @@ app.get('/v1/admin/fixes/summary', jwtAuth, async (c) => {
       failed,
       inProgress,
       prsOpen,
-      prsMerged,
+      prsCiPassing,
+      // Deprecated alias so a stale admin FE deployed before this rename
+      // doesn't blank-out the tile. Drop after one release cycle.
+      prsMerged: prsCiPassing,
       days,
     },
   })

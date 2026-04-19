@@ -47,7 +47,7 @@ export function FixSummaryRow({ summary, successRate }: Props) {
           label="PRs open"
           value={summary.prsOpen}
           accent={(summary.prsOpen > 0 ? 'brand' : 'muted') as Tone}
-          sublabel={`${summary.prsMerged} CI ✓`}
+          sublabel={summary.prsOpen > 0 ? 'awaiting review or merge' : 'no open PRs'}
         />
       </KpiRow>
 

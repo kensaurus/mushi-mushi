@@ -47,7 +47,16 @@ export interface FixSummary {
   failed: number
   inProgress: number
   prsOpen: number
-  prsMerged: number
+  /**
+   * Count of fix attempts whose GitHub check-run reported `success`. Despite
+   * the historic name `prsMerged`, this is **CI-passing**, not "merged" —
+   * GitHub's `check_run.conclusion` enum has no `merged` value. New code
+   * should read `prsCiPassing`; `prsMerged` is kept as a temporary alias so
+   * the FE survives a deploy that lands before the renamed API.
+   */
+  prsCiPassing: number
+  /** @deprecated Read `prsCiPassing` instead. Kept for one release cycle. */
+  prsMerged?: number
   days: { day: string; total: number; completed: number; failed: number }[]
 }
 
