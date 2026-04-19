@@ -19,45 +19,82 @@ const features = [
   },
 ]
 
+// Mirrors `pricing_plans` in 20260419000000_billing_plans.sql.
+// Pricing copy here is the marketing surface; the gateway reads the DB catalog.
 const pricingTiers = [
   {
-    name: 'Free',
+    name: 'Hobby',
     price: '$0',
     cadence: 'forever',
     headline: '1,000 reports / month',
     points: [
-      'All web + mobile SDKs',
-      'Hosted admin console',
+      'All 8 SDKs (web, mobile, desktop)',
+      'Hosted admin console + dashboards',
+      '7-day report retention',
+      'Up to 3 teammates',
       'Community Discord support',
     ],
     cta: { label: 'Start free', href: '/signup' },
   },
   {
-    name: 'Cloud',
-    price: '$0.0025',
-    cadence: 'per ingested report',
-    headline: 'After 1,000 free, no seat caps',
+    name: 'Starter',
+    price: '$19',
+    cadence: '/ project / month',
+    headline: '10,000 reports + $0.0025/report after',
     points: [
-      'Everything in Free',
-      'Unlimited team members',
+      'Everything in Hobby',
+      'Unlimited teammates',
+      '30-day report retention',
       'Plugin marketplace + webhooks',
-      'Priority email support',
+      'BYOK (bring your own LLM keys)',
+      'Email support, 48h SLA',
     ],
-    cta: { label: 'Add a card', href: '/signup' },
+    cta: { label: 'Start trial', href: '/signup?plan=starter' },
     featured: true,
+  },
+  {
+    name: 'Pro',
+    price: '$99',
+    cadence: '/ project / month',
+    headline: '50,000 reports + $0.002/report after',
+    points: [
+      'Everything in Starter',
+      '90-day report retention + audit log',
+      'SSO (SAML / OIDC)',
+      'Weekly intelligence reports (PDF)',
+      'Priority support, 8h SLA',
+    ],
+    cta: { label: 'Start trial', href: '/signup?plan=pro' },
   },
   {
     name: 'Enterprise',
     price: 'Talk',
     cadence: 'to us',
-    headline: 'SOC 2 evidence, SSO, BYOK, BYO storage',
+    headline: 'Unlimited volume, self-hosted, SOC 2',
     points: [
-      'Everything in Cloud',
-      'SAML SSO, SCIM',
-      'Self-hosted option',
-      'Annual SOC 2 evidence pack',
+      'Everything in Pro',
+      'Unlimited reports, 365-day retention',
+      'Self-hosted (your VPC) or dedicated cloud',
+      'SCIM provisioning, custom DPA',
+      'Annual SOC 2 / ISO evidence pack',
+      'Dedicated success engineer, 4h SLA',
     ],
     cta: { label: 'Email sales', href: 'mailto:hello@mushimushi.dev' },
+  },
+]
+
+// Optional add-ons surfaced under the tier grid. Keeps the headline tiers
+// readable while still flagging that there's a Teams seat-pack story.
+const addOns = [
+  {
+    name: 'Teams pack',
+    body: 'Add 5 reviewer seats with read-only triage scope. Useful for support / PMs who need to read reports but not deploy fixes.',
+    price: '$10 / 5 seats / month',
+  },
+  {
+    name: 'Extended retention',
+    body: 'Bump report + audit retention beyond your tier default. Required for some regulated industries.',
+    price: 'From $25 / month',
   },
 ]
 
@@ -125,13 +162,14 @@ export default function Home() {
       <section id="pricing" className="mt-24">
         <h2 className="text-3xl font-semibold tracking-tight">Pricing</h2>
         <p className="mt-2 text-neutral-400">
-          Usage-based — no seat tax, no surprise overage. Upgrade in 60s.
+          Pay for outcomes — flat plan + cheap overage. No seat tax, no PR fees.
+          Cancel any time.
         </p>
-        <div className="mt-8 grid gap-6 md:grid-cols-3">
+        <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {pricingTiers.map((tier) => (
             <article
               key={tier.name}
-              className={`rounded-xl border p-6 ${
+              className={`flex flex-col rounded-xl border p-6 ${
                 tier.featured
                   ? 'border-indigo-400 bg-indigo-500/10'
                   : 'border-neutral-800 bg-neutral-950/60'
@@ -145,14 +183,14 @@ export default function Home() {
                 <span className="text-sm text-neutral-400">{tier.cadence}</span>
               </p>
               <p className="mt-1 text-sm text-neutral-300">{tier.headline}</p>
-              <ul className="mt-4 space-y-1.5 text-sm text-neutral-300">
+              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-neutral-300">
                 {tier.points.map((p) => (
                   <li key={p}>· {p}</li>
                 ))}
               </ul>
               <Link
                 href={tier.cta.href}
-                className={`mt-6 inline-block rounded-md px-4 py-2 text-sm font-medium ${
+                className={`mt-6 inline-block rounded-md px-4 py-2 text-center text-sm font-medium ${
                   tier.featured
                     ? 'bg-indigo-500 text-white hover:bg-indigo-400'
                     : 'border border-neutral-700 hover:border-neutral-500'
@@ -163,6 +201,27 @@ export default function Home() {
             </article>
           ))}
         </div>
+
+        <div className="mt-10 grid gap-4 sm:grid-cols-2">
+          {addOns.map((addon) => (
+            <article
+              key={addon.name}
+              className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-5"
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <h4 className="text-sm font-semibold text-neutral-200">{addon.name}</h4>
+                <span className="text-xs text-neutral-400">{addon.price}</span>
+              </div>
+              <p className="mt-2 text-sm text-neutral-400">{addon.body}</p>
+            </article>
+          ))}
+        </div>
+
+        <p className="mt-6 text-xs text-neutral-500">
+          Prices in USD. EU, UK, and JP customers are billed in their local
+          currency at Stripe's daily rate. Volume discounts available for
+          annual contracts — <Link href="mailto:hello@mushimushi.dev" className="underline">talk to us</Link>.
+        </p>
       </section>
 
       <footer className="mt-24 border-t border-neutral-900 pt-8 text-sm text-neutral-500">

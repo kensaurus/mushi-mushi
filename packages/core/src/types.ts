@@ -149,6 +149,12 @@ export interface MushiReport {
   metadata?: Record<string, unknown>;
   sessionId?: string;
   reporterToken: string;
+  /**
+   * Wave E §3c — stable per-device hash from `getDeviceFingerprintHash()`.
+   * Sent so the server can run the cross-account anti-gaming check; falls
+   * back to IP+UA fingerprinting when omitted.
+   */
+  fingerprintHash?: string;
   appVersion?: string;
   proactiveTrigger?: string;
 

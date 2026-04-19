@@ -24,7 +24,7 @@ Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-gene
 | `checkFileScope` | Validates that fixes only touch allowed files |
 | `checkCircuitBreaker` | Prevents runaway fix attempts |
 | `createPR` / `buildPRBody` | GitHub PR creation via Octokit |
-| `resolveSandboxProvider` / `LocalNoopSandboxProvider` / `createE2BProvider` | Managed sandbox abstraction (V5.3 §2.10) |
+| `resolveSandboxProvider` / `LocalNoopSandboxProvider` / `createE2BProvider` / `createModalProvider` / `createCloudflareProvider` | Managed sandbox abstraction (V5.3 §2.10) — `local-noop`, `e2b`, `modal`, and `cloudflare` adapters |
 | `SandboxAuditWriter` | Persists per-step sandbox audit events |
 
 ## Usage — single repo
@@ -88,13 +88,24 @@ import { resolveSandboxProvider, buildSandboxConfig } from '@mushi-mushi/agents'
 const provider = resolveSandboxProvider({
   name: process.env.MUSHI_SANDBOX_PROVIDER ?? 'local-noop',
   e2b: { apiKey: process.env.E2B_API_KEY },
+  modal: { token: process.env.MODAL_TOKEN, endpoint: process.env.MODAL_ENDPOINT },
+  cloudflare: { token: process.env.CLOUDFLARE_SANDBOX_TOKEN, workerUrl: process.env.CLOUDFLARE_SANDBOX_WORKER_URL },
 })
 const sandbox = await provider.create(buildSandboxConfig({ reportId }))
 ```
 
-Available providers: `local-noop` (default, no isolation), `e2b` (managed
-microVMs via `createE2BProvider`). All exec/file events flow through
-`SandboxAuditWriter` into the `sandbox_runs` table for SOC 2 evidence.
+Available providers:
+
+| Name | Module | What it does |
+|------|--------|-------------|
+| `local-noop` | `LocalNoopSandboxProvider` | Default, no isolation. **The orchestrator refuses to run this in production unless `MUSHI_ALLOW_LOCAL_SANDBOX=1`** |
+| `e2b` | `createE2BProvider` | Managed microVMs via the E2B REST API; deny-by-default egress |
+| `modal` | `createModalProvider` | Modal Sandboxes REST adapter (`POST /v1/sandboxes/...`); per-sandbox `allowed_hosts` egress allowlist |
+| `cloudflare` | `createCloudflareProvider` | Cloudflare Workers Sandbox SDK adapter (`POST /sandbox`, `POST /sandbox/:id/process`); egress enforced by Cloudflare outbound rules |
+
+All exec/file events flow through `SandboxAuditWriter` into the `sandbox_runs`
+table for SOC 2 evidence. `MUSHI_GIT_TOKEN=...` is redacted from stdout/stderr
+before audit persistence.
 
 ## Status
 

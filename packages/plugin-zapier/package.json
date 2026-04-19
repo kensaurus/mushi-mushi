@@ -50,9 +50,12 @@
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
-    "plugin",
     "zapier",
+    "plugin",
     "webhook",
-    "automation"
+    "automation",
+    "no-code",
+    "integration",
+    "bug-reporting"
   ]
 }

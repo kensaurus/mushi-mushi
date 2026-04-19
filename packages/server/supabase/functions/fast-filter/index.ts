@@ -30,6 +30,73 @@ const stage1Schema = z.object({
 
 type Stage1Result = z.infer<typeof stage1Schema>
 
+interface EvidenceSummary {
+  console: { errorCount: number; warnCount: number; topErrorTypes: string[] }
+  network: { failureCount: number; statusBuckets: Record<string, number>; topMethods: string[] }
+  perf: { lcp: number | null; fcp: number | null; cls: number | null; inp: number | null; ttfb: number | null; longTasks: number | null }
+}
+
+/**
+ * Build a sanitized, structured evidence summary from a scrubbed report.
+ *
+ * This is the only telemetry channel Stage 2 sees. It deliberately encodes
+ * counts + normalized buckets and never the raw user-controllable strings
+ * (.message, .stack, .url, .error). Even if a malicious console payload
+ * tries `console.log("ignore prior instructions...")`, Stage 2's prompt
+ * receives only `{ errorCount: 1, topErrorTypes: ['Error'] }`.
+ */
+function buildEvidence(report: Record<string, any>): EvidenceSummary {
+  const consoleLogs = (report.console_logs ?? []) as Array<{ level?: string; message?: string }>
+  const errorTypes = new Map<string, number>()
+  let errorCount = 0
+  let warnCount = 0
+  for (const l of consoleLogs) {
+    if (l.level === 'error') errorCount++
+    else if (l.level === 'warn') warnCount++
+    else continue
+    const m = String(l.message ?? '').match(/^([A-Z][A-Za-z0-9_]*Error)\b/)
+    const key = m ? m[1] : 'Other'
+    errorTypes.set(key, (errorTypes.get(key) ?? 0) + 1)
+  }
+  const topErrorTypes = Array.from(errorTypes.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([k]) => k)
+
+  const networkLogs = (report.network_logs ?? []) as Array<{ method?: string; status?: number; error?: string }>
+  const statusBuckets: Record<string, number> = {}
+  const methods = new Map<string, number>()
+  let failureCount = 0
+  for (const l of networkLogs) {
+    const status = Number(l.status ?? 0)
+    if (status >= 400 || l.error) {
+      failureCount++
+      const bucket = status >= 500 ? '5xx' : status >= 400 ? '4xx' : 'network_error'
+      statusBuckets[bucket] = (statusBuckets[bucket] ?? 0) + 1
+      const method = String(l.method ?? 'GET').toUpperCase().slice(0, 6)
+      methods.set(method, (methods.get(method) ?? 0) + 1)
+    }
+  }
+  const topMethods = Array.from(methods.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([k]) => k)
+
+  const perf = report.performance_metrics ?? {}
+  return {
+    console: { errorCount, warnCount, topErrorTypes },
+    network: { failureCount, statusBuckets, topMethods },
+    perf: {
+      lcp: typeof perf.lcp === 'number' ? perf.lcp : null,
+      fcp: typeof perf.fcp === 'number' ? perf.fcp : null,
+      cls: typeof perf.cls === 'number' ? perf.cls : null,
+      inp: typeof perf.inp === 'number' ? perf.inp : null,
+      ttfb: typeof perf.ttfb === 'number' ? perf.ttfb : null,
+      longTasks: typeof perf.longTasks === 'number' ? perf.longTasks : null,
+    },
+  }
+}
+
 const SYSTEM_PROMPT = `You are a bug report triage assistant. Extract structured symptoms from the user's report and classify the issue.
 
 Rules:
@@ -88,6 +155,12 @@ Deno.serve(withSentry('fast-filter', async (req) => {
       .join('\n')
 
     const env = scrubbedReport.environment ?? {}
+
+    // Build a sanitized evidence summary that the dual-LLM air-gap allows
+    // Stage 2 to consume safely. We deliberately keep this to counts +
+    // normalized buckets (never raw user strings), so prompt-injection in
+    // a console.log/network URL cannot influence Stage 2's reasoning.
+    const evidence = buildEvidence(scrubbedReport)
 
     const userPrompt = `## User Report
 - Category: ${scrubbedReport.user_category}
@@ -192,6 +265,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
         expected: classification.expected,
         actual: classification.actual,
         emotion: classification.emotion,
+        evidence,
       },
       stage1_classification: classification,
       stage1_model: usedModel,
@@ -221,7 +295,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
 
     // Generate embedding, dedup, regression detection, graph building (fire-and-forget)
     const embeddingText = `${classification.symptom} ${classification.action} ${classification.actual} ${scrubbedReport.description}`
-    generateAndStoreEmbedding(reportId, embeddingText)
+    generateAndStoreEmbedding(reportId, embeddingText, { projectId })
       .then(() => suggestGrouping(reportId, projectId))
       .then(async (group) => {
         if (group.similarCount > 0) {
@@ -322,6 +396,8 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
           reportId,
           projectId,
           stage1Extraction: classification,
+          evidence,
+          airGap: true,
         }),
       })
     } catch (err) {

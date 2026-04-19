@@ -53,12 +53,21 @@
     "verify:android": "cd android && ./gradlew clean build"
   },
   "keywords": [
+    "mushi-mushi",
     "capacitor",
     "capacitor-plugin",
-    "mushi-mushi",
+    "ionic",
     "bug-reporting",
-    "sdk",
-    "ionic"
+    "user-feedback",
+    "shake-to-report",
+    "screenshot",
+    "session-replay",
+    "offline-queue",
+    "ios",
+    "android",
+    "sentry-companion",
+    "error-tracking",
+    "sdk"
   ],
   "peerDependencies": {
     "@capacitor/core": ">=6.0.0"

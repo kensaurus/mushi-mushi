@@ -1,6 +1,18 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import * as Sentry from '@sentry/react'
 import { supabase } from './supabase'
 import type { Session, User } from '@supabase/supabase-js'
+
+// Attach the Supabase user id (UUID — not PII) to every Sentry event so we can
+// answer "which user hit this?" without scanning replays. Email is intentionally
+// omitted to stay consistent with `sendDefaultPii: false`.
+function syncSentryUser(session: Session | null): void {
+  if (session?.user?.id) {
+    Sentry.setUser({ id: session.user.id })
+  } else {
+    Sentry.setUser(null)
+  }
+}
 
 interface AuthContextValue {
   session: Session | null
@@ -40,11 +52,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
+      syncSentryUser(session)
       setLoading(false)
     }).catch(() => setLoading(false))
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
+      syncSentryUser(session)
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true)
       }
@@ -87,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut()
     setSession(null)
+    syncSentryUser(null)
     setIsPasswordRecovery(false)
   }
 

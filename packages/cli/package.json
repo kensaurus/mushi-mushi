@@ -1,8 +1,8 @@
 {
   "name": "@mushi-mushi/cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
-  "description": "CLI tool for Mushi Mushi — project management, report triage, pipeline health",
+  "description": "CLI for Mushi Mushi — `mushi init` wizard installs the right SDK for your framework, plus report triage and pipeline health commands",
   "bin": {
     "mushi": "./dist/index.js"
   },
@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@clack/prompts": "^0.11.0",
     "commander": "^14.0.3"
   },
   "devDependencies": {
@@ -45,17 +46,43 @@
   "keywords": [
     "mushi-mushi",
     "bug-reporting",
-    "sdk"
+    "user-feedback",
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sdk",
+    "wizard",
+    "setup",
+    "cli",
+    "init",
+    "next.js",
+    "nextjs",
+    "react",
+    "vue",
+    "nuxt",
+    "svelte",
+    "sveltekit",
+    "angular",
+    "react-native",
+    "expo",
+    "capacitor",
+    "sentry-companion",
+    "error-tracking"
   ],
   "exports": {
     ".": {
+      "import": "./dist/index.js"
+    },
+    "./init": {
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
+        "types": "./dist/init.d.ts",
+        "default": "./dist/init.js"
+      }
+    },
+    "./detect": {
+      "import": {
+        "types": "./dist/detect.d.ts",
+        "default": "./dist/detect.js"
       }
     }
   },

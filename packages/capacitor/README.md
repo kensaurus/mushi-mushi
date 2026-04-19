@@ -3,6 +3,10 @@
 Capacitor plugin for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
+> **One-command setup:** `npx mushi-mushi` auto-detects Capacitor and installs this package.
+>
+> **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
+
 > **Status**: V0.2.0 (Wave C C4). Surface stable; minor changes still possible
 > before V1.0.
 

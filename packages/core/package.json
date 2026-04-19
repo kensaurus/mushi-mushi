@@ -34,12 +34,19 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "keywords": [
+    "mushi-mushi",
     "bug-reporting",
-    "sdk",
     "user-feedback",
-    "friction",
+    "sdk",
+    "core",
     "types",
-    "api-client"
+    "api-client",
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage"
   ],
   "publishConfig": {
     "access": "public"
