@@ -49,6 +49,18 @@
   "keywords": [
     "mushi-mushi",
     "bug-reporting",
+    "user-feedback",
+    "vue",
+    "vue3",
+    "nuxt",
+    "plugin",
+    "composables",
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage",
     "sdk"
   ],
   "exports": {

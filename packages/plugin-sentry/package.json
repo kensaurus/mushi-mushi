@@ -50,9 +50,12 @@
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
-    "plugin",
     "sentry",
+    "sentry-companion",
+    "plugin",
     "error-tracking",
-    "observability"
+    "observability",
+    "bug-reporting",
+    "integration"
   ]
 }

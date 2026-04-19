@@ -106,7 +106,20 @@ Mushi Mushi is the missing layer. Drop a small SDK into your app — users press
 ## Quick start
 
 ```bash
-npm install @mushi-mushi/react
+npx mushi-mushi
+```
+
+The wizard auto-detects your framework (Next.js / Nuxt / SvelteKit / Angular / Expo / Capacitor / plain React, Vue, Svelte / vanilla JS), installs the right SDK with your package manager, writes `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` to `.env.local` (with the right framework prefix), and prints the snippet to paste in. Equivalent commands:
+
+```bash
+npm create mushi-mushi              # via the npm-create convention
+npx @mushi-mushi/cli init           # if you prefer the scoped name
+```
+
+Skip the wizard and install directly if you already know which SDK you want:
+
+```bash
+npm install @mushi-mushi/react      # also covers Next.js
 ```
 
 ```tsx
@@ -206,6 +219,8 @@ Released today: `v0.8.0`. Next: `v1.0.0` — see [HANDOVER.md](./HANDOVER.md) fo
 
 **Admin console overhaul (Apr 2026):** every analytical page now shares the same `charts.tsx` primitives (`KpiTile`, `LineSparkline`, `SeverityStackedBars`, `Histogram`, `StatusPill`, `HealthPill`). Knowledge graph is a real React Flow canvas with cluster layout + side-panel. Judge has live KPIs, distribution histogram and a prompt leaderboard. NL Query has persistent per-user history and sanitised SQL output. Fixes shows a per-attempt Git branch graph plus a 30-day KPI summary. Queue (formerly DLQ) gets pagination, throughput sparkline and stage breakdown. Fine-Tuning was retired in favour of **Prompt Lab** (A/B traffic, dataset preview, clone/activate/delete) — `/fine-tuning` redirects there. Bug Intelligence runs **async** through `intelligence_generation_jobs` so the page no longer hangs on slow LLM calls. Cross-cutting: global `useToast`, StrictMode-safe `usePageData`, paused polling on hidden tabs, and an `IntegrationHealthDot` that reflects real `/v1/admin/health/history` status.
 
+**PDCA cockpit reframing (Apr 2026):** the 23-page admin console is now organised around the Plan → Do → Check → Act loop the README sells, not the previous `Overview / Pipeline / Operations / Configuration` jargon. The sidebar groups every page under its PDCA stage (`Layout.tsx`); the dashboard prepends a 4-tile `PdcaCockpit` with a single living number per stage, a coloured ring on the current bottleneck, and one-click drill-into-stage. The empty dashboard now reads as a 3-step PDCA first-run script. Reports list got a 4 px severity stripe, a `+N similar` dedup badge, and a single primary action per row (`Triage →` or `Dispatch fix →`). Knowledge graph auto-switches to a Sankey-style storyboard when fewer than 12 nodes exist. Judge surfaces report summaries instead of hashes plus column tooltips. Anti-Gaming aggregates identical events by `(reason, fingerprint, ip)`. `PageHelp` defaults open on first visit per page and persists user dismissal in `localStorage`. See [`apps/admin/README.md`](./apps/admin/README.md#information-architecture-pdca-loop) for the new IA + composition.
+
 ### Honest status — what works, what's still partial
 
 | Area                 | Working                                                                                             | Still partial                                                  |
@@ -268,22 +283,26 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 
 ## Packages
 
-> Most developers only install **one** SDK package — it pulls in `core` and `web` automatically.
+> Most developers only install **one** SDK package — `npx mushi-mushi` picks the right one for you and pulls in `core` and `web` automatically.
 
 | Install                            | Framework               | What you get                                                                              |
 | ---------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| `npx mushi-mushi`                  | **Any** (auto-detects)  | One-command wizard — installs the right SDK, writes env vars, prints the snippet          |
 | `npm i @mushi-mushi/react`         | React / Next.js         | `<MushiProvider>`, `useMushi()`, `<MushiErrorBoundary>` — drop-in for any React app       |
 | `npm i @mushi-mushi/vue`           | Vue 3 / Nuxt            | `MushiPlugin`, `useMushi()` composable, error handler (pair with `web` for the widget UI) |
 | `npm i @mushi-mushi/svelte`        | Svelte / SvelteKit      | `initMushi()`, SvelteKit error hook (pair with `web` for the widget UI)                   |
 | `npm i @mushi-mushi/angular`       | Angular 17+             | `provideMushi()`, `MushiService`, error handler (pair with `web` for the widget UI)       |
 | `npm i @mushi-mushi/react-native`  | React Native / Expo     | Shake-to-report, bottom-sheet widget, navigation capture, offline queue                   |
+| `npm i @mushi-mushi/capacitor`     | Capacitor / Ionic       | iOS + Android via Capacitor — shake-to-report, screenshot, offline queue                  |
 | `npm i @mushi-mushi/web`           | Vanilla / any framework | Framework-agnostic SDK — Shadow-DOM widget, screenshot, console + network capture         |
 
+[![mushi-mushi](https://img.shields.io/npm/v/mushi-mushi?label=mushi-mushi%20(launcher)&color=cb3837)](https://www.npmjs.com/package/mushi-mushi)
 [![@mushi-mushi/react](https://img.shields.io/npm/v/@mushi-mushi/react?label=react&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![@mushi-mushi/vue](https://img.shields.io/npm/v/@mushi-mushi/vue?label=vue&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/vue)
 [![@mushi-mushi/svelte](https://img.shields.io/npm/v/@mushi-mushi/svelte?label=svelte&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/svelte)
 [![@mushi-mushi/angular](https://img.shields.io/npm/v/@mushi-mushi/angular?label=angular&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/angular)
 [![@mushi-mushi/react-native](https://img.shields.io/npm/v/@mushi-mushi/react-native?label=react-native&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react-native)
+[![@mushi-mushi/capacitor](https://img.shields.io/npm/v/@mushi-mushi/capacitor?label=capacitor&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/capacitor)
 [![@mushi-mushi/web](https://img.shields.io/npm/v/@mushi-mushi/web?label=web&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/web)
 [![@mushi-mushi/cli](https://img.shields.io/npm/v/@mushi-mushi/cli?label=cli&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/cli)
 [![@mushi-mushi/mcp](https://img.shields.io/npm/v/@mushi-mushi/mcp?label=mcp&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp)
