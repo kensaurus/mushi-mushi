@@ -61,7 +61,7 @@ const stripeFetch = async <T>(
     headers: {
       Authorization: `Bearer ${cfg.secretKey}`,
       'Content-Type': 'application/x-www-form-urlencoded',
-      'Stripe-Version': '2025-08-27.acacia',
+      'Stripe-Version': '2025-08-27.basil',
     },
     body: init.body?.toString(),
   })

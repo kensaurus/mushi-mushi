@@ -292,7 +292,7 @@ const handler = async (req: Request): Promise<Response> => {
   return Response.json({ ok: true, event_id: event.id })
 }
 
-Deno.serve(withSentry(handler, { name: 'stripe-webhooks' }))
+Deno.serve(withSentry('stripe-webhooks', handler))
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
