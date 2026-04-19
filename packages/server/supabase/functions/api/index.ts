@@ -30,6 +30,8 @@ import {
   type CheckoutLineItem,
 } from '../_shared/stripe.ts'
 import { getPlan, listPlans } from '../_shared/plans.ts'
+import { notifyOperator } from '../_shared/operator-notify.ts'
+import { SUPPORT_EMAIL, SUPPORT_URL } from '../_shared/support.ts'
 
 ensureSentry('api')
 
@@ -6350,6 +6352,208 @@ app.get('/v1/admin/billing/invoices', jwtAuth, async (c) => {
       error: { code: 'STRIPE_ERROR', message: err instanceof Error ? err.message : 'unknown' },
     }, 502)
   }
+})
+
+// ============================================================
+// Support inbox (Wave 4.3)
+//
+// Goals:
+//   - Give paid customers a one-click "Talk to a human" channel from the
+//     admin console — no third-party support tool to integrate yet.
+//   - Operator gets a Slack/Discord push within seconds.
+//   - Searchable history per project (the audit log + `support_tickets`).
+//   - Cheap abuse defence: max 5 tickets/hour/user.
+//
+// Why a single payload-light endpoint vs an inbox UI? You ship faster, the
+// operator learns more from the first 10 customer conversations, and
+// adding categorised triage later (priority, owner, SLA) is one PR away.
+// ============================================================
+
+// Public-ish lookup: surface the support address so the marketing /admin
+// surfaces don't hardcode it. Auth-gated so we don't leak the SUPPORT_EMAIL
+// override that self-hosters set to a private inbox.
+app.get('/v1/admin/support/info', jwtAuth, (c) => {
+  return c.json({
+    ok: true,
+    data: {
+      email: SUPPORT_EMAIL,
+      url: SUPPORT_URL,
+      // Indicates whether operator notifications are wired up. Self-hosters
+      // who haven't set the webhook see a "delivered to email only" hint
+      // in the UI instead of an unconditional "we'll Slack you" promise.
+      operator_notifications_enabled: Boolean(
+        Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL')
+        ?? Deno.env.get('OPERATOR_DISCORD_WEBHOOK_URL'),
+      ),
+    },
+  })
+})
+
+const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const
+type SupportCategory = typeof SUPPORT_CATEGORIES[number]
+
+interface ContactBody {
+  project_id?: string | null
+  subject?: string
+  body?: string
+  category?: string
+}
+
+const RATE_LIMIT_PER_HOUR = 5
+
+app.post('/v1/support/contact', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const userEmail = (c.get('userEmail') as string | undefined) ?? ''
+  if (!userEmail) {
+    return c.json({ ok: false, error: { code: 'EMAIL_REQUIRED' } }, 400)
+  }
+
+  const body = await c.req.json().catch(() => null) as ContactBody | null
+  if (!body) return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+
+  const subject = (body.subject ?? '').trim()
+  const message = (body.body ?? '').trim()
+  if (subject.length < 3 || subject.length > 200) {
+    return c.json({ ok: false, error: { code: 'BAD_SUBJECT', message: 'Subject must be 3-200 chars.' } }, 400)
+  }
+  if (message.length < 10 || message.length > 5000) {
+    return c.json({ ok: false, error: { code: 'BAD_BODY', message: 'Body must be 10-5000 chars.' } }, 400)
+  }
+  const category: SupportCategory =
+    SUPPORT_CATEGORIES.includes(body.category as SupportCategory)
+      ? body.category as SupportCategory
+      : 'other'
+
+  const db = getServiceClient()
+
+  // Project ownership check (when project_id is supplied).
+  let projectName: string | null = null
+  let planId: string | null = null
+  if (body.project_id) {
+    const owned = await ownedProjectIds(db, userId)
+    if (!owned.includes(body.project_id)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+    }
+    const { data: project } = await db
+      .from('projects')
+      .select('name')
+      .eq('id', body.project_id)
+      .maybeSingle()
+    projectName = project?.name ?? null
+
+    const { data: sub } = await db
+      .from('billing_subscriptions')
+      .select('plan_id, status')
+      .eq('project_id', body.project_id)
+      .maybeSingle()
+    if (sub?.status === 'active' || sub?.status === 'trialing' || sub?.status === 'past_due') {
+      planId = sub.plan_id ?? null
+    }
+  }
+
+  // Cheap rate limit. Counts COMPLETED inserts in the last 60 minutes.
+  // Race-prone (two concurrent submits could both pass) but the worst case
+  // is one extra ticket — acceptable for now.
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { count } = await db
+    .from('support_tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', oneHourAgo)
+  if ((count ?? 0) >= RATE_LIMIT_PER_HOUR) {
+    return c.json({
+      ok: false,
+      error: { code: 'RATE_LIMITED', message: `Limit is ${RATE_LIMIT_PER_HOUR} tickets/hour. Email ${SUPPORT_EMAIL} for urgent issues.` },
+    }, 429)
+  }
+
+  const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null
+  const userAgent = c.req.header('user-agent')?.slice(0, 500) ?? null
+
+  const { data: ticket, error: insertErr } = await db
+    .from('support_tickets')
+    .insert({
+      project_id: body.project_id ?? null,
+      user_id: userId,
+      user_email: userEmail,
+      subject,
+      body: message,
+      category,
+      plan_id: planId,
+      ip_address: ipAddress,
+      user_agent: userAgent,
+    })
+    .select('id, created_at')
+    .single()
+
+  if (insertErr || !ticket) {
+    log.error('support_ticket_insert_failed', { err: insertErr?.message })
+    return c.json({ ok: false, error: { code: 'DB_ERROR' } }, 500)
+  }
+
+  // audit_logs is per-project (FK). Tickets without a project are still
+  // captured in `support_tickets` itself — no need to fabricate a
+  // placeholder project_id just to satisfy the audit row.
+  if (body.project_id) {
+    await logAudit(db, body.project_id, userId, 'support.ticket_created', 'support_ticket', ticket.id, {
+      category,
+      plan_id: planId,
+      subject,
+    }, { email: userEmail, ip: ipAddress ?? undefined, userAgent: userAgent ?? undefined })
+  }
+
+  // Best-effort operator notification. We DO await it (rather than fire-
+  // and-forget) so we can stamp `notified_at` to support a backfill cron
+  // for self-hosters who set the webhook later.
+  const sentCount = await notifyOperator({
+    title: planId ? `Paid customer support ticket (${planId})` : 'Support ticket',
+    body: `*${subject}*\n\n${message.slice(0, 800)}${message.length > 800 ? '\n…[truncated]' : ''}`,
+    level: planId ? 'urgent' : 'warn',
+    fields: [
+      { label: 'From', value: userEmail },
+      { label: 'Category', value: category },
+      { label: 'Project', value: projectName ?? (body.project_id ? body.project_id.slice(0, 8) : 'no project') },
+      { label: 'Plan', value: planId ?? 'free' },
+    ],
+    footer: `ticket: ${ticket.id}`,
+  })
+  if (sentCount > 0) {
+    await db
+      .from('support_tickets')
+      .update({ notified_at: new Date().toISOString() })
+      .eq('id', ticket.id)
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      ticket_id: ticket.id,
+      created_at: ticket.created_at,
+      delivered_to_operator: sentCount > 0,
+      support_email: SUPPORT_EMAIL,
+    },
+  })
+})
+
+// List the caller's own tickets (across all projects they own). Used by
+// the BillingPage history section so paid users can see which questions
+// are still open.
+app.get('/v1/admin/support/tickets', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20')))
+
+  const { data, error } = await db
+    .from('support_tickets')
+    .select('id, project_id, subject, category, status, plan_id, created_at, updated_at, resolved_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  }
+  return c.json({ ok: true, data: { tickets: data ?? [] } })
 })
 
 Deno.serve(app.fetch)

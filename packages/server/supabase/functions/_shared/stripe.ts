@@ -132,6 +132,7 @@ export const createCheckoutSession = (
   cfg: StripeConfig,
   args: CreateCheckoutSessionArgs,
 ): Promise<CheckoutSession> => {
+  const supportEmail = (Deno.env.get('SUPPORT_EMAIL') ?? '').trim() || 'support@mushimushi.dev'
   const body = form({
     mode: 'subscription',
     customer: args.customer,
@@ -146,6 +147,13 @@ export const createCheckoutSession = (
     payment_method_collection: 'always',
     allow_promotion_codes: 'true',
     billing_address_collection: 'auto',
+    // Surface the support address on the Checkout page so prospects know
+    // where to ask questions BEFORE they hand over their card. Stripe caps
+    // each entry at 1000 chars; a short tagline is plenty.
+    'custom_text[submit][message]':
+      `Need a hand? Email ${supportEmail} — we reply within one business day.`,
+    'custom_text[after_submit][message]':
+      `Receipt + login link will arrive at the email you entered. Questions? ${supportEmail}`,
   })
   args.lineItems.forEach((item, i) => {
     body.set(`line_items[${i}][price]`, item.price)

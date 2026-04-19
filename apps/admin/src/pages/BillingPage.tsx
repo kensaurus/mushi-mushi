@@ -17,11 +17,12 @@
  *          Stripe-hosted URLs we redirect to.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   PageHeader,
   PageHelp,
@@ -32,6 +33,9 @@ import {
   ErrorAlert,
   EmptyState,
   RelativeTime,
+  Input,
+  Textarea,
+  SelectField,
 } from '../components/ui'
 
 interface PlanCatalog {
@@ -236,6 +240,8 @@ export function BillingPage() {
           ))}
         </div>
       )}
+
+      <SupportSection projects={projects} />
     </div>
   )
 }
@@ -539,6 +545,225 @@ function InvoicesSection({ projectId, hasCustomer }: InvoicesSectionProps) {
           ))}
         </tbody>
       </table>
+    </section>
+  )
+}
+
+// ============================================================
+// Support contact (Wave 4.3)
+//
+// Lives inside Billing because that's where paid customers go when
+// something is wrong with their account. Future versions will surface this
+// elsewhere (header HelpMenu, command palette) — but starting from one
+// well-known location is the right v1.
+// ============================================================
+
+interface SupportInfo {
+  email: string
+  url: string
+  operator_notifications_enabled: boolean
+}
+
+interface SupportTicket {
+  id: string
+  project_id: string | null
+  subject: string
+  category: string
+  status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  plan_id: string | null
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}
+
+const TICKET_STATUS_TONE: Record<SupportTicket['status'], string> = {
+  open: 'bg-warn/10 text-warn',
+  in_progress: 'bg-brand-subtle text-brand',
+  resolved: 'bg-ok-muted text-ok',
+  closed: 'bg-surface-overlay text-fg-muted',
+}
+
+function SupportSection({ projects }: { projects: BillingProject[] }) {
+  const infoQuery = usePageData<SupportInfo>('/v1/admin/support/info')
+  const ticketsQuery = usePageData<{ tickets: SupportTicket[] }>('/v1/admin/support/tickets?limit=10')
+  const info = infoQuery.data
+  const tickets = ticketsQuery.data?.tickets ?? []
+  const [composing, setComposing] = useState(false)
+
+  if (infoQuery.loading) return null
+  if (!info) return null
+
+  return (
+    <Card className="p-3 space-y-3">
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-fg">Need help?</h3>
+          <p className="text-2xs text-fg-muted mt-0.5">
+            Direct line to a human. We reply within one business day for paid plans, two for free.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <a
+            href={`mailto:${info.email}?subject=${encodeURIComponent('[Mushi Mushi support]')}`}
+            className="text-2xs text-brand hover:text-brand-hover font-mono"
+          >
+            {info.email}
+          </a>
+          <Btn size="sm" onClick={() => setComposing((v) => !v)}>
+            {composing ? 'Cancel' : 'Open ticket'}
+          </Btn>
+        </div>
+      </header>
+
+      {composing && (
+        <SupportComposer
+          projects={projects}
+          supportEmail={info.email}
+          onSubmitted={() => {
+            setComposing(false)
+            ticketsQuery.reload()
+          }}
+        />
+      )}
+
+      {tickets.length > 0 && <TicketHistory tickets={tickets} projects={projects} />}
+    </Card>
+  )
+}
+
+interface ComposerProps {
+  projects: BillingProject[]
+  supportEmail: string
+  onSubmitted: () => void
+}
+
+function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps) {
+  const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const initialProjectId = useMemo(() => {
+    if (activeProjectId && projects.some((p) => p.project_id === activeProjectId)) {
+      return activeProjectId
+    }
+    return projects[0]?.project_id ?? ''
+  }, [activeProjectId, projects])
+
+  const [projectId, setProjectId] = useState(initialProjectId)
+  const [category, setCategory] = useState('billing')
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    const res = await apiFetch<{ ticket_id: string; delivered_to_operator: boolean }>(
+      '/v1/support/contact',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          project_id: projectId || null,
+          subject: subject.trim(),
+          body: body.trim(),
+          category,
+        }),
+      },
+    )
+    setSubmitting(false)
+    if (!res.ok) {
+      if (res.error?.code === 'RATE_LIMITED') {
+        toast.error('Slow down', `${res.error.message} Or email ${supportEmail} directly.`)
+      } else {
+        toast.error('Could not send', res.error?.message)
+      }
+      return
+    }
+    toast.success(
+      'Ticket received',
+      res.data?.delivered_to_operator
+        ? 'A human is on it. Reply will land in your inbox.'
+        : `Saved. Email ${supportEmail} for urgent issues.`,
+    )
+    setSubject('')
+    setBody('')
+    onSubmitted()
+  }, [projectId, subject, body, category, supportEmail, toast, onSubmitted])
+
+  return (
+    <form onSubmit={handleSubmit} className="border border-edge-subtle rounded-md p-3 bg-surface-subtle space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <SelectField
+          label="Project (optional)"
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+        >
+          <option value="">No specific project</option>
+          {projects.map((p) => (
+            <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
+          <option value="billing">Billing</option>
+          <option value="bug">Bug</option>
+          <option value="feature">Feature request</option>
+          <option value="other">Other</option>
+        </SelectField>
+      </div>
+      <Input
+        label="Subject"
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+        placeholder="One-line summary"
+        required
+        minLength={3}
+        maxLength={200}
+      />
+      <Textarea
+        label="What's going on?"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={5}
+        placeholder="Steps to reproduce, what you expected vs. what happened, project ID if relevant…"
+        required
+        minLength={10}
+        maxLength={5000}
+      />
+      <div className="flex items-center justify-between">
+        <p className="text-2xs text-fg-faint">
+          Sent to <span className="font-mono">{supportEmail}</span>. Don't include passwords or API keys.
+        </p>
+        <Btn type="submit" size="sm" disabled={submitting || subject.length < 3 || body.length < 10}>
+          {submitting ? 'Sending…' : 'Send ticket'}
+        </Btn>
+      </div>
+    </form>
+  )
+}
+
+function TicketHistory({ tickets, projects }: { tickets: SupportTicket[]; projects: BillingProject[] }) {
+  const projectName = useCallback(
+    (id: string | null) => projects.find((p) => p.project_id === id)?.project_name ?? '—',
+    [projects],
+  )
+  return (
+    <section className="border-t border-edge-subtle pt-2">
+      <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Recent tickets</h4>
+      <ul className="divide-y divide-edge-subtle">
+        {tickets.map((t) => (
+          <li key={t.id} className="py-1.5 flex items-center justify-between gap-2 text-2xs">
+            <div className="min-w-0 flex-1">
+              <p className="text-fg truncate font-medium">{t.subject}</p>
+              <p className="text-fg-faint">
+                {projectName(t.project_id)} · {t.category} · <RelativeTime value={t.created_at} />
+              </p>
+            </div>
+            <Badge className={TICKET_STATUS_TONE[t.status]}>{t.status.replace('_', ' ')}</Badge>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }
