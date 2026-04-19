@@ -47,6 +47,16 @@
   "keywords": [
     "mushi-mushi",
     "bug-reporting",
+    "user-feedback",
+    "angular",
+    "ngmodule",
+    "error-handler",
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage",
     "sdk"
   ],
   "exports": {

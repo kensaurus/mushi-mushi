@@ -6,6 +6,8 @@
 
 import { LocalNoopSandboxProvider } from './local-noop.js'
 import { createE2BProvider } from './e2b.js'
+import { createModalProvider } from './modal.js'
+import { createCloudflareProvider } from './cloudflare.js'
 import { SandboxError, type SandboxProvider } from './types.js'
 
 export type SandboxProviderName = SandboxProvider['name']
@@ -32,15 +34,22 @@ export function resolveSandboxProvider(opts: ResolveProviderOptions): SandboxPro
   if (opts.name === 'e2b') {
     return createE2BProvider({ apiKey: opts.apiKey })
   }
-  // Modal / Cloudflare adapters land in Wave A patch releases; refuse early.
+  if (opts.name === 'modal') {
+    return createModalProvider({ apiKey: opts.apiKey })
+  }
+  if (opts.name === 'cloudflare') {
+    return createCloudflareProvider({ apiKey: opts.apiKey })
+  }
   throw new SandboxError(
-    `Sandbox provider "${opts.name}" not yet implemented (V5.3 §2.10 ships e2b + local-noop in M6)`,
+    `Sandbox provider "${opts.name}" not recognised`,
     'PROVIDER_UNAVAILABLE',
   )
 }
 
 export { LocalNoopSandboxProvider } from './local-noop.js'
 export { createE2BProvider } from './e2b.js'
+export { createModalProvider } from './modal.js'
+export { createCloudflareProvider } from './cloudflare.js'
 export { buildSandboxConfig } from './policy.js'
 export type { BuildSandboxConfigOptions } from './policy.js'
 export {

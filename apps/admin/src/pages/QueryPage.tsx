@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { apiFetch } from '../lib/supabase'
+import { usePageData } from '../lib/usePageData'
 import {
   PageHeader,
   PageHelp,
@@ -113,23 +114,15 @@ export function QueryPage() {
   const toast = useToast()
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
-  const [history, setHistory] = useState<HistoryRow[]>([])
-  const [historyLoading, setHistoryLoading] = useState(true)
   const [runs, setRuns] = useState<RunItem[]>([])
 
-  const loadHistory = useCallback(() => {
-    setHistoryLoading(true)
-    apiFetch<{ history: HistoryRow[] }>('/v1/admin/query/history?limit=25')
-      .then((res) => {
-        if (res.ok) setHistory(res.data?.history ?? [])
-      })
-      .catch(() => {/* noop */})
-      .finally(() => setHistoryLoading(false))
-  }, [])
-
-  useEffect(() => {
-    loadHistory()
-  }, [loadHistory])
+  const {
+    data: historyData,
+    loading: historyLoading,
+    reload: loadHistory,
+    error: historyError,
+  } = usePageData<{ history: HistoryRow[] }>('/v1/admin/query/history?limit=25')
+  const history = historyData?.history ?? []
 
   async function handleSubmit(q?: string) {
     const queryText = (q ?? question).trim()
@@ -162,8 +155,8 @@ export function QueryPage() {
   async function deleteHistory(id: string) {
     const res = await apiFetch(`/v1/admin/query/history/${id}`, { method: 'DELETE' })
     if (res.ok) {
-      setHistory((prev) => prev.filter((h) => h.id !== id))
       toast.success('Query removed from history')
+      loadHistory()
     } else {
       toast.error('Failed to delete', res.error?.message)
     }
@@ -274,6 +267,8 @@ export function QueryPage() {
         <Section title="History" className="self-start">
           {historyLoading ? (
             <Loading text="Loading…" />
+          ) : historyError ? (
+            <p className="text-xs text-danger">Could not load history: {historyError}</p>
           ) : history.length === 0 ? (
             <p className="text-xs text-fg-muted">No queries yet.</p>
           ) : (

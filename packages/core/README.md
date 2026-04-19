@@ -2,6 +2,8 @@
 
 Core types, API client, and utilities for the Mushi Mushi SDK.
 
+> **You almost certainly don't need to install this directly.** Run `npx mushi-mushi` and the wizard will pick the right framework SDK ([`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react), [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue), [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte), [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular), [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native), [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor), or [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web)) which depends on this package.
+
 ## What's Inside
 
 - **Types**: `MushiConfig`, `MushiReport`, `MushiEnvironment`, and all shared interfaces

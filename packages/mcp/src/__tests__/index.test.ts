@@ -21,10 +21,10 @@ const mockConnect = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(class {
-    tool = vi.fn((name: string, description: string, _schema: any, handler: Function) => {
+    tool = vi.fn((name: string, description: string, _schema: unknown, handler: Function) => {
       registeredTools.set(name, { description, handler })
     })
-    resource = vi.fn((_name: string, uri: string, _opts: any, handler: Function) => {
+    resource = vi.fn((_name: string, uri: string, _opts: unknown, handler: Function) => {
       registeredResources.set(uri, { handler })
     })
     connect = mockConnect
@@ -58,7 +58,7 @@ const EXPECTED_TOOLS = [
 const originalExit = process.exit
 
 beforeAll(async () => {
-  process.exit = vi.fn() as any
+  process.exit = vi.fn() as unknown as typeof process.exit
   process.env.MUSHI_API_KEY = 'test-key'
   process.env.MUSHI_PROJECT_ID = 'test-project'
   await import('../../src/index')

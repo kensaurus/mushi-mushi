@@ -6,19 +6,22 @@ Backend for Mushi Mushi — Supabase Edge Functions powering the LLM pipeline, k
 
 ```
 supabase/functions/
-  api/                  Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins)
-  fast-filter/          Stage 1 — Haiku extracts key facts, blocks spam (prompt-cached)
-  classify-report/      Stage 2 — Sonnet deep analysis with vision + RAG (prompt-cached)
-  judge-batch/          Nightly LLM quality scoring + prompt A/B auto-promotion
-  intelligence-report/  Automated weekly summary generation
-  generate-synthetic/   Synthetic test data generator
-  stripe-webhooks/      Wave D D5 — handles Stripe subscription + invoice events
-  usage-aggregator/     Wave D D5 — hourly cron pushing usage_events to Stripe Meter Events
-  _shared/              Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
-                        telemetry, plugins, sanitize, stripe, byok, region, age-graph, ...)
+  api/                       Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins, SSO, integrations)
+  fast-filter/               Stage 1 — Haiku extracts key facts and a structured evidence object, blocks spam (prompt-cached)
+  classify-report/           Stage 2 — Sonnet deep analysis with vision + RAG. AIR-GAPPED: only consumes Stage 1's structured evidence, never raw user strings (prompt-cached)
+  judge-batch/               Nightly LLM quality scoring + prompt A/B auto-promotion
+  intelligence-report/       Automated weekly summary generation
+  generate-synthetic/        Synthetic test data generator
+  stripe-webhooks/           Wave D D5 — handles Stripe subscription + invoice events
+  usage-aggregator/          Wave D D5 — hourly cron pushing usage_events to Stripe Meter Events
+  webhooks-github-indexer/   GitHub App webhook → codebase RAG indexer; `?mode=sweep` reindexes all installed repos for cron use
+  sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
+  fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests)
+  _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
+                             telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit, ...)
 
-supabase/templates/     Branded HTML email templates (confirmation, recovery)
-supabase/migrations/    PostgreSQL schema + RLS policies (latest: billing, multi_repo_fixes)
+supabase/templates/          Branded HTML email templates (confirmation, recovery)
+supabase/migrations/         PostgreSQL schema + RLS policies (latest: SSO state, plugin marketplace alias view security_invoker, search_path hardening)
 ```
 
 ## Development
@@ -78,19 +81,36 @@ Set these as Supabase secrets:
 
 All routes are served from the `api` function under `/v1/`:
 
-- `POST /v1/reports` — SDK report submission
-- `POST /v1/reports/batch` — Batch report submission (up to 10)
-- `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console
+- `POST /v1/reports` — SDK report submission. Returns **HTTP 402** + `{ code: 'QUOTA_EXCEEDED', limit, used }` when the project's free-tier monthly quota is hit (`_shared/quota.ts`); paid plans bypass via Stripe metered billing
+- `POST /v1/reports/batch` — Batch report submission (up to 10), same quota gate
+- `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console. Each returned row carries a `dedup_count` (number of reports sharing the same `report_group_id`) so the admin UI can collapse duplicates into a `+N similar` badge without an N+1 fetch
 - `GET /v1/admin/stats` — Dashboard statistics
+- `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, and a `cta` deep-link) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
+- `GET /v1/admin/judge/evaluations` — Hydrates each row with the underlying report's `summary`, `severity`, and `status` so judge UIs can show human-readable summaries instead of opaque `report_id` hashes
 - `GET /v1/admin/graph/*` — Knowledge graph queries
 - `POST /v1/admin/query` — Natural language data queries
 - `GET/PATCH /v1/admin/settings` — Project configuration
-- `GET /v1/admin/billing` — Current customer + subscription + recent usage (Wave D D5)
-- `POST /v1/admin/billing/checkout` — Start a Stripe Checkout session (Wave D D5)
-- `POST /v1/admin/billing/portal` — Open the Stripe Billing Portal (Wave D D5)
+- `GET /v1/admin/billing` — Per-project plan, monthly usage, free-tier quota, `over_quota` flag
+- `GET /v1/admin/billing/invoices` — Recent Stripe invoices for the project's customer (`stripe.listInvoices`)
+- `POST /v1/admin/billing/checkout` — Start a Stripe Checkout session
+- `POST /v1/admin/billing/portal` — Open the Stripe Billing Portal
+- `POST /v1/admin/queue/flush-queued` — Force-process reports stuck in `status='queued'` (kicks `fast-filter` for each)
+- `GET | POST | DELETE /v1/admin/integrations[/:type]` — Integration credentials CRUD. `GET` masks secrets; `POST` merges with existing masked values so partial updates don't drop tokens
+- `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD (Wave D D1)
 - `GET /.well-known/agent-card` — A2A agent card (Wave C C5)
 - See `supabase/functions/api/index.ts` for the full route table
+
+## Stage 2 air-gap (Wave D — 2026-04-18)
+
+Stage 2 (`classify-report`) **never receives raw user-supplied strings**. The
+contract is enforced at the boundary: `fast-filter` produces a typed
+`Stage1Evidence` object — title, normalised symptom buckets, suspected
+component, severity hint, list of console-error frames (no payloads), list of
+network failures (no bodies), reproducer steps. `classify-report` consumes only
+that object plus the screenshot. Raw `description`, `userIntent`, console /
+network bodies stay in the DB but never enter Stage 2 prompts. This closes the
+prompt-injection / data-exfiltration vector raised in `MushiMushi_Critical_Analysis.md`.
 
 ## Security: prompt-injection defense (Wave D D8)
 

@@ -1,6 +1,8 @@
 import { Command } from 'commander'
 import { loadConfig, saveConfig } from './config.js'
 import type { CliConfig } from './config.js'
+import { runInit } from './init.js'
+import type { FrameworkId } from './detect.js'
 
 async function apiCall(path: string, config: CliConfig, options: RequestInit = {}): Promise<unknown> {
   const endpoint = config.endpoint ?? 'https://api.mushimushi.dev'
@@ -19,8 +21,32 @@ async function apiCall(path: string, config: CliConfig, options: RequestInit = {
 
 const program = new Command()
   .name('mushi')
-  .description('Mushi Mushi CLI — manage bug reports and pipeline')
-  .version('0.0.1')
+  .description('Mushi Mushi CLI — set up the SDK, manage bug reports, monitor pipeline')
+  .version('0.3.0')
+
+program
+  .command('init')
+  .description('Set up the Mushi Mushi SDK in this project (auto-detects framework)')
+  .option('--project-id <id>', 'Skip the prompt by passing the project ID')
+  .option('--api-key <key>', 'Skip the prompt by passing the API key')
+  .option('--framework <id>', 'Force a framework (next, react, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, vanilla)')
+  .option('--skip-install', 'Don\'t auto-install the SDK package — print the command instead')
+  .option('-y, --yes', 'Accept detected framework without prompting')
+  .action(async (opts: {
+    projectId?: string
+    apiKey?: string
+    framework?: FrameworkId
+    skipInstall?: boolean
+    yes?: boolean
+  }) => {
+    await runInit({
+      projectId: opts.projectId,
+      apiKey: opts.apiKey,
+      framework: opts.framework,
+      skipInstall: opts.skipInstall,
+      yes: opts.yes,
+    })
+  })
 
 program
   .command('login')

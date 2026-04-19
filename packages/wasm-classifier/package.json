@@ -34,14 +34,19 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "keywords": [
+    "mushi-mushi",
     "wasm",
     "onnx",
+    "onnxruntime-web",
+    "webgpu",
     "phi-3-mini",
     "on-device-ai",
-    "bug-reporting",
+    "edge-inference",
     "pre-classification",
+    "bug-reporting",
+    "user-feedback",
     "privacy",
-    "edge-inference"
+    "spam-filter"
   ],
   "publishConfig": {
     "access": "public"

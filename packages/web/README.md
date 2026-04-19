@@ -2,6 +2,10 @@
 
 Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM isolation.
 
+> **One-command setup:** `npx mushi-mushi` installs this package for vanilla-JS apps (or alongside the framework SDK for Vue, Svelte, Angular).
+>
+> **Framework SDKs:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) (Next.js / React) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) (Nuxt / Vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) (SvelteKit / Svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/capacitor`](https://npmjs.com/package/@mushi-mushi/capacitor)
+
 ## Features
 
 - Shadow DOM widget with full CSS isolation from host page

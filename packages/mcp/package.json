@@ -56,7 +56,15 @@
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "cursor",
+    "agentic-fix",
     "bug-reporting",
+    "ai-triage",
+    "llm",
+    "developer-tools",
     "sdk"
   ]
 }

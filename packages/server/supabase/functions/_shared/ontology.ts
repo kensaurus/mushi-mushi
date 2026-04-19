@@ -1,4 +1,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { log } from './logger.ts'
+
+const ontologyLog = log.child('ontology')
 
 export interface OntologyTag {
   tag: string
@@ -43,16 +46,38 @@ export async function applyTags(
 ): Promise<void> {
   if (!tags.length) return
 
-  await db.from('reports').update({ bug_ontology_tags: tags }).eq('id', reportId)
+  const { error: updateError } = await db
+    .from('reports')
+    .update({ bug_ontology_tags: tags })
+    .eq('id', reportId)
 
+  if (updateError) {
+    ontologyLog.warn('Failed to write ontology tags to report', { reportId, error: updateError.message })
+  }
+
+  // Supabase's PostgrestFilterBuilder is "thenable" but does NOT have a `.catch`
+  // method until awaited. Use `await` + `{ error }` instead.
   for (const tag of tags) {
-    await db.rpc('increment_ontology_usage', { p_tag: tag, p_project_id: projectId }).catch(() => {
-      // tag may not exist yet — create it
-      db.from('bug_ontology').insert({
-        project_id: projectId,
-        tag,
-        description: `Auto-created from report classification`,
-      }).then(() => {}).catch(() => {})
+    const { error: rpcError } = await db.rpc('increment_ontology_usage', {
+      p_tag: tag,
+      p_project_id: projectId,
     })
+
+    if (!rpcError) continue
+
+    const { error: insertError } = await db.from('bug_ontology').insert({
+      project_id: projectId,
+      tag,
+      description: 'Auto-created from report classification',
+    })
+
+    if (insertError) {
+      ontologyLog.warn('Failed to auto-create ontology tag', {
+        tag,
+        projectId,
+        rpcError: rpcError.message,
+        insertError: insertError.message,
+      })
+    }
   }
 }

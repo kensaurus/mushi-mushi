@@ -1,6 +1,7 @@
 import { getServiceClient } from './db.ts'
 import { createTrace } from './observability.ts'
 import { log } from './logger.ts'
+import { resolveLlmKey } from './byok.ts'
 
 const embLog = log.child('embeddings')
 
@@ -8,19 +9,61 @@ const DEFAULT_MODEL = 'text-embedding-3-small'
 const DEFAULT_DIMENSIONS = 1536
 const DEFAULT_DEDUP_THRESHOLD = 0.82
 
+export interface EmbeddingOptions {
+  model?: string
+  /**
+   * Wave E §3a: when provided, the OpenAI key is BYOK-resolved against the
+   * project's `byok_openai_key_ref`, with optional `byok_openai_base_url`
+   * for OpenRouter / OpenAI-compatible gateways. Falls back to env if not
+   * configured. Omitting projectId preserves the legacy env-only behaviour.
+   */
+  projectId?: string
+}
+
+interface ResolvedOpenAi {
+  key: string
+  baseUrl: string
+  source: 'byok' | 'env'
+}
+
+async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null> {
+  if (projectId) {
+    try {
+      const db = getServiceClient()
+      const r = await resolveLlmKey(db, projectId, 'openai')
+      if (r) {
+        return {
+          key: r.key,
+          baseUrl: r.baseUrl ?? 'https://api.openai.com',
+          source: r.source,
+        }
+      }
+    } catch (err) {
+      embLog.warn('BYOK OpenAI resolve failed; falling back to env', { projectId, err: String(err).slice(0, 120) })
+    }
+  }
+  const envKey = Deno.env.get('OPENAI_API_KEY')
+  if (!envKey) return null
+  return { key: envKey, baseUrl: 'https://api.openai.com', source: 'env' }
+}
+
 export async function createEmbedding(
   text: string,
-  model?: string,
+  modelOrOpts?: string | EmbeddingOptions,
+  legacyOpts?: EmbeddingOptions,
 ): Promise<number[]> {
-  const embeddingModel = model ?? DEFAULT_MODEL
-  const openaiKey = Deno.env.get('OPENAI_API_KEY')
-  if (!openaiKey) throw new Error('OPENAI_API_KEY not set')
+  const opts: EmbeddingOptions = typeof modelOrOpts === 'string'
+    ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
+    : { ...(modelOrOpts ?? {}) }
+  const embeddingModel = opts.model ?? DEFAULT_MODEL
+  const resolved = await resolveOpenAi(opts.projectId)
+  if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
 
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
+  const response = await fetch(`${resolved.baseUrl}/v1/embeddings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${openaiKey}`,
+      'Authorization': `Bearer ${resolved.key}`,
     },
     body: JSON.stringify({
       model: embeddingModel,
@@ -43,24 +86,32 @@ export async function createEmbedding(
 export async function generateAndStoreEmbedding(
   reportId: string,
   text: string,
-  model?: string,
+  modelOrOpts?: string | EmbeddingOptions,
+  legacyOpts?: EmbeddingOptions,
 ): Promise<void> {
-  const embeddingModel = model ?? DEFAULT_MODEL
-  const openaiKey = Deno.env.get('OPENAI_API_KEY')
-  if (!openaiKey) {
-    embLog.warn('OPENAI_API_KEY not set, skipping embedding generation')
+  const opts: EmbeddingOptions = typeof modelOrOpts === 'string'
+    ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
+    : { ...(modelOrOpts ?? {}) }
+  const embeddingModel = opts.model ?? DEFAULT_MODEL
+  const resolved = await resolveOpenAi(opts.projectId)
+  if (!resolved) {
+    embLog.warn('No OpenAI key (BYOK or env), skipping embedding generation', { reportId })
     return
   }
 
-  const trace = createTrace('embedding', { reportId, model: embeddingModel })
+  const trace = createTrace('embedding', {
+    reportId,
+    model: embeddingModel,
+    keySource: resolved.source,
+  })
   const span = trace.span('openai.embed')
 
   try {
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetch(`${resolved.baseUrl}/v1/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiKey}`,
+        'Authorization': `Bearer ${resolved.key}`,
       },
       body: JSON.stringify({
         model: embeddingModel,

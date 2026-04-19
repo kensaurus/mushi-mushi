@@ -75,6 +75,12 @@
     "mushi-mushi",
     "plugin-sdk",
     "webhooks",
-    "bug-tracking"
+    "webhook-handler",
+    "signature-verification",
+    "express",
+    "hono",
+    "bug-tracking",
+    "integrations",
+    "sdk"
   ]
 }
