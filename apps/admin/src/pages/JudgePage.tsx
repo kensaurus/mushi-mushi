@@ -13,6 +13,7 @@ import {
   Badge,
   Section,
   RelativeTime,
+  Tooltip,
 } from '../components/ui'
 import {
   KpiTile,
@@ -48,7 +49,52 @@ interface EvalRow {
   prompt_version: string | null
   created_at: string
   judge_fallback_used: boolean | null
+  report_summary: string | null
+  report_severity: string | null
+  report_status: string | null
 }
+
+/**
+ * Glossary for the judge score columns. Drives both the score-trend legend
+ * and the column-header tooltips so the same explanation appears wherever
+ * the dimension is referenced — single source of truth.
+ */
+const SCORE_DIMENSIONS = [
+  {
+    key: 'overall',
+    label: 'Overall',
+    short: 'Score',
+    description: 'Weighted average of accuracy, severity, component, and repro. Headline judge grade.',
+  },
+  {
+    key: 'accuracy',
+    label: 'Accuracy',
+    short: 'Acc',
+    description: 'Did the classifier pick the right category for what the user actually reported?',
+  },
+  {
+    key: 'severity',
+    label: 'Severity',
+    short: 'Sev',
+    description: 'Did the assigned severity (critical/high/medium/low) match real impact?',
+  },
+  {
+    key: 'component',
+    label: 'Component',
+    short: 'Comp',
+    description: "Did the classifier identify the correct affected component or page?",
+  },
+  {
+    key: 'repro',
+    label: 'Repro',
+    short: 'Repro',
+    description: 'How well does the report capture steps to reproduce — useful for the auto-fix agent?',
+  },
+] as const
+
+const DIMENSION_TOOLTIPS = Object.fromEntries(
+  SCORE_DIMENSIONS.map((d) => [d.short, d.description] as const),
+) as Record<string, string>
 
 interface PromptRow {
   id: string
@@ -68,10 +114,20 @@ interface Distribution {
   total: number
 }
 
-function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
+function ScoreBar({
+  label,
+  value,
+  color,
+  description,
+}: {
+  label: string
+  value: number
+  color: string
+  description?: string
+}) {
+  const inner = (
     <div className="flex items-center gap-2">
-      <span className="text-2xs text-fg-muted w-20">{label}</span>
+      <span className="text-2xs text-fg-muted w-20 cursor-help">{label}</span>
       <div className="flex-1 h-2 bg-surface-root rounded-full overflow-hidden">
         <div
           className="h-full rounded-full motion-safe:transition-all motion-safe:duration-500"
@@ -82,6 +138,51 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
         {(value * 100).toFixed(0)}%
       </span>
     </div>
+  )
+  if (!description) return inner
+  return <Tooltip content={description}>{inner}</Tooltip>
+}
+
+/**
+ * Compact legend that maps a dimension's color swatch to its human meaning.
+ * Renders inline next to the score-trend sparkline so first-time users can
+ * decode the colored bars without clicking around. Uses the same
+ * SCORE_DIMENSIONS source the column tooltips use.
+ */
+function ScoreTrendLegend() {
+  return (
+    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-3xs text-fg-faint">
+      {SCORE_DIMENSIONS.map((d) => (
+        <Tooltip key={d.key} content={d.description}>
+          <span className="inline-flex items-center gap-1 cursor-help">
+            <span
+              className="inline-block w-2 h-2 rounded-full"
+              style={{ backgroundColor: SCORE_COLORS[d.key] }}
+              aria-hidden="true"
+            />
+            {d.label}
+          </span>
+        </Tooltip>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Adds a help cursor + dotted underline + hover tooltip to a column-header
+ * label. Most of the recent-evaluations columns are 3-character abbreviations
+ * (Acc, Sev, Comp, Repro) so the tooltip is the only place users learn what
+ * they actually mean.
+ */
+function HeaderTip({ short, full }: { short: string; full?: string }) {
+  const description = full ?? DIMENSION_TOOLTIPS[short]
+  if (!description) return <>{short}</>
+  return (
+    <Tooltip content={description}>
+      <span className="cursor-help underline decoration-dotted decoration-fg-faint/40 underline-offset-2">
+        {short}
+      </span>
+    </Tooltip>
   )
 }
 
@@ -212,13 +313,41 @@ export function JudgePage() {
             <>
               <LineSparkline values={trendValues} accent="text-brand" height={42} ariaLabel="Weekly judge score trend" />
               {latest && (
-                <div className="mt-3 space-y-1">
-                  <ScoreBar label="Overall" value={latest.avg_score} color={SCORE_COLORS.overall} />
-                  <ScoreBar label="Accuracy" value={latest.avg_accuracy} color={SCORE_COLORS.accuracy} />
-                  <ScoreBar label="Severity" value={latest.avg_severity} color={SCORE_COLORS.severity} />
-                  <ScoreBar label="Component" value={latest.avg_component} color={SCORE_COLORS.component} />
-                  <ScoreBar label="Repro" value={latest.avg_repro} color={SCORE_COLORS.repro} />
-                </div>
+                <>
+                  <div className="mt-3 space-y-1">
+                    <ScoreBar
+                      label="Overall"
+                      value={latest.avg_score}
+                      color={SCORE_COLORS.overall}
+                      description={DIMENSION_TOOLTIPS.Score}
+                    />
+                    <ScoreBar
+                      label="Accuracy"
+                      value={latest.avg_accuracy}
+                      color={SCORE_COLORS.accuracy}
+                      description={DIMENSION_TOOLTIPS.Acc}
+                    />
+                    <ScoreBar
+                      label="Severity"
+                      value={latest.avg_severity}
+                      color={SCORE_COLORS.severity}
+                      description={DIMENSION_TOOLTIPS.Sev}
+                    />
+                    <ScoreBar
+                      label="Component"
+                      value={latest.avg_component}
+                      color={SCORE_COLORS.component}
+                      description={DIMENSION_TOOLTIPS.Comp}
+                    />
+                    <ScoreBar
+                      label="Repro"
+                      value={latest.avg_repro}
+                      color={SCORE_COLORS.repro}
+                      description={DIMENSION_TOOLTIPS.Repro}
+                    />
+                  </div>
+                  <ScoreTrendLegend />
+                </>
               )}
             </>
           )}
@@ -325,47 +454,79 @@ export function JudgePage() {
                   <th className="py-1.5 px-3 font-medium">When</th>
                   <th className="py-1.5 px-3 font-medium">Model</th>
                   <th className="py-1.5 px-3 font-medium">Prompt</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Score</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Acc</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Sev</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Comp</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Repro</th>
-                  <th className="py-1.5 px-3 font-medium">Agreed</th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Score" />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Acc" />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Sev" />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Comp" />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Repro" />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium">
+                    <Tooltip content="Did the classifier agree with the user's own category submission? ✓ = agreed, ✗ = overrode the user's pick.">
+                      <span className="cursor-help underline decoration-dotted decoration-fg-faint/40 underline-offset-2">Agreed</span>
+                    </Tooltip>
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {evals.map((e) => (
-                  <tr key={e.id} className="border-b border-edge-subtle text-fg-secondary hover:bg-surface-overlay/30">
-                    <td className="py-1.5 px-3">
-                      <Link to={`/reports/${e.report_id}`} className="text-brand hover:text-brand-hover font-mono text-2xs">
-                        {e.report_id.slice(0, 8)}…
-                      </Link>
-                    </td>
-                    <td className="py-1.5 px-3 text-fg-faint text-2xs">
-                      <RelativeTime value={e.created_at} />
-                    </td>
-                    <td className="py-1.5 px-3 font-mono text-2xs text-fg-faint truncate max-w-[12rem]">
-                      {e.judge_model ?? '—'}
-                      {e.judge_fallback_used && (
-                        <span className="ml-1 text-warn" title="Judge fallback used">⚠</span>
-                      )}
-                    </td>
-                    <td className="py-1.5 px-3 font-mono text-2xs text-fg-faint">{e.prompt_version ?? '—'}</td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={e.judge_score} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={e.accuracy_score} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={e.severity_score} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={e.component_score} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={e.repro_score} /></td>
-                    <td className="py-1.5 px-3">
-                      {e.classification_agreed === true && (
-                        <span className="text-ok text-xs">✓</span>
-                      )}
-                      {e.classification_agreed === false && (
-                        <span className="text-danger text-xs">✗</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {evals.map((e) => {
+                  const summary = e.report_summary?.trim()
+                  const display = summary && summary.length > 0
+                    ? summary
+                    : `Report ${e.report_id.slice(0, 8)}…`
+                  return (
+                    <tr key={e.id} className="border-b border-edge-subtle text-fg-secondary hover:bg-surface-overlay/30">
+                      <td className="py-1.5 px-3 max-w-[22rem]">
+                        <Link
+                          to={`/reports/${e.report_id}`}
+                          className="text-brand hover:text-brand-hover line-clamp-1 leading-snug"
+                          title={summary ?? undefined}
+                        >
+                          {display}
+                        </Link>
+                        <div className="text-3xs text-fg-faint font-mono mt-0.5">
+                          {e.report_id.slice(0, 8)}
+                          {e.report_severity && (
+                            <span className="ml-1.5 normal-case">· {e.report_severity}</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-1.5 px-3 text-fg-faint text-2xs">
+                        <RelativeTime value={e.created_at} />
+                      </td>
+                      <td className="py-1.5 px-3 font-mono text-2xs text-fg-faint truncate max-w-[12rem]">
+                        {e.judge_model ?? '—'}
+                        {e.judge_fallback_used && (
+                          <Tooltip content="Primary judge model failed; fallback model graded this report.">
+                            <span className="ml-1 text-warn cursor-help">⚠</span>
+                          </Tooltip>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-3 font-mono text-2xs text-fg-faint">{e.prompt_version ?? '—'}</td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.judge_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.accuracy_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.severity_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.component_score} /></td>
+                      <td className="py-1.5 px-3 text-right"><ScorePill value={e.repro_score} /></td>
+                      <td className="py-1.5 px-3">
+                        {e.classification_agreed === true && (
+                          <span className="text-ok text-xs">✓</span>
+                        )}
+                        {e.classification_agreed === false && (
+                          <span className="text-danger text-xs">✗</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -379,11 +540,21 @@ export function JudgePage() {
               <thead>
                 <tr className="text-fg-muted text-left border-b border-edge">
                   <th className="py-1.5 px-3 font-medium">Week</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Score</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Accuracy</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Severity</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Component</th>
-                  <th className="py-1.5 px-3 font-medium text-right">Repro</th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Score" />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Accuracy" full={DIMENSION_TOOLTIPS.Acc} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Severity" full={DIMENSION_TOOLTIPS.Sev} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Component" full={DIMENSION_TOOLTIPS.Comp} />
+                  </th>
+                  <th className="py-1.5 px-3 font-medium text-right">
+                    <HeaderTip short="Repro" />
+                  </th>
                   <th className="py-1.5 px-3 font-medium text-right">Evals</th>
                 </tr>
               </thead>

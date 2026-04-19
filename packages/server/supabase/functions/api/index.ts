@@ -27,7 +27,9 @@ import {
   createCustomer,
   listInvoices,
   stripeFromEnv,
+  type CheckoutLineItem,
 } from '../_shared/stripe.ts'
+import { getPlan, listPlans } from '../_shared/plans.ts'
 
 ensureSentry('api')
 
@@ -403,9 +405,11 @@ app.post('/v1/reports', apiKeyAuth, async (c) => {
         ok: false,
         error: {
           code: 'QUOTA_EXCEEDED',
-          message: `Free tier quota of ${quota.limit} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+          message: `${quota.plan.display_name} plan quota of ${quota.limit?.toLocaleString() ?? 'n/a'} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
           used: quota.used,
           limit: quota.limit,
+          plan: quota.plan,
+          reason: quota.reason,
           periodResetsAt: quota.periodResetsAt,
         },
       }, 402)
@@ -442,9 +446,11 @@ app.post('/v1/reports/batch', apiKeyAuth, async (c) => {
       ok: false,
       error: {
         code: 'QUOTA_EXCEEDED',
-        message: `Free tier quota of ${quota.limit} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
+        message: `${quota.plan.display_name} plan quota of ${quota.limit?.toLocaleString() ?? 'n/a'} reports/month exceeded. Upgrade or wait until ${quota.periodResetsAt}.`,
         used: quota.used,
         limit: quota.limit,
+        plan: quota.plan,
+        reason: quota.reason,
         periodResetsAt: quota.periodResetsAt,
       },
     }, 402)
@@ -1287,7 +1293,30 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
 
   const { data: reports, count, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  return c.json({ ok: true, data: { reports: reports ?? [], total: count ?? 0 } })
+
+  // Enrich each report with `dedup_count` (number of reports in the same
+  // dedup group) so the triage UI can collapse duplicates into "+N similar"
+  // badges. Single-query fetch by group id, then map back to row.
+  const groupIds = Array.from(new Set(
+    (reports ?? [])
+      .map(r => (r as { report_group_id: string | null }).report_group_id)
+      .filter((g): g is string => Boolean(g)),
+  ))
+  const groupCountMap = new Map<string, number>()
+  if (groupIds.length > 0) {
+    const { data: groups } = await db
+      .from('report_groups')
+      .select('id, report_count')
+      .in('id', groupIds)
+    for (const g of groups ?? []) groupCountMap.set(g.id as string, g.report_count as number)
+  }
+
+  const enriched = (reports ?? []).map(r => {
+    const gid = (r as { report_group_id: string | null }).report_group_id
+    return { ...r, dedup_count: gid ? (groupCountMap.get(gid) ?? 1) : 1 }
+  })
+
+  return c.json({ ok: true, data: { reports: enriched, total: count ?? 0 } })
 })
 
 app.get('/v1/admin/reports/:id', jwtAuth, async (c) => {
@@ -1574,6 +1603,17 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
     .order('checked_at', { ascending: true })
     .limit(2000)
 
+  // Classification evals (judge) — last 14 days. Powers the Check stage of
+  // the PDCA cockpit: how often does the LLM classifier agree with the
+  // independent grader?
+  const { data: recentEvals } = await db
+    .from('classification_evaluations')
+    .select('id, report_id, judge_score, classification_agreed, created_at')
+    .in('project_id', projectIds)
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(500)
+
   // Bucket helpers
   const dayKey = (iso: string) => iso.slice(0, 10)
   const days: string[] = []
@@ -1700,6 +1740,120 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
     uptime: v.total > 0 ? v.ok / v.total : null,
   }))
 
+  // ---------------------------------------------------------------------------
+  // PDCA Cockpit — four-stage strip rendered at the top of the dashboard.
+  // Each stage exposes one headline number, a "current bottleneck" caption,
+  // and a deep-link CTA so the user always sees "→ where do I act now?"
+  // ---------------------------------------------------------------------------
+  type StageTone = 'ok' | 'warn' | 'urgent'
+  interface PdcaStage {
+    id: 'plan' | 'do' | 'check' | 'act'
+    label: string
+    icon: string
+    description: string
+    count: number
+    countLabel: string
+    bottleneck: string | null
+    tone: StageTone
+    cta: { to: string; label: string }
+  }
+
+  // Plan: open reports waiting > 1h (already computed as `openBacklog`).
+  const oldestNewMs = (recentReports ?? [])
+    .filter(r => r.status === 'new' || r.status === 'queued')
+    .reduce<number>((min, r) => {
+      const t = new Date(String(r.created_at)).getTime()
+      return Math.min(min, t)
+    }, Number.POSITIVE_INFINITY)
+  const oldestNewHours = Number.isFinite(oldestNewMs)
+    ? Math.floor((now - oldestNewMs) / 3_600_000)
+    : 0
+  const planTone: StageTone = openBacklog > 5 ? 'urgent' : openBacklog > 0 ? 'warn' : 'ok'
+  const planStage: PdcaStage = {
+    id: 'plan',
+    label: 'Plan',
+    icon: 'inbox',
+    description: 'Capture & classify',
+    count: openBacklog,
+    countLabel: openBacklog === 1 ? 'report waiting > 1h' : 'reports waiting > 1h',
+    bottleneck: openBacklog > 0 && oldestNewHours > 0
+      ? `Oldest report has been waiting ${oldestNewHours}h to triage`
+      : null,
+    tone: planTone,
+    cta: { to: '/reports?status=new', label: 'Triage queue' },
+  }
+
+  // Do: fixes in progress + failed = the active dispatch surface area.
+  const doCount = fixSummary.inProgress + fixSummary.failed
+  const doTone: StageTone = fixSummary.failed > 0
+    ? 'urgent'
+    : fixSummary.inProgress > 0 ? 'warn' : 'ok'
+  const doStage: PdcaStage = {
+    id: 'do',
+    label: 'Do',
+    icon: 'wrench',
+    description: 'Dispatch fixes',
+    count: doCount,
+    countLabel: doCount === 1 ? 'fix in flight' : 'fixes in flight',
+    bottleneck: fixSummary.failed > 0
+      ? `${fixSummary.failed} failed ${fixSummary.failed === 1 ? 'fix needs' : 'fixes need'} retry`
+      : null,
+    tone: doTone,
+    cta: { to: '/fixes', label: 'Open Fixes' },
+  }
+
+  // Check: pending evals = classified reports without a judge_evaluated_at,
+  // capped to the 14-day window we already pulled.
+  const evaluatedReportIds = new Set((recentEvals ?? []).map(e => e.report_id))
+  const pendingEvals = (recentReports ?? []).filter(r => {
+    if (r.status !== 'classified' && r.status !== 'fixed') return false
+    return !evaluatedReportIds.has(r.id)
+  }).length
+  const disagreements = (recentEvals ?? []).filter(e => e.classification_agreed === false).length
+  const checkTone: StageTone = disagreements > 3 ? 'urgent' : pendingEvals > 10 ? 'warn' : 'ok'
+  const checkStage: PdcaStage = {
+    id: 'check',
+    label: 'Check',
+    icon: 'magnifier',
+    description: 'Verify quality',
+    count: pendingEvals,
+    countLabel: pendingEvals === 1 ? 'eval pending' : 'evals pending',
+    bottleneck: disagreements > 0
+      ? `${disagreements} ${disagreements === 1 ? 'disagreement' : 'disagreements'} between LLM and judge`
+      : null,
+    tone: checkTone,
+    cta: { to: '/judge', label: 'Open Judge' },
+  }
+
+  // Act: integration destinations live + healthy.
+  const liveIntegrations = integrations.filter(i => i.lastStatus === 'ok').length
+  const failingIntegrations = integrations.filter(i => i.lastStatus && i.lastStatus !== 'ok').length
+  const actTone: StageTone = failingIntegrations > 0
+    ? 'urgent'
+    : liveIntegrations === 0 ? 'warn' : 'ok'
+  const actStage: PdcaStage = {
+    id: 'act',
+    label: 'Act',
+    icon: 'plug',
+    description: 'Integrate & scale',
+    count: liveIntegrations,
+    countLabel: liveIntegrations === 1 ? 'destination live' : 'destinations live',
+    bottleneck: failingIntegrations > 0
+      ? `${failingIntegrations} ${failingIntegrations === 1 ? 'integration is' : 'integrations are'} failing health checks`
+      : liveIntegrations === 0
+        ? 'No destinations connected — fixes have nowhere to land'
+        : null,
+    tone: actTone,
+    cta: { to: '/integrations', label: 'Open Integrations' },
+  }
+
+  const pdcaStages: PdcaStage[] = [planStage, doStage, checkStage, actStage]
+  // "Current focus" = the most-urgent stage, falling back to highest-count
+  // warn stage so a quiet system still nudges the user forward.
+  const focusStage = pdcaStages.find(s => s.tone === 'urgent')?.id
+    ?? pdcaStages.filter(s => s.tone === 'warn').sort((a, b) => b.count - a.count)[0]?.id
+    ?? null
+
   return c.json({
     ok: true,
     data: {
@@ -1722,6 +1876,8 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
       triageQueue,
       activity,
       integrations,
+      pdcaStages,
+      focusStage,
     },
   })
 })
@@ -1785,7 +1941,37 @@ app.get('/v1/admin/judge/evaluations', jwtAuth, async (c) => {
     .order(sort.col, { ascending: sort.asc })
     .limit(limit)
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  return c.json({ ok: true, data: { evaluations: data ?? [] } })
+
+  // Hydrate each row with the underlying report's human summary so the
+  // Judge table can display "Submit button on /checkout has wrong size"
+  // instead of "f9b3c2…" — the original UX audit called the hash-only
+  // column literally unreadable for triage decisions.
+  const reportIds = Array.from(new Set((data ?? []).map(r => r.report_id as string).filter(Boolean)))
+  const summaryMap = new Map<string, { summary: string | null; description: string | null; severity: string | null; status: string | null }>()
+  if (reportIds.length > 0) {
+    const { data: reportRows } = await db
+      .from('reports')
+      .select('id, summary, description, severity, status')
+      .in('id', reportIds)
+    for (const r of reportRows ?? []) {
+      summaryMap.set(r.id as string, {
+        summary: (r as { summary: string | null }).summary,
+        description: (r as { description: string | null }).description,
+        severity: (r as { severity: string | null }).severity,
+        status: (r as { status: string | null }).status,
+      })
+    }
+  }
+  const enriched = (data ?? []).map(row => {
+    const meta = summaryMap.get(row.report_id as string)
+    return {
+      ...row,
+      report_summary: meta?.summary ?? meta?.description ?? null,
+      report_severity: meta?.severity ?? null,
+      report_status: meta?.status ?? null,
+    }
+  })
+  return c.json({ ok: true, data: { evaluations: enriched } })
 })
 
 // Score distribution histogram (bucketed into 10 deciles).
@@ -2962,10 +3148,10 @@ async function dereferenceMaybeVault(db: ReturnType<typeof getServiceClient>, re
 }
 
 // Projects admin endpoints
-// Wave 4.2: billing summary for the admin /billing page.
-// Returns plan, current-period usage, and quota state for every project the
-// user owns. Free-tier projects show used/limit; subscribed projects show
-// metered usage with no hard cap.
+// Per-project billing summary for the admin /billing page.
+// Returns the resolved tier, current-period usage, included quota, overage
+// rate, and Stripe customer/subscription state — everything the BillingPage
+// + PdcaCockpit + QuotaBanner read from one call.
 app.get('/v1/admin/billing', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
@@ -2975,8 +3161,12 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
     .select('id, name')
     .eq('owner_id', userId)
 
+  // Always send the plan catalog so the FE can render the upgrade modal
+  // without a second round-trip — even when the user owns 0 projects.
+  const plans = await listPlans()
+
   if (!projects || projects.length === 0) {
-    return c.json({ ok: true, data: { projects: [] } })
+    return c.json({ ok: true, data: { projects: [], plans } })
   }
 
   const periodStart = new Date()
@@ -2986,7 +3176,7 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
   const projectIds = projects.map(p => p.id)
   const [{ data: subs }, { data: customers }, { data: usage }] = await Promise.all([
     db.from('billing_subscriptions')
-      .select('project_id, status, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end')
+      .select('project_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id')
       .in('project_id', projectIds),
     db.from('billing_customers')
       .select('project_id, stripe_customer_id, default_payment_ok, email')
@@ -2997,43 +3187,69 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
       .gte('occurred_at', periodStart.toISOString()),
   ])
 
+  // Pick the most recent active sub per project (a project may have a
+  // canceled sub + a fresh active one; we always render the active one).
   const subByProject = new Map<string, any>()
   for (const s of subs ?? []) {
-    if (!subByProject.has(s.project_id)) subByProject.set(s.project_id, s)
+    const cur = subByProject.get(s.project_id)
+    const isMoreRecent = !cur || new Date(s.current_period_end ?? 0) > new Date(cur.current_period_end ?? 0)
+    if (isMoreRecent) subByProject.set(s.project_id, s)
   }
   const customerByProject = new Map<string, any>()
-  for (const c of customers ?? []) customerByProject.set(c.project_id, c)
+  for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu)
 
-  const usageByProject = new Map<string, { reports: number; fixes: number; tokens: number }>()
+  const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number; tokens: number }>()
   for (const u of usage ?? []) {
-    const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, tokens: 0 }
+    const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0, tokens: 0 }
     if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity)
     else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity)
+    else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity)
     else if (u.event_name === 'classifier_tokens') cur.tokens += Number(u.quantity)
     usageByProject.set(u.project_id, cur)
   }
 
-  const freeLimit = Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000')
-
-  const items = projects.map(p => {
+  const items = await Promise.all(projects.map(async p => {
     const sub = subByProject.get(p.id) ?? null
     const cust = customerByProject.get(p.id) ?? null
-    const u = usageByProject.get(p.id) ?? { reports: 0, fixes: 0, tokens: 0 }
-    const subscribed = !!sub && ['active', 'trialing', 'past_due'].includes(sub.status)
+    const u = usageByProject.get(p.id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0, tokens: 0 }
+    const planId = sub && ['active', 'trialing', 'past_due'].includes(sub.status) ? sub.plan_id : 'hobby'
+    const plan = await getPlan(planId)
+    const limit = plan.included_reports_per_month
     return {
       project_id: p.id,
       project_name: p.name,
-      plan: subscribed ? sub.stripe_price_id : 'free',
+      // Both kept for FE backwards-compat: legacy `plan: 'free' | <price-id>` and the new tier object.
+      plan: plan.id === 'hobby' ? 'free' : (sub?.stripe_price_id ?? plan.id),
+      tier: {
+        id: plan.id,
+        display_name: plan.display_name,
+        monthly_price_usd: plan.monthly_price_usd,
+        included_reports_per_month: plan.included_reports_per_month,
+        overage_unit_amount_decimal: plan.overage_unit_amount_decimal,
+        retention_days: plan.retention_days,
+        feature_flags: plan.feature_flags,
+      },
       subscription: sub,
       customer: cust,
       period_start: periodStart.toISOString(),
       usage: u,
-      limit_reports: subscribed ? null : freeLimit,
-      over_quota: !subscribed && u.reports >= freeLimit,
+      limit_reports: limit,
+      over_quota: limit !== null && u.reports >= limit && !plan.overage_price_lookup_key,
+      // Used by the QuotaBanner to render at >=80% / >=100%.
+      usage_pct: limit ? Math.round((u.reports / limit) * 100) : null,
     }
-  })
+  }))
 
-  return c.json({ ok: true, data: { projects: items, free_limit_reports_per_month: freeLimit } })
+  // Hobby quota for the legacy `free_limit_reports_per_month` key still used
+  // by older FE builds. Pick the catalog value, fall back to env.
+  const hobby = plans.find(pl => pl.id === 'hobby')
+  const freeLimit = hobby?.included_reports_per_month
+    ?? Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000')
+
+  return c.json({
+    ok: true,
+    data: { projects: items, plans, free_limit_reports_per_month: freeLimit },
+  })
 })
 
 // =================================================================================
@@ -3269,11 +3485,26 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
   const projectIds = (projects ?? []).map(p => p.id)
   if (projectIds.length === 0) return c.json({ ok: true, data: { projects: [] } })
 
+  // `latestReports` is one query per project so each project gets its true
+  // most-recent report. The previous single-query approach with a global
+  // `limit(projectIds.length * 2)` would silently report `last_report_at: null`
+  // for any project whose newest report was older than the top N rows of a
+  // sibling project — see UX audit: glot.it showed "last report never" despite
+  // having 31 reports because mushi-mushi (sister project) had pushed it past
+  // the limit window.
   const [reportCounts, allKeys, members, latestReports] = await Promise.all([
     db.from('reports').select('project_id', { count: 'exact', head: false }).in('project_id', projectIds),
     db.from('project_api_keys').select('id, project_id, key_prefix, created_at, is_active').in('project_id', projectIds).order('created_at', { ascending: false }),
     db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
-    db.from('reports').select('project_id, created_at').in('project_id', projectIds).order('created_at', { ascending: false }).limit(projectIds.length * 2),
+    Promise.all(projectIds.map(pid =>
+      db.from('reports')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+        .then(r => ({ project_id: pid, created_at: r.data?.created_at ?? null }))
+    )),
   ])
 
   const countMap: Record<string, number> = {}
@@ -3292,8 +3523,8 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
   }
 
   const lastReportMap: Record<string, string> = {}
-  for (const r of latestReports.data ?? []) {
-    if (!lastReportMap[r.project_id]) lastReportMap[r.project_id] = r.created_at
+  for (const r of latestReports) {
+    if (r.created_at) lastReportMap[r.project_id] = r.created_at
   }
 
   const enriched = (projects ?? []).map(p => {
@@ -5960,7 +6191,12 @@ app.post('/v1/admin/storage/:projectId/health', jwtAuth, async (c) => {
 // ----------------------------------------------------------------
 app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
-  const body = await c.req.json().catch(() => null) as { project_id?: string; email?: string } | null
+  const body = await c.req.json().catch(() => null) as {
+    project_id?: string
+    email?: string
+    /** 'starter' | 'pro' — defaults to 'starter' so legacy clients still work. */
+    plan_id?: string
+  } | null
   if (!body?.project_id || !body?.email) {
     return c.json({ ok: false, error: { code: 'INVALID_BODY' } }, 400)
   }
@@ -5969,9 +6205,45 @@ app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
   if (!owned.includes(body.project_id)) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
   const cfg = stripeFromEnv()
-  if (!cfg.secretKey || !cfg.defaultPriceId) {
+  if (!cfg.secretKey) {
     return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED' } }, 503)
   }
+
+  const planId = body.plan_id ?? 'starter'
+  const plan = await getPlan(planId)
+  if (plan.id === 'hobby') {
+    return c.json({ ok: false, error: { code: 'PLAN_NOT_PURCHASABLE', message: 'Hobby is the default free tier — no checkout needed.' } }, 400)
+  }
+  if (!plan.is_self_serve) {
+    return c.json({ ok: false, error: { code: 'PLAN_SALES_LED', message: `${plan.display_name} requires contacting sales.` } }, 400)
+  }
+  if (!plan.base_price_lookup_key) {
+    return c.json({ ok: false, error: { code: 'PLAN_NOT_CONFIGURED', message: `Plan ${plan.id} has no base_price_lookup_key — run scripts/stripe-bootstrap.mjs.` } }, 503)
+  }
+
+  // Resolve Stripe price IDs from env (set by stripe-bootstrap.mjs). We don't
+  // hit Stripe's /prices/search on every request — env is faster and means
+  // we fail closed if bootstrap hasn't been run.
+  const priceMap: Record<string, { base?: string; overage?: string }> = {
+    starter: {
+      base: Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? cfg.defaultPriceId,
+      overage: Deno.env.get('STRIPE_PRICE_STARTER_OVERAGE'),
+    },
+    pro: {
+      base: Deno.env.get('STRIPE_PRICE_PRO_BASE'),
+      overage: Deno.env.get('STRIPE_PRICE_PRO_OVERAGE'),
+    },
+  }
+  const prices = priceMap[plan.id] ?? {}
+  if (!prices.base) {
+    return c.json({
+      ok: false,
+      error: { code: 'PLAN_NOT_CONFIGURED', message: `Set STRIPE_PRICE_${plan.id.toUpperCase()}_BASE.` },
+    }, 503)
+  }
+
+  const lineItems: CheckoutLineItem[] = [{ price: prices.base, quantity: 1 }]
+  if (prices.overage) lineItems.push({ price: prices.overage })
 
   const { data: existing } = await db
     .from('billing_customers')
@@ -5997,14 +6269,18 @@ app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
   const session = await createCheckoutSession(cfg, {
     customer: customerId,
     projectId: body.project_id,
+    planId: plan.id,
+    lineItems,
   })
 
   await logAudit(db, body.project_id, userId, 'billing.checkout_started', 'project', body.project_id, {
     stripe_customer_id: customerId,
     session_id: session.id,
+    plan_id: plan.id,
+    line_items: lineItems.length,
   })
 
-  return c.json({ ok: true, url: session.url })
+  return c.json({ ok: true, url: session.url, plan_id: plan.id })
 })
 
 app.post('/v1/admin/billing/portal', jwtAuth, async (c) => {

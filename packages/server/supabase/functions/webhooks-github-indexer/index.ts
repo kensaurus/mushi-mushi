@@ -160,6 +160,88 @@ async function fetchFileContents(
 app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }))
 
 /**
+ * Handle a `pull_request.closed` event with `merged: true`.
+ *
+ * Looks up the `fix_attempts` row whose `pr_url` matches the merged PR — if
+ * it's one of ours, append a `fixes_succeeded` usage_event so the aggregator
+ * pushes it to Stripe Meter Events on the next tick. Idempotent: a `pr_url`
+ * unique constraint on the metadata field would be ideal, but for now we
+ * `select first` and bail if a `fixes_succeeded` event already exists for
+ * the same PR. This is best-effort billing — we never 500 on a billing
+ * write so GitHub doesn't retry the webhook for non-billing reasons.
+ */
+async function handleFixPrMerged(payload: {
+  pull_request?: { html_url?: string; number?: number }
+  repository?: { full_name?: string }
+}): Promise<Response> {
+  const prUrl = payload.pull_request?.html_url
+  if (!prUrl) return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 })
+
+  const db = getDb()
+  const { data: attempt } = await db
+    .from('fix_attempts')
+    .select('id, project_id')
+    .eq('pr_url', prUrl)
+    .maybeSingle()
+
+  if (!attempt) {
+    return new Response(
+      JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Mark the fix attempt as merged so the dashboard PDCA cockpit + the
+  // intelligence reports can show "successful fixes" downstream.
+  await db.from('fix_attempts')
+    .update({ merged_at: new Date().toISOString() })
+    .eq('id', attempt.id)
+    .is('merged_at', null)
+
+  // Idempotency check — if we already billed this PR, skip the second insert.
+  const { data: existing } = await db
+    .from('usage_events')
+    .select('id')
+    .eq('project_id', attempt.project_id)
+    .eq('event_name', 'fixes_succeeded')
+    .contains('metadata', { fix_attempt_id: attempt.id })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    return new Response(
+      JSON.stringify({ ok: true, deduped: true, fix_attempt_id: attempt.id }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const { error: usageErr } = await db.from('usage_events').insert({
+    project_id: attempt.project_id,
+    event_name: 'fixes_succeeded',
+    quantity: 1,
+    metadata: {
+      fix_attempt_id: attempt.id,
+      pr_url: prUrl,
+      pr_number: payload.pull_request?.number,
+      repository: payload.repository?.full_name,
+    },
+  })
+
+  if (usageErr) {
+    log.warn('usage_events fixes_succeeded insert failed (non-fatal)', {
+      err: usageErr.message,
+      projectId: attempt.project_id,
+      prUrl,
+    })
+  }
+
+  return new Response(
+    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, project_id: attempt.project_id }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  )
+}
+
+/**
  * Sweep mode: invoked hourly by pg_cron (see migration
  * 20260418003200_repo_indexer_cron.sql). Re-indexes every project_repos row
  * whose `last_indexed_at` is older than `staleAfterHours` (default 24h).
@@ -311,6 +393,25 @@ app.post('/webhooks-github-indexer', async (c) => {
     return c.json({ error: 'invalid signature' }, 401)
   }
   const event = c.req.header('X-GitHub-Event') ?? 'unknown'
+
+  // pull_request.closed (merged=true) — value-based billing trigger.
+  // Record `fixes_succeeded` if this PR matches a fix we opened.
+  if (event === 'pull_request') {
+    const prPayload = JSON.parse(raw) as {
+      action?: string
+      pull_request?: {
+        merged?: boolean
+        html_url?: string
+        number?: number
+      }
+      repository?: { full_name?: string }
+    }
+    if (prPayload.action !== 'closed' || !prPayload.pull_request?.merged) {
+      return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202)
+    }
+    return await handleFixPrMerged(prPayload)
+  }
+
   if (event !== 'push' && event !== 'installation_repositories') {
     return c.json({ ok: true, ignored: event }, 202)
   }

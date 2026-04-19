@@ -5,7 +5,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react'
-import type { ReactNode, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link } from 'react-router-dom'
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
@@ -436,13 +436,55 @@ interface PageHelpProps {
   whatIsIt: string
   useCases?: string[]
   howToUse?: string
+  /** Force-override the default-open behaviour. Leave unset for the
+   *  default "open until the user dismisses it once" UX. */
   defaultOpen?: boolean
 }
 
-export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen = false }: PageHelpProps) {
+const PAGEHELP_DISMISS_PREFIX = 'mushi:pagehelp:dismissed:'
+
+function readPageHelpDismissed(title: string): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(PAGEHELP_DISMISS_PREFIX + title) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writePageHelpDismissed(title: string, dismissed: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    if (dismissed) {
+      window.localStorage.setItem(PAGEHELP_DISMISS_PREFIX + title, '1')
+    } else {
+      window.localStorage.removeItem(PAGEHELP_DISMISS_PREFIX + title)
+    }
+  } catch {
+    // localStorage is best-effort; private-mode browsers throw on write.
+  }
+}
+
+export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: PageHelpProps) {
+  // First-time visitors should see the page context unfolded — the audit
+  // found that having every disclosure collapsed by default hid the entire
+  // value-prop of each page. Once the user dismisses it, the choice is
+  // persisted per-title across sessions so power users aren't pestered.
+  const [open, setOpen] = useState<boolean>(() => {
+    if (defaultOpen !== undefined) return defaultOpen
+    return !readPageHelpDismissed(title)
+  })
+
+  const handleToggle: ReactEventHandler<HTMLDetailsElement> = (e) => {
+    const next = e.currentTarget.open
+    setOpen(next)
+    writePageHelpDismissed(title, !next)
+  }
+
   return (
     <details
-      open={defaultOpen}
+      open={open}
+      onToggle={handleToggle}
       className="group mb-4 rounded-md border border-edge-subtle bg-surface-raised/30 open:bg-surface-raised/50"
     >
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs text-fg-muted hover:text-fg-secondary motion-safe:transition-colors">

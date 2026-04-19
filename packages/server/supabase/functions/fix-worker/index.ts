@@ -408,6 +408,30 @@ Deno.serve(withSentry('fix-worker', async (req) => {
       status: 'fixing',
     }).eq('id', dispatch.report_id)
 
+    // Bill the project for the fix attempt — one usage_event per draft PR
+    // we successfully open. The aggregator pushes these to Stripe Meter
+    // Events on the next 5-min cron tick. We never block the response on
+    // a usage-log failure — billing is best-effort vs. user-facing latency.
+    {
+      const { error: usageErr } = await db.from('usage_events').insert({
+        project_id: dispatch.project_id,
+        event_name: 'fixes_attempted',
+        quantity: 1,
+        metadata: {
+          fix_attempt_id: fixAttemptId,
+          report_id: dispatch.report_id,
+          pr_url: prResult.url,
+          pr_number: prResult.number,
+        },
+      })
+      if (usageErr) {
+        log.warn('usage_events fixes_attempted insert failed (non-fatal)', {
+          err: usageErr.message,
+          projectId: dispatch.project_id,
+        })
+      }
+    }
+
     await trace.end()
 
     return new Response(JSON.stringify({

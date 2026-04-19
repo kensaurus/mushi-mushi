@@ -14,6 +14,7 @@ import { PageHeader, PageHelp, Btn, Loading, ErrorAlert } from '../components/ui
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
+import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
@@ -62,6 +63,10 @@ export function DashboardPage() {
       )}
 
       <QuotaBanner />
+
+      {data.pdcaStages && data.pdcaStages.length > 0 && (
+        <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
+      )}
 
       <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} />
 

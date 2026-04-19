@@ -11,8 +11,21 @@
  *   - replay masks ALL text + blocks media — admin console handles bug reports
  *     that may contain user PII
  *   - beforeSend strips token-like query params from URLs before transport
+ *
+ * INSTRUMENTATION:
+ *   - reactRouterV7BrowserTracingIntegration gives transaction names that match
+ *     route patterns (`/reports/:id`) instead of opaque URLs (`/reports/uuid…`),
+ *     which is what makes performance dashboards usable. Pair with
+ *     `Sentry.withSentryReactRouterV7Routing(Routes)` in App.tsx.
  */
 
+import { useEffect } from 'react'
+import {
+  createRoutesFromChildren,
+  matchRoutes,
+  useLocation,
+  useNavigationType,
+} from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
@@ -30,7 +43,13 @@ export function initSentry(): void {
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
     integrations: [
-      Sentry.browserTracingIntegration(),
+      Sentry.reactRouterV7BrowserTracingIntegration({
+        useEffect,
+        useLocation,
+        useNavigationType,
+        createRoutesFromChildren,
+        matchRoutes,
+      }),
       Sentry.replayIntegration({
         maskAllText: true,
         maskAllInputs: true,
@@ -44,10 +63,21 @@ export function initSentry(): void {
       /safari-extension:\/\//i,
     ],
     ignoreErrors: [
-      // Browser extensions and benign noise
+      // Browser extension noise we have zero leverage over
+      /^Script error\.?$/,
       'ResizeObserver loop limit exceeded',
       'ResizeObserver loop completed with undelivered notifications',
       'Non-Error promise rejection captured',
+      // User-cancelled requests — not a bug, expected control-flow signal
+      'AbortError',
+      'The operation was aborted',
+      'cancelled',
+      // Deploy-race: an in-flight chunk request lands after we ship a new
+      // build and the old hash is gone. The user gets an automatic reload
+      // on next nav; nothing for us to fix.
+      'ChunkLoadError',
+      'Loading chunk',
+      'Failed to fetch dynamically imported module',
       // Network blips users can't act on
       'Failed to fetch',
       'NetworkError when attempting to fetch resource',

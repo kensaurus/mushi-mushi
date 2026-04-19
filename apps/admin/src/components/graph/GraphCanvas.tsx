@@ -30,6 +30,9 @@ interface Props {
   onPaneClick: () => void
   onResetView: () => void
   hidden?: boolean
+  /** When false, the minimap is suppressed — useful on small graphs where it
+   *  adds visual clutter without helping orientation. Defaults to true. */
+  showMinimap?: boolean
 }
 
 const HINT_KEY = 'mushi.graph.hintSeen'
@@ -43,6 +46,7 @@ export function GraphCanvas({
   onPaneClick,
   onResetView,
   hidden = false,
+  showMinimap = true,
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false)
 
@@ -100,16 +104,18 @@ export function GraphCanvas({
       >
         <Background gap={24} color="oklch(0.30 0 0)" />
         <Controls position="bottom-right" showInteractive={false} />
-        <MiniMap
-          pannable
-          zoomable
-          nodeColor={(n) => {
-            const data = n.data as { node?: GraphNode } | undefined
-            return NODE_COLORS[data?.node?.node_type ?? ''] ?? 'oklch(0.45 0 0)'
-          }}
-          maskColor="oklch(0.10 0 0 / 0.6)"
-          style={{ background: 'oklch(0.14 0 0)' }}
-        />
+        {showMinimap && (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={(n) => {
+              const data = n.data as { node?: GraphNode } | undefined
+              return NODE_COLORS[data?.node?.node_type ?? ''] ?? 'oklch(0.45 0 0)'
+            }}
+            maskColor="oklch(0.10 0 0 / 0.6)"
+            style={{ background: 'oklch(0.14 0 0)' }}
+          />
+        )}
         {!hintDismissed && (
           <Panel position="top-center">
             <div className="flex items-center gap-2 rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary shadow-raised">

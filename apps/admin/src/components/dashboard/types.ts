@@ -65,6 +65,21 @@ export interface DashboardCounts {
   llmFailures14d: number
 }
 
+export type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
+export type PdcaStageTone = 'ok' | 'warn' | 'urgent'
+
+export interface PdcaStage {
+  id: PdcaStageId
+  label: string
+  icon: string
+  description: string
+  count: number
+  countLabel: string
+  bottleneck: string | null
+  tone: PdcaStageTone
+  cta: { to: string; label: string }
+}
+
 export interface DashboardData {
   empty: boolean
   projects?: Array<{ id: string; name: string }>
@@ -77,6 +92,8 @@ export interface DashboardData {
   triageQueue?: TriageItem[]
   activity?: ActivityItem[]
   integrations?: IntegrationStatus[]
+  pdcaStages?: PdcaStage[]
+  focusStage?: PdcaStageId | null
 }
 
 export function relTime(iso: string): string {

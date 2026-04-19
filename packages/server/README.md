@@ -83,8 +83,10 @@ All routes are served from the `api` function under `/v1/`:
 
 - `POST /v1/reports` — SDK report submission. Returns **HTTP 402** + `{ code: 'QUOTA_EXCEEDED', limit, used }` when the project's free-tier monthly quota is hit (`_shared/quota.ts`); paid plans bypass via Stripe metered billing
 - `POST /v1/reports/batch` — Batch report submission (up to 10), same quota gate
-- `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console
+- `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console. Each returned row carries a `dedup_count` (number of reports sharing the same `report_group_id`) so the admin UI can collapse duplicates into a `+N similar` badge without an N+1 fetch
 - `GET /v1/admin/stats` — Dashboard statistics
+- `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, and a `cta` deep-link) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
+- `GET /v1/admin/judge/evaluations` — Hydrates each row with the underlying report's `summary`, `severity`, and `status` so judge UIs can show human-readable summaries instead of opaque `report_id` hashes
 - `GET /v1/admin/graph/*` — Knowledge graph queries
 - `POST /v1/admin/query` — Natural language data queries
 - `GET/PATCH /v1/admin/settings` — Project configuration

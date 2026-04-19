@@ -26,6 +26,7 @@ import {
   type QuickView,
 } from '../components/graph/GraphFilters'
 import { GraphSidePanel } from '../components/graph/GraphSidePanel'
+import { GraphStoryboard } from '../components/graph/GraphStoryboard'
 import { GraphTableView } from '../components/graph/GraphTableView'
 import { layoutNodes } from '../components/graph/graphLayout'
 import {
@@ -40,6 +41,14 @@ import {
 } from '../components/graph/types'
 
 type ViewMode = 'graph' | 'table'
+
+/**
+ * Below this node count we auto-flip to the storyboard layout because the
+ * spaghetti React Flow canvas adds noise (large empty pan area, minimap
+ * clutter) without insight when the data is sparse. Users can still toggle
+ * back to the canvas with the view switch.
+ */
+const STORYBOARD_THRESHOLD = 12
 
 export function GraphPage() {
   const toast = useToast()
@@ -65,6 +74,9 @@ export function GraphPage() {
   const [view, setView] = useState<ViewMode>('graph')
   const [hideSingletons, setHideSingletons] = useState(true)
   const [layoutSeed, setLayoutSeed] = useState(0)
+  // Lets users override the auto-storyboard heuristic — useful when they
+  // want the spatial canvas even on a small graph (e.g. to inspect dragging).
+  const [forceCanvas, setForceCanvas] = useState(false)
 
   // Pre-baked filter views — flip filter sets to highlight a specific story.
   // Reset selection so the side-panel doesn't show a stale node from a
@@ -258,6 +270,9 @@ export function GraphPage() {
     })
   }, [])
 
+  const useStoryboard =
+    view === 'graph' && !forceCanvas && filteredNodes.length > 0 && filteredNodes.length < STORYBOARD_THRESHOLD
+
   if (loading) return <Loading text="Loading graph…" />
   if (error)
     return (
@@ -314,16 +329,60 @@ export function GraphPage() {
               onToggleEdgeType={toggleEdgeType}
             />
 
-            <GraphCanvas
-              flowNodes={flowNodes}
-              flowEdges={flowEdges}
-              filteredCount={filteredNodes.length}
-              filteredEdgeCount={filteredEdges.length}
-              onNodeClick={onNodeClick}
-              onPaneClick={clearSelection}
-              onResetView={() => applyView('all')}
-              hidden={view !== 'graph'}
-            />
+            {useStoryboard ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-2xs text-fg-muted">
+                  <span>
+                    Storyboard view — {filteredNodes.length} nodes flow{' '}
+                    <span className="font-medium text-fg-secondary">left → right</span>{' '}
+                    by stage. Click any card for blast radius.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setForceCanvas(true)}
+                    className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+                  >
+                    Switch to spatial canvas
+                  </button>
+                </div>
+                <GraphStoryboard
+                  nodes={filteredNodes}
+                  edges={filteredEdges}
+                  selectedNodeId={selectedNode?.id ?? null}
+                  blastRadiusIds={blastRadiusIds}
+                  onSelect={(node) => {
+                    setSelectedNode(node)
+                    void fetchBlastRadius(node)
+                  }}
+                  onClear={clearSelection}
+                />
+              </div>
+            ) : (
+              <>
+                {view === 'graph' && forceCanvas && filteredNodes.length < STORYBOARD_THRESHOLD && (
+                  <div className="flex items-center justify-end text-2xs text-fg-muted">
+                    <button
+                      type="button"
+                      onClick={() => setForceCanvas(false)}
+                      className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+                    >
+                      ← Back to storyboard
+                    </button>
+                  </div>
+                )}
+                <GraphCanvas
+                  flowNodes={flowNodes}
+                  flowEdges={flowEdges}
+                  filteredCount={filteredNodes.length}
+                  filteredEdgeCount={filteredEdges.length}
+                  onNodeClick={onNodeClick}
+                  onPaneClick={clearSelection}
+                  onResetView={() => applyView('all')}
+                  hidden={view !== 'graph'}
+                  showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
+                />
+              </>
+            )}
 
             {view === 'table' && (
               <GraphTableView

@@ -34,12 +34,40 @@ import {
   RelativeTime,
 } from '../components/ui'
 
+interface PlanCatalog {
+  id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
+  display_name: string
+  position: number
+  monthly_price_usd: number
+  base_price_lookup_key: string | null
+  overage_price_lookup_key: string | null
+  included_reports_per_month: number | null
+  overage_unit_amount_decimal: number | null
+  retention_days: number
+  seat_limit: number | null
+  is_self_serve: boolean
+  active: boolean
+  feature_flags: Record<string, unknown>
+}
+
+interface ProjectTier {
+  id: string
+  display_name: string
+  monthly_price_usd: number
+  included_reports_per_month: number | null
+  overage_unit_amount_decimal: number | null
+  retention_days: number
+  feature_flags: Record<string, unknown>
+}
+
 interface BillingProject {
   project_id: string
   project_name: string
   plan: string
+  tier?: ProjectTier
   subscription: {
     status?: string
+    plan_id?: string | null
     stripe_price_id?: string
     current_period_start?: string
     current_period_end?: string
@@ -54,14 +82,17 @@ interface BillingProject {
   usage: {
     reports: number
     fixes: number
+    fixesSucceeded?: number
     tokens: number
   }
   limit_reports: number | null
   over_quota: boolean
+  usage_pct?: number | null
 }
 
 interface BillingResponse {
   projects: BillingProject[]
+  plans?: PlanCatalog[]
   free_limit_reports_per_month: number
 }
 
@@ -88,6 +119,14 @@ const STATUS_TONE: Record<string, string> = {
   free: 'bg-surface-overlay text-fg-muted',
 }
 
+// Visual tier badges. Falls back to a neutral pill for unknown plan ids.
+const TIER_TONE: Record<string, string> = {
+  hobby: 'bg-surface-overlay text-fg-muted',
+  starter: 'bg-brand-subtle text-brand',
+  pro: 'bg-ok-muted text-ok',
+  enterprise: 'bg-warn/10 text-warn border border-warn/30',
+}
+
 const formatMoney = (amountMinor: number, currency: string) => {
   try {
     return new Intl.NumberFormat(undefined, {
@@ -107,8 +146,10 @@ export function BillingPage() {
   const projects = billing?.projects ?? []
 
   const [actioning, setActioning] = useState<string | null>(null)
+  // Project ID whose plan picker is open. null = no picker open.
+  const [pickerFor, setPickerFor] = useState<string | null>(null)
 
-  const startCheckout = useCallback(async (projectId: string) => {
+  const startCheckout = useCallback(async (projectId: string, planId: string) => {
     if (!user?.email) {
       toast.error('Email required', 'Sign in with an email-backed account before subscribing.')
       return
@@ -116,13 +157,15 @@ export function BillingPage() {
     setActioning(`checkout:${projectId}`)
     const res = await apiFetch<{ url: string }>('/v1/admin/billing/checkout', {
       method: 'POST',
-      body: JSON.stringify({ project_id: projectId, email: user.email }),
+      body: JSON.stringify({ project_id: projectId, email: user.email, plan_id: planId }),
     })
     setActioning(null)
     if (!res.ok || !res.data?.url) {
       const code = res.error?.code
       if (code === 'STRIPE_NOT_CONFIGURED') {
-        toast.error('Stripe not configured', 'Set STRIPE_SECRET_KEY and STRIPE_DEFAULT_PRICE_ID on the API function.')
+        toast.error('Stripe not configured', 'Set STRIPE_SECRET_KEY on the API function.')
+      } else if (code === 'PLAN_NOT_CONFIGURED') {
+        toast.error('Plan not configured', res.error?.message ?? 'Run scripts/stripe-bootstrap.mjs.')
       } else {
         toast.error('Checkout failed', res.error?.message)
       }
@@ -180,8 +223,14 @@ export function BillingPage() {
             <ProjectBillingCard
               key={p.project_id}
               project={p}
+              plans={billing?.plans ?? []}
               actioning={actioning}
-              onUpgrade={() => startCheckout(p.project_id)}
+              pickerOpen={pickerFor === p.project_id}
+              onTogglePicker={() => setPickerFor(pickerFor === p.project_id ? null : p.project_id)}
+              onPickPlan={(planId) => {
+                setPickerFor(null)
+                void startCheckout(p.project_id, planId)
+              }}
               onManage={() => openPortal(p.project_id)}
             />
           ))}
@@ -193,35 +242,71 @@ export function BillingPage() {
 
 interface CardProps {
   project: BillingProject
+  plans: PlanCatalog[]
   actioning: string | null
-  onUpgrade: () => void
+  pickerOpen: boolean
+  onTogglePicker: () => void
+  onPickPlan: (planId: string) => void
   onManage: () => void
 }
 
-function ProjectBillingCard({ project, actioning, onUpgrade, onManage }: CardProps) {
+function ProjectBillingCard({
+  project,
+  plans,
+  actioning,
+  pickerOpen,
+  onTogglePicker,
+  onPickPlan,
+  onManage,
+}: CardProps) {
   const subscribed = !!project.subscription && ['active', 'trialing', 'past_due'].includes(project.subscription.status ?? '')
-  const planLabel = subscribed ? 'Cloud Starter (metered)' : 'Free'
+  const tier = project.tier
+  const tierId = tier?.id ?? 'hobby'
+  const planLabel = tier?.display_name
+    ?? (subscribed ? `Plan ${project.subscription?.plan_id ?? '—'}` : 'Hobby (free)')
   const statusLabel = subscribed ? (project.subscription?.status ?? 'active') : 'free'
-  const usagePct = project.limit_reports
-    ? Math.min(100, Math.round((project.usage.reports / project.limit_reports) * 100))
-    : null
+  // Use the API-provided usage_pct when available; clamp client-side too.
+  const apiPct = project.usage_pct ?? null
+  const usagePct = apiPct != null
+    ? Math.min(100, apiPct)
+    : project.limit_reports
+      ? Math.min(100, Math.round((project.usage.reports / project.limit_reports) * 100))
+      : null
+
+  const overageRate = tier?.overage_unit_amount_decimal
+  const purchasable = plans.filter((p) => p.is_self_serve && p.id !== 'hobby' && p.id !== tierId)
 
   return (
     <Card className="p-3 space-y-3">
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-fg">{project.project_name}</h3>
-          <div className="flex items-center gap-2 mt-0.5">
-            <Badge className={STATUS_TONE[statusLabel] ?? 'bg-surface-overlay text-fg-muted'}>
+          <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <Badge className={TIER_TONE[tierId] ?? 'bg-surface-overlay text-fg-muted'}>
               {planLabel}
+              {tier && tier.monthly_price_usd > 0 && (
+                <span className="ml-1 opacity-70">${tier.monthly_price_usd}/mo</span>
+              )}
             </Badge>
+            {subscribed && (
+              <Badge className={STATUS_TONE[statusLabel] ?? 'bg-surface-overlay text-fg-muted'}>
+                {statusLabel}
+              </Badge>
+            )}
             {project.subscription?.cancel_at_period_end && (
               <Badge className="bg-warn/10 text-warn border border-warn/30">
                 Cancels at period end
               </Badge>
             )}
             {project.over_quota && (
-              <Badge className="bg-danger-subtle text-danger">Over quota — new reports rejected</Badge>
+              <Badge className="bg-danger-subtle text-danger">
+                Over quota — new reports rejected
+              </Badge>
+            )}
+            {overageRate != null && (
+              <span className="text-2xs text-fg-faint">
+                Overage ${Number(overageRate).toFixed(4)} / report
+              </span>
             )}
           </div>
           {project.subscription?.current_period_end && (
@@ -230,10 +315,13 @@ function ProjectBillingCard({ project, actioning, onUpgrade, onManage }: CardPro
             </p>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
-          {!subscribed && (
-            <Btn onClick={onUpgrade} disabled={actioning === `checkout:${project.project_id}`}>
-              {actioning === `checkout:${project.project_id}` ? 'Opening Stripe…' : 'Upgrade'}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {purchasable.length > 0 && (
+            <Btn
+              onClick={onTogglePicker}
+              disabled={actioning?.startsWith(`checkout:${project.project_id}`) ?? false}
+            >
+              {pickerOpen ? 'Hide plans' : subscribed ? 'Change plan' : 'Upgrade'}
             </Btn>
           )}
           {project.customer?.stripe_customer_id && (
@@ -244,10 +332,78 @@ function ProjectBillingCard({ project, actioning, onUpgrade, onManage }: CardPro
         </div>
       </header>
 
+      {pickerOpen && (
+        <PlanPicker
+          plans={purchasable}
+          currentPlanId={tierId}
+          busy={actioning?.startsWith(`checkout:${project.project_id}`) ?? false}
+          onPick={onPickPlan}
+        />
+      )}
+
       <UsageBar usage={project.usage} limitReports={project.limit_reports} pct={usagePct} />
 
       <InvoicesSection projectId={project.project_id} hasCustomer={!!project.customer?.stripe_customer_id} />
     </Card>
+  )
+}
+
+interface PlanPickerProps {
+  plans: PlanCatalog[]
+  currentPlanId: string
+  busy: boolean
+  onPick: (planId: string) => void
+}
+
+function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
+  return (
+    <section className="border border-edge-subtle rounded-md p-3 bg-surface-subtle">
+      <div className="flex items-baseline justify-between mb-2">
+        <h4 className="text-2xs uppercase tracking-wider text-fg-faint">
+          {currentPlanId === 'hobby' ? 'Pick a plan' : 'Switch to'}
+        </h4>
+        <span className="text-2xs text-fg-faint">Billed monthly · cancel any time</span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {plans.map((p) => (
+          <article key={p.id} className="rounded-md border border-edge-subtle p-3 bg-surface">
+            <header className="flex items-baseline justify-between gap-2">
+              <h5 className="text-sm font-semibold text-fg">{p.display_name}</h5>
+              <span className="text-sm font-mono text-fg-secondary">
+                ${p.monthly_price_usd}/mo
+              </span>
+            </header>
+            <p className="text-2xs text-fg-muted mt-1">
+              {p.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo included
+              {p.overage_unit_amount_decimal != null && (
+                <> · ${Number(p.overage_unit_amount_decimal).toFixed(4)}/report after</>
+              )}
+            </p>
+            <p className="text-2xs text-fg-faint mt-0.5">
+              {p.retention_days}-day retention
+              {p.feature_flags.sso ? ' · SSO' : ''}
+              {p.feature_flags.byok ? ' · BYOK' : ''}
+              {p.feature_flags.intelligence_reports ? ' · Intelligence reports' : ''}
+            </p>
+            <Btn
+              size="sm"
+              className="mt-2 w-full"
+              onClick={() => onPick(p.id)}
+              disabled={busy}
+            >
+              {busy ? 'Opening Stripe…' : `Select ${p.display_name}`}
+            </Btn>
+          </article>
+        ))}
+      </div>
+      <p className="text-2xs text-fg-faint mt-2">
+        Need an air-gapped install, custom DPA, or &gt; 500k reports/mo?{' '}
+        <a href="mailto:hello@mushimushi.dev" className="text-brand hover:text-brand-hover">
+          Email sales
+        </a>{' '}
+        for Enterprise.
+      </p>
+    </section>
   )
 }
 

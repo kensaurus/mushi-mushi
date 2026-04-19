@@ -1,11 +1,13 @@
 // ============================================================
-// Wave D D5: Thin Stripe wrapper for the Mushi Cloud product.
+// Thin Stripe wrapper for Mushi Mushi Cloud.
 //
-// Wraps just the four operations the Edge Functions actually need:
+// Wraps just the operations the Edge Functions actually need:
 //   1. createCustomer / retrieveCustomer  — sign-up bootstrap
-//   2. createCheckoutSession              — sign-up redirect
-//   3. createBillingPortalSession         — manage card / cancel
-//   4. recordMeterEvents                  — usage push (Stripe Meter Events)
+//   2. createCheckoutSession              — sign-up + plan upgrade redirect
+//   3. createBillingPortalSession         — manage card / cancel / switch
+//   4. listInvoices                       — billing UI history
+//   5. recordMeterEvent                   — usage push (Stripe Meter Events)
+//   6. retrieveSubscription               — webhook hydrate w/ items expanded
 //
 // Plus signature verification for the webhook receiver.
 //
@@ -21,8 +23,20 @@ const STRIPE_API = 'https://api.stripe.com/v1'
 export interface StripeConfig {
   secretKey: string
   webhookSecret: string
-  meterEventName: string  // e.g. 'reports_ingested'
-  defaultPriceId: string  // metered price ID for the Cloud Starter plan
+  /**
+   * Stripe Billing Meter `event_name` for ingested user reports.
+   * Defaults to `mushi_reports_ingested` to avoid name collisions with
+   * other projects on the same Stripe account. The legacy alias
+   * `reports_ingested` is also accepted by `stripeFromEnv()` for
+   * backwards compatibility with installs that haven't run the bootstrap
+   * script yet.
+   */
+  meterEventName: string
+  /** Meter event name for successfully merged auto-fix PRs (value-based pricing). */
+  fixesMeterEventName: string
+  /** Legacy single-price alias — the Starter base price ID. Kept for the */
+  /** pre-tier-rollout `/billing/checkout` callers that didn't pass a plan. */
+  defaultPriceId: string
   successUrl: string
   cancelUrl: string
   portalReturnUrl: string
@@ -76,6 +90,7 @@ export const createCustomer = (
       email: args.email,
       name: args.name,
       'metadata[project_id]': args.projectId,
+      'metadata[source]': 'mushi-mushi',
     }),
   })
 
@@ -88,24 +103,59 @@ export interface CheckoutSession {
   customer: string
 }
 
+export interface CheckoutLineItem {
+  /** Stripe Price ID. */
+  price: string
+  /** Optional fixed quantity. Metered prices must omit this. */
+  quantity?: number
+}
+
+export interface CreateCheckoutSessionArgs {
+  customer: string
+  projectId: string
+  /**
+   * Plan we're upgrading the customer to. Persisted as `metadata.plan_id` on
+   * both the Checkout Session and the resulting Subscription so the webhook
+   * can hydrate `billing_subscriptions.plan_id` without a Stripe round-trip.
+   */
+  planId: string
+  /**
+   * Line items for the subscription. The first item is the flat base fee;
+   * subsequent items are metered overage prices (no quantity).
+   */
+  lineItems: CheckoutLineItem[]
+  /** Optional Checkout Session-level override (e.g. self-serve coupon code). */
+  promotionCode?: string
+}
+
 export const createCheckoutSession = (
   cfg: StripeConfig,
-  args: { customer: string; projectId: string },
-): Promise<CheckoutSession> =>
-  stripeFetch(cfg, '/checkout/sessions', {
-    method: 'POST',
-    body: form({
-      mode: 'subscription',
-      customer: args.customer,
-      'line_items[0][price]': cfg.defaultPriceId,
-      success_url: cfg.successUrl,
-      cancel_url: cfg.cancelUrl,
-      'metadata[project_id]': args.projectId,
-      'subscription_data[metadata][project_id]': args.projectId,
-      automatic_tax: 'true',
-      payment_method_collection: 'always',
-    }),
+  args: CreateCheckoutSessionArgs,
+): Promise<CheckoutSession> => {
+  const body = form({
+    mode: 'subscription',
+    customer: args.customer,
+    success_url: cfg.successUrl,
+    cancel_url: cfg.cancelUrl,
+    'metadata[project_id]': args.projectId,
+    'metadata[plan_id]': args.planId,
+    'subscription_data[metadata][project_id]': args.projectId,
+    'subscription_data[metadata][plan_id]': args.planId,
+    'subscription_data[metadata][source]': 'mushi-mushi',
+    automatic_tax: 'true',
+    payment_method_collection: 'always',
+    allow_promotion_codes: 'true',
+    billing_address_collection: 'auto',
   })
+  args.lineItems.forEach((item, i) => {
+    body.set(`line_items[${i}][price]`, item.price)
+    if (item.quantity !== undefined) {
+      body.set(`line_items[${i}][quantity]`, String(item.quantity))
+    }
+  })
+  if (args.promotionCode) body.set('discounts[0][promotion_code]', args.promotionCode)
+  return stripeFetch(cfg, '/checkout/sessions', { method: 'POST', body })
+}
 
 export interface PortalSession {
   id: string
@@ -135,15 +185,71 @@ export interface StripeInvoice {
   period_end: number
 }
 
-// List the most recent invoices for a customer. Used by the /billing UI to
-// show payment history without making the user click through to Stripe.
-// Limit defaults to 10 — the customer portal handles "show all" cases.
 export const listInvoices = (
   cfg: StripeConfig,
   customer: string,
   limit = 10,
 ): Promise<{ data: StripeInvoice[] }> =>
   stripeFetch(cfg, `/invoices?customer=${encodeURIComponent(customer)}&limit=${limit}`)
+
+// ----------------------------------------------------------------
+// Subscription hydration
+// ----------------------------------------------------------------
+//
+// Stripe API version 2025-03-31.basil moved `current_period_start` and
+// `current_period_end` from the Subscription onto each Subscription Item,
+// because subscriptions can now have items with mixed billing cycles. The
+// pre-2025 webhook payload still includes these fields at the subscription
+// level for backwards compatibility — but only when reading via API call,
+// not in webhook events. To get a stable view, we pull the subscription
+// with `expand[]=items.data` and read the period from `items.data[0]`.
+export interface StripeSubscriptionItem {
+  id: string
+  price: { id: string; lookup_key?: string | null; metadata?: Record<string, string> }
+  current_period_start: number
+  current_period_end: number
+  metadata?: Record<string, string>
+}
+export interface StripeSubscription {
+  id: string
+  status: string
+  customer: string
+  cancel_at_period_end: boolean
+  current_period_start?: number
+  current_period_end?: number
+  metadata: Record<string, string>
+  items: { data: StripeSubscriptionItem[] }
+}
+
+export const retrieveSubscription = (
+  cfg: StripeConfig,
+  subscriptionId: string,
+): Promise<StripeSubscription> =>
+  stripeFetch(
+    cfg,
+    `/subscriptions/${encodeURIComponent(subscriptionId)}?expand[]=items.data.price`,
+  )
+
+/**
+ * Pull the canonical (start, end) for a subscription regardless of which
+ * Stripe API quirk it came from. Falls back through every known location:
+ *
+ *   1. Newest API: `items.data[i].current_period_start/_end`
+ *   2. Pre-2025-03-31: subscription-level fields (kept for old test fixtures)
+ *   3. Last resort: `null` so the caller can decide whether to refetch
+ */
+export function readSubscriptionPeriod(
+  sub: StripeSubscription | Record<string, unknown>,
+): { start: number | null; end: number | null } {
+  const items = (sub as StripeSubscription).items?.data ?? []
+  const first = items[0]
+  if (first?.current_period_start && first?.current_period_end) {
+    return { start: first.current_period_start, end: first.current_period_end }
+  }
+  const start = (sub as { current_period_start?: number }).current_period_start ?? null
+  const end = (sub as { current_period_end?: number }).current_period_end ?? null
+  return { start, end }
+}
 
 // ----------------------------------------------------------------
 // Meter Events — Stripe's per-record usage reporting API
@@ -154,6 +260,12 @@ export interface MeterEventPayload {
   customer: string                    // Stripe customer ID
   value: number                       // units in this event
   timestamp?: number                  // unix seconds; defaults to now
+  /**
+   * Optional override of the meter event name. Defaults to the config's
+   * `meterEventName`. Pass to record `mushi_fixes_succeeded` from the
+   * fix-worker without threading a second config through.
+   */
+  eventName?: string
 }
 
 export const recordMeterEvent = async (
@@ -161,7 +273,7 @@ export const recordMeterEvent = async (
   payload: MeterEventPayload,
 ): Promise<{ identifier: string }> => {
   const body = form({
-    event_name: cfg.meterEventName,
+    event_name: payload.eventName ?? cfg.meterEventName,
     'payload[stripe_customer_id]': payload.customer,
     'payload[value]': payload.value,
     identifier: payload.identifier,
@@ -225,8 +337,13 @@ export const verifyStripeSignature = async (args: {
 export const stripeFromEnv = (): StripeConfig => ({
   secretKey: Deno.env.get('STRIPE_SECRET_KEY') ?? '',
   webhookSecret: Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '',
-  meterEventName: Deno.env.get('STRIPE_METER_EVENT_NAME') ?? 'reports_ingested',
-  defaultPriceId: Deno.env.get('STRIPE_DEFAULT_PRICE_ID') ?? '',
+  // Default to the namespaced meter name created by `scripts/stripe-bootstrap.mjs`.
+  // Old installs setting `STRIPE_METER_EVENT_NAME=reports_ingested` keep working.
+  meterEventName: Deno.env.get('STRIPE_METER_REPORTS_EVENT_NAME')
+    ?? Deno.env.get('STRIPE_METER_EVENT_NAME')
+    ?? 'mushi_reports_ingested',
+  fixesMeterEventName: Deno.env.get('STRIPE_METER_FIXES_EVENT_NAME') ?? 'mushi_fixes_succeeded',
+  defaultPriceId: Deno.env.get('STRIPE_DEFAULT_PRICE_ID') ?? Deno.env.get('STRIPE_PRICE_STARTER_BASE') ?? '',
   successUrl: Deno.env.get('STRIPE_SUCCESS_URL') ?? 'https://app.mushimushi.dev/billing/success',
   cancelUrl: Deno.env.get('STRIPE_CANCEL_URL') ?? 'https://app.mushimushi.dev/billing/cancel',
   portalReturnUrl: Deno.env.get('STRIPE_PORTAL_RETURN_URL') ?? 'https://app.mushimushi.dev/settings/billing',

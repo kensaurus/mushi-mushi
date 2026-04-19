@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
+import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
@@ -10,6 +11,11 @@ import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
+
+// Wrap Routes so navigation transactions report route patterns (`/reports/:id`)
+// rather than concrete URLs (`/reports/uuid…`). Pairs with
+// `reactRouterV7BrowserTracingIntegration` in `lib/sentry.ts`.
+const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes)
 
 const envStatus = checkEnv()
 
@@ -81,7 +87,7 @@ export function App() {
     <AuthProvider>
       <ToastProvider>
       <PasswordRecoveryGate>
-      <Routes>
+      <SentryRoutes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
@@ -91,7 +97,7 @@ export function App() {
               <Layout>
                 <ErrorBoundary>
                 <Suspense fallback={<Loading text="Loading..." />}>
-                <Routes>
+                <SentryRoutes>
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
@@ -118,14 +124,14 @@ export function App() {
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
                   <Route path="*" element={<NotFoundPage />} />
-                </Routes>
+                </SentryRoutes>
                 </Suspense>
                 </ErrorBoundary>
               </Layout>
             </ProtectedRoute>
           }
         />
-      </Routes>
+      </SentryRoutes>
       </PasswordRecoveryGate>
       </ToastProvider>
     </AuthProvider>

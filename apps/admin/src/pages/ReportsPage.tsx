@@ -19,6 +19,7 @@ import { HelpOverlay } from '../components/reports/HelpOverlay'
 import { ReportsFilterBar, type ContextChip } from '../components/reports/ReportsFilterBar'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
+import { pluralize, pluralizeWithCount } from '../lib/format'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -78,6 +79,7 @@ export function ReportsPage() {
   const [cursor, setCursor] = useState(0)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
+  const [dispatching, setDispatching] = useState<Set<string>>(new Set())
 
   // Reset selection + cursor whenever the visible page changes.
   useEffect(() => {
@@ -169,7 +171,7 @@ export function ReportsPage() {
             : `Severity → ${value}`
       toast.success(
         `${verb}`,
-        `${res.data?.updated ?? ids.length} report${ids.length === 1 ? '' : 's'} updated`,
+        `${pluralizeWithCount(res.data?.updated ?? ids.length, 'report')} updated`,
       )
       clearSelection()
       reload()
@@ -273,7 +275,7 @@ export function ReportsPage() {
     }
     if (criticalQueuedCount > 0) {
       return {
-        title: `${criticalQueuedCount} critical ${criticalQueuedCount === 1 ? 'report' : 'reports'} need triage`,
+        title: `${pluralizeWithCount(criticalQueuedCount, 'critical report')} ${pluralize(criticalQueuedCount, 'needs', 'need')} triage`,
         description:
           'High-severity reports are still pending. Open them to confirm classification and dispatch a fix.',
         cta: {
@@ -291,7 +293,7 @@ export function ReportsPage() {
     }
     if (queuedCount > 0 && !status) {
       return {
-        title: `${queuedCount} ${queuedCount === 1 ? 'report is' : 'reports are'} waiting for triage`,
+        title: `${pluralizeWithCount(queuedCount, 'report')} ${pluralize(queuedCount, 'is', 'are')} waiting for triage`,
         description:
           'Filter to the new bucket to confirm classification and decide who fixes them.',
         cta: { label: 'Filter to untriaged', onClick: () => setFilter('status', 'new') },
@@ -331,6 +333,32 @@ export function ReportsPage() {
       } else {
         toast.error('Dismiss failed', res.error?.message)
       }
+    },
+    [toast, reload],
+  )
+
+  const handleDispatchFix = useCallback(
+    async (r: ReportRow) => {
+      // Inline dispatch — fire-and-forget POST and immediately link the user
+      // to /fixes for the dispatch monitor. Subscribing to SSE per-row would
+      // be wasteful when the user can already babysit one job at a time on
+      // the Fixes page; here we just queue the work and confirm it landed.
+      setDispatching(prev => new Set(prev).add(r.id))
+      const res = await apiFetch<{ dispatchId: string }>(`/v1/admin/fixes/dispatch`, {
+        method: 'POST',
+        body: JSON.stringify({ reportId: r.id, projectId: r.project_id }),
+      })
+      setDispatching(prev => {
+        const next = new Set(prev)
+        next.delete(r.id)
+        return next
+      })
+      if (!res.ok) {
+        toast.error('Dispatch failed', res.error?.message ?? 'Could not queue fix attempt')
+        return
+      }
+      toast.success('Fix dispatched', 'Track progress on the Fixes page')
+      reload()
     },
     [toast, reload],
   )
@@ -416,6 +444,7 @@ export function ReportsPage() {
           cursor={cursor}
           allSelected={allSelected}
           someSelected={someSelected}
+          dispatching={dispatching}
           onToggleSelectAll={toggleSelectAll}
           onToggleSelect={toggleSelect}
           onSetSort={setSort}
@@ -424,6 +453,7 @@ export function ReportsPage() {
           onOpen={handleOpen}
           onCopyLink={handleCopyLink}
           onDismiss={handleDismiss}
+          onDispatchFix={handleDispatchFix}
         />
       )}
 

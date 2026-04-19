@@ -92,8 +92,10 @@ export function GraphFilterChips({
   onToggleNodeType,
   onToggleEdgeType,
 }: FilterChipsProps) {
+  const allNodes = enabledNodeTypes.size === NODE_TYPES.length
+  const allEdges = enabledEdgeTypes.size === EDGE_TYPES.length
   return (
-    <div className="space-y-2">
+    <div className="rounded-md border border-edge-subtle bg-surface-raised/30 p-2.5 space-y-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           placeholder="Search node label…"
@@ -101,32 +103,38 @@ export function GraphFilterChips({
           onChange={(e) => onSearchChange(e.target.value)}
           className="w-64"
         />
-        <div className="flex flex-wrap gap-1">
-          {NODE_TYPES.map((nt) => {
-            const active = enabledNodeTypes.has(nt)
-            return (
-              <button
-                key={nt}
-                type="button"
-                onClick={() => onToggleNodeType(nt)}
-                className={`px-2 py-0.5 rounded-sm text-2xs border ${
-                  active
-                    ? 'border-edge bg-surface-raised text-fg'
-                    : 'border-edge-subtle bg-transparent text-fg-faint'
-                }`}
-              >
-                <span
-                  className="inline-block w-2 h-2 rounded-full mr-1 align-middle"
-                  style={{ backgroundColor: NODE_COLORS[nt] }}
-                />
-                {NODE_TYPE_LABELS[nt]}
-              </button>
-            )
-          })}
-        </div>
+        <span className="text-2xs text-fg-faint ml-auto">
+          {NODE_TYPES.filter((t) => enabledNodeTypes.has(t)).length}/{NODE_TYPES.length} node types ·{' '}
+          {EDGE_TYPES.filter((t) => enabledEdgeTypes.has(t)).length}/{EDGE_TYPES.length} edge types
+        </span>
       </div>
 
-      <div className="flex flex-wrap gap-1">
+      <FilterChipGroup label="Show node types" allActive={allNodes}>
+        {NODE_TYPES.map((nt) => {
+          const active = enabledNodeTypes.has(nt)
+          return (
+            <button
+              key={nt}
+              type="button"
+              onClick={() => onToggleNodeType(nt)}
+              aria-pressed={active}
+              className={`px-2 py-0.5 rounded-sm text-2xs border motion-safe:transition-colors ${
+                active
+                  ? 'border-edge bg-surface-raised text-fg'
+                  : 'border-edge-subtle bg-transparent text-fg-faint hover:text-fg-muted'
+              }`}
+            >
+              <span
+                className="inline-block w-2 h-2 rounded-full mr-1 align-middle"
+                style={{ backgroundColor: NODE_COLORS[nt] }}
+              />
+              {NODE_TYPE_LABELS[nt]}
+            </button>
+          )
+        })}
+      </FilterChipGroup>
+
+      <FilterChipGroup label="Connect via edges" allActive={allEdges}>
         {EDGE_TYPES.map((et) => {
           const active = enabledEdgeTypes.has(et)
           return (
@@ -134,17 +142,45 @@ export function GraphFilterChips({
               key={et}
               type="button"
               onClick={() => onToggleEdgeType(et)}
-              className={`px-2 py-0.5 rounded-sm text-3xs border font-mono ${
+              aria-pressed={active}
+              className={`px-2 py-0.5 rounded-sm text-3xs border font-mono motion-safe:transition-colors ${
                 active
                   ? 'border-edge bg-surface-raised text-fg-secondary'
-                  : 'border-edge-subtle bg-transparent text-fg-faint'
+                  : 'border-edge-subtle bg-transparent text-fg-faint hover:text-fg-muted'
               }`}
             >
               {EDGE_LABELS[et]}
             </button>
           )
         })}
-      </div>
+      </FilterChipGroup>
+    </div>
+  )
+}
+
+interface FilterChipGroupProps {
+  label: string
+  allActive: boolean
+  children: React.ReactNode
+}
+
+/**
+ * Visually labels a row of chips so first-time users can tell node-type
+ * filters from edge-type filters at a glance, instead of staring at two
+ * undifferentiated chip rows. The "all" pill gives a passive read of state.
+ */
+function FilterChipGroup({ label, allActive, children }: FilterChipGroupProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-2xs uppercase tracking-wider text-fg-faint min-w-[6.5rem]">
+        {label}
+        {allActive && (
+          <span className="ml-1 text-3xs text-fg-faint/60 normal-case tracking-normal">
+            (all)
+          </span>
+        )}
+      </span>
+      {children}
     </div>
   )
 }

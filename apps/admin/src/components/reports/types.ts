@@ -19,12 +19,40 @@ export interface ReportRow {
   user_category: string
   confidence: number | null
   component: string | null
+  /** Number of reports in the same dedup group (>=1). When >1 we render a
+   *  "+N similar" badge so triagers can scan past duplicates instead of
+   *  reading 5 visually-identical rows. */
+  dedup_count?: number
+  report_group_id?: string | null
 }
 
 export type SortField = 'created_at' | 'severity' | 'confidence' | 'status' | 'component'
 export type SortDir = 'asc' | 'desc'
 
 export const PAGE_SIZE = 50
+
+/**
+ * Left-edge stripe color per severity. Drawn 4px wide on the row so triage
+ * scan is instant — `critical` jumps off the page in red, `low` blends in.
+ */
+export const SEVERITY_STRIPE: Record<string, string> = {
+  critical: 'bg-danger',
+  high:     'bg-warn',
+  medium:   'bg-warn/60',
+  low:      'bg-info',
+}
+
+export function severityStripeClass(severity: string | null): string {
+  if (!severity) return 'bg-edge-subtle'
+  return SEVERITY_STRIPE[severity] ?? 'bg-edge-subtle'
+}
+
+/**
+ * Reports in these statuses are eligible for the inline "Dispatch fix" CTA.
+ * Anything still `new` needs human triage first; anything `fixed`/`dismissed`
+ * is already terminal so dispatching another attempt would just be noise.
+ */
+export const DISPATCH_ELIGIBLE_STATUSES = new Set(['classified', 'fixing'])
 
 export function severityLabelShort(s: string | null): string {
   if (!s) return '—'

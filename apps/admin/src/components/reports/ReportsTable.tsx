@@ -22,6 +22,9 @@ interface Props {
   cursor: number
   allSelected: boolean
   someSelected: boolean
+  /** Set of report IDs currently being dispatched. Disables their inline
+   *  Dispatch button while the queue request is in flight. */
+  dispatching: Set<string>
   onToggleSelectAll: () => void
   onToggleSelect: (id: string) => void
   onSetSort: (f: SortField) => void
@@ -30,6 +33,7 @@ interface Props {
   onOpen: (row: ReportRow) => void
   onCopyLink: (row: ReportRow) => void
   onDismiss: (row: ReportRow) => void
+  onDispatchFix: (row: ReportRow) => void
 }
 
 export function ReportsTable({
@@ -43,6 +47,7 @@ export function ReportsTable({
   cursor,
   allSelected,
   someSelected,
+  dispatching,
   onToggleSelectAll,
   onToggleSelect,
   onSetSort,
@@ -51,6 +56,7 @@ export function ReportsTable({
   onOpen,
   onCopyLink,
   onDismiss,
+  onDispatchFix,
 }: Props) {
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
@@ -58,7 +64,8 @@ export function ReportsTable({
         <table className="w-full text-sm" aria-label="Bug reports">
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
-              <th scope="col" className="w-8 px-2 py-2 text-left">
+              <th scope="col" className="w-1 p-0" aria-label="Severity stripe" />
+              <th scope="col" className="w-8 px-2 py-2 text-left pl-3">
                 <input
                   type="checkbox"
                   aria-label={allSelected ? 'Deselect all on page' : 'Select all on page'}
@@ -109,8 +116,8 @@ export function ReportsTable({
                 onSort={onSetSort}
                 className="text-right w-24"
               />
-              <th scope="col" className="w-28 px-2 py-2 text-right">
-                Actions
+              <th scope="col" className="w-40 px-2 py-2 text-right">
+                Next step
               </th>
             </tr>
           </thead>
@@ -122,11 +129,13 @@ export function ReportsTable({
                 index={i}
                 isSelected={selected.has(r.id)}
                 isCursor={i === cursor}
+                dispatchBusy={dispatching.has(r.id)}
                 onToggleSelect={() => onToggleSelect(r.id)}
                 onFocus={() => onSetCursor(i)}
                 onOpen={() => onOpen(r)}
                 onCopyLink={() => onCopyLink(r)}
                 onDismiss={() => onDismiss(r)}
+                onDispatchFix={() => onDispatchFix(r)}
               />
             ))}
           </tbody>

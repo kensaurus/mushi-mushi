@@ -24,6 +24,7 @@ import {
 } from '../components/ui'
 import { KpiTile } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
+import { pluralizeWithCount } from '../lib/format'
 
 interface ReporterDevice {
   id: string
@@ -61,6 +62,58 @@ const EVENT_BADGE: Record<AntiGamingEvent['event_type'], string> = {
 
 const EVENT_TYPE_OPTIONS = ['', 'multi_account', 'velocity_anomaly', 'manual_flag', 'unflag']
 
+interface EventGroup {
+  /** Tuple key: `${event_type}|${reason ?? ''}|${reporter_token_hash}|${ip_address ?? ''}` */
+  key: string
+  event_type: AntiGamingEvent['event_type']
+  reason: string | null
+  reporter_token_hash: string
+  ip_address: string | null
+  count: number
+  first_at: string
+  last_at: string
+  /** Underlying event ids, useful for the expanded detail view + audit trail. */
+  ids: string[]
+}
+
+/**
+ * Collapse identical events into one row keyed by the (event_type, reason,
+ * reporter_token_hash, ip_address) tuple. The detector fires once per
+ * threshold breach so a single misbehaving device can spam dozens of
+ * identical lines per hour — this aggregation makes the audit feed
+ * actually skimmable while preserving every individual event id for
+ * SOC-2 traceability.
+ *
+ * Events are returned newest-first by their last occurrence so the most
+ * active groups bubble to the top.
+ */
+function groupEvents(events: AntiGamingEvent[]): EventGroup[] {
+  const map = new Map<string, EventGroup>()
+  for (const e of events) {
+    const key = `${e.event_type}|${e.reason ?? ''}|${e.reporter_token_hash}|${e.ip_address ?? ''}`
+    const existing = map.get(key)
+    if (existing) {
+      existing.count += 1
+      existing.ids.push(e.id)
+      if (e.created_at < existing.first_at) existing.first_at = e.created_at
+      if (e.created_at > existing.last_at) existing.last_at = e.created_at
+    } else {
+      map.set(key, {
+        key,
+        event_type: e.event_type,
+        reason: e.reason,
+        reporter_token_hash: e.reporter_token_hash,
+        ip_address: e.ip_address,
+        count: 1,
+        first_at: e.created_at,
+        last_at: e.created_at,
+        ids: [e.id],
+      })
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
+}
+
 export function AntiGamingPage() {
   const toast = useToast()
   const [filter, setFilter] = useState<'flagged' | 'all'>('flagged')
@@ -68,6 +121,8 @@ export function AntiGamingPage() {
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [aggregateEvents, setAggregateEvents] = useState(true)
+  const [expandedEventGroup, setExpandedEventGroup] = useState<string | null>(null)
 
   const devicesPath = `/v1/admin/anti-gaming/devices${filter === 'flagged' ? '?flagged=true' : ''}`
   const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter] })
@@ -100,6 +155,9 @@ export function AntiGamingPage() {
       || d.ip_addresses.some((ip) => ip.toLowerCase().includes(needle)),
     )
   }, [allDevices, search])
+
+  const eventGroups = useMemo(() => groupEvents(events), [events])
+  const collapsedCount = events.length - eventGroups.length
 
   const stats = useMemo(() => {
     const flagged = allDevices.filter((d) => d.flagged_as_suspicious).length
@@ -229,8 +287,8 @@ export function AntiGamingPage() {
                             </code>
                           )}
                           <span className="text-2xs text-fg-faint">
-                            {d.reporter_tokens.length} token{d.reporter_tokens.length !== 1 ? 's' : ''} · {d.ip_addresses.length} IP{d.ip_addresses.length !== 1 ? 's' : ''} · {d.report_count} reports
-                            {d.distinct_user_count > 0 ? ` · ${d.distinct_user_count} distinct users` : ''}
+                            {pluralizeWithCount(d.reporter_tokens.length, 'token')} · {pluralizeWithCount(d.ip_addresses.length, 'IP')} · {pluralizeWithCount(d.report_count, 'report')}
+                            {d.distinct_user_count > 0 ? ` · ${pluralizeWithCount(d.distinct_user_count, 'distinct user')}` : ''}
                           </span>
                         </div>
                         {d.flag_reason && (
@@ -297,16 +355,83 @@ export function AntiGamingPage() {
 
       <section>
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">Recent events</h2>
-          <FilterSelect
-            label="Type"
-            value={eventFilter}
-            options={EVENT_TYPE_OPTIONS}
-            onChange={(e) => setEventFilter(e.currentTarget.value)}
-          />
+          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
+            Recent events
+            {aggregateEvents && collapsedCount > 0 && (
+              <span className="ml-2 text-2xs font-normal normal-case text-fg-faint">
+                {eventGroups.length} groups · {collapsedCount} duplicates collapsed
+              </span>
+            )}
+          </h2>
+          <div className="flex items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 text-2xs text-fg-muted cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aggregateEvents}
+                onChange={(e) => setAggregateEvents(e.target.checked)}
+                className="h-3 w-3 accent-brand"
+              />
+              Group identical
+            </label>
+            <FilterSelect
+              label="Type"
+              value={eventFilter}
+              options={EVENT_TYPE_OPTIONS}
+              onChange={(e) => setEventFilter(e.currentTarget.value)}
+            />
+          </div>
         </div>
         {events.length === 0 ? (
           <EmptyState title="No anti-gaming events yet" description={eventFilter ? 'Try a different event type.' : undefined} />
+        ) : aggregateEvents ? (
+          <div className="space-y-0.5 font-mono text-2xs">
+            {eventGroups.map((g) => {
+              const isOpen = expandedEventGroup === g.key
+              const isRecurring = g.count > 1
+              const tokTip = `Reporter token hash ${g.reporter_token_hash}`
+              return (
+                <div key={g.key} className="rounded-sm hover:bg-surface-overlay/40">
+                  <button
+                    type="button"
+                    onClick={() => isRecurring && setExpandedEventGroup(isOpen ? null : g.key)}
+                    aria-expanded={isOpen}
+                    disabled={!isRecurring}
+                    className="w-full flex items-center gap-2 px-2 py-1 text-left disabled:cursor-default"
+                  >
+                    <span className="text-fg-faint w-32 truncate" title={`First: ${new Date(g.first_at).toLocaleString()}\nLast: ${new Date(g.last_at).toLocaleString()}`}>
+                      {new Date(g.last_at).toLocaleString()}
+                    </span>
+                    <Badge className={EVENT_BADGE[g.event_type]}>{g.event_type}</Badge>
+                    {isRecurring && (
+                      <Badge className="bg-surface-raised text-fg-muted border border-edge-subtle">
+                        ×{g.count}
+                      </Badge>
+                    )}
+                    <span className="text-fg-secondary truncate flex-1">{g.reason ?? '—'}</span>
+                    <span className="text-fg-faint shrink-0 max-w-32 truncate" title={tokTip}>
+                      tok:{g.reporter_token_hash.slice(0, 8)}…
+                    </span>
+                    {g.ip_address && <span className="text-fg-faint shrink-0">{g.ip_address}</span>}
+                    {isRecurring && (
+                      <span className="text-fg-faint shrink-0 text-3xs">{isOpen ? '▾' : '▸'}</span>
+                    )}
+                  </button>
+                  {isOpen && isRecurring && (
+                    <div className="px-2 pb-2 ml-32 space-y-0.5 text-3xs text-fg-faint border-l border-edge-subtle">
+                      {events
+                        .filter((e) => g.ids.includes(e.id))
+                        .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+                        .map((e) => (
+                          <div key={e.id} className="pl-2 py-0.5">
+                            {new Date(e.created_at).toLocaleString()} · evt:{e.id.slice(0, 8)}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
         ) : (
           <div className="space-y-0.5 font-mono text-2xs">
             {events.map(e => (

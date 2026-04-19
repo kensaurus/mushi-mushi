@@ -119,7 +119,7 @@ export function HealthPage() {
 
   const filteredRecent = useMemo<LlmRecent[]>(() => {
     if (!llm) return []
-    let rows = llm.recent
+    let rows = llm.recent ?? []
     if (recentFilter === 'errors') rows = rows.filter((r) => r.status !== 'success')
     if (recentFilter === 'fallbacks') rows = rows.filter((r) => r.fallback_used)
     if (fnFilter) rows = rows.filter((r) => r.function_name === fnFilter)
@@ -143,9 +143,11 @@ export function HealthPage() {
   if (llmQuery.loading || cronQuery.loading) return <Loading text="Loading health metrics..." />
   if (llmQuery.error || !llm) return <ErrorAlert message={`Failed to load health metrics: ${llmQuery.error ?? 'no data'}`} onRetry={reloadAll} />
 
-  const fallbackPct = (llm.fallbackRate * 100).toFixed(1)
-  const errorPct = (llm.errorRate * 100).toFixed(1)
-  const fnNames = Object.keys(llm.byFunction).sort()
+  const fallbackPct = ((llm.fallbackRate ?? 0) * 100).toFixed(1)
+  const errorPct = ((llm.errorRate ?? 0) * 100).toFixed(1)
+  const byFunction = llm.byFunction ?? {}
+  const byModel = llm.byModel ?? {}
+  const fnNames = Object.keys(byFunction).sort()
 
   return (
     <div className="space-y-4">
@@ -249,7 +251,7 @@ export function HealthPage() {
         ) : (
           <div className="space-y-1">
             {fnNames.map((fn) => {
-              const f = llm.byFunction[fn]
+              const f = byFunction[fn]
               const isFiltered = fnFilter === fn
               return (
                 <Card key={fn} className="p-2.5 flex items-center justify-between text-xs">
@@ -278,11 +280,11 @@ export function HealthPage() {
 
       <section>
         <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">Per-model breakdown</h3>
-        {Object.keys(llm.byModel).length === 0 ? (
+        {Object.keys(byModel).length === 0 ? (
           <EmptyState title={`No LLM activity in the last ${window}`} />
         ) : (
           <div className="space-y-1">
-            {Object.entries(llm.byModel).map(([model, m]) => (
+            {Object.entries(byModel).map(([model, m]) => (
               <Card key={model} className="p-2.5 flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2 min-w-0">
                   <code className="font-mono text-2xs text-fg-secondary truncate">{model}</code>

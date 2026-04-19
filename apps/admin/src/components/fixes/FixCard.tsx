@@ -10,6 +10,7 @@ import { Card, Badge, RelativeTime } from '../ui'
 import { formatTokens } from '../charts'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
+import { pluralizeWithCount } from '../../lib/format'
 import { ciBadge, type FixAttempt } from './types'
 
 interface Props {
@@ -57,8 +58,8 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
           Report: {fix.report_id.slice(0, 8)}…
         </Link>
         {fix.branch && <span title={fix.branch}>Branch: {fix.branch.length > 32 ? `${fix.branch.slice(0, 32)}…` : fix.branch}</span>}
-        {fix.lines_changed != null && <span>{fix.lines_changed} lines</span>}
-        {fix.files_changed && <span>{fix.files_changed.length} files</span>}
+        {fix.lines_changed != null && <span>{pluralizeWithCount(fix.lines_changed, 'line')}</span>}
+        {fix.files_changed && <span>{pluralizeWithCount(fix.files_changed.length, 'file')}</span>}
         {totalTokens > 0 && (
           <span title={`Input: ${fix.llm_input_tokens} · Output: ${fix.llm_output_tokens}`}>
             {formatTokens(totalTokens)} tok

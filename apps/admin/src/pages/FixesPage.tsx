@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
+import { pluralize, pluralizeWithCount } from '../lib/format'
 import { PageHeader, PageHelp, Loading, ErrorAlert } from '../components/ui'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
@@ -137,7 +138,7 @@ export function FixesPage() {
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
     const failed = results.length - ok
     if (failed === 0) {
-      toast.push({ tone: 'success', message: `Re-dispatched ${ok} failed ${ok === 1 ? 'fix' : 'fixes'}` })
+      toast.push({ tone: 'success', message: `Re-dispatched ${ok} failed ${pluralize(ok, 'fix', 'fixes')}` })
     } else {
       toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
     }
@@ -150,14 +151,14 @@ export function FixesPage() {
   return (
     <div className="space-y-3">
       <PageHeader title="Auto-Fix Pipeline">
-        <span className="text-2xs text-fg-faint font-mono">{fixes.length} attempts</span>
+        <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>
         {failedFixes.length > 0 && (
           <button
             type="button"
             onClick={retryAllFailed}
             disabled={retryingAll}
             className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
-            title={`Re-dispatch every fix attempt currently in failed state (${failedFixes.length} job${failedFixes.length === 1 ? '' : 's'}).`}
+            title={`Re-dispatch every fix attempt currently in failed state (${pluralizeWithCount(failedFixes.length, 'job')}).`}
           >
             {retryingAll ? 'Retrying\u2026' : `Retry ${failedFixes.length} failed`}
           </button>

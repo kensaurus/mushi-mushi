@@ -43,7 +43,8 @@
     "changelog:aggregate": "node scripts/aggregate-changelogs.mjs",
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",
     "roadmap:bootstrap": "node scripts/bootstrap-roadmap.mjs",
-    "pdca:loop": "node scripts/pdca-bounded-loop.mjs"
+    "pdca:loop": "node scripts/pdca-bounded-loop.mjs",
+    "stripe:bootstrap": "node scripts/stripe-bootstrap.mjs"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

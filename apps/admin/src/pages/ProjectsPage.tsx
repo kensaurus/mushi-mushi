@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { pluralize, pluralizeWithCount } from '../lib/format'
 import {
   PageHeader,
   PageHelp,
@@ -163,7 +164,7 @@ export function ProjectsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Projects" description={`${projects.length} project${projects.length === 1 ? '' : 's'} owned by you`} />
+      <PageHeader title="Projects" description={`${pluralizeWithCount(projects.length, 'project')} owned by you`} />
 
       <PageHelp
         title="About Projects"
@@ -215,9 +216,9 @@ export function ProjectsPage() {
                       Created {new Date(project.created_at).toLocaleDateString()} · last report {relativeTime(project.last_report_at)}
                     </p>
                     <div className="flex items-center gap-3 mt-2 text-2xs text-fg-secondary">
-                      <span><span className="font-mono text-fg">{project.report_count}</span> reports</span>
-                      <span><span className="font-mono text-fg">{project.active_key_count}</span> active key{project.active_key_count === 1 ? '' : 's'}</span>
-                      <span><span className="font-mono text-fg">{project.member_count}</span> member{project.member_count === 1 ? '' : 's'}</span>
+                      <span><span className="font-mono text-fg">{project.report_count}</span> {pluralize(project.report_count, 'report')}</span>
+                      <span><span className="font-mono text-fg">{project.active_key_count}</span> active {pluralize(project.active_key_count, 'key')}</span>
+                      <span><span className="font-mono text-fg">{project.member_count}</span> {pluralize(project.member_count, 'member')}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
@@ -284,7 +285,7 @@ export function ProjectsPage() {
                 {project.api_keys.length > 0 && (
                   <details className="mt-3 pt-2 border-t border-edge-subtle">
                     <summary className="text-2xs text-fg-muted cursor-pointer select-none hover:text-fg">
-                      {project.api_keys.length} key{project.api_keys.length === 1 ? '' : 's'} ({project.active_key_count} active)
+                      {pluralizeWithCount(project.api_keys.length, 'key')} ({project.active_key_count} active)
                     </summary>
                     <div className="mt-2 space-y-1">
                       {project.api_keys.map((key) => (
