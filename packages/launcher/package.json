@@ -1,0 +1,75 @@
+{
+  "name": "mushi-mushi",
+  "version": "0.3.0",
+  "license": "MIT",
+  "description": "Mushi Mushi launcher — `npx mushi-mushi` (or `npx mushi-mushi init`) auto-detects your framework and installs the right SDK. Bug-reporting + AI triage SDK for React, Vue, Svelte, Angular, React Native, Expo, Capacitor, and vanilla JS.",
+  "bin": {
+    "mushi-mushi": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mushi-mushi/cli": "workspace:^"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "eslint": "^10.2.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.2"
+  },
+  "author": "Kenji Sakuramoto",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/launcher"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "keywords": [
+    "mushi-mushi",
+    "bug-reporting",
+    "user-feedback",
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sdk",
+    "wizard",
+    "setup",
+    "init",
+    "react",
+    "next.js",
+    "nextjs",
+    "vue",
+    "nuxt",
+    "svelte",
+    "sveltekit",
+    "angular",
+    "react-native",
+    "expo",
+    "capacitor",
+    "ionic",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage",
+    "llm"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  }
+}

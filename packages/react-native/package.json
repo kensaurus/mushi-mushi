@@ -58,6 +58,17 @@
   "keywords": [
     "mushi-mushi",
     "bug-reporting",
+    "user-feedback",
+    "react-native",
+    "expo",
+    "shake-to-report",
+    "bottom-sheet",
+    "screenshot",
+    "session-replay",
+    "offline-queue",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage",
     "sdk"
   ],
   "exports": {

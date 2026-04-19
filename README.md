@@ -97,7 +97,7 @@ Mushi Mushi is the missing layer. Drop a small SDK into your app — users press
 2. **LLM-native classification** — 2-stage pipeline (Haiku fast-filter → Sonnet deep + vision), structured outputs via `response_format`, prompt-cached system instructions, deterministic JSON.
 3. **Knowledge graph + dedup** — Bug ↔ component ↔ page ↔ version edges in Postgres + pgvector. Auto-grouping kills duplicate noise.
 4. **LLM-as-Judge self-improvement** — Weekly Sonnet judge scores classifier outputs; low-scoring runs feed a fine-tuning queue. OpenAI fallback when Anthropic is degraded.
-5. **Agent-agnostic auto-fix** — Orchestrator with `validateResult` gating + GitHub PR creation. Sandbox provider abstraction (`local-noop` for tests, `e2b` for prod, `modal` / `cloudflare` scaffolded). True MCP client adapter (JSON-RPC 2.0 + SEP-1686 Tasks) so Claude Code, Codex, Cursor, or any future agent plugs in.
+5. **Agent-agnostic auto-fix** — Orchestrator with `validateResult` gating + GitHub PR creation. Sandbox provider abstraction (`local-noop` for tests, `e2b` / `modal` / `cloudflare` for prod, all four wired through `resolveSandboxProvider`). True MCP client adapter (JSON-RPC 2.0 + SEP-1686 Tasks) so Claude Code, Codex, Cursor, or any future agent plugs in.
 6. **Multi-repo coordinated PRs** — A bug spanning frontend + backend opens linked PRs (`fix_coordinations` table) so reviewers see the full surface.
 7. **Enterprise scaffolding** — SSO config CRUD, audit log ingest, plugin marketplace with HMAC, region-pinned data residency, retention policies, DSAR workflow, Stripe metered billing.
 
@@ -106,7 +106,20 @@ Mushi Mushi is the missing layer. Drop a small SDK into your app — users press
 ## Quick start
 
 ```bash
-npm install @mushi-mushi/react
+npx mushi-mushi
+```
+
+The wizard auto-detects your framework (Next.js / Nuxt / SvelteKit / Angular / Expo / Capacitor / plain React, Vue, Svelte / vanilla JS), installs the right SDK with your package manager, writes `MUSHI_PROJECT_ID` and `MUSHI_API_KEY` to `.env.local` (with the right framework prefix), and prints the snippet to paste in. Equivalent commands:
+
+```bash
+npm create mushi-mushi              # via the npm-create convention
+npx @mushi-mushi/cli init           # if you prefer the scoped name
+```
+
+Skip the wizard and install directly if you already know which SDK you want:
+
+```bash
+npm install @mushi-mushi/react      # also covers Next.js
 ```
 
 ```tsx
@@ -202,18 +215,22 @@ Released today: `v0.8.0`. Next: `v1.0.0` — see [HANDOVER.md](./HANDOVER.md) fo
 
 **Latest dogfood:** end-to-end PDCA loop validated on a real production webapp ([glot.it](https://github.com/kensaurus/glot.it)) with my own OpenRouter key. Report → Stage 1 + Stage 2 LLM triage → admin "Dispatch fix" → `fix-worker` → draft GitHub PR → live in `/fixes`. Sentry, Langfuse and GitHub all probe **Healthy** from the Integrations page. Full writeup with screenshots: [`docs/dogfood-glotit-pdca-2026-04-17.md`](./docs/dogfood-glotit-pdca-2026-04-17.md).
 
+**PDCA full-sweep (2026-04-18):** Stage 2 air-gap closed (only structured Stage 1 evidence reaches Sonnet, never raw user strings) and now contract-tested via `stage2-airgap.test.ts`; pipeline self-heals via `mushi-pipeline-recovery-5m` `pg_cron` + admin "Recover stranded" button + `scripts/pipeline-recover.mjs` host fallback (verified 2026-04-18 12:14 UTC: synthetic stranded report `07325681-…` → fast-filter 1.7 s → classify-report 14.1 s → `classified`); SDK now ships `fingerprintHash` (V5 §3c) and `ingestReport` always anti-games when present; Stripe quota gate ships HTTP 402 + `/billing` UI + invoice list + dashboard `QuotaBanner`; Sentry Seer cron poller; GitHub indexer sweep mode; Modal + Cloudflare sandbox adapters; real SAML SSO via Supabase Auth Admin API (OIDC documented as enterprise-tier-only); integrations routing CRUD with masked-secret pass-through; GraphPage a11y (table fallback + ARIA); `usePageData` + `useToast` rolled out across all 24 admin tabs (Playwright sweep 2026-04-18 12:20 UTC: 0 console errors, 0 warnings); `library-modernizer` + `prompt-auto-tune` Edge Functions deployed; 7 Supabase advisor lints cleared. Full handover: [`docs/HANDOVER-2026-04-18.md`](./docs/HANDOVER-2026-04-18.md).
+
 **Admin console overhaul (Apr 2026):** every analytical page now shares the same `charts.tsx` primitives (`KpiTile`, `LineSparkline`, `SeverityStackedBars`, `Histogram`, `StatusPill`, `HealthPill`). Knowledge graph is a real React Flow canvas with cluster layout + side-panel. Judge has live KPIs, distribution histogram and a prompt leaderboard. NL Query has persistent per-user history and sanitised SQL output. Fixes shows a per-attempt Git branch graph plus a 30-day KPI summary. Queue (formerly DLQ) gets pagination, throughput sparkline and stage breakdown. Fine-Tuning was retired in favour of **Prompt Lab** (A/B traffic, dataset preview, clone/activate/delete) — `/fine-tuning` redirects there. Bug Intelligence runs **async** through `intelligence_generation_jobs` so the page no longer hangs on slow LLM calls. Cross-cutting: global `useToast`, StrictMode-safe `usePageData`, paused polling on hidden tabs, and an `IntegrationHealthDot` that reflects real `/v1/admin/health/history` status.
+
+**PDCA cockpit reframing (Apr 2026):** the 23-page admin console is now organised around the Plan → Do → Check → Act loop the README sells, not the previous `Overview / Pipeline / Operations / Configuration` jargon. The sidebar groups every page under its PDCA stage (`Layout.tsx`); the dashboard prepends a 4-tile `PdcaCockpit` with a single living number per stage, a coloured ring on the current bottleneck, and one-click drill-into-stage. The empty dashboard now reads as a 3-step PDCA first-run script. Reports list got a 4 px severity stripe, a `+N similar` dedup badge, and a single primary action per row (`Triage →` or `Dispatch fix →`). Knowledge graph auto-switches to a Sankey-style storyboard when fewer than 12 nodes exist. Judge surfaces report summaries instead of hashes plus column tooltips. Anti-Gaming aggregates identical events by `(reason, fingerprint, ip)`. `PageHelp` defaults open on first visit per page and persists user dismissal in `localStorage`. See [`apps/admin/README.md`](./apps/admin/README.md#information-architecture-pdca-loop) for the new IA + composition.
 
 ### Honest status — what works, what's still partial
 
 | Area                 | Working                                                                                             | Still partial                                                  |
 | -------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Classification       | Haiku fast-filter, Sonnet deep, **vision air-gap closed**, structured outputs, prompt-cached prompts | —                                                              |
+| Classification       | Haiku fast-filter, Sonnet deep, **vision air-gap closed + contract-tested**, structured outputs, prompt-cached prompts, **`pg_cron` self-healing every 5 min** | —                                                              |
 | Judge / self-improve | Sonnet judge with **OpenAI fallback** wired                                                          | Auto-promotion of fine-tuning candidates to a training run     |
 | Fix orchestrator     | Single + multi-repo, `validateResult` gating, GitHub PR creation, **MCP JSON-RPC 2.0** client       | First-party Claude Code / Codex adapters wait on vendor APIs   |
-| Sandbox              | Provider abstraction; `local-noop` (tests) + `e2b` (prod-ready, deny-by-default egress)             | `modal` / `cloudflare` scaffolded but throw `PROVIDER_UNAVAILABLE` |
+| Sandbox              | Provider abstraction; `local-noop` (tests) + `e2b` / `modal` / `cloudflare` (prod-ready, deny-by-default egress, audit-event stream) | —                                                              |
 | Verify               | Screenshot diff via Playwright + pixelmatch                                                          | Step interpreter is proof-of-concept (nav + click only)        |
-| Enterprise           | Plugin marketplace + HMAC, audit ingest, region pinning, retention CRUD, Stripe metering            | SSO is config CRUD only — no SAML/OIDC flow yet                |
+| Enterprise           | Plugin marketplace + HMAC, audit ingest, region pinning, retention CRUD, Stripe metering + `/billing` UI + invoice list, **SAML SSO via Supabase Auth Admin API** (ACS / Entity ID surfaced for IdP setup), routing-destination CRUD with masked secrets | OIDC SSO writes config but waits on GoTrue admin endpoints     |
 | Streaming            | Fix-dispatch SSE (CVE-2026-29085-safe sanitization)                                                  | Classification reasoning still arrives whole, not token-stream |
 
 The orchestrator **refuses to run `local-noop` in production** unless you explicitly set `MUSHI_ALLOW_LOCAL_SANDBOX=1`. Pick `e2b` (or implement the `SandboxProvider` interface yourself) before exposing autofix to production traffic.
@@ -266,22 +283,26 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 
 ## Packages
 
-> Most developers only install **one** SDK package — it pulls in `core` and `web` automatically.
+> Most developers only install **one** SDK package — `npx mushi-mushi` picks the right one for you and pulls in `core` and `web` automatically.
 
 | Install                            | Framework               | What you get                                                                              |
 | ---------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| `npx mushi-mushi`                  | **Any** (auto-detects)  | One-command wizard — installs the right SDK, writes env vars, prints the snippet          |
 | `npm i @mushi-mushi/react`         | React / Next.js         | `<MushiProvider>`, `useMushi()`, `<MushiErrorBoundary>` — drop-in for any React app       |
 | `npm i @mushi-mushi/vue`           | Vue 3 / Nuxt            | `MushiPlugin`, `useMushi()` composable, error handler (pair with `web` for the widget UI) |
 | `npm i @mushi-mushi/svelte`        | Svelte / SvelteKit      | `initMushi()`, SvelteKit error hook (pair with `web` for the widget UI)                   |
 | `npm i @mushi-mushi/angular`       | Angular 17+             | `provideMushi()`, `MushiService`, error handler (pair with `web` for the widget UI)       |
 | `npm i @mushi-mushi/react-native`  | React Native / Expo     | Shake-to-report, bottom-sheet widget, navigation capture, offline queue                   |
+| `npm i @mushi-mushi/capacitor`     | Capacitor / Ionic       | iOS + Android via Capacitor — shake-to-report, screenshot, offline queue                  |
 | `npm i @mushi-mushi/web`           | Vanilla / any framework | Framework-agnostic SDK — Shadow-DOM widget, screenshot, console + network capture         |
 
+[![mushi-mushi](https://img.shields.io/npm/v/mushi-mushi?label=mushi-mushi%20(launcher)&color=cb3837)](https://www.npmjs.com/package/mushi-mushi)
 [![@mushi-mushi/react](https://img.shields.io/npm/v/@mushi-mushi/react?label=react&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![@mushi-mushi/vue](https://img.shields.io/npm/v/@mushi-mushi/vue?label=vue&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/vue)
 [![@mushi-mushi/svelte](https://img.shields.io/npm/v/@mushi-mushi/svelte?label=svelte&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/svelte)
 [![@mushi-mushi/angular](https://img.shields.io/npm/v/@mushi-mushi/angular?label=angular&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/angular)
 [![@mushi-mushi/react-native](https://img.shields.io/npm/v/@mushi-mushi/react-native?label=react-native&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react-native)
+[![@mushi-mushi/capacitor](https://img.shields.io/npm/v/@mushi-mushi/capacitor?label=capacitor&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/capacitor)
 [![@mushi-mushi/web](https://img.shields.io/npm/v/@mushi-mushi/web?label=web&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/web)
 [![@mushi-mushi/cli](https://img.shields.io/npm/v/@mushi-mushi/cli?label=cli&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/cli)
 [![@mushi-mushi/mcp](https://img.shields.io/npm/v/@mushi-mushi/mcp?label=mcp&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp)

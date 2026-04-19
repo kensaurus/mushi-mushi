@@ -50,8 +50,12 @@
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
-    "plugin",
     "pagerduty",
-    "incident-response"
+    "plugin",
+    "incident-response",
+    "on-call",
+    "alerting",
+    "bug-reporting",
+    "integration"
   ]
 }

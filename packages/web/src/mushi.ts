@@ -10,6 +10,7 @@ import {
   createOfflineQueue,
   captureEnvironment,
   getReporterToken,
+  getDeviceFingerprintHash,
   getSessionId,
   createRateLimiter,
   createPiiScrubber,
@@ -240,6 +241,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     const scrubbedDescription = piiScrubber.scrub(preFilter.truncate(description));
 
     const sentryCtx = config.sentry ? captureSentryContext(config.sentry) : undefined;
+    const fingerprintHash = await getDeviceFingerprintHash().catch(() => null);
 
     const report: MushiReport = {
       id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
@@ -260,6 +262,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       },
       sessionId: getSessionId(),
       reporterToken: getReporterToken(),
+      ...(fingerprintHash ? { fingerprintHash } : {}),
       appVersion: config.integrations?.vercel?.analyticsId,
       proactiveTrigger: pendingProactiveTrigger ?? undefined,
       sentryEventId: sentryCtx?.eventId,

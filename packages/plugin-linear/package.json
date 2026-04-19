@@ -50,8 +50,13 @@
   "sideEffects": false,
   "keywords": [
     "mushi-mushi",
-    "plugin",
     "linear",
-    "issue-tracker"
+    "linear-app",
+    "plugin",
+    "issue-tracker",
+    "issue-sync",
+    "bidirectional-sync",
+    "bug-reporting",
+    "integration"
   ]
 }

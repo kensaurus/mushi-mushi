@@ -10,6 +10,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -103,13 +104,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const value: ToastContextValue = {
-    push,
-    success: (title, description) => push({ tone: 'success', title, description }),
-    error: (title, description) => push({ tone: 'error', title, description }),
-    info: (title, description) => push({ tone: 'info', title, description }),
-    warn: (title, description) => push({ tone: 'warn', title, description }),
-  }
+  // Memoise the context value so consumers using `toast` in `useCallback` or
+  // `useEffect` deps don't re-fire on every toast push/dismiss render. Without
+  // this, e.g. QueryPage re-fetched /v1/admin/query/history every time any
+  // toast appeared or auto-dismissed.
+  const value = useMemo<ToastContextValue>(
+    () => ({
+      push,
+      success: (title, description) => push({ tone: 'success', title, description }),
+      error: (title, description) => push({ tone: 'error', title, description }),
+      info: (title, description) => push({ tone: 'info', title, description }),
+      warn: (title, description) => push({ tone: 'warn', title, description }),
+    }),
+    [push],
+  )
 
   return (
     <ToastContext.Provider value={value}>
