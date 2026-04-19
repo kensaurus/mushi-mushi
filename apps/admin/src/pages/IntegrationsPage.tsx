@@ -15,6 +15,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SetupNudge } from '../components/SetupNudge'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
 import {
@@ -29,7 +30,8 @@ import {
 
 export function IntegrationsPage() {
   const toast = useToast()
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   const historyQuery = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')

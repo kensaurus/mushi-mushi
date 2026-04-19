@@ -19,6 +19,7 @@ import { pluralize } from '../../lib/format'
 import { PageHeader, Card, Btn, Loading } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
+import { useActiveProjectId } from '../ProjectSwitcher'
 
 type LoopStageId = 'plan' | 'do' | 'check'
 
@@ -35,7 +36,8 @@ interface LoopStage {
 export function GettingStartedEmpty() {
   const navigate = useNavigate()
   const toast = useToast()
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
 
   if (setup.loading) return <Loading text="Checking your account..." />

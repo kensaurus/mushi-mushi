@@ -46,10 +46,15 @@ export function GraphStoryboard({
   onSelect,
   onClear,
 }: Props) {
+  // Outer ref scrolls (overflow-auto). Inner ref is the actual content box —
+  // sized to `max-content` so it can grow wider than the viewport. We measure
+  // node coordinates relative to the inner box and put the SVG inside it, so
+  // both translate together when the user scrolls. No scroll listener needed.
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const innerRef = useRef<HTMLDivElement | null>(null)
   const nodeRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const [rects, setRects] = useState<Map<string, NodeRect>>(new Map())
-  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
+  const [innerSize, setInnerSize] = useState({ w: 0, h: 0 })
 
   // Group nodes by type into ordered columns. Empty columns are skipped so
   // a 2-type story renders as 2 columns, not 4-with-gaps.
@@ -69,29 +74,32 @@ export function GraphStoryboard({
     }))
   }, [nodes])
 
-  // Recompute SVG link anchor points whenever layout changes.
+  // Recompute SVG link anchor points whenever layout changes. Measurements are
+  // taken against the inner content box (which can be wider than the scroll
+  // viewport), so the SVG and its bezier paths stay aligned with the nodes
+  // even when the user scrolls horizontally.
   useLayoutEffect(() => {
     const measure = () => {
-      const container = containerRef.current
-      if (!container) return
-      const cRect = container.getBoundingClientRect()
-      setContainerSize({ w: cRect.width, h: cRect.height })
+      const inner = innerRef.current
+      if (!inner) return
+      const iRect = inner.getBoundingClientRect()
+      setInnerSize({ w: iRect.width, h: iRect.height })
       const next = new Map<string, NodeRect>()
       for (const [id, el] of nodeRefs.current.entries()) {
         const r = el.getBoundingClientRect()
         next.set(id, {
           id,
-          cx: r.left + r.width / 2 - cRect.left,
-          cy: r.top + r.height / 2 - cRect.top,
-          right: r.right - cRect.left,
-          left: r.left - cRect.left,
+          cx: r.left + r.width / 2 - iRect.left,
+          cy: r.top + r.height / 2 - iRect.top,
+          right: r.right - iRect.left,
+          left: r.left - iRect.left,
         })
       }
       setRects(next)
     }
     measure()
     const ro = new ResizeObserver(measure)
-    if (containerRef.current) ro.observe(containerRef.current)
+    if (innerRef.current) ro.observe(innerRef.current)
     window.addEventListener('resize', measure)
     return () => {
       ro.disconnect()
@@ -129,11 +137,14 @@ export function GraphStoryboard({
       style={{ minHeight: 420 }}
       role="region"
       aria-label={`Sparse graph storyboard with ${nodes.length} nodes across ${columns.length} stages.`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClear()
-      }}
     >
-      <div className="flex items-stretch gap-12 px-8 py-6 min-h-[420px]">
+      <div
+        ref={innerRef}
+        className="relative flex items-stretch gap-12 px-8 py-6 min-h-[420px] w-max min-w-full"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClear()
+        }}
+      >
         {columns.map((col) => (
           <div key={col.type} className="flex flex-col gap-3 min-w-[10rem] max-w-[14rem]">
             <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
@@ -184,48 +195,48 @@ export function GraphStoryboard({
             </div>
           </div>
         ))}
-      </div>
 
-      {/* Bezier links sit on top of the columns but pointer-events-none so the
-          buttons remain clickable. We absolutely position the SVG to the
-          measured container size so paths align pixel-perfect. */}
-      <svg
-        className="absolute inset-0 pointer-events-none"
-        width={containerSize.w}
-        height={containerSize.h}
-        aria-hidden="true"
-      >
-        <defs>
-          <marker
-            id="storyboard-arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M0,0 L10,5 L0,10 z" fill="oklch(0.55 0 0)" />
-          </marker>
-        </defs>
-        {links.map((l) => (
-          <path
-            key={l.id}
-            d={l.path}
-            fill="none"
-            stroke={
-              l.type === 'regression_of'
-                ? 'oklch(0.65 0.22 25)'
-                : l.type === 'fix_verified'
-                  ? 'oklch(0.72 0.19 155)'
-                  : 'oklch(0.55 0 0)'
-            }
-            strokeWidth={Math.max(1.5, Math.min(3, l.weight))}
-            strokeOpacity={l.dim ? 0.15 : 0.55}
-            markerEnd="url(#storyboard-arrow)"
-          />
-        ))}
-      </svg>
+        {/* Bezier links sit inside the same scrollable inner box so they
+            translate with the columns when the user scrolls. pointer-events
+            stay off the SVG so clicks fall through to the column buttons. */}
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={innerSize.w}
+          height={innerSize.h}
+          aria-hidden="true"
+        >
+          <defs>
+            <marker
+              id="storyboard-arrow"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M0,0 L10,5 L0,10 z" fill="oklch(0.55 0 0)" />
+            </marker>
+          </defs>
+          {links.map((l) => (
+            <path
+              key={l.id}
+              d={l.path}
+              fill="none"
+              stroke={
+                l.type === 'regression_of'
+                  ? 'oklch(0.65 0.22 25)'
+                  : l.type === 'fix_verified'
+                    ? 'oklch(0.72 0.19 155)'
+                    : 'oklch(0.55 0 0)'
+              }
+              strokeWidth={Math.max(1.5, Math.min(3, l.weight))}
+              strokeOpacity={l.dim ? 0.15 : 0.55}
+              markerEnd="url(#storyboard-arrow)"
+            />
+          ))}
+        </svg>
+      </div>
     </div>
   )
 }

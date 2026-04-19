@@ -17,6 +17,7 @@ import { Btn, Card, Input, PageHelp, Loading, ErrorAlert } from '../components/u
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 
 interface ApiKey {
@@ -65,7 +66,8 @@ type Framework = keyof typeof SDK_SNIPPETS
 export function OnboardingPage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
 
   const [projectName, setProjectName] = useState('')
   const [creating, setCreating] = useState(false)

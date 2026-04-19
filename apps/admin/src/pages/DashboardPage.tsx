@@ -10,6 +10,7 @@
 import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeader, PageHelp, Btn, Loading, ErrorAlert } from '../components/ui'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
@@ -24,7 +25,8 @@ import type { DashboardData } from '../components/dashboard/types'
 
 export function DashboardPage() {
   const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
 
   if (loading) return <Loading text="Loading dashboard..." />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
