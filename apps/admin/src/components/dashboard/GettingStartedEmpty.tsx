@@ -49,6 +49,7 @@ export function GettingStartedEmpty() {
   const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
   const hasReports = project.report_count > 0
   const hasFix = project.fix_count > 0
+  const hasMerged = project.merged_fix_count > 0
 
   async function submitTest() {
     if (!project) return
@@ -70,6 +71,7 @@ export function GettingStartedEmpty() {
     sdkInstalled,
     hasReports,
     hasFix,
+    hasMerged,
     onSendTest: submitTest,
     testStatus,
     onSetup: () => navigate('/onboarding'),
@@ -108,13 +110,14 @@ interface BuildStageArgs {
   sdkInstalled: boolean
   hasReports: boolean
   hasFix: boolean
+  hasMerged: boolean
   onSendTest: () => void
   testStatus: 'idle' | 'running' | 'pass' | 'fail'
   onSetup: () => void
 }
 
 function buildStages(args: BuildStageArgs): LoopStage[] {
-  const { sdkInstalled, hasReports, hasFix, onSendTest, testStatus, onSetup } = args
+  const { sdkInstalled, hasReports, hasFix, hasMerged, onSendTest, testStatus, onSetup } = args
 
   // Stage rules:
   //  - "active" = the next thing the user should actually do
@@ -151,12 +154,14 @@ function buildStages(args: BuildStageArgs): LoopStage[] {
       id: 'check',
       letter: 'C',
       label: 'Check',
-      headline: 'Verify the loop',
-      body: hasFix
-        ? 'A draft PR has been opened. Review the agent\u2019s rationale + diff in /fixes, then merge — the loop is closed.'
-        : 'Watch the dispatched fix progress through Plan → Do → Check on the /fixes timeline. Each step writes a Langfuse trace.',
-      cta: { to: '/fixes', label: 'Open Fixes', primary: hasFix },
-      state: hasFix ? 'done' : hasReports ? 'next' : 'next',
+      headline: hasMerged ? 'Loop closed' : 'Verify the loop',
+      body: hasMerged
+        ? 'Your first auto-fix has been merged upstream. New reports now flow through Plan \u2192 Do \u2192 Check end-to-end \u2014 watch the metrics in /fixes.'
+        : hasFix
+          ? 'A draft PR has been opened. Review the agent\u2019s rationale + diff in /fixes, then merge \u2014 that closes the loop.'
+          : 'Watch the dispatched fix progress through Plan \u2192 Do \u2192 Check on the /fixes timeline. Each step writes a Langfuse trace.',
+      cta: { to: '/fixes', label: hasMerged ? 'View merged fix' : 'Open Fixes', primary: hasFix && !hasMerged },
+      state: hasMerged ? 'done' : hasFix ? 'active' : 'next',
     },
   ]
 }

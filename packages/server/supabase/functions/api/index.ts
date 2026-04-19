@@ -3299,7 +3299,7 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
       .order('created_at', { ascending: false })
       .limit(500),
     db.from('fix_attempts')
-      .select('project_id')
+      .select('project_id, merged_at')
       .in('project_id', projectIds)
       .limit(1000),
     db.from('project_repos')
@@ -3331,9 +3331,17 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
     if (platform && platform !== 'mushi-admin') sdkByProject.add(r.project_id)
   }
 
+  // Track BOTH "any fix dispatched" (drives the Check stage transition into
+  // 'active') and "fix merged" (drives Check → 'done'). Without the merged
+  // count the dashboard's PDCA loop card flips straight from 'next' to
+  // 'done' and falsely claims "Loop closed" the moment a draft PR opens.
   const fixesByProject = new Map<string, number>()
+  const mergedFixesByProject = new Map<string, number>()
   for (const f of fixesRes.data ?? []) {
     fixesByProject.set(f.project_id, (fixesByProject.get(f.project_id) ?? 0) + 1)
+    if (f.merged_at) {
+      mergedFixesByProject.set(f.project_id, (mergedFixesByProject.get(f.project_id) ?? 0) + 1)
+    }
   }
 
   type StepId =
@@ -3367,6 +3375,7 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
     const hasSentry = Boolean(settings?.sentry_org_slug)
     const hasByok = Boolean(settings?.byok_anthropic_key_ref)
     const fixCount = fixesByProject.get(p.id) ?? 0
+    const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0
 
     const steps: Step[] = [
       {
@@ -3460,6 +3469,7 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
       done: completeRequired === requiredSteps.length,
       report_count: reportInfo.count,
       fix_count: fixCount,
+      merged_fix_count: mergedFixCount,
     }
   })
 
