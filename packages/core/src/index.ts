@@ -34,6 +34,7 @@ export { createPreFilter, type PreFilterResult } from './pre-filter';
 export { createOfflineQueue, type OfflineQueue } from './queue';
 export { captureEnvironment } from './environment';
 export { getReporterToken } from './reporter-token';
+export { getDeviceFingerprintHash } from './fingerprint';
 export { getSessionId } from './session';
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
 export { createPiiScrubber, scrubPii, type PiiScrubberConfig } from './pii-scrubber';

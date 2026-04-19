@@ -74,3 +74,19 @@ export async function apiFetch<T>(
     return { ok: false, error: { code: 'NETWORK_ERROR', message: String(err) } }
   }
 }
+
+// Same auth + base URL handling as apiFetch but returns the raw Response so
+// callers can stream non-JSON payloads (HTML, CSV, blobs) without parsing.
+export async function apiFetchRaw(
+  path: string,
+  options?: RequestInit,
+): Promise<Response> {
+  const token = await getAccessToken()
+  return fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options?.headers,
+    },
+  })
+}

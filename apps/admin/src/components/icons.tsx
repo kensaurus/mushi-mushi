@@ -224,6 +224,14 @@ export function IconMarketplace(p: IconProps) {
   </>)
 }
 
+export function IconBilling(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2" y="4" width="12" height="9" rx="1.5" />
+    <path d="M2 7h12" />
+    <path d="M5 10.5h2.5" />
+  </>)
+}
+
 export function IconUser(p: IconProps) {
   return wrap(p, <>
     <circle cx="8" cy="5.5" r="2.5" />

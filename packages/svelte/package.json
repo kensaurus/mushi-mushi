@@ -48,6 +48,15 @@
   "keywords": [
     "mushi-mushi",
     "bug-reporting",
+    "user-feedback",
+    "svelte",
+    "sveltekit",
+    "session-replay",
+    "screenshot",
+    "shake-to-report",
+    "sentry-companion",
+    "error-tracking",
+    "ai-triage",
     "sdk"
   ],
   "exports": {

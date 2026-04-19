@@ -1,10 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useMemo, useState } from 'react'
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
   type Edge,
   type Node,
   type NodeMouseHandler,
@@ -12,221 +7,120 @@ import {
 import '@xyflow/react/dist/style.css'
 
 import { apiFetch } from '../lib/supabase'
-import { NODE_COLORS } from '../lib/tokens'
+import { usePageData } from '../lib/usePageData'
+import { useToast } from '../lib/toast'
 import {
   PageHeader,
   PageHelp,
-  Card,
-  Badge,
   Loading,
   ErrorAlert,
-  EmptyState,
-  Input,
-  RelativeTime,
 } from '../components/ui'
+import { SetupNudge } from '../components/SetupNudge'
+import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
+import { OntologyPanel } from '../components/graph/OntologyPanel'
+import { GroupsPanel } from '../components/graph/GroupsPanel'
+import { GraphCanvas } from '../components/graph/GraphCanvas'
+import {
+  GraphFilterChips,
+  QuickViewsRow,
+  type QuickView,
+} from '../components/graph/GraphFilters'
+import { GraphSidePanel } from '../components/graph/GraphSidePanel'
+import { GraphStoryboard } from '../components/graph/GraphStoryboard'
+import { GraphTableView } from '../components/graph/GraphTableView'
+import { layoutNodes } from '../components/graph/graphLayout'
+import {
+  EDGE_LABELS,
+  EDGE_TYPES,
+  NODE_TYPES,
+  type BlastRadiusItem,
+  type EdgeType,
+  type GraphEdge,
+  type GraphNode,
+  type NodeType,
+} from '../components/graph/types'
 
-interface GraphNode {
-  id: string
-  node_type: string
-  label: string
-  metadata?: Record<string, unknown> | null
-  last_traversed_at?: string | null
-  created_at?: string | null
-}
+type ViewMode = 'graph' | 'table'
 
-interface GraphEdge {
-  id: string
-  source_node_id: string
-  target_node_id: string
-  edge_type: string
-  weight: number
-}
-
-interface BlastRadiusItem {
-  target_node_id?: string
-  node_id?: string
-  node_type: string
-  label: string
-  min_depth: number
-}
-
-const EDGE_TYPES = [
-  'causes',
-  'related_to',
-  'regression_of',
-  'duplicate_of',
-  'affects',
-  'fix_attempted',
-  'fix_applied',
-  'fix_verified',
-] as const
-type EdgeType = (typeof EDGE_TYPES)[number]
-
-const EDGE_LABELS: Record<string, string> = {
-  causes: 'causes',
-  related_to: 'related',
-  regression_of: 'regression',
-  duplicate_of: 'duplicate',
-  affects: 'affects',
-  fix_attempted: 'fix attempted',
-  fix_applied: 'fix applied',
-  fix_verified: 'fix verified',
-}
-
-const NODE_TYPES = ['report_group', 'component', 'page', 'version'] as const
-type NodeType = (typeof NODE_TYPES)[number]
-
-const NODE_TYPE_LABELS: Record<string, string> = {
-  report_group: 'Report group',
-  component: 'Component',
-  page: 'Page',
-  version: 'Version',
-}
-
-// Force-directed layout: simple deterministic positioning via spectral seed +
-// iterative repulsion. Pure function so reactflow can re-layout on filter
-// changes without state churn.
-function layoutNodes(nodes: GraphNode[], edges: GraphEdge[]): Map<string, { x: number; y: number }> {
-  const positions = new Map<string, { x: number; y: number }>()
-  if (nodes.length === 0) return positions
-
-  const groupBy = new Map<string, GraphNode[]>()
-  for (const n of nodes) {
-    const k = n.node_type
-    if (!groupBy.has(k)) groupBy.set(k, [])
-    groupBy.get(k)!.push(n)
-  }
-
-  // Place each node-type cluster on a circle ring around the canvas center.
-  const center = { x: 0, y: 0 }
-  const ringRadius = 420
-  const groupKeys = [...groupBy.keys()]
-  groupKeys.forEach((key, gi) => {
-    const groupNodes = groupBy.get(key)!
-    const groupAngle = (2 * Math.PI * gi) / Math.max(1, groupKeys.length)
-    const groupCenter = {
-      x: center.x + ringRadius * Math.cos(groupAngle),
-      y: center.y + ringRadius * Math.sin(groupAngle),
-    }
-    const innerRadius = Math.max(60, Math.min(220, groupNodes.length * 22))
-    groupNodes.forEach((n, ni) => {
-      const a = (2 * Math.PI * ni) / Math.max(1, groupNodes.length)
-      positions.set(n.id, {
-        x: groupCenter.x + innerRadius * Math.cos(a),
-        y: groupCenter.y + innerRadius * Math.sin(a),
-      })
-    })
-  })
-
-  // Light edge attraction pass: pull connected nodes ~5% toward each other.
-  for (let pass = 0; pass < 8; pass++) {
-    for (const e of edges) {
-      const a = positions.get(e.source_node_id)
-      const b = positions.get(e.target_node_id)
-      if (!a || !b) continue
-      const dx = b.x - a.x
-      const dy = b.y - a.y
-      const move = 0.04
-      a.x += dx * move
-      a.y += dy * move
-      b.x -= dx * move
-      b.y -= dy * move
-    }
-  }
-
-  return positions
-}
-
-function nodeMetadataValue(n: GraphNode, key: string): string | number | null {
-  const meta = n.metadata as Record<string, unknown> | null | undefined
-  if (!meta) return null
-  const v = meta[key]
-  if (v == null) return null
-  if (typeof v === 'string' || typeof v === 'number') return v
-  return null
-}
-
-function nodeShape(node_type: string): string {
-  // Visually distinguish report_groups (incident clusters) from
-  // structural nodes (component/page) — squarer for groups, rounded for
-  // structure. Done with className not style so dark/light themes work.
-  if (node_type === 'report_group') return 'rounded-md'
-  return 'rounded-full'
-}
-
-function NodeChip({ node, selected }: { node: GraphNode; selected: boolean }) {
-  const occ = nodeMetadataValue(node, 'occurrence_count')
-  const color = NODE_COLORS[node.node_type] ?? 'oklch(0.55 0 0)'
-  const ring = selected ? 'ring-2 ring-fg shadow-raised' : 'ring-1 ring-edge'
-  const shape = nodeShape(node.node_type)
-  return (
-    <div
-      className={`px-2.5 py-1 text-2xs leading-tight font-medium text-fg bg-surface-raised ${shape} ${ring} max-w-[200px]`}
-      title={`${NODE_TYPE_LABELS[node.node_type] ?? node.node_type}: ${node.label}`}
-    >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span
-          className="inline-block w-2 h-2 rounded-full shrink-0"
-          style={{ backgroundColor: color }}
-          aria-hidden="true"
-        />
-        <span className="truncate">{node.label}</span>
-        {occ != null && (
-          <span className="text-3xs text-fg-faint font-mono shrink-0">×{occ}</span>
-        )}
-      </div>
-    </div>
-  )
-}
+/**
+ * Below this node count we auto-flip to the storyboard layout because the
+ * spaghetti React Flow canvas adds noise (large empty pan area, minimap
+ * clutter) without insight when the data is sparse. Users can still toggle
+ * back to the canvas with the view switch.
+ */
+const STORYBOARD_THRESHOLD = 12
 
 export function GraphPage() {
-  const [rawNodes, setRawNodes] = useState<GraphNode[]>([])
-  const [rawEdges, setRawEdges] = useState<GraphEdge[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
+  const toast = useToast()
+  const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
+  const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
+
+  const rawNodes = nodesQuery.data?.nodes ?? []
+  const rawEdges = edgesQuery.data?.edges ?? []
+  const loading = nodesQuery.loading || edgesQuery.loading
+  const error = nodesQuery.error ?? edgesQuery.error
+  const reloadGraph = useCallback(() => {
+    nodesQuery.reload()
+    edgesQuery.reload()
+  }, [nodesQuery, edgesQuery])
+
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [blastRadius, setBlastRadius] = useState<BlastRadiusItem[]>([])
   const [blastLoading, setBlastLoading] = useState(false)
 
   const [search, setSearch] = useState('')
-  const [enabledNodeTypes, setEnabledNodeTypes] = useState<Set<NodeType>>(
-    new Set(NODE_TYPES),
-  )
-  const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(
-    new Set(EDGE_TYPES),
-  )
+  const [enabledNodeTypes, setEnabledNodeTypes] = useState<Set<NodeType>>(new Set(NODE_TYPES))
+  const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(new Set(EDGE_TYPES))
+  const [view, setView] = useState<ViewMode>('graph')
+  const [hideSingletons, setHideSingletons] = useState(true)
+  const [layoutSeed, setLayoutSeed] = useState(0)
+  // Lets users override the auto-storyboard heuristic — useful when they
+  // want the spatial canvas even on a small graph (e.g. to inspect dragging).
+  const [forceCanvas, setForceCanvas] = useState(false)
 
-  const loadGraph = useCallback(() => {
-    setLoading(true)
-    setError(false)
-    Promise.all([
-      apiFetch<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes'),
-      apiFetch<{ edges: GraphEdge[] }>('/v1/admin/graph/edges'),
-    ])
-      .then(([nodesRes, edgesRes]) => {
-        if (nodesRes.ok && edgesRes.ok) {
-          setRawNodes(nodesRes.data?.nodes ?? [])
-          setRawEdges(edgesRes.data?.edges ?? [])
-        } else {
-          setError(true)
-        }
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
+  // Pre-baked filter views — flip filter sets to highlight a specific story.
+  // Reset selection so the side-panel doesn't show a stale node from a
+  // different filter context.
+  const applyView = useCallback((preset: QuickView) => {
+    setSelectedNode(null)
+    setBlastRadius([])
+    if (preset === 'all') {
+      setEnabledEdgeTypes(new Set(EDGE_TYPES))
+      setEnabledNodeTypes(new Set(NODE_TYPES))
+    } else if (preset === 'regressions') {
+      setEnabledEdgeTypes(new Set(['regression_of', 'duplicate_of', 'related_to']))
+      setEnabledNodeTypes(new Set(NODE_TYPES))
+    } else if (preset === 'fragile') {
+      setEnabledEdgeTypes(new Set(['affects', 'causes']))
+      setEnabledNodeTypes(new Set(['component', 'page', 'report_group']))
+    } else if (preset === 'fixes') {
+      setEnabledEdgeTypes(new Set(['fix_attempted', 'fix_applied', 'fix_verified']))
+      setEnabledNodeTypes(new Set(NODE_TYPES))
+    }
   }, [])
-
-  useEffect(() => {
-    loadGraph()
-  }, [loadGraph])
 
   const filteredNodes = useMemo(() => {
     const q = search.trim().toLowerCase()
-    return rawNodes.filter((n) => {
+    const typeFiltered = rawNodes.filter((n) => {
       if (!enabledNodeTypes.has(n.node_type as NodeType)) return false
       if (q && !n.label.toLowerCase().includes(q)) return false
       return true
     })
-  }, [rawNodes, enabledNodeTypes, search])
+    if (!hideSingletons) return typeFiltered
+    // A node is a singleton if no enabled edge connects to it. We have to
+    // compute connections against the type-filtered set to keep the result
+    // stable when only edge filters change.
+    const visible = new Set(typeFiltered.map((n) => n.id))
+    const connected = new Set<string>()
+    for (const e of rawEdges) {
+      if (!enabledEdgeTypes.has(e.edge_type as EdgeType)) continue
+      if (visible.has(e.source_node_id) && visible.has(e.target_node_id)) {
+        connected.add(e.source_node_id)
+        connected.add(e.target_node_id)
+      }
+    }
+    return typeFiltered.filter((n) => connected.has(n.id))
+  }, [rawNodes, rawEdges, enabledNodeTypes, enabledEdgeTypes, search, hideSingletons])
 
   const filteredEdges = useMemo(() => {
     const visibleNodeIds = new Set(filteredNodes.map((n) => n.id))
@@ -238,9 +132,15 @@ export function GraphPage() {
     )
   }, [rawEdges, filteredNodes, enabledEdgeTypes])
 
+  const singletonCount = useMemo(() => {
+    if (!hideSingletons) return 0
+    const typeFiltered = rawNodes.filter((n) => enabledNodeTypes.has(n.node_type as NodeType))
+    return typeFiltered.length - filteredNodes.length
+  }, [rawNodes, filteredNodes, enabledNodeTypes, hideSingletons])
+
   const positions = useMemo(
-    () => layoutNodes(filteredNodes, filteredEdges),
-    [filteredNodes, filteredEdges],
+    () => layoutNodes(filteredNodes, filteredEdges, layoutSeed),
+    [filteredNodes, filteredEdges, layoutSeed],
   )
 
   const blastRadiusIds = useMemo(() => {
@@ -297,16 +197,42 @@ export function GraphPage() {
           strokeWidth: Math.max(1, Math.min(3, e.weight)),
           opacity: dimmed ? 0.18 : 0.7,
         },
-        labelStyle: {
-          fontSize: 10,
-          fill: 'oklch(0.65 0 0)',
-        },
-        labelBgStyle: {
-          fill: 'oklch(0.18 0 0)',
-        },
+        labelStyle: { fontSize: 10, fill: 'oklch(0.65 0 0)' },
+        labelBgStyle: { fill: 'oklch(0.18 0 0)' },
       } satisfies Edge
     })
   }, [filteredEdges, blastRadiusIds, blastRadius.length])
+
+  const fetchBlastRadius = useCallback(
+    async (node: GraphNode) => {
+      setBlastLoading(true)
+      try {
+        const res = await apiFetch<{ affected: BlastRadiusItem[] }>(
+          `/v1/admin/graph/blast-radius/${node.id}`,
+        )
+        if (res.ok) {
+          setBlastRadius(res.data?.affected ?? [])
+        } else {
+          setBlastRadius([])
+          toast.push({
+            tone: 'error',
+            message: `Couldn't compute blast radius for "${node.label}"`,
+            description: res.error?.message ?? 'Unknown error from /v1/admin/graph/blast-radius',
+          })
+        }
+      } catch (err) {
+        setBlastRadius([])
+        toast.push({
+          tone: 'error',
+          message: `Couldn't reach blast-radius API for "${node.label}"`,
+          description: err instanceof Error ? err.message : String(err),
+        })
+      } finally {
+        setBlastLoading(false)
+      }
+    },
+    [toast],
+  )
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_evt, node) => {
@@ -316,59 +242,53 @@ export function GraphPage() {
         setBlastRadius([])
         return
       }
-      setBlastLoading(true)
-      apiFetch<{ affected: BlastRadiusItem[] }>(
-        `/v1/admin/graph/blast-radius/${original.id}`,
-      )
-        .then((res) => {
-          if (res.ok) setBlastRadius(res.data?.affected ?? [])
-          else setBlastRadius([])
-        })
-        .catch(() => setBlastRadius([]))
-        .finally(() => setBlastLoading(false))
+      void fetchBlastRadius(original)
     },
-    [filteredNodes],
+    [filteredNodes, fetchBlastRadius],
   )
 
-  const clearSelection = () => {
+  const clearSelection = useCallback(() => {
     setSelectedNode(null)
     setBlastRadius([])
-  }
+  }, [])
 
-  const toggleEdgeType = (et: EdgeType) => {
+  const toggleEdgeType = useCallback((et: EdgeType) => {
     setEnabledEdgeTypes((prev) => {
       const next = new Set(prev)
       if (next.has(et)) next.delete(et)
       else next.add(et)
       return next
     })
-  }
+  }, [])
 
-  const toggleNodeType = (nt: NodeType) => {
+  const toggleNodeType = useCallback((nt: NodeType) => {
     setEnabledNodeTypes((prev) => {
       const next = new Set(prev)
       if (next.has(nt)) next.delete(nt)
       else next.add(nt)
       return next
     })
-  }
+  }, [])
+
+  const useStoryboard =
+    view === 'graph' && !forceCanvas && filteredNodes.length > 0 && filteredNodes.length < STORYBOARD_THRESHOLD
 
   if (loading) return <Loading text="Loading graph…" />
   if (error)
     return (
-      <ErrorAlert
-        message="Failed to load knowledge graph."
-        onRetry={loadGraph}
-      />
+      <ErrorAlert message={`Failed to load knowledge graph: ${error}`} onRetry={reloadGraph} />
     )
 
   return (
     <div className="space-y-3">
       <PageHeader title="Knowledge Graph">
-        <span className="text-2xs text-fg-faint font-mono">
-          {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
-          {filteredEdges.length}/{rawEdges.length} edges
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-2xs text-fg-faint font-mono">
+            {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
+            {filteredEdges.length}/{rawEdges.length} edges
+          </span>
+          <ViewModeToggle view={view} onChange={setView} />
+        </div>
       </PageHeader>
 
       <PageHelp
@@ -376,109 +296,109 @@ export function GraphPage() {
         whatIsIt="A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts."
         useCases={[
           'See blast radius: click any node to highlight everything it can affect',
-          'Find regressions: red-tinted edges flag bugs that reappeared after a fix',
-          'Spot fragile components: nodes with the most incoming "affects" edges',
-          'Audit fix coverage: green "fix_verified" edges trace successful repairs',
+          'Find regressions: pick the Regressions view to focus on bugs that reappeared after a fix',
+          'Spot fragile components: pick the Fragile components view to surface high-incoming-affects nodes',
+          'Audit fix coverage: pick the Fix coverage view to trace fix_verified edges',
         ]}
-        howToUse="Filter by node or edge type with the chips below. Click a node to load its blast radius. Use the minimap to navigate; scroll to zoom; drag the canvas to pan."
+        howToUse="Use the quick views to focus on a story, or filter manually with the chips. Drag the canvas to pan, scroll to zoom, click any node for its blast radius. Re-layout shakes the graph into a fresh arrangement."
+      />
+
+      <QuickViewsRow
+        hideSingletons={hideSingletons}
+        singletonCount={singletonCount}
+        onApplyView={applyView}
+        onToggleSingletons={setHideSingletons}
+        onRelayout={() => setLayoutSeed((s) => s + 1)}
       />
 
       {rawNodes.length === 0 ? (
-        <EmptyState
-          title="The graph is empty"
-          description="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."
+        <SetupNudge
+          requires={['first_report_received']}
+          emptyTitle="The graph is empty"
+          emptyDescription="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Input
-                placeholder="Search node label…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-64"
-              />
-              <div className="flex flex-wrap gap-1">
-                {NODE_TYPES.map((nt) => {
-                  const active = enabledNodeTypes.has(nt)
-                  return (
-                    <button
-                      key={nt}
-                      type="button"
-                      onClick={() => toggleNodeType(nt)}
-                      className={`px-2 py-0.5 rounded-sm text-2xs border ${
-                        active
-                          ? 'border-edge bg-surface-raised text-fg'
-                          : 'border-edge-subtle bg-transparent text-fg-faint'
-                      }`}
-                    >
-                      <span
-                        className="inline-block w-2 h-2 rounded-full mr-1 align-middle"
-                        style={{ backgroundColor: NODE_COLORS[nt] }}
-                      />
-                      {NODE_TYPE_LABELS[nt]}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <GraphFilterChips
+              search={search}
+              onSearchChange={setSearch}
+              enabledNodeTypes={enabledNodeTypes}
+              enabledEdgeTypes={enabledEdgeTypes}
+              onToggleNodeType={toggleNodeType}
+              onToggleEdgeType={toggleEdgeType}
+            />
 
-            <div className="flex flex-wrap gap-1">
-              {EDGE_TYPES.map((et) => {
-                const active = enabledEdgeTypes.has(et)
-                return (
+            {useStoryboard ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-2xs text-fg-muted">
+                  <span>
+                    Storyboard view — {filteredNodes.length} nodes flow{' '}
+                    <span className="font-medium text-fg-secondary">left → right</span>{' '}
+                    by stage. Click any card for blast radius.
+                  </span>
                   <button
-                    key={et}
                     type="button"
-                    onClick={() => toggleEdgeType(et)}
-                    className={`px-2 py-0.5 rounded-sm text-3xs border font-mono ${
-                      active
-                        ? 'border-edge bg-surface-raised text-fg-secondary'
-                        : 'border-edge-subtle bg-transparent text-fg-faint'
-                    }`}
+                    onClick={() => setForceCanvas(true)}
+                    className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
                   >
-                    {EDGE_LABELS[et]}
+                    Switch to spatial canvas
                   </button>
-                )
-              })}
-            </div>
-
-            <div
-              className="border border-edge rounded-md bg-surface-root"
-              style={{ height: 520 }}
-            >
-              <ReactFlow
-                nodes={flowNodes}
-                edges={flowEdges}
-                onNodeClick={onNodeClick}
-                onPaneClick={clearSelection}
-                fitView
-                minZoom={0.2}
-                maxZoom={1.6}
-                proOptions={{ hideAttribution: true }}
-                nodesDraggable={false}
-                nodesConnectable={false}
-                elementsSelectable
-                nodeOrigin={[0.5, 0.5]}
-                nodeTypes={{ default: ReactFlowChip }}
-              >
-                <Background gap={24} color="oklch(0.30 0 0)" />
-                <Controls position="bottom-right" showInteractive={false} />
-                <MiniMap
-                  pannable
-                  zoomable
-                  nodeColor={(n) => {
-                    const data = n.data as { node?: GraphNode } | undefined
-                    return NODE_COLORS[data?.node?.node_type ?? ''] ?? 'oklch(0.45 0 0)'
+                </div>
+                <GraphStoryboard
+                  nodes={filteredNodes}
+                  edges={filteredEdges}
+                  selectedNodeId={selectedNode?.id ?? null}
+                  blastRadiusIds={blastRadiusIds}
+                  onSelect={(node) => {
+                    setSelectedNode(node)
+                    void fetchBlastRadius(node)
                   }}
-                  maskColor="oklch(0.10 0 0 / 0.6)"
-                  style={{ background: 'oklch(0.14 0 0)' }}
+                  onClear={clearSelection}
                 />
-              </ReactFlow>
-            </div>
+              </div>
+            ) : (
+              <>
+                {view === 'graph' && forceCanvas && filteredNodes.length < STORYBOARD_THRESHOLD && (
+                  <div className="flex items-center justify-end text-2xs text-fg-muted">
+                    <button
+                      type="button"
+                      onClick={() => setForceCanvas(false)}
+                      className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+                    >
+                      ← Back to storyboard
+                    </button>
+                  </div>
+                )}
+                <GraphCanvas
+                  flowNodes={flowNodes}
+                  flowEdges={flowEdges}
+                  filteredCount={filteredNodes.length}
+                  filteredEdgeCount={filteredEdges.length}
+                  onNodeClick={onNodeClick}
+                  onPaneClick={clearSelection}
+                  onResetView={() => applyView('all')}
+                  hidden={view !== 'graph'}
+                  showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
+                />
+              </>
+            )}
+
+            {view === 'table' && (
+              <GraphTableView
+                nodes={filteredNodes}
+                edges={filteredEdges}
+                selectedNodeId={selectedNode?.id ?? null}
+                blastRadiusIds={blastRadiusIds}
+                onSelect={(node) => {
+                  setSelectedNode(node)
+                  void fetchBlastRadius(node)
+                }}
+              />
+            )}
           </div>
 
-          <SidePanel
+          <GraphSidePanel
             node={selectedNode}
             blastRadius={blastRadius}
             blastLoading={blastLoading}
@@ -486,131 +406,45 @@ export function GraphPage() {
           />
         </div>
       )}
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <GraphBackendPanel />
+        <OntologyPanel />
+      </div>
+
+      <GroupsPanel />
     </div>
   )
 }
 
-function ReactFlowChip({ data }: { data: { node: GraphNode; isSelected: boolean } }) {
-  return <NodeChip node={data.node} selected={data.isSelected} />
+interface ViewModeToggleProps {
+  view: ViewMode
+  onChange: (v: ViewMode) => void
 }
 
-interface SidePanelProps {
-  node: GraphNode | null
-  blastRadius: BlastRadiusItem[]
-  blastLoading: boolean
-  onClear: () => void
-}
-
-function SidePanel({ node, blastRadius, blastLoading, onClear }: SidePanelProps) {
-  if (!node) {
-    return (
-      <Card className="p-3 self-start">
-        <p className="text-xs text-fg-muted">
-          Click any node to inspect it and load its blast radius.
-        </p>
-      </Card>
-    )
-  }
-  const occ = nodeMetadataValue(node, 'occurrence_count')
-  const reportLink =
-    node.node_type === 'component'
-      ? `/reports?component=${encodeURIComponent(node.label)}`
-      : node.node_type === 'page'
-        ? `/reports?url=${encodeURIComponent(node.label)}`
-        : null
-
+function ViewModeToggle({ view, onChange }: ViewModeToggleProps) {
   return (
-    <Card className="p-3 self-start space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-2xs uppercase tracking-wider text-fg-faint">
-            {NODE_TYPE_LABELS[node.node_type] ?? node.node_type}
-          </div>
-          <h3 className="text-sm font-medium text-fg break-words">{node.label}</h3>
-        </div>
-        <button
-          type="button"
-          onClick={onClear}
-          className="text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5"
-          aria-label="Clear selection"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 text-2xs">
-        {occ != null && (
-          <div>
-            <div className="text-fg-faint">Occurrences</div>
-            <div className="font-mono text-fg">{occ}</div>
-          </div>
-        )}
-        {node.last_traversed_at && (
-          <div>
-            <div className="text-fg-faint">Last seen</div>
-            <div className="text-fg-secondary">
-              <RelativeTime value={node.last_traversed_at} />
-            </div>
-          </div>
-        )}
-        {node.created_at && (
-          <div>
-            <div className="text-fg-faint">First seen</div>
-            <div className="text-fg-secondary">
-              <RelativeTime value={node.created_at} />
-            </div>
-          </div>
-        )}
-        <div className="col-span-2">
-          <div className="text-fg-faint">Node id</div>
-          <div className="font-mono text-fg-secondary break-all">{node.id}</div>
-        </div>
-      </div>
-
-      {reportLink && (
-        <Link
-          to={reportLink}
-          className="inline-block text-xs text-brand hover:text-brand-hover"
-        >
-          View related reports →
-        </Link>
-      )}
-
-      <div className="border-t border-edge-subtle pt-2">
-        <div className="flex items-center justify-between mb-1">
-          <h4 className="text-xs font-medium text-fg-secondary">Blast radius</h4>
-          {blastRadius.length > 0 && (
-            <Badge className="bg-surface-overlay text-fg-muted text-3xs">
-              {blastRadius.length}
-            </Badge>
-          )}
-        </div>
-        {blastLoading ? (
-          <p className="text-2xs text-fg-faint">Computing…</p>
-        ) : blastRadius.length === 0 ? (
-          <p className="text-2xs text-fg-faint">
-            Nothing downstream — this node doesn't propagate via causes/affects/related_to.
-          </p>
-        ) : (
-          <ul className="text-2xs text-fg-muted space-y-0.5 max-h-56 overflow-y-auto">
-            {blastRadius.map((b, i) => (
-              <li key={i} className="flex items-center gap-1">
-                <span
-                  className="w-2 h-2 rounded-full inline-block shrink-0"
-                  style={{
-                    backgroundColor:
-                      NODE_COLORS[b.node_type] ?? 'oklch(0.45 0 0)',
-                  }}
-                />
-                <span className="truncate">{b.label}</span>
-                <span className="text-fg-faint font-mono shrink-0">
-                  d{b.min_depth}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
+    <div
+      role="group"
+      aria-label="Graph view mode"
+      className="inline-flex border border-edge rounded-sm overflow-hidden"
+    >
+      <button
+        type="button"
+        onClick={() => onChange('graph')}
+        aria-pressed={view === 'graph'}
+        className={`px-2 py-0.5 text-2xs ${view === 'graph' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
+      >
+        Graph
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('table')}
+        aria-pressed={view === 'table'}
+        className={`px-2 py-0.5 text-2xs border-l border-edge ${view === 'table' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
+      >
+        Table
+      </button>
+    </div>
   )
 }

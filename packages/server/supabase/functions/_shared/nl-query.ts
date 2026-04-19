@@ -3,6 +3,8 @@ import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { z } from 'npm:zod@3'
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createTrace } from './observability.ts'
+import { resolveLlmKey } from './byok.ts'
+import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 
 const DANGEROUS_PATTERNS = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|exec|execute)\b/i
 
@@ -29,8 +31,45 @@ export async function executeNaturalLanguageQuery(
   projectIds: string[],
   question: string,
 ): Promise<{ sql: string; explanation: string; results: unknown[]; summary: string }> {
-  const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
-  const trace = createTrace('nl-query', { question: question.slice(0, 100) })
+  // Wave E §3d: short-circuit graph-shaped questions (blast radius, depends
+  // on, path between) into a recursive-CTE traversal. Avoids the LLM SQL
+  // generator hand-writing buggy `WITH RECURSIVE` queries against
+  // graph_nodes/graph_edges, and gives deterministic answers.
+  const graphIntent = detectGraphQuery(question)
+  if (graphIntent && projectIds.length > 0) {
+    const trace = createTrace('nl-query', {
+      question: question.slice(0, 100),
+      mode: 'graph',
+      intent: graphIntent.intent,
+    })
+    const span = trace.span('graph-traverse')
+    try {
+      const out = await executeGraphQuery(db, projectIds, graphIntent)
+      span.end({ rows: out.results.length })
+      await trace.end()
+      return out
+    } catch (e) {
+      span.end({ error: (e as Error).message })
+      await trace.end()
+      // Fall through to LLM SQL — graph traversal failures shouldn't break
+      // the user's question entirely.
+    }
+  }
+
+  // Wave E §3a: BYOK-resolve Anthropic against the first project the user
+  // owns. Falls back to the env key if the project hasn't configured BYOK.
+  // Resolution failures are non-fatal — `resolved` is null and we use env.
+  const resolved = projectIds.length > 0
+    ? await resolveLlmKey(db, projectIds[0], 'anthropic').catch(() => null)
+    : null
+  const apiKey = resolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY')
+  if (!apiKey) throw new Error('No Anthropic key available (BYOK or env)')
+  const anthropic = createAnthropic({ apiKey })
+  const trace = createTrace('nl-query', {
+    question: question.slice(0, 100),
+    keySource: resolved?.source ?? 'env',
+    mode: 'llm-sql',
+  })
 
   const planSpan = trace.span('generate-sql')
   const { object: queryPlan, usage: planUsage } = await generateObject({

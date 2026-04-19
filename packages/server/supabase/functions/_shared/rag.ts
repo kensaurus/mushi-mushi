@@ -35,7 +35,7 @@ export async function getRelevantCode(
   if (!queryText.trim()) return []
 
   try {
-    const embedding = await createEmbedding(queryText)
+    const embedding = await createEmbedding(queryText, { projectId })
 
     const { data: files } = await db.rpc('match_codebase_files', {
       query_embedding: embedding,
