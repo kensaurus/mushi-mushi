@@ -10,7 +10,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, PageHelp, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SetupNudge } from '../components/SetupNudge'
@@ -186,7 +187,7 @@ export function IntegrationsPage() {
     routingQuery.reload()
   }
 
-  if (loading) return <Loading text="Loading integrations…" />
+  if (loading) return <PanelSkeleton rows={5} label="Loading integrations" />
   if (error) return <ErrorAlert message={`Failed to load integrations: ${error}`} onRetry={reloadAll} />
 
   return (

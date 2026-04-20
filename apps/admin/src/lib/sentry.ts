@@ -15,8 +15,11 @@
  * INSTRUMENTATION:
  *   - reactRouterV7BrowserTracingIntegration gives transaction names that match
  *     route patterns (`/reports/:id`) instead of opaque URLs (`/reports/uuid…`),
- *     which is what makes performance dashboards usable. Pair with
- *     `Sentry.withSentryReactRouterV7Routing(Routes)` in App.tsx.
+ *     which is what makes performance dashboards usable. Pair with EXACTLY ONE
+ *     `Sentry.withSentryReactRouterV7Routing(Routes)` in App.tsx — wrapping
+ *     nested Routes will collapse parametrized transactions into the parent's
+ *     splat (`/reports/:id` → `/reports/*`) because React commits child
+ *     effects before parent effects.
  */
 
 import { useEffect } from 'react'

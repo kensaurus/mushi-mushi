@@ -14,10 +14,10 @@ import {
   Btn,
   FilterSelect,
   EmptyState,
-  Loading,
   ErrorAlert,
   RecommendedAction,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
@@ -268,7 +268,7 @@ export function DLQPage() {
         })()}
 
       {loading ? (
-        <Loading text="Loading queue..." />
+        <TableSkeleton rows={6} columns={4} showFilters label="Loading queue" />
       ) : error ? (
         <ErrorAlert message="Failed to load queue items." onRetry={loadAll} />
       ) : items.length === 0 ? (

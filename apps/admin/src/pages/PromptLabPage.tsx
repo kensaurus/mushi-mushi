@@ -14,9 +14,9 @@ import { useMemo, useState } from 'react'
 import {
   PageHeader,
   PageHelp,
-  Loading,
   ErrorAlert,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiRow, KpiTile, formatPct } from '../components/charts'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
@@ -139,7 +139,7 @@ export function PromptLabPage() {
     }
   }
 
-  if (loading) return <Loading text="Loading prompt lab..." />
+  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading prompt lab" />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
   if (!data) return null
 

@@ -168,11 +168,19 @@ export function Layout({ children }: { children: ReactNode }) {
 
   // Force-open the section that contains the current page so the user
   // never sees a sidebar where their location is hidden behind a collapsed
-  // chevron. The user's previous opt-in/opt-out is otherwise preserved.
+  // chevron. The effective collapsed state mirrors `toggleSection` —
+  // `prev[id] ?? defaultCollapsed` — so a deep-link into Workspace
+  // (defaultCollapsed: true, no localStorage entry yet) still expands.
+  // Only mutates in-memory state, so the user's persisted preference
+  // survives a reload.
   useEffect(() => {
     const containing = NAV.find(s => s.items.some(i => isActive(pathname, i.path)))
     if (!containing) return
-    setCollapsedMap(prev => (prev[containing.id] ? { ...prev, [containing.id]: false } : prev))
+    setCollapsedMap(prev => {
+      const effectivelyCollapsed = prev[containing.id] ?? containing.defaultCollapsed ?? false
+      if (!effectivelyCollapsed) return prev
+      return { ...prev, [containing.id]: false }
+    })
   }, [pathname])
 
   function toggleSection(id: string, defaultCollapsed: boolean) {

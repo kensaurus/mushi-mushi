@@ -12,9 +12,14 @@ import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
 
-// Wrap Routes so navigation transactions report route patterns (`/reports/:id`)
-// rather than concrete URLs (`/reports/uuid…`). Pairs with
-// `reactRouterV7BrowserTracingIntegration` in `lib/sentry.ts`.
+// Wrap Routes ONCE, at the level where the real (parametrized) route
+// definitions live — i.e. the inner Routes mounted under the auth gate.
+// The outer Routes only sees `/login`, `/reset-password`, `/*`, so wrapping
+// it would clobber every authenticated transaction with `/*` (React commits
+// child effects before parent effects, so the parent wrapper overwrites the
+// child's correctly-parametrized name on every navigation). Sentry's docs
+// are explicit: this wrapper is "only needed at the top level of your app."
+// See: https://docs.sentry.io/platforms/javascript/guides/react/features/react-router/v7/
 const SentryRoutes = Sentry.withSentryReactRouterV7Routing(Routes)
 
 const envStatus = checkEnv()
@@ -87,7 +92,7 @@ export function App() {
     <AuthProvider>
       <ToastProvider>
       <PasswordRecoveryGate>
-      <SentryRoutes>
+      <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
@@ -131,7 +136,7 @@ export function App() {
             </ProtectedRoute>
           }
         />
-      </SentryRoutes>
+      </Routes>
       </PasswordRecoveryGate>
       </ToastProvider>
     </AuthProvider>

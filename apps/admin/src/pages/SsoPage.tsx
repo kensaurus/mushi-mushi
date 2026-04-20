@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, ErrorAlert, EmptyState } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 
 interface SsoConfig {
@@ -168,7 +169,7 @@ export function SsoPage() {
         </Card>
       )}
 
-      {loading ? <Loading /> : error ? <ErrorAlert message={`Failed to load SSO configs: ${error}`} onRetry={reload} /> : configs.length === 0 ? (
+      {loading ? <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading SSO providers" /> : error ? <ErrorAlert message={`Failed to load SSO configs: ${error}`} onRetry={reload} /> : configs.length === 0 ? (
         <EmptyState
           title="No identity providers configured"
           description="Add a provider above. Until at least one is registered, all admins continue to log in via email and password."

@@ -19,9 +19,9 @@ import {
   FilterSelect,
   Input,
   EmptyState,
-  Loading,
   ErrorAlert,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile, type KpiDelta } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
 import { pluralizeWithCount } from '../lib/format'
@@ -262,7 +262,7 @@ export function AntiGamingPage() {
           />
         </div>
         {loading ? (
-          <Loading text="Loading devices..." />
+          <TableSkeleton rows={6} columns={4} showFilters={false} label="Loading devices" />
         ) : error ? (
           <ErrorAlert message={`Failed to load devices: ${error}`} onRetry={devicesQuery.reload} />
         ) : devices.length === 0 ? (

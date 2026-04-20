@@ -4,16 +4,18 @@ import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { useHotkeys } from '../lib/useHotkeys'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   PageHeader,
   PageHelp,
   EmptyState,
-  Loading,
   ErrorAlert,
   RecommendedAction,
   Tooltip,
   Kbd,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
 import { HelpOverlay } from '../components/reports/HelpOverlay'
 import { ReportsFilterBar, type ContextChip } from '../components/reports/ReportsFilterBar'
@@ -26,6 +28,9 @@ export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
 
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -390,6 +395,7 @@ export function ReportsPage() {
     <div>
       <PageHeader
         title="Reports"
+        projectScope={projectName}
         description="User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise."
       >
         <span className="text-xs text-fg-muted font-mono tabular-nums">
@@ -458,11 +464,15 @@ export function ReportsPage() {
       />
 
       {loading ? (
-        <Loading text="Loading reports..." />
+        <TableSkeleton rows={8} columns={6} showFilters={false} label="Loading reports" />
       ) : error ? (
         <ErrorAlert message={`Failed to load reports: ${error}`} onRetry={reload} />
-      ) : reports.length === 0 ? (
+      ) : reports.length === 0 && hasFilters ? (
         <EmptyState title="No reports match the selected filters." />
+      ) : reports.length === 0 ? (
+        // RecommendedAction above already shows "No reports yet" — don't
+        // double-paint a contradictory empty state. Audit Wave K bugfix.
+        null
       ) : (
         <ReportsTable
           reports={reports}

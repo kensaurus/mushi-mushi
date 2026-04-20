@@ -9,7 +9,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
-import { PageHeader, PageHelp, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Btn, ErrorAlert, EmptyState } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import {
   ActiveJobCard,
@@ -237,7 +238,7 @@ export function IntelligencePage() {
       <RecentJobsList jobs={recentJobs} />
 
       {loading ? (
-        <Loading />
+        <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading intelligence reports" />
       ) : error ? (
         <ErrorAlert message="Failed to load intelligence reports." onRetry={fetchData} />
       ) : reports.length === 0 ? (

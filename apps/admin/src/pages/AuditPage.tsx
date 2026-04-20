@@ -19,10 +19,10 @@ import {
   FilterSelect,
   Input,
   SelectField,
-  Loading,
   ErrorAlert,
   EmptyState,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 
 interface AuditEntry {
   id: string
@@ -285,7 +285,7 @@ export function AuditPage() {
       </Card>
 
       {loading ? (
-        <Loading />
+        <TableSkeleton rows={10} columns={5} showFilters={false} label="Loading audit logs" />
       ) : error ? (
         <ErrorAlert message={`Failed to load audit logs: ${error}`} onRetry={reload} />
       ) : logs.length === 0 ? (

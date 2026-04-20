@@ -7,11 +7,13 @@
  *          evolve independently and stay below the 30-line-function limit.
  */
 
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { PageHeader, PageHelp, Btn, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Btn, ErrorAlert } from '../components/ui'
+import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
 import { FirstReportHero } from '../components/dashboard/FirstReportHero'
@@ -28,8 +30,9 @@ export function DashboardPage() {
   const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
+  const [showFullDashboard, setShowFullDashboard] = useState(false)
 
-  if (loading) return <Loading text="Loading dashboard..." />
+  if (loading) return <DashboardSkeleton />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
   if (!data || data.empty) return <GettingStartedEmpty />
 
@@ -38,22 +41,22 @@ export function DashboardPage() {
   const reportsByDay = data.reportsByDay ?? []
   const llmByDay = data.llmByDay ?? []
   const activity = data.activity ?? []
-  // Drive the hero's "live pulse" off the most recent report event in the
-  // activity feed. We can't use reportsByDay because that's day-bucketed.
   const lastReportAt = activity.find(a => a.kind === 'report')?.at ?? null
   const projectName = setup.activeProject?.project_name ?? null
-  // P1 audit: when the user has wired the SDK but no real bugs have landed,
-  // promote the test-report CTA to a hero so they don't bounce off a wall
-  // of zero-state widgets.
   const sdkInstalled = setup.activeProject ? !setup.isStepIncomplete('sdk_installed') : false
   const showFirstReportHero =
     !!setup.activeProject &&
     sdkInstalled &&
     setup.activeProject.report_count === 0
+  // First-action clarity (Wave K Phase 1): when required setup steps are
+  // missing, hide the wall of KPIs/charts/cockpit by default. Show only the
+  // checklist + hero intro so the user has exactly one thing to do.
+  const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
+  const renderFullDashboard = !setupIncomplete || showFullDashboard
 
   return (
     <div>
-      <PageHeader title="Dashboard">
+      <PageHeader title="Dashboard" description={projectName ? `Your loop on ${projectName}` : undefined}>
         <Btn size="sm" variant="ghost" onClick={reload}>
           Refresh
         </Btn>
@@ -82,43 +85,58 @@ export function DashboardPage() {
         />
       )}
 
-      <PageHelp
-        title="About the Dashboard"
-        whatIsIt="14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it."
-        useCases={[
-          'See whether report intake is rising or falling vs the prior week',
-          'Catch a backlog of un-triaged reports before users complain',
-          'Spot a regression in LLM cost or failure rate after a prompt change',
-          'Jump into the highest-priority report that needs review',
-        ]}
-        howToUse="Click any KPI or row to drill in. Hover the chart bars for per-day totals."
-      />
-
       {setup.activeProject && (
         <SetupChecklist project={setup.activeProject} mode="banner" onRefresh={setup.reload} />
       )}
 
-      <QuotaBanner />
-
-      {data.pdcaStages && data.pdcaStages.length > 0 && (
-        <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
+      {setupIncomplete && !showFullDashboard && (
+        <div className="mt-4 flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+          <p className="text-xs text-fg-muted">
+            Finish setup above to unlock the full dashboard. You can peek now if you like.
+          </p>
+          <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
+            Show full dashboard
+          </Btn>
+        </div>
       )}
 
-      <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} />
+      {renderFullDashboard && (
+        <>
+          <PageHelp
+            title="About the Dashboard"
+            whatIsIt="14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it."
+            useCases={[
+              'See whether report intake is rising or falling vs the prior week',
+              'Catch a backlog of un-triaged reports before users complain',
+              'Spot a regression in LLM cost or failure rate after a prompt change',
+              'Jump into the highest-priority report that needs review',
+            ]}
+            howToUse="Click any KPI or row to drill in. Hover the chart bars for per-day totals."
+          />
 
-      <ChartsRow
-        reportsByDay={reportsByDay}
-        llmByDay={llmByDay}
-        totalLlmCalls={counts.llmCalls14d}
-      />
+          <QuotaBanner />
 
-      <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
+          {data.pdcaStages && data.pdcaStages.length > 0 && (
+            <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
+          )}
 
-      <InsightsRow
-        topComponents={data.topComponents ?? []}
-        integrations={data.integrations ?? []}
-        activity={activity}
-      />
+          <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} />
+
+          <ChartsRow
+            reportsByDay={reportsByDay}
+            llmByDay={llmByDay}
+            totalLlmCalls={counts.llmCalls14d}
+          />
+
+          <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
+
+          <InsightsRow
+            topComponents={data.topComponents ?? []}
+            integrations={data.integrations ?? []}
+            activity={activity}
+          />
+        </>
+      )}
     </div>
   )
 }

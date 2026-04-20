@@ -54,7 +54,7 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
               >
                 {meta.letter}
               </span>
-              {subtle ? 'PDCA loop \u2014 healthy' : `${meta.label} \u2014 next action`}
+              {subtle ? 'Triage \u2192 Fix \u2192 Verify \u2014 healthy' : `${meta.label} \u2014 next action`}
             </span>
             {projectName && (
               <span className="text-3xs text-fg-faint normal-case tracking-normal">

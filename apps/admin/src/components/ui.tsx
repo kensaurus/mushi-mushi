@@ -7,7 +7,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { PDCA_STAGES, stageForPath } from '../lib/pdca'
+import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
@@ -426,9 +426,14 @@ interface PageHeaderProps {
    *  the PDCA loop (login, settings, etc.). Leave undefined to inherit the
    *  default URL-driven chip — that's the path almost every page should take. */
   contextChip?: ReactNode | null
+  /** Project name to anchor the page in the user's reality
+   *  (e.g. `Reports · glot-it`). Pass `null` or omit to keep the bare title.
+   *  Audit Wave K: every PDCA page surfaces the active project so the user
+   *  can tell which app a bug came from without scanning the switcher. */
+  projectScope?: string | null
 }
 
-export function PageHeader({ title, description, children, contextChip }: PageHeaderProps) {
+export function PageHeader({ title, description, children, contextChip, projectScope }: PageHeaderProps) {
   // `undefined` = render the auto URL-derived stage chip; `null` = explicitly
   // suppressed; anything else = caller-provided chip. This keeps the audit
   // invariant ("every PDCA page shows its stage above the title") without
@@ -438,7 +443,15 @@ export function PageHeader({ title, description, children, contextChip }: PageHe
     <div className="flex items-start justify-between mb-5 gap-3">
       <div className="min-w-0">
         {chip && <div className="mb-1.5">{chip}</div>}
-        <h2 className="text-base font-semibold text-fg">{title}</h2>
+        <h2 className="text-base font-semibold text-fg">
+          {title}
+          {projectScope && (
+            <>
+              <span className="mx-1.5 text-fg-faint" aria-hidden="true">·</span>
+              <span className="font-mono text-fg-secondary">{projectScope}</span>
+            </>
+          )}
+        </h2>
         {description && <p className="text-xs text-fg-muted mt-0.5">{description}</p>}
       </div>
       {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
@@ -455,14 +468,17 @@ export function PageHeader({ title, description, children, contextChip }: PageHe
  */
 function AutoPdcaChip() {
   const { pathname } = useLocation()
-  const stage = stageForPath(pathname)
-  if (!stage) return null
-  const meta = PDCA_STAGES[stage]
+  const chip = chipForPath(pathname)
+  if (!chip) return null
+  const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip]
+  const ariaLabel = chip === 'overview'
+    ? `Overview: ${meta.hint}`
+    : `PDCA stage: ${meta.label}. ${meta.hint}`
   return (
     <Tooltip content={meta.hint}>
       <span
         className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
-        aria-label={`PDCA stage: ${meta.label}. ${meta.hint}`}
+        aria-label={ariaLabel}
       >
         <span
           className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm font-semibold text-[9px] ${meta.badgeBg} ${meta.badgeFg}`}
@@ -489,6 +505,7 @@ interface PageHelpProps {
 }
 
 const PAGEHELP_DISMISS_PREFIX = 'mushi:pagehelp:dismissed:'
+const PAGEHELP_VISITED_FLAG = 'mushi:visited'
 
 function readPageHelpDismissed(title: string): boolean {
   if (typeof window === 'undefined') return false
@@ -512,15 +529,41 @@ function writePageHelpDismissed(title: string, dismissed: boolean) {
   }
 }
 
+/** Returning users (anyone who has visited the admin before) shouldn't be
+ *  bombarded with help disclosures on every page. We mark the visit on first
+ *  page-help mount and use it to flip the default from open -> closed for
+ *  subsequent sessions on pages they haven't explicitly opened. Audit Wave K. */
+function isReturningUser(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(PAGEHELP_VISITED_FLAG) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markVisited() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PAGEHELP_VISITED_FLAG, '1')
+  } catch {
+    /* best effort */
+  }
+}
+
 export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: PageHelpProps) {
-  // First-time visitors should see the page context unfolded — the audit
-  // found that having every disclosure collapsed by default hid the entire
-  // value-prop of each page. Once the user dismisses it, the choice is
-  // persisted per-title across sessions so power users aren't pestered.
+  // Default-open only for first-ever visits (a single global flag, not per
+  // page) — the audit found existing per-title-only logic hammered returning
+  // users with re-opened help on every new page they navigated to.
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
-    return !readPageHelpDismissed(title)
+    if (readPageHelpDismissed(title)) return false
+    return !isReturningUser()
   })
+
+  useEffect(() => {
+    markVisited()
+  }, [])
 
   const handleToggle: ReactEventHandler<HTMLDetailsElement> = (e) => {
     const next = e.currentTarget.open
@@ -878,6 +921,68 @@ export function Loading({ text = 'Loading…' }: { text?: string }) {
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
     <div className={`motion-safe:animate-pulse rounded-sm bg-surface-overlay/50 ${className}`} />
+  )
+}
+
+/* ── ResultChip — persistent inline feedback for Test/Run/Trigger ───────────
+ *
+ * After clicking a "Test" or "Run" or "Trigger" button, the user needs a
+ * sticky receipt: did it work, when did it run, what was the response.
+ * Toasts disappear; this stays put next to the button until the next run.
+ *
+ * Tones map directly to status semantics so the chip can be passed a single
+ * tone prop and never needs to think about colour. Wave K microinteraction.
+ */
+
+export type ResultChipTone = 'idle' | 'running' | 'success' | 'error' | 'info'
+
+interface ResultChipProps {
+  tone: ResultChipTone
+  children: ReactNode
+  /** Optional ISO timestamp, rendered as relative time after the message. */
+  at?: string | null
+  className?: string
+}
+
+const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
+  idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
+  running: 'border-info/30 bg-info-muted/30 text-info',
+  success: 'border-ok/30 bg-ok-muted/30 text-ok',
+  error: 'border-danger/30 bg-danger-muted/30 text-danger',
+  info: 'border-info/30 bg-info-muted/30 text-info',
+}
+
+const RESULT_CHIP_GLYPH: Record<ResultChipTone, string> = {
+  idle: '·',
+  running: '…',
+  success: '✓',
+  error: '✕',
+  info: 'i',
+}
+
+export function ResultChip({ tone, children, at, className = '' }: ResultChipProps) {
+  const isRunning = tone === 'running'
+  return (
+    <span
+      role="status"
+      aria-live={tone === 'error' ? 'assertive' : 'polite'}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs leading-tight motion-safe:animate-mushi-fade-in ${RESULT_CHIP_CLS[tone]} ${className}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+          isRunning ? 'motion-safe:animate-spin' : ''
+        }`}
+      >
+        {isRunning ? '↻' : RESULT_CHIP_GLYPH[tone]}
+      </span>
+      <span className="min-w-0 truncate">{children}</span>
+      {at && (
+        <span className="text-fg-faint ml-0.5">
+          · <RelativeTime value={at} />
+        </span>
+      )}
+    </span>
   )
 }
 

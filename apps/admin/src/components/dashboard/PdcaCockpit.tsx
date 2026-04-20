@@ -37,10 +37,10 @@ const TONE_DOT: Record<PdcaStageTone, { dot: string; label: string; pulse?: bool
 export function PdcaCockpit({ stages, focusStage }: Props) {
   if (stages.length === 0) return null
   return (
-    <section aria-label="PDCA cockpit" className="mb-4">
+    <section aria-label="Loop status" className="mb-4">
       <div className="flex items-baseline justify-between mb-2">
         <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
-          PDCA cockpit
+          Loop status &mdash; Plan, Do, Check, Act
         </h2>
         <span className="text-2xs text-fg-faint">
           One loop · Plan → Do → Check → Act

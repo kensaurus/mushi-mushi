@@ -41,12 +41,33 @@ const TILES: Array<{
 ]
 
 export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: Props) {
-  const { data, loading } = usePageData<SeverityStats>(
+  const { data, loading, error, reload } = usePageData<SeverityStats>(
     `/v1/admin/reports/severity-stats?days=${windowDays}`,
     { deps: [windowDays] },
   )
 
   const counts = data?.bySeverity ?? { critical: 0, high: 0, medium: 0, low: 0 }
+
+  // Surface fetch failures inline instead of silently rendering zeros — the
+  // audit found this row claiming "0 critical · 0 high" when the endpoint
+  // 500'd, which is actively misleading. Audit Wave K bugfix.
+  if (error) {
+    return (
+      <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-danger">Couldn\u2019t load severity stats</p>
+          <p className="mt-0.5 truncate text-3xs text-fg-muted">{error}</p>
+        </div>
+        <button
+          type="button"
+          onClick={reload}
+          className="shrink-0 rounded-sm border border-danger/40 bg-danger/10 px-2 py-1 text-2xs font-medium text-danger hover:bg-danger/15 motion-safe:transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3">

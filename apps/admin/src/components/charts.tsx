@@ -217,8 +217,14 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
     <div>
       <div className="flex items-end gap-1 h-24" role="group" aria-label="Daily severity breakdown">
         {data.map((d) => {
+          // Two-step scaling: `totalH` sets the column height as a % of the
+          // chart (so a half-max day reads as half the chart height), and
+          // `seg` distributes severity within that already-scaled column as
+          // a % of its OWN height. Multiplying seg by totalH would compose
+          // the two ratios and quadratically squish every non-max column —
+          // a half-max day would render at 25%, not 50%.
           const totalH = (d.total / max) * 100
-          const seg = (n: number) => (d.total > 0 ? (n / d.total) * totalH : 0)
+          const seg = (n: number) => (d.total > 0 ? (n / d.total) * 100 : 0)
           return (
             <SeverityBarColumn
               key={d.day}

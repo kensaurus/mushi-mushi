@@ -10,6 +10,7 @@ import {
   RelativeTime,
   Section,
   Loading,
+  ErrorAlert,
 } from '../components/ui'
 import { useToast } from '../lib/toast'
 
@@ -403,7 +404,7 @@ export function QueryPage() {
             {historyLoading ? (
               <Loading text="Loading…" />
             ) : historyError ? (
-              <p className="text-xs text-danger">Could not load history: {historyError}</p>
+              <ErrorAlert message={`Could not load history: ${historyError}`} onRetry={loadHistory} />
             ) : recent.length === 0 ? (
               <p className="text-xs text-fg-muted">No queries yet.</p>
             ) : (

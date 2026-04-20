@@ -80,9 +80,9 @@ Deno.serve(withSentry('soc2-evidence', async (req) => {
       }
     }
 
-    await cronRun.complete({
-      inserted_count: inserted.length,
-      project_count: projects?.length ?? 0,
+    await cronRun.finish({
+      rowsAffected: inserted.length,
+      metadata: { project_count: projects?.length ?? 0 },
     })
 
     return new Response(JSON.stringify({ ok: true, inserted: inserted.length }), {

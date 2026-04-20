@@ -42,7 +42,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
           )}
           {ci && <Badge className={ci.className}>{ci.label}</Badge>}
           {fix.review_passed === false && (
-            <Badge className="bg-warning-subtle text-warning" title="The agent flagged this for extra human review.">
+            <Badge className="bg-warn-muted text-warn" title="The agent flagged this for extra human review.">
               Needs review
             </Badge>
           )}
@@ -95,7 +95,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
         <button
           type="button"
           onClick={onToggle}
-          className="text-fg-muted hover:text-fg-primary underline-offset-2 hover:underline"
+          className="text-fg-muted hover:text-fg underline-offset-2 hover:underline"
         >
           {isOpen ? 'Hide details' : 'Show details'}
         </button>
@@ -111,7 +111,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
       </div>
 
       {isOpen && (
-        <div className="mt-1 pt-2 border-t border-border space-y-2">
+        <div className="mt-1 pt-2 border-t border-edge space-y-2">
           {timeline ? (
             <div>
               <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">PDCA timeline</h4>
@@ -144,7 +144,7 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
       )}
 
       {fix.error && (
-        <div className="rounded bg-danger-subtle/40 px-2 py-1.5 text-2xs text-danger">
+        <div className="rounded bg-danger-muted/40 px-2 py-1.5 text-2xs text-danger">
           <span className="font-mono uppercase tracking-wide">Error · </span>
           <span className="font-mono">{fix.error}</span>
         </div>

@@ -60,9 +60,9 @@ Tokens are defined in `src/index.css` using Tailwind v4's `@theme` directive. Sh
 
 Layout & content:
 
-- `PageHeader`, `PageHelp` — consistent page chrome with collapsible "what / when / how" help block. `PageHelp` defaults open on first visit per page and persists user dismissal in `localStorage[mushi:pagehelp:${title}]`, so first-time discovery isn't hidden by default
+- `PageHeader`, `PageHelp` — consistent page chrome with collapsible "what / when / how" help block. `PageHeader` accepts an optional `projectScope` prop so list pages can render `Reports · glot-it` and the active project name stays visible across the loop. `PageHelp` defaults open only on the user's first ever visit (single global `mushi:visited` flag in `localStorage`) and persists per-page dismissal in `localStorage[mushi:pagehelp:dismissed:${title}]`, so first-time learners get the explainer but returning admins aren't bombarded with re-opened help on every page they navigate to (Wave K)
 - `Section` — titled section with optional leading `icon` (e.g. `IconUser`, `IconSparkle`, `IconCamera` from `icons.tsx`)
-- `Card`, `Divider`, `Loading`, `Skeleton`, `ErrorAlert`, `StatCard`
+- `Card`, `Divider`, `Loading`, `Skeleton`, `ErrorAlert`, `StatCard`. Layout-shaped skeletons live in `src/components/skeletons/` (`DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`) and replace 22 page-level `<Loading />` spinners — first paint matches the loaded layout instead of a tiny spinner over an empty page. Each accepts a `label` for `aria-label` and sets `role="status" aria-busy="true"`. `TableSkeleton` accepts `rows / columns / showFilters / showKpiStrip` so callers can shape it for their layout; `PanelSkeleton` accepts `inCard` so settings sub-panels (which already live inside a `<Section>`) don't double-wrap
 - `EmptyState` — NN/G-compliant empty: `title` (status line) + `description` (learning cue) + optional `hints` bullet list + optional `action` (direct path) + optional `icon`. Use this everywhere instead of bespoke "no results" cards so the three legs of empty-state design are always present
 
 Field rendering:
@@ -82,7 +82,11 @@ Media:
 
 Forms & controls:
 
-- `Btn`, `Input`, `Textarea`, `Checkbox`, `Toggle`, `SelectField`, `FilterSelect`, `Tooltip`, `Kbd`, `Badge`
+- `Btn`, `Input`, `Textarea`, `Checkbox`, `Toggle`, `SelectField`, `FilterSelect`, `Tooltip`, `Kbd`, `Badge`. `Btn` accepts a `loading` prop that swaps the leading icon for a spinner and sets `aria-busy`, so callers don't have to toggle text manually — adopted across `ReportTriageBar`, `HealthPage` cron triggers, BYOK / Firecrawl / Health quick-tests, and Billing invoice retry
+
+Action receipts:
+
+- `ResultChip` — persistent inline receipt for Test / Run / Trigger buttons (`✓ Connection OK · 2s ago` / `✕ Auth failed · just now`). Five tones (`idle / running / success / error / info`) with matching glyphs, spinner glyph for `running`. `aria-live="polite"` (or `"assertive"` for errors), optional `at` prop renders a `<RelativeTime>` so the chip doubles as "when did this last succeed?". Used by `BYOK / Firecrawl / Health` quick-tests so users never have to hunt for "did it actually work?" (Wave K)
 
 ### Label helpers (`src/lib/tokens.ts`)
 
@@ -192,7 +196,7 @@ Every analytical page reuses the same visual vocabulary from `src/components/cha
 
 `DashboardPage` is built from focused sub-components in `src/components/dashboard/`:
 
-- **`PdcaCockpit`** — top-of-page strip rendering 4 stage tiles (Plan / Do / Check / Act). Each tile shows one big living number, a stage tone (`ok` / `warn` / `urgent`), a one-line bottleneck caption, and a deep-link CTA. The `focusStage` from the API gets a coloured ring; `urgent` stages also surface a full-width "Resolve →" callout below the strip. Backed by the `pdcaStages` + `focusStage` block on `GET /v1/admin/dashboard`
+- **`PdcaCockpit`** — top-of-page strip rendered under the heading **"Loop status — Plan, Do, Check, Act"** (Wave K renamed the visible copy from the jargon-heavy "PDCA cockpit"; the component name stays for code-search continuity). Renders 4 stage tiles (Plan / Do / Check / Act). Each tile shows one big living number, a stage tone (`ok` / `warn` / `urgent`), a one-line bottleneck caption, and a deep-link CTA. The `focusStage` from the API gets a coloured ring; `urgent` stages also surface a full-width "Resolve →" callout below the strip. Backed by the `pdcaStages` + `focusStage` block on `GET /v1/admin/dashboard`
 - **`FirstReportHero`** — promoted CTA shown when the SDK is installed but no reports have arrived (driven by `useSetupStatus`). One big "Send a test report" button so the user can close the loop without leaving the dashboard
 - **`GettingStartedEmpty`** — reused inside the dashboard when no project exists yet. PDCA-framed first-run script (Plan: install SDK → Do: dispatch a fix → Check: watch it land) wrapping the existing `SetupChecklist` primitive
 - **`KpiRow`**, **`ChartsRow`**, **`TriageAndFixRow`**, **`InsightsRow`**, **`QuotaBanner`** — pre-existing rows preserved beneath the cockpit (the legacy `QuickFiltersCard` was retired; severity / status filters live on the Reports page itself now)
@@ -216,6 +220,9 @@ Async UX & reliability:
 - `HealthPill` is shared across `Dashboard`, `Judge`, `Queue`, `Fixes`, `Prompt Lab`, **and now both core platform integrations + routing destinations on `/integrations`**
 - `FixesPage` polling pauses while the tab is hidden and guards against overlapping in-flight requests
 - `usePageData` is the standard data-load hook for `Dashboard`, `Reports`, `ReportDetail`, `Queue`, `DLQ`, `Audit`, `AntiGaming`, `Health`, `Sso`, `Settings`, `Marketplace`, `Integrations`, and `Billing`. `useToast` is the standard mutation-feedback channel for the same set
+- Motion utilities in `src/index.css` (`animate-mushi-fade-in` 160ms, `animate-mushi-modal-in` 220ms scale-in, `animate-mushi-toast-in` 180ms slide-from-right, `animate-mushi-toast-out` 140ms slide-back) — all gated by `motion-safe:` so users with `prefers-reduced-motion` see no animation. Toasts (`useToast`) animate in / out via a `closing` flag + `setTimeout` on dismiss. Modal scrims fade-in and inner panels scale-in (`PromptDiffModal`, `PromptEditorModal`, `GroupsPanel` merge dialog). `ResultChip` fades in. (Wave K)
+- `SettingsPage` tablist uses an absolutely-positioned underline that translates between active tabs in 200ms via `useLayoutEffect` measurement, instead of jumping per-button border styles — full a11y preserved (`role="tab"`, `aria-selected`, `aria-controls`, focus-visible ring)
+- Pre-setup dashboard gate: when any `setup.checklist` item is incomplete, `DashboardPage` renders only `SetupChecklist + HeroIntro` with a "Show full dashboard" reveal, so brand-new admins aren't drowned by 9 KPI tiles before they've even sent a test report (Wave K)
 
 ### New admin endpoints (server)
 

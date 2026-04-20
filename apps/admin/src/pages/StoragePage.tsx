@@ -12,7 +12,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, SelectField } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, ErrorAlert, Input, SelectField } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 
@@ -163,7 +164,7 @@ export function StoragePage() {
     reloadAll()
   }
 
-  if (loading) return <Loading />
+  if (loading) return <TableSkeleton rows={5} columns={4} showFilters label="Loading storage" />
   if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
   return (

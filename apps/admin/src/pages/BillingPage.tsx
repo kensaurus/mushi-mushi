@@ -30,7 +30,6 @@ import {
   Card,
   Btn,
   Badge,
-  Loading,
   ErrorAlert,
   EmptyState,
   RelativeTime,
@@ -38,6 +37,7 @@ import {
   Textarea,
   SelectField,
 } from '../components/ui'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
 interface PlanCatalog {
   id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
@@ -200,7 +200,7 @@ export function BillingPage() {
     window.open(res.data.url, '_blank', 'noopener,noreferrer')
   }, [toast])
 
-  if (billingQuery.loading) return <Loading text="Loading billing…" />
+  if (billingQuery.loading) return <PanelSkeleton rows={5} label="Loading billing" />
   if (billingQuery.error) {
     return <ErrorAlert message={`Failed to load billing: ${billingQuery.error}`} onRetry={billingQuery.reload} />
   }
@@ -559,9 +559,18 @@ function InvoicesSection({ projectId, hasCustomer }: InvoicesSectionProps) {
 
   if (invoicesQuery.error) {
     return (
-      <p className="text-2xs text-danger border-t border-edge-subtle pt-2">
-        Could not load invoices: {invoicesQuery.error}
-      </p>
+      <div className="border-t border-edge-subtle pt-2 flex items-center justify-between gap-2">
+        <p className="text-2xs text-danger">
+          Could not load invoices: {invoicesQuery.error}
+        </p>
+        <button
+          type="button"
+          onClick={invoicesQuery.reload}
+          className="rounded-sm border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger hover:bg-danger/15 motion-safe:transition-colors"
+        >
+          Retry
+        </button>
+      </div>
     )
   }
 

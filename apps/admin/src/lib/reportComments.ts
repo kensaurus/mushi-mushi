@@ -68,7 +68,11 @@ export function useReportComments(opts: UseReportCommentsOptions): {
     if (!trimmed) return
     const { data: sess } = await supabase.auth.getUser()
     const me = sess.user
-    if (!me) return
+    if (!me) {
+      // Throwing so the caller can surface a toast; previous silent return
+      // looked indistinguishable from a successful post.
+      throw new Error('You must be signed in to comment.')
+    }
     const { error } = await supabase.from('report_comments').insert({
       report_id: reportId,
       project_id: projectId,
@@ -78,12 +82,18 @@ export function useReportComments(opts: UseReportCommentsOptions): {
       visible_to_reporter: options?.visibleToReporter ?? false,
       parent_id: options?.parentId ?? null,
     })
-    if (error) debugWarn('comments', 'insert failed', { error: error.message })
+    if (error) {
+      debugWarn('comments', 'insert failed', { error: error.message })
+      throw new Error(error.message)
+    }
   }, [reportId, projectId])
 
   const deleteComment = useCallback(async (id: number) => {
     const { error } = await supabase.from('report_comments').delete().eq('id', id)
-    if (error) debugWarn('comments', 'delete failed', { error: error.message })
+    if (error) {
+      debugWarn('comments', 'delete failed', { error: error.message })
+      throw new Error(error.message)
+    }
   }, [])
 
   return { comments, loading, postComment, deleteComment }

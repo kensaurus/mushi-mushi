@@ -7,13 +7,13 @@ import {
   Section,
   Field,
   IdField,
-  Loading,
   PageHelp,
   RecommendedAction,
   EmptyState,
   ErrorAlert,
   Btn,
 } from '../components/ui'
+import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { statusLabel, severityLabel, CATEGORY_LABELS } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { FixProgressStream } from '../components/FixProgressStream'
@@ -89,7 +89,7 @@ export function ReportDetailPage() {
     )
   }
 
-  if (loading) return <Loading text="Loading report..." />
+  if (loading) return <DetailSkeleton label="Loading report" />
 
   if (error) {
     const isNotFound = /not_?found|404/i.test(error)
@@ -112,7 +112,7 @@ export function ReportDetailPage() {
     return <ErrorAlert message={`Could not load report: ${error}`} onRetry={reload} />
   }
 
-  if (!report) return <Loading text="Loading report..." />
+  if (!report) return <DetailSkeleton label="Loading report" />
 
   return <ReportDetailView report={report} onTriage={handleTriage} saving={saving} savedAt={savedAt} />
 }

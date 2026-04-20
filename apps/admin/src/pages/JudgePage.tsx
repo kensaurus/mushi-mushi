@@ -6,7 +6,6 @@ import {
   PageHeader,
   PageHelp,
   Card,
-  Loading,
   ErrorAlert,
   EmptyState,
   Btn,
@@ -15,6 +14,7 @@ import {
   RelativeTime,
   Tooltip,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import {
   KpiTile,
   KpiRow,
@@ -24,6 +24,8 @@ import {
 } from '../components/charts'
 import { SCORE_COLORS } from '../lib/tokens'
 import { useToast } from '../lib/toast'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 
 interface WeekData {
   week_start: string
@@ -194,6 +196,9 @@ function ScorePill({ value }: { value: number | null }) {
 
 export function JudgePage() {
   const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
 
@@ -230,7 +235,7 @@ export function JudgePage() {
     }
   }
 
-  if (loading) return <Loading text="Loading judge…" />
+  if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />
   if (error) return <ErrorAlert message={`Failed to load judge data: ${error}`} onRetry={loadAll} />
 
   const latest = weeks[0]
@@ -247,6 +252,7 @@ export function JudgePage() {
     <div className="space-y-4">
       <PageHeader
         title="Judge"
+        projectScope={projectName}
         description="Independent grading of every classified report — calibrate confidence and catch silent regressions."
       >
         <Btn

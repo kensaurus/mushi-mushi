@@ -11,9 +11,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { PageHeader, PageHelp, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import type { FixTimelineEvent } from '../components/FixGitGraph'
 import { FixSummaryRow } from '../components/fixes/FixSummaryRow'
 import { FixRecommendation } from '../components/fixes/FixRecommendation'
@@ -42,6 +45,9 @@ function bucketize(fix: FixAttempt): StatusBucket {
 }
 
 export function FixesPage() {
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const [fixes, setFixes] = useState<FixAttempt[]>([])
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
@@ -184,13 +190,14 @@ export function FixesPage() {
     void loadFixes()
   }, [failedFixes, loadFixes, toast])
 
-  if (loading) return <Loading text="Loading fixes..." />
+  if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
 
   return (
     <div className="space-y-3">
       <PageHeader
         title="Auto-Fix Pipeline"
+        projectScope={projectName}
         description="Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end."
       >
         <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>

@@ -172,6 +172,7 @@ export function ReportsTable({
               />
               <SortHeader
                 label="Conf."
+                fullLabel="Confidence"
                 field="confidence"
                 current={sort}
                 dir={dir}

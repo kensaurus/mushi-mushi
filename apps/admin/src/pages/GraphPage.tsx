@@ -16,6 +16,8 @@ import {
   ErrorAlert,
 } from '../components/ui'
 import { SetupNudge } from '../components/SetupNudge'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
@@ -52,6 +54,9 @@ const STORYBOARD_THRESHOLD = 12
 
 export function GraphPage() {
   const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
 
@@ -283,6 +288,7 @@ export function GraphPage() {
     <div className="space-y-3">
       <PageHeader
         title="Knowledge Graph"
+        projectScope={projectName}
         description="See how reports cluster into components, pages, and releases. Click any node for its blast radius."
       >
         <div className="flex items-center gap-2">

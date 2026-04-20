@@ -14,13 +14,13 @@ import {
   PageHeader,
   PageHelp,
   Btn,
-  Loading,
   ErrorAlert,
   EmptyState,
   Input,
   Section,
   FilterSelect,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { DispatchTable } from '../components/marketplace/DispatchTable'
 import { InstallForm } from '../components/marketplace/InstallForm'
 import { InstalledList } from '../components/marketplace/InstalledList'
@@ -201,7 +201,7 @@ export function MarketplacePage() {
     [toast, reloadAll],
   )
 
-  if (loading) return <Loading />
+  if (loading) return <TableSkeleton rows={6} columns={4} showFilters label="Loading marketplace" />
   if (error)
     return <ErrorAlert message={`Failed to load marketplace: ${error}`} onRetry={reloadAll} />
 

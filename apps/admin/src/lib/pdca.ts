@@ -12,6 +12,11 @@
 
 export type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
 
+/** Synthetic chip identity used by the dashboard ("Overview — your loop at a
+ *  glance"). It isn't a real PDCA stage — it sits *above* the loop so the
+ *  page-header chip slot is never empty on `/`. */
+export type PdcaChipId = PdcaStageId | 'overview'
+
 export interface PdcaStageMeta {
   id: PdcaStageId
   letter: 'P' | 'D' | 'C' | 'A'
@@ -26,6 +31,25 @@ export interface PdcaStageMeta {
   tintBorder: string
   ring: string
   text: string
+}
+
+/** Common rendering shape shared by `PdcaStageMeta` and the synthetic
+ *  overview chip. Aliased off `PdcaStageMeta` so adding a new tint field
+ *  only happens in one place. `letter` is widened to `string` because the
+ *  overview chip uses `∞`, not a P/D/C/A letter. `ring` is omitted because
+ *  the overview chip never receives a focus ring (it isn't selectable). */
+type PdcaChipMeta = Omit<PdcaStageMeta, 'id' | 'letter' | 'ring'> & { letter: string }
+
+/** Decorative chip metadata for the synthetic 'overview' surface. */
+export const PDCA_OVERVIEW_CHIP: PdcaChipMeta = {
+  letter: '∞',
+  label: 'Overview — your loop at a glance',
+  hint: 'A bird\u2019s-eye view of every PDCA stage. Drill into a tile to act.',
+  badgeBg: 'bg-brand/15',
+  badgeFg: 'text-brand',
+  tintBg: 'bg-brand/5',
+  tintBorder: 'border-brand/30',
+  text: 'text-brand',
 }
 
 export const PDCA_STAGES: Record<PdcaStageId, PdcaStageMeta> = {
@@ -85,6 +109,16 @@ export const PDCA_ORDER: PdcaStageId[] = ['plan', 'do', 'check', 'act']
  * Reverse-map admin routes to a PDCA stage. New pages just add their path
  * here and inherit the context chip + sidebar grouping for free. Routes are
  * matched as prefixes (so `/reports/abc123` resolves to `plan`).
+ *
+ * IMPORTANT: only routes that live inside a PDCA stage in the sidebar
+ * (`Layout.tsx > NAV`) belong here. Workspace routes (`/projects`,
+ * `/settings`, `/sso`, `/billing`, `/audit`, `/compliance`, `/storage`,
+ * `/query`) are deliberately outside the bug-fix loop and MUST be omitted
+ * — adding one would (a) light up a false "← here" badge on the wrong
+ * sidebar section, (b) render a false stage chip on its `PageHeader` via
+ * `AutoPdcaChip`, and (c) mislabel `<PdcaContextHint />` in auto-mode.
+ * Three surfaces, one source of truth — keep this list lock-step with the
+ * stage-bearing sections in the sidebar.
  */
 const STAGE_ROUTES: Array<{ prefix: string; stage: PdcaStageId }> = [
   { prefix: '/reports',       stage: 'plan' },
@@ -105,6 +139,16 @@ const STAGE_ROUTES: Array<{ prefix: string; stage: PdcaStageId }> = [
 export function stageForPath(pathname: string): PdcaStageId | null {
   const hit = STAGE_ROUTES.find(r => pathname === r.prefix || pathname.startsWith(r.prefix + '/'))
   return hit?.stage ?? null
+}
+
+/** Returns the chip identity to render in the page-header chip slot.
+ *  Pages under a real stage prefix get that stage; the dashboard ("/") gets
+ *  the synthetic 'overview' chip; everything else returns null so the chip
+ *  is suppressed (login, settings, billing — none of which sit in the loop).
+ */
+export function chipForPath(pathname: string): PdcaChipId | null {
+  if (pathname === '/' || pathname === '') return 'overview'
+  return stageForPath(pathname)
 }
 
 export function nextStage(stage: PdcaStageId): PdcaStageId | null {

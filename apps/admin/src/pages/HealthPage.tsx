@@ -28,6 +28,8 @@ import {
   FilterSelect,
   RelativeTime,
 } from '../components/ui'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 
 interface LlmRecent {
   function_name: string
@@ -104,6 +106,9 @@ const RECENT_FILTER_OPTIONS = ['', 'errors', 'fallbacks']
 
 export function HealthPage() {
   const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
   const window = searchParams.get('window') ?? '24h'
   const recentFilter = searchParams.get('recent') ?? ''
@@ -165,7 +170,11 @@ export function HealthPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="System Health" description="Real-time LLM and scheduled-job telemetry. Updates as events arrive.">
+      <PageHeader
+        title="System Health"
+        projectScope={projectName}
+        description="Real-time LLM and scheduled-job telemetry. Updates as events arrive."
+      >
         <SelectField
           label="Window"
           value={window}
@@ -356,9 +365,9 @@ export function HealthPage() {
                       size="sm"
                       variant="ghost"
                       onClick={() => triggerJob(job as 'judge-batch' | 'intelligence-report')}
-                      disabled={triggering === job}
+                      loading={triggering === job}
                     >
-                      {triggering === job ? 'Triggering...' : 'Trigger now'}
+                      Trigger now
                     </Btn>
                   )}
                 </div>

@@ -10,6 +10,9 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'integration.synced' | 'plugin.executed'
   | 'billing.checkout_started' | 'billing.subscription_changed' | 'billing.payment_failed'
   | 'support.ticket_created' | 'support.ticket_status_changed'
+  | 'compliance.retention.updated'
+  | 'compliance.dsar.created' | 'compliance.dsar.updated'
+  | 'compliance.soc2.evidence_refreshed'
 
 export async function logAudit(
   db: SupabaseClient,

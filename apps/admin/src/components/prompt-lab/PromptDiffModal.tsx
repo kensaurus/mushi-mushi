@@ -14,12 +14,12 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
   const meta = prompt.auto_generation_metadata
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
       onClick={onClose}
     >
       <Card
         elevated
-        className="w-full max-w-5xl p-4 space-y-2 max-h-[90vh] flex flex-col"
+        className="w-full max-w-5xl p-4 space-y-2 max-h-[90vh] flex flex-col motion-safe:animate-mushi-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

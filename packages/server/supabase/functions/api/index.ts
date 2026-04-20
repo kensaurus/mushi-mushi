@@ -6176,14 +6176,15 @@ app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, async (c) => {
 
   const { error } = await db.from('project_retention_policies').upsert(updates, { onConflict: 'project_id' })
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  await logAudit(db, {
-    project_id: projectId,
-    actor_id: userId,
-    action: 'retention.update',
-    resource_type: 'project_retention_policies',
-    resource_id: projectId,
-    metadata: updates,
-  }).catch(() => {})
+  await logAudit(
+    db,
+    projectId,
+    userId,
+    'compliance.retention.updated',
+    'project_retention_policies',
+    projectId,
+    updates,
+  ).catch(() => {})
   return c.json({ ok: true })
 })
 
@@ -6229,14 +6230,15 @@ app.post('/v1/admin/compliance/dsars', jwtAuth, async (c) => {
     .select('*')
     .single()
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  await logAudit(db, {
-    project_id: projectId,
-    actor_id: userId,
-    action: 'dsar.create',
-    resource_type: 'data_subject_requests',
-    resource_id: data.id,
-    metadata: { request_type: requestType, subject_email: subjectEmail },
-  }).catch(() => {})
+  await logAudit(
+    db,
+    projectId,
+    userId,
+    'compliance.dsar.created',
+    'data_subject_requests',
+    data.id,
+    { request_type: requestType, subject_email: subjectEmail },
+  ).catch(() => {})
   return c.json({ ok: true, data: { request: data } })
 })
 
@@ -6255,12 +6257,25 @@ app.patch('/v1/admin/compliance/dsars/:id', jwtAuth, async (c) => {
   if (body.status === 'completed') updates.fulfilled_at = new Date().toISOString()
   if (body.status === 'completed') updates.fulfilled_by = userId
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('data_subject_requests')
     .update(updates)
     .eq('id', id)
     .in('project_id', projectIds)
+    .select('project_id')
+    .single()
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (updated?.project_id) {
+    await logAudit(
+      db,
+      updated.project_id,
+      userId,
+      'compliance.dsar.updated',
+      'data_subject_requests',
+      id,
+      updates,
+    ).catch(() => {})
+  }
   return c.json({ ok: true })
 })
 
@@ -6300,13 +6315,15 @@ app.post('/v1/admin/compliance/evidence/refresh', jwtAuth, async (c) => {
     if (!res.ok) {
       return c.json({ ok: false, error: { code: 'EDGE_FUNCTION_ERROR', message: txt.slice(0, 200) } }, 502)
     }
-    await logAudit(db, {
-      project_id: projectIds[0],
-      actor_id: userId,
-      action: 'soc2.evidence.manual_refresh',
-      resource_type: 'soc2_evidence',
-      metadata: { project_count: projectIds.length },
-    }).catch(() => {})
+    await logAudit(
+      db,
+      projectIds[0],
+      userId,
+      'compliance.soc2.evidence_refreshed',
+      'soc2_evidence',
+      undefined,
+      { project_count: projectIds.length },
+    ).catch(() => {})
     return c.json({ ok: true })
   } catch (err) {
     return c.json({ ok: false, error: { code: 'NETWORK_ERROR', message: (err as Error).message } }, 500)

@@ -17,12 +17,12 @@ import {
   PageHelp,
   Card,
   Btn,
-  Loading,
   ErrorAlert,
   Input,
   EmptyState,
   Badge,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 
@@ -177,7 +177,7 @@ export function ProjectsPage() {
     toast.success(`Switched active project to ${name}`)
   }
 
-  if (loading) return <Loading text="Loading projects..." />
+  if (loading) return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
   if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reload} />
 
   return (

@@ -18,11 +18,11 @@ import {
   Badge,
   Btn,
   EmptyState,
-  Loading,
   ErrorAlert,
   FilterSelect,
   SelectField,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 
 interface ReporterNotification {
@@ -142,7 +142,7 @@ export function NotificationsPage() {
       />
 
       {loading ? (
-        <Loading text="Loading notifications..." />
+        <TableSkeleton rows={6} columns={4} showFilters={false} label="Loading notifications" />
       ) : error ? (
         <ErrorAlert message={`Failed to load notifications: ${error}`} onRetry={reload} />
       ) : notifications.length === 0 ? (
