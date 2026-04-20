@@ -9,7 +9,8 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Section, Input, SelectField, Btn, Loading, ErrorAlert, Checkbox } from '../ui'
+import { Section, Input, SelectField, Btn, ErrorAlert, Checkbox } from '../ui'
+import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -49,7 +50,7 @@ export function GeneralPanel() {
     }
   }
 
-  if (loading) return <Loading text="Loading settings…" />
+  if (loading) return <PanelSkeleton rows={4} label="Loading settings" inCard={false} />
   if (error) return <ErrorAlert message={`Failed to load settings: ${error}`} onRetry={reload} />
 
   return (

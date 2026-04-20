@@ -10,11 +10,13 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, PageHelp, Loading, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SetupNudge } from '../components/SetupNudge'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
 import {
@@ -29,7 +31,8 @@ import {
 
 export function IntegrationsPage() {
   const toast = useToast()
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   const historyQuery = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
@@ -184,12 +187,15 @@ export function IntegrationsPage() {
     routingQuery.reload()
   }
 
-  if (loading) return <Loading text="Loading integrations…" />
+  if (loading) return <PanelSkeleton rows={5} label="Loading integrations" />
   if (error) return <ErrorAlert message={`Failed to load integrations: ${error}`} onRetry={reloadAll} />
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Integrations" />
+      <PageHeader
+        title="Integrations"
+        description="Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust."
+      />
 
       {!setup.hasAnyProject && (
         <SetupNudge

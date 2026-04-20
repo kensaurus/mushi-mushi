@@ -12,12 +12,12 @@ interface PromptEditorModalProps {
 export function PromptEditorModal({ prompt, onChange, onClose, onSave, saving }: PromptEditorModalProps) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
       onClick={onClose}
     >
       <Card
         elevated
-        className="w-full max-w-3xl p-4 space-y-2"
+        className="w-full max-w-3xl p-4 space-y-2 motion-safe:animate-mushi-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">

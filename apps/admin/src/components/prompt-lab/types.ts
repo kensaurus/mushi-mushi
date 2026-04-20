@@ -19,6 +19,14 @@ export interface PromptVersion {
   traffic_percentage: number
   avg_judge_score: number | null
   total_evaluations: number
+  /**
+   * Wave J §2: real LLM cost in USD attributed to invocations stamped with
+   * this prompt's `version`. Always present (0 when no calls). Computed
+   * server-side from llm_invocations.cost_usd so it matches Health + Billing.
+   */
+  cost_usd_total: number
+  /** Average $ per invocation, or null when no evaluations have run yet. */
+  avg_cost_usd: number | null
   created_at: string
   updated_at: string
   auto_generated?: boolean

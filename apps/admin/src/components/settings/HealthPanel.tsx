@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Section, Btn, Card } from '../ui'
+import { Section, Btn, Card, ResultChip, type ResultChipTone } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { RESOLVED_API_URL } from '../../lib/env'
 
@@ -43,6 +43,7 @@ export function HealthPanel() {
 function QuickTestSection() {
   const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [detail, setDetail] = useState('')
+  const [lastRunAt, setLastRunAt] = useState<string | null>(null)
   const [project, setProject] = useState<TestProject | null>(null)
   const [projectLoading, setProjectLoading] = useState(true)
 
@@ -75,7 +76,11 @@ function QuickTestSection() {
       setStatus('fail')
       setDetail(res.error?.message ?? 'Submission failed')
     }
+    setLastRunAt(new Date().toISOString())
   }
+
+  const chipTone: ResultChipTone =
+    status === 'running' ? 'running' : status === 'pass' ? 'success' : status === 'fail' ? 'error' : 'idle'
 
   return (
     <Section title="Pipeline Quick Test">
@@ -83,20 +88,23 @@ function QuickTestSection() {
         Submit a test report to verify the ingest pipeline works end-to-end.
         {project && <> Tests the project <span className="font-mono text-fg-secondary">{project.name}</span>.</>}
       </p>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Btn
           size="sm"
-          variant={status === 'pass' ? 'ghost' : 'primary'}
+          variant="primary"
           onClick={runTest}
-          disabled={status === 'running' || projectLoading || !project}
+          loading={status === 'running'}
+          disabled={projectLoading || !project}
         >
-          {status === 'running' ? 'Sending…' : status === 'pass' ? '\u2713 Passed' : 'Send test report'}
+          Send test report
         </Btn>
         {!projectLoading && !project && (
           <span className="text-2xs text-fg-muted">Create a project first to run this test.</span>
         )}
-        {detail && (
-          <span className={`text-2xs ${status === 'pass' ? 'text-ok' : 'text-danger'}`}>{detail}</span>
+        {status !== 'idle' && (
+          <ResultChip tone={chipTone} at={lastRunAt}>
+            {detail || (status === 'running' ? 'Sending…' : 'Done')}
+          </ResultChip>
         )}
       </div>
     </Section>

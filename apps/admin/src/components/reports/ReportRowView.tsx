@@ -14,7 +14,8 @@
 
 import { Link } from 'react-router-dom'
 import { Badge, Tooltip } from '../ui'
-import { SEVERITY, STATUS, statusLabel } from '../../lib/tokens'
+import { SEVERITY } from '../../lib/tokens'
+import { StatusStepper } from './StatusStepper'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
@@ -29,6 +30,16 @@ interface Props {
   isSelected: boolean
   isCursor: boolean
   dispatchBusy?: boolean
+  /** When >1, this row is the canonical (newest) of a fingerprint group with
+   *  N siblings. Renders the expand chevron + "+N variants" chip. */
+  variantCount?: number
+  /** Whether the canonical row's siblings are currently expanded. */
+  expanded?: boolean
+  /** True when this row is rendered as a variant under an expanded canonical. */
+  isVariant?: boolean
+  /** Toggle expand state for this canonical row's group. Undefined for
+   *  non-canonical / singleton rows. */
+  onToggleGroup?: () => void
   onToggleSelect: () => void
   onFocus: () => void
   onOpen: () => void
@@ -43,6 +54,10 @@ export function ReportRowView({
   isSelected,
   isCursor,
   dispatchBusy = false,
+  variantCount,
+  expanded = false,
+  isVariant = false,
+  onToggleGroup,
   onToggleSelect,
   onFocus,
   onOpen,
@@ -53,12 +68,23 @@ export function ReportRowView({
   const summary = row.summary ?? row.description
   const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
   const dedupCount = row.dedup_count ?? 1
+  // Real blast radius — distinct people who felt this. Falls back to the raw
+  // dedup count when the BE is older than the Wave I migration so the column
+  // is never blank.
+  const uniqueUsers = row.unique_users ?? 0
+  const blastRadius = uniqueUsers > 0 ? uniqueUsers : dedupCount
   const canDispatch = DISPATCH_ELIGIBLE_STATUSES.has(row.status)
+
+  // "Loud" rows = critical OR significant blast (>=3 distinct users felt it).
+  // These get a slightly tinted background so triagers can scan the page and
+  // see immediately where the real fires are without parsing severity badges.
+  const isLoud = row.severity === 'critical' || blastRadius >= 3
 
   const baseRowCls =
     'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-colors cursor-pointer relative'
   const cursorCls = isCursor ? 'bg-surface-overlay/40 outline outline-1 outline-brand/40' : ''
-  const selectedCls = isSelected ? 'bg-brand/5' : ''
+  const variantBgCls = isVariant ? 'bg-surface-overlay/30' : ''
+  const selectedCls = isSelected ? 'bg-brand/5' : isLoud ? 'bg-danger/5' : variantBgCls
 
   return (
     <tr
@@ -88,15 +114,57 @@ export function ReportRowView({
           className="h-3.5 w-3.5 accent-brand"
         />
       </td>
-      <td className="px-2 py-2 min-w-0">
+      <td className={`px-2 py-2 min-w-0 ${isVariant ? 'pl-7' : ''}`}>
         <div className="flex items-start gap-1.5 min-w-0">
+          {onToggleGroup && (
+            <Tooltip content={expanded ? 'Hide variants' : `Show ${(variantCount ?? 1) - 1} more variant${(variantCount ?? 1) - 1 === 1 ? '' : 's'}`}>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onToggleGroup()
+                }}
+                aria-expanded={expanded}
+                aria-label={expanded ? 'Collapse variants' : 'Expand variants'}
+                className="shrink-0 mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded-sm text-fg-faint hover:text-fg hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" className={`motion-safe:transition-transform ${expanded ? 'rotate-90' : ''}`}>
+                  <path d="M3 2l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </Tooltip>
+          )}
+          {isVariant && (
+            <span className="shrink-0 mt-0.5 text-2xs text-fg-faint" aria-hidden="true">↳</span>
+          )}
           <div className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1">
             {summary}
           </div>
-          {dedupCount > 1 && (
-            <Tooltip content={`${dedupCount} reports grouped by similarity. Open to see siblings.`}>
-              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full bg-info-muted text-info border border-info/20 cursor-help">
-                +{dedupCount - 1} similar
+          {blastRadius > 1 && (
+            <Tooltip
+              content={
+                uniqueUsers > 0
+                  ? `${uniqueUsers} distinct user${uniqueUsers === 1 ? '' : 's'} felt this in the last 7d (across ${dedupCount} report${dedupCount === 1 ? '' : 's'}). One fix attempt closes the whole group — open to expand variants.`
+                  : `Felt by ${dedupCount} report${dedupCount === 1 ? '' : 's'} so far. One fix attempt closes the whole group — open to see siblings.`
+              }
+            >
+              <span
+                className={`shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border ${
+                  blastRadius >= 5
+                    ? 'bg-danger/15 text-danger border-danger/30'
+                    : blastRadius >= 3
+                      ? 'bg-warn/15 text-warn border-warn/30'
+                      : 'bg-info-muted text-info border-info/20'
+                }`}
+              >
+                ×{blastRadius} felt
+              </span>
+            </Tooltip>
+          )}
+          {variantCount && variantCount > 1 && !isVariant && (
+            <Tooltip content={`${variantCount - 1} sibling report${variantCount - 1 === 1 ? '' : 's'} on this page share the same fingerprint. Click the chevron to expand.`}>
+              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full border border-edge-subtle text-fg-muted cursor-help">
+                +{variantCount - 1} variant{variantCount - 1 === 1 ? '' : 's'}
               </span>
             </Tooltip>
           )}
@@ -106,9 +174,11 @@ export function ReportRowView({
         )}
       </td>
       <td className="px-2 py-2 align-top">
-        <Badge className={STATUS[row.status] ?? 'text-fg-muted border border-edge'}>
-          {statusLabel(row.status)}
-        </Badge>
+        <StatusStepper
+          status={row.status}
+          severity={row.severity}
+          timestamps={{ new: row.created_at }}
+        />
       </td>
       <td className="px-2 py-2 align-top">
         {row.severity ? (

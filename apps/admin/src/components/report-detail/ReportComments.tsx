@@ -2,8 +2,10 @@ import { useState } from 'react'
 import { Section, RelativeTime, InfoHint, Tooltip } from '../ui'
 import { IconChat } from '../icons'
 import { useReportComments } from '../../lib/reportComments'
+import { useToast } from '../../lib/toast'
 
 export function ReportComments({ reportId, projectId }: { reportId: string; projectId: string }) {
+  const toast = useToast()
   const { comments, loading, postComment, deleteComment } = useReportComments({ reportId, projectId })
   const [body, setBody] = useState('')
   const [visibleToReporter, setVisibleToReporter] = useState(false)
@@ -17,8 +19,20 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
       await postComment(body, { visibleToReporter })
       setBody('')
       setVisibleToReporter(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Try again in a moment.'
+      toast.error('Couldn\u2019t post comment', msg)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDelete = async (id: number) => {
+    try {
+      await deleteComment(id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Try again in a moment.'
+      toast.error('Couldn\u2019t delete comment', msg)
     }
   }
 
@@ -50,7 +64,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
             </div>
             <button
               type="button"
-              onClick={() => deleteComment(c.id)}
+              onClick={() => void handleDelete(c.id)}
               className="text-2xs text-fg-faint hover:text-danger px-1"
               aria-label="Delete comment"
             >

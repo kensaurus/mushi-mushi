@@ -6,7 +6,8 @@
 
 import React, { useState, useRef, useEffect } from 'react'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
@@ -53,10 +54,14 @@ export function Card({ children, className = '', interactive, elevated, onClick,
         },
       }
     : {}
+  const interactiveCls =
+    interactive || onClick
+      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-all motion-safe:duration-150 hover:border-edge hover:-translate-y-px hover:shadow-raised'
+      : ''
   if (elevated) {
     return (
       <div
-        className={`card-elevated ${interactive || onClick ? 'hover:brightness-110 motion-safe:transition-all motion-safe:duration-150' : ''} ${className}`}
+        className={`card-elevated ${interactiveCls} ${className}`}
         onClick={onClick}
         title={title}
         {...interactiveProps}
@@ -67,7 +72,7 @@ export function Card({ children, className = '', interactive, elevated, onClick,
   }
   return (
     <div
-      className={`bg-surface-raised/50 border border-edge-subtle rounded-md shadow-card ${interactive || onClick ? 'hover:bg-surface-overlay motion-safe:transition-colors motion-safe:duration-150' : ''} ${className}`}
+      className={`bg-surface-raised/50 border border-edge-subtle rounded-md shadow-card ${interactiveCls} ${interactive || onClick ? 'hover:bg-surface-overlay' : ''} ${className}`}
       onClick={onClick}
       title={title}
       {...interactiveProps}
@@ -415,17 +420,75 @@ interface PageHeaderProps {
   title: string
   description?: string
   children?: ReactNode
+  /** Override the leading chip slot. Pass an explicit chip (e.g. a custom
+   *  <PdcaContextHint stage="…" />) to override the URL-derived default, or
+   *  pass `null` to suppress the chip entirely on pages that aren't part of
+   *  the PDCA loop (login, settings, etc.). Leave undefined to inherit the
+   *  default URL-driven chip — that's the path almost every page should take. */
+  contextChip?: ReactNode | null
+  /** Project name to anchor the page in the user's reality
+   *  (e.g. `Reports · glot-it`). Pass `null` or omit to keep the bare title.
+   *  Audit Wave K: every PDCA page surfaces the active project so the user
+   *  can tell which app a bug came from without scanning the switcher. */
+  projectScope?: string | null
 }
 
-export function PageHeader({ title, description, children }: PageHeaderProps) {
+export function PageHeader({ title, description, children, contextChip, projectScope }: PageHeaderProps) {
+  // `undefined` = render the auto URL-derived stage chip; `null` = explicitly
+  // suppressed; anything else = caller-provided chip. This keeps the audit
+  // invariant ("every PDCA page shows its stage above the title") without
+  // forcing every page to import PdcaContextHint manually.
+  const chip = contextChip === undefined ? <AutoPdcaChip /> : contextChip
   return (
-    <div className="flex items-start justify-between mb-5">
-      <div>
-        <h2 className="text-base font-semibold text-fg">{title}</h2>
+    <div className="flex items-start justify-between mb-5 gap-3">
+      <div className="min-w-0">
+        {chip && <div className="mb-1.5">{chip}</div>}
+        <h2 className="text-base font-semibold text-fg">
+          {title}
+          {projectScope && (
+            <>
+              <span className="mx-1.5 text-fg-faint" aria-hidden="true">·</span>
+              <span className="font-mono text-fg-secondary">{projectScope}</span>
+            </>
+          )}
+        </h2>
         {description && <p className="text-xs text-fg-muted mt-0.5">{description}</p>}
       </div>
-      {children && <div className="flex items-center gap-2">{children}</div>}
+      {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
     </div>
+  )
+}
+
+/**
+ * URL-derived PDCA stage chip rendered inline (rather than re-using
+ * `<PdcaContextHint />`) to sidestep the circular import that would arise if
+ * ui.tsx imported a component which itself imports Tooltip from ui.tsx. The
+ * styling stays in lock-step with `PdcaContextHint` because both surfaces
+ * read from the shared `PDCA_STAGES` map.
+ */
+function AutoPdcaChip() {
+  const { pathname } = useLocation()
+  const chip = chipForPath(pathname)
+  if (!chip) return null
+  const meta = chip === 'overview' ? PDCA_OVERVIEW_CHIP : PDCA_STAGES[chip]
+  const ariaLabel = chip === 'overview'
+    ? `Overview: ${meta.hint}`
+    : `PDCA stage: ${meta.label}. ${meta.hint}`
+  return (
+    <Tooltip content={meta.hint}>
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs uppercase tracking-wider cursor-help ${meta.tintBg} ${meta.tintBorder} ${meta.text}`}
+        aria-label={ariaLabel}
+      >
+        <span
+          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm font-semibold text-[9px] ${meta.badgeBg} ${meta.badgeFg}`}
+          aria-hidden="true"
+        >
+          {meta.letter}
+        </span>
+        {meta.label}
+      </span>
+    </Tooltip>
   )
 }
 
@@ -442,6 +505,7 @@ interface PageHelpProps {
 }
 
 const PAGEHELP_DISMISS_PREFIX = 'mushi:pagehelp:dismissed:'
+const PAGEHELP_VISITED_FLAG = 'mushi:visited'
 
 function readPageHelpDismissed(title: string): boolean {
   if (typeof window === 'undefined') return false
@@ -465,15 +529,41 @@ function writePageHelpDismissed(title: string, dismissed: boolean) {
   }
 }
 
+/** Returning users (anyone who has visited the admin before) shouldn't be
+ *  bombarded with help disclosures on every page. We mark the visit on first
+ *  page-help mount and use it to flip the default from open -> closed for
+ *  subsequent sessions on pages they haven't explicitly opened. Audit Wave K. */
+function isReturningUser(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(PAGEHELP_VISITED_FLAG) === '1'
+  } catch {
+    return false
+  }
+}
+
+function markVisited() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(PAGEHELP_VISITED_FLAG, '1')
+  } catch {
+    /* best effort */
+  }
+}
+
 export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: PageHelpProps) {
-  // First-time visitors should see the page context unfolded — the audit
-  // found that having every disclosure collapsed by default hid the entire
-  // value-prop of each page. Once the user dismisses it, the choice is
-  // persisted per-title across sessions so power users aren't pestered.
+  // Default-open only for first-ever visits (a single global flag, not per
+  // page) — the audit found existing per-title-only logic hammered returning
+  // users with re-opened help on every new page they navigated to.
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
-    return !readPageHelpDismissed(title)
+    if (readPageHelpDismissed(title)) return false
+    return !isReturningUser()
   })
+
+  useEffect(() => {
+    markVisited()
+  }, [])
 
   const handleToggle: ReactEventHandler<HTMLDetailsElement> = (e) => {
     const next = e.currentTarget.open
@@ -546,7 +636,7 @@ export function FilterSelect({ label, options, ...rest }: FilterSelectProps) {
   return (
     <select
       {...rest}
-      className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
+      className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
     >
       <option value="">All {label}</option>
       {options.filter(Boolean).map((opt) => (
@@ -562,42 +652,110 @@ interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'ghost' | 'danger'
   size?: 'sm' | 'md'
   children: ReactNode
+  /** When true, swaps the leading area for a spinner and disables the
+   *  button. Use this instead of toggling text manually so loading state
+   *  is consistent across the app. */
+  loading?: boolean
+  /** Optional icon rendered before children. Sized to match the variant. */
+  leadingIcon?: ReactNode
 }
 
-export function Btn({ variant = 'primary', size = 'md', children, className = '', ...rest }: BtnProps) {
-  const base = 'inline-flex items-center justify-center font-medium rounded-sm disabled:opacity-40 disabled:pointer-events-none motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.97]'
-  const sizes = {
-    sm: 'px-2 py-1 text-xs gap-1.5',
-    md: 'px-3 py-1.5 text-sm gap-2',
-  }
-  const variants = {
-    primary: 'bg-brand text-brand-fg hover:bg-brand-hover shadow-sm hover:shadow-md',
-    ghost: 'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge-subtle',
-    danger: 'bg-danger-muted text-danger hover:bg-danger-muted/80 border border-danger/20',
-  }
+const BTN_BASE =
+  'inline-flex items-center justify-center font-medium rounded-sm ' +
+  'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
+  'motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.97]'
+
+const BTN_SIZES = {
+  sm: 'px-2 py-1 text-xs gap-1.5',
+  md: 'px-3 py-1.5 text-sm gap-2',
+} as const
+
+const BTN_VARIANTS = {
+  primary: 'bg-brand text-brand-fg hover:bg-brand-hover shadow-card hover:shadow-raised',
+  ghost: 'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge',
+  danger: 'bg-danger-muted text-danger hover:bg-danger-muted/80 border border-danger/30 hover:border-danger/40',
+} as const
+
+export function Btn({
+  variant = 'primary',
+  size = 'md',
+  children,
+  className = '',
+  loading,
+  leadingIcon,
+  disabled,
+  ...rest
+}: BtnProps) {
+  const isDisabled = disabled || loading
   return (
-    <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...rest}>
+    <button
+      className={`${BTN_BASE} ${BTN_SIZES[size]} ${BTN_VARIANTS[variant]} ${className}`}
+      disabled={isDisabled}
+      aria-busy={loading || undefined}
+      {...rest}
+    >
+      {loading ? <BtnSpinner size={size} /> : leadingIcon}
       {children}
     </button>
   )
 }
 
+function BtnSpinner({ size }: { size: 'sm' | 'md' }) {
+  const dim = size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'
+  return (
+    <svg
+      className={`motion-safe:animate-spin ${dim}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
+  )
+}
+
+/* ── Form-control state matrix (Input / SelectField / Textarea share these)
+ *  default → hover → focus-visible → invalid → disabled, always with the
+ *  brand ring at 60% opacity for AAA-friendly contrast on dark surfaces. */
+
+const FIELD_BASE =
+  'w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg ' +
+  'placeholder:text-fg-faint hover:border-edge ' +
+  'focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 ' +
+  'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/40 ' +
+  'disabled:opacity-50 disabled:cursor-not-allowed ' +
+  'motion-safe:transition-colors motion-safe:duration-150'
+
+const FIELD_LABEL = 'text-xs text-fg-muted mb-1 block font-medium'
+const FIELD_ERROR = 'mt-1 text-2xs text-danger'
+
 /* ── Input ──────────────────────────────────────────────────────────────── */
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string
+  /** Inline error message rendered below the field. Setting this also
+   *  flips `aria-invalid` so the brand ring becomes a danger ring. */
+  error?: string
 }
 
-export function Input({ label, className = '', id, ...rest }: InputProps) {
+export function Input({ label, className = '', id, error, ...rest }: InputProps) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
   return (
     <label className="block">
-      {label && <span className="text-xs text-fg-muted mb-1 block">{label}</span>}
+      {label && <span className={FIELD_LABEL}>{label}</span>}
       <input
         id={inputId}
-        className={`w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40 motion-safe:transition-colors motion-safe:duration-150 ${className}`}
+        aria-invalid={error ? true : undefined}
+        className={`${FIELD_BASE} ${className}`}
         {...rest}
       />
+      {error && <p className={FIELD_ERROR}>{error}</p>}
     </label>
   )
 }
@@ -607,18 +765,21 @@ export function Input({ label, className = '', id, ...rest }: InputProps) {
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   children: ReactNode
+  error?: string
 }
 
-export function SelectField({ label, children, className = '', ...rest }: SelectFieldProps) {
+export function SelectField({ label, children, className = '', error, ...rest }: SelectFieldProps) {
   return (
     <label className="block">
-      {label && <span className="text-xs text-fg-muted mb-1 block">{label}</span>}
+      {label && <span className={FIELD_LABEL}>{label}</span>}
       <select
-        className={`w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150 ${className}`}
+        aria-invalid={error ? true : undefined}
+        className={`${FIELD_BASE} ${className}`}
         {...rest}
       >
         {children}
       </select>
+      {error && <p className={FIELD_ERROR}>{error}</p>}
     </label>
   )
 }
@@ -634,15 +795,15 @@ interface CheckboxProps {
 
 export function Checkbox({ label, checked, onChange, disabled }: CheckboxProps) {
   return (
-    <label className={`inline-flex items-center gap-2 cursor-pointer ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
+    <label className={`group inline-flex items-center gap-2 cursor-pointer ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange?.(e.target.checked)}
         disabled={disabled}
-        className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus:ring-1 focus:ring-brand/40"
+        className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
       />
-      <span className="text-xs text-fg-secondary select-none">{label}</span>
+      <span className="text-xs text-fg-secondary group-hover:text-fg select-none motion-safe:transition-colors">{label}</span>
     </label>
   )
 }
@@ -665,10 +826,11 @@ export function Toggle({ label, checked, onChange, disabled }: ToggleProps) {
         aria-checked={checked}
         onClick={() => onChange?.(!checked)}
         disabled={disabled}
-        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border border-edge motion-safe:transition-colors motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${checked ? 'bg-brand' : 'bg-surface-raised'}`}
+        className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border motion-safe:transition-colors motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${checked ? 'bg-brand border-brand/60' : 'bg-surface-raised border-edge hover:border-edge'}`}
       >
         <span
-          className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-fg shadow-sm motion-safe:transition-transform motion-safe:duration-150 ${checked ? 'translate-x-4' : 'translate-x-0'}`}
+          className={`pointer-events-none inline-flex items-center justify-center h-4 w-4 rounded-full bg-fg shadow-card motion-safe:transition-transform motion-safe:duration-150 ${checked ? 'translate-x-4' : 'translate-x-0'}`}
+          aria-hidden="true"
         />
       </button>
       {label && <span className="text-xs text-fg-secondary select-none">{label}</span>}
@@ -680,18 +842,21 @@ export function Toggle({ label, checked, onChange, disabled }: ToggleProps) {
 
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
+  error?: string
 }
 
-export function Textarea({ label, className = '', id, ...rest }: TextareaProps) {
+export function Textarea({ label, className = '', id, error, ...rest }: TextareaProps) {
   const textareaId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
   return (
     <label className="block">
-      {label && <span className="text-xs text-fg-muted mb-1 block">{label}</span>}
+      {label && <span className={FIELD_LABEL}>{label}</span>}
       <textarea
         id={textareaId}
-        className={`w-full bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40 motion-safe:transition-colors motion-safe:duration-150 resize-y min-h-20 ${className}`}
+        aria-invalid={error ? true : undefined}
+        className={`${FIELD_BASE} resize-y min-h-20 ${className}`}
         {...rest}
       />
+      {error && <p className={FIELD_ERROR}>{error}</p>}
     </label>
   )
 }
@@ -699,16 +864,39 @@ export function Textarea({ label, className = '', id, ...rest }: TextareaProps) 
 /* ── EmptyState ─────────────────────────────────────────────────────────── */
 
 interface EmptyStateProps {
+  /** Status line — short statement of what the user is looking at right now. */
   title: string
+  /** Learning cue — explain why this is empty + what the user can do. */
   description?: string
+  /** Primary action ("direct path") — Btn or Link styled component. */
   action?: ReactNode
+  /**
+   * Optional inline learning cues. Rendered as a tight bullet list under the
+   * description so the user can see "what should I try?" without navigating
+   * away. Follows the third leg of NN/G's empty-state guidelines (status +
+   * learning cue + direct path). Audit Wave I §6.
+   */
+  hints?: string[]
+  /** Optional small icon glyph rendered above the title. */
+  icon?: ReactNode
 }
 
-export function EmptyState({ title, description, action }: EmptyStateProps) {
+export function EmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
-    <Card className="p-8 text-center">
+    <Card className="p-6 text-center">
+      {icon && <div aria-hidden="true" className="mx-auto mb-2 text-fg-faint">{icon}</div>}
       <p className="text-fg-muted text-sm">{title}</p>
-      {description && <p className="text-fg-faint text-xs mt-1">{description}</p>}
+      {description && <p className="text-fg-faint text-xs mt-1 max-w-prose mx-auto leading-relaxed">{description}</p>}
+      {hints && hints.length > 0 && (
+        <ul className="mt-2 inline-block text-left text-2xs text-fg-faint space-y-0.5">
+          {hints.map((hint) => (
+            <li key={hint} className="flex items-start gap-1.5">
+              <span aria-hidden="true" className="text-fg-faint">·</span>
+              <span>{hint}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       {action && <div className="mt-3">{action}</div>}
     </Card>
   )
@@ -733,6 +921,68 @@ export function Loading({ text = 'Loading…' }: { text?: string }) {
 export function Skeleton({ className = '' }: { className?: string }) {
   return (
     <div className={`motion-safe:animate-pulse rounded-sm bg-surface-overlay/50 ${className}`} />
+  )
+}
+
+/* ── ResultChip — persistent inline feedback for Test/Run/Trigger ───────────
+ *
+ * After clicking a "Test" or "Run" or "Trigger" button, the user needs a
+ * sticky receipt: did it work, when did it run, what was the response.
+ * Toasts disappear; this stays put next to the button until the next run.
+ *
+ * Tones map directly to status semantics so the chip can be passed a single
+ * tone prop and never needs to think about colour. Wave K microinteraction.
+ */
+
+export type ResultChipTone = 'idle' | 'running' | 'success' | 'error' | 'info'
+
+interface ResultChipProps {
+  tone: ResultChipTone
+  children: ReactNode
+  /** Optional ISO timestamp, rendered as relative time after the message. */
+  at?: string | null
+  className?: string
+}
+
+const RESULT_CHIP_CLS: Record<ResultChipTone, string> = {
+  idle: 'border-edge-subtle bg-surface-overlay/60 text-fg-muted',
+  running: 'border-info/30 bg-info-muted/30 text-info',
+  success: 'border-ok/30 bg-ok-muted/30 text-ok',
+  error: 'border-danger/30 bg-danger-muted/30 text-danger',
+  info: 'border-info/30 bg-info-muted/30 text-info',
+}
+
+const RESULT_CHIP_GLYPH: Record<ResultChipTone, string> = {
+  idle: '·',
+  running: '…',
+  success: '✓',
+  error: '✕',
+  info: 'i',
+}
+
+export function ResultChip({ tone, children, at, className = '' }: ResultChipProps) {
+  const isRunning = tone === 'running'
+  return (
+    <span
+      role="status"
+      aria-live={tone === 'error' ? 'assertive' : 'polite'}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-2xs leading-tight motion-safe:animate-mushi-fade-in ${RESULT_CHIP_CLS[tone]} ${className}`}
+    >
+      <span
+        aria-hidden="true"
+        className={`inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+          isRunning ? 'motion-safe:animate-spin' : ''
+        }`}
+      >
+        {isRunning ? '↻' : RESULT_CHIP_GLYPH[tone]}
+      </span>
+      <span className="min-w-0 truncate">{children}</span>
+      {at && (
+        <span className="text-fg-faint ml-0.5">
+          · <RelativeTime value={at} />
+        </span>
+      )}
+    </span>
   )
 }
 

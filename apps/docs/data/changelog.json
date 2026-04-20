@@ -1,7 +1,7 @@
 [
   {
     "majorMinor": "next",
-    "headline": "pending (pending release)",
+    "headline": "**Wave K — admin console UX overhaul + microinteraction sweep + 4 frontend bug fixes (no SDK behaviour change).**",
     "pending": true,
     "versions": [],
     "highlights": [

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Card, Badge, Btn, Loading, ErrorAlert, RelativeTime } from '../ui'
+import { Card, Badge, Btn, ErrorAlert, RelativeTime } from '../ui'
+import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 
 interface GraphBackendStatus {
   backend: 'sql_only' | 'age_dual' | 'age_only'
@@ -64,7 +65,7 @@ export function GraphBackendPanel() {
       </div>
 
       {loading ? (
-        <Loading text="Loading backend status…" />
+        <PanelSkeleton rows={3} label="Loading backend status" inCard={false} />
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : data ? (

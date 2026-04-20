@@ -27,7 +27,11 @@ interface ToastItem {
   title: string
   description?: string
   duration: number
+  /** When true, the toast is animating out and will be unmounted shortly. */
+  closing?: boolean
 }
+
+const EXIT_ANIMATION_MS = 140
 
 // `message` is accepted as an alias for `title` because most call sites in
 // the admin console reach for the more colloquial property name. We map it
@@ -71,12 +75,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
 
   const dismiss = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id))
     const timer = timers.current.get(id)
     if (timer) {
       clearTimeout(timer)
       timers.current.delete(id)
     }
+    // If a previous dismiss already scheduled the unmount, leave it alone —
+    // re-entering would leak the original timer and double-fire setToasts.
+    const exitKey = `${id}-exit`
+    if (timers.current.has(exitKey)) return
+    // Mark as closing first so the exit animation can play. Schedule the
+    // actual unmount after the keyframe completes; if the user pushes a new
+    // toast in that window, React's keyed reconciliation handles it cleanly.
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, closing: true } : t)))
+    const exitTimer = setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id))
+      timers.current.delete(exitKey)
+    }, EXIT_ANIMATION_MS)
+    timers.current.set(exitKey, exitTimer)
   }, [])
 
   const push = useCallback<ToastContextValue['push']>(
@@ -131,7 +147,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role="status"
-            className={`pointer-events-auto rounded-md border ${TONE_CLS[t.tone]} bg-surface-raised shadow-raised p-3 flex items-start gap-2`}
+            className={`pointer-events-auto rounded-md border ${TONE_CLS[t.tone]} bg-surface-raised shadow-raised p-3 flex items-start gap-2 ${t.closing ? 'motion-safe:animate-mushi-toast-out' : 'motion-safe:animate-mushi-toast-in'}`}
           >
             <span
               className={`shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${TONE_CLS[t.tone]}`}

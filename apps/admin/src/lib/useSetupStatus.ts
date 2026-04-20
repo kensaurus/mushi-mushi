@@ -45,6 +45,11 @@ export interface SetupProject {
   done: boolean
   report_count: number
   fix_count: number
+  /** Subset of `fix_count` that have a non-null `merged_at` — i.e. the
+   *  PR landed in the upstream repo. Drives the Check-stage transition
+   *  from 'active' (PR open, awaiting merge) to 'done' (loop closed)
+   *  on the dashboard's first-run PDCA card. */
+  merged_fix_count: number
 }
 
 export interface SetupResponse {

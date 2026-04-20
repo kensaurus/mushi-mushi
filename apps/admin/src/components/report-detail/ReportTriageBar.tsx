@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { SelectField } from '../ui'
+import { SelectField, Btn } from '../ui'
 import { STATUS_LABELS, SEVERITY_LABELS } from '../../lib/tokens'
 import { IconArrowRight, IconExternalLink } from '../icons'
 import { apiFetch } from '../../lib/supabase'
@@ -127,25 +127,26 @@ export function ReportTriageBar({
       </div>
 
       <div className="ml-auto flex flex-wrap items-end gap-2">
-        <button
-          type="button"
+        <Btn
+          variant="ghost"
+          size="sm"
           onClick={syncToIntegrations}
           disabled={syncing}
+          loading={syncing}
           title={activeRoutes.length === 0 ? 'No routing destinations active' : `Push to: ${activeRoutes.map((r) => PROVIDER_LABEL[r.integration_type] ?? r.integration_type).join(', ')}`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-edge-subtle bg-surface-overlay px-3 py-1.5 text-xs font-medium text-fg-secondary hover:bg-surface-raised disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
         >
-          {syncing ? 'Syncing…' : `Sync to ${activeRoutes.length || 0} ${activeRoutes.length === 1 ? 'destination' : 'destinations'}`}
-        </button>
+          {syncing ? 'Syncing\u2026' : `Sync to ${activeRoutes.length || 0} ${activeRoutes.length === 1 ? 'destination' : 'destinations'}`}
+        </Btn>
         <div className="flex flex-col items-end gap-1">
-          <button
-            type="button"
+          <Btn
+            variant="primary"
             onClick={onDispatch}
             disabled={dispatchDisabled}
-            className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-fg-on-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+            loading={isDispatchBusy && dispatchState.status !== 'completed' && dispatchState.status !== 'failed'}
+            leadingIcon={<IconArrowRight />}
           >
-            <IconArrowRight />
             {dispatchLabel}
-          </button>
+          </Btn>
           {dispatchState.status === 'completed' && dispatchState.prUrl && (
             <a
               href={dispatchState.prUrl}
