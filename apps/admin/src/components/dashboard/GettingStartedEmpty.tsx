@@ -222,29 +222,56 @@ function LoopStageCard({ stage, step }: { stage: LoopStage; step: number }) {
       </div>
       <p className="text-2xs text-fg-secondary leading-snug min-h-[3rem]">{stage.body}</p>
       <div className="mt-2.5">
-        {cta.to ? (
-          <Link
-            to={cta.to}
-            className={cta.primary
-              ? 'inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors'
-              : 'inline-flex items-center gap-1 text-xs text-brand hover:underline'
-            }
-            aria-disabled={isLocked}
-            tabIndex={isLocked ? -1 : 0}
-          >
-            {cta.label} {cta.primary && <span aria-hidden="true">→</span>}
-          </Link>
-        ) : (
-          <Btn
-            size="sm"
-            variant={cta.primary ? 'primary' : 'ghost'}
-            onClick={cta.onClick}
-            disabled={isLocked}
-          >
-            {cta.label}
-          </Btn>
-        )}
+        <StageCta cta={cta} isLocked={isLocked} />
       </div>
     </li>
+  )
+}
+
+const CTA_BASE_PRIMARY = 'inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg'
+const CTA_BASE_GHOST = 'inline-flex items-center gap-1 text-xs text-brand'
+
+function ctaClass(primary: boolean | undefined, locked: boolean): string {
+  const base = primary ? CTA_BASE_PRIMARY : CTA_BASE_GHOST
+  if (locked) return `${base} cursor-not-allowed`
+  return primary
+    ? `${base} hover:bg-brand-hover motion-safe:transition-colors`
+    : `${base} hover:underline`
+}
+
+function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean }) {
+  const label = (
+    <>
+      {cta.label} {cta.primary && <span aria-hidden="true">→</span>}
+    </>
+  )
+
+  if (cta.to) {
+    // Render a non-link span when locked so a mouse click cannot navigate.
+    // Relying on aria-disabled + tabIndex=-1 alone leaves react-router's
+    // <Link> click handler active, mismatching announced vs actual behavior.
+    if (isLocked) {
+      return (
+        <span className={ctaClass(cta.primary, true)} aria-disabled="true">
+          {label}
+        </span>
+      )
+    }
+    return (
+      <Link to={cta.to} className={ctaClass(cta.primary, false)}>
+        {label}
+      </Link>
+    )
+  }
+
+  return (
+    <Btn
+      size="sm"
+      variant={cta.primary ? 'primary' : 'ghost'}
+      onClick={cta.onClick}
+      disabled={isLocked}
+    >
+      {cta.label}
+    </Btn>
   )
 }

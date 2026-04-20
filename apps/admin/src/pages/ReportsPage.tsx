@@ -17,6 +17,7 @@ import {
 import { BulkBar } from '../components/reports/BulkBar'
 import { HelpOverlay } from '../components/reports/HelpOverlay'
 import { ReportsFilterBar, type ContextChip } from '../components/reports/ReportsFilterBar'
+import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
@@ -35,6 +36,13 @@ export function ReportsPage() {
   const dir = (searchParams.get('dir') as SortDir | null) ?? 'desc'
   const page = Math.max(0, Number(searchParams.get('page') ?? '0') || 0)
   const q = searchParams.get('q') ?? ''
+  // Group-by-fingerprint defaults ON (matches the audit "P0: collapse
+  // duplicates"). Users can opt out with `?group=none` in the URL.
+  const groupCollapse = (searchParams.get('group') ?? 'fingerprint') === 'fingerprint'
+  const expandedGroups = useMemo(() => {
+    const raw = searchParams.get('expand') ?? ''
+    return new Set(raw.split(',').filter(Boolean))
+  }, [searchParams])
 
   const [searchInput, setSearchInput] = useState(q)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
@@ -145,6 +153,21 @@ export function ReportsPage() {
       if (p === 0) next.delete('page')
       else next.set('page', String(p))
       setSearchParams(next)
+    },
+    [searchParams, setSearchParams],
+  )
+
+  // Toggle a group's expand state and persist into the URL so the back-button
+  // restores any open groups. Empty list = clean URL.
+  const toggleGroup = useCallback(
+    (groupId: string) => {
+      const next = new URLSearchParams(searchParams)
+      const current = new Set((next.get('expand') ?? '').split(',').filter(Boolean))
+      if (current.has(groupId)) current.delete(groupId)
+      else current.add(groupId)
+      if (current.size === 0) next.delete('expand')
+      else next.set('expand', [...current].join(','))
+      setSearchParams(next, { replace: true })
     },
     [searchParams, setSearchParams],
   )
@@ -365,7 +388,10 @@ export function ReportsPage() {
 
   return (
     <div>
-      <PageHeader title="Reports">
+      <PageHeader
+        title="Reports"
+        description="User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise."
+      >
         <span className="text-xs text-fg-muted font-mono tabular-nums">
           {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
         </span>
@@ -390,6 +416,11 @@ export function ReportsPage() {
           'Drill into a single report for the original payload, screenshots, and pipeline timeline',
         ]}
         howToUse="Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions."
+      />
+
+      <ReportsKpiStrip
+        activeSeverity={severity}
+        onFilter={(sev) => setFilter('severity', sev)}
       />
 
       {recommendation && (
@@ -445,6 +476,9 @@ export function ReportsPage() {
           allSelected={allSelected}
           someSelected={someSelected}
           dispatching={dispatching}
+          groupCollapse={groupCollapse}
+          expandedGroups={expandedGroups}
+          onToggleGroup={toggleGroup}
           onToggleSelectAll={toggleSelectAll}
           onToggleSelect={toggleSelect}
           onSetSort={setSort}

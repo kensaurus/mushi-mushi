@@ -56,12 +56,23 @@ const SUGGESTIONS = [
   'cloudflare workers fetch ECONNRESET intermittent',
 ]
 
+type SessionMode = 'all' | 'search' | 'scrape'
+type SessionAge = 'all' | '24h' | '7d'
+
+const AGE_LIMITS: Record<SessionAge, number | null> = {
+  all: null,
+  '24h': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+}
+
 export function ResearchPage() {
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [active, setActive] = useState<SearchResponse | null>(null)
   const [attachInput, setAttachInput] = useState<Record<string, string>>({})
+  const [modeFilter, setModeFilter] = useState<SessionMode>('all')
+  const [ageFilter, setAgeFilter] = useState<SessionAge>('all')
 
   const {
     data: historyData,
@@ -70,6 +81,20 @@ export function ResearchPage() {
     reload: loadHistory,
   } = usePageData<{ sessions: SessionRow[] }>('/v1/admin/research/sessions?limit=20')
   const sessions = historyData?.sessions ?? null
+  // Mode + age filters live in the FE: history is small (<= 20 sessions) and
+  // adding server-side params would require an API change for marginal gain.
+  // Audit Wave I P2 — Research history needed mode/since filters.
+  const filteredSessions = sessions
+    ? sessions.filter((s) => {
+        if (modeFilter !== 'all' && s.mode !== modeFilter) return false
+        const limit = AGE_LIMITS[ageFilter]
+        if (limit !== null) {
+          const age = Date.now() - new Date(s.created_at).getTime()
+          if (age > limit) return false
+        }
+        return true
+      })
+    : null
 
   async function runSearch(q: string) {
     const trimmed = q.trim()
@@ -144,7 +169,10 @@ export function ResearchPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Research" />
+      <PageHeader
+        title="Research"
+        description="Long-form notes from QA and product research. Pin findings here so the next loop iteration starts smarter."
+      />
 
       <PageHelp
         title="About Research"
@@ -235,12 +263,51 @@ export function ResearchPage() {
       )}
 
       <Section title="Recent sessions" className="space-y-2">
+        {sessions && sessions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 text-2xs">
+            <SegmentedFilter
+              label="Mode"
+              value={modeFilter}
+              options={[
+                { id: 'all', label: 'All' },
+                { id: 'search', label: 'Search' },
+                { id: 'scrape', label: 'Scrape' },
+              ]}
+              onChange={setModeFilter}
+            />
+            <SegmentedFilter
+              label="Since"
+              value={ageFilter}
+              options={[
+                { id: 'all', label: 'All' },
+                { id: '24h', label: '24h' },
+                { id: '7d', label: '7d' },
+              ]}
+              onChange={setAgeFilter}
+            />
+            <span className="text-3xs text-fg-faint font-mono ml-1">
+              {filteredSessions?.length ?? 0}/{sessions.length}
+            </span>
+          </div>
+        )}
         {historyLoading && <Loading text="Loading history..." />}
         {historyError && <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />}
         {sessions && sessions.length === 0 && (
           <div className="text-2xs text-fg-muted">No sessions yet — your first search will land here.</div>
         )}
-        {sessions && sessions.length > 0 && (
+        {sessions && sessions.length > 0 && filteredSessions && filteredSessions.length === 0 && (
+          <div className="text-2xs text-fg-muted">
+            No sessions match these filters.{' '}
+            <button
+              type="button"
+              onClick={() => { setModeFilter('all'); setAgeFilter('all') }}
+              className="text-brand hover:underline"
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+        {filteredSessions && filteredSessions.length > 0 && (
           <div className="border border-edge rounded-md overflow-hidden">
             <table className="w-full text-xs">
               <thead>
@@ -253,7 +320,7 @@ export function ResearchPage() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((s) => (
+                {filteredSessions.map((s) => (
                   <tr key={s.id} className="border-b border-edge/60 hover:bg-surface-raised/40">
                     <td className="py-1.5 px-3 truncate max-w-[28ch]" title={s.query}>{s.query}</td>
                     <td className="py-1.5 px-3 font-mono text-2xs text-fg-muted">{s.mode}</td>
@@ -275,6 +342,42 @@ export function ResearchPage() {
           </div>
         )}
       </Section>
+    </div>
+  )
+}
+
+interface SegmentedFilterProps<T extends string> {
+  label: string
+  value: T
+  options: { id: T; label: string }[]
+  onChange: (next: T) => void
+}
+
+function SegmentedFilter<T extends string>({ label, value, options, onChange }: SegmentedFilterProps<T>) {
+  return (
+    <div role="radiogroup" aria-label={label} className="inline-flex items-center gap-1">
+      <span className="text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
+      <div className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-raised/50">
+        {options.map((opt) => {
+          const active = opt.id === value
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => onChange(opt.id)}
+              className={`px-1.5 py-0.5 text-2xs ${
+                active
+                  ? 'bg-brand text-brand-fg'
+                  : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
+              }`}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

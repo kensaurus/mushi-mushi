@@ -39,6 +39,8 @@ interface Member {
   role: string
 }
 
+type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
+
 interface Project {
   id: string
   name: string
@@ -50,6 +52,22 @@ interface Project {
   members: Member[]
   report_count: number
   last_report_at: string | null
+  pdca_bottleneck: PdcaStageId | null
+  pdca_bottleneck_label: string | null
+}
+
+const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
+  plan: 'bg-info-muted text-info border border-info/30',
+  do: 'bg-warn-muted text-warn border border-warn/30',
+  check: 'bg-warn-muted text-warn border border-warn/30',
+  act: 'bg-danger-muted text-danger border border-danger/30',
+}
+
+const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
+  plan: '/reports?status=new',
+  do: '/fixes',
+  check: '/judge',
+  act: '/integrations',
 }
 
 const STORAGE_KEY = 'mushi:active_project_id'
@@ -215,10 +233,20 @@ export function ProjectsPage() {
                     <p className="text-2xs text-fg-faint mt-0.5">
                       Created {new Date(project.created_at).toLocaleDateString()} · last report {relativeTime(project.last_report_at)}
                     </p>
-                    <div className="flex items-center gap-3 mt-2 text-2xs text-fg-secondary">
+                    <div className="flex items-center gap-3 mt-2 text-2xs text-fg-secondary flex-wrap">
                       <span><span className="font-mono text-fg">{project.report_count}</span> {pluralize(project.report_count, 'report')}</span>
                       <span><span className="font-mono text-fg">{project.active_key_count}</span> active {pluralize(project.active_key_count, 'key')}</span>
                       <span><span className="font-mono text-fg">{project.member_count}</span> {pluralize(project.member_count, 'member')}</span>
+                      {project.pdca_bottleneck && project.pdca_bottleneck_label && (
+                        <Link
+                          to={`${PDCA_BOTTLENECK_DEEP_LINK[project.pdca_bottleneck]}&project=${project.id}`}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs font-medium hover:opacity-90 motion-safe:transition-opacity ${PDCA_BOTTLENECK_TONE[project.pdca_bottleneck]}`}
+                          title="Where this project is stuck — click to jump to that stage"
+                        >
+                          <span className="font-mono uppercase">{project.pdca_bottleneck}</span>
+                          <span>{project.pdca_bottleneck_label}</span>
+                        </Link>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">

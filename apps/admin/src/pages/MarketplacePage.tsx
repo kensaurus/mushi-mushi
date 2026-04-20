@@ -207,7 +207,10 @@ export function MarketplacePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Plugin marketplace">
+      <PageHeader
+        title="Plugin marketplace"
+        description="Toggle plugins to extend the loop \u2014 extra evaluators, custom dispatchers, or downstream notifiers."
+      >
         <Btn variant="ghost" size="sm" onClick={reloadAll}>
           Refresh
         </Btn>

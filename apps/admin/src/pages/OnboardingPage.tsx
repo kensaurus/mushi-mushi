@@ -16,6 +16,7 @@ import { apiFetch } from '../lib/supabase'
 import { Btn, Card, Input, PageHelp, Loading, ErrorAlert } from '../components/ui'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
+import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -165,6 +166,11 @@ export function OnboardingPage() {
     })
   }
 
+  const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
+  const hasReports = (project?.report_count ?? 0) > 0
+  const hasFix = (project?.fix_count ?? 0) > 0
+  const hasMerged = (project?.merged_fix_count ?? 0) > 0
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
@@ -173,6 +179,16 @@ export function OnboardingPage() {
           Live progress — every step is verified against your project's data, not local cache.
         </p>
       </div>
+
+      {project && (
+        <ProjectNarrativeStrip
+          projectName={project.project_name}
+          sdkInstalled={sdkInstalled}
+          hasReports={hasReports}
+          hasFix={hasFix}
+          hasMerged={hasMerged}
+        />
+      )}
 
       <PageHelp
         title="About this wizard"

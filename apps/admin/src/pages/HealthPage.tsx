@@ -26,6 +26,7 @@ import {
   RecommendedAction,
   SelectField,
   FilterSelect,
+  RelativeTime,
 } from '../components/ui'
 
 interface LlmRecent {
@@ -51,9 +52,22 @@ interface LlmHealth {
   errors: number
   errorRate: number
   avgLatencyMs: number
-  p95LatencyMs: number
+  // Wave I added p95LatencyMs to the API. Optional here so older deployed
+  // Edge Functions (or partial-rollout staging envs) don't crash the page —
+  // the render uses `?? 0` everywhere this is read.
+  p95LatencyMs?: number
   byModel: Record<string, { calls: number; errors: number; tokens: number }>
-  byFunction: Record<string, { calls: number; errors: number; fallbacks: number; avgLatencyMs: number }>
+  byFunction: Record<string, {
+    calls: number
+    errors: number
+    fallbacks: number
+    avgLatencyMs: number
+    // Same Wave I rollout: optional so a stale Edge Function doesn't break
+    // the per-function rows. Render with `?? 0`.
+    p95LatencyMs?: number
+    costUsd?: number
+    lastFailureAt?: string | null
+  }>
   recent: LlmRecent[]
 }
 
@@ -240,7 +254,7 @@ export function HealthPage() {
             value={`${errorPct}%`}
             accent={llm.errorRate > 0.05 ? 'text-danger' : llm.errorRate > 0 ? 'text-warn' : 'text-ok'}
           />
-          <StatCard label="Latency p50 / p95" value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs}ms`} />
+          <StatCard label="Latency p50 / p95" value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`} />
         </div>
       </section>
 
@@ -254,15 +268,22 @@ export function HealthPage() {
               const f = byFunction[fn]
               const isFiltered = fnFilter === fn
               return (
-                <Card key={fn} className="p-2.5 flex items-center justify-between text-xs">
+                <Card key={fn} className="p-2.5 flex items-center justify-between text-xs gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <code className="font-mono text-2xs text-fg font-medium truncate">{fn}</code>
                   </div>
-                  <div className="flex items-center gap-3 text-2xs text-fg-muted shrink-0">
+                  <div className="flex items-center gap-3 text-2xs text-fg-muted shrink-0 flex-wrap justify-end">
                     <span>{f.calls} calls</span>
-                    <span>avg {f.avgLatencyMs}ms</span>
+                    <span title="Average call latency">avg {f.avgLatencyMs}ms</span>
+                    <span title="95th percentile latency over the window">p95 {f.p95LatencyMs ?? 0}ms</span>
+                    <span title="Estimated USD spend over the window">${(f.costUsd ?? 0).toFixed((f.costUsd ?? 0) >= 1 ? 2 : 4)}</span>
                     {f.fallbacks > 0 && <Badge className="bg-warn-muted text-warn">{f.fallbacks} fallback{f.fallbacks === 1 ? '' : 's'}</Badge>}
                     {f.errors > 0 && <Badge className="bg-danger-muted text-danger">{f.errors} error{f.errors === 1 ? '' : 's'}</Badge>}
+                    {f.lastFailureAt && (
+                      <span className="text-danger" title={`Last failure ${new Date(f.lastFailureAt).toLocaleString()}`}>
+                        last failure <RelativeTime value={f.lastFailureAt} />
+                      </span>
+                    )}
                     <Btn
                       variant="ghost"
                       size="sm"

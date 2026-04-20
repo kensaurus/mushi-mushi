@@ -237,6 +237,34 @@ select, input, textarea {
 }
 
 /* ---------------------------------------------------------------------------
+   PERSONALITY
+   Soft pulsing glow used by HeroIntro and the cockpit bottleneck dot so the
+   loop visibly *breathes* when there's something to act on. Reduced motion
+   media query at the bottom of the file disables this for users who opt out.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-pulse-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.mushi-pulse {
+  animation: mushi-pulse-glow 2.4s var(--ease-out-expo) infinite;
+}
+
+/* Section + page rhythm helpers — keep vertical spacing consistent across
+   pages. The audit found rhythm drifted: some pages used `mb-3`, others
+   `mb-4`, others bare `space-y-2`. Standardise on these two utilities.   */
+.page-stack > * + * { margin-top: 1rem; }     /* between page sections */
+.section-stack > * + * { margin-top: 0.625rem; } /* inside a card section */
+
+/* ---------------------------------------------------------------------------
    REDUCED MOTION
    Disable transitions and animations for users who prefer reduced motion.
 --------------------------------------------------------------------------- */
@@ -246,5 +274,39 @@ select, input, textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   PRINT (compliance PDF export, audit log printouts)
+   Strips chrome (sidebar, headers, action buttons) and forces a printable
+   palette. Pages opt out of printing via the .no-print utility on transient
+   elements (banners, toasts, tooltips). Audit Wave I §5 compliance.
+--------------------------------------------------------------------------- */
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  /* Hide app shell — sidebar, top bar, modal portals, toasts. */
+  aside,
+  nav,
+  header[role="banner"],
+  .no-print,
+  [data-print="hide"] {
+    display: none !important;
+  }
+  /* Avoid splitting cards across page breaks where possible. */
+  .card,
+  table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Make links printable as URLs. */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
   }
 }

@@ -21,6 +21,26 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixCard } from '../components/fixes/FixCard'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 
+type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'merged' | 'failed'
+
+const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'inflight', label: 'In flight' },
+  { id: 'pr_open', label: 'PR open' },
+  { id: 'merged', label: 'CI passing' },
+  { id: 'failed', label: 'Failed' },
+]
+
+function bucketize(fix: FixAttempt): StatusBucket {
+  const status = fix.status?.toLowerCase()
+  if (status === 'queued' || status === 'running') return 'inflight'
+  if (status === 'failed') return 'failed'
+  const conclusion = fix.check_run_conclusion?.toLowerCase()
+  if (conclusion === 'success') return 'merged'
+  if (fix.pr_url) return 'pr_open'
+  return 'all'
+}
+
 export function FixesPage() {
   const [fixes, setFixes] = useState<FixAttempt[]>([])
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
@@ -30,6 +50,7 @@ export function FixesPage() {
   const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
+  const [statusBucket, setStatusBucket] = useState<StatusBucket>('all')
   const toast = useToast()
   // Guard refs prevent overlapping polls and post-unmount state writes —
   // both happen often in StrictMode dev because effects mount twice.
@@ -107,6 +128,24 @@ export function FixesPage() {
 
   const failedFixes = useMemo(() => fixes.filter((f) => f.status === 'failed'), [fixes])
 
+  // Pre-bucket every fix once so the segmented filter and the per-bucket
+  // counts in the segmented control stay in sync without re-scanning the
+  // list per render. Audit Wave I — closes the missing FixesPage status
+  // filter finding.
+  const bucketCounts = useMemo(() => {
+    const counts: Record<StatusBucket, number> = { all: fixes.length, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
+    for (const f of fixes) {
+      const b = bucketize(f)
+      if (b !== 'all') counts[b] += 1
+    }
+    return counts
+  }, [fixes])
+
+  const visibleFixes = useMemo(() => {
+    if (statusBucket === 'all') return fixes
+    return fixes.filter((f) => bucketize(f) === statusBucket)
+  }, [fixes, statusBucket])
+
   const retryOne = useCallback(
     async (reportId: string) => {
       const res = await apiFetch('/v1/admin/fixes/dispatch', {
@@ -150,7 +189,10 @@ export function FixesPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Auto-Fix Pipeline">
+      <PageHeader
+        title="Auto-Fix Pipeline"
+        description="Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end."
+      >
         <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>
         {failedFixes.length > 0 && (
           <button
@@ -189,20 +231,79 @@ export function FixesPage() {
           emptyDescription="Open a classified report and click \u201cDispatch fix\u201d to start the auto-fix loop."
         />
       ) : (
-        <div className="space-y-1.5">
-          {fixes.map((fix) => (
-            <FixCard
-              key={fix.id}
-              fix={fix}
-              isOpen={expanded === fix.id}
-              timeline={timelines[fix.id]}
-              traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
-              onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
-              onRetry={() => retryOne(fix.report_id)}
-            />
-          ))}
-        </div>
+        <>
+          <FixesStatusFilter
+            value={statusBucket}
+            counts={bucketCounts}
+            onChange={setStatusBucket}
+          />
+          {visibleFixes.length === 0 ? (
+            <p className="text-2xs text-fg-muted px-2 py-3">
+              No fixes in this state right now.{' '}
+              <button
+                type="button"
+                onClick={() => setStatusBucket('all')}
+                className="text-brand hover:underline"
+              >
+                Show all
+              </button>
+            </p>
+          ) : (
+            <div className="space-y-1.5">
+              {visibleFixes.map((fix) => (
+                <FixCard
+                  key={fix.id}
+                  fix={fix}
+                  isOpen={expanded === fix.id}
+                  timeline={timelines[fix.id]}
+                  traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
+                  onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
+                  onRetry={() => retryOne(fix.report_id)}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
+    </div>
+  )
+}
+
+interface FixesStatusFilterProps {
+  value: StatusBucket
+  counts: Record<StatusBucket, number>
+  onChange: (next: StatusBucket) => void
+}
+
+function FixesStatusFilter({ value, counts, onChange }: FixesStatusFilterProps) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Filter fixes by status"
+      className="inline-flex items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised/50 p-0.5"
+    >
+      {STATUS_BUCKETS.map((b) => {
+        const active = b.id === value
+        return (
+          <button
+            key={b.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(b.id)}
+            className={`px-2 py-1 rounded-sm text-2xs font-medium motion-safe:transition-colors ${
+              active
+                ? 'bg-brand text-brand-fg'
+                : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
+            }`}
+          >
+            {b.label}
+            <span className={`ml-1 font-mono ${active ? 'text-brand-fg/80' : 'text-fg-faint'}`}>
+              {counts[b.id]}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }

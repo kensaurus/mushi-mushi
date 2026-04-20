@@ -46,9 +46,9 @@ interface Evidence {
 }
 
 const STATUS_CHIP: Record<Evidence['status'], string> = {
-  pass: 'bg-emerald-500/10 text-emerald-500',
-  warn: 'bg-amber-500/10 text-amber-500',
-  fail: 'bg-red-500/10 text-red-500',
+  pass: 'bg-ok/15 text-ok border border-ok/30',
+  warn: 'bg-warn/15 text-warn border border-warn/30',
+  fail: 'bg-danger/15 text-danger border border-danger/30',
 }
 
 export function CompliancePage() {
@@ -188,9 +188,15 @@ export function CompliancePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Compliance">
+      <PageHeader
+        title="Compliance"
+        description="Track GDPR, SOC2, and audit obligations against the data Mushi holds for this project."
+      >
         <Btn onClick={refreshEvidence} disabled={refreshing}>
           {refreshing ? 'Refreshing…' : 'Refresh evidence'}
+        </Btn>
+        <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
+          Export PDF
         </Btn>
       </PageHeader>
 

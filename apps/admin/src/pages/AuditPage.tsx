@@ -85,6 +85,13 @@ const SINCE_OPTIONS = [
   { value: '30d', label: 'Last 30 days' },
 ]
 
+const ACTOR_TYPE_OPTIONS = [
+  { value: '', label: 'Any actor' },
+  { value: 'human', label: 'Human' },
+  { value: 'agent', label: 'Agent (LLM)' },
+  { value: 'system', label: 'System (cron / webhook)' },
+]
+
 const PAGE_SIZE = 50
 
 function sinceToIso(since: string): string | null {
@@ -121,6 +128,7 @@ export function AuditPage() {
   const action = searchParams.get('action') ?? ''
   const resourceType = searchParams.get('resource_type') ?? ''
   const actor = searchParams.get('actor') ?? ''
+  const actorType = searchParams.get('actor_type') ?? ''
   const since = searchParams.get('since') ?? ''
   const q = searchParams.get('q') ?? ''
   const page = Math.max(Number(searchParams.get('page') ?? '1'), 1)
@@ -131,13 +139,14 @@ export function AuditPage() {
     if (action) params.set('action', action)
     if (resourceType) params.set('resource_type', resourceType)
     if (actor) params.set('actor', actor)
+    if (actorType) params.set('actor_type', actorType)
     const sinceIso = sinceToIso(since)
     if (sinceIso) params.set('since', sinceIso)
     if (q) params.set('q', q)
     params.set('limit', String(PAGE_SIZE))
     params.set('offset', String(offset))
     return params.toString()
-  }, [action, resourceType, actor, since, q, offset])
+  }, [action, resourceType, actor, actorType, since, q, offset])
 
   const { data, loading, error, reload } = usePageData<AuditResponse>(
     `/v1/admin/audit?${queryString}`,
@@ -190,11 +199,14 @@ export function AuditPage() {
     toast.success(`Exported ${logs.length} entries`)
   }
 
-  const activeFilterCount = [action, resourceType, actor, since, q].filter(Boolean).length
+  const activeFilterCount = [action, resourceType, actor, actorType, since, q].filter(Boolean).length
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Audit Log">
+      <PageHeader
+        title="Audit Log"
+        description="Append-only history of every mutation made by the platform. Filter by actor, action, or resource."
+      >
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
       </PageHeader>
 
@@ -210,7 +222,7 @@ export function AuditPage() {
       />
 
       <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
           <FilterSelect
             label="Action"
             value={action}
@@ -223,6 +235,15 @@ export function AuditPage() {
             options={RESOURCE_OPTIONS}
             onChange={(e) => updateParam('resource_type', e.currentTarget.value)}
           />
+          <SelectField
+            label="Actor type"
+            value={actorType}
+            onChange={(e) => updateParam('actor_type', e.currentTarget.value)}
+          >
+            {ACTOR_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </SelectField>
           <SelectField
             label="When"
             value={since}

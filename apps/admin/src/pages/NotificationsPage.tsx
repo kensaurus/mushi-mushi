@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
 import { apiFetch } from '../lib/supabase'
@@ -48,6 +48,7 @@ const TYPE_OPTIONS = ['', 'classified', 'fixed', 'fix_failed', 'reward', 'commen
 
 export function NotificationsPage() {
   const toast = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [expanded, setExpanded] = useState<string | null>(null)
   const [bulking, setBulking] = useState(false)
@@ -105,7 +106,10 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Reporter Notifications">
+      <PageHeader
+        title="Reporter Notifications"
+        description="Outbound messages sent to the people who reported the bugs — keeps the loop transparent."
+      >
         <SelectField
           label="Show"
           value={filter}
@@ -145,13 +149,32 @@ export function NotificationsPage() {
         filter === 'unread' || type ? (
           <EmptyState
             title="No notifications match these filters"
-            description="Try clearing the filters or switching back to All."
+            description="Switch back to All or clear the type filter to see the full list. Reporters only see what's listed here, so an empty filtered view does not mean the pipeline is silent."
+            action={
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams)
+                  next.delete('show')
+                  next.delete('type')
+                  setSearchParams(next, { replace: true })
+                }}
+              >
+                Clear filters
+              </Btn>
+            }
           />
         ) : (
           <SetupNudge
             requires={['first_report_received']}
             emptyTitle="No notifications yet"
-            emptyDescription="Notifications appear when the pipeline classifies, fixes, or rewards a report."
+            emptyDescription="Notifications fire when a report is classified, fixed, or rewarded — the SDK widget polls them so the reporter sees the loop close. If reports exist but nothing shows here, double-check reporter_notifications_enabled in /settings or wire a routing destination from /integrations."
+            emptyAction={
+              <Btn variant="ghost" size="sm" onClick={() => navigate('/integrations')}>
+                Open Integrations
+              </Btn>
+            }
           />
         )
       ) : (

@@ -28,9 +28,10 @@ import {
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
+import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import {
   ClassificationFields,
-  ScreenshotBlock,
+  ScreenshotHero,
 } from '../components/report-detail/ReportClassification'
 import {
   PerformanceMetrics,
@@ -155,6 +156,18 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
 
+      <PdcaReceiptStrip
+        report={report}
+        dispatchState={dispatchState}
+        className="mb-3"
+      />
+
+      {/* Screenshot hero — promoted out of the User-report section so it's
+          the first piece of evidence triagers see. Wave I audit P0. */}
+      {report.screenshot_url && (
+        <ScreenshotHero url={report.screenshot_url} className="mb-3" />
+      )}
+
       <RecommendedAction
         title={recommendation.title}
         description={recommendation.description}
@@ -189,7 +202,11 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
               tooltip="What the reporter said they were trying to do when the issue happened."
             />
           )}
-          <ScreenshotBlock url={report.screenshot_url} />
+          {!report.screenshot_url && (
+            <p className="text-2xs text-fg-faint italic mt-2">
+              No screenshot was captured for this report.
+            </p>
+          )}
         </Section>
 
         <Section title="LLM classification" icon={<IconSparkle />}>

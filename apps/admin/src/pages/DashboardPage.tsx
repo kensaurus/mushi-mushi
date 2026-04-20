@@ -14,13 +14,14 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageHeader, PageHelp, Btn, Loading, ErrorAlert } from '../components/ui'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
+import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
+import { HeroIntro } from '../components/dashboard/HeroIntro'
 import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
-import { QuickFiltersCard } from '../components/dashboard/QuickFiltersCard'
 import type { DashboardData } from '../components/dashboard/types'
 
 export function DashboardPage() {
@@ -36,6 +37,19 @@ export function DashboardPage() {
   const fixSummary = data.fixSummary!
   const reportsByDay = data.reportsByDay ?? []
   const llmByDay = data.llmByDay ?? []
+  const activity = data.activity ?? []
+  // Drive the hero's "live pulse" off the most recent report event in the
+  // activity feed. We can't use reportsByDay because that's day-bucketed.
+  const lastReportAt = activity.find(a => a.kind === 'report')?.at ?? null
+  const projectName = setup.activeProject?.project_name ?? null
+  // P1 audit: when the user has wired the SDK but no real bugs have landed,
+  // promote the test-report CTA to a hero so they don't bounce off a wall
+  // of zero-state widgets.
+  const sdkInstalled = setup.activeProject ? !setup.isStepIncomplete('sdk_installed') : false
+  const showFirstReportHero =
+    !!setup.activeProject &&
+    sdkInstalled &&
+    setup.activeProject.report_count === 0
 
   return (
     <div>
@@ -47,6 +61,26 @@ export function DashboardPage() {
           View all reports →
         </Link>
       </PageHeader>
+
+      {showFirstReportHero && setup.activeProject && (
+        <FirstReportHero
+          projectId={setup.activeProject.project_id}
+          projectName={setup.activeProject.project_name}
+          onReportSent={() => {
+            setup.reload()
+            reload()
+          }}
+        />
+      )}
+
+      {!showFirstReportHero && data.pdcaStages && data.pdcaStages.length > 0 && (
+        <HeroIntro
+          stages={data.pdcaStages}
+          focusStage={data.focusStage}
+          projectName={projectName}
+          lastReportAt={lastReportAt}
+        />
+      )}
 
       <PageHelp
         title="About the Dashboard"
@@ -83,10 +117,8 @@ export function DashboardPage() {
       <InsightsRow
         topComponents={data.topComponents ?? []}
         integrations={data.integrations ?? []}
-        activity={data.activity ?? []}
+        activity={activity}
       />
-
-      <QuickFiltersCard />
     </div>
   )
 }

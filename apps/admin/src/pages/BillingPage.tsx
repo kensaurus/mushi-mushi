@@ -22,6 +22,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
+import { formatLlmCost } from '../lib/format'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   PageHeader,
@@ -89,6 +90,13 @@ interface BillingProject {
     fixesSucceeded?: number
     tokens: number
   }
+  /**
+   * Wave J §2: real LLM dollars spent this billing month, summed server-side
+   * from llm_invocations.cost_usd. Always present (0 when no calls). Lets the
+   * Billing page show "what is this project actually costing me?" alongside
+   * report quota usage.
+   */
+  llm_cost_usd_this_month?: number
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
@@ -199,7 +207,10 @@ export function BillingPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Billing">
+      <PageHeader
+        title="Billing"
+        description="Plan, usage, invoices, and quota \u2014 everything you need to keep the loop running on your terms."
+      >
         <span className="text-2xs text-fg-faint font-mono">
           Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? '—'} reports / mo
         </span>
@@ -347,7 +358,13 @@ function ProjectBillingCard({
         />
       )}
 
-      <UsageBar usage={project.usage} limitReports={project.limit_reports} pct={usagePct} />
+      <UsageBar
+        usage={project.usage}
+        limitReports={project.limit_reports}
+        pct={usagePct}
+        periodStart={project.period_start}
+        llmCostUsd={project.llm_cost_usd_this_month}
+      />
 
       <InvoicesSection projectId={project.project_id} hasCustomer={!!project.customer?.stripe_customer_id} />
     </Card>
@@ -417,9 +434,54 @@ interface UsageBarProps {
   usage: BillingProject['usage']
   limitReports: number | null
   pct: number | null
+  periodStart: string | null
+  /** Wave J §3: real $ spent on LLM calls this billing month. */
+  llmCostUsd?: number
 }
 
-function UsageBar({ usage, limitReports, pct }: UsageBarProps) {
+interface UsageForecast {
+  etaDays: number
+  etaDate: Date
+  tone: 'danger' | 'warn' | 'muted'
+  label: string
+}
+
+/**
+ * Project the day the project will hit its quota at the current ingest rate.
+ * Returns null when there's not enough signal — first 24h of the period, no
+ * limit, already over-quota, or the project is on a totally idle day.
+ */
+function buildUsageForecast(
+  used: number,
+  limit: number | null,
+  periodStart: string | null,
+): UsageForecast | null {
+  if (limit == null || used <= 0) return null
+  if (used >= limit) return null
+  if (!periodStart) return null
+  const startMs = new Date(periodStart).getTime()
+  if (Number.isNaN(startMs)) return null
+  const daysElapsed = (Date.now() - startMs) / 86_400_000
+  if (daysElapsed < 1) return null
+  const dailyRate = used / daysElapsed
+  if (dailyRate <= 0) return null
+  const etaDays = Math.max(0, Math.ceil((limit - used) / dailyRate))
+  const etaDate = new Date(Date.now() + etaDays * 86_400_000)
+  const tone: UsageForecast['tone'] = etaDays < 3 ? 'danger' : etaDays < 7 ? 'warn' : 'muted'
+  const dateStr = etaDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const label = etaDays === 0
+    ? `At current rate, you'll hit your limit today`
+    : `At current rate, you'll hit your limit on ${dateStr} (${etaDays}d away)`
+  return { etaDays, etaDate, tone, label }
+}
+
+const FORECAST_TONE: Record<UsageForecast['tone'], string> = {
+  danger: 'bg-danger-subtle text-danger',
+  warn: 'bg-warn/10 text-warn',
+  muted: 'text-fg-faint',
+}
+
+function UsageBar({ usage, limitReports, pct, periodStart, llmCostUsd }: UsageBarProps) {
   const barColor = pct == null
     ? 'bg-brand'
     : pct >= 100
@@ -427,9 +489,10 @@ function UsageBar({ usage, limitReports, pct }: UsageBarProps) {
       : pct >= 80
         ? 'bg-warn'
         : 'bg-ok'
+  const forecast = buildUsageForecast(usage.reports, limitReports, periodStart)
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-2xs text-fg-muted">
+      <div className="flex items-center justify-between text-2xs text-fg-muted gap-2 flex-wrap">
         <span>
           Reports this period: <span className="font-mono text-fg">{usage.reports.toLocaleString()}</span>
           {limitReports != null && (
@@ -437,16 +500,36 @@ function UsageBar({ usage, limitReports, pct }: UsageBarProps) {
           )}
           {limitReports == null && <> <span className="text-fg-faint">(unlimited)</span></>}
         </span>
-        <span className="text-fg-faint">
-          Fixes <span className="font-mono text-fg-secondary">{usage.fixes.toLocaleString()}</span>
-          {' · '}
-          Classifier tokens <span className="font-mono text-fg-secondary">{usage.tokens.toLocaleString()}</span>
+        <span className="text-fg-faint flex items-center gap-2 flex-wrap">
+          <span>
+            Fixes <span className="font-mono text-fg-secondary">{usage.fixes.toLocaleString()}</span>
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            Classifier tokens <span className="font-mono text-fg-secondary">{usage.tokens.toLocaleString()}</span>
+          </span>
+          {llmCostUsd != null && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span
+                className="font-mono text-fg-secondary"
+                title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd"
+              >
+                LLM <span className="text-fg">{formatLlmCost(llmCostUsd)}</span>
+              </span>
+            </>
+          )}
         </span>
       </div>
       {limitReports != null && (
         <div className="h-1.5 bg-surface-overlay rounded-sm overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}>
           <div className={`h-full ${barColor}`} style={{ width: `${Math.max(2, pct ?? 0)}%` }} />
         </div>
+      )}
+      {forecast && (
+        <p className={`text-2xs px-1.5 py-0.5 rounded-sm inline-block font-mono ${FORECAST_TONE[forecast.tone]}`}>
+          {forecast.label}
+        </p>
       )}
     </div>
   )

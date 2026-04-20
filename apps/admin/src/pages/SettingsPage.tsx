@@ -42,7 +42,10 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Project Settings" />
+      <PageHeader
+        title="Project Settings"
+        description="Per-project flags, retention, routing defaults, and feature toggles."
+      />
 
       <PageHelp
         title="About Settings"

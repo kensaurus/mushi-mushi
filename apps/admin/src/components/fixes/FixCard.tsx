@@ -10,6 +10,7 @@ import { Card, Badge, RelativeTime } from '../ui'
 import { formatTokens } from '../charts'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
+import { PdcaReceipt } from './PdcaReceipt'
 import { pluralizeWithCount } from '../../lib/format'
 import { ciBadge, type FixAttempt } from './types'
 
@@ -52,6 +53,8 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
       </div>
 
       {fix.summary && <p className="text-xs text-fg-secondary">{fix.summary}</p>}
+
+      <PdcaReceipt fix={fix} timeline={timeline} className="pt-1" />
 
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-2xs text-fg-muted font-mono">
         <Link to={`/reports/${fix.report_id}`} className="hover:text-fg-secondary underline-offset-2 hover:underline">

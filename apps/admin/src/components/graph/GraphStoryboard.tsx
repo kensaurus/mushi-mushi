@@ -58,6 +58,10 @@ export function GraphStoryboard({
 
   // Group nodes by type into ordered columns. Empty columns are skipped so
   // a 2-type story renders as 2 columns, not 4-with-gaps.
+  // Also pre-compute a per-column "most-affected" node (highest degree) so
+  // the column header can read like a sentence — "3 components · top
+  // CommandPalette" — instead of just dumping the type name and a count.
+  // Audit Wave I P0 partial — closes the GraphStoryboard chapter labels gap.
   const columns = useMemo(() => {
     const grouped = new Map<NodeType, GraphNode[]>()
     for (const n of nodes) {
@@ -67,12 +71,26 @@ export function GraphStoryboard({
       existing.push(n)
       grouped.set(t, existing)
     }
-    return COLUMN_ORDER.filter((t) => grouped.has(t)).map((t) => ({
-      type: t,
-      label: NODE_TYPE_LABELS[t] ?? t,
-      nodes: grouped.get(t)!,
-    }))
-  }, [nodes])
+    const degree = new Map<string, number>()
+    for (const e of edges) {
+      degree.set(e.source_node_id, (degree.get(e.source_node_id) ?? 0) + e.weight)
+      degree.set(e.target_node_id, (degree.get(e.target_node_id) ?? 0) + e.weight)
+    }
+    return COLUMN_ORDER.filter((t) => grouped.has(t)).map((t) => {
+      const colNodes = grouped.get(t)!
+      const top = colNodes.reduce<GraphNode | null>((best, n) => {
+        const dn = degree.get(n.id) ?? 0
+        const db = best ? degree.get(best.id) ?? 0 : -1
+        return dn > db ? n : best
+      }, null)
+      return {
+        type: t,
+        label: NODE_TYPE_LABELS[t] ?? t,
+        nodes: colNodes,
+        topNode: top,
+      }
+    })
+  }, [nodes, edges])
 
   // Recompute SVG link anchor points whenever layout changes. Measurements are
   // taken against the inner content box (which can be wider than the scroll
@@ -138,6 +156,7 @@ export function GraphStoryboard({
       role="region"
       aria-label={`Sparse graph storyboard with ${nodes.length} nodes across ${columns.length} stages.`}
     >
+      <EdgeLegend />
       <div
         ref={innerRef}
         className="relative flex items-stretch gap-12 px-8 py-6 min-h-[420px] w-max min-w-full"
@@ -147,14 +166,24 @@ export function GraphStoryboard({
       >
         {columns.map((col) => (
           <div key={col.type} className="flex flex-col gap-3 min-w-[10rem] max-w-[14rem]">
-            <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ backgroundColor: NODE_COLORS[col.type] }}
-                aria-hidden="true"
-              />
-              {col.label}
-              <span className="font-mono text-fg-faint/60">({col.nodes.length})</span>
+            <div className="space-y-0.5">
+              <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: NODE_COLORS[col.type] }}
+                  aria-hidden="true"
+                />
+                <span className="font-mono text-fg-secondary">{col.nodes.length}</span>
+                <span>{col.label}</span>
+              </div>
+              {col.topNode && col.nodes.length > 1 && (
+                <div
+                  className="text-3xs text-fg-faint truncate"
+                  title={`Most-connected ${col.label.toLowerCase()}: ${col.topNode.label || col.topNode.id}`}
+                >
+                  top: <span className="text-fg-secondary">{col.topNode.label || '(unnamed)'}</span>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-2.5">
               {col.nodes.map((node) => {
@@ -237,6 +266,22 @@ export function GraphStoryboard({
           ))}
         </svg>
       </div>
+    </div>
+  )
+}
+
+function EdgeLegend() {
+  return (
+    <div
+      className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/80 px-2 py-1 text-3xs text-fg-muted backdrop-blur-sm"
+      title="Edge thickness scales with the number of bug reports touching both nodes."
+    >
+      <svg width="36" height="10" viewBox="0 0 36 10" aria-hidden="true">
+        <line x1="0" y1="5" x2="12" y2="5" stroke="oklch(0.55 0 0)" strokeWidth="1.5" strokeOpacity="0.55" />
+        <line x1="14" y1="5" x2="26" y2="5" stroke="oklch(0.55 0 0)" strokeWidth="2.25" strokeOpacity="0.55" />
+        <line x1="28" y1="5" x2="36" y2="5" stroke="oklch(0.55 0 0)" strokeWidth="3" strokeOpacity="0.55" />
+      </svg>
+      <span>thicker = more bugs touching both</span>
     </div>
   )
 }

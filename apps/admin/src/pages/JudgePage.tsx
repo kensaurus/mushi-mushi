@@ -245,8 +245,18 @@ export function JudgePage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Judge">
-        <Btn size="sm" variant="ghost" onClick={runNow} disabled={running}>
+      <PageHeader
+        title="Judge"
+        description="Independent grading of every classified report — calibrate confidence and catch silent regressions."
+      >
+        <Btn
+          size="sm"
+          variant="primary"
+          onClick={runNow}
+          disabled={running}
+          loading={running}
+          leadingIcon={<PlayIcon />}
+        >
           {running ? 'Dispatching…' : 'Run judge now'}
         </Btn>
       </PageHeader>
@@ -482,6 +492,12 @@ export function JudgePage() {
                   const display = summary && summary.length > 0
                     ? summary
                     : `Report ${e.report_id.slice(0, 8)}…`
+                  // Surface the judge's disagreement reasoning inline so
+                  // operators don't have to click into the report to see why
+                  // the classifier and judge diverged. Tooltip carries the
+                  // full text. Audit Wave I P1.
+                  const disagreementReason =
+                    e.classification_agreed === false ? e.judge_reasoning?.trim() : null
                   return (
                     <tr key={e.id} className="border-b border-edge-subtle text-fg-secondary hover:bg-surface-overlay/30">
                       <td className="py-1.5 px-3 max-w-[22rem]">
@@ -498,6 +514,13 @@ export function JudgePage() {
                             <span className="ml-1.5 normal-case">· {e.report_severity}</span>
                           )}
                         </div>
+                        {disagreementReason && (
+                          <Tooltip content={disagreementReason}>
+                            <p className="mt-1 text-3xs text-warn line-clamp-1 cursor-help italic">
+                              ⚠ {disagreementReason}
+                            </p>
+                          </Tooltip>
+                        )}
                       </td>
                       <td className="py-1.5 px-3 text-fg-faint text-2xs">
                         <RelativeTime value={e.created_at} />
@@ -585,5 +608,19 @@ export function JudgePage() {
         </Card>
       )}
     </div>
+  )
+}
+
+function PlayIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="11"
+      height="11"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M3.5 2.6v10.8c0 .9 1 1.4 1.7.9l8.3-5.4a1.1 1.1 0 0 0 0-1.8L5.2 1.7a1.1 1.1 0 0 0-1.7.9z" />
+    </svg>
   )
 }

@@ -281,7 +281,10 @@ export function GraphPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Knowledge Graph">
+      <PageHeader
+        title="Knowledge Graph"
+        description="See how reports cluster into components, pages, and releases. Click any node for its blast radius."
+      >
         <div className="flex items-center gap-2">
           <span className="text-2xs text-fg-faint font-mono">
             {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
@@ -331,20 +334,10 @@ export function GraphPage() {
 
             {useStoryboard ? (
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-2xs text-fg-muted">
-                  <span>
-                    Storyboard view — {filteredNodes.length} nodes flow{' '}
-                    <span className="font-medium text-fg-secondary">left → right</span>{' '}
-                    by stage. Click any card for blast radius.
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setForceCanvas(true)}
-                    className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-                  >
-                    Switch to spatial canvas
-                  </button>
-                </div>
+                <StoryboardNarrative
+                  nodes={filteredNodes}
+                  onSwitchToCanvas={() => setForceCanvas(true)}
+                />
                 <GraphStoryboard
                   nodes={filteredNodes}
                   edges={filteredEdges}
@@ -444,6 +437,57 @@ function ViewModeToggle({ view, onChange }: ViewModeToggleProps) {
         className={`px-2 py-0.5 text-2xs border-l border-edge ${view === 'table' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
       >
         Table
+      </button>
+    </div>
+  )
+}
+
+interface StoryboardNarrativeProps {
+  nodes: GraphNode[]
+  onSwitchToCanvas: () => void
+}
+
+/**
+ * Renders a one-sentence "this is what you're looking at" header above the
+ * sparse-graph storyboard. Computed from real node-type counts so the copy
+ * always reflects the data on screen — no static hand-wave.
+ */
+function StoryboardNarrative({ nodes, onSwitchToCanvas }: StoryboardNarrativeProps) {
+  const sentence = useMemo(() => {
+    const counts: Record<NodeType, number> = {
+      report_group: 0,
+      component: 0,
+      page: 0,
+      version: 0,
+    }
+    for (const n of nodes) {
+      const t = n.node_type as NodeType
+      if (t in counts) counts[t] += 1
+    }
+    const phrase = (n: number, singular: string, plural: string) =>
+      `${n} ${n === 1 ? singular : plural}`
+    if (nodes.length === 0) return 'No nodes match the current filters yet.'
+    const parts: string[] = []
+    if (counts.report_group > 0) parts.push(phrase(counts.report_group, 'report cluster', 'report clusters'))
+    if (counts.component > 0) parts.push(phrase(counts.component, 'component', 'components'))
+    if (counts.page > 0) parts.push(phrase(counts.page, 'page', 'pages'))
+    if (counts.version > 0) parts.push(phrase(counts.version, 'release version', 'release versions'))
+    if (parts.length === 0) return `${nodes.length} nodes flow left → right by stage.`
+    return `${parts.join(' → ')}. Click any card to highlight its blast radius.`
+  }, [nodes])
+
+  return (
+    <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-raised/40">
+      <p className="text-xs text-fg-secondary leading-snug">
+        <span className="text-2xs uppercase tracking-wider text-fg-faint mr-1">Story</span>
+        {sentence}
+      </p>
+      <button
+        type="button"
+        onClick={onSwitchToCanvas}
+        className="shrink-0 text-2xs px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+      >
+        Spatial canvas
       </button>
     </div>
   )

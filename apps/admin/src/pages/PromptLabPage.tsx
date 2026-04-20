@@ -154,7 +154,10 @@ export function PromptLabPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Prompt Lab">
+      <PageHeader
+        title="Prompt Lab"
+        description="Test prompt versions live before promoting them to production. Diff outputs side-by-side."
+      >
         <span className="text-2xs text-fg-faint font-mono">
           {data.prompts.length} prompts · {totalEvals} evals
         </span>

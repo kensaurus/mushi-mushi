@@ -94,7 +94,10 @@ export function SsoPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="SSO Configuration" />
+      <PageHeader
+        title="SSO Configuration"
+        description="Configure SAML or OIDC for your team. JIT-provisioning on first login is enabled by default."
+      />
 
       <PageHelp
         title="About SSO"

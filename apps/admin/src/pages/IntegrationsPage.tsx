@@ -191,7 +191,10 @@ export function IntegrationsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Integrations" />
+      <PageHeader
+        title="Integrations"
+        description="Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust."
+      />
 
       {!setup.hasAnyProject && (
         <SetupNudge
