@@ -1,10 +1,36 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "**Wave K — admin console UX overhaul + microinteraction sweep + 4 frontend bug fixes (no SDK behaviour change).**",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "0.4",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.4.0"
+    ],
     "highlights": [
+      {
+        "title": "`@mushi-mushi/cli` `0.3.0`",
+        "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
+      },
+      {
+        "title": "`mushi-mushi` `0.3.0` (NEW, unscoped)",
+        "description": "One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first."
+      },
+      {
+        "title": "`create-mushi-mushi` `0.3.0` (NEW)",
+        "description": "`npm create mushi-mushi` — same wizard via the standard npm-create convention."
+      },
+      {
+        "title": "All 16 published packages",
+        "description": "keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking."
+      },
+      {
+        "title": "All SDK READMEs",
+        "description": "discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa."
+      },
+      {
+        "title": "Root README",
+        "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
+      },
       {
         "title": "`@mushi-mushi/cli` `0.3.0`",
         "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
@@ -30,16 +56,54 @@
         "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.4.0"
+      },
+      {
+        "name": "create-mushi-mushi",
+        "version": "0.4.0"
+      },
+      {
+        "name": "mushi-mushi",
+        "version": "0.4.0"
+      }
+    ]
   },
   {
     "majorMinor": "0.3",
     "headline": "7567cee: # v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK",
     "pending": false,
     "versions": [
+      "0.3.1",
       "0.3.0"
     ],
     "highlights": [
+      {
+        "title": "`@mushi-mushi/cli` `0.3.0`",
+        "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
+      },
+      {
+        "title": "`mushi-mushi` `0.3.0` (NEW, unscoped)",
+        "description": "One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first."
+      },
+      {
+        "title": "`create-mushi-mushi` `0.3.0` (NEW)",
+        "description": "`npm create mushi-mushi` — same wizard via the standard npm-create convention."
+      },
+      {
+        "title": "All 16 published packages",
+        "description": "keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking."
+      },
+      {
+        "title": "All SDK READMEs",
+        "description": "discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa."
+      },
+      {
+        "title": "Root README",
+        "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
+      },
       {
         "title": "Native iOS SDK",
         "description": "(`MushiMushi`, SwiftPM + CocoaPods): shake-to-report"
@@ -63,36 +127,12 @@
       {
         "title": "SOC 2 Type 1 readiness module",
         "description": "new tables"
-      },
-      {
-        "title": "Data residency regions (US / EU / JP)",
-        "description": "opt-in pinning per project,"
-      },
-      {
-        "title": "BYO Storage abstraction",
-        "description": "(`s3` / `r2` / `gcs` / `minio` / `supabase`):"
-      },
-      {
-        "title": "BYOK Anthropic / OpenAI keys end-to-end",
-        "description": "`resolveLlmKey` now"
-      },
-      {
-        "title": "Region rollout",
-        "description": "a single-region deploy continues to work unchanged."
-      },
-      {
-        "title": "BYO Storage",
-        "description": "secrets MUST be loaded into Supabase Vault before being"
-      },
-      {
-        "title": "BYOK",
-        "description": "rotating a key is non-destructive — the old vault entry is"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.3.0"
+        "version": "0.3.1"
       }
     ]
   },
@@ -101,9 +141,34 @@
     "headline": "7567cee: # v0.6.0 — Wave A: hardening + agentic-fix orchestration",
     "pending": false,
     "versions": [
+      "0.2.1",
       "0.2.0"
     ],
     "highlights": [
+      {
+        "title": "`@mushi-mushi/cli` `0.3.0`",
+        "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
+      },
+      {
+        "title": "`mushi-mushi` `0.3.0` (NEW, unscoped)",
+        "description": "One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first."
+      },
+      {
+        "title": "`create-mushi-mushi` `0.3.0` (NEW)",
+        "description": "`npm create mushi-mushi` — same wizard via the standard npm-create convention."
+      },
+      {
+        "title": "All 16 published packages",
+        "description": "keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking."
+      },
+      {
+        "title": "All SDK READMEs",
+        "description": "discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa."
+      },
+      {
+        "title": "Root README",
+        "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
+      },
       {
         "title": "Vision air-gap",
         "description": "Stage-2 vision analysis now sees the screenshot only with"
@@ -127,36 +192,12 @@
       {
         "title": "Sandbox provider abstraction",
         "description": "`local-noop` (tests) and `e2b` (managed"
-      },
-      {
-        "title": "True MCP adapter",
-        "description": "`McpFixAgent` speaks JSON-RPC 2.0 with `tools/call`"
-      },
-      {
-        "title": "BYOK schema",
-        "description": "`byok_anthropic_key_ref` / `byok_openai_key_ref` columns"
-      },
-      {
-        "title": "On-device pre-classifier",
-        "description": "(`@mushi-mushi/wasm-classifier`, public 0.1.0):"
-      },
-      {
-        "title": "Real-time collaboration on reports",
-        "description": "`report_comments` (threaded,"
-      },
-      {
-        "title": "AG-UI streaming protocol",
-        "description": "(v0.4): the fix-dispatch SSE stream now emits"
-      },
-      {
-        "title": "Fine-tune pipeline",
-        "description": "extended `fine_tuning_jobs` with"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -164,51 +205,55 @@
       },
       {
         "name": "@mushi-mushi/core",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
-        "version": "0.2.0"
+        "version": "0.2.1"
+      },
+      {
+        "name": "@mushi-mushi/plugin-sentry",
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/react",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/wasm-classifier",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "0.2.0"
+        "version": "0.2.1"
       }
     ]
   },
