@@ -30,6 +30,14 @@ import {
   type CheckoutLineItem,
 } from '../_shared/stripe.ts'
 import { getPlan, listPlans } from '../_shared/plans.ts'
+import { notifyOperator } from '../_shared/operator-notify.ts'
+import { SUPPORT_EMAIL, SUPPORT_URL } from '../_shared/support.ts'
+// LLM cost estimation. Wave J §1: the canonical pricing table now lives in
+// `_shared/pricing.ts` so it feeds telemetry writes (`logLlmInvocation`) AND
+// the migrations (`20260420000200_llm_cost_usd.sql`). Health + Billing read
+// the persisted `cost_usd` column from `llm_invocations` directly; this
+// estimator is the defensive fallback for rows the backfill missed.
+import { estimateCallCostUsd } from '../_shared/pricing.ts'
 
 ensureSentry('api')
 
@@ -1246,6 +1254,43 @@ app.post('/v1/admin/codebase/upload', apiKeyAuth, async (c) => {
 // ADMIN ROUTES (JWT auth)
 // ============================================================
 
+// Severity breakdown over a sliding window — drives the KPI strip on
+// /reports so triagers can see "5 critical · 12 high · …" before they scroll.
+// Uses a single small SELECT (severity-only) so it stays cheap even for
+// projects with millions of historical reports.
+app.get('/v1/admin/reports/severity-stats', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const days = Math.min(Math.max(Number(c.req.query('days')) || 14, 1), 90)
+  const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
+  const projectIds = (projects ?? []).map(p => p.id)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { window_days: days, bySeverity: { critical: 0, high: 0, medium: 0, low: 0 }, total: 0 } })
+  }
+
+  const { data: rows } = await db
+    .from('reports')
+    .select('severity')
+    .in('project_id', projectIds)
+    .gte('created_at', sinceIso)
+    .neq('status', 'dismissed')
+
+  const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>
+  for (const r of (rows ?? []) as Array<{ severity: string | null }>) {
+    if (r.severity && r.severity in bySeverity) bySeverity[r.severity] += 1
+  }
+  return c.json({
+    ok: true,
+    data: {
+      window_days: days,
+      bySeverity,
+      total: (rows ?? []).length,
+    },
+  })
+})
+
 app.get('/v1/admin/reports', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
@@ -1294,26 +1339,41 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   const { data: reports, count, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
 
-  // Enrich each report with `dedup_count` (number of reports in the same
-  // dedup group) so the triage UI can collapse duplicates into "+N similar"
-  // badges. Single-query fetch by group id, then map back to row.
+  // Enrich each report with the real blast radius for its dedup group:
+  //   dedup_count      = total reports filed against the same fingerprint
+  //   unique_users     = COUNT(DISTINCT reporter_token_hash) — how many distinct
+  //                      devices felt it. Token hash is the right proxy for
+  //                      "people" in the dominant anonymous shake-to-report case
+  //                      where reporter_user_id is NULL.
+  //   unique_sessions  = COUNT(DISTINCT session_id) — how many distinct visits
+  // Powered by the report_group_blast_radius RPC (Wave I migration) so we get
+  // one round-trip regardless of how many groups are visible on this page.
   const groupIds = Array.from(new Set(
     (reports ?? [])
       .map(r => (r as { report_group_id: string | null }).report_group_id)
       .filter((g): g is string => Boolean(g)),
   ))
-  const groupCountMap = new Map<string, number>()
+  const groupStatsMap = new Map<string, { reports: number; users: number; sessions: number }>()
   if (groupIds.length > 0) {
-    const { data: groups } = await db
-      .from('report_groups')
-      .select('id, report_count')
-      .in('id', groupIds)
-    for (const g of groups ?? []) groupCountMap.set(g.id as string, g.report_count as number)
+    const { data: stats } = await db.rpc('report_group_blast_radius', { p_group_ids: groupIds })
+    for (const s of (stats ?? []) as Array<{ report_group_id: string; report_count: number; unique_users: number; unique_sessions: number }>) {
+      groupStatsMap.set(s.report_group_id, {
+        reports: Number(s.report_count) || 0,
+        users: Number(s.unique_users) || 0,
+        sessions: Number(s.unique_sessions) || 0,
+      })
+    }
   }
 
   const enriched = (reports ?? []).map(r => {
     const gid = (r as { report_group_id: string | null }).report_group_id
-    return { ...r, dedup_count: gid ? (groupCountMap.get(gid) ?? 1) : 1 }
+    const stats = gid ? groupStatsMap.get(gid) : undefined
+    return {
+      ...r,
+      dedup_count: stats?.reports ?? 1,
+      unique_users: stats?.users ?? 0,
+      unique_sessions: stats?.sessions ?? 0,
+    }
   })
 
   return c.json({ ok: true, data: { reports: enriched, total: count ?? 0 } })
@@ -1333,14 +1393,39 @@ app.get('/v1/admin/reports/:id', jwtAuth, async (c) => {
   // Attach the LLM invocation timeline for this report so the detail page can
   // deep-link to Langfuse traces for each pipeline stage (fast-filter, classify-report,
   // judge-batch). Cheaper to fetch alongside the report than as a separate round-trip.
-  const { data: invocations } = await db
-    .from('llm_invocations')
-    .select('id, function_name, stage, used_model, primary_model, fallback_used, fallback_reason, status, error_message, latency_ms, input_tokens, output_tokens, key_source, langfuse_trace_id, prompt_version, created_at')
-    .eq('report_id', reportId)
-    .order('created_at', { ascending: true })
-    .limit(20)
+  // Also pull the linked fix attempts + judge eval so the PDCA receipt strip
+  // on the report detail page can render without another network hop.
+  const [invocationsRes, fixesRes, judgeRes] = await Promise.all([
+    db
+      .from('llm_invocations')
+      .select('id, function_name, stage, used_model, primary_model, fallback_used, fallback_reason, status, error_message, latency_ms, input_tokens, output_tokens, key_source, langfuse_trace_id, prompt_version, created_at')
+      .eq('report_id', reportId)
+      .order('created_at', { ascending: true })
+      .limit(20),
+    db
+      .from('fix_attempts')
+      .select('id, status, agent, pr_url, pr_number, branch, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, error, started_at, completed_at, created_at')
+      .eq('report_id', reportId)
+      .order('created_at', { ascending: false })
+      .limit(5),
+    db
+      .from('classification_evaluations')
+      .select('id, judge_score, classification_agreed, judge_reasoning, created_at')
+      .eq('report_id', reportId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ])
 
-  return c.json({ ok: true, data: { ...data, llm_invocations: invocations ?? [] } })
+  return c.json({
+    ok: true,
+    data: {
+      ...data,
+      llm_invocations: invocationsRes.data ?? [],
+      fix_attempts: fixesRes.data ?? [],
+      judge_eval: judgeRes.data ?? null,
+    },
+  })
 })
 
 app.patch('/v1/admin/reports/:id', jwtAuth, async (c) => {
@@ -2062,6 +2147,38 @@ app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
     : promptsQuery.or(`project_id.is.null,project_id.in.(${projectIds.join(',')})`)
   const { data: prompts } = await promptsQuery
 
+  // Wave J §2: per-prompt-version cost rollup so the Prompt Lab modal can
+  // show "$ per evaluation" alongside avg judge score. Reads directly from
+  // the persisted cost_usd column written by telemetry.ts.
+  const promptCostByVersion = new Map<string, { totalCostUsd: number; calls: number }>()
+  if (projectIds.length > 0 && (prompts ?? []).length > 0) {
+    const versionList = Array.from(new Set((prompts ?? []).map(p => p.version).filter(Boolean)))
+    if (versionList.length > 0) {
+      const { data: costRows } = await db
+        .from('llm_invocations')
+        .select('prompt_version, cost_usd')
+        .in('project_id', projectIds)
+        .in('prompt_version', versionList)
+        .not('cost_usd', 'is', null)
+      for (const row of costRows ?? []) {
+        const cur = promptCostByVersion.get(row.prompt_version) ?? { totalCostUsd: 0, calls: 0 }
+        cur.totalCostUsd += Number(row.cost_usd)
+        cur.calls += 1
+        promptCostByVersion.set(row.prompt_version, cur)
+      }
+    }
+  }
+  const promptsWithCost = (prompts ?? []).map(p => {
+    const agg = promptCostByVersion.get(p.version)
+    return {
+      ...p,
+      cost_usd_total: agg ? Math.round(agg.totalCostUsd * 10000) / 10000 : 0,
+      avg_cost_usd: agg && agg.calls > 0
+        ? Math.round((agg.totalCostUsd / agg.calls) * 1000000) / 1000000
+        : null,
+    }
+  })
+
   // Dataset stats — what reports could the next experiment be evaluated on?
   let totalReports = 0
   let labelledReports = 0
@@ -2103,7 +2220,7 @@ app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
   return c.json({
     ok: true,
     data: {
-      prompts: prompts ?? [],
+      prompts: promptsWithCost,
       dataset: {
         total: totalReports,
         labelled: labelledReports,
@@ -3174,7 +3291,7 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
   periodStart.setUTCHours(0, 0, 0, 0)
 
   const projectIds = projects.map(p => p.id)
-  const [{ data: subs }, { data: customers }, { data: usage }] = await Promise.all([
+  const [{ data: subs }, { data: customers }, { data: usage }, { data: llmCosts }] = await Promise.all([
     db.from('billing_subscriptions')
       .select('project_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id')
       .in('project_id', projectIds),
@@ -3185,6 +3302,14 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
       .select('project_id, event_name, quantity, occurred_at')
       .in('project_id', projectIds)
       .gte('occurred_at', periodStart.toISOString()),
+    // Wave J §2: real LLM cost (COGS) for the current billing month so the
+    // Billing page can show "$ spent on LLM this month" alongside report
+    // quota. Reads the persisted cost_usd column written by telemetry.ts.
+    db.from('llm_invocations')
+      .select('project_id, cost_usd')
+      .in('project_id', projectIds)
+      .gte('created_at', periodStart.toISOString())
+      .not('cost_usd', 'is', null),
   ])
 
   // Pick the most recent active sub per project (a project may have a
@@ -3206,6 +3331,12 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
     else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity)
     else if (u.event_name === 'classifier_tokens') cur.tokens += Number(u.quantity)
     usageByProject.set(u.project_id, cur)
+  }
+
+  const llmCostByProject = new Map<string, number>()
+  for (const c of llmCosts ?? []) {
+    const cur = llmCostByProject.get(c.project_id) ?? 0
+    llmCostByProject.set(c.project_id, cur + Number(c.cost_usd))
   }
 
   const items = await Promise.all(projects.map(async p => {
@@ -3233,6 +3364,10 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
       customer: cust,
       period_start: periodStart.toISOString(),
       usage: u,
+      // Wave J §2: actual LLM dollars spent this billing month, summed from
+      // the persisted `llm_invocations.cost_usd` column. Rounded to four
+      // decimals so a $0.0001 Haiku call is still visible.
+      llm_cost_usd_this_month: Math.round((llmCostByProject.get(p.id) ?? 0) * 10000) / 10000,
       limit_reports: limit,
       over_quota: limit !== null && u.reports >= limit && !plan.overage_price_lookup_key,
       // Used by the QuotaBanner to render at >=80% / >=100%.
@@ -3299,7 +3434,7 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
       .order('created_at', { ascending: false })
       .limit(500),
     db.from('fix_attempts')
-      .select('project_id')
+      .select('project_id, merged_at')
       .in('project_id', projectIds)
       .limit(1000),
     db.from('project_repos')
@@ -3331,9 +3466,17 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
     if (platform && platform !== 'mushi-admin') sdkByProject.add(r.project_id)
   }
 
+  // Track BOTH "any fix dispatched" (drives the Check stage transition into
+  // 'active') and "fix merged" (drives Check → 'done'). Without the merged
+  // count the dashboard's PDCA loop card flips straight from 'next' to
+  // 'done' and falsely claims "Loop closed" the moment a draft PR opens.
   const fixesByProject = new Map<string, number>()
+  const mergedFixesByProject = new Map<string, number>()
   for (const f of fixesRes.data ?? []) {
     fixesByProject.set(f.project_id, (fixesByProject.get(f.project_id) ?? 0) + 1)
+    if (f.merged_at) {
+      mergedFixesByProject.set(f.project_id, (mergedFixesByProject.get(f.project_id) ?? 0) + 1)
+    }
   }
 
   type StepId =
@@ -3367,6 +3510,7 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
     const hasSentry = Boolean(settings?.sentry_org_slug)
     const hasByok = Boolean(settings?.byok_anthropic_key_ref)
     const fixCount = fixesByProject.get(p.id) ?? 0
+    const mergedFixCount = mergedFixesByProject.get(p.id) ?? 0
 
     const steps: Step[] = [
       {
@@ -3460,6 +3604,7 @@ app.get('/v1/admin/setup', jwtAuth, async (c) => {
       done: completeRequired === requiredSteps.length,
       report_count: reportInfo.count,
       fix_count: fixCount,
+      merged_fix_count: mergedFixCount,
     }
   })
 
@@ -3492,7 +3637,14 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
   // sibling project — see UX audit: glot.it showed "last report never" despite
   // having 31 reports because mushi-mushi (sister project) had pushed it past
   // the limit window.
-  const [reportCounts, allKeys, members, latestReports] = await Promise.all([
+  // PDCA bottleneck rollup is computed per-project so the projects list can
+  // show "where this project is stuck" inline. Audit Wave I P1: previously
+  // the only signal was last_report_at, which doesn't tell the user whether
+  // they need to triage, ship a fix, or wire integrations.
+  const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString()
+  const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000).toISOString()
+
+  const [reportCounts, allKeys, members, latestReports, planBacklogs, doFlights, checkPending] = await Promise.all([
     db.from('reports').select('project_id', { count: 'exact', head: false }).in('project_id', projectIds),
     db.from('project_api_keys').select('id, project_id, key_prefix, created_at, is_active').in('project_id', projectIds).order('created_at', { ascending: false }),
     db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
@@ -3505,6 +3657,19 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
         .maybeSingle()
         .then(r => ({ project_id: pid, created_at: r.data?.created_at ?? null }))
     )),
+    db.from('reports')
+      .select('project_id')
+      .in('project_id', projectIds)
+      .eq('status', 'new')
+      .lt('created_at', oneHourAgo),
+    db.from('fix_attempts')
+      .select('project_id, status')
+      .in('project_id', projectIds)
+      .in('status', ['pending', 'running', 'pr_open', 'failed']),
+    db.from('classification_evaluations')
+      .select('report_id, project_id, classification_agreed, created_at')
+      .in('project_id', projectIds)
+      .gte('created_at', fourteenDaysAgo),
   ])
 
   const countMap: Record<string, number> = {}
@@ -3527,8 +3692,55 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
     if (r.created_at) lastReportMap[r.project_id] = r.created_at
   }
 
+  const planBacklogMap: Record<string, number> = {}
+  for (const r of planBacklogs.data ?? []) {
+    planBacklogMap[r.project_id] = (planBacklogMap[r.project_id] ?? 0) + 1
+  }
+
+  const fixInflightMap: Record<string, number> = {}
+  const fixFailedMap: Record<string, number> = {}
+  for (const f of doFlights.data ?? []) {
+    if (f.status === 'failed') {
+      fixFailedMap[f.project_id] = (fixFailedMap[f.project_id] ?? 0) + 1
+    } else {
+      fixInflightMap[f.project_id] = (fixInflightMap[f.project_id] ?? 0) + 1
+    }
+  }
+
+  const checkDisagreeMap: Record<string, number> = {}
+  for (const e of checkPending.data ?? []) {
+    if (e.classification_agreed === false) {
+      checkDisagreeMap[e.project_id] = (checkDisagreeMap[e.project_id] ?? 0) + 1
+    }
+  }
+
   const enriched = (projects ?? []).map(p => {
     const keys = keyMap[p.id] ?? []
+    const planCount = planBacklogMap[p.id] ?? 0
+    const doInflight = fixInflightMap[p.id] ?? 0
+    const doFailed = fixFailedMap[p.id] ?? 0
+    const disagreements = checkDisagreeMap[p.id] ?? 0
+    // Pick the single most-urgent stage so the FE can render one bottleneck
+    // pill per row without a chart. Mirrors the dashboard focusStage logic
+    // but scoped per-project.
+    let bottleneckStage: 'plan' | 'do' | 'check' | 'act' | null = null
+    let bottleneckLabel: string | null = null
+    if (doFailed > 0) {
+      bottleneckStage = 'do'
+      bottleneckLabel = `${doFailed} ${doFailed === 1 ? 'fix needs' : 'fixes need'} retry`
+    } else if (planCount > 5) {
+      bottleneckStage = 'plan'
+      bottleneckLabel = `${planCount} reports waiting > 1h to triage`
+    } else if (disagreements > 3) {
+      bottleneckStage = 'check'
+      bottleneckLabel = `${disagreements} judge ${disagreements === 1 ? 'disagrees' : 'disagree'} with classifier`
+    } else if (doInflight > 0) {
+      bottleneckStage = 'do'
+      bottleneckLabel = `${doInflight} ${doInflight === 1 ? 'fix in flight' : 'fixes in flight'}`
+    } else if (planCount > 0) {
+      bottleneckStage = 'plan'
+      bottleneckLabel = `${planCount} ${planCount === 1 ? 'report waiting' : 'reports waiting'} > 1h`
+    }
     return {
       ...p,
       report_count: countMap[p.id] ?? 0,
@@ -3537,6 +3749,8 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
       member_count: (memberMap[p.id] ?? []).length,
       members: memberMap[p.id] ?? [],
       last_report_at: lastReportMap[p.id] ?? null,
+      pdca_bottleneck: bottleneckStage,
+      pdca_bottleneck_label: bottleneckLabel,
     }
   })
 
@@ -4096,14 +4310,35 @@ app.get('/v1/admin/query/history', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 20), 1), 100)
-  const { data, error } = await db
+  const onlySaved = c.req.query('saved') === '1'
+  let query = db
     .from('nl_query_history')
-    .select('id, project_id, prompt, sql, summary, explanation, row_count, error, latency_ms, created_at')
+    .select('id, project_id, prompt, sql, summary, explanation, row_count, error, latency_ms, is_saved, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit)
+  if (onlySaved) query = query.eq('is_saved', true)
+  const { data, error } = await query
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
   return c.json({ ok: true, data: { history: data ?? [] } })
+})
+
+// PATCH the is_saved flag — used by the Query page Saved sidebar.
+app.patch('/v1/admin/query/history/:id', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const id = c.req.param('id')
+  const body = await c.req.json().catch(() => ({})) as { is_saved?: boolean }
+  if (typeof body.is_saved !== 'boolean') {
+    return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'is_saved boolean required' } }, 400)
+  }
+  const db = getServiceClient()
+  const { error } = await db
+    .from('nl_query_history')
+    .update({ is_saved: body.is_saved })
+    .eq('id', id)
+    .eq('user_id', userId)
+  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  return c.json({ ok: true, data: { id, is_saved: body.is_saved } })
 })
 
 app.delete('/v1/admin/query/history/:id', jwtAuth, async (c) => {
@@ -4691,6 +4926,13 @@ app.get('/v1/admin/audit', jwtAuth, async (c) => {
   const action = c.req.query('action')
   const resourceType = c.req.query('resource_type')
   const actor = c.req.query('actor')
+  // actor_type is derived from actor_id shape so the FE can split human vs
+  // agent vs system bots (cron / webhook / migration). Audit Wave I P2.
+  // Mapping:
+  //   human  -> actor_id is a uuid (auth.users.id) AND actor_email is set
+  //   agent  -> actor_id starts with 'agent_' or actor_email like 'agent-%@'
+  //   system -> actor_id is null OR starts with 'cron_' / 'system_' / 'webhook_'
+  const actorType = c.req.query('actor_type') as 'human' | 'agent' | 'system' | undefined
   const since = c.req.query('since')
   const q = c.req.query('q')?.trim()
   const limit = Math.min(Number(c.req.query('limit') ?? 50), 200)
@@ -4708,6 +4950,14 @@ app.get('/v1/admin/audit', jwtAuth, async (c) => {
   if (actor) query = query.ilike('actor_email', `%${actor}%`)
   if (since) query = query.gte('created_at', since)
   if (q) query = query.or(`action.ilike.%${q}%,resource_type.ilike.%${q}%,resource_id.ilike.%${q}%`)
+  if (actorType === 'human') {
+    // A real human always has both an email and a uuid actor_id.
+    query = query.not('actor_email', 'is', null).not('actor_id', 'is', null)
+  } else if (actorType === 'agent') {
+    query = query.or('actor_id.like.agent_%,actor_email.like.agent-%@%')
+  } else if (actorType === 'system') {
+    query = query.or('actor_id.is.null,actor_id.like.cron_%,actor_id.like.system_%,actor_id.like.webhook_%')
+  }
 
   const { data, count } = await query
   return c.json({ ok: true, data: { logs: data ?? [], count: count ?? 0 } })
@@ -5567,7 +5817,7 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
   const since = new Date(Date.now() - ms).toISOString()
   const { data: invocations } = await db
     .from('llm_invocations')
-    .select('function_name, used_model, primary_model, fallback_used, status, latency_ms, input_tokens, output_tokens, created_at, langfuse_trace_id, report_id, key_source')
+    .select('function_name, used_model, primary_model, fallback_used, status, latency_ms, input_tokens, output_tokens, cost_usd, created_at, langfuse_trace_id, report_id, key_source')
     .in('project_id', projectIds)
     .gte('created_at', since)
     .order('created_at', { ascending: false })
@@ -5580,12 +5830,23 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
   const avgLatency = rows.length > 0
     ? Math.round(rows.reduce((sum, r) => sum + (r.latency_ms ?? 0), 0) / rows.length)
     : 0
-  const p95Latency = rows.length > 0
-    ? rows.map(r => r.latency_ms ?? 0).sort((a, b) => a - b)[Math.floor(rows.length * 0.95)] ?? 0
+
+  // Per-function p95 + a global p95. Sort once, slice index = floor(0.95 * len).
+  const sortedGlobal = rows.map(r => r.latency_ms ?? 0).sort((a, b) => a - b)
+  const p95Latency = sortedGlobal.length > 0
+    ? sortedGlobal[Math.min(sortedGlobal.length - 1, Math.floor(sortedGlobal.length * 0.95))] ?? 0
     : 0
 
   const byModel: Record<string, { calls: number; errors: number; tokens: number }> = {}
-  const byFunction: Record<string, { calls: number; errors: number; fallbacks: number; avgLatencyMs: number }> = {}
+  const byFunction: Record<string, {
+    calls: number
+    errors: number
+    fallbacks: number
+    avgLatencyMs: number
+    p95LatencyMs: number
+    costUsd: number
+    lastFailureAt: string | null
+  }> = {}
   const fnLatency: Record<string, number[]> = {}
   for (const r of rows) {
     const modelKey = r.used_model
@@ -5595,18 +5856,43 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     byModel[modelKey].tokens += (r.input_tokens ?? 0) + (r.output_tokens ?? 0)
 
     const fnKey = r.function_name
-    byFunction[fnKey] ??= { calls: 0, errors: 0, fallbacks: 0, avgLatencyMs: 0 }
-    byFunction[fnKey].calls += 1
-    if (r.status !== 'success') byFunction[fnKey].errors += 1
-    if (r.fallback_used) byFunction[fnKey].fallbacks += 1
+    byFunction[fnKey] ??= {
+      calls: 0,
+      errors: 0,
+      fallbacks: 0,
+      avgLatencyMs: 0,
+      p95LatencyMs: 0,
+      costUsd: 0,
+      lastFailureAt: null,
+    }
+    const fnAgg = byFunction[fnKey]
+    fnAgg.calls += 1
+    if (r.status !== 'success') {
+      fnAgg.errors += 1
+      // Track the most recent failure timestamp so the FE can render
+      // "last failure 12m ago" without a second query.
+      if (!fnAgg.lastFailureAt || r.created_at > fnAgg.lastFailureAt) {
+        fnAgg.lastFailureAt = r.created_at as string
+      }
+    }
+    if (r.fallback_used) fnAgg.fallbacks += 1
+    // Prefer the persisted cost_usd column (Wave J §1). Fall back to the
+    // shared estimator for ancient rows the backfill missed.
+    fnAgg.costUsd += r.cost_usd != null
+      ? Number(r.cost_usd)
+      : estimateCallCostUsd(r.used_model, r.input_tokens ?? 0, r.output_tokens ?? 0)
     fnLatency[fnKey] ??= []
     fnLatency[fnKey].push(r.latency_ms ?? 0)
   }
   for (const fn of Object.keys(byFunction)) {
-    const arr = fnLatency[fn]
+    const arr = fnLatency[fn].slice().sort((a, b) => a - b)
     byFunction[fn].avgLatencyMs = arr.length > 0
       ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length)
       : 0
+    byFunction[fn].p95LatencyMs = arr.length > 0
+      ? arr[Math.min(arr.length - 1, Math.floor(arr.length * 0.95))] ?? 0
+      : 0
+    byFunction[fn].costUsd = Math.round(byFunction[fn].costUsd * 10000) / 10000
   }
 
   return c.json({
@@ -5890,14 +6176,15 @@ app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, async (c) => {
 
   const { error } = await db.from('project_retention_policies').upsert(updates, { onConflict: 'project_id' })
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  await logAudit(db, {
-    project_id: projectId,
-    actor_id: userId,
-    action: 'retention.update',
-    resource_type: 'project_retention_policies',
-    resource_id: projectId,
-    metadata: updates,
-  }).catch(() => {})
+  await logAudit(
+    db,
+    projectId,
+    userId,
+    'compliance.retention.updated',
+    'project_retention_policies',
+    projectId,
+    updates,
+  ).catch(() => {})
   return c.json({ ok: true })
 })
 
@@ -5943,14 +6230,15 @@ app.post('/v1/admin/compliance/dsars', jwtAuth, async (c) => {
     .select('*')
     .single()
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
-  await logAudit(db, {
-    project_id: projectId,
-    actor_id: userId,
-    action: 'dsar.create',
-    resource_type: 'data_subject_requests',
-    resource_id: data.id,
-    metadata: { request_type: requestType, subject_email: subjectEmail },
-  }).catch(() => {})
+  await logAudit(
+    db,
+    projectId,
+    userId,
+    'compliance.dsar.created',
+    'data_subject_requests',
+    data.id,
+    { request_type: requestType, subject_email: subjectEmail },
+  ).catch(() => {})
   return c.json({ ok: true, data: { request: data } })
 })
 
@@ -5969,12 +6257,25 @@ app.patch('/v1/admin/compliance/dsars/:id', jwtAuth, async (c) => {
   if (body.status === 'completed') updates.fulfilled_at = new Date().toISOString()
   if (body.status === 'completed') updates.fulfilled_by = userId
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('data_subject_requests')
     .update(updates)
     .eq('id', id)
     .in('project_id', projectIds)
+    .select('project_id')
+    .single()
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (updated?.project_id) {
+    await logAudit(
+      db,
+      updated.project_id,
+      userId,
+      'compliance.dsar.updated',
+      'data_subject_requests',
+      id,
+      updates,
+    ).catch(() => {})
+  }
   return c.json({ ok: true })
 })
 
@@ -6014,13 +6315,15 @@ app.post('/v1/admin/compliance/evidence/refresh', jwtAuth, async (c) => {
     if (!res.ok) {
       return c.json({ ok: false, error: { code: 'EDGE_FUNCTION_ERROR', message: txt.slice(0, 200) } }, 502)
     }
-    await logAudit(db, {
-      project_id: projectIds[0],
-      actor_id: userId,
-      action: 'soc2.evidence.manual_refresh',
-      resource_type: 'soc2_evidence',
-      metadata: { project_count: projectIds.length },
-    }).catch(() => {})
+    await logAudit(
+      db,
+      projectIds[0],
+      userId,
+      'compliance.soc2.evidence_refreshed',
+      'soc2_evidence',
+      undefined,
+      { project_count: projectIds.length },
+    ).catch(() => {})
     return c.json({ ok: true })
   } catch (err) {
     return c.json({ ok: false, error: { code: 'NETWORK_ERROR', message: (err as Error).message } }, 500)
@@ -6120,7 +6423,7 @@ app.get('/v1/admin/storage', jwtAuth, async (c) => {
   if (projectIds.length === 0) {
     // Keep both shapes for backward-compat: top-level `settings` for any old
     // client, and the canonical `data` envelope that apiFetch expects.
-    return c.json({ ok: true, settings: [], data: { settings: [] } })
+    return c.json({ ok: true, settings: [], data: { settings: [], usage: [] } })
   }
   const { data, error } = await db
     .from('project_storage_settings')
@@ -6128,6 +6431,41 @@ app.get('/v1/admin/storage', jwtAuth, async (c) => {
     .in('project_id', projectIds)
   if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
   return c.json({ ok: true, settings: data ?? [], data: { settings: data ?? [] } })
+})
+
+// Per-project storage usage rollup (Audit Wave I §5 storage). Counts uploaded
+// artefacts (reports.screenshot_path IS NOT NULL is the only artefact kind we
+// track today) and the last write timestamp. Object-bytes is intentionally
+// omitted until we land a `screenshot_size_bytes` column — counting objects is
+// already enough to spot runaway buckets and stale projects.
+app.get('/v1/admin/storage/usage', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) return c.json({ ok: true, data: { usage: [] } })
+
+  const usage = await Promise.all(projectIds.map(async (pid) => {
+    const [{ count }, { data: latest }] = await Promise.all([
+      db.from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .not('screenshot_path', 'is', null),
+      db.from('reports')
+        .select('created_at')
+        .eq('project_id', pid)
+        .not('screenshot_path', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+    return {
+      project_id: pid,
+      object_count: count ?? 0,
+      last_write_at: latest?.created_at ?? null,
+    }
+  }))
+
+  return c.json({ ok: true, data: { usage } })
 })
 
 app.put('/v1/admin/storage/:projectId', jwtAuth, async (c) => {
@@ -6340,6 +6678,208 @@ app.get('/v1/admin/billing/invoices', jwtAuth, async (c) => {
       error: { code: 'STRIPE_ERROR', message: err instanceof Error ? err.message : 'unknown' },
     }, 502)
   }
+})
+
+// ============================================================
+// Support inbox (Wave 4.3)
+//
+// Goals:
+//   - Give paid customers a one-click "Talk to a human" channel from the
+//     admin console — no third-party support tool to integrate yet.
+//   - Operator gets a Slack/Discord push within seconds.
+//   - Searchable history per project (the audit log + `support_tickets`).
+//   - Cheap abuse defence: max 5 tickets/hour/user.
+//
+// Why a single payload-light endpoint vs an inbox UI? You ship faster, the
+// operator learns more from the first 10 customer conversations, and
+// adding categorised triage later (priority, owner, SLA) is one PR away.
+// ============================================================
+
+// Public-ish lookup: surface the support address so the marketing /admin
+// surfaces don't hardcode it. Auth-gated so we don't leak the SUPPORT_EMAIL
+// override that self-hosters set to a private inbox.
+app.get('/v1/admin/support/info', jwtAuth, (c) => {
+  return c.json({
+    ok: true,
+    data: {
+      email: SUPPORT_EMAIL,
+      url: SUPPORT_URL,
+      // Indicates whether operator notifications are wired up. Self-hosters
+      // who haven't set the webhook see a "delivered to email only" hint
+      // in the UI instead of an unconditional "we'll Slack you" promise.
+      operator_notifications_enabled: Boolean(
+        Deno.env.get('OPERATOR_SLACK_WEBHOOK_URL')
+        ?? Deno.env.get('OPERATOR_DISCORD_WEBHOOK_URL'),
+      ),
+    },
+  })
+})
+
+const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const
+type SupportCategory = typeof SUPPORT_CATEGORIES[number]
+
+interface ContactBody {
+  project_id?: string | null
+  subject?: string
+  body?: string
+  category?: string
+}
+
+const RATE_LIMIT_PER_HOUR = 5
+
+app.post('/v1/support/contact', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const userEmail = (c.get('userEmail') as string | undefined) ?? ''
+  if (!userEmail) {
+    return c.json({ ok: false, error: { code: 'EMAIL_REQUIRED' } }, 400)
+  }
+
+  const body = await c.req.json().catch(() => null) as ContactBody | null
+  if (!body) return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400)
+
+  const subject = (body.subject ?? '').trim()
+  const message = (body.body ?? '').trim()
+  if (subject.length < 3 || subject.length > 200) {
+    return c.json({ ok: false, error: { code: 'BAD_SUBJECT', message: 'Subject must be 3-200 chars.' } }, 400)
+  }
+  if (message.length < 10 || message.length > 5000) {
+    return c.json({ ok: false, error: { code: 'BAD_BODY', message: 'Body must be 10-5000 chars.' } }, 400)
+  }
+  const category: SupportCategory =
+    SUPPORT_CATEGORIES.includes(body.category as SupportCategory)
+      ? body.category as SupportCategory
+      : 'other'
+
+  const db = getServiceClient()
+
+  // Project ownership check (when project_id is supplied).
+  let projectName: string | null = null
+  let planId: string | null = null
+  if (body.project_id) {
+    const owned = await ownedProjectIds(db, userId)
+    if (!owned.includes(body.project_id)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+    }
+    const { data: project } = await db
+      .from('projects')
+      .select('name')
+      .eq('id', body.project_id)
+      .maybeSingle()
+    projectName = project?.name ?? null
+
+    const { data: sub } = await db
+      .from('billing_subscriptions')
+      .select('plan_id, status')
+      .eq('project_id', body.project_id)
+      .maybeSingle()
+    if (sub?.status === 'active' || sub?.status === 'trialing' || sub?.status === 'past_due') {
+      planId = sub.plan_id ?? null
+    }
+  }
+
+  // Cheap rate limit. Counts COMPLETED inserts in the last 60 minutes.
+  // Race-prone (two concurrent submits could both pass) but the worst case
+  // is one extra ticket — acceptable for now.
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+  const { count } = await db
+    .from('support_tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', oneHourAgo)
+  if ((count ?? 0) >= RATE_LIMIT_PER_HOUR) {
+    return c.json({
+      ok: false,
+      error: { code: 'RATE_LIMITED', message: `Limit is ${RATE_LIMIT_PER_HOUR} tickets/hour. Email ${SUPPORT_EMAIL} for urgent issues.` },
+    }, 429)
+  }
+
+  const ipAddress = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? null
+  const userAgent = c.req.header('user-agent')?.slice(0, 500) ?? null
+
+  const { data: ticket, error: insertErr } = await db
+    .from('support_tickets')
+    .insert({
+      project_id: body.project_id ?? null,
+      user_id: userId,
+      user_email: userEmail,
+      subject,
+      body: message,
+      category,
+      plan_id: planId,
+      ip_address: ipAddress,
+      user_agent: userAgent,
+    })
+    .select('id, created_at')
+    .single()
+
+  if (insertErr || !ticket) {
+    log.error('support_ticket_insert_failed', { err: insertErr?.message })
+    return c.json({ ok: false, error: { code: 'DB_ERROR' } }, 500)
+  }
+
+  // audit_logs is per-project (FK). Tickets without a project are still
+  // captured in `support_tickets` itself — no need to fabricate a
+  // placeholder project_id just to satisfy the audit row.
+  if (body.project_id) {
+    await logAudit(db, body.project_id, userId, 'support.ticket_created', 'support_ticket', ticket.id, {
+      category,
+      plan_id: planId,
+      subject,
+    }, { email: userEmail, ip: ipAddress ?? undefined, userAgent: userAgent ?? undefined })
+  }
+
+  // Best-effort operator notification. We DO await it (rather than fire-
+  // and-forget) so we can stamp `notified_at` to support a backfill cron
+  // for self-hosters who set the webhook later.
+  const sentCount = await notifyOperator({
+    title: planId ? `Paid customer support ticket (${planId})` : 'Support ticket',
+    body: `*${subject}*\n\n${message.slice(0, 800)}${message.length > 800 ? '\n…[truncated]' : ''}`,
+    level: planId ? 'urgent' : 'warn',
+    fields: [
+      { label: 'From', value: userEmail },
+      { label: 'Category', value: category },
+      { label: 'Project', value: projectName ?? (body.project_id ? body.project_id.slice(0, 8) : 'no project') },
+      { label: 'Plan', value: planId ?? 'free' },
+    ],
+    footer: `ticket: ${ticket.id}`,
+  })
+  if (sentCount > 0) {
+    await db
+      .from('support_tickets')
+      .update({ notified_at: new Date().toISOString() })
+      .eq('id', ticket.id)
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      ticket_id: ticket.id,
+      created_at: ticket.created_at,
+      delivered_to_operator: sentCount > 0,
+      support_email: SUPPORT_EMAIL,
+    },
+  })
+})
+
+// List the caller's own tickets (across all projects they own). Used by
+// the BillingPage history section so paid users can see which questions
+// are still open.
+app.get('/v1/admin/support/tickets', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20')))
+
+  const { data, error } = await db
+    .from('support_tickets')
+    .select('id, project_id, subject, category, status, plan_id, created_at, updated_at, resolved_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) {
+    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  }
+  return c.json({ ok: true, data: { tickets: data ?? [] } })
 })
 
 Deno.serve(app.fetch)

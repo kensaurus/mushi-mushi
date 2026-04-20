@@ -42,7 +42,7 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
         </div>
         {inst ? (
           <span
-            className={`inline-flex rounded px-2 py-0.5 text-3xs ${inst.is_active ? 'bg-emerald-500/10 text-emerald-500' : 'bg-fg-muted/10 text-fg-muted'}`}
+            className={`inline-flex rounded-sm px-2 py-0.5 text-3xs border ${inst.is_active ? 'bg-ok/15 text-ok border-ok/30' : 'bg-fg-muted/10 text-fg-muted border-edge-subtle'}`}
           >
             {inst.is_active ? 'Installed' : 'Disabled'}
           </span>

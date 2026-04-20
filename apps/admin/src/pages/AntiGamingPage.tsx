@@ -19,10 +19,10 @@ import {
   FilterSelect,
   Input,
   EmptyState,
-  Loading,
   ErrorAlert,
 } from '../components/ui'
-import { KpiTile } from '../components/charts'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { KpiTile, type KpiDelta } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
 import { pluralizeWithCount } from '../lib/format'
 
@@ -166,6 +166,12 @@ export function AntiGamingPage() {
     return { total: allDevices.length, flagged, crossAccount, totalReports }
   }, [allDevices])
 
+  // Today-vs-7d-avg delta on each KPI: derived from device.created_at (tracked,
+  // flagged, cross-account) and device.report_count_today is not stored, so the
+  // reports KPI gets a static delta. Audit Wave I P2 — surface direction of
+  // travel without waiting on a server-side rollup.
+  const deltas = useMemo(() => buildDeltas(allDevices, events), [allDevices, events])
+
   async function unflag(deviceId: string) {
     setBusy(deviceId)
     try {
@@ -201,7 +207,10 @@ export function AntiGamingPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Anti-Gaming">
+      <PageHeader
+        title="Anti-Gaming"
+        description="Protect intake quality \u2014 throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
+      >
         <FilterSelect
           label="Show"
           value={filter}
@@ -219,13 +228,23 @@ export function AntiGamingPage() {
           'Identify scripted submission attempts',
           'Stop a single misconfigured client from polluting the report queue',
         ]}
-        howToUse="Flagged reports are still ingested but marked. Use Unflag after verifying a false positive (shared NAT, dev test accounts) or Flag manually after confirming abuse. The event log shows every decision for SOC 2 audit."
+        howToUse="Where this fits the loop — Plan stage. Junk intake here pollutes every downstream stage (classify, judge, fix). Flagged reports are still ingested but marked. Use Unflag after verifying a false positive (shared NAT, dev test accounts) or Flag manually after confirming abuse. The event log shows every decision for SOC 2 audit. Reporter token + device fingerprint are minted by the SDK — see packages/web/README.md#reporter-token for how to wire that on the client."
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Tracked devices" value={stats.total} />
-        <KpiTile label="Flagged" value={stats.flagged} accent={stats.flagged > 0 ? 'danger' : undefined} />
-        <KpiTile label="Cross-account" value={stats.crossAccount} accent={stats.crossAccount > 0 ? 'warn' : undefined} />
+        <KpiTile label="Tracked devices" value={stats.total} delta={deltas.tracked} />
+        <KpiTile
+          label="Flagged"
+          value={stats.flagged}
+          accent={stats.flagged > 0 ? 'danger' : undefined}
+          delta={deltas.flagged}
+        />
+        <KpiTile
+          label="Cross-account"
+          value={stats.crossAccount}
+          accent={stats.crossAccount > 0 ? 'warn' : undefined}
+          delta={deltas.crossAccount}
+        />
         <KpiTile label="Total reports" value={stats.totalReports} />
       </div>
 
@@ -243,7 +262,7 @@ export function AntiGamingPage() {
           />
         </div>
         {loading ? (
-          <Loading text="Loading devices..." />
+          <TableSkeleton rows={6} columns={4} showFilters={false} label="Loading devices" />
         ) : error ? (
           <ErrorAlert message={`Failed to load devices: ${error}`} onRetry={devicesQuery.reload} />
         ) : devices.length === 0 ? (
@@ -448,4 +467,61 @@ export function AntiGamingPage() {
       </section>
     </div>
   )
+}
+
+interface AntiGamingDeltas {
+  tracked: KpiDelta | null
+  flagged: KpiDelta | null
+  crossAccount: KpiDelta | null
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+function buildDeltas(devices: ReporterDevice[], events: AntiGamingEvent[]): AntiGamingDeltas {
+  return {
+    tracked: deltaFromTimestamps(devices.map((d) => d.created_at)),
+    flagged: deltaFromTimestamps(
+      events
+        .filter((e) => e.event_type === 'multi_account' || e.event_type === 'manual_flag')
+        .map((e) => e.created_at),
+      { invertTone: true },
+    ),
+    crossAccount: deltaFromTimestamps(
+      events.filter((e) => e.event_type === 'multi_account').map((e) => e.created_at),
+      { invertTone: true },
+    ),
+  }
+}
+
+function deltaFromTimestamps(
+  timestamps: string[],
+  opts: { invertTone?: boolean } = {},
+): KpiDelta | null {
+  if (timestamps.length === 0) return null
+  const now = Date.now()
+  const todayCutoff = now - DAY_MS
+  const sevenDayCutoff = now - 7 * DAY_MS
+  let today = 0
+  let priorWindow = 0
+  for (const ts of timestamps) {
+    const t = new Date(ts).getTime()
+    if (Number.isNaN(t)) continue
+    if (t >= todayCutoff) today += 1
+    else if (t >= sevenDayCutoff) priorWindow += 1
+  }
+  if (today === 0 && priorWindow === 0) return null
+  const sevenDayAvg = priorWindow / 6
+  const diff = today - sevenDayAvg
+  const direction: KpiDelta['direction'] = diff > 0.5 ? 'up' : diff < -0.5 ? 'down' : 'flat'
+  // For abuse counters, "up" is bad, "down" is good. Plain counters keep the
+  // natural read.
+  const tone: KpiDelta['tone'] = opts.invertTone
+    ? direction === 'up' ? 'danger' : direction === 'down' ? 'ok' : 'muted'
+    : direction === 'up' ? 'ok' : direction === 'down' ? 'warn' : 'muted'
+  const formattedDiff = Math.abs(diff) >= 1 ? Math.round(Math.abs(diff)).toString() : Math.abs(diff).toFixed(1)
+  return {
+    value: direction === 'flat' ? 'flat vs 7d avg' : `${formattedDiff} vs 7d avg`,
+    direction,
+    tone,
+  }
 }

@@ -7,7 +7,7 @@
 
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { Card, Badge } from './ui'
+import { Card, Badge, Tooltip } from './ui'
 
 /* ── KpiTile ────────────────────────────────────────────────────────────── */
 
@@ -41,12 +41,28 @@ export interface KpiTileProps {
   to?: string
   accent?: Tone
   delta?: KpiDelta | null
+  /** One-line "what does this number mean for me?" copy. Renders as a
+   *  cursor-help hint on the tile so the dashboard answers a question
+   *  rather than dumping a number. Audit P0 from 2026-04-19. */
+  meaning?: string
 }
 
-export function KpiTile({ label, value, sublabel, to, accent, delta }: KpiTileProps) {
+export function KpiTile({ label, value, sublabel, to, accent, delta, meaning }: KpiTileProps) {
   const inner = (
     <div className="px-3 py-2.5">
-      <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
+      <div className="flex items-center gap-1 truncate">
+        <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
+        {meaning && (
+          <Tooltip content={meaning}>
+            <span
+              aria-label={meaning}
+              className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-3xs text-fg-faint hover:text-fg-muted hover:border-fg-faint cursor-help"
+            >
+              <span aria-hidden="true" className="leading-none italic font-serif">i</span>
+            </span>
+          </Tooltip>
+        )}
+      </div>
       <div className="flex items-baseline gap-1.5 mt-1 min-w-0">
         <div
           className={`text-lg font-semibold font-mono truncate ${
@@ -72,7 +88,7 @@ export function KpiTile({ label, value, sublabel, to, accent, delta }: KpiTilePr
   )
   if (to) {
     return (
-      <Card elevated interactive className="cursor-pointer">
+      <Card elevated interactive>
         <Link
           to={to}
           className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md"
@@ -199,24 +215,23 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
   const max = Math.max(1, ...data.map((d) => d.total))
   return (
     <div>
-      <div className="flex items-end gap-1 h-24">
+      <div className="flex items-end gap-1 h-24" role="group" aria-label="Daily severity breakdown">
         {data.map((d) => {
+          // Two-step scaling: `totalH` sets the column height as a % of the
+          // chart (so a half-max day reads as half the chart height), and
+          // `seg` distributes severity within that already-scaled column as
+          // a % of its OWN height. Multiplying seg by totalH would compose
+          // the two ratios and quadratically squish every non-max column —
+          // a half-max day would render at 25%, not 50%.
           const totalH = (d.total / max) * 100
-          const seg = (n: number) => (d.total > 0 ? (n / d.total) * totalH : 0)
+          const seg = (n: number) => (d.total > 0 ? (n / d.total) * 100 : 0)
           return (
-            <div
+            <SeverityBarColumn
               key={d.day}
-              className="flex-1 flex flex-col-reverse items-stretch gap-px h-full"
-              title={`${shortDay(d.day)}: ${d.total} (C${d.critical} H${d.high} M${d.medium} L${d.low})`}
-            >
-              <div className="bg-danger" style={{ height: `${seg(d.critical)}%` }} />
-              <div className="bg-warn" style={{ height: `${seg(d.high)}%` }} />
-              <div className="bg-info" style={{ height: `${seg(d.medium)}%` }} />
-              <div className="bg-ok" style={{ height: `${seg(d.low)}%` }} />
-              {d.unscored != null && (
-                <div className="bg-fg-faint/40" style={{ height: `${seg(d.unscored)}%` }} />
-              )}
-            </div>
+              day={d}
+              totalH={totalH}
+              seg={seg}
+            />
           )
         })}
       </div>
@@ -231,6 +246,44 @@ export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
         <LegendDot color="bg-ok" label="Low" />
         {data.some((d) => d.unscored != null) && (
           <LegendDot color="bg-fg-faint/40" label="Unscored" />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SeverityBarColumn({
+  day,
+  totalH,
+  seg,
+}: {
+  day: SeverityDay
+  totalH: number
+  seg: (n: number) => number
+}) {
+  // Hover surfaces a count badge above the column so users get quantitative
+  // answers without leaving the chart.
+  return (
+    <div className="group relative flex-1 h-full">
+      {day.total > 0 && (
+        <span
+          className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 z-10 rounded-sm bg-surface-overlay border border-edge-subtle px-1 text-3xs font-mono text-fg shadow-card opacity-0 group-hover:opacity-100 motion-safe:transition-opacity"
+          aria-hidden="true"
+        >
+          {day.total}
+        </span>
+      )}
+      <div
+        className="absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch gap-px"
+        title={`${shortDay(day.day)}: ${day.total} reports (C${day.critical} H${day.high} M${day.medium} L${day.low})`}
+        style={{ height: `${Math.max(2, totalH)}%` }}
+      >
+        <div className="bg-danger motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.critical)}%` }} />
+        <div className="bg-warn motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.high)}%` }} />
+        <div className="bg-info motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.medium)}%` }} />
+        <div className="bg-ok motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.low)}%` }} />
+        {day.unscored != null && (
+          <div className="bg-fg-faint/40" style={{ height: `${seg(day.unscored)}%` }} />
         )}
       </div>
     </div>

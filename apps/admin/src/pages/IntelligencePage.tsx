@@ -9,7 +9,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
-import { PageHeader, PageHelp, Btn, Loading, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Btn, ErrorAlert, EmptyState } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import {
   ActiveJobCard,
@@ -194,7 +195,10 @@ export function IntelligencePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Bug Intelligence">
+      <PageHeader
+        title="Bug Intelligence"
+        description="Aggregate signals across reports \u2014 hotspot components, regression patterns, and shifting severity trends."
+      >
         <Btn onClick={generateNow} disabled={generating || !!activeJob}>
           {activeJob ? 'Generating…' : generating ? 'Enqueuing…' : 'Generate this week'}
         </Btn>
@@ -209,6 +213,13 @@ export function IntelligencePage() {
           'Compare your fix velocity against anonymised industry benchmarks (opt-in)',
         ]}
         howToUse="Reports are generated automatically every Monday by cron. Click Generate to run for the current week — the job runs in the background and the progress card below stays live. If a job is wedged you can cancel it."
+      />
+
+      <ThisWeekNarrative
+        latest={reports[0] ?? null}
+        loading={loading}
+        onGenerate={generateNow}
+        generating={generating || !!activeJob}
       />
 
       {activeJob && <ActiveJobCard job={activeJob} onCancel={() => void cancelJob(activeJob.id)} />}
@@ -227,7 +238,7 @@ export function IntelligencePage() {
       <RecentJobsList jobs={recentJobs} />
 
       {loading ? (
-        <Loading />
+        <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading intelligence reports" />
       ) : error ? (
         <ErrorAlert message="Failed to load intelligence reports." onRetry={fetchData} />
       ) : reports.length === 0 ? (
@@ -248,4 +259,62 @@ export function IntelligencePage() {
       )}
     </div>
   )
+}
+
+interface ThisWeekNarrativeProps {
+  latest: IntelligenceReport | null
+  loading: boolean
+  generating: boolean
+  onGenerate: () => void
+}
+
+// Surface the most-recent generated report as a one-paragraph "this week"
+// strip so the Intelligence page leads with insight, not a wall of buttons.
+// Falls back to NN/G-shape empty state (status + learning cue + CTA) when
+// no report exists yet. Audit Wave I P1.
+function ThisWeekNarrative({ latest, loading, generating, onGenerate }: ThisWeekNarrativeProps) {
+  if (loading) return null
+
+  if (!latest) {
+    return (
+      <section className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3.5">
+        <p className="text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1">
+          This week
+        </p>
+        <p className="text-xs text-fg-secondary leading-snug max-w-prose">
+          No intelligence digest has been generated yet. The cron writes one every Monday,
+          but you can fire one immediately to see this week's hotspots, fix velocity, and
+          severity drift in narrative form.
+        </p>
+        <div className="mt-2.5">
+          <Btn size="sm" variant="primary" onClick={onGenerate} disabled={generating}>
+            {generating ? 'Generating…' : 'Generate this week'}
+          </Btn>
+        </div>
+      </section>
+    )
+  }
+
+  const headline = firstParagraph(latest.summary_md)
+  return (
+    <section className="rounded-md border border-brand/20 bg-brand/5 p-3.5">
+      <div className="flex items-baseline justify-between mb-1 gap-2 flex-wrap">
+        <p className="text-2xs uppercase tracking-wider text-brand font-semibold">
+          Week of {latest.week_start}
+        </p>
+        <span className="text-3xs text-fg-faint font-mono">{latest.llm_model ?? ''}</span>
+      </div>
+      <p className="text-xs text-fg-secondary leading-relaxed max-w-prose whitespace-pre-line">
+        {headline}
+      </p>
+    </section>
+  )
+}
+
+function firstParagraph(md: string | null | undefined): string {
+  if (!md) return 'Report generated, but no summary text was captured.'
+  const trimmed = md.trim()
+  const split = trimmed.split(/\n\s*\n/, 2)
+  const first = (split[0] ?? trimmed).replace(/^#+\s*/gm, '').trim()
+  return first.length > 380 ? `${first.slice(0, 380)}…` : first
 }

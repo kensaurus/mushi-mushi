@@ -25,6 +25,9 @@ export function SetupChecklist({ project, mode, onRefresh }: SetupChecklistProps
   const requiredDone = project.required_complete >= project.required_total
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
+  // Highlight the next required step with a "Do this next" chip + brand ring,
+  // mirroring the dashboard HeroIntro language. Audit Wave I P1.
+  const nextRequiredId = project.steps.find((s) => s.required && !s.complete)?.id ?? null
 
   if (mode === 'banner') {
     return (
@@ -33,6 +36,7 @@ export function SetupChecklist({ project, mode, onRefresh }: SetupChecklistProps
         requiredDone={requiredDone}
         allDone={allDone}
         pct={pct}
+        nextRequiredId={nextRequiredId}
         onRefresh={onRefresh}
       />
     )
@@ -43,6 +47,7 @@ export function SetupChecklist({ project, mode, onRefresh }: SetupChecklistProps
       project={project}
       requiredDone={requiredDone}
       pct={pct}
+      nextRequiredId={nextRequiredId}
       onRefresh={onRefresh}
     />
   )
@@ -52,6 +57,7 @@ interface InternalProps {
   project: SetupProject
   requiredDone: boolean
   pct: number
+  nextRequiredId: string | null
   onRefresh?: () => void
 }
 
@@ -60,27 +66,33 @@ function BannerChecklist({
   requiredDone,
   allDone,
   pct,
+  nextRequiredId,
   onRefresh,
 }: InternalProps & { allDone: boolean }) {
-  // Default: collapsed when all steps are complete (so the banner shrinks to a
-  // tiny pill once the user is fully set up); expanded otherwise.
-  const [open, setOpen] = useState(!allDone)
+  // Default: collapsed once required steps pass OR the user is >=80% through
+  // overall setup so the dashboard hero stops fighting a near-complete
+  // checklist for attention. Audit Wave I P2.
+  const overallPct = project.complete / Math.max(1, project.total)
+  const [open, setOpen] = useState(!(requiredDone || overallPct >= 0.8))
 
   if (!open) {
+    const collapsedCopy = allDone
+      ? '✓ Setup complete'
+      : requiredDone
+        ? '✓ All set — optional integrations available'
+        : `Setup ${project.required_complete}/${project.required_total} required`
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
         className={`mb-4 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-2xs motion-safe:transition-colors ${
-          allDone
+          allDone || requiredDone
             ? 'border-ok/30 bg-ok-muted/15 text-ok'
             : 'border-warn/30 bg-warn/10 text-warn'
         } hover:brightness-110`}
         aria-label="Show setup checklist"
       >
-        <span className="font-medium">
-          {allDone ? '✓ Setup complete' : `Setup ${project.required_complete}/${project.required_total} required`}
-        </span>
+        <span className="font-medium">{collapsedCopy}</span>
         <span className="text-3xs text-fg-muted">expand</span>
       </button>
     )
@@ -142,14 +154,18 @@ function BannerChecklist({
 
       <ol className="space-y-1 p-3">
         {project.steps.map(step => (
-          <ChecklistRow key={step.id} step={step} />
+          <ChecklistRow
+            key={step.id}
+            step={step}
+            current={step.id === nextRequiredId}
+          />
         ))}
       </ol>
     </div>
   )
 }
 
-function WizardChecklist({ project, requiredDone, pct }: InternalProps) {
+function WizardChecklist({ project, requiredDone, pct, nextRequiredId }: InternalProps) {
   return (
     <div className="space-y-3">
       <div className="rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
@@ -176,7 +192,7 @@ function WizardChecklist({ project, requiredDone, pct }: InternalProps) {
       <ol className="space-y-2">
         {project.steps.map(step => (
           <li key={step.id}>
-            <ChecklistCard step={step} />
+            <ChecklistCard step={step} current={step.id === nextRequiredId} />
           </li>
         ))}
       </ol>
@@ -184,16 +200,23 @@ function WizardChecklist({ project, requiredDone, pct }: InternalProps) {
   )
 }
 
-function ChecklistRow({ step }: { step: SetupStep }) {
+function ChecklistRow({ step, current }: { step: SetupStep; current?: boolean }) {
   return (
-    <li className="flex items-start gap-2.5 rounded-sm px-1.5 py-1 hover:bg-surface-overlay/40 motion-safe:transition-colors">
-      <StepIcon complete={step.complete} required={step.required} />
+    <li className={`flex items-start gap-2.5 rounded-sm px-1.5 py-1 motion-safe:transition-colors ${
+      current ? 'bg-brand/5 ring-1 ring-brand/30' : 'hover:bg-surface-overlay/40'
+    }`}>
+      <StepIcon complete={step.complete} required={step.required} current={current} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className={`text-xs ${step.complete ? 'text-fg-secondary line-through' : 'text-fg'}`}>
             {step.label}
           </span>
-          {!step.required && (
+          {current && (
+            <span className="rounded-sm bg-brand/15 px-1 py-0.5 text-3xs text-brand uppercase tracking-wider">
+              do this next
+            </span>
+          )}
+          {!step.required && !current && (
             <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-3xs text-fg-faint uppercase tracking-wider">
               optional
             </span>
@@ -213,23 +236,30 @@ function ChecklistRow({ step }: { step: SetupStep }) {
   )
 }
 
-function ChecklistCard({ step }: { step: SetupStep }) {
+function ChecklistCard({ step, current }: { step: SetupStep; current?: boolean }) {
   return (
-    <div className={`rounded-md border p-3 ${
+    <div className={`rounded-md border p-3 motion-safe:transition-all ${
       step.complete
         ? 'border-ok/30 bg-ok-muted/10'
-        : step.required
-          ? 'border-brand/30 bg-brand/5'
-          : 'border-edge-subtle bg-surface-raised/30'
+        : current
+          ? 'border-brand/40 bg-brand/5 ring-2 ring-brand/40'
+          : step.required
+            ? 'border-brand/30 bg-brand/5'
+            : 'border-edge-subtle bg-surface-raised/30'
     }`}>
       <div className="flex items-start gap-3">
-        <StepIcon complete={step.complete} required={step.required} large />
+        <StepIcon complete={step.complete} required={step.required} current={current} large />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h4 className={`text-sm font-medium ${step.complete ? 'text-fg-secondary' : 'text-fg'}`}>
               {step.label}
             </h4>
-            {!step.required && (
+            {current && (
+              <span className="rounded-sm bg-brand text-brand-fg px-1.5 py-0.5 text-3xs uppercase tracking-wider font-semibold">
+                do this next
+              </span>
+            )}
+            {!step.required && !current && (
               <span className="rounded-sm border border-edge-subtle bg-surface-raised px-1 py-0.5 text-3xs text-fg-faint uppercase tracking-wider">
                 optional
               </span>
@@ -255,12 +285,27 @@ function ChecklistCard({ step }: { step: SetupStep }) {
   )
 }
 
-function StepIcon({ complete, required, large }: { complete: boolean; required: boolean; large?: boolean }) {
+function StepIcon({
+  complete,
+  required,
+  current,
+  large,
+}: { complete: boolean; required: boolean; current?: boolean; large?: boolean }) {
   const size = large ? 'h-5 w-5 text-xs' : 'h-4 w-4 text-2xs'
   if (complete) {
     return (
       <span className={`${size} mt-0.5 inline-flex items-center justify-center rounded-full bg-ok text-ok-fg shrink-0`}>
         ✓
+      </span>
+    )
+  }
+  if (current) {
+    return (
+      <span
+        className={`${size} mt-0.5 inline-flex items-center justify-center rounded-full bg-brand text-brand-fg shrink-0 motion-safe:animate-pulse`}
+        aria-label="Current step"
+      >
+        →
       </span>
     )
   }

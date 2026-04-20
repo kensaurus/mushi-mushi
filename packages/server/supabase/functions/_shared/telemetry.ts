@@ -6,6 +6,7 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
+import { estimateCallCostUsd } from './pricing.ts'
 
 const log = rootLog.child('telemetry')
 
@@ -41,6 +42,15 @@ export function logLlmInvocation(
   db: SupabaseClient,
   rec: LlmInvocationRecord,
 ): Promise<void> {
+  // Compute cost at write time using the centralized pricing table so Health,
+  // Billing COGS, and Prompt Lab all read the same number from one column.
+  // See `_shared/pricing.ts` and migration `20260420000200_llm_cost_usd.sql`
+  // (Wave J §1) — both must mirror to keep historical and live data aligned.
+  const costUsd = estimateCallCostUsd(
+    rec.usedModel,
+    rec.inputTokens ?? 0,
+    rec.outputTokens ?? 0,
+  )
   return db.from('llm_invocations').insert({
     project_id: rec.projectId ?? null,
     report_id: rec.reportId ?? null,
@@ -55,6 +65,7 @@ export function logLlmInvocation(
     latency_ms: rec.latencyMs ?? null,
     input_tokens: rec.inputTokens ?? null,
     output_tokens: rec.outputTokens ?? null,
+    cost_usd: costUsd,
     prompt_version: rec.promptVersion ?? null,
     key_source: rec.keySource ?? null,
     langfuse_trace_id: rec.langfuseTraceId ?? null,

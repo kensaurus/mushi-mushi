@@ -78,6 +78,28 @@ export function ScreenshotBlock({ url }: { url: string | null }) {
   )
 }
 
+/**
+ * ScreenshotHero — promotes the user-captured screenshot to a full-width
+ * hero strip immediately under the report header. The screenshot is the
+ * single most useful piece of triage evidence; tucking it inside the
+ * "User report" card buries it. Audit Wave I P0 (2026-04-19).
+ */
+export function ScreenshotHero({ url, className = '' }: { url: string; className?: string }) {
+  return (
+    <figure className={`rounded-md border border-edge-subtle bg-surface-raised/40 overflow-hidden ${className}`}>
+      <ImageZoom
+        src={url}
+        alt="Bug report screenshot"
+        thumbClassName="block w-full max-h-96 object-cover object-top"
+      />
+      <figcaption className="flex items-center gap-1.5 px-3 py-1.5 text-2xs text-fg-faint border-t border-edge-subtle">
+        <IconCamera />
+        <span>What the reporter saw — click to zoom</span>
+      </figcaption>
+    </figure>
+  )
+}
+
 export function EmptySectionMessage({ text }: { text: string }) {
   return <div className="text-xs text-fg-muted italic py-1">{text}</div>
 }
