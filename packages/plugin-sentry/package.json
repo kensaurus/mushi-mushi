@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-sentry",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "description": "Reference Mushi Mushi plugin: mirror critical user-reported bugs into Sentry as events, and resolve the corresponding Sentry fingerprint when Mushi applies a fix.",
   "type": "module",
