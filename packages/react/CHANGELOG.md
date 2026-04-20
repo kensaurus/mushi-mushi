@@ -1,5 +1,45 @@
 # @mushi-mushi/react
 
+## 0.2.1
+
+### Patch Changes
+
+- fc5c58e: **One-command setup wizard + npm discoverability sweep.**
+  - **`@mushi-mushi/cli` `0.3.0`**: New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages.
+  - **`mushi-mushi` `0.3.0` (NEW, unscoped)**: One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first.
+  - **`create-mushi-mushi` `0.3.0` (NEW)**: `npm create mushi-mushi` — same wizard via the standard npm-create convention.
+  - **All 16 published packages**: keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking.
+  - **All SDK READMEs**: discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa.
+  - **Root README**: quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher.
+
+- 41b6aa7: **Wave K — admin console UX overhaul + microinteraction sweep + 4 frontend bug fixes (no SDK behaviour change).**
+
+  The published SDKs are unchanged in this release; the bump is to align the npm tarball with the updated cross-link README + the new admin console (`@mushi-mushi/admin@0.1.0`) that SDK consumers are pointed at from the dashboard.
+
+  What ships behind it (admin-side, visible to anyone running `npx mushi-mushi` and landing in the console):
+  - `PageHelp` defaults open only on the user's first ever visit (single global `mushi:visited` flag) instead of bombarding returning admins with re-opened help on every page.
+  - `PageHeader` accepts a `projectScope` prop; `Reports / Fixes / Judge / Graph / Health / Compliance` thread the active project name through so headers read `Reports · glot-it`.
+  - New `<ResultChip>` primitive — persistent inline `✓ Connection OK · 2s ago` receipt for every Test / Run / Trigger button. Adopted across BYOK / Firecrawl / Health quick-tests.
+  - Layout-shaped skeletons (`DashboardSkeleton`, `TableSkeleton`, `DetailSkeleton`, `PanelSkeleton`) replace 22 page-level spinner-on-blank loaders so first paint matches the loaded layout.
+  - Microinteractions: animated toasts (in 180ms / out 140ms), modal scrim fade-in + panel scale-in, sliding-underline tab indicator on Settings (with `ResizeObserver` so it stays aligned on viewport resize).
+  - Pre-setup dashboard reveal: brand-new admins see `SetupChecklist + HeroIntro` only until the first report lands.
+
+  Frontend bug fixes:
+  - `ByokPanel` `testedAt` no longer recomputes `new Date()` on every render — the `<RelativeTime>` chip now correctly reads "X seconds ago" instead of perpetually "just now".
+  - `toast` exit-timer guard prevents double-dismiss from leaking the original timer.
+  - `ReportsKpiStrip` surfaces `/v1/admin/reports/severity-stats` failures inline with retry instead of silently rendering zeros.
+  - `Compliance` DSAR creation switched to snake_case + explicit `projectId` to match the backend validator (was producing a persistent 400).
+  - `Sentry.withSentryReactRouterV7Routing` wrapper moved to the auth-gate inner Routes so transactions report parametrized names (`/reports/:id`) instead of being collapsed to `/*`.
+  - `SeverityStackedBars` no longer composes two scale ratios — non-max columns now render at their true height.
+
+  Server-side compliance fixes (deployed separately to Supabase Edge Functions, not part of the npm tarball but part of this release):
+  - `logAudit()` calls in `compliance/retention`, `compliance/dsars` (POST + PATCH), and `compliance/evidence/refresh` rewritten to use positional args; new `'compliance.dsar.updated'` audit added to PATCH (was a missing audit row); `cronRun.complete()` corrected to `cronRun.finish()` in `soc2-evidence`.
+
+- Updated dependencies [fc5c58e]
+- Updated dependencies [41b6aa7]
+  - @mushi-mushi/core@0.2.1
+  - @mushi-mushi/web@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes
