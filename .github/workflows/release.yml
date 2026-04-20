@@ -27,6 +27,11 @@ name: Release
 on:
   push:
     branches: [master]
+  # Manual dispatch for cases where the changesets PR squash-merge is attributed
+  # to github-actions[bot], which suppresses the downstream `push` trigger via
+  # GitHub's anti-loop protection. Use this to re-fire the publish step against
+  # the current `master` HEAD without rewriting history.
+  workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
