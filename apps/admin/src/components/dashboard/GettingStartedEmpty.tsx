@@ -19,6 +19,7 @@ import { pluralize } from '../../lib/format'
 import { PageHeader, Card, Btn, Loading } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
+import { useActiveProjectId } from '../ProjectSwitcher'
 
 type LoopStageId = 'plan' | 'do' | 'check'
 
@@ -35,7 +36,8 @@ interface LoopStage {
 export function GettingStartedEmpty() {
   const navigate = useNavigate()
   const toast = useToast()
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
 
   if (setup.loading) return <Loading text="Checking your account..." />
@@ -47,6 +49,7 @@ export function GettingStartedEmpty() {
   const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
   const hasReports = project.report_count > 0
   const hasFix = project.fix_count > 0
+  const hasMerged = project.merged_fix_count > 0
 
   async function submitTest() {
     if (!project) return
@@ -68,6 +71,7 @@ export function GettingStartedEmpty() {
     sdkInstalled,
     hasReports,
     hasFix,
+    hasMerged,
     onSendTest: submitTest,
     testStatus,
     onSetup: () => navigate('/onboarding'),
@@ -106,13 +110,14 @@ interface BuildStageArgs {
   sdkInstalled: boolean
   hasReports: boolean
   hasFix: boolean
+  hasMerged: boolean
   onSendTest: () => void
   testStatus: 'idle' | 'running' | 'pass' | 'fail'
   onSetup: () => void
 }
 
 function buildStages(args: BuildStageArgs): LoopStage[] {
-  const { sdkInstalled, hasReports, hasFix, onSendTest, testStatus, onSetup } = args
+  const { sdkInstalled, hasReports, hasFix, hasMerged, onSendTest, testStatus, onSetup } = args
 
   // Stage rules:
   //  - "active" = the next thing the user should actually do
@@ -149,12 +154,14 @@ function buildStages(args: BuildStageArgs): LoopStage[] {
       id: 'check',
       letter: 'C',
       label: 'Check',
-      headline: 'Verify the loop',
-      body: hasFix
-        ? 'A draft PR has been opened. Review the agent\u2019s rationale + diff in /fixes, then merge — the loop is closed.'
-        : 'Watch the dispatched fix progress through Plan → Do → Check on the /fixes timeline. Each step writes a Langfuse trace.',
-      cta: { to: '/fixes', label: 'Open Fixes', primary: hasFix },
-      state: hasFix ? 'done' : hasReports ? 'next' : 'next',
+      headline: hasMerged ? 'Loop closed' : 'Verify the loop',
+      body: hasMerged
+        ? 'Your first auto-fix has been merged upstream. New reports now flow through Plan \u2192 Do \u2192 Check end-to-end \u2014 watch the metrics in /fixes.'
+        : hasFix
+          ? 'A draft PR has been opened. Review the agent\u2019s rationale + diff in /fixes, then merge \u2014 that closes the loop.'
+          : 'Watch the dispatched fix progress through Plan \u2192 Do \u2192 Check on the /fixes timeline. Each step writes a Langfuse trace.',
+      cta: { to: '/fixes', label: hasMerged ? 'View merged fix' : 'Open Fixes', primary: hasFix && !hasMerged },
+      state: hasMerged ? 'done' : hasFix ? 'active' : 'next',
     },
   ]
 }
@@ -215,29 +222,56 @@ function LoopStageCard({ stage, step }: { stage: LoopStage; step: number }) {
       </div>
       <p className="text-2xs text-fg-secondary leading-snug min-h-[3rem]">{stage.body}</p>
       <div className="mt-2.5">
-        {cta.to ? (
-          <Link
-            to={cta.to}
-            className={cta.primary
-              ? 'inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors'
-              : 'inline-flex items-center gap-1 text-xs text-brand hover:underline'
-            }
-            aria-disabled={isLocked}
-            tabIndex={isLocked ? -1 : 0}
-          >
-            {cta.label} {cta.primary && <span aria-hidden="true">→</span>}
-          </Link>
-        ) : (
-          <Btn
-            size="sm"
-            variant={cta.primary ? 'primary' : 'ghost'}
-            onClick={cta.onClick}
-            disabled={isLocked}
-          >
-            {cta.label}
-          </Btn>
-        )}
+        <StageCta cta={cta} isLocked={isLocked} />
       </div>
     </li>
+  )
+}
+
+const CTA_BASE_PRIMARY = 'inline-flex items-center gap-1 rounded-sm bg-brand px-2.5 py-1 text-xs font-medium text-brand-fg'
+const CTA_BASE_GHOST = 'inline-flex items-center gap-1 text-xs text-brand'
+
+function ctaClass(primary: boolean | undefined, locked: boolean): string {
+  const base = primary ? CTA_BASE_PRIMARY : CTA_BASE_GHOST
+  if (locked) return `${base} cursor-not-allowed`
+  return primary
+    ? `${base} hover:bg-brand-hover motion-safe:transition-colors`
+    : `${base} hover:underline`
+}
+
+function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean }) {
+  const label = (
+    <>
+      {cta.label} {cta.primary && <span aria-hidden="true">→</span>}
+    </>
+  )
+
+  if (cta.to) {
+    // Render a non-link span when locked so a mouse click cannot navigate.
+    // Relying on aria-disabled + tabIndex=-1 alone leaves react-router's
+    // <Link> click handler active, mismatching announced vs actual behavior.
+    if (isLocked) {
+      return (
+        <span className={ctaClass(cta.primary, true)} aria-disabled="true">
+          {label}
+        </span>
+      )
+    }
+    return (
+      <Link to={cta.to} className={ctaClass(cta.primary, false)}>
+        {label}
+      </Link>
+    )
+  }
+
+  return (
+    <Btn
+      size="sm"
+      variant={cta.primary ? 'primary' : 'ghost'}
+      onClick={cta.onClick}
+      disabled={isLocked}
+    >
+      {cta.label}
+    </Btn>
   )
 }

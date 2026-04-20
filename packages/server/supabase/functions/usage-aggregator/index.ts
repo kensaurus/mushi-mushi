@@ -65,7 +65,7 @@ const handler = async (_req: Request): Promise<Response> => {
   ]
 
   const db = getServiceClient()
-  const cron = await startCronRun('usage-aggregator')
+  const cron = await startCronRun(db, 'usage-aggregator', 'cron')
 
   let synced = 0
   let failed = 0
@@ -128,18 +128,17 @@ const handler = async (_req: Request): Promise<Response> => {
       }
     }
 
-    await cron.complete({ status: 'ok', stats: { synced, failed, total: totalBatches } })
+    await cron.finish({
+      rowsAffected: synced,
+      metadata: { synced, failed, batches: totalBatches },
+    })
     return Response.json({ ok: true, synced, failed, batches: totalBatches })
   } catch (err) {
-    await cron.complete({
-      status: 'error',
-      stats: { synced, failed },
-      error: err instanceof Error ? err.message : String(err),
-    })
+    await cron.fail(err)
     throw err
   }
 }
 
-Deno.serve(withSentry(handler, { name: 'usage-aggregator' }))
+Deno.serve(withSentry('usage-aggregator', handler))
 
 declare const Deno: { serve(handler: (req: Request) => Response | Promise<Response>): void; env: { get(name: string): string | undefined } }

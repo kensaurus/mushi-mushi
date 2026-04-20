@@ -33,9 +33,10 @@ import {
   verifyStripeSignature,
   type StripeSubscription,
 } from '../_shared/stripe.ts'
-import { getPlanByBaseLookupKey } from '../_shared/plans.ts'
+import { getPlan, getPlanByBaseLookupKey } from '../_shared/plans.ts'
 import { invalidateQuotaCache } from '../_shared/quota.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { notifyOperator, type NotifyField } from '../_shared/operator-notify.ts'
 
 const wlog = log.child('stripe-webhooks')
 
@@ -182,17 +183,22 @@ const markPaymentDelinquent = async (db: Db, invoice: Record<string, unknown>) =
   invalidateQuotaCache()
 }
 
-const recoverFromDelinquent = async (db: Db, invoice: Record<string, unknown>) => {
+// Returns true when the row was actually flipped (i.e. it was past_due and
+// is now active). Lets the caller decide whether to fire the
+// "payment recovered" operator notification — a routine successful invoice
+// on an already-active sub doesn't deserve a Slack ping.
+const recoverFromDelinquent = async (db: Db, invoice: Record<string, unknown>): Promise<boolean> => {
   const subId = invoice.subscription as string | undefined
-  if (!subId) return
-  // Only flip past_due → active. A successful invoice on an `active` sub is a no-op.
-  const { error } = await db
+  if (!subId) return false
+  const { data, error } = await db
     .from('billing_subscriptions')
     .update({ status: 'active', updated_at: new Date().toISOString() })
     .eq('stripe_subscription_id', subId)
     .eq('status', 'past_due')
+    .select('stripe_subscription_id')
   if (error) throw new Error(`recover_active_failed: ${error.message}`)
   invalidateQuotaCache()
+  return (data?.length ?? 0) > 0
 }
 
 const updateCustomerPaymentOk = async (db: Db, customer: Record<string, unknown>) => {
@@ -205,6 +211,153 @@ const updateCustomerPaymentOk = async (db: Db, customer: Record<string, unknown>
     .update({ default_payment_ok: ok, updated_at: new Date().toISOString() })
     .eq('stripe_customer_id', customerId)
   if (error) throw new Error(`customer_payment_update_failed: ${error.message}`)
+}
+
+// ============================================================
+// Operator notifications.
+//
+// Fired AFTER the database mutation succeeds — we'd rather lose a Slack
+// ping than corrupt billing state. All helpers swallow their own errors;
+// the caller wraps with `.catch(() => {})` for belt-and-braces safety.
+// ============================================================
+
+const STRIPE_DASHBOARD_ROOT = (Deno.env.get('STRIPE_LIVEMODE') === 'true')
+  ? 'https://dashboard.stripe.com'
+  : 'https://dashboard.stripe.com/test'
+
+function projectName(metadata: Record<string, string> | undefined): string {
+  return metadata?.['project_id']?.slice(0, 8) ?? 'unknown'
+}
+
+function maskEmail(email: string | null | undefined): string {
+  if (!email) return 'unknown@—'
+  const [local, domain] = email.split('@')
+  if (!domain || !local) return email
+  const prefix = local.length <= 2 ? local : `${local.slice(0, 2)}…`
+  return `${prefix}@${domain}`
+}
+
+async function notifyCheckoutCompleted(
+  session: Record<string, unknown>,
+): Promise<void> {
+  const projectId = (session.metadata as Record<string, string> | undefined)?.['project_id']
+  const planMetadata = (session.metadata as Record<string, string> | undefined)?.['plan_id']
+  const customerId = session.customer as string | undefined
+  const email = (session.customer_details as { email?: string } | undefined)?.email
+  const amountTotal = session.amount_total as number | undefined
+  const currency = (session.currency as string | undefined)?.toUpperCase() ?? 'USD'
+  const paymentStatus = session.payment_status as string | undefined
+
+  let planLabel = planMetadata ?? 'unknown'
+  if (planMetadata) {
+    try {
+      const plan = await getPlan(planMetadata)
+      planLabel = `${plan.display_name} ($${plan.monthly_price_usd}/mo)`
+    } catch {
+      // fall through with the metadata id as label
+    }
+  }
+
+  const fields: NotifyField[] = [
+    { label: 'Plan', value: planLabel },
+    { label: 'Project', value: projectName(session.metadata as Record<string, string> | undefined) },
+    { label: 'Email', value: maskEmail(email) },
+    { label: 'Payment', value: paymentStatus ?? 'unknown' },
+  ]
+  if (amountTotal != null) {
+    fields.push({ label: 'Charged', value: `${(amountTotal / 100).toFixed(2)} ${currency}` })
+  }
+
+  await notifyOperator({
+    title: 'New paid customer',
+    body: `*${maskEmail(email)}* completed Checkout for project \`${projectId ?? '?'}\`.`,
+    level: 'info',
+    fields,
+    url: customerId ? `${STRIPE_DASHBOARD_ROOT}/customers/${customerId}` : undefined,
+    footer: `event: checkout.session.completed`,
+  }).catch(() => {})
+}
+
+async function notifySubscriptionDeleted(
+  raw: Record<string, unknown>,
+): Promise<void> {
+  const subId = raw.id as string | undefined
+  const customerId = raw.customer as string | undefined
+  const meta = raw.metadata as Record<string, string> | undefined
+  const planId = meta?.['plan_id']
+  const cancelReason = (raw.cancellation_details as { reason?: string } | undefined)?.reason
+
+  await notifyOperator({
+    title: 'Customer cancelled',
+    body: `Subscription \`${subId ?? '?'}\` ended. Project \`${projectName(meta)}\` has dropped to free.`,
+    level: 'warn',
+    fields: [
+      { label: 'Plan', value: planId ?? 'unknown' },
+      { label: 'Project', value: projectName(meta) },
+      { label: 'Reason', value: cancelReason ?? 'not provided' },
+    ],
+    url: customerId ? `${STRIPE_DASHBOARD_ROOT}/customers/${customerId}` : undefined,
+    footer: 'event: customer.subscription.deleted',
+  }).catch(() => {})
+}
+
+async function notifyPaymentFailed(
+  invoice: Record<string, unknown>,
+): Promise<void> {
+  const invoiceId = invoice.id as string | undefined
+  const customerId = invoice.customer as string | undefined
+  const customerEmail = invoice.customer_email as string | undefined
+  const amountDue = invoice.amount_due as number | undefined
+  const currency = (invoice.currency as string | undefined)?.toUpperCase() ?? 'USD'
+  const attempt = invoice.attempt_count as number | undefined
+  const nextAttempt = invoice.next_payment_attempt as number | undefined
+
+  const fields: NotifyField[] = [
+    { label: 'Customer', value: maskEmail(customerEmail) },
+    { label: 'Attempt', value: String(attempt ?? '?') },
+  ]
+  if (amountDue != null) {
+    fields.push({ label: 'Amount due', value: `${(amountDue / 100).toFixed(2)} ${currency}` })
+  }
+  if (nextAttempt) {
+    fields.push({
+      label: 'Next retry',
+      value: new Date(nextAttempt * 1000).toUTCString(),
+    })
+  }
+
+  await notifyOperator({
+    title: 'Payment failed',
+    body: `Card declined for *${maskEmail(customerEmail)}*. Subscription will move to \`past_due\`; quota stays enforced until the dunning window expires.`,
+    level: 'urgent',
+    fields,
+    url: invoiceId ? `${STRIPE_DASHBOARD_ROOT}/invoices/${invoiceId}` : undefined,
+    footer: 'event: invoice.payment_failed',
+  }).catch(() => {})
+}
+
+async function notifyPaymentRecovered(
+  invoice: Record<string, unknown>,
+): Promise<void> {
+  const customerId = invoice.customer as string | undefined
+  const customerEmail = invoice.customer_email as string | undefined
+  const amountPaid = invoice.amount_paid as number | undefined
+  const currency = (invoice.currency as string | undefined)?.toUpperCase() ?? 'USD'
+
+  await notifyOperator({
+    title: 'Payment recovered',
+    body: `*${maskEmail(customerEmail)}* paid the open invoice. Subscription is back to \`active\`.`,
+    level: 'info',
+    fields: [
+      { label: 'Customer', value: maskEmail(customerEmail) },
+      {
+        label: 'Paid',
+        value: amountPaid != null ? `${(amountPaid / 100).toFixed(2)} ${currency}` : 'unknown',
+      },
+    ],
+    url: customerId ? `${STRIPE_DASHBOARD_ROOT}/customers/${customerId}` : undefined,
+    footer: 'event: invoice.payment_succeeded (recovery)',
+  }).catch(() => {})
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -256,21 +409,68 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     switch (event.type) {
       case 'customer.subscription.created':
-      case 'customer.subscription.updated':
+        await upsertSubscription(db, event.data.object)
+        // Note: the matching `checkout.session.completed` event also fires
+        // and carries the rich payment context — we ping there, not here,
+        // to avoid double-paging on every new sub.
+        break
+      case 'customer.subscription.updated': {
+        await upsertSubscription(db, event.data.object)
+        // Detect a downgrade-signal: the customer flipped on
+        // `cancel_at_period_end`. Stripe doesn't fire `.deleted` until the
+        // period ACTUALLY ends, which can be 30 days away — by then the
+        // signal to retain them is stale. Surface it the moment they hit
+        // "Cancel" in the Billing Portal.
+        const obj = event.data.object as Record<string, unknown>
+        const previous = (event.data as { previous_attributes?: Record<string, unknown> }).previous_attributes
+        const wasNotCancelling = previous && 'cancel_at_period_end' in previous
+          ? previous.cancel_at_period_end === false
+          : false
+        const isCancellingNow = obj.cancel_at_period_end === true
+        if (wasNotCancelling && isCancellingNow) {
+          await notifyOperator({
+            title: 'Cancellation scheduled',
+            body: `A customer scheduled cancellation at period end. You have ~30 days to reach out.`,
+            level: 'warn',
+            fields: [
+              { label: 'Project', value: projectName(obj.metadata as Record<string, string> | undefined) },
+              { label: 'Plan', value: (obj.metadata as Record<string, string> | undefined)?.['plan_id'] ?? 'unknown' },
+              { label: 'Period ends', value: typeof obj.current_period_end === 'number'
+                  ? new Date((obj.current_period_end as number) * 1000).toUTCString()
+                  : 'unknown' },
+            ],
+            url: typeof obj.customer === 'string'
+              ? `${STRIPE_DASHBOARD_ROOT}/customers/${obj.customer}`
+              : undefined,
+            footer: 'event: customer.subscription.updated (cancel_at_period_end → true)',
+          }).catch(() => {})
+        }
+        break
+      }
       case 'customer.subscription.deleted':
+        await upsertSubscription(db, event.data.object)
+        await notifySubscriptionDeleted(event.data.object)
+        break
       case 'customer.subscription.paused':
       case 'customer.subscription.resumed':
         await upsertSubscription(db, event.data.object)
         break
       case 'checkout.session.completed':
         await linkCustomerOnCheckout(db, event.data.object)
+        await notifyCheckoutCompleted(event.data.object)
         break
       case 'invoice.payment_failed':
         await markPaymentDelinquent(db, event.data.object)
+        await notifyPaymentFailed(event.data.object)
         break
-      case 'invoice.payment_succeeded':
-        await recoverFromDelinquent(db, event.data.object)
+      case 'invoice.payment_succeeded': {
+        const wasRecovery = await recoverFromDelinquent(db, event.data.object)
+        // Only ping on actual recovery. Routine renewals every month don't
+        // deserve a notification — they'd train the operator to ignore the
+        // channel.
+        if (wasRecovery) await notifyPaymentRecovered(event.data.object)
         break
+      }
       case 'customer.updated':
         await updateCustomerPaymentOk(db, event.data.object)
         break
@@ -292,7 +492,7 @@ const handler = async (req: Request): Promise<Response> => {
   return Response.json({ ok: true, event_id: event.id })
 }
 
-Deno.serve(withSentry(handler, { name: 'stripe-webhooks' }))
+Deno.serve(withSentry('stripe-webhooks', handler))
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void

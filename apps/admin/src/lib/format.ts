@@ -26,3 +26,26 @@ export function pluralize(count: number, single: string, plural?: string): strin
 export function pluralizeWithCount(count: number, single: string, plural?: string): string {
   return `${count} ${pluralize(count, single, plural)}`
 }
+
+/**
+ * Format a USD amount with adaptive precision so a $0.0001 Haiku ping still
+ * surfaces but a $42 month reads cleanly. Used by every LLM-cost surface in
+ * the admin (Billing, Prompt Lab, Health) so all three pages render the same
+ * shape.
+ *
+ * Buckets:
+ *   null/undefined → '—'
+ *   exactly 0      → '$0.00'
+ *   <$0.0001       → '<$0.0001' (avoid scientific notation for tiny pings)
+ *   <$0.01         → 4 decimals  ('$0.0042')
+ *   <$1            → 3 decimals  ('$0.123')
+ *   else           → 2 decimals  ('$42.00')
+ */
+export function formatLlmCost(usd: number | null | undefined): string {
+  if (usd == null) return '—'
+  if (usd === 0) return '$0.00'
+  if (usd < 0.0001) return '<$0.0001'
+  if (usd < 0.01) return `$${usd.toFixed(4)}`
+  if (usd < 1) return `$${usd.toFixed(3)}`
+  return `$${usd.toFixed(2)}`
+}

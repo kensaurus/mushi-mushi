@@ -1,4 +1,5 @@
 import { Card, Btn, RelativeTime } from '../ui'
+import { formatLlmCost } from '../../lib/format'
 import type { PromptVersion } from './types'
 import { lineDiff } from './lineDiff'
 
@@ -13,12 +14,12 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
   const meta = prompt.auto_generation_metadata
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
       onClick={onClose}
     >
       <Card
         elevated
-        className="w-full max-w-5xl p-4 space-y-2 max-h-[90vh] flex flex-col"
+        className="w-full max-w-5xl p-4 space-y-2 max-h-[90vh] flex flex-col motion-safe:animate-mushi-modal-in"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
@@ -82,10 +83,87 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
             ))}
           </pre>
         )}
+        {parent && <PerfStrip parent={parent} candidate={prompt} />}
         <div className="flex justify-end gap-1.5">
           <Btn variant="ghost" onClick={onClose}>Close</Btn>
         </div>
       </Card>
     </div>
   )
+}
+
+// Performance vs baseline strip. Wave J §3 — `Avg $ / eval` now reads real
+// cost data from llm_invocations.cost_usd via /v1/admin/prompt-lab. The
+// 3-cell layout lets ops see "did the candidate get more accurate AND
+// cheaper?" without leaving the diff.
+function PerfStrip({ parent, candidate }: { parent: PromptVersion; candidate: PromptVersion }) {
+  const cells = [
+    {
+      label: 'Evaluations',
+      parent: formatNum(parent.total_evaluations),
+      candidate: formatNum(candidate.total_evaluations),
+      delta: numericDelta(parent.total_evaluations, candidate.total_evaluations, 'higher-is-up'),
+    },
+    {
+      label: 'Avg judge score',
+      parent: formatScore(parent.avg_judge_score),
+      candidate: formatScore(candidate.avg_judge_score),
+      delta: numericDelta(parent.avg_judge_score, candidate.avg_judge_score, 'higher-is-up'),
+    },
+    {
+      label: 'Avg $ / eval',
+      parent: formatLlmCost(parent.avg_cost_usd),
+      candidate: formatLlmCost(candidate.avg_cost_usd),
+      // For cost, lower is BETTER — invert the tone so a cheaper candidate
+      // reads green and a more expensive one reads red.
+      delta: numericDelta(parent.avg_cost_usd, candidate.avg_cost_usd, 'lower-is-up'),
+    },
+  ]
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {cells.map((c) => (
+        <div key={c.label} className="rounded-sm border border-edge-subtle bg-surface-overlay/40 p-2">
+          <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">{c.label}</div>
+          <div className="flex items-baseline gap-2 font-mono text-xs">
+            <span className="text-fg-faint">parent:</span>
+            <span className="text-fg-secondary">{c.parent}</span>
+            <span className="text-fg-faint">→</span>
+            <span className="text-fg">{c.candidate}</span>
+            {c.delta && (
+              <span
+                className={`text-3xs ${c.delta.tone === 'up' ? 'text-ok' : c.delta.tone === 'down' ? 'text-danger' : 'text-fg-faint'}`}
+              >
+                {c.delta.label}
+              </span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function formatNum(n: number | null | undefined): string {
+  if (n == null) return '—'
+  return n.toLocaleString()
+}
+
+function formatScore(s: number | null | undefined): string {
+  if (s == null) return '—'
+  return s.toFixed(2)
+}
+
+function numericDelta(
+  parent: number | null | undefined,
+  candidate: number | null | undefined,
+  direction: 'higher-is-up' | 'lower-is-up',
+): { label: string; tone: 'up' | 'down' | 'flat' } | null {
+  if (parent == null || candidate == null) return null
+  const diff = candidate - parent
+  if (Math.abs(diff) < 0.005) return { label: 'flat', tone: 'flat' }
+  const isImprovement = direction === 'higher-is-up' ? diff > 0 : diff < 0
+  return {
+    label: `${diff > 0 ? '+' : ''}${diff.toFixed(diff > -0.01 && diff < 0.01 ? 4 : 2)}`,
+    tone: isImprovement ? 'up' : 'down',
+  }
 }
