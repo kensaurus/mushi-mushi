@@ -65,7 +65,8 @@ export interface DashboardCounts {
   llmFailures14d: number
 }
 
-export type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
+import type { PdcaStageId } from '../../lib/pdca'
+export type { PdcaStageId }
 export type PdcaStageTone = 'ok' | 'warn' | 'urgent'
 
 export interface PdcaStage {

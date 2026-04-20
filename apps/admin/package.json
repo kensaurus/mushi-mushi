@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/admin",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "description": "Mushi Mushi admin console — report triage, analytics dashboard, project settings",
   "license": "SEE LICENSE IN LICENSE",

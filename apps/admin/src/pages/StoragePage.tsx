@@ -12,7 +12,8 @@
 import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, Input, SelectField } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, ErrorAlert, Input, SelectField } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 
@@ -40,6 +41,12 @@ interface StorageSetting {
 interface OwnedProject {
   id: string
   name: string
+}
+
+interface StorageUsageRow {
+  project_id: string
+  object_count: number
+  last_write_at: string | null
 }
 
 const HEALTH_CHIP: Record<StorageSetting['health_status'], string> = {
@@ -75,14 +82,22 @@ function defaultsFor(projectId: string): StorageSetting {
 export function StoragePage() {
   const settingsQuery = usePageData<{ settings: StorageSetting[] }>('/v1/admin/storage')
   const projectsQuery = usePageData<{ projects: OwnedProject[] }>('/v1/admin/projects')
+  const usageQuery = usePageData<{ usage: StorageUsageRow[] }>('/v1/admin/storage/usage')
   const settings = settingsQuery.data?.settings ?? []
   const projects = projectsQuery.data?.projects ?? []
+  const usageRows = usageQuery.data?.usage ?? []
   const loading = settingsQuery.loading || projectsQuery.loading
   const error = settingsQuery.error ?? projectsQuery.error
   const reloadAll = useCallback(() => {
     settingsQuery.reload()
     projectsQuery.reload()
-  }, [settingsQuery, projectsQuery])
+    usageQuery.reload()
+  }, [settingsQuery, projectsQuery, usageQuery])
+
+  const usageByProject = useMemo(
+    () => new Map(usageRows.map((u) => [u.project_id, u])),
+    [usageRows],
+  )
 
   // Drafts only carry fields the user has touched. We merge them on top of the
   // existing setting (or the defaults for un-configured projects) at render.
@@ -149,12 +164,15 @@ export function StoragePage() {
     reloadAll()
   }
 
-  if (loading) return <Loading />
+  if (loading) return <TableSkeleton rows={5} columns={4} showFilters label="Loading storage" />
   if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Storage" />
+      <PageHeader
+        title="Storage"
+        description="Per-project bucket usage and retention policy for screenshots, logs, and uploaded artefacts."
+      />
       <PageHelp
         title="About BYO Storage"
         whatIsIt="Per-project storage backend for screenshots, intelligence-report PDFs, and fix attachments. Defaults to the cluster's Supabase Storage; switch to AWS S3, Cloudflare R2, Google Cloud Storage, or MinIO to keep customer data inside your existing infrastructure."
@@ -173,6 +191,41 @@ export function StoragePage() {
           emptyDescription="Create a project first \u2014 every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
         />
       ) : null}
+
+      {cards.length > 0 && usageRows.length > 0 && (
+        <Card className="p-3">
+          <div className="text-xs font-medium uppercase tracking-wider mb-2">Per-project usage</div>
+          <p className="text-2xs text-fg-muted mb-2">
+            Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project
+            burning through storage or to confirm a quiet project before changing its provider.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+                <tr className="border-b border-edge-subtle">
+                  <th className="py-1.5 text-left">Project</th>
+                  <th className="text-right">Objects</th>
+                  <th className="text-left pl-3">Last write</th>
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map((p) => {
+                  const u = usageByProject.get(p.id)
+                  return (
+                    <tr key={p.id} className="border-b border-edge-subtle/40">
+                      <td className="py-1.5">{p.name}</td>
+                      <td className="text-right font-mono">{(u?.object_count ?? 0).toLocaleString()}</td>
+                      <td className="pl-3 text-fg-muted">
+                        {u?.last_write_at ? new Date(u.last_write_at).toLocaleString() : '—'}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {cards.map(({ setting: s, existing }) => {
         const m = merged(s)

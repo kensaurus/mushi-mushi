@@ -40,6 +40,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay }: Props) {
         to="/reports"
         accent="brand"
         delta={intakeDelta}
+        meaning="Total user-reported friction events received in the last 14 days. Up = more pain reaching users; down = healthier release."
       />
       <KpiTile
         label="Triage backlog"
@@ -47,6 +48,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay }: Props) {
         sublabel="open > 1h"
         to="/reports?status=new"
         accent={counts.openBacklog > 0 ? 'warn' : 'ok'}
+        meaning="Reports that have sat untriaged for more than an hour. Aim for 0 — fresh reports are easier to act on while context is hot."
       />
       <KpiTile
         label="Auto-fix PRs"
@@ -54,6 +56,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay }: Props) {
         sublabel={`${fixSummary.inProgress} in progress · ${fixSummary.failed} failed`}
         to="/fixes"
         accent={fixSummary.failed > 0 ? 'danger' : counts.openPrs > 0 ? 'ok' : 'muted'}
+        meaning="Open PRs Mushi has dispatched on your behalf. Each one closes the PDCA loop with a verifiable receipt."
       />
       <KpiTile
         label="LLM tokens (14d)"
@@ -61,6 +64,7 @@ export function KpiRow({ counts, fixSummary, reportsByDay }: Props) {
         sublabel={`${counts.llmCalls14d} calls · ${counts.llmFailures14d} failed`}
         to="/health"
         accent={counts.llmFailures14d > 0 ? 'warn' : 'ok'}
+        meaning="Tokens consumed by the Haiku→Sonnet classification pipeline. Compare against your Anthropic budget; spikes signal noisy intake."
       />
     </div>
   )

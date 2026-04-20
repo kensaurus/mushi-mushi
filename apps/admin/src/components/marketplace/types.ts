@@ -49,11 +49,11 @@ export interface ReliabilityStats {
 }
 
 export const STATUS_CHIP: Record<string, string> = {
-  ok: 'bg-emerald-500/10 text-emerald-500',
-  error: 'bg-red-500/10 text-red-500',
-  timeout: 'bg-amber-500/10 text-amber-500',
-  skipped: 'bg-fg-muted/10 text-fg-muted',
-  pending: 'bg-blue-500/10 text-blue-500',
+  ok: 'bg-ok/15 text-ok border border-ok/30',
+  error: 'bg-danger/15 text-danger border border-danger/30',
+  timeout: 'bg-warn/15 text-warn border border-warn/30',
+  skipped: 'bg-fg-muted/10 text-fg-muted border border-edge-subtle',
+  pending: 'bg-info/15 text-info border border-info/30',
 }
 
 export const CATEGORY_LABEL: Record<string, string> = {

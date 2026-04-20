@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Btn, Badge, RelativeTime, EmptyState, Loading, ErrorAlert } from '../ui'
+import { Card, Btn, Badge, RelativeTime, EmptyState, ErrorAlert } from '../ui'
+import { TableSkeleton } from '../skeletons/TableSkeleton'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import { formatPct } from '../charts'
@@ -66,7 +67,7 @@ export function SyntheticReportsCard() {
       </div>
 
       {loading ? (
-        <Loading text="Loading synthetic reports…" />
+        <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading synthetic reports" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : reports.length === 0 ? (

@@ -49,6 +49,16 @@ export function RoutingProviderCard({
             )}
           </div>
           <p className="text-2xs text-fg-muted mt-0.5">{provider.whyItMatters}</p>
+          {!existing && provider.capabilitiesOnceConnected.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 text-2xs text-fg-muted">
+              {provider.capabilitiesOnceConnected.map((capability) => (
+                <li key={capability} className="flex gap-1.5">
+                  <span aria-hidden="true" className="text-fg-faint">+</span>
+                  <span>{capability}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           {existing?.last_synced_at && (
             <p className="text-2xs text-fg-faint mt-0.5">
               Last sync <RelativeTime value={existing.last_synced_at} />
