@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/cli",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "description": "CLI for Mushi Mushi — `mushi init` wizard installs the right SDK for your framework, plus report triage and pipeline health commands",
   "bin": {
