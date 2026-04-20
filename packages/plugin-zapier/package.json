@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-zapier",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "description": "Reference Mushi Mushi plugin: fan out any Mushi event to a Zapier-style incoming webhook.",
   "type": "module",
