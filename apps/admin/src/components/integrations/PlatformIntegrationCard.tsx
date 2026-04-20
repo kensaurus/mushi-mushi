@@ -56,6 +56,16 @@ export function PlatformIntegrationCard({
             )}
           </div>
           <p className="text-2xs text-fg-muted mt-0.5">{def.whyItMatters}</p>
+          {!requiredOk && def.capabilitiesOnceConnected.length > 0 && (
+            <ul className="mt-1.5 space-y-0.5 text-2xs text-fg-muted">
+              {def.capabilitiesOnceConnected.map((capability) => (
+                <li key={capability} className="flex gap-1.5">
+                  <span aria-hidden="true" className="text-fg-faint">+</span>
+                  <span>{capability}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           {requiredOk && (

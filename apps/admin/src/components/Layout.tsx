@@ -6,7 +6,7 @@
 
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode, ComponentType } from 'react'
 import {
   IconDashboard, IconReports, IconGraph, IconJudge, IconQuery,
@@ -17,6 +17,7 @@ import {
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { ProjectSwitcher } from './ProjectSwitcher'
+import { stageForPath, type PdcaStageId } from '../lib/pdca'
 
 interface NavItem {
   label: string
@@ -31,6 +32,12 @@ interface NavSection {
   stage?: 'P' | 'D' | 'C' | 'A'
   /** Hover tooltip explaining what this stage does in the loop. */
   hint?: string
+  /** Stable id used for collapse persistence. */
+  id: string
+  /** When true, the section starts collapsed and the user must opt in to
+   *  see the items. Used for "Workspace" so first-run users see the loop
+   *  pages first instead of 8 admin destinations. */
+  defaultCollapsed?: boolean
   items: NavItem[]
 }
 
@@ -41,6 +48,7 @@ interface NavSection {
 // memory + bookmarks survive.
 const NAV: NavSection[] = [
   {
+    id: 'start',
     title: 'Start here',
     items: [
       { label: 'Dashboard',   path: '/',           icon: IconDashboard },
@@ -48,6 +56,7 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    id: 'plan',
     title: 'Plan — capture & classify',
     stage: 'P',
     hint: 'Inbound user-felt bugs land here, get classified, deduped, and prioritised.',
@@ -59,6 +68,7 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    id: 'do',
     title: 'Do — dispatch fixes',
     stage: 'D',
     hint: 'Turn classified reports into draft pull requests. Tune the prompt that does it.',
@@ -68,6 +78,7 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    id: 'check',
     title: 'Check — verify quality',
     stage: 'C',
     hint: 'Independently grade the LLM\u2019s work and the system\u2019s own health.',
@@ -79,6 +90,7 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    id: 'act',
     title: 'Act — integrate & scale',
     stage: 'A',
     hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
@@ -89,8 +101,10 @@ const NAV: NavSection[] = [
     ],
   },
   {
+    id: 'workspace',
     title: 'Workspace',
     hint: 'Account, identity, and admin tools — outside the bug-fix loop.',
+    defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
       { label: 'Settings',   path: '/settings',   icon: IconSettings },
@@ -103,6 +117,34 @@ const NAV: NavSection[] = [
     ],
   },
 ]
+
+const NAV_COLLAPSED_KEY = 'mushi:nav:collapsed:v1'
+
+function readCollapsedState(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = window.localStorage.getItem(NAV_COLLAPSED_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeCollapsedState(state: Record<string, boolean>) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(NAV_COLLAPSED_KEY, JSON.stringify(state))
+  } catch {
+    // localStorage write can fail in private mode; non-fatal.
+  }
+}
+
+const SECTION_TO_STAGE: Record<string, PdcaStageId> = {
+  plan: 'plan',
+  do: 'do',
+  check: 'check',
+  act: 'act',
+}
 
 const STAGE_TONE: Record<NonNullable<NavSection['stage']>, string> = {
   P: 'bg-info-muted text-info',
@@ -120,6 +162,35 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
+
+  const activeStage = stageForPath(pathname)
+
+  // Force-open the section that contains the current page so the user
+  // never sees a sidebar where their location is hidden behind a collapsed
+  // chevron. The effective collapsed state mirrors `toggleSection` —
+  // `prev[id] ?? defaultCollapsed` — so a deep-link into Workspace
+  // (defaultCollapsed: true, no localStorage entry yet) still expands.
+  // Only mutates in-memory state, so the user's persisted preference
+  // survives a reload.
+  useEffect(() => {
+    const containing = NAV.find(s => s.items.some(i => isActive(pathname, i.path)))
+    if (!containing) return
+    setCollapsedMap(prev => {
+      const effectivelyCollapsed = prev[containing.id] ?? containing.defaultCollapsed ?? false
+      if (!effectivelyCollapsed) return prev
+      return { ...prev, [containing.id]: false }
+    })
+  }, [pathname])
+
+  function toggleSection(id: string, defaultCollapsed: boolean) {
+    setCollapsedMap(prev => {
+      const currentlyCollapsed = prev[id] ?? defaultCollapsed
+      const next = { ...prev, [id]: !currentlyCollapsed }
+      writeCollapsedState(next)
+      return next
+    })
+  }
 
   const sidebarContent = (
     <>
@@ -134,42 +205,43 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-2 py-2">
-        {NAV.map((section) => (
-          <div key={section.title}>
-            <div
-              className="nav-section flex items-center gap-1.5"
-              title={section.hint}
-            >
-              {section.stage && (
-                <span
-                  className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[0.55rem] font-bold leading-none ${STAGE_TONE[section.stage]}`}
-                  aria-hidden="true"
-                >
-                  {section.stage}
-                </span>
+        {NAV.map((section) => {
+          const collapsed = collapsedMap[section.id] ?? section.defaultCollapsed ?? false
+          const stageId = SECTION_TO_STAGE[section.id]
+          const isActiveStage = stageId !== undefined && stageId === activeStage
+          const collapsible = section.defaultCollapsed !== undefined || section.id === 'workspace'
+          return (
+            <div key={section.id}>
+              <SectionHeader
+                section={section}
+                collapsed={collapsed}
+                collapsible={collapsible}
+                isActiveStage={isActiveStage}
+                onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
+              />
+              {!collapsed && (
+                <div className="space-y-0.5">
+                  {section.items.map(({ label, path, icon: Icon }) => {
+                    const active = isActive(pathname, path)
+                    return (
+                      <Link
+                        key={path}
+                        to={path}
+                        onClick={() => setMobileOpen(false)}
+                        aria-current={active ? 'page' : undefined}
+                        className="nav-link"
+                      >
+                        <Icon className="nav-link-icon" />
+                        <span>{label}</span>
+                        {path === '/integrations' && <IntegrationHealthDot />}
+                      </Link>
+                    )
+                  })}
+                </div>
               )}
-              <span className="truncate">{section.title}</span>
             </div>
-            <div className="space-y-0.5">
-              {section.items.map(({ label, path, icon: Icon }) => {
-                const active = isActive(pathname, path)
-                return (
-                  <Link
-                    key={path}
-                    to={path}
-                    onClick={() => setMobileOpen(false)}
-                    aria-current={active ? 'page' : undefined}
-                    className="nav-link"
-                  >
-                    <Icon className="nav-link-icon" />
-                    <span>{label}</span>
-                    {path === '/integrations' && <IntegrationHealthDot />}
-                  </Link>
-                )
-              })}
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </nav>
 
       {/* User footer */}
@@ -254,6 +326,69 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+    </div>
+  )
+}
+
+interface SectionHeaderProps {
+  section: NavSection
+  collapsed: boolean
+  collapsible: boolean
+  isActiveStage: boolean
+  onToggle: () => void
+}
+
+function SectionHeader({ section, collapsed, collapsible, isActiveStage, onToggle }: SectionHeaderProps) {
+  const inner = (
+    <span className="flex items-center gap-1.5 min-w-0 w-full">
+      {section.stage && (
+        <span
+          className={`inline-flex items-center justify-center w-3.5 h-3.5 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[section.stage]}`}
+          aria-hidden="true"
+        >
+          {section.stage}
+        </span>
+      )}
+      <span className="truncate flex-1 text-left">{section.title}</span>
+      {isActiveStage && (
+        <span
+          className="text-3xs font-medium normal-case tracking-normal text-brand shrink-0"
+          aria-label="Current stage"
+        >
+          ← here
+        </span>
+      )}
+      {collapsible && (
+        <svg
+          className={`h-2.5 w-2.5 text-fg-faint shrink-0 motion-safe:transition-transform ${collapsed ? '' : 'rotate-90'}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          aria-hidden="true"
+        >
+          <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </span>
+  )
+
+  if (collapsible) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className="nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm"
+        title={section.hint}
+        aria-expanded={!collapsed}
+      >
+        {inner}
+      </button>
+    )
+  }
+  return (
+    <div className="nav-section flex items-center gap-1.5" title={section.hint}>
+      {inner}
     </div>
   )
 }

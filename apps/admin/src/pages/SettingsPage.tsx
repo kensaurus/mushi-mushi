@@ -5,6 +5,7 @@
  *          ?tab=… so deep links and the back-button behave correctly.
  */
 
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader, PageHelp } from '../components/ui'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
@@ -40,9 +41,37 @@ export function SettingsPage() {
     setSearchParams(next, { replace: true })
   }
 
+  // Sliding tab indicator. Measure the active tab's box and translate a
+  // single underline span into place; the per-tab `border-b-2` was visually
+  // jumpy because it instantly re-rendered without motion.
+  const tablistRef = useRef<HTMLDivElement | null>(null)
+  const tabRefs = useRef<Map<TabId, HTMLButtonElement>>(new Map())
+  const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+
+  // Re-measure on tab switch *and* on tablist resize — the container is
+  // `flex-wrap`, so a viewport resize can change every tab's offsetLeft and
+  // strand the underline mid-row. Using `useLayoutEffect` (not effect) avoids
+  // a one-frame flash where the underline points at the old position.
+  useLayoutEffect(() => {
+    const measure = () => {
+      const tab = tabRefs.current.get(active)
+      if (!tab) return
+      setIndicator({ left: tab.offsetLeft, width: tab.offsetWidth })
+    }
+    measure()
+    const list = tablistRef.current
+    if (!list || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(list)
+    return () => ro.disconnect()
+  }, [active])
+
   return (
     <div className="space-y-4">
-      <PageHeader title="Project Settings" />
+      <PageHeader
+        title="Project Settings"
+        description="Per-project flags, retention, routing defaults, and feature toggles."
+      />
 
       <PageHelp
         title="About Settings"
@@ -56,31 +85,45 @@ export function SettingsPage() {
       />
 
       <div
+        ref={tablistRef}
         role="tablist"
         aria-label="Settings sections"
-        className="flex flex-wrap gap-1 border-b border-edge-subtle"
+        className="relative flex flex-wrap gap-1 border-b border-edge-subtle"
       >
         {TABS.map((t) => {
           const selected = t.id === active
           return (
             <button
               key={t.id}
+              ref={(el) => {
+                if (el) tabRefs.current.set(t.id, el)
+                else tabRefs.current.delete(t.id)
+              }}
               role="tab"
               aria-selected={selected}
               aria-controls={`settings-panel-${t.id}`}
               id={`settings-tab-${t.id}`}
               onClick={() => setActive(t.id)}
               className={
-                'px-3 py-1.5 text-xs font-medium rounded-t-sm border-b-2 motion-safe:transition-colors ' +
-                (selected
-                  ? 'border-brand text-fg'
-                  : 'border-transparent text-fg-muted hover:text-fg hover:border-edge')
+                'px-3 py-1.5 text-xs font-medium rounded-t-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
+                (selected ? 'text-fg' : 'text-fg-muted hover:text-fg')
               }
             >
               {t.label}
             </button>
           )
         })}
+        {indicator.width > 0 && (
+          <span
+            aria-hidden="true"
+            className="absolute -bottom-px h-0.5 bg-brand rounded-full motion-safe:transition-[transform,width] motion-safe:duration-200 motion-safe:ease-out"
+            style={{
+              width: `${indicator.width}px`,
+              transform: `translateX(${indicator.left}px)`,
+              left: 0,
+            }}
+          />
+        )}
       </div>
 
       <p className="text-2xs text-fg-muted">{activeMeta.description}</p>

@@ -15,8 +15,11 @@
  * INSTRUMENTATION:
  *   - reactRouterV7BrowserTracingIntegration gives transaction names that match
  *     route patterns (`/reports/:id`) instead of opaque URLs (`/reports/uuid…`),
- *     which is what makes performance dashboards usable. Pair with
- *     `Sentry.withSentryReactRouterV7Routing(Routes)` in App.tsx.
+ *     which is what makes performance dashboards usable. Pair with EXACTLY ONE
+ *     `Sentry.withSentryReactRouterV7Routing(Routes)` in App.tsx — wrapping
+ *     nested Routes will collapse parametrized transactions into the parent's
+ *     splat (`/reports/:id` → `/reports/*`) because React commits child
+ *     effects before parent effects.
  */
 
 import { useEffect } from 'react'
@@ -90,6 +93,19 @@ export function initSentry(): void {
       if (event.request?.query_string && typeof event.request.query_string === 'string') {
         event.request.query_string = event.request.query_string.replace(TOKEN_QUERY_RX, '$1[redacted]')
       }
+      // Drop React Fast Refresh re-registration artifacts. When a dev edits a
+      // component during HMR, React Refresh briefly re-runs render with
+      // partially-registered closures, throwing ReferenceErrors like
+      // "SectionHeader is not defined" from inside `@react-refresh` frames.
+      // These never reach the user (next render hoists correctly) and are pure
+      // dev noise — see MUSHI-MUSHI-ADMIN-3 in Sentry. Filter at the SDK
+      // boundary so the noise never costs an issue slot.
+      const frames = event.exception?.values?.[0]?.stacktrace?.frames ?? []
+      const isHmrArtifact = frames.some(f =>
+        /@react-refresh|performReactRefresh/i.test(f.filename ?? '') ||
+        /performReactRefresh/i.test(f.function ?? ''),
+      )
+      if (isHmrArtifact) return null
       return event
     },
   })

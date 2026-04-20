@@ -53,7 +53,21 @@ export function ProjectSwitcher() {
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
 
-  if (setup.loading || !setup.data || setup.data.projects.length === 0) {
+  if (setup.loading || !setup.data) {
+    // Audit Wave K: never collapse the chrome anchor while loading. A skeleton
+    // chip keeps the header layout stable so links don't reflow under the
+    // user's cursor and the user always sees "I'm in a project context".
+    return (
+      <div
+        aria-busy="true"
+        aria-label="Loading project"
+        className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs text-fg-faint"
+      >
+        <span className="motion-safe:animate-pulse">Loading project…</span>
+      </div>
+    )
+  }
+  if (setup.data.projects.length === 0) {
     return null
   }
 

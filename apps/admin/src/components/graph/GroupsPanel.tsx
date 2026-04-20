@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Card, Btn, Loading, ErrorAlert, EmptyState, Badge, RelativeTime } from '../ui'
+import { Card, Btn, ErrorAlert, EmptyState, Badge, RelativeTime } from '../ui'
+import { TableSkeleton } from '../skeletons/TableSkeleton'
 
 interface ReportGroup {
   id: string
@@ -82,7 +83,7 @@ export function GroupsPanel() {
       </div>
 
       {loading ? (
-        <Loading text="Loading groups…" />
+        <TableSkeleton rows={5} columns={4} showFilters={false} label="Loading groups" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : groups.length === 0 ? (
@@ -150,12 +151,12 @@ export function GroupsPanel() {
 
       {mergeSource && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
           onClick={() => setMergeSource(null)}
         >
           <Card
             elevated
-            className="w-full max-w-lg p-4 space-y-3"
+            className="w-full max-w-lg p-4 space-y-3 motion-safe:animate-mushi-modal-in"
             onClick={(e) => e.stopPropagation()}
           >
             <div>

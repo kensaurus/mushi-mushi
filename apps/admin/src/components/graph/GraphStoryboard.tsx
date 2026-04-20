@@ -46,13 +46,22 @@ export function GraphStoryboard({
   onSelect,
   onClear,
 }: Props) {
+  // Outer ref scrolls (overflow-auto). Inner ref is the actual content box —
+  // sized to `max-content` so it can grow wider than the viewport. We measure
+  // node coordinates relative to the inner box and put the SVG inside it, so
+  // both translate together when the user scrolls. No scroll listener needed.
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const innerRef = useRef<HTMLDivElement | null>(null)
   const nodeRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
   const [rects, setRects] = useState<Map<string, NodeRect>>(new Map())
-  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
+  const [innerSize, setInnerSize] = useState({ w: 0, h: 0 })
 
   // Group nodes by type into ordered columns. Empty columns are skipped so
   // a 2-type story renders as 2 columns, not 4-with-gaps.
+  // Also pre-compute a per-column "most-affected" node (highest degree) so
+  // the column header can read like a sentence — "3 components · top
+  // CommandPalette" — instead of just dumping the type name and a count.
+  // Audit Wave I P0 partial — closes the GraphStoryboard chapter labels gap.
   const columns = useMemo(() => {
     const grouped = new Map<NodeType, GraphNode[]>()
     for (const n of nodes) {
@@ -62,36 +71,53 @@ export function GraphStoryboard({
       existing.push(n)
       grouped.set(t, existing)
     }
-    return COLUMN_ORDER.filter((t) => grouped.has(t)).map((t) => ({
-      type: t,
-      label: NODE_TYPE_LABELS[t] ?? t,
-      nodes: grouped.get(t)!,
-    }))
-  }, [nodes])
+    const degree = new Map<string, number>()
+    for (const e of edges) {
+      degree.set(e.source_node_id, (degree.get(e.source_node_id) ?? 0) + e.weight)
+      degree.set(e.target_node_id, (degree.get(e.target_node_id) ?? 0) + e.weight)
+    }
+    return COLUMN_ORDER.filter((t) => grouped.has(t)).map((t) => {
+      const colNodes = grouped.get(t)!
+      const top = colNodes.reduce<GraphNode | null>((best, n) => {
+        const dn = degree.get(n.id) ?? 0
+        const db = best ? degree.get(best.id) ?? 0 : -1
+        return dn > db ? n : best
+      }, null)
+      return {
+        type: t,
+        label: NODE_TYPE_LABELS[t] ?? t,
+        nodes: colNodes,
+        topNode: top,
+      }
+    })
+  }, [nodes, edges])
 
-  // Recompute SVG link anchor points whenever layout changes.
+  // Recompute SVG link anchor points whenever layout changes. Measurements are
+  // taken against the inner content box (which can be wider than the scroll
+  // viewport), so the SVG and its bezier paths stay aligned with the nodes
+  // even when the user scrolls horizontally.
   useLayoutEffect(() => {
     const measure = () => {
-      const container = containerRef.current
-      if (!container) return
-      const cRect = container.getBoundingClientRect()
-      setContainerSize({ w: cRect.width, h: cRect.height })
+      const inner = innerRef.current
+      if (!inner) return
+      const iRect = inner.getBoundingClientRect()
+      setInnerSize({ w: iRect.width, h: iRect.height })
       const next = new Map<string, NodeRect>()
       for (const [id, el] of nodeRefs.current.entries()) {
         const r = el.getBoundingClientRect()
         next.set(id, {
           id,
-          cx: r.left + r.width / 2 - cRect.left,
-          cy: r.top + r.height / 2 - cRect.top,
-          right: r.right - cRect.left,
-          left: r.left - cRect.left,
+          cx: r.left + r.width / 2 - iRect.left,
+          cy: r.top + r.height / 2 - iRect.top,
+          right: r.right - iRect.left,
+          left: r.left - iRect.left,
         })
       }
       setRects(next)
     }
     measure()
     const ro = new ResizeObserver(measure)
-    if (containerRef.current) ro.observe(containerRef.current)
+    if (innerRef.current) ro.observe(innerRef.current)
     window.addEventListener('resize', measure)
     return () => {
       ro.disconnect()
@@ -129,21 +155,35 @@ export function GraphStoryboard({
       style={{ minHeight: 420 }}
       role="region"
       aria-label={`Sparse graph storyboard with ${nodes.length} nodes across ${columns.length} stages.`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClear()
-      }}
     >
-      <div className="flex items-stretch gap-12 px-8 py-6 min-h-[420px]">
+      <EdgeLegend />
+      <div
+        ref={innerRef}
+        className="relative flex items-stretch gap-12 px-8 py-6 min-h-[420px] w-max min-w-full"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClear()
+        }}
+      >
         {columns.map((col) => (
           <div key={col.type} className="flex flex-col gap-3 min-w-[10rem] max-w-[14rem]">
-            <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full"
-                style={{ backgroundColor: NODE_COLORS[col.type] }}
-                aria-hidden="true"
-              />
-              {col.label}
-              <span className="font-mono text-fg-faint/60">({col.nodes.length})</span>
+            <div className="space-y-0.5">
+              <div className="text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-1.5">
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ backgroundColor: NODE_COLORS[col.type] }}
+                  aria-hidden="true"
+                />
+                <span className="font-mono text-fg-secondary">{col.nodes.length}</span>
+                <span>{col.label}</span>
+              </div>
+              {col.topNode && col.nodes.length > 1 && (
+                <div
+                  className="text-3xs text-fg-faint truncate"
+                  title={`Most-connected ${col.label.toLowerCase()}: ${col.topNode.label || col.topNode.id}`}
+                >
+                  top: <span className="text-fg-secondary">{col.topNode.label || '(unnamed)'}</span>
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-2.5">
               {col.nodes.map((node) => {
@@ -184,48 +224,64 @@ export function GraphStoryboard({
             </div>
           </div>
         ))}
-      </div>
 
-      {/* Bezier links sit on top of the columns but pointer-events-none so the
-          buttons remain clickable. We absolutely position the SVG to the
-          measured container size so paths align pixel-perfect. */}
-      <svg
-        className="absolute inset-0 pointer-events-none"
-        width={containerSize.w}
-        height={containerSize.h}
-        aria-hidden="true"
-      >
-        <defs>
-          <marker
-            id="storyboard-arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M0,0 L10,5 L0,10 z" fill="oklch(0.55 0 0)" />
-          </marker>
-        </defs>
-        {links.map((l) => (
-          <path
-            key={l.id}
-            d={l.path}
-            fill="none"
-            stroke={
-              l.type === 'regression_of'
-                ? 'oklch(0.65 0.22 25)'
-                : l.type === 'fix_verified'
-                  ? 'oklch(0.72 0.19 155)'
-                  : 'oklch(0.55 0 0)'
-            }
-            strokeWidth={Math.max(1.5, Math.min(3, l.weight))}
-            strokeOpacity={l.dim ? 0.15 : 0.55}
-            markerEnd="url(#storyboard-arrow)"
-          />
-        ))}
+        {/* Bezier links sit inside the same scrollable inner box so they
+            translate with the columns when the user scrolls. pointer-events
+            stay off the SVG so clicks fall through to the column buttons. */}
+        <svg
+          className="absolute inset-0 pointer-events-none"
+          width={innerSize.w}
+          height={innerSize.h}
+          aria-hidden="true"
+        >
+          <defs>
+            <marker
+              id="storyboard-arrow"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M0,0 L10,5 L0,10 z" fill="oklch(0.55 0 0)" />
+            </marker>
+          </defs>
+          {links.map((l) => (
+            <path
+              key={l.id}
+              d={l.path}
+              fill="none"
+              stroke={
+                l.type === 'regression_of'
+                  ? 'oklch(0.65 0.22 25)'
+                  : l.type === 'fix_verified'
+                    ? 'oklch(0.72 0.19 155)'
+                    : 'oklch(0.55 0 0)'
+              }
+              strokeWidth={Math.max(1.5, Math.min(3, l.weight))}
+              strokeOpacity={l.dim ? 0.15 : 0.55}
+              markerEnd="url(#storyboard-arrow)"
+            />
+          ))}
+        </svg>
+      </div>
+    </div>
+  )
+}
+
+function EdgeLegend() {
+  return (
+    <div
+      className="absolute right-2 top-2 z-20 flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/80 px-2 py-1 text-3xs text-fg-muted backdrop-blur-sm"
+      title="Edge thickness scales with the number of bug reports touching both nodes."
+    >
+      <svg width="36" height="10" viewBox="0 0 36 10" aria-hidden="true">
+        <line x1="0" y1="5" x2="12" y2="5" stroke="oklch(0.55 0 0)" strokeWidth="1.5" strokeOpacity="0.55" />
+        <line x1="14" y1="5" x2="26" y2="5" stroke="oklch(0.55 0 0)" strokeWidth="2.25" strokeOpacity="0.55" />
+        <line x1="28" y1="5" x2="36" y2="5" stroke="oklch(0.55 0 0)" strokeWidth="3" strokeOpacity="0.55" />
       </svg>
+      <span>thicker = more bugs touching both</span>
     </div>
   )
 }

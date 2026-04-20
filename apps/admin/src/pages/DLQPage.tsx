@@ -14,10 +14,10 @@ import {
   Btn,
   FilterSelect,
   EmptyState,
-  Loading,
   ErrorAlert,
   RecommendedAction,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
@@ -181,7 +181,10 @@ export function DLQPage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Processing Queue">
+      <PageHeader
+        title="Processing Queue"
+        description="Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here."
+      >
         <FilterSelect
           label="Status"
           value={filter}
@@ -212,9 +215,11 @@ export function DLQPage() {
         </Btn>
         <Btn
           size="sm"
-          variant="ghost"
+          variant="primary"
           onClick={recoverStranded}
           disabled={flushing}
+          loading={flushing}
+          leadingIcon={<RefreshIcon />}
           title="Re-fires fast-filter for any report stuck older than 5 minutes plus pending queue items past their SLA."
         >
           {flushing ? 'Recovering…' : 'Recover stranded'}
@@ -263,7 +268,7 @@ export function DLQPage() {
         })()}
 
       {loading ? (
-        <Loading text="Loading queue..." />
+        <TableSkeleton rows={6} columns={4} showFilters label="Loading queue" />
       ) : error ? (
         <ErrorAlert message="Failed to load queue items." onRetry={loadAll} />
       ) : items.length === 0 ? (
@@ -316,5 +321,26 @@ export function DLQPage() {
         </>
       )}
     </div>
+  )
+}
+
+function RefreshIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 8a5.5 5.5 0 0 1 9.4-3.9L13 5.2" />
+      <path d="M13 2v3h-3" />
+      <path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9L3 10.8" />
+      <path d="M3 14v-3h3" />
+    </svg>
   )
 }
