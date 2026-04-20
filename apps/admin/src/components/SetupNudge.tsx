@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { EmptyState, Btn } from './ui'
 import { useSetupStatus, type SetupStepId } from '../lib/useSetupStatus'
+import { useActiveProjectId } from './ProjectSwitcher'
 
 interface SetupNudgeProps {
   /** What blocks this page when missing. Order matters — first incomplete wins. */
@@ -30,7 +31,8 @@ export function SetupNudge({
   emptyDescription,
   emptyAction,
 }: SetupNudgeProps) {
-  const setup = useSetupStatus()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
 
   if (setup.loading) return null
 

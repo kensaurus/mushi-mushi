@@ -17,22 +17,27 @@
  *          Stripe-hosted URLs we redirect to.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
+import { formatLlmCost } from '../lib/format'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 import {
   PageHeader,
   PageHelp,
   Card,
   Btn,
   Badge,
-  Loading,
   ErrorAlert,
   EmptyState,
   RelativeTime,
+  Input,
+  Textarea,
+  SelectField,
 } from '../components/ui'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
 interface PlanCatalog {
   id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
@@ -85,6 +90,13 @@ interface BillingProject {
     fixesSucceeded?: number
     tokens: number
   }
+  /**
+   * Wave J §2: real LLM dollars spent this billing month, summed server-side
+   * from llm_invocations.cost_usd. Always present (0 when no calls). Lets the
+   * Billing page show "what is this project actually costing me?" alongside
+   * report quota usage.
+   */
+  llm_cost_usd_this_month?: number
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
@@ -188,14 +200,17 @@ export function BillingPage() {
     window.open(res.data.url, '_blank', 'noopener,noreferrer')
   }, [toast])
 
-  if (billingQuery.loading) return <Loading text="Loading billing…" />
+  if (billingQuery.loading) return <PanelSkeleton rows={5} label="Loading billing" />
   if (billingQuery.error) {
     return <ErrorAlert message={`Failed to load billing: ${billingQuery.error}`} onRetry={billingQuery.reload} />
   }
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Billing">
+      <PageHeader
+        title="Billing"
+        description="Plan, usage, invoices, and quota \u2014 everything you need to keep the loop running on your terms."
+      >
         <span className="text-2xs text-fg-faint font-mono">
           Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? '—'} reports / mo
         </span>
@@ -236,6 +251,8 @@ export function BillingPage() {
           ))}
         </div>
       )}
+
+      <SupportSection projects={projects} />
     </div>
   )
 }
@@ -341,7 +358,13 @@ function ProjectBillingCard({
         />
       )}
 
-      <UsageBar usage={project.usage} limitReports={project.limit_reports} pct={usagePct} />
+      <UsageBar
+        usage={project.usage}
+        limitReports={project.limit_reports}
+        pct={usagePct}
+        periodStart={project.period_start}
+        llmCostUsd={project.llm_cost_usd_this_month}
+      />
 
       <InvoicesSection projectId={project.project_id} hasCustomer={!!project.customer?.stripe_customer_id} />
     </Card>
@@ -411,9 +434,54 @@ interface UsageBarProps {
   usage: BillingProject['usage']
   limitReports: number | null
   pct: number | null
+  periodStart: string | null
+  /** Wave J §3: real $ spent on LLM calls this billing month. */
+  llmCostUsd?: number
 }
 
-function UsageBar({ usage, limitReports, pct }: UsageBarProps) {
+interface UsageForecast {
+  etaDays: number
+  etaDate: Date
+  tone: 'danger' | 'warn' | 'muted'
+  label: string
+}
+
+/**
+ * Project the day the project will hit its quota at the current ingest rate.
+ * Returns null when there's not enough signal — first 24h of the period, no
+ * limit, already over-quota, or the project is on a totally idle day.
+ */
+function buildUsageForecast(
+  used: number,
+  limit: number | null,
+  periodStart: string | null,
+): UsageForecast | null {
+  if (limit == null || used <= 0) return null
+  if (used >= limit) return null
+  if (!periodStart) return null
+  const startMs = new Date(periodStart).getTime()
+  if (Number.isNaN(startMs)) return null
+  const daysElapsed = (Date.now() - startMs) / 86_400_000
+  if (daysElapsed < 1) return null
+  const dailyRate = used / daysElapsed
+  if (dailyRate <= 0) return null
+  const etaDays = Math.max(0, Math.ceil((limit - used) / dailyRate))
+  const etaDate = new Date(Date.now() + etaDays * 86_400_000)
+  const tone: UsageForecast['tone'] = etaDays < 3 ? 'danger' : etaDays < 7 ? 'warn' : 'muted'
+  const dateStr = etaDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  const label = etaDays === 0
+    ? `At current rate, you'll hit your limit today`
+    : `At current rate, you'll hit your limit on ${dateStr} (${etaDays}d away)`
+  return { etaDays, etaDate, tone, label }
+}
+
+const FORECAST_TONE: Record<UsageForecast['tone'], string> = {
+  danger: 'bg-danger-subtle text-danger',
+  warn: 'bg-warn/10 text-warn',
+  muted: 'text-fg-faint',
+}
+
+function UsageBar({ usage, limitReports, pct, periodStart, llmCostUsd }: UsageBarProps) {
   const barColor = pct == null
     ? 'bg-brand'
     : pct >= 100
@@ -421,9 +489,10 @@ function UsageBar({ usage, limitReports, pct }: UsageBarProps) {
       : pct >= 80
         ? 'bg-warn'
         : 'bg-ok'
+  const forecast = buildUsageForecast(usage.reports, limitReports, periodStart)
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-2xs text-fg-muted">
+      <div className="flex items-center justify-between text-2xs text-fg-muted gap-2 flex-wrap">
         <span>
           Reports this period: <span className="font-mono text-fg">{usage.reports.toLocaleString()}</span>
           {limitReports != null && (
@@ -431,16 +500,36 @@ function UsageBar({ usage, limitReports, pct }: UsageBarProps) {
           )}
           {limitReports == null && <> <span className="text-fg-faint">(unlimited)</span></>}
         </span>
-        <span className="text-fg-faint">
-          Fixes <span className="font-mono text-fg-secondary">{usage.fixes.toLocaleString()}</span>
-          {' · '}
-          Classifier tokens <span className="font-mono text-fg-secondary">{usage.tokens.toLocaleString()}</span>
+        <span className="text-fg-faint flex items-center gap-2 flex-wrap">
+          <span>
+            Fixes <span className="font-mono text-fg-secondary">{usage.fixes.toLocaleString()}</span>
+          </span>
+          <span aria-hidden="true">·</span>
+          <span>
+            Classifier tokens <span className="font-mono text-fg-secondary">{usage.tokens.toLocaleString()}</span>
+          </span>
+          {llmCostUsd != null && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span
+                className="font-mono text-fg-secondary"
+                title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd"
+              >
+                LLM <span className="text-fg">{formatLlmCost(llmCostUsd)}</span>
+              </span>
+            </>
+          )}
         </span>
       </div>
       {limitReports != null && (
         <div className="h-1.5 bg-surface-overlay rounded-sm overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}>
           <div className={`h-full ${barColor}`} style={{ width: `${Math.max(2, pct ?? 0)}%` }} />
         </div>
+      )}
+      {forecast && (
+        <p className={`text-2xs px-1.5 py-0.5 rounded-sm inline-block font-mono ${FORECAST_TONE[forecast.tone]}`}>
+          {forecast.label}
+        </p>
       )}
     </div>
   )
@@ -470,9 +559,18 @@ function InvoicesSection({ projectId, hasCustomer }: InvoicesSectionProps) {
 
   if (invoicesQuery.error) {
     return (
-      <p className="text-2xs text-danger border-t border-edge-subtle pt-2">
-        Could not load invoices: {invoicesQuery.error}
-      </p>
+      <div className="border-t border-edge-subtle pt-2 flex items-center justify-between gap-2">
+        <p className="text-2xs text-danger">
+          Could not load invoices: {invoicesQuery.error}
+        </p>
+        <button
+          type="button"
+          onClick={invoicesQuery.reload}
+          className="rounded-sm border border-danger/40 bg-danger/10 px-2 py-0.5 text-2xs text-danger hover:bg-danger/15 motion-safe:transition-colors"
+        >
+          Retry
+        </button>
+      </div>
     )
   }
 
@@ -539,6 +637,225 @@ function InvoicesSection({ projectId, hasCustomer }: InvoicesSectionProps) {
           ))}
         </tbody>
       </table>
+    </section>
+  )
+}
+
+// ============================================================
+// Support contact (Wave 4.3)
+//
+// Lives inside Billing because that's where paid customers go when
+// something is wrong with their account. Future versions will surface this
+// elsewhere (header HelpMenu, command palette) — but starting from one
+// well-known location is the right v1.
+// ============================================================
+
+interface SupportInfo {
+  email: string
+  url: string
+  operator_notifications_enabled: boolean
+}
+
+interface SupportTicket {
+  id: string
+  project_id: string | null
+  subject: string
+  category: string
+  status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  plan_id: string | null
+  created_at: string
+  updated_at: string
+  resolved_at: string | null
+}
+
+const TICKET_STATUS_TONE: Record<SupportTicket['status'], string> = {
+  open: 'bg-warn/10 text-warn',
+  in_progress: 'bg-brand-subtle text-brand',
+  resolved: 'bg-ok-muted text-ok',
+  closed: 'bg-surface-overlay text-fg-muted',
+}
+
+function SupportSection({ projects }: { projects: BillingProject[] }) {
+  const infoQuery = usePageData<SupportInfo>('/v1/admin/support/info')
+  const ticketsQuery = usePageData<{ tickets: SupportTicket[] }>('/v1/admin/support/tickets?limit=10')
+  const info = infoQuery.data
+  const tickets = ticketsQuery.data?.tickets ?? []
+  const [composing, setComposing] = useState(false)
+
+  if (infoQuery.loading) return null
+  if (!info) return null
+
+  return (
+    <Card className="p-3 space-y-3">
+      <header className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-fg">Need help?</h3>
+          <p className="text-2xs text-fg-muted mt-0.5">
+            Direct line to a human. We reply within one business day for paid plans, two for free.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <a
+            href={`mailto:${info.email}?subject=${encodeURIComponent('[Mushi Mushi support]')}`}
+            className="text-2xs text-brand hover:text-brand-hover font-mono"
+          >
+            {info.email}
+          </a>
+          <Btn size="sm" onClick={() => setComposing((v) => !v)}>
+            {composing ? 'Cancel' : 'Open ticket'}
+          </Btn>
+        </div>
+      </header>
+
+      {composing && (
+        <SupportComposer
+          projects={projects}
+          supportEmail={info.email}
+          onSubmitted={() => {
+            setComposing(false)
+            ticketsQuery.reload()
+          }}
+        />
+      )}
+
+      {tickets.length > 0 && <TicketHistory tickets={tickets} projects={projects} />}
+    </Card>
+  )
+}
+
+interface ComposerProps {
+  projects: BillingProject[]
+  supportEmail: string
+  onSubmitted: () => void
+}
+
+function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps) {
+  const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const initialProjectId = useMemo(() => {
+    if (activeProjectId && projects.some((p) => p.project_id === activeProjectId)) {
+      return activeProjectId
+    }
+    return projects[0]?.project_id ?? ''
+  }, [activeProjectId, projects])
+
+  const [projectId, setProjectId] = useState(initialProjectId)
+  const [category, setCategory] = useState('billing')
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+    const res = await apiFetch<{ ticket_id: string; delivered_to_operator: boolean }>(
+      '/v1/support/contact',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          project_id: projectId || null,
+          subject: subject.trim(),
+          body: body.trim(),
+          category,
+        }),
+      },
+    )
+    setSubmitting(false)
+    if (!res.ok) {
+      if (res.error?.code === 'RATE_LIMITED') {
+        toast.error('Slow down', `${res.error.message} Or email ${supportEmail} directly.`)
+      } else {
+        toast.error('Could not send', res.error?.message)
+      }
+      return
+    }
+    toast.success(
+      'Ticket received',
+      res.data?.delivered_to_operator
+        ? 'A human is on it. Reply will land in your inbox.'
+        : `Saved. Email ${supportEmail} for urgent issues.`,
+    )
+    setSubject('')
+    setBody('')
+    onSubmitted()
+  }, [projectId, subject, body, category, supportEmail, toast, onSubmitted])
+
+  return (
+    <form onSubmit={handleSubmit} className="border border-edge-subtle rounded-md p-3 bg-surface-subtle space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <SelectField
+          label="Project (optional)"
+          value={projectId}
+          onChange={(e) => setProjectId(e.target.value)}
+        >
+          <option value="">No specific project</option>
+          {projects.map((p) => (
+            <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
+          ))}
+        </SelectField>
+        <SelectField
+          label="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        >
+          <option value="billing">Billing</option>
+          <option value="bug">Bug</option>
+          <option value="feature">Feature request</option>
+          <option value="other">Other</option>
+        </SelectField>
+      </div>
+      <Input
+        label="Subject"
+        value={subject}
+        onChange={(e) => setSubject(e.target.value)}
+        placeholder="One-line summary"
+        required
+        minLength={3}
+        maxLength={200}
+      />
+      <Textarea
+        label="What's going on?"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={5}
+        placeholder="Steps to reproduce, what you expected vs. what happened, project ID if relevant…"
+        required
+        minLength={10}
+        maxLength={5000}
+      />
+      <div className="flex items-center justify-between">
+        <p className="text-2xs text-fg-faint">
+          Sent to <span className="font-mono">{supportEmail}</span>. Don't include passwords or API keys.
+        </p>
+        <Btn type="submit" size="sm" disabled={submitting || subject.length < 3 || body.length < 10}>
+          {submitting ? 'Sending…' : 'Send ticket'}
+        </Btn>
+      </div>
+    </form>
+  )
+}
+
+function TicketHistory({ tickets, projects }: { tickets: SupportTicket[]; projects: BillingProject[] }) {
+  const projectName = useCallback(
+    (id: string | null) => projects.find((p) => p.project_id === id)?.project_name ?? '—',
+    [projects],
+  )
+  return (
+    <section className="border-t border-edge-subtle pt-2">
+      <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Recent tickets</h4>
+      <ul className="divide-y divide-edge-subtle">
+        {tickets.map((t) => (
+          <li key={t.id} className="py-1.5 flex items-center justify-between gap-2 text-2xs">
+            <div className="min-w-0 flex-1">
+              <p className="text-fg truncate font-medium">{t.subject}</p>
+              <p className="text-fg-faint">
+                {projectName(t.project_id)} · {t.category} · <RelativeTime value={t.created_at} />
+              </p>
+            </div>
+            <Badge className={TICKET_STATUS_TONE[t.status]}>{t.status.replace('_', ' ')}</Badge>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }

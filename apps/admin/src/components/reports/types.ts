@@ -19,10 +19,18 @@ export interface ReportRow {
   user_category: string
   confidence: number | null
   component: string | null
-  /** Number of reports in the same dedup group (>=1). When >1 we render a
-   *  "+N similar" badge so triagers can scan past duplicates instead of
-   *  reading 5 visually-identical rows. */
+  /** Total reports filed against the same fingerprint (>=1). Lets the table
+   *  collapse duplicate rows behind a single canonical row + "+N variants" chip. */
   dedup_count?: number
+  /** COUNT(DISTINCT reporter_token_hash) for this dedup group — the real blast
+   *  radius. Token hash is device-stable per the SDK, so this counts distinct
+   *  devices that felt the bug (the right proxy for "people" in the anonymous
+   *  reporter case). Set by /v1/admin/reports via the report_group_blast_radius
+   *  RPC. */
+  unique_users?: number
+  /** COUNT(DISTINCT session_id) for this dedup group. Useful as a tie-breaker
+   *  when a single device opens the same bug across multiple sessions. */
+  unique_sessions?: number
   report_group_id?: string | null
 }
 

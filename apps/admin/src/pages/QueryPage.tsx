@@ -10,6 +10,7 @@ import {
   RelativeTime,
   Section,
   Loading,
+  ErrorAlert,
 } from '../components/ui'
 import { useToast } from '../lib/toast'
 
@@ -30,6 +31,7 @@ interface HistoryRow {
   row_count: number
   error: string | null
   latency_ms: number | null
+  is_saved?: boolean
   created_at: string
 }
 
@@ -50,6 +52,29 @@ const SUGGESTIONS = [
   'Average judge score by week (last 4 weeks)',
 ]
 
+const SQL_HINTS: Array<{ prompt: string; whyItWorks: string }> = [
+  {
+    prompt: 'How many P0/P1 reports landed this week vs last week?',
+    whyItWorks: 'Time-bucketed comparison — phrase the deltas explicitly.',
+  },
+  {
+    prompt: 'List components that regressed (fixed → reopened) in the last 30 days',
+    whyItWorks: 'Mention "regressed" so the LLM joins reports.fixed_at with later events.',
+  },
+  {
+    prompt: 'Which reporters have the highest agreement rate with the judge?',
+    whyItWorks: 'Anchor on a known metric (classification_agreed) so the SQL stays read-only.',
+  },
+  {
+    prompt: 'Average classifier latency by model over the last 14 days',
+    whyItWorks: 'Specifying the time window keeps the result set small + the LLM cheap.',
+  },
+  {
+    prompt: 'Reports with screenshots but no console logs in the last 7 days',
+    whyItWorks: 'Pair two columns to test telemetry coverage end-to-end.',
+  },
+]
+
 function asTable(rows: unknown[]): { columns: string[]; data: Record<string, unknown>[] } | null {
   if (!Array.isArray(rows) || rows.length === 0) return null
   const objects = rows.filter((r): r is Record<string, unknown> => typeof r === 'object' && r !== null)
@@ -59,6 +84,60 @@ function asTable(rows: unknown[]): { columns: string[]; data: Record<string, unk
     for (const k of Object.keys(obj)) cols.add(k)
   }
   return { columns: [...cols], data: objects }
+}
+
+function HistoryItem({
+  row,
+  onRerun,
+  onToggleSave,
+  onDelete,
+}: {
+  row: HistoryRow
+  onRerun: () => void
+  onToggleSave: () => void
+  onDelete: () => void
+}) {
+  return (
+    <li className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-colors group">
+      <button
+        type="button"
+        onClick={onRerun}
+        className="text-left w-full text-2xs text-fg-secondary hover:text-fg"
+        title={row.error ?? 'Click to rerun'}
+      >
+        <span className="line-clamp-2">{row.prompt}</span>
+      </button>
+      <div className="flex items-center justify-between mt-1 text-3xs text-fg-faint font-mono gap-1">
+        <span>
+          <RelativeTime value={row.created_at} />
+          {row.error ? (
+            <span className="ml-1 text-danger">· error</span>
+          ) : (
+            <span className="ml-1">· {row.row_count} row{row.row_count === 1 ? '' : 's'}</span>
+          )}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onToggleSave}
+            className={`motion-safe:transition-opacity hover:text-brand ${row.is_saved ? 'text-brand' : 'opacity-0 group-hover:opacity-100'}`}
+            aria-label={row.is_saved ? 'Unpin saved query' : 'Pin to saved'}
+            title={row.is_saved ? 'Unpin saved query' : 'Pin to Saved'}
+          >
+            {row.is_saved ? '★' : '☆'}
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="opacity-0 group-hover:opacity-100 motion-safe:transition-opacity hover:text-danger"
+            aria-label="Delete history entry"
+          >
+            ✕
+          </button>
+        </span>
+      </div>
+    </li>
+  )
 }
 
 function ResultsTable({ rows }: { rows: unknown[] }) {
@@ -162,9 +241,29 @@ export function QueryPage() {
     }
   }
 
+  async function toggleSaved(row: HistoryRow) {
+    const next = !(row.is_saved ?? false)
+    const res = await apiFetch(`/v1/admin/query/history/${row.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_saved: next }),
+    })
+    if (res.ok) {
+      toast.success(next ? 'Pinned to Saved' : 'Unpinned from Saved')
+      loadHistory()
+    } else {
+      toast.error('Could not update', res.error?.message)
+    }
+  }
+
+  const saved = history.filter((h) => h.is_saved)
+  const recent = history.filter((h) => !h.is_saved)
+
   return (
     <div className="space-y-4">
-      <PageHeader title="Ask Your Data" />
+      <PageHeader
+        title="Ask Your Data"
+        description="Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited."
+      />
 
       <PageHelp
         title="About Ask Your Data"
@@ -211,6 +310,27 @@ export function QueryPage() {
               </button>
             ))}
           </div>
+
+          <Card className="p-3">
+            <div className="flex items-baseline justify-between gap-2 mb-1.5">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-fg-muted">SQL hints</h3>
+              <span className="text-2xs text-fg-faint">Phrase your question to make the LLM produce sharper SQL.</span>
+            </div>
+            <ul className="space-y-1">
+              {SQL_HINTS.map((h) => (
+                <li key={h.prompt} className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setQuestion(h.prompt); handleSubmit(h.prompt) }}
+                    className="text-left text-2xs text-fg-secondary hover:text-fg flex-1 min-w-0"
+                  >
+                    <span className="block truncate">{h.prompt}</span>
+                    <span className="block text-3xs text-fg-faint italic">{h.whyItWorks}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Card>
 
           <div className="space-y-2">
             {runs.length === 0 && (
@@ -264,51 +384,44 @@ export function QueryPage() {
           </div>
         </div>
 
-        <Section title="History" className="self-start">
-          {historyLoading ? (
-            <Loading text="Loading…" />
-          ) : historyError ? (
-            <p className="text-xs text-danger">Could not load history: {historyError}</p>
-          ) : history.length === 0 ? (
-            <p className="text-xs text-fg-muted">No queries yet.</p>
-          ) : (
-            <ul className="space-y-1.5 max-h-[32rem] overflow-y-auto -mr-1 pr-1">
-              {history.map((h) => (
-                <li
-                  key={h.id}
-                  className="rounded-sm border border-edge-subtle p-2 hover:bg-surface-overlay/30 motion-safe:transition-colors group"
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleSubmit(h.prompt)}
-                    className="text-left w-full text-2xs text-fg-secondary hover:text-fg"
-                    title={h.error ?? 'Click to rerun'}
-                  >
-                    <span className="line-clamp-2">{h.prompt}</span>
-                  </button>
-                  <div className="flex items-center justify-between mt-1 text-3xs text-fg-faint font-mono">
-                    <span>
-                      <RelativeTime value={h.created_at} />
-                      {h.error ? (
-                        <span className="ml-1 text-danger">· error</span>
-                      ) : (
-                        <span className="ml-1">· {h.row_count} row{h.row_count === 1 ? '' : 's'}</span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => deleteHistory(h.id)}
-                      className="opacity-0 group-hover:opacity-100 motion-safe:transition-opacity hover:text-danger"
-                      aria-label="Delete history entry"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
+        <div className="self-start space-y-3">
+          {saved.length > 0 && (
+            <Section title={`Saved (${saved.length})`}>
+              <ul className="space-y-1.5">
+                {saved.map((h) => (
+                  <HistoryItem
+                    key={h.id}
+                    row={h}
+                    onRerun={() => handleSubmit(h.prompt)}
+                    onToggleSave={() => toggleSaved(h)}
+                    onDelete={() => deleteHistory(h.id)}
+                  />
+                ))}
+              </ul>
+            </Section>
           )}
-        </Section>
+          <Section title="History">
+            {historyLoading ? (
+              <Loading text="Loading…" />
+            ) : historyError ? (
+              <ErrorAlert message={`Could not load history: ${historyError}`} onRetry={loadHistory} />
+            ) : recent.length === 0 ? (
+              <p className="text-xs text-fg-muted">No queries yet.</p>
+            ) : (
+              <ul className="space-y-1.5 max-h-[32rem] overflow-y-auto -mr-1 pr-1">
+                {recent.map((h) => (
+                  <HistoryItem
+                    key={h.id}
+                    row={h}
+                    onRerun={() => handleSubmit(h.prompt)}
+                    onToggleSave={() => toggleSaved(h)}
+                    onDelete={() => deleteHistory(h.id)}
+                  />
+                ))}
+              </ul>
+            )}
+          </Section>
+        </div>
       </div>
     </div>
   )

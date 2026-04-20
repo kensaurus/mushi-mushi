@@ -45,6 +45,7 @@
 
   /* ── Semantic status ───────────────────────────────────────────────── */
   --color-ok: oklch(0.72 0.19 155);
+  --color-ok-fg: oklch(0.16 0.04 155);
   --color-ok-muted: oklch(0.30 0.06 155);
   --color-warn: oklch(0.80 0.15 80);
   --color-warn-muted: oklch(0.30 0.05 80);
@@ -52,6 +53,19 @@
   --color-danger-muted: oklch(0.28 0.06 25);
   --color-info: oklch(0.68 0.16 240);
   --color-info-muted: oklch(0.28 0.05 240);
+
+  /* ── Aliases — older code references these names. Keep them mapped to
+       the canonical tokens above so stale class names still render the
+       right colour instead of silently dropping out. Audit Wave K. */
+  --color-warning: var(--color-warn);
+  --color-warning-subtle: var(--color-warn-muted);
+  --color-danger-subtle: var(--color-danger-muted);
+  --color-info-subtle: var(--color-info-muted);
+  --color-ok-subtle: var(--color-ok-muted);
+  --color-fg-primary: var(--color-fg);
+  --color-fg-on-accent: var(--color-fg);
+  --color-border: var(--color-edge);
+  --color-border-subtle: var(--color-edge-subtle);
 
   /* ── Overlay ──────────────────────────────────────────────────────── */
   --color-overlay: oklch(0 0 0 / 0.6);
@@ -237,6 +251,65 @@ select, input, textarea {
 }
 
 /* ---------------------------------------------------------------------------
+   PERSONALITY
+   Soft pulsing glow used by HeroIntro and the cockpit bottleneck dot so the
+   loop visibly *breathes* when there's something to act on. Reduced motion
+   media query at the bottom of the file disables this for users who opt out.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-pulse-glow {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+.mushi-pulse {
+  animation: mushi-pulse-glow 2.4s var(--ease-out-expo) infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   MODAL + TOAST MOTION
+   Backdrop fade, panel scale-in, toast slide-in. Wave K microinteractions —
+   gives async UI a perceived weight without bloating bundle with framer-motion.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes mushi-modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes mushi-toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes mushi-toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(16px); }
+}
+
+.animate-mushi-fade-in   { animation: mushi-fade-in 160ms var(--ease-out-expo) both; }
+.animate-mushi-modal-in  { animation: mushi-modal-in 220ms var(--ease-out-expo) both; }
+.animate-mushi-toast-in  { animation: mushi-toast-in 180ms var(--ease-out-expo) both; }
+.animate-mushi-toast-out { animation: mushi-toast-out 140ms var(--ease-out-expo) both; }
+
+/* Section + page rhythm helpers — keep vertical spacing consistent across
+   pages. The audit found rhythm drifted: some pages used `mb-3`, others
+   `mb-4`, others bare `space-y-2`. Standardise on these two utilities.   */
+.page-stack > * + * { margin-top: 1rem; }     /* between page sections */
+.section-stack > * + * { margin-top: 0.625rem; } /* inside a card section */
+
+/* ---------------------------------------------------------------------------
    REDUCED MOTION
    Disable transitions and animations for users who prefer reduced motion.
 --------------------------------------------------------------------------- */
@@ -246,5 +319,39 @@ select, input, textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   PRINT (compliance PDF export, audit log printouts)
+   Strips chrome (sidebar, headers, action buttons) and forces a printable
+   palette. Pages opt out of printing via the .no-print utility on transient
+   elements (banners, toasts, tooltips). Audit Wave I §5 compliance.
+--------------------------------------------------------------------------- */
+
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  /* Hide app shell — sidebar, top bar, modal portals, toasts. */
+  aside,
+  nav,
+  header[role="banner"],
+  .no-print,
+  [data-print="hide"] {
+    display: none !important;
+  }
+  /* Avoid splitting cards across page breaks where possible. */
+  .card,
+  table {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Make links printable as URLs. */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.85em;
+    color: #555;
   }
 }

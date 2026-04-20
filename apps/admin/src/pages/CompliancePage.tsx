@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, PageHelp, Card, Btn, Loading, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { useToast } from '../lib/toast'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
 
 interface RetentionPolicy {
   project_id: string
@@ -46,13 +49,16 @@ interface Evidence {
 }
 
 const STATUS_CHIP: Record<Evidence['status'], string> = {
-  pass: 'bg-emerald-500/10 text-emerald-500',
-  warn: 'bg-amber-500/10 text-amber-500',
-  fail: 'bg-red-500/10 text-red-500',
+  pass: 'bg-ok/15 text-ok border border-ok/30',
+  warn: 'bg-warn/15 text-warn border border-warn/30',
+  fail: 'bg-danger/15 text-danger border border-danger/30',
 }
 
 export function CompliancePage() {
   const toast = useToast()
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const policiesQuery = usePageData<{ policies: RetentionPolicy[] }>('/v1/admin/compliance/retention')
   const dsarsQuery = usePageData<{ requests: Dsar[] }>('/v1/admin/compliance/dsars')
   const evidenceQuery = usePageData<{ evidence: Evidence[] }>('/v1/admin/compliance/evidence')
@@ -166,13 +172,20 @@ export function CompliancePage() {
       toast.error('Subject email is required')
       return
     }
+    if (!setup.activeProject) {
+      toast.error('No active project', 'Pick a project in the header switcher before filing a DSAR.')
+      return
+    }
     setFiling(true)
+    // Backend expects snake_case + explicit projectId. Audit Wave K bugfix:
+    // the previous camelCase body produced a persistent 400 from the validator.
     const res = await apiFetch('/v1/admin/compliance/dsars', {
       method: 'POST',
       body: JSON.stringify({
-        requestType: dsarForm.requestType,
-        subjectEmail: dsarForm.subjectEmail.trim(),
-        subjectId: dsarForm.subjectId.trim() || undefined,
+        projectId: setup.activeProject.project_id,
+        request_type: dsarForm.requestType,
+        subject_email: dsarForm.subjectEmail.trim(),
+        subject_id: dsarForm.subjectId.trim() || undefined,
         notes: dsarForm.notes.trim() || undefined,
       }),
     })
@@ -188,9 +201,16 @@ export function CompliancePage() {
 
   return (
     <div className="space-y-3">
-      <PageHeader title="Compliance">
+      <PageHeader
+        title="Compliance"
+        projectScope={projectName}
+        description="Track GDPR, SOC2, and audit obligations against the data Mushi holds for this project."
+      >
         <Btn onClick={refreshEvidence} disabled={refreshing}>
           {refreshing ? 'Refreshing…' : 'Refresh evidence'}
+        </Btn>
+        <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
+          Export PDF
         </Btn>
       </PageHeader>
 
@@ -205,7 +225,7 @@ export function CompliancePage() {
         howToUse="Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot."
       />
 
-      {loading ? <Loading /> : error ? (
+      {loading ? <PanelSkeleton rows={5} label="Loading compliance data" /> : error ? (
         <ErrorAlert message={`Failed to load compliance data: ${error}`} onRetry={reloadAll} />
       ) : (
         <>

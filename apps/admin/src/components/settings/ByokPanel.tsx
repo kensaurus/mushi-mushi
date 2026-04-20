@@ -8,7 +8,8 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
-import { Section, Input, Btn, Loading, ErrorAlert } from '../ui'
+import { Section, Input, Btn, ErrorAlert, ResultChip, type ResultChipTone } from '../ui'
+import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
@@ -28,6 +29,13 @@ interface TestResult {
   httpStatus: number
   latencyMs: number
   detail: string
+}
+
+interface TestResultEntry {
+  result: TestResult
+  /** Captured at the moment the test completed; never recomputed on render
+   *  so `<RelativeTime>` reads "X seconds ago", not "just now" forever. */
+  testedAt: string
 }
 
 interface ByokProviderMeta {
@@ -92,7 +100,10 @@ export function ByokPanel() {
   const [drafts, setDrafts] = useState<Record<ByokKey['provider'], string>>({ anthropic: '', openai: '' })
   const [baseUrlDraft, setBaseUrlDraft] = useState('')
   const [feedback, setFeedback] = useState<{ provider: ByokKey['provider']; ok: boolean; message: string } | null>(null)
-  const [testResults, setTestResults] = useState<Partial<Record<ByokKey['provider'], TestResult>>>({})
+  // Capture the wall-clock timestamp when the test completes — deriving
+  // `testedAt` inside render via `new Date()` would reset the chip's
+  // RelativeTime to "just now" on every parent re-render.
+  const [testResults, setTestResults] = useState<Partial<Record<ByokKey['provider'], TestResultEntry>>>({})
 
   // Hydrate baseUrl from server data once. Avoid clobbering user typing on
   // re-renders by only syncing when the openai key changes.
@@ -151,14 +162,17 @@ export function ByokPanel() {
     const res = await apiFetch<TestResult>(`/v1/admin/byok/${provider}/test`, { method: 'POST' })
     setTesting(null)
     if (res.ok && res.data) {
-      setTestResults((r) => ({ ...r, [provider]: res.data }))
+      setTestResults((r) => ({
+        ...r,
+        [provider]: { result: res.data, testedAt: new Date().toISOString() },
+      }))
       reload()
     } else {
       setFeedback({ provider, ok: false, message: res.error?.message ?? 'Test failed.' })
     }
   }
 
-  if (loading) return <Loading text="Loading BYOK status…" />
+  if (loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
   if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
 
   return (
@@ -175,9 +189,10 @@ export function ByokPanel() {
       {keys?.map((k) => {
         const meta = BYOK_PROVIDER_LABELS[k.provider]
         const fb = feedback?.provider === k.provider ? feedback : null
-        const testResult = testResults[k.provider]
+        const testEntry = testResults[k.provider]
+        const testResult = testEntry?.result
         const testStatus = testResult?.status ?? k.testStatus
-        const testedAt = testResult ? new Date().toISOString() : k.testedAt
+        const testedAt = testEntry?.testedAt ?? k.testedAt
         const statusMeta = testStatus ? TEST_STATUS_LABEL[testStatus] : null
 
         return (
@@ -269,22 +284,45 @@ export function ByokPanel() {
             />
 
             <div className="flex items-center gap-2 flex-wrap">
-              <Btn size="sm" onClick={() => save(k.provider)} disabled={pending === k.provider}>
-                {pending === k.provider ? 'Saving…' : k.configured ? 'Rotate key' : 'Save key'}
+              <Btn size="sm" onClick={() => save(k.provider)} loading={pending === k.provider}>
+                {k.configured ? 'Rotate key' : 'Save key'}
               </Btn>
               {k.configured && (
                 <>
-                  <Btn size="sm" variant="ghost" onClick={() => testKey(k.provider)} disabled={testing === k.provider}>
-                    {testing === k.provider ? 'Testing…' : 'Test connection'}
+                  <Btn size="sm" variant="ghost" onClick={() => testKey(k.provider)} loading={testing === k.provider}>
+                    Test connection
                   </Btn>
                   <Btn size="sm" variant="ghost" onClick={() => clearKey(k.provider)} disabled={pending === k.provider}>
                     Clear
                   </Btn>
                 </>
               )}
-              {fb && (
-                <span className={`text-2xs ${fb.ok ? 'text-ok' : 'text-danger'}`}>{fb.message}</span>
-              )}
+              {(() => {
+                if (fb) {
+                  return (
+                    <ResultChip tone={fb.ok ? 'success' : 'error'}>
+                      {fb.message}
+                    </ResultChip>
+                  )
+                }
+                if (testing === k.provider) {
+                  return <ResultChip tone="running">Testing…</ResultChip>
+                }
+                if (testResult) {
+                  const tone: ResultChipTone =
+                    testResult.status === 'ok'
+                      ? 'success'
+                      : testResult.status === 'error_quota'
+                        ? 'info'
+                        : 'error'
+                  return (
+                    <ResultChip tone={tone} at={testedAt}>
+                      {testResult.hint || statusMeta?.label || testResult.status}
+                    </ResultChip>
+                  )
+                }
+                return null
+              })()}
             </div>
 
             {testResult && testResult.status !== 'ok' && (

@@ -34,6 +34,12 @@ export interface PlatformDef {
   kind: Kind
   label: string
   whyItMatters: string
+  /**
+   * Concrete capabilities the platform unlocks once configured. Rendered as a
+   * tight bullet list under whyItMatters so the user can see "what do I get
+   * for connecting this?" before they hand over a token. Audit Wave I P1.
+   */
+  capabilitiesOnceConnected: string[]
   fields: PlatformFieldDef[]
 }
 
@@ -41,6 +47,7 @@ export interface RoutingProviderDef {
   type: 'jira' | 'linear' | 'github' | 'pagerduty'
   label: string
   whyItMatters: string
+  capabilitiesOnceConnected: string[]
   fields: PlatformFieldDef[]
 }
 
@@ -64,6 +71,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     kind: 'sentry',
     label: 'Sentry',
     whyItMatters: 'Pulls Seer root-cause analysis into your reports and lets the LLM cross-reference production errors with user feedback. Wire the webhook to mirror Sentry user feedback into Mushi.',
+    capabilitiesOnceConnected: [
+      'Auto-attach matching Sentry events (stack trace + breadcrumbs) to each report',
+      'Include Seer root-cause hints in the classifier prompt',
+      'Mirror Sentry user-feedback submissions into the report queue',
+    ],
     fields: [
       { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'Your Sentry organization slug — visible in the Sentry URL after sentry.io/organizations/.', required: true },
       { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'The specific Sentry project for this codebase.' },
@@ -76,6 +88,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     kind: 'langfuse',
     label: 'Langfuse',
     whyItMatters: 'Every LLM call (Stage 1 classify, Stage 2 vision, fix-worker) emits a trace. Click any trace from a report or fix attempt to see the exact prompt + response + token cost.',
+    capabilitiesOnceConnected: [
+      'One-click trace links on every classification, judge run, and fix attempt',
+      'Per-call cost + latency surfaced in /health and /billing',
+      'Replay any failing prompt against a different model from the Prompt Lab',
+    ],
     fields: [
       { name: 'langfuse_host', label: 'Host', placeholder: 'https://cloud.langfuse.com', type: 'url', help: 'Cloud or self-hosted Langfuse base URL (no trailing slash).', required: true },
       { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-… (or vault://id)', type: 'password', help: 'Langfuse public key. From Project Settings → API Keys.', required: true },
@@ -86,6 +103,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
     kind: 'github',
     label: 'GitHub (code repo)',
     whyItMatters: 'The fix-worker creates draft PRs against this repo. Add a webhook secret to sync CI check-runs back into the Auto-Fix Pipeline so reviewers see green/red without leaving Mushi.',
+    capabilitiesOnceConnected: [
+      'Dispatch auto-fix attempts that open draft PRs on a feature branch',
+      'CI check-run conclusions sync back into the Fix card (PR open / CI passing / failing)',
+      'Pre-emptive code-context retrieval so the fix prompt has the surrounding lines',
+    ],
     fields: [
       { name: 'github_repo_url', label: 'Repo URL', placeholder: 'https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true },
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".' },
@@ -100,6 +122,11 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     type: 'jira',
     label: 'Jira',
     whyItMatters: 'Triaged reports become Jira tickets in the project of your choice. Severity maps to Jira priority.',
+    capabilitiesOnceConnected: [
+      'Auto-create Jira issues for high-severity reports',
+      'Map Mushi severity to Jira priority + status transitions',
+      'Two-way link: closing the Jira issue resolves the Mushi report',
+    ],
     fields: [
       { name: 'baseUrl', label: 'Base URL', placeholder: 'https://acme.atlassian.net', type: 'url', help: 'Your Atlassian Cloud or Server base URL.', required: true },
       { name: 'email', label: 'User email', placeholder: 'bot@acme.com', help: 'Email of the Jira user owning the API token.', required: true },
@@ -111,6 +138,11 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     type: 'linear',
     label: 'Linear',
     whyItMatters: 'Mirror reports into Linear with proper labels and priorities. Classification metadata maps to Linear labels.',
+    capabilitiesOnceConnected: [
+      'Mirror reports as Linear issues with severity-mapped priority',
+      'Apply category labels automatically (bug, regression, ux, etc.)',
+      'Link the Linear issue back into the report for round-trip context',
+    ],
     fields: [
       { name: 'apiKey', label: 'API key', placeholder: 'lin_api_...', type: 'password', help: 'Personal API key from Linear → Settings → API.', required: true },
       { name: 'teamId', label: 'Team ID', placeholder: 'TEAM-uuid', help: 'UUID of the Linear team that should receive issues.', required: true },
@@ -120,6 +152,11 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     type: 'github',
     label: 'GitHub Issues',
     whyItMatters: 'Open GitHub Issues directly in your repo. Different repo than the auto-fix code repo — this is for tracking, not patching.',
+    capabilitiesOnceConnected: [
+      'Open GitHub Issues with severity + category as labels',
+      'Public issue tracker option (separate repo from the code repo)',
+      'Closes the issue automatically when the linked report is resolved',
+    ],
     fields: [
       { name: 'token', label: 'Personal access token', placeholder: 'ghp_...', type: 'password', help: 'Fine-grained PAT with Issues:write on the target repo.', required: true },
       { name: 'owner', label: 'Owner', placeholder: 'acme', help: 'Org or user that owns the repo.', required: true },
@@ -130,6 +167,11 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
     type: 'pagerduty',
     label: 'PagerDuty',
     whyItMatters: 'Page on-call when severity ≥ critical. Routes through Events API v2.',
+    capabilitiesOnceConnected: [
+      'Page the on-call when severity = critical',
+      'De-dupes incidents per fingerprint to avoid alert storms',
+      'Auto-resolve the incident when the linked report is closed',
+    ],
     fields: [
       { name: 'routingKey', label: 'Routing key', placeholder: '32-char integration key', type: 'password', help: 'Events API v2 integration key from PagerDuty service.', required: true },
     ],

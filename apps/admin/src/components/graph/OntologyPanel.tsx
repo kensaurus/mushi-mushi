@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Card, Btn, Loading, ErrorAlert, EmptyState, Input } from '../ui'
+import { Card, Btn, ErrorAlert, EmptyState, Input } from '../ui'
+import { TableSkeleton } from '../skeletons/TableSkeleton'
 
 interface OntologyTag {
   tag: string
@@ -94,7 +95,7 @@ export function OntologyPanel() {
       )}
 
       {loading ? (
-        <Loading text="Loading ontology…" />
+        <TableSkeleton rows={5} columns={3} showFilters={false} label="Loading ontology" />
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : tags.length === 0 ? (

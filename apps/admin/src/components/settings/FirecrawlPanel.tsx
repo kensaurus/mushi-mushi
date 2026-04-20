@@ -8,7 +8,8 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
-import { Section, Input, Btn, Loading, ErrorAlert } from '../ui'
+import { Section, Input, Btn, ErrorAlert, ResultChip } from '../ui'
+import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 
 interface FirecrawlConfig {
   configured: boolean
@@ -102,7 +103,7 @@ export function FirecrawlPanel() {
     }
   }
 
-  if (loading) return <Loading text="Loading Firecrawl status…" />
+  if (loading) return <PanelSkeleton rows={3} label="Loading Firecrawl status" inCard={false} />
   if (error) return <ErrorAlert message={`Failed to load Firecrawl status: ${error}`} onRetry={reload} />
 
   const statusMeta = cfg?.testStatus ? TEST_STATUS_LABEL[cfg.testStatus] : null
@@ -185,22 +186,24 @@ export function FirecrawlPanel() {
           </label>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <Btn size="sm" onClick={save} disabled={pending}>
-              {pending ? 'Saving…' : cfg.configured ? 'Update' : 'Save'}
+            <Btn size="sm" onClick={save} loading={pending}>
+              {cfg.configured ? 'Update' : 'Save'}
             </Btn>
             {cfg.configured && (
               <>
-                <Btn size="sm" variant="ghost" onClick={testKey} disabled={testing}>
-                  {testing ? 'Testing…' : 'Test connection'}
+                <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
+                  Test connection
                 </Btn>
                 <Btn size="sm" variant="ghost" onClick={clearKey} disabled={pending}>
                   Clear
                 </Btn>
               </>
             )}
-            {feedback && (
-              <span className={`text-2xs ${feedback.ok ? 'text-ok' : 'text-danger'}`}>{feedback.message}</span>
-            )}
+            {testing && !feedback ? (
+              <ResultChip tone="running">Testing…</ResultChip>
+            ) : feedback ? (
+              <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
+            ) : null}
           </div>
         </div>
       )}

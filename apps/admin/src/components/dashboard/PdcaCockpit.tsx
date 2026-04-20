@@ -1,18 +1,19 @@
 /**
  * FILE: apps/admin/src/components/dashboard/PdcaCockpit.tsx
- * PURPOSE: Top-of-dashboard PDCA strip — four stage tiles (Plan / Do / Check
- *          / Act) with a single living number, the current bottleneck, and a
- *          deep-link into the stage. The "current focus" stage gets a brand
- *          ring so the user always sees `→ where do I act now?` without
- *          parsing the rest of the dashboard.
+ * PURPOSE: Four-stage PDCA navigator that pairs with the dashboard <HeroIntro/>.
+ *          Hero answers "what do I do next?"; this answers "what's the state
+ *          of the whole pipeline?".
  *
- *          This component is the answer to two pain points captured in the
- *          UX audit: (1) "what do I do first?" and (2) "how does mushi-mushi
- *          fit the PDCA loop my team actually runs?".
+ *          Each tile shows: stage letter, label, single living count, the
+ *          current bottleneck for that stage (or a "clean" line), and a
+ *          deep-link CTA. The current focus stage gets a tinted background
+ *          + ring; arrows connect stages at every breakpoint so the loop is
+ *          visible whether you're on mobile or wide.
  */
 
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
+import { PDCA_STAGES } from '../../lib/pdca'
 import { Card } from '../ui'
 import type { PdcaStage, PdcaStageId, PdcaStageTone } from './types'
 
@@ -21,35 +22,25 @@ interface Props {
   focusStage: PdcaStageId | null | undefined
 }
 
-const STAGE_ACCENT: Record<PdcaStageId, { letter: string; ring: string; iconBg: string; iconFg: string }> = {
-  plan:  { letter: 'P', ring: 'ring-info/50',  iconBg: 'bg-info-muted',  iconFg: 'text-info' },
-  do:    { letter: 'D', ring: 'ring-brand/60', iconBg: 'bg-brand/15',    iconFg: 'text-brand' },
-  check: { letter: 'C', ring: 'ring-warn/50',  iconBg: 'bg-warn-muted',  iconFg: 'text-warn' },
-  act:   { letter: 'A', ring: 'ring-ok/50',    iconBg: 'bg-ok-muted',    iconFg: 'text-ok' },
-}
-
 const TONE_NUMBER: Record<PdcaStageTone, string> = {
   ok: 'text-fg',
   warn: 'text-warn',
   urgent: 'text-danger',
 }
 
-const TONE_BADGE: Record<PdcaStageTone, { dot: string; label: string }> = {
+const TONE_DOT: Record<PdcaStageTone, { dot: string; label: string; pulse?: boolean }> = {
   ok:     { dot: 'bg-ok',     label: 'Healthy' },
   warn:   { dot: 'bg-warn',   label: 'Watch' },
-  urgent: { dot: 'bg-danger', label: 'Bottleneck' },
+  urgent: { dot: 'bg-danger', label: 'Bottleneck', pulse: true },
 }
 
 export function PdcaCockpit({ stages, focusStage }: Props) {
   if (stages.length === 0) return null
-
-  const bottleneckStage = stages.find(s => s.tone === 'urgent') ?? null
-
   return (
-    <section aria-label="PDCA cockpit" className="mb-4">
+    <section aria-label="Loop status" className="mb-4">
       <div className="flex items-baseline justify-between mb-2">
         <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
-          PDCA cockpit
+          Loop status &mdash; Plan, Do, Check, Act
         </h2>
         <span className="text-2xs text-fg-faint">
           One loop · Plan → Do → Check → Act
@@ -66,10 +57,6 @@ export function PdcaCockpit({ stages, focusStage }: Props) {
           />
         ))}
       </div>
-
-      {bottleneckStage && (
-        <BottleneckCallout stage={bottleneckStage} />
-      )}
     </section>
   )
 }
@@ -77,108 +64,107 @@ export function PdcaCockpit({ stages, focusStage }: Props) {
 interface TileProps {
   stage: PdcaStage
   isFocus: boolean
-  /** Whether to render the right-edge connector arrow on lg+ screens. */
   connector: boolean
 }
 
 function StageTile({ stage, isFocus, connector }: TileProps) {
-  const accent = STAGE_ACCENT[stage.id]
+  const meta = PDCA_STAGES[stage.id]
   const numberTone = TONE_NUMBER[stage.tone]
-  const badge = TONE_BADGE[stage.tone]
+  const dot = TONE_DOT[stage.tone]
   return (
     <div className="relative">
       <Card
         elevated
         interactive
-        className={`h-full ${isFocus ? `ring-2 ring-offset-1 ring-offset-surface ${accent.ring}` : ''}`}
+        className={`h-full ${isFocus ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg}` : ''}`}
       >
         <Link
           to={stage.cta.to}
-          className="block p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md"
+          className="block p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-md group"
         >
-          <div className="flex items-start gap-2.5">
-            <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-bold text-xs leading-none shrink-0 ${accent.iconBg} ${accent.iconFg}`}
-              aria-hidden="true"
-            >
-              {accent.letter}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-fg">{stage.label}</span>
-                <span
-                  className="inline-flex items-center gap-1 text-3xs text-fg-muted"
-                  title={`${badge.label} · ${stage.bottleneck ?? 'No action needed'}`}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
-                  {badge.label}
-                </span>
-              </div>
-              <p className="text-2xs text-fg-faint mt-0.5">{stage.description}</p>
-
-              <div className="mt-2 flex items-baseline gap-1.5">
-                <span className={`text-2xl font-semibold font-mono leading-none ${numberTone}`}>
-                  {stage.count}
-                </span>
-                <span className="text-2xs text-fg-muted truncate">{stage.countLabel}</span>
-              </div>
-
-              <p className="mt-2 text-2xs text-fg-secondary line-clamp-2 min-h-[2rem]">
-                {stage.bottleneck ?? <span className="text-fg-faint">Nothing blocking — pipeline is clean.</span>}
-              </p>
-
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-2xs text-brand group-hover:underline inline-flex items-center gap-1">
-                  {stage.cta.label}
-                  <span aria-hidden="true">→</span>
-                </span>
+          <header className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                aria-hidden="true"
+                className={`inline-flex items-center justify-center w-7 h-7 rounded-md font-bold text-sm leading-none shrink-0 ${meta.badgeBg} ${meta.badgeFg}`}
+              >
+                {meta.letter}
+              </span>
+              <div className="min-w-0">
+                <span className="text-xs font-semibold text-fg block leading-tight">{meta.label}</span>
                 {isFocus && (
-                  <span className="text-3xs text-fg-muted uppercase tracking-wide">
+                  <span className={`text-3xs font-mono uppercase tracking-wider ${meta.text}`}>
                     Current focus
                   </span>
                 )}
               </div>
             </div>
+            <span
+              className="inline-flex items-center gap-1 text-3xs text-fg-muted shrink-0"
+              title={`${dot.label} · ${stage.bottleneck ?? 'No action needed'}`}
+            >
+              <span
+                className={`relative w-1.5 h-1.5 rounded-full ${dot.dot}`}
+                aria-hidden="true"
+              >
+                {dot.pulse && (
+                  <span className={`absolute inset-0 rounded-full ${dot.dot} opacity-60 motion-safe:animate-ping`} />
+                )}
+              </span>
+              {dot.label}
+            </span>
+          </header>
+
+          <p className="text-2xs text-fg-faint mt-1.5 leading-snug line-clamp-2">{stage.description}</p>
+
+          <div className="mt-2.5 flex items-baseline gap-1.5">
+            <span className={`text-2xl font-semibold font-mono leading-none ${numberTone}`}>
+              {stage.count}
+            </span>
+            <span className="text-2xs text-fg-muted truncate">{stage.countLabel}</span>
+          </div>
+
+          <p className="mt-2 text-2xs text-fg-secondary leading-snug min-h-[2.25rem] line-clamp-2">
+            {stage.bottleneck ?? <span className="text-fg-faint">Clean — nothing waiting in this stage.</span>}
+          </p>
+
+          <div className="mt-2.5 flex items-center justify-between">
+            <span className="text-2xs text-brand inline-flex items-center gap-1 group-hover:underline">
+              {stage.cta.label}
+              <span aria-hidden="true">→</span>
+            </span>
           </div>
         </Link>
       </Card>
 
-      {connector && (
-        <ArrowConnector />
-      )}
+      {connector && <ArrowConnector />}
     </div>
   )
 }
 
 function ArrowConnector(): ReactNode {
+  // Arrow renders to the right on lg+ (between cards), and to the bottom on
+  // smaller breakpoints where tiles stack into a column. Either way the
+  // user sees the loop visually rather than inferring it from labels.
   return (
-    <span
-      aria-hidden="true"
-      className="hidden lg:flex absolute top-1/2 -right-2 -translate-y-1/2 z-10 w-4 h-4 items-center justify-center text-fg-faint"
-    >
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-        <path d="M3 7h7m0 0L7 4m3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+    <span aria-hidden="true" className="text-fg-faint pointer-events-none">
+      <span className="hidden lg:flex absolute top-1/2 -right-2 -translate-y-1/2 z-10 w-4 h-4 items-center justify-center">
+        <ArrowSvg direction="right" />
+      </span>
+      <span className="lg:hidden flex absolute -bottom-2 left-1/2 -translate-x-1/2 z-10 w-4 h-4 items-center justify-center">
+        <ArrowSvg direction="down" />
+      </span>
     </span>
   )
 }
 
-function BottleneckCallout({ stage }: { stage: PdcaStage }) {
+function ArrowSvg({ direction }: { direction: 'right' | 'down' }) {
+  const path = direction === 'right'
+    ? 'M3 7h7m0 0L7 4m3 3-3 3'
+    : 'M7 3v7m0 0L4 7m3 3 3-3'
   return (
-    <Link
-      to={stage.cta.to}
-      className="mt-2 group flex items-center gap-2 px-3 py-2 rounded-md bg-danger-muted border border-danger/30 text-2xs text-fg hover:bg-danger-muted/80 motion-safe:transition-colors"
-    >
-      <span className="inline-flex w-4 h-4 items-center justify-center rounded-full bg-danger text-2xs text-white font-semibold shrink-0">
-        !
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="font-medium">{stage.label} stage is the bottleneck:</span>{' '}
-        <span className="text-fg-secondary">{stage.bottleneck ?? `${stage.count} ${stage.countLabel}`}</span>
-      </span>
-      <span className="text-brand group-hover:underline inline-flex items-center gap-1 shrink-0">
-        Resolve <span aria-hidden="true">→</span>
-      </span>
-    </Link>
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+      <path d={path} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }

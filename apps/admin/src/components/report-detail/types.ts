@@ -8,6 +8,32 @@ export interface ReportEnvironment {
   [key: string]: unknown
 }
 
+export interface ReportFixAttempt {
+  id: string
+  status: string
+  agent: string | null
+  pr_url: string | null
+  pr_number: number | null
+  branch: string | null
+  files_changed: string[] | null
+  lines_changed: number | null
+  review_passed: boolean | null
+  check_run_status: string | null
+  check_run_conclusion: string | null
+  error: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+export interface ReportJudgeEval {
+  id: string
+  judge_score: number | null
+  classification_agreed: boolean | null
+  judge_reasoning: string | null
+  created_at: string
+}
+
 export interface ReportDetail {
   id: string
   project_id: string
@@ -31,5 +57,10 @@ export interface ReportDetail {
   reporter_token_hash: string
   session_id: string | null
   created_at: string
+  classified_at: string | null
   processing_error: string | null
+  /** Linked agentic fix attempts for this report. Most recent first. */
+  fix_attempts?: ReportFixAttempt[]
+  /** Latest classification judge evaluation, if the judge has run. */
+  judge_eval?: ReportJudgeEval | null
 }
