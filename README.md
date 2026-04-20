@@ -204,14 +204,19 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 ## Where the project is today
 
-| Wave | Theme                                              | Status |
-| :--: | -------------------------------------------------- | :----: |
-|  A   | Capture, fast-filter, deep classification, dedup   |   ✅    |
-|  B   | Knowledge graph, NL queries, weekly intelligence   |   ✅    |
-|  C   | Vision air-gap, RAG codebase indexer, fix dispatch |   ✅    |
-|  D   | Marketplace, Cloud + Stripe, multi-repo fixes, hardened LLM I/O | ✅ (v1.0.0 prepping) |
+| Wave | Theme                                                                                              | Status |
+| :--: | -------------------------------------------------------------------------------------------------- | :----: |
+|  A   | Capture, fast-filter, deep classification, dedup                                                   |   ✅    |
+|  B   | Knowledge graph, NL queries, weekly intelligence                                                   |   ✅    |
+|  C   | Vision air-gap, RAG codebase indexer, fix dispatch                                                 |   ✅    |
+|  D   | Marketplace, Cloud + Stripe, multi-repo fixes, hardened LLM I/O                                    |   ✅    |
+| E–H  | PDCA full-sweep, pipeline self-heal, SAML SSO, integrations CRUD, Sentry hardening                 |   ✅    |
+|  I   | Real `unique_users` blast radius, `StatusStepper`, `PdcaReceiptStrip`, `EmptyState` NN/G compliance |   ✅    |
+|  J   | Real LLM cost (`llm_invocations.cost_usd`), Billing `LLM $X.XX` chip, Prompt Lab `Avg $ / eval`    |   ✅    |
+|  K   | Admin polish — first-action gating, layout-shaped skeletons, `ResultChip`, microinteractions       |   ✅    |
+|  L   | Beginner/Advanced mode toggle, Next-Best-Action strip, unified 4-stage PDCA, post-QA fixes (Sentry-wrapped DB errors, smoke-test, graceful schema-drift) |   ✅    |
 
-Released today: `v0.8.0`. Next: `v1.0.0` — see [HANDOVER.md](./HANDOVER.md) for the release checklist and the two deferred follow-ups (Node mirror of `sanitize.ts` and the demo video).
+**Currently published:** SDK packages at `0.2.x` ([`@mushi-mushi/web`](https://www.npmjs.com/package/@mushi-mushi/web), [`react`](https://www.npmjs.com/package/@mushi-mushi/react), [`vue`](https://www.npmjs.com/package/@mushi-mushi/vue), [`svelte`](https://www.npmjs.com/package/@mushi-mushi/svelte), [`angular`](https://www.npmjs.com/package/@mushi-mushi/angular), [`react-native`](https://www.npmjs.com/package/@mushi-mushi/react-native), [`capacitor`](https://www.npmjs.com/package/@mushi-mushi/capacitor)), CLI + launcher at `0.4.x` ([`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi), [`@mushi-mushi/cli`](https://www.npmjs.com/package/@mushi-mushi/cli)), admin web at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) (auto-deployed to S3 + CloudFront on every push to `master`). Latest handover: [`docs/HANDOVER-wave-l-2026-04-20.md`](./docs/HANDOVER-wave-l-2026-04-20.md).
 
 **Latest dogfood:** end-to-end PDCA loop validated on a real production webapp ([glot.it](https://github.com/kensaurus/glot.it)) with my own OpenRouter key. Report → Stage 1 + Stage 2 LLM triage → admin "Dispatch fix" → `fix-worker` → draft GitHub PR → live in `/fixes`. Sentry, Langfuse and GitHub all probe **Healthy** from the Integrations page. Full writeup with screenshots: [`docs/dogfood-glotit-pdca-2026-04-17.md`](./docs/dogfood-glotit-pdca-2026-04-17.md).
 
@@ -480,7 +485,7 @@ tooling/   # Shared ESLint + TypeScript configs
 
 ## Contributing
 
-Issues and PRs welcome. To get started: `pnpm install && pnpm dev`. See individual package READMEs for package-specific setup, and [HANDOVER.md](./HANDOVER.md) for the current state of play.
+Issues and PRs welcome. To get started: `pnpm install && pnpm dev`. See individual package READMEs for package-specific setup, and the latest wave handover ([`docs/HANDOVER-wave-l-2026-04-20.md`](./docs/HANDOVER-wave-l-2026-04-20.md)) for the current state of play.
 
 ## License
 

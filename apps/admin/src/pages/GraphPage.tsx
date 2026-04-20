@@ -12,12 +12,14 @@ import { useToast } from '../lib/toast'
 import {
   PageHeader,
   PageHelp,
-  Loading,
   ErrorAlert,
 } from '../components/ui'
+import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
+import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
@@ -57,6 +59,7 @@ export function GraphPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const copy = usePageCopy('/graph')
   const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
 
@@ -278,7 +281,7 @@ export function GraphPage() {
   const useStoryboard =
     view === 'graph' && !forceCanvas && filteredNodes.length > 0 && filteredNodes.length < STORYBOARD_THRESHOLD
 
-  if (loading) return <Loading text="Loading graph…" />
+  if (loading) return <GraphSkeleton />
   if (error)
     return (
       <ErrorAlert message={`Failed to load knowledge graph: ${error}`} onRetry={reloadGraph} />
@@ -287,9 +290,9 @@ export function GraphPage() {
   return (
     <div className="space-y-3">
       <PageHeader
-        title="Knowledge Graph"
+        title={copy?.title ?? 'Knowledge Graph'}
         projectScope={projectName}
-        description="See how reports cluster into components, pages, and releases. Click any node for its blast radius."
+        description={copy?.description ?? 'See how reports cluster into components, pages, and releases. Click any node for its blast radius.'}
       >
         <div className="flex items-center gap-2">
           <span className="text-2xs text-fg-faint font-mono">
@@ -301,15 +304,15 @@ export function GraphPage() {
       </PageHeader>
 
       <PageHelp
-        title="About the Knowledge Graph"
-        whatIsIt="A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts."
-        useCases={[
+        title={copy?.help?.title ?? 'About the Knowledge Graph'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'}
+        useCases={copy?.help?.useCases ?? [
           'See blast radius: click any node to highlight everything it can affect',
           'Find regressions: pick the Regressions view to focus on bugs that reappeared after a fix',
           'Spot fragile components: pick the Fragile components view to surface high-incoming-affects nodes',
           'Audit fix coverage: pick the Fix coverage view to trace fix_verified edges',
         ]}
-        howToUse="Use the quick views to focus on a story, or filter manually with the chips. Drag the canvas to pan, scroll to zoom, click any node for its blast radius. Re-layout shakes the graph into a fresh arrangement."
+        howToUse={copy?.help?.howToUse ?? 'Use the quick views to focus on a story, or filter manually with the chips. Drag the canvas to pan, scroll to zoom, click any node for its blast radius. Re-layout shakes the graph into a fresh arrangement.'}
       />
 
       <QuickViewsRow
@@ -325,6 +328,12 @@ export function GraphPage() {
           requires={['first_report_received']}
           emptyTitle="The graph is empty"
           emptyDescription="Nodes and edges populate automatically as the LLM pipeline classifies reports. Submit a report from the dashboard to seed the graph."
+          emptyIcon={<HeroGraphNodes />}
+          blockedIcon={<HeroGraphNodes accent="text-fg-faint" />}
+          emptyHints={[
+            'Each report becomes a node — duplicates collapse into the same fingerprint.',
+            'Edges link reports that share a feature, route, or fingerprint.',
+          ]}
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-[1fr_18rem]">

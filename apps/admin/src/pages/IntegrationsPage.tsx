@@ -15,6 +15,7 @@ import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SetupNudge } from '../components/SetupNudge'
+import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
@@ -28,11 +29,13 @@ import {
   type RoutingIntegration,
   type RoutingProviderDef,
 } from '../components/integrations/types'
+import { usePageCopy } from '../lib/copy'
 
 export function IntegrationsPage() {
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
+  const copy = usePageCopy('/integrations')
   const platformQuery = usePageData<PlatformResponse>('/v1/admin/integrations/platform')
   const historyQuery = usePageData<{ history: HealthRow[] }>('/v1/admin/health/history')
   const routingQuery = usePageData<{ integrations: RoutingIntegration[] }>('/v1/admin/integrations')
@@ -193,8 +196,8 @@ export function IntegrationsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Integrations"
-        description="Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust."
+        title={copy?.title ?? 'Integrations'}
+        description={copy?.description ?? 'Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust.'}
       />
 
       {!setup.hasAnyProject && (
@@ -202,18 +205,20 @@ export function IntegrationsPage() {
           requires={['project_created']}
           emptyTitle="Create a project before wiring integrations"
           emptyDescription="Integrations are scoped to a project. Once you have one, you can wire Sentry, Langfuse, GitHub, and your routing destinations."
+          emptyIcon={<HeroPlugIntegration />}
+          blockedIcon={<HeroPlugIntegration accent="text-fg-faint" />}
         />
       )}
 
       <PageHelp
-        title="About Integrations"
-        whatIsIt="Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports."
-        useCases={[
+        title={copy?.help?.title ?? 'About Integrations'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'}
+        useCases={copy?.help?.useCases ?? [
           'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
           'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
           'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
         ]}
-        howToUse="For each card, click Edit to add credentials, then Test to probe live. Status pills, latency, and a 7-day sparkline live-update with each probe."
+        howToUse={copy?.help?.howToUse ?? 'For each card, click Edit to add credentials, then Test to probe live. Status pills, latency, and a 7-day sparkline live-update with each probe.'}
       />
 
       <section>

@@ -232,20 +232,31 @@ export function AntiGamingPage() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Tracked devices" value={stats.total} delta={deltas.tracked} />
+        <KpiTile
+          label="Tracked devices"
+          value={stats.total}
+          delta={deltas.tracked}
+          meaning="Distinct device fingerprints the SDK has seen submitting reports. A growing number means broader reach; a flat one means the SDK isn't installed widely."
+        />
         <KpiTile
           label="Flagged"
           value={stats.flagged}
           accent={stats.flagged > 0 ? 'danger' : undefined}
           delta={deltas.flagged}
+          meaning="Devices our heuristics or you have marked as abusive. Their reports still ingest but won't dispatch fixes automatically."
         />
         <KpiTile
           label="Cross-account"
           value={stats.crossAccount}
           accent={stats.crossAccount > 0 ? 'warn' : undefined}
           delta={deltas.crossAccount}
+          meaning="Devices that have submitted reports under more than one reporter token in the same window. A common abuse signal — but also fires for shared NAT."
         />
-        <KpiTile label="Total reports" value={stats.totalReports} />
+        <KpiTile
+          label="Total reports"
+          value={stats.totalReports}
+          meaning="Cumulative reports ingested from any tracked device. Compare against the dashboard's 14d intake to see if abuse is inflating volume."
+        />
       </div>
 
       <section>

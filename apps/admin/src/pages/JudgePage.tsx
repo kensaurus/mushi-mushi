@@ -26,6 +26,8 @@ import { SCORE_COLORS } from '../lib/tokens'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
+import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 
 interface WeekData {
   week_start: string
@@ -199,6 +201,7 @@ export function JudgePage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const copy = usePageCopy('/judge')
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
 
@@ -251,9 +254,9 @@ export function JudgePage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Judge"
+        title={copy?.title ?? 'Judge'}
         projectScope={projectName}
-        description="Independent grading of every classified report — calibrate confidence and catch silent regressions."
+        description={copy?.description ?? 'Independent grading of every classified report — calibrate confidence and catch silent regressions.'}
       >
         <Btn
           size="sm"
@@ -268,14 +271,14 @@ export function JudgePage() {
       </PageHeader>
 
       <PageHelp
-        title="About the Judge"
-        whatIsIt="A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."
-        useCases={[
+        title={copy?.help?.title ?? 'About the Judge'}
+        whatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
+        useCases={copy?.help?.useCases ?? [
           'Detect when the classifier silently degrades after a model or prompt change',
           'Compare prompt versions head-to-head on real reports',
           'Decide whether to roll back, fork, or promote a prompt',
         ]}
-        howToUse='Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'
+        howToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
       />
 
       <KpiRow cols={4}>
@@ -284,6 +287,7 @@ export function JudgePage() {
           value={latest ? formatPct(latest.avg_score) : '—'}
           sublabel={latest ? `${latest.eval_count} evals` : 'No evals yet'}
           accent={latest && latest.avg_score >= 0.8 ? 'ok' : latest && latest.avg_score >= 0.6 ? 'warn' : 'danger'}
+          meaning="Mean judge score this week. ≥80% is healthy; <60% means the classifier is drifting and the prompt likely needs a tune."
           delta={
             previous
               ? {
@@ -298,11 +302,13 @@ export function JudgePage() {
           label="Total evaluations"
           value={totalEvals}
           sublabel="Last 12 weeks"
+          meaning="How many fix attempts the independent LLM judge has graded over the last 12 weeks. More evals = more confidence in the trend."
         />
         <KpiTile
           label="Prompt versions"
           value={prompts.length}
           sublabel={`${prompts.filter((p) => p.is_active).length} active · ${prompts.filter((p) => p.is_candidate).length} candidate`}
+          meaning="Distinct classifier prompts in your library. Candidates are A/B'd against the active prompt; promote a winner from the leaderboard."
         />
         <KpiTile
           label="Mean score (overall)"
@@ -315,6 +321,7 @@ export function JudgePage() {
               : '—'
           }
           sublabel={dist ? `${dist.total} scored evals` : ''}
+          meaning="All-time mean judge score across every evaluation. Useful as a long-term health signal — a sliding 12w mean is on the chart to its right."
         />
       </KpiRow>
 
@@ -322,8 +329,13 @@ export function JudgePage() {
         <Section title="Score trend (12w)">
           {weeks.length === 0 ? (
             <EmptyState
+              icon={<HeroJudgeScale />}
               title="No evaluations yet"
-              description='Click "Run judge now" above to score recent reports.'
+              description="The judge is an independent LLM that grades how good each fix attempt is. Once it's run, you'll see weekly scores, prompt-version trends, and which classifier is winning."
+              hints={[
+                'Run judge now scores the most recent reports against the active prompt.',
+                'Aim for ≥80% mean score before promoting a candidate prompt.',
+              ]}
             />
           ) : (
             <>

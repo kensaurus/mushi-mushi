@@ -2,9 +2,14 @@
  * FILE: apps/admin/src/components/dashboard/GettingStartedEmpty.tsx
  * PURPOSE: First-run dashboard. Shown when the user has no projects (we send
  *          them straight to the onboarding wizard) or has projects but no
- *          inbound reports yet (we frame their first PDCA loop with three
- *          stages — Plan / Do / Check — so they immediately see the loop the
- *          README promises instead of an empty grid).
+ *          inbound reports yet (we frame their first PDCA loop with FOUR
+ *          stages — Plan / Do / Check / Act — so the model the user sees
+ *          here matches the cockpit, sidebar, narrative strip, and live
+ *          pipeline diagram everywhere else in the app).
+ *
+ *          Wave L: unified to 4 stages (was 3) and pulls outcome copy from
+ *          `lib/pdca.ts > PDCA_STAGE_OUTCOMES` so a future wording change
+ *          updates first-run, cockpit, and pipeline in lock-step.
  *
  *          Reuses the canonical <SetupChecklist> primitive in banner mode so
  *          checklist progress stays in lock-step with the wizard.
@@ -16,21 +21,18 @@ import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { useSetupStatus, type SetupProject } from '../../lib/useSetupStatus'
 import { pluralize } from '../../lib/format'
-import { PageHeader, Card, Btn, Loading } from '../ui'
+import { PDCA_STAGES, PDCA_ORDER, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '../../lib/pdca'
+import { PageHeader, Card, Btn, Skeleton } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
 import { useActiveProjectId } from '../ProjectSwitcher'
 
-type LoopStageId = 'plan' | 'do' | 'check'
-
 interface LoopStage {
-  id: LoopStageId
-  letter: string
-  label: string
-  headline: string
-  body: string
+  id: PdcaStageId
   cta: { to?: string; onClick?: () => void; label: string; primary?: boolean }
   state: 'active' | 'next' | 'done'
+  /** Per-stage status line under the body — what's currently happening. */
+  status?: string
 }
 
 export function GettingStartedEmpty() {
@@ -40,11 +42,11 @@ export function GettingStartedEmpty() {
   const setup = useSetupStatus(activeProjectId)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
 
-  if (setup.loading) return <Loading text="Checking your account..." />
+  if (setup.loading) return <GettingStartedSkeleton />
   if (!setup.hasAnyProject) return <Navigate to="/onboarding" replace />
 
   const project = setup.activeProject
-  if (!project) return <Loading text="Loading projects..." />
+  if (!project) return <GettingStartedSkeleton />
 
   const sdkInstalled = !setup.isStepIncomplete('sdk_installed')
   const hasReports = project.report_count > 0
@@ -81,7 +83,7 @@ export function GettingStartedEmpty() {
     <div>
       <PageHeader
         title="Welcome to Mushi Mushi"
-        description="Run your first user-felt-bug PDCA loop in three stages."
+        description="Run your first user-felt-bug PDCA loop. Four stages, one closed loop."
       />
 
       <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} />
@@ -126,42 +128,51 @@ function buildStages(args: BuildStageArgs): LoopStage[] {
   return [
     {
       id: 'plan',
-      letter: 'P',
-      label: 'Plan',
-      headline: 'Capture your first user-felt bug',
-      body: sdkInstalled
-        ? 'SDK is installed. Send a synthetic test report or wait for a real one to land in Reports.'
-        : 'Drop the Mushi Mushi widget into your app so end-users can flag bugs without opening DevTools.',
       cta: sdkInstalled
-        ? { onClick: onSendTest, label: testStatus === 'running' ? 'Sending…' : testStatus === 'pass' ? '✓ Test sent' : 'Send test report', primary: testStatus !== 'pass' }
+        ? {
+            onClick: onSendTest,
+            label:
+              testStatus === 'running' ? 'Sending…' :
+              testStatus === 'pass' ? '✓ Test sent' :
+              testStatus === 'fail' ? 'Retry test' :
+              'Send test report',
+            primary: testStatus !== 'pass',
+          }
         : { onClick: onSetup, label: 'Open setup wizard', primary: true },
       state: hasReports ? 'done' : 'active',
+      status: sdkInstalled
+        ? 'SDK is connected — fire a synthetic report or wait for a real one.'
+        : 'Drop the Mushi widget into your app so end-users can flag bugs without DevTools.',
     },
     {
       id: 'do',
-      letter: 'D',
-      label: 'Do',
-      headline: 'Dispatch a fix',
-      body: hasReports
-        ? 'Open the latest report, classify it if needed, then click "Dispatch fix" to let the agent draft a PR on a feature branch.'
-        : 'Once your first report lands, you\u2019ll dispatch the auto-fix agent here. It needs a GitHub repo + an Anthropic key in BYOK.',
       cta: hasReports
         ? { to: '/reports', label: 'Open Reports', primary: true }
         : { to: '/integrations', label: 'Connect GitHub & Anthropic', primary: false },
       state: hasFix ? 'done' : hasReports ? 'active' : 'next',
+      status: hasReports
+        ? 'Open the latest report and click "Dispatch fix" to draft a PR on a feature branch.'
+        : 'Once your first report lands, the auto-fix agent drafts a PR. Needs a GitHub repo + an Anthropic key.',
     },
     {
       id: 'check',
-      letter: 'C',
-      label: 'Check',
-      headline: hasMerged ? 'Loop closed' : 'Verify the loop',
-      body: hasMerged
-        ? 'Your first auto-fix has been merged upstream. New reports now flow through Plan \u2192 Do \u2192 Check end-to-end \u2014 watch the metrics in /fixes.'
-        : hasFix
-          ? 'A draft PR has been opened. Review the agent\u2019s rationale + diff in /fixes, then merge \u2014 that closes the loop.'
-          : 'Watch the dispatched fix progress through Plan \u2192 Do \u2192 Check on the /fixes timeline. Each step writes a Langfuse trace.',
-      cta: { to: '/fixes', label: hasMerged ? 'View merged fix' : 'Open Fixes', primary: hasFix && !hasMerged },
+      cta: hasFix
+        ? { to: '/judge', label: 'See judge scores', primary: hasFix && !hasMerged }
+        : { to: '/judge', label: 'Tour the judge', primary: false },
       state: hasMerged ? 'done' : hasFix ? 'active' : 'next',
+      status: hasFix
+        ? 'An independent LLM grades the draft + screenshot diff. Bad fixes are blocked from merge.'
+        : 'After Do, an LLM judge + screenshot diff verify the fix is real before it can ship.',
+    },
+    {
+      id: 'act',
+      cta: hasMerged
+        ? { to: '/integrations', label: 'See routing destinations', primary: true }
+        : { to: '/integrations', label: 'Set up routing', primary: false },
+      state: hasMerged ? 'done' : 'next',
+      status: hasMerged
+        ? 'Loop closed. Merged fixes flow back to Sentry, Slack, and your CI automatically.'
+        : 'After Check, verified fixes route to Sentry/Slack/GitHub. Set up where bugs should land.',
     },
   ]
 }
@@ -190,20 +201,22 @@ function FirstLoopPanel({ stages, project }: PanelProps) {
         </Link>
       </div>
 
-      <ol className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+      <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         {stages.map((stage, i) => (
-          <LoopStageCard key={stage.id} stage={stage} step={i + 1} />
+          <LoopStageCard key={stage.id} stage={stage} step={i + 1} isLast={i === stages.length - 1} />
         ))}
       </ol>
     </section>
   )
 }
 
-function LoopStageCard({ stage, step }: { stage: LoopStage; step: number }) {
+function LoopStageCard({ stage, step, isLast }: { stage: LoopStage; step: number; isLast: boolean }) {
+  const meta = PDCA_STAGES[stage.id]
+  const outcome = PDCA_STAGE_OUTCOMES[stage.id]
   const tone = stage.state === 'done'
     ? { ring: 'ring-1 ring-ok/30 bg-ok-muted/10', letter: 'bg-ok text-ok-fg' }
     : stage.state === 'active'
-      ? { ring: 'ring-2 ring-brand/40 bg-brand/5', letter: 'bg-brand text-brand-fg' }
+      ? { ring: `ring-2 ${meta.ring} ${meta.tintBg}`, letter: `${meta.badgeBg} ${meta.badgeFg}` }
       : { ring: 'ring-1 ring-edge-subtle bg-surface-raised/30', letter: 'bg-surface-overlay text-fg-muted' }
 
   const isLocked = stage.state === 'next'
@@ -211,16 +224,23 @@ function LoopStageCard({ stage, step }: { stage: LoopStage; step: number }) {
 
   return (
     <li className={`relative rounded-md p-3 ${tone.ring} ${isLocked ? 'opacity-60' : ''}`}>
+      {!isLast && (
+        <span aria-hidden="true" className="hidden lg:flex absolute top-1/2 -right-2 -translate-y-1/2 z-10 w-4 h-4 items-center justify-center text-fg-faint">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7h7m0 0L7 4m3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      )}
       <div className="flex items-center gap-2 mb-2">
         <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md font-bold text-xs leading-none ${tone.letter}`}>
-          {stage.state === 'done' ? '✓' : stage.letter}
+          {stage.state === 'done' ? '✓' : meta.letter}
         </span>
         <div className="min-w-0 flex-1">
-          <span className="text-2xs uppercase tracking-wider text-fg-muted">Step {step} · {stage.label}</span>
-          <h3 className="text-xs font-semibold text-fg truncate">{stage.headline}</h3>
+          <span className="text-2xs uppercase tracking-wider text-fg-muted">Step {step} · {meta.label}</span>
+          <h3 className="text-xs font-semibold text-fg truncate">{outcome.headline}</h3>
         </div>
       </div>
-      <p className="text-2xs text-fg-secondary leading-snug min-h-[3rem]">{stage.body}</p>
+      <p className="text-2xs text-fg-secondary leading-snug min-h-[3rem]">{stage.status ?? outcome.outcome}</p>
       <div className="mt-2.5">
         <StageCta cta={cta} isLocked={isLocked} />
       </div>
@@ -247,9 +267,6 @@ function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean 
   )
 
   if (cta.to) {
-    // Render a non-link span when locked so a mouse click cannot navigate.
-    // Relying on aria-disabled + tabIndex=-1 alone leaves react-router's
-    // <Link> click handler active, mismatching announced vs actual behavior.
     if (isLocked) {
       return (
         <span className={ctaClass(cta.primary, true)} aria-disabled="true">
@@ -273,5 +290,42 @@ function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean 
     >
       {cta.label}
     </Btn>
+  )
+}
+
+/**
+ * Layout-shaped skeleton that matches the rendered first-run loop so the
+ * page doesn't jolt when setup data resolves. Replaces the prior
+ * <Loading text="Checking your account..." /> spinner (Wave L).
+ */
+function GettingStartedSkeleton() {
+  return (
+    <div>
+      <div className="mb-5">
+        <Skeleton className="h-4 w-44 mb-2" />
+        <Skeleton className="h-3 w-72" />
+      </div>
+      <Skeleton className="h-12 w-full mb-4" />
+      <section className="rounded-lg border border-edge-subtle bg-surface-raised/30 p-4">
+        <div className="mb-3">
+          <Skeleton className="h-3.5 w-40 mb-1" />
+          <Skeleton className="h-3 w-64" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+          {PDCA_ORDER.map((id) => (
+            <div key={id} className="rounded-md ring-1 ring-edge-subtle bg-surface-raised/30 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Skeleton className="h-6 w-6 rounded-md" />
+                <Skeleton className="h-3 flex-1" />
+              </div>
+              <Skeleton className="h-3 w-full mb-1" />
+              <Skeleton className="h-3 w-3/4 mb-1" />
+              <Skeleton className="h-3 w-2/3 mb-3" />
+              <Skeleton className="h-6 w-28" />
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   )
 }

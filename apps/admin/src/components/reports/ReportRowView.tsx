@@ -81,14 +81,19 @@ export function ReportRowView({
   const isLoud = row.severity === 'critical' || blastRadius >= 3
 
   const baseRowCls =
-    'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-colors cursor-pointer relative'
+    'group border-t border-edge-subtle hover:bg-surface-overlay/60 motion-safe:transition-colors cursor-pointer relative motion-safe:animate-mushi-fade-in'
   const cursorCls = isCursor ? 'bg-surface-overlay/40 outline outline-1 outline-brand/40' : ''
   const variantBgCls = isVariant ? 'bg-surface-overlay/30' : ''
   const selectedCls = isSelected ? 'bg-brand/5' : isLoud ? 'bg-danger/5' : variantBgCls
+  // Stagger row entry by 18ms per index up to the first ~12 rows. Caps so a
+  // 200-row page doesn't introduce a 4s wait on the last row; later rows just
+  // share the final delay slot which still reads as "the table painted in".
+  const staggerDelayMs = Math.min(index, 12) * 18
 
   return (
     <tr
       data-row-index={index}
+      style={staggerDelayMs > 0 ? { animationDelay: `${staggerDelayMs}ms` } : undefined}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button, input, a')) return
         onOpen()

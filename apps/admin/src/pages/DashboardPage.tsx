@@ -7,11 +7,14 @@
  *          evolve independently and stay below the 30-line-function limit.
  */
 
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useToast } from '../lib/toast'
+import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
+import { Confetti } from '../components/Confetti'
 import { PageHeader, PageHelp, Btn, ErrorAlert } from '../components/ui'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
@@ -20,17 +23,42 @@ import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
 import { HeroIntro } from '../components/dashboard/HeroIntro'
 import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
+import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import type { DashboardData } from '../components/dashboard/types'
+import { usePageCopy } from '../lib/copy'
 
 export function DashboardPage() {
   const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
+  const toast = useToast()
+  const navigate = useNavigate()
   const [showFullDashboard, setShowFullDashboard] = useState(false)
+  const copy = usePageCopy('/')
+
+  // First-fix-merged celebration: when `merged_fix_count` flips 0 → 1 we
+  // fire a confetti burst + a toast with a CTA to the merged PR. This is the
+  // single most important peak-end moment in the whole loop — it's the proof
+  // that Mushi closed a PDCA cycle on the user's project. (Round 2 polish.)
+  // SPA-route via `navigate` rather than `window.location.assign` — the
+  // latter discards in-memory state (toast queue, scroll, focus) on what
+  // should be a celebratory in-app jump.
+  const onFirstMergedFix = useCallback(() => {
+    toast.success(
+      'Your first auto-fix was merged 🎉',
+      'Mushi just closed a full PDCA loop end-to-end. Want to see the merged PR?',
+      { label: 'View merged fixes', onClick: () => navigate('/fixes') },
+    )
+  }, [toast, navigate])
+  const { triggerKey: confettiKey } = useMilestoneCelebration(
+    'first-merged-fix',
+    setup.activeProject?.merged_fix_count ?? null,
+    { onFire: onFirstMergedFix },
+  )
 
   if (loading) return <DashboardSkeleton />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
@@ -56,7 +84,11 @@ export function DashboardPage() {
 
   return (
     <div>
-      <PageHeader title="Dashboard" description={projectName ? `Your loop on ${projectName}` : undefined}>
+      <Confetti triggerKey={confettiKey} />
+      <PageHeader
+        title={copy?.title ?? 'Dashboard'}
+        description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
+      >
         <Btn size="sm" variant="ghost" onClick={reload}>
           Refresh
         </Btn>
@@ -64,6 +96,14 @@ export function DashboardPage() {
           View all reports →
         </Link>
       </PageHeader>
+
+      <LivePdcaPipeline
+        projectId={setup.activeProject?.project_id}
+        onDemoReportSent={() => {
+          setup.reload()
+          reload()
+        }}
+      />
 
       {showFirstReportHero && setup.activeProject && (
         <FirstReportHero
@@ -103,15 +143,15 @@ export function DashboardPage() {
       {renderFullDashboard && (
         <>
           <PageHelp
-            title="About the Dashboard"
-            whatIsIt="14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it."
-            useCases={[
+            title={copy?.help?.title ?? 'About the Dashboard'}
+            whatIsIt={copy?.help?.whatIsIt ?? '14-day operational view of bug intake, LLM cost, auto-fix pipeline, integration health, and the triage queue. Every tile links to the page where you can act on it.'}
+            useCases={copy?.help?.useCases ?? [
               'See whether report intake is rising or falling vs the prior week',
               'Catch a backlog of un-triaged reports before users complain',
               'Spot a regression in LLM cost or failure rate after a prompt change',
               'Jump into the highest-priority report that needs review',
             ]}
-            howToUse="Click any KPI or row to drill in. Hover the chart bars for per-day totals."
+            howToUse={copy?.help?.howToUse ?? 'Click any KPI or row to drill in. Hover the chart bars for per-day totals.'}
           />
 
           <QuotaBanner />
@@ -120,7 +160,7 @@ export function DashboardPage() {
             <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
           )}
 
-          <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} />
+          <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} llmByDay={llmByDay} />
 
           <ChartsRow
             reportsByDay={reportsByDay}

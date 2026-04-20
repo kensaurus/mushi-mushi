@@ -5,7 +5,7 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../_shared/sse.ts'
 import { AguiEmitter } from '../_shared/agui.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
-import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
+import { ensureSentry, sentryHonoErrorHandler, reportError } from '../_shared/sentry.ts'
 import { apiKeyAuth, jwtAuth } from '../_shared/auth.ts'
 import { checkIngestQuota } from '../_shared/quota.ts'
 import { regionRouter, currentRegion, lookupProjectRegion, regionEndpoint } from '../_shared/region.ts'
@@ -46,6 +46,42 @@ ensureSentry('api')
 const app = new Hono().basePath('/api')
 
 app.onError(sentryHonoErrorHandler)
+
+/**
+ * Wave L: capture a Supabase / Postgres error to Sentry AND return the
+ * canonical 500 JSON response in one call. Most DB errors here returned
+ * `c.json({ ok: false, error: { code: 'DB_ERROR', ... } }, 500)` directly
+ * which sidesteps Hono's `app.onError` (no throw → no capture). That made
+ * production drift like the 04-20 `nl_query_history.is_saved` 500 invisible
+ * to Sentry. This helper centralises both behaviours so missing-column /
+ * RLS / pool-exhaustion failures all page someone going forward.
+ *
+ * Postgres error codes propagate through `code` so Sentry filters can
+ * single out e.g. `42703` (undefined column) vs `42501` (permission).
+ */
+function dbError(
+  c: Context,
+  err: { message?: string; code?: string; details?: string | null; hint?: string | null } | null | undefined,
+): Response {
+  const captured = err instanceof Error ? err : new Error(err?.message ?? 'Unknown DB error')
+  reportError(captured, {
+    tags: {
+      path: c.req.path,
+      method: c.req.method,
+      db_code: err?.code ?? 'unknown',
+      error_type: 'db',
+    },
+    extra: {
+      pg_code: err?.code ?? null,
+      pg_details: err?.details ?? null,
+      pg_hint: err?.hint ?? null,
+    },
+  })
+  return c.json(
+    { ok: false, error: { code: 'DB_ERROR', message: err?.message ?? 'Unknown DB error' } },
+    500,
+  )
+}
 
 app.use('*', cors({
   origin: '*',
@@ -913,7 +949,7 @@ app.get('/v1/notifications', apiKeyAuth, async (c) => {
 
   const { data: notifications, error } = await query
   if (error) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return dbError(c, error)
   }
 
   c.header('Cache-Control', 'no-store')
@@ -939,7 +975,7 @@ app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
     .eq('id', notifId)
     .eq('project_id', projectId)
     .eq('reporter_token_hash', auth.tokenHash)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true })
 })
 
@@ -1272,20 +1308,37 @@ app.get('/v1/admin/reports/severity-stats', jwtAuth, async (c) => {
 
   const { data: rows } = await db
     .from('reports')
-    .select('severity')
+    .select('severity, created_at')
     .in('project_id', projectIds)
     .gte('created_at', sinceIso)
     .neq('status', 'dismissed')
 
   const bySeverity = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>
-  for (const r of (rows ?? []) as Array<{ severity: string | null }>) {
-    if (r.severity && r.severity in bySeverity) bySeverity[r.severity] += 1
+  // Build a per-day, per-severity matrix so the Reports KPI strip can render
+  // a 14d trend sparkline alongside each tile (Round 2 polish — KPI rows
+  // need momentum, not just snapshots).
+  const dayBuckets = new Map<string, { critical: number; high: number; medium: number; low: number; total: number }>()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
+    const key = d.toISOString().slice(0, 10)
+    dayBuckets.set(key, { critical: 0, high: 0, medium: 0, low: 0, total: 0 })
   }
+  for (const r of (rows ?? []) as Array<{ severity: string | null; created_at: string }>) {
+    if (r.severity && r.severity in bySeverity) bySeverity[r.severity] += 1
+    const dayKey = (r.created_at ?? '').slice(0, 10)
+    const bucket = dayBuckets.get(dayKey)
+    if (bucket) {
+      bucket.total += 1
+      if (r.severity && r.severity in bucket) bucket[r.severity as 'critical' | 'high' | 'medium' | 'low'] += 1
+    }
+  }
+  const byDay = Array.from(dayBuckets.entries()).map(([day, counts]) => ({ day, ...counts }))
   return c.json({
     ok: true,
     data: {
       window_days: days,
       bySeverity,
+      byDay,
       total: (rows ?? []).length,
     },
   })
@@ -1337,7 +1390,7 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   }
 
   const { data: reports, count, error } = await query
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   // Enrich each report with the real blast radius for its dedup group:
   //   dedup_count      = total reports filed against the same fingerprint
@@ -1453,7 +1506,7 @@ app.patch('/v1/admin/reports/:id', jwtAuth, async (c) => {
     .eq('id', reportId).in('project_id', projectIds).single()
 
   const { error } = await db.from('reports').update(updates).eq('id', reportId).in('project_id', projectIds)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   // Award reputation points on status transitions
   if (report && updates.status && updates.status !== report.status) {
@@ -1563,7 +1616,7 @@ app.post('/v1/admin/reports/bulk', jwtAuth, async (c) => {
     .in('id', allowedIds)
     .in('project_id', projectIds)
   if (updErr) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: updErr.message } }, 500)
+    return dbError(c, updErr)
   }
 
   // Side effects mirror PATCH: reputation, notifications, plugin dispatch on
@@ -1841,6 +1894,39 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
     bottleneck: string | null
     tone: StageTone
     cta: { to: string; label: string }
+    /** Optional 7-day momentum series (oldest → newest). Rendered as a tiny
+     *  spark in the cockpit header so each tile shows whether it's trending
+     *  up, settling, or holding. Round 2 polish — added per audit
+     *  POLISH-BACKLOG.md "PdcaCockpit micro-trend" item. */
+    series?: number[]
+  }
+
+  // 7-day series for each PDCA stage. Reused across the four stage builders
+  // so we only walk the recentReports / recentFixes / recentEvals arrays once.
+  const last7Days: string[] = []
+  for (let i = 6; i >= 0; i--) {
+    last7Days.push(new Date(now - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+  }
+  const last7Index = new Map(last7Days.map((d, i) => [d, i]))
+  const planSeries7d = new Array(7).fill(0) as number[]
+  const doSeries7d = new Array(7).fill(0) as number[]
+  const checkSeries7d = new Array(7).fill(0) as number[]
+  for (const r of recentReports ?? []) {
+    const i = last7Index.get(String(r.created_at).slice(0, 10))
+    if (i !== undefined) planSeries7d[i] += 1
+  }
+  for (const f of recentFixes ?? []) {
+    const i = last7Index.get(String(f.created_at).slice(0, 10))
+    if (i !== undefined) doSeries7d[i] += 1
+  }
+  for (const e of recentEvals ?? []) {
+    // recentEvals rows expose `created_at`; fall back to evaluated_at if the
+    // row pre-dates the schema change.
+    const ts = String((e as { created_at?: string; evaluated_at?: string }).created_at
+      ?? (e as { evaluated_at?: string }).evaluated_at
+      ?? '').slice(0, 10)
+    const i = last7Index.get(ts)
+    if (i !== undefined) checkSeries7d[i] += 1
   }
 
   // Plan: open reports waiting > 1h (already computed as `openBacklog`).
@@ -1866,6 +1952,7 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
       : null,
     tone: planTone,
     cta: { to: '/reports?status=new', label: 'Triage queue' },
+    series: planSeries7d,
   }
 
   // Do: fixes in progress + failed = the active dispatch surface area.
@@ -1885,6 +1972,7 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
       : null,
     tone: doTone,
     cta: { to: '/fixes', label: 'Open Fixes' },
+    series: doSeries7d,
   }
 
   // Check: pending evals = classified reports without a judge_evaluated_at,
@@ -1908,6 +1996,7 @@ app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
       : null,
     tone: checkTone,
     cta: { to: '/judge', label: 'Open Judge' },
+    series: checkSeries7d,
   }
 
   // Act: integration destinations live + healthy.
@@ -2025,7 +2114,7 @@ app.get('/v1/admin/judge/evaluations', jwtAuth, async (c) => {
     .in('project_id', projectIds)
     .order(sort.col, { ascending: sort.asc })
     .limit(limit)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   // Hydrate each row with the underlying report's human summary so the
   // Judge table can display "Submit button on /checkout has wrong size"
@@ -2374,7 +2463,7 @@ app.patch('/v1/admin/settings', jwtAuth, async (c) => {
     .from('project_settings')
     .upsert({ project_id: project.id, ...updates }, { onConflict: 'project_id' })
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true })
 })
 
@@ -2482,7 +2571,7 @@ app.put('/v1/admin/byok/:provider', jwtAuth, async (c) => {
     .from('project_settings')
     .upsert({ project_id: project.id, ...update }, { onConflict: 'project_id' })
   if (upsertErr) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: upsertErr.message } }, 500)
+    return dbError(c, upsertErr)
   }
 
   // 'rotated' covers the upsert path (replacing a prior key); 'added' for first-time.
@@ -2521,7 +2610,7 @@ app.delete('/v1/admin/byok/:provider', jwtAuth, async (c) => {
       [`byok_${provider}_key_last_used_at`]: null,
     }, { onConflict: 'project_id' })
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await db.from('byok_audit_log').insert({ project_id: project.id, provider, action: 'removed', actor_user_id: userId }).catch(() => {})
   await logAudit(db, project.id, userId, 'settings.updated', 'byok', provider, { provider, cleared: true }).catch(() => {})
@@ -2734,7 +2823,7 @@ app.put('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
   const { error } = await db
     .from('project_settings')
     .upsert(update, { onConflict: 'project_id' })
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   if (update.byok_firecrawl_key_ref) {
     await db
@@ -2769,7 +2858,7 @@ app.delete('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
       byok_firecrawl_tested_at: null,
     }, { onConflict: 'project_id' })
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await db.from('byok_audit_log').insert({ project_id: project.id, provider: 'firecrawl', action: 'removed', actor_user_id: userId }).catch(() => {})
   await logAudit(db, project.id, userId, 'settings.updated', 'byok', 'firecrawl', { provider: 'firecrawl', cleared: true }).catch(() => {})
@@ -2876,7 +2965,7 @@ app.post('/v1/admin/research/search', jwtAuth, async (c) => {
     .single()
 
   if (sErr || !session) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: sErr?.message ?? 'Failed to persist session' } }, 500)
+    return dbError(c, sErr ?? { message: 'Failed to persist session' })
   }
 
   if (results.length > 0) {
@@ -2926,7 +3015,7 @@ app.get('/v1/admin/research/sessions', jwtAuth, async (c) => {
     .order('created_at', { ascending: false })
     .limit(limit)
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { sessions: sessions ?? [] } })
 })
 
@@ -2943,7 +3032,7 @@ app.get('/v1/admin/research/sessions/:id', jwtAuth, async (c) => {
     .eq('id', sessionId)
     .eq('project_id', project.id)
     .maybeSingle()
-  if (sErr) return c.json({ ok: false, error: { code: 'DB_ERROR', message: sErr.message } }, 500)
+  if (sErr) return dbError(c, sErr)
   if (!session) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
 
   const { data: snippets } = await db
@@ -2982,7 +3071,7 @@ app.post('/v1/admin/research/snippets/:id/attach', jwtAuth, async (c) => {
     .eq('id', snippetId)
     .eq('project_id', project.id)
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await logAudit(db, project.id, userId, 'report.triaged', 'research_snippet', snippetId, { reportId }).catch(() => {})
   return c.json({ ok: true })
@@ -3019,7 +3108,7 @@ app.get('/v1/admin/modernization', jwtAuth, async (c) => {
   if (status !== 'all') q = q.eq('status', status)
 
   const { data, error } = await q
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { findings: data ?? [] } })
 })
 
@@ -3118,7 +3207,7 @@ app.post('/v1/admin/modernization/:id/dismiss', jwtAuth, async (c) => {
     .from('modernization_findings')
     .update({ status: 'dismissed' })
     .eq('id', findingId)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await logAudit(db, finding.project_id, userId, 'report.triaged', 'modernization_finding', findingId, { dep: finding.dep_name, action: 'dismissed' }).catch(() => {})
   return c.json({ ok: true })
@@ -3773,7 +3862,7 @@ app.post('/v1/admin/projects', jwtAuth, async (c) => {
     owner_id: userId,
   }).select('id').single()
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await db.from('project_settings').insert({ project_id: data.id })
   // Membership is the source-of-truth for "can this user dispatch fixes /
@@ -3810,7 +3899,7 @@ app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
     is_active: true,
   })
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { key: rawKey, prefix } }, 201)
 })
 
@@ -4031,7 +4120,7 @@ app.post('/v1/admin/queue/flush-queued', jwtAuth, async (c) => {
     .limit(50)
 
   if (error) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return dbError(c, error)
   }
 
   const items = queued ?? []
@@ -4319,7 +4408,22 @@ app.get('/v1/admin/query/history', jwtAuth, async (c) => {
     .limit(limit)
   if (onlySaved) query = query.eq('is_saved', true)
   const { data, error } = await query
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) {
+    // Wave L resilience: if the deploy is mid-flight (Edge Function is on
+    // the new bundle but the `is_saved` migration hasn't landed yet — the
+    // exact failure mode that bit the 04-20 dogfood), return an empty
+    // history list with a soft-warning instead of 500. The saved sidebar
+    // simply renders empty until the migration lands; the rest of the
+    // /query page (POST endpoint, sample queries) keeps working.
+    if (error.code === '42703') {
+      reportError(error, {
+        tags: { path: c.req.path, method: c.req.method, db_code: '42703', error_type: 'migration_drift' },
+        extra: { hint: 'Run `supabase db push` to apply the nl_query_history.is_saved migration.' },
+      })
+      return c.json({ ok: true, data: { history: [], degraded: 'schema_pending' } })
+    }
+    return dbError(c, error)
+  }
   return c.json({ ok: true, data: { history: data ?? [] } })
 })
 
@@ -4337,7 +4441,7 @@ app.patch('/v1/admin/query/history/:id', jwtAuth, async (c) => {
     .update({ is_saved: body.is_saved })
     .eq('id', id)
     .eq('user_id', userId)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { id, is_saved: body.is_saved } })
 })
 
@@ -4346,7 +4450,7 @@ app.delete('/v1/admin/query/history/:id', jwtAuth, async (c) => {
   const id = c.req.param('id')
   const db = getServiceClient()
   const { error } = await db.from('nl_query_history').delete().eq('id', id).eq('user_id', userId)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { deleted: id } })
 })
 
@@ -4463,7 +4567,7 @@ app.post('/v1/admin/fixes', jwtAuth, async (c) => {
     status: 'pending',
   }).select('id').single()
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   return c.json({ ok: true, data: { fixId: fix!.id } })
 })
@@ -4679,7 +4783,7 @@ app.patch('/v1/admin/fixes/:id', jwtAuth, async (c) => {
   }
 
   const { error } = await db.from('fix_attempts').update(updates).eq('id', fixId).in('project_id', projectIds)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   if (updates.status === 'completed' && updates.pr_url) {
     const { data: fix } = await db.from('fix_attempts').select('report_id, project_id, agent, branch, pr_url, commit_sha').eq('id', fixId).in('project_id', projectIds).single()
@@ -4995,7 +5099,7 @@ app.post('/v1/admin/fine-tuning', jwtAuth, async (c) => {
     export_format: body.exportFormat ?? 'jsonl_classification',
   }).select('id').single()
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   await logAudit(db, project.id, userId, 'settings.updated', 'fine_tuning', job!.id, { baseModel: body.baseModel })
   return c.json({ ok: true, data: { jobId: job!.id } })
 })
@@ -5159,7 +5263,7 @@ app.delete('/v1/admin/fine-tuning/:id', jwtAuth, async (c) => {
   if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
 
   const { error } = await db.from('fine_tuning_jobs').delete().eq('id', jobId)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await logAudit(db, job.project_id, userId, 'settings.updated', 'fine_tuning_delete', jobId, {
     previous_status: job.status,
@@ -5463,7 +5567,7 @@ app.delete('/v1/admin/plugins/:slug', jwtAuth, async (c) => {
 
   await db.rpc('vault_delete_secret', { secret_name: `mushi/plugin/${project.id}/${slug}` }).catch(() => {})
   const { error } = await db.from('project_plugins').delete().eq('project_id', project.id).or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, { plugin: slug, removed: true }).catch(() => {})
   return c.json({ ok: true })
 })
@@ -5481,7 +5585,7 @@ app.get('/v1/marketplace/plugins', async (c) => {
     .order('is_official', { ascending: false })
     .order('install_count', { ascending: false })
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { plugins: data ?? [] } })
 })
 
@@ -5498,7 +5602,7 @@ app.get('/v1/admin/plugins/dispatch-log', jwtAuth, async (c) => {
     .order('created_at', { ascending: false })
     .limit(100)
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { entries: data ?? [] } })
 })
 
@@ -5566,7 +5670,7 @@ app.post('/v1/admin/intelligence', jwtAuth, async (c) => {
     .select('id')
     .single()
   if (insertErr || !job) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: insertErr?.message ?? 'Failed to enqueue' } }, 500)
+    return dbError(c, insertErr ?? { message: 'Failed to enqueue' })
   }
 
   // Kick the worker without awaiting — it does its own status updates.
@@ -5678,7 +5782,7 @@ app.get('/v1/admin/intelligence', jwtAuth, async (c) => {
     .order('week_start', { ascending: false })
     .limit(52)
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { reports: data ?? [] } })
 })
 
@@ -5696,7 +5800,7 @@ app.get('/v1/admin/intelligence/:id/html', jwtAuth, async (c) => {
     .select('rendered_html, project_id')
     .eq('id', id)
     .maybeSingle()
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   if (!data || !projectIds.includes(data.project_id))
     return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not visible to caller' } }, 404)
 
@@ -5766,7 +5870,7 @@ app.post('/v1/admin/graph-backend/snapshot', jwtAuth, async (c) => {
   if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404)
 
   const { data, error } = await db.rpc('mushi_age_snapshot_drift', { p_project_id: project.id })
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { auditId: data } })
 })
 
@@ -5788,7 +5892,7 @@ app.put('/v1/admin/settings/benchmarking', jwtAuth, async (c) => {
     })
     .eq('project_id', project.id)
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { optIn } })
 })
 
@@ -5989,7 +6093,7 @@ app.get('/v1/admin/anti-gaming/devices', jwtAuth, async (c) => {
     .limit(200)
   if (flagged) q = q.eq('flagged_as_suspicious', true)
   const { data, error } = await q
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { devices: data ?? [] } })
 })
 
@@ -6011,7 +6115,7 @@ app.get('/v1/admin/anti-gaming/events', jwtAuth, async (c) => {
   if (eventType) query = query.eq('event_type', eventType)
 
   const { data, error } = await query
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { events: data ?? [] } })
 })
 
@@ -6036,7 +6140,7 @@ app.post('/v1/admin/anti-gaming/devices/:id/flag', jwtAuth, async (c) => {
     .from('reporter_devices')
     .update({ flagged_as_suspicious: true, flag_reason: reason })
     .eq('id', id)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await logAntiGamingEvent(db, {
     projectId: device.project_id,
@@ -6067,7 +6171,7 @@ app.post('/v1/admin/anti-gaming/devices/:id/unflag', jwtAuth, async (c) => {
     .from('reporter_devices')
     .update({ flagged_as_suspicious: false, flag_reason: null, cross_account_flagged: false })
     .eq('id', id)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await logAntiGamingEvent(db, {
     projectId: device.project_id,
@@ -6099,7 +6203,7 @@ app.get('/v1/admin/notifications', jwtAuth, async (c) => {
   if (onlyUnread) query = query.is('read_at', null)
 
   const { data, error } = await query
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { notifications: data ?? [] } })
 })
 
@@ -6115,7 +6219,7 @@ app.post('/v1/admin/notifications/:id/read', jwtAuth, async (c) => {
     .update({ read_at: new Date().toISOString() })
     .eq('id', notifId)
     .in('project_id', projectIds)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true })
 })
 
@@ -6130,7 +6234,7 @@ app.post('/v1/admin/notifications/read-all', jwtAuth, async (c) => {
     .update({ read_at: new Date().toISOString() }, { count: 'exact' })
     .in('project_id', projectIds)
     .is('read_at', null)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   await logAudit(db, projectIds[0], userId, 'settings.updated', 'notifications', undefined, { marked_read: count ?? 0 })
   return c.json({ ok: true, data: { marked_read: count ?? 0 } })
 })
@@ -6148,7 +6252,7 @@ app.get('/v1/admin/compliance/retention', jwtAuth, async (c) => {
     .from('project_retention_policies')
     .select('*')
     .in('project_id', projectIds)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { policies: data ?? [] } })
 })
 
@@ -6175,7 +6279,7 @@ app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, async (c) => {
   }
 
   const { error } = await db.from('project_retention_policies').upsert(updates, { onConflict: 'project_id' })
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   await logAudit(
     db,
     projectId,
@@ -6200,7 +6304,7 @@ app.get('/v1/admin/compliance/dsars', jwtAuth, async (c) => {
     .in('project_id', projectIds)
     .order('created_at', { ascending: false })
     .limit(500)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { requests: data ?? [] } })
 })
 
@@ -6229,7 +6333,7 @@ app.post('/v1/admin/compliance/dsars', jwtAuth, async (c) => {
     })
     .select('*')
     .single()
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   await logAudit(
     db,
     projectId,
@@ -6264,7 +6368,7 @@ app.patch('/v1/admin/compliance/dsars/:id', jwtAuth, async (c) => {
     .in('project_id', projectIds)
     .select('project_id')
     .single()
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   if (updated?.project_id) {
     await logAudit(
       db,
@@ -6291,7 +6395,7 @@ app.get('/v1/admin/compliance/evidence', jwtAuth, async (c) => {
     .in('project_id', projectIds)
     .order('generated_at', { ascending: false })
     .limit(500)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, data: { evidence: data ?? [] } })
 })
 
@@ -6355,7 +6459,7 @@ app.get('/v1/admin/residency', jwtAuth, async (c) => {
     .select('id, name, slug, data_residency_region, created_at')
     .in('id', projectIds)
 
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({
     ok: true,
     projects: data ?? [],
@@ -6402,7 +6506,7 @@ app.put('/v1/admin/residency/:projectId', jwtAuth, async (c) => {
     .from('projects')
     .update({ data_residency_region: region })
     .eq('id', projectId)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   await logAudit(db, projectId, userId, 'settings.updated', 'project_residency', projectId, {
     region,
@@ -6429,7 +6533,7 @@ app.get('/v1/admin/storage', jwtAuth, async (c) => {
     .from('project_storage_settings')
     .select('*')
     .in('project_id', projectIds)
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
   return c.json({ ok: true, settings: data ?? [], data: { settings: data ?? [] } })
 })
 
@@ -6488,7 +6592,7 @@ app.put('/v1/admin/storage/:projectId', jwtAuth, async (c) => {
   const { error } = await db
     .from('project_storage_settings')
     .upsert(patch, { onConflict: 'project_id' })
-  if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+  if (error) return dbError(c, error)
 
   invalidateStorageCache(projectId)
 
@@ -6814,7 +6918,7 @@ app.post('/v1/support/contact', jwtAuth, async (c) => {
 
   if (insertErr || !ticket) {
     log.error('support_ticket_insert_failed', { err: insertErr?.message })
-    return c.json({ ok: false, error: { code: 'DB_ERROR' } }, 500)
+    return dbError(c, insertErr ?? { message: 'support_ticket_insert_failed' })
   }
 
   // audit_logs is per-project (FK). Tickets without a project are still
@@ -6877,7 +6981,7 @@ app.get('/v1/admin/support/tickets', jwtAuth, async (c) => {
     .limit(limit)
 
   if (error) {
-    return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    return dbError(c, error)
   }
   return c.json({ ok: true, data: { tickets: data ?? [] } })
 })

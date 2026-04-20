@@ -18,11 +18,19 @@ import {
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
+import { useAdminMode } from '../lib/mode'
+import { Tooltip } from './ui'
+import { NextBestAction } from './NextBestAction'
 
 interface NavItem {
   label: string
   path: string
   icon: ComponentType<{ className?: string }>
+  /** When true, the item is visible in beginner mode. Beginner mode shows a
+   *  curated 9-page loop; everything else is hidden until the user opts
+   *  into Advanced mode. Routes still resolve in either mode — only the
+   *  sidebar is filtered, so deep links + bookmarks survive. */
+  beginner?: boolean
 }
 
 interface NavSection {
@@ -46,13 +54,21 @@ interface NavSection {
 // where each tab lives in the loop and where the bottleneck typically sits.
 // Keep route paths identical — only labels and grouping change so muscle
 // memory + bookmarks survive.
+// Beginner mode shows the 9-page linear loop:
+//   Start    → Dashboard, Get started
+//   Plan     → Reports, Graph
+//   Do       → Fixes
+//   Check    → Judge, Health
+//   Act      → Integrations
+//   Workspace→ Settings (collapsed; surfaces only when the user opens it)
+// Advanced mode shows everything below.
 const NAV: NavSection[] = [
   {
     id: 'start',
     title: 'Start here',
     items: [
-      { label: 'Dashboard',   path: '/',           icon: IconDashboard },
-      { label: 'Get started', path: '/onboarding', icon: IconSparkle },
+      { label: 'Dashboard',   path: '/',           icon: IconDashboard, beginner: true },
+      { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true },
     ],
   },
   {
@@ -61,8 +77,8 @@ const NAV: NavSection[] = [
     stage: 'P',
     hint: 'Inbound user-felt bugs land here, get classified, deduped, and prioritised.',
     items: [
-      { label: 'Reports',     path: '/reports',     icon: IconReports },
-      { label: 'Graph',       path: '/graph',       icon: IconGraph },
+      { label: 'Reports',     path: '/reports',     icon: IconReports, beginner: true },
+      { label: 'Graph',       path: '/graph',       icon: IconGraph,   beginner: true },
       { label: 'Anti-Gaming', path: '/anti-gaming', icon: IconShield },
       { label: 'Queue',       path: '/queue',       icon: IconQueue },
     ],
@@ -73,7 +89,7 @@ const NAV: NavSection[] = [
     stage: 'D',
     hint: 'Turn classified reports into draft pull requests. Tune the prompt that does it.',
     items: [
-      { label: 'Fixes',      path: '/fixes',      icon: IconFixes },
+      { label: 'Fixes',      path: '/fixes',      icon: IconFixes,       beginner: true },
       { label: 'Prompt Lab', path: '/prompt-lab', icon: IconFineTuning },
     ],
   },
@@ -83,8 +99,8 @@ const NAV: NavSection[] = [
     stage: 'C',
     hint: 'Independently grade the LLM\u2019s work and the system\u2019s own health.',
     items: [
-      { label: 'Judge',        path: '/judge',        icon: IconJudge },
-      { label: 'Health',       path: '/health',       icon: IconHealth },
+      { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
+      { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
       { label: 'Intelligence', path: '/intelligence', icon: IconIntelligence },
       { label: 'Research',     path: '/research',     icon: IconGlobe },
     ],
@@ -95,7 +111,7 @@ const NAV: NavSection[] = [
     stage: 'A',
     hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
     items: [
-      { label: 'Integrations',  path: '/integrations',  icon: IconIntegrations },
+      { label: 'Integrations',  path: '/integrations',  icon: IconIntegrations, beginner: true },
       { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
       { label: 'Notifications', path: '/notifications', icon: IconBell },
     ],
@@ -107,7 +123,7 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
-      { label: 'Settings',   path: '/settings',   icon: IconSettings },
+      { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
       { label: 'SSO',        path: '/sso',        icon: IconSSO },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
       { label: 'Audit Log',  path: '/audit',      icon: IconAudit },
@@ -163,8 +179,18 @@ export function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
+  const { mode, toggle, isBeginner } = useAdminMode()
 
   const activeStage = stageForPath(pathname)
+
+  // Filter NAV items based on the active mode. Sections collapse to an empty
+  // shell if all their items are advanced-only; we drop them entirely so the
+  // sidebar stays tight in beginner mode.
+  const visibleNav: NavSection[] = isBeginner
+    ? NAV
+        .map(s => ({ ...s, items: s.items.filter(i => i.beginner) }))
+        .filter(s => s.items.length > 0)
+    : NAV
 
   // Force-open the section that contains the current page so the user
   // never sees a sidebar where their location is hidden behind a collapsed
@@ -182,6 +208,15 @@ export function Layout({ children }: { children: ReactNode }) {
       return { ...prev, [containing.id]: false }
     })
   }, [pathname])
+
+  // Beginner-mode safety net: if the user lands on an advanced-only route
+  // (deep link, bookmark, autocomplete), we never block navigation, but we
+  // do surface a once-per-route hint that the page is hidden from their
+  // sidebar — and how to switch modes. The hint sits in the sidebar so it
+  // doesn't disrupt the page they actually wanted to read.
+  const onAdvancedRoute = isBeginner && pathname !== '/' && !visibleNav.some(s =>
+    s.items.some(i => isActive(pathname, i.path))
+  )
 
   function toggleSection(id: string, defaultCollapsed: boolean) {
     setCollapsedMap(prev => {
@@ -201,11 +236,19 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="text-fg-secondary">mushi</span>
         </h1>
         <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
+        <ModeToggle mode={mode} onToggle={toggle} />
+        {onAdvancedRoute && (
+          <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn">
+            <p className="leading-snug">
+              This page lives in <strong>Advanced</strong> mode. Switch to keep it in your sidebar.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-2 py-2">
-        {NAV.map((section) => {
+        {visibleNav.map((section) => {
           const collapsed = collapsedMap[section.id] ?? section.defaultCollapsed ?? false
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
@@ -322,11 +365,40 @@ export function Layout({ children }: { children: ReactNode }) {
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
           <div className="max-w-6xl mx-auto px-5 py-4">
+            <NextBestAction />
             {children}
           </div>
         </main>
       </div>
     </div>
+  )
+}
+
+function ModeToggle({ mode, onToggle }: { mode: 'beginner' | 'advanced'; onToggle: () => void }) {
+  const isBeginner = mode === 'beginner'
+  return (
+    <Tooltip
+      content={
+        isBeginner
+          ? 'Beginner: 9 essential pages + guided next-best-action. Click for the full 23-page console.'
+          : 'Advanced: all 23 pages + dense layouts. Click to return to the beginner view.'
+      }
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-pressed={!isBeginner}
+        aria-label={`Switch to ${isBeginner ? 'advanced' : 'beginner'} mode`}
+        className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface-raised/60 px-2 py-0.5 text-2xs font-medium text-fg-secondary hover:border-brand/40 hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+      >
+        <span
+          aria-hidden="true"
+          className={`inline-flex h-2 w-2 rounded-full ${isBeginner ? 'bg-info' : 'bg-brand'}`}
+        />
+        <span>{isBeginner ? 'Beginner' : 'Advanced'}</span>
+        <span aria-hidden="true" className="text-fg-faint">⇄</span>
+      </button>
+    </Tooltip>
   )
 }
 

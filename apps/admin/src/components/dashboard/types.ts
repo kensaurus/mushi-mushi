@@ -79,6 +79,11 @@ export interface PdcaStage {
   bottleneck: string | null
   tone: PdcaStageTone
   cta: { to: string; label: string }
+  /** Optional 7-day momentum series (oldest → newest) for the stage. Renders
+   *  as a micro-spark in the cockpit header so each tile shows whether it's
+   *  trending up or settling. Backend may omit it for stages where a daily
+   *  count doesn't make sense. */
+  series?: number[]
 }
 
 export interface DashboardData {

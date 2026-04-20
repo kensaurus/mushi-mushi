@@ -180,23 +180,27 @@ export function PromptLabPage() {
           label="Active prompts"
           value={data.prompts.filter((p) => p.is_active).length}
           sublabel="serving production traffic"
+          meaning="Prompts currently classifying live reports. One active per stage; the rest are candidates or archived."
         />
         <KpiTile
           label="Candidates"
           value={candidates}
           accent={candidates > 0 ? 'info' : 'muted'}
           sublabel="awaiting eval"
+          meaning="Cloned prompts collecting evaluations before they can be promoted. Each one needs a few hundred scored reports for confidence."
         />
         <KpiTile
           label="Best score"
           value={bestPrompt?.avg_judge_score != null ? formatPct(bestPrompt.avg_judge_score) : '—'}
           accent={'ok'}
           sublabel={bestPrompt ? `${bestPrompt.stage}/${bestPrompt.version}` : 'no scored prompts yet'}
+          meaning="Highest mean judge score across all prompts (active + candidate). If a candidate beats the active one significantly, consider promoting it."
         />
         <KpiTile
           label="Eval dataset"
           value={data.dataset.labelled.toLocaleString()}
           sublabel={`labelled / ${data.dataset.total.toLocaleString()} total reports`}
+          meaning="Reports that have a human-labelled ground truth. Bigger = stronger eval signal. Build it up by triaging reports yourself."
         />
       </KpiRow>
 

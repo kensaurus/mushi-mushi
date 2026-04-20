@@ -13,6 +13,7 @@ import { ByokPanel } from '../components/settings/ByokPanel'
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
 import { HealthPanel } from '../components/settings/HealthPanel'
 import { DevToolsPanel } from '../components/settings/DevToolsPanel'
+import { usePageCopy } from '../lib/copy'
 
 type TabId = 'general' | 'byok' | 'firecrawl' | 'health' | 'dev'
 
@@ -30,6 +31,7 @@ function isTabId(value: string | null): value is TabId {
 
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const copy = usePageCopy('/settings')
   const param = searchParams.get('tab')
   const active: TabId = isTabId(param) ? param : 'general'
   const activeMeta = TABS.find(t => t.id === active) ?? TABS[0]
@@ -69,19 +71,19 @@ export function SettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Project Settings"
-        description="Per-project flags, retention, routing defaults, and feature toggles."
+        title={copy?.title ?? 'Project Settings'}
+        description={copy?.description ?? 'Per-project flags, retention, routing defaults, and feature toggles.'}
       />
 
       <PageHelp
-        title="About Settings"
-        whatIsIt="Tunable knobs for the bug pipeline: which model classifies reports, how strict the dedup threshold is, where to send notifications, and which Sentry feedback to ingest."
-        useCases={[
+        title={copy?.help?.title ?? 'About Settings'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Tunable knobs for the bug pipeline: which model classifies reports, how strict the dedup threshold is, where to send notifications, and which Sentry feedback to ingest.'}
+        useCases={copy?.help?.useCases ?? [
           'Swap in a fine-tuned model once Fine-Tuning produces one',
           'Tighten the confidence threshold to reduce false positives, or loosen it to catch more',
           'Pipe alerts into Slack and Sentry for unified incident response',
         ]}
-        howToUse="Save persists changes immediately and writes an audit-log entry. Use Health & test below to verify your config before relying on it in production."
+        howToUse={copy?.help?.howToUse ?? 'Save persists changes immediately and writes an audit-log entry. Use Health & test below to verify your config before relying on it in production.'}
       />
 
       <div

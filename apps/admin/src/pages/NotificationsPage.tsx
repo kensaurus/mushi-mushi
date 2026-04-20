@@ -24,6 +24,7 @@ import {
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
+import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 
 interface ReporterNotification {
   id: string
@@ -148,6 +149,7 @@ export function NotificationsPage() {
       ) : notifications.length === 0 ? (
         filter === 'unread' || type ? (
           <EmptyState
+            icon={<HeroSearch accent="text-fg-faint" />}
             title="No notifications match these filters"
             description="Switch back to All or clear the type filter to see the full list. Reporters only see what's listed here, so an empty filtered view does not mean the pipeline is silent."
             action={

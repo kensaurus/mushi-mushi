@@ -298,10 +298,39 @@ select, input, textarea {
   to   { opacity: 0; transform: translateX(16px); }
 }
 
+/* Toast progress bar — drains left → right over the auto-dismiss budget so
+   the user can see how long they have to read. Pause-on-hover is wired by
+   toggling animation-play-state in the toast component. Round 2 polish. */
+@keyframes mushi-toast-progress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+/* Card pulse — fires once when an async test transitions to success so the
+   user's eye is pulled to the receipt. Border colour is provided by the
+   caller via `text-*` so the keyframe stays tone-agnostic. */
+@keyframes mushi-success-pulse {
+  0%   { box-shadow: 0 0 0 0 currentColor; }
+  60%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Confetti burst — pure CSS celebration for the first merged fix. Single
+   shape that drifts and rotates while fading. We render ~14 of these in
+   different colours/positions for the burst effect. */
+@keyframes mushi-confetti-fall {
+  0%   { opacity: 0; transform: translate(0, -8px) rotate(0deg); }
+  10%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--mushi-tx, 40px), var(--mushi-ty, 120px)) rotate(var(--mushi-rot, 360deg)); }
+}
+
 .animate-mushi-fade-in   { animation: mushi-fade-in 160ms var(--ease-out-expo) both; }
 .animate-mushi-modal-in  { animation: mushi-modal-in 220ms var(--ease-out-expo) both; }
 .animate-mushi-toast-in  { animation: mushi-toast-in 180ms var(--ease-out-expo) both; }
 .animate-mushi-toast-out { animation: mushi-toast-out 140ms var(--ease-out-expo) both; }
+.animate-mushi-toast-progress { animation: mushi-toast-progress linear forwards; }
+.animate-mushi-success-pulse  { animation: mushi-success-pulse 600ms var(--ease-out-expo) both; }
+.animate-mushi-confetti-fall  { animation: mushi-confetti-fall 1400ms cubic-bezier(.18,.78,.42,1) both; }
 
 /* Section + page rhythm helpers — keep vertical spacing consistent across
    pages. The audit found rhythm drifted: some pages used `mb-3`, others

@@ -237,7 +237,7 @@ export function DLQPage() {
         howToUse="Switch status to find what's failing. Use the stage filter to scope. Retry individual items, or use Retry page after fixing the root cause."
       />
 
-      {summary && <QueueKpiRow summary={summary} />}
+      {summary && <QueueKpiRow summary={summary} throughput={throughput} />}
 
       <QueueThroughputChart throughput={throughput} />
 
