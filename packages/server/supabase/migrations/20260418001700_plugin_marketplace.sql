@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave D D1: Plugin marketplace + webhook dispatcher
+-- D1: Plugin marketplace + webhook dispatcher
 --
 -- Extends the existing `project_plugins` table with the columns needed for
 -- third-party HTTPS webhook plugins (URL, Vault-backed signing secret,
@@ -22,11 +22,11 @@ ALTER TABLE project_plugins
     CHECK (last_delivery_status IS NULL OR last_delivery_status IN ('ok', 'error', 'timeout', 'skipped'));
 
 COMMENT ON COLUMN project_plugins.webhook_url IS
-  'Wave D D1: HTTPS endpoint that receives signed event webhooks. NULL = built-in plugin.';
+  'HTTPS endpoint that receives signed event webhooks. NULL = built-in plugin.';
 COMMENT ON COLUMN project_plugins.webhook_secret_vault_ref IS
-  'Wave D D1: Supabase Vault entry name holding the HMAC signing secret. NEVER raw.';
+  'Supabase Vault entry name holding the HMAC signing secret. NEVER raw.';
 COMMENT ON COLUMN project_plugins.subscribed_events IS
-  'Wave D D1: array of event names (e.g. {report.created, fix.applied}). Empty = all.';
+  'array of event names (e.g. {report.created, fix.applied}). Empty = all.';
 
 CREATE INDEX IF NOT EXISTS idx_project_plugins_slug ON project_plugins (plugin_slug);
 

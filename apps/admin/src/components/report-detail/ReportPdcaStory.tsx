@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/report-detail/ReportPdcaStory.tsx
  * PURPOSE: Vertical PDCA story timeline rendered above <PdcaReceiptStrip>
- *          on the report-detail page (Wave O, §2.4 of the audit).
+ * on the report-detail page
  *
  *          PdcaReceiptStrip is a compact 4-up grid of "what state is each
  *          stage in" — useful for at-a-glance triage. This timeline is

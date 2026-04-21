@@ -4,7 +4,7 @@
  *          success/error feedback. Replaces silent apiFetch failures across
  *          Projects, SSO, Storage, DLQ, Fine-Tuning, etc.
  *
- *          Wave L hardening:
+ *
  *           - Pause auto-dismiss on hover/focus (so the user can read it)
  *           - Optional `action` slot for "Undo" / "View report" CTAs
  *           - Stack cap (3) — oldest auto-dismisses if a 4th arrives

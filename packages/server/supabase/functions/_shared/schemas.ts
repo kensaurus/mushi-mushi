@@ -61,7 +61,7 @@ export const reportSubmissionSchema = z.object({
   sessionId: z.string().optional(),
   reporterToken: z.string(),
   /**
-   * Wave E §3c: SDK-supplied SHA-256 hex of stable device characteristics.
+   * §3c: SDK-supplied SHA-256 hex of stable device characteristics.
    * Optional for back-compat with older SDK versions; when present we feed
    * it into the anti-gaming cross-account check.
    */

@@ -1,4 +1,4 @@
-# BYO Storage (Wave C C8)
+# BYO Storage
 
 The `storage.ts` module provides a single `StorageAdapter` interface across
 five backends:

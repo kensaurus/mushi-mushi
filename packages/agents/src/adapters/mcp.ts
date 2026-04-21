@@ -34,6 +34,14 @@ export interface McpClientOptions {
   timeoutMs?: number
   /** Polling interval for tasks/get when the server returns a task id (SEP-1686). */
   pollIntervalMs?: number
+  /**
+   * Wave S5: use the official `@modelcontextprotocol/sdk` client when
+   * installed. Defaults to `auto` — try the SDK, silently fall back to
+   * the hand-rolled JSON-RPC transport if the peer dep is absent.
+   * Set `'hand-rolled'` in tests / sandboxed environments where dynamic
+   * imports of peer deps aren't desirable.
+   */
+  sdkMode?: 'auto' | 'require' | 'hand-rolled'
 }
 
 interface JsonRpcRequest {
@@ -64,6 +72,12 @@ interface TaskGetResult {
   error?: { code: number; message: string }
 }
 
+interface SdkClient {
+  connect: (transport: unknown) => Promise<void>
+  callTool: (args: { name: string; arguments: Record<string, unknown> }) => Promise<ToolsCallResult>
+  close?: () => Promise<void>
+}
+
 export class McpFixAgent implements FixAgent {
   name = 'mcp'
   private serverUrl: string
@@ -71,6 +85,7 @@ export class McpFixAgent implements FixAgent {
   private toolName: string
   private timeoutMs: number
   private pollIntervalMs: number
+  private sdkMode: 'auto' | 'require' | 'hand-rolled'
   private nextId = 1
 
   constructor(opts: McpClientOptions) {
@@ -80,29 +95,29 @@ export class McpFixAgent implements FixAgent {
     this.toolName = opts.toolName ?? 'mushi.generate_fix'
     this.timeoutMs = opts.timeoutMs ?? 10 * 60_000
     this.pollIntervalMs = opts.pollIntervalMs ?? 2_000
+    this.sdkMode = opts.sdkMode ?? 'auto'
   }
 
   async generateFix(context: FixContext): Promise<FixResult> {
     const branch = `mushi/fix-${context.reportId.slice(0, 8)}`
+    const toolArgs = {
+      report: context.report,
+      reproductionSteps: context.reproductionSteps,
+      relevantCode: context.relevantCode.map(f => ({
+        path: f.path,
+        content: f.content.slice(0, 8000),
+      })),
+      graphContext: context.graphContext,
+      config: {
+        maxLines: context.config.maxLines,
+        scopeRestriction: context.config.scopeRestriction,
+        componentDir: context.report.component,
+        branch,
+      },
+    }
+
     try {
-      const callRes = await this.rpc<ToolsCallResult>('tools/call', {
-        name: this.toolName,
-        arguments: {
-          report: context.report,
-          reproductionSteps: context.reproductionSteps,
-          relevantCode: context.relevantCode.map(f => ({
-            path: f.path,
-            content: f.content.slice(0, 8000),
-          })),
-          graphContext: context.graphContext,
-          config: {
-            maxLines: context.config.maxLines,
-            scopeRestriction: context.config.scopeRestriction,
-            componentDir: context.report.component,
-            branch,
-          },
-        },
-      })
+      const callRes = await this.callTool(toolArgs)
 
       // SEP-1686 Tasks: server returned a task id; poll until terminal.
       let final: ToolsCallResult = callRes
@@ -114,11 +129,39 @@ export class McpFixAgent implements FixAgent {
         return failedResult(branch, this.extractText(final) || 'MCP tool returned isError=true')
       }
 
-      const parsed = this.parseFixResult(final, branch)
-      return parsed
+      return this.parseFixResult(final, branch)
     } catch (err) {
       return failedResult(branch, String(err))
     }
+  }
+
+  /**
+   * Wave S5: prefer the official `@modelcontextprotocol/sdk` client when
+   * installed — it does capability negotiation, progress notifications,
+   * and reconnection. Falls back to the hand-rolled JSON-RPC path when
+   * the peer dep is missing (keeps `pnpm install` lightweight for Edge
+   * Function deployments that never talk to MCP servers).
+   */
+  private async callTool(args: Record<string, unknown>): Promise<ToolsCallResult> {
+    if (this.sdkMode !== 'hand-rolled') {
+      const sdk = await loadSdk()
+      if (sdk) {
+        const client: SdkClient = new sdk.Client({ name: 'mushi-mushi', version: '0.0.1' }, { capabilities: {} })
+        const transport = new sdk.StreamableHTTPClientTransport(new URL(this.serverUrl), {
+          requestInit: this.bearer ? { headers: { Authorization: `Bearer ${this.bearer}` } } : undefined,
+        })
+        try {
+          await client.connect(transport)
+          return await client.callTool({ name: this.toolName, arguments: args })
+        } finally {
+          try { await client.close?.() } catch { /* tolerate */ }
+        }
+      }
+      if (this.sdkMode === 'require') {
+        throw new Error('McpFixAgent sdkMode="require" but @modelcontextprotocol/sdk is not installed')
+      }
+    }
+    return this.rpc<ToolsCallResult>('tools/call', { name: this.toolName, arguments: args })
   }
 
   validateResult(context: FixContext, result: FixResult): { valid: boolean; errors: string[] } {
@@ -236,4 +279,25 @@ function failedResult(branch: string, error: string): FixResult {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms))
+}
+
+interface McpSdkModules {
+  Client: new (info: { name: string; version: string }, opts: { capabilities: Record<string, unknown> }) => SdkClient
+  StreamableHTTPClientTransport: new (url: URL, opts?: { requestInit?: RequestInit }) => unknown
+}
+
+let sdkCache: McpSdkModules | null | undefined
+async function loadSdk(): Promise<McpSdkModules | null> {
+  if (sdkCache !== undefined) return sdkCache
+  try {
+    // Dynamic subpath imports so bundlers don't hard-fail when the peer
+    // dep is absent. The SDK ships subpath exports for `Client` and
+    // `StreamableHTTPClientTransport`.
+    const clientMod = await import(/* @vite-ignore */ '@modelcontextprotocol/sdk/client/index.js') as { Client: McpSdkModules['Client'] }
+    const transportMod = await import(/* @vite-ignore */ '@modelcontextprotocol/sdk/client/streamableHttp.js') as { StreamableHTTPClientTransport: McpSdkModules['StreamableHTTPClientTransport'] }
+    sdkCache = { Client: clientMod.Client, StreamableHTTPClientTransport: transportMod.StreamableHTTPClientTransport }
+  } catch {
+    sdkCache = null
+  }
+  return sdkCache
 }

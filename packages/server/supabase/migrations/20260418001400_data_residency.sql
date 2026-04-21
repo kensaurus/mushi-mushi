@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave C C7: Data residency
+-- C7: Data residency
 --
 -- Adds:
 --   * projects.data_residency_region — pin a project to one of

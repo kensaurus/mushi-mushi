@@ -7,6 +7,35 @@ export interface ProjectContext {
 }
 
 /**
+ * Constant-time string equality.
+ *
+ * Classic `a === b` short-circuits on the first mismatched byte and leaks a
+ * measurable timing side-channel under load — attackers with a few thousand
+ * requests can infer correct-prefix-length. Deno ships a Web Crypto runtime
+ * but no built-in `timingSafeEqual`, so we use a simple XOR-reduce over
+ * same-length byte arrays. Lengths are always compared via the same shape.
+ *
+ * Exported so other Edge Functions (webhook HMAC verifiers, API key
+ * comparisons) can share a single hardened primitive.
+ */
+export function timingSafeEqual(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  const enc = new TextEncoder()
+  const aBytes = enc.encode(a)
+  const bBytes = enc.encode(b)
+  // Always walk a fixed-length buffer so attackers can't use length-mismatch
+  // early returns as a timing channel. We XOR a sentinel diff on length drift.
+  const len = Math.max(aBytes.length, bBytes.length)
+  let diff = aBytes.length ^ bBytes.length
+  for (let i = 0; i < len; i++) {
+    const ai = aBytes[i] ?? 0
+    const bi = bBytes[i] ?? 0
+    diff |= ai ^ bi
+  }
+  return diff === 0
+}
+
+/**
  * Gate an Edge Function handler to trusted internal callers.
  *
  * Why this exists: Supabase Edge Functions with `verify_jwt = false` are
@@ -54,8 +83,8 @@ export function requireServiceRoleAuth(req: Request): Response | null {
   }
 
   const matches =
-    (internalSecret !== undefined && token === internalSecret) ||
-    (serviceRoleKey !== undefined && token === serviceRoleKey)
+    (internalSecret !== undefined && timingSafeEqual(token, internalSecret)) ||
+    (serviceRoleKey !== undefined && timingSafeEqual(token, serviceRoleKey))
 
   if (!matches) {
     return new Response(

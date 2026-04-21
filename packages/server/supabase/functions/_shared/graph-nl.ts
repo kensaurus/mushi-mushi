@@ -1,5 +1,5 @@
 /**
- * _shared/graph-nl.ts — Wave E §3d
+ * _shared/graph-nl.ts — §3d
  *
  * Pattern-detects graph-traversal questions in natural-language admin
  * queries (the /v1/admin/query endpoint and the QueryPage UI) and answers

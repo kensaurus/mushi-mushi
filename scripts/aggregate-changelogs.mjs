@@ -2,7 +2,7 @@
 // =============================================================================
 // scripts/aggregate-changelogs.mjs
 //
-// Wave D D2: Customer-facing changelog generator.
+// D2: Customer-facing changelog generator.
 //
 // Walks every published package's auto-generated CHANGELOG.md (created by
 // Changesets), groups every per-package entry by SDK release version, and
@@ -22,9 +22,9 @@
 // Inputs:  packages/*/CHANGELOG.md  (Changesets-managed)
 // Outputs: CHANGELOG.md + apps/docs/data/changelog.json
 //
-// Conventions (set by the .changeset/v0_*-wave-*.md files):
+// Conventions (set by the `.changeset/v0_*.md` files):
 //   * The first line of every changeset bullet that begins a release is an
-//     H1 (`# v0.X.0 — Wave X: ...`). We use this as the release headline.
+// H1 (`# v0.X.0 — ...`). We use this as the release headline.
 //   * Bullets prefixed with "- **Highlight**" are surfaced into the docs feed
 //     so customers see what changed without scanning npm changelogs.
 //
@@ -90,7 +90,7 @@ function parsePackageChangelog(packageName, content) {
 
 /**
  * Pick the "marquee" heading from a changeset bullet body. Heuristic:
- *   - if the bullet begins with an `# vX.Y.Z — Wave …` H1, return that
+ *   - if the bullet begins with an `# vX.Y.Z — …` H1, return that
  *   - otherwise return the first sentence
  */
 function extractHeadline(body) {
@@ -161,7 +161,7 @@ function groupByRelease(allEntries) {
       for (const body of bullets) {
         if (!release.headline) {
           const headline = extractHeadline(body)
-          if (headline.toLowerCase().includes('wave') || headline.startsWith('v')) {
+          if (headline.startsWith('v')) {
             release.headline = headline
           }
         }
@@ -275,7 +275,7 @@ async function loadPendingChangeset() {
 
     if (!slot.headline) {
       const candidate = extractHeadline(rest)
-      if (candidate.toLowerCase().includes('wave') || candidate.startsWith('v') || candidate.startsWith('#')) {
+      if (candidate.startsWith('v') || candidate.startsWith('#')) {
         slot.headline = candidate
       }
     }

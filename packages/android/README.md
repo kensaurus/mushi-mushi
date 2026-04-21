@@ -3,7 +3,7 @@
 Native Android (Kotlin) SDK for [Mushi Mushi](https://mushimushi.dev) — the
 open-source, LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.2.0 (Wave C C2). Surface stable; minor changes still possible
+> **Status**: V0.2.0 Surface stable; minor changes still possible
 > before V1.0.
 
 ## Features

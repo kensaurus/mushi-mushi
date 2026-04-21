@@ -1,7 +1,7 @@
 export { FixOrchestrator } from './orchestrator.js'
 export type { OrchestratorConfig } from './orchestrator.js'
 
-// Wave D D7: multi-repo coordination
+// D7: multi-repo coordination
 export { MultiRepoFixOrchestrator } from './orchestrator-multi.js'
 
 export { ClaudeCodeAgent } from './adapters/claude-code.js'

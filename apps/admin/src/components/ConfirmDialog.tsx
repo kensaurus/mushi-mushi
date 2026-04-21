@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/ConfirmDialog.tsx
- * PURPOSE: Themed replacement for window.confirm + window.prompt (Wave P).
+ * PURPOSE: Themed replacement for window.confirm + window.prompt
  *
  *          The browser-native dialogs are jarring on a dark themed app,
  *          can't carry destructive-action affordances, and break Playwright

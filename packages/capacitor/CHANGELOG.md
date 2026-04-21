@@ -20,9 +20,9 @@
 
 ### Minor Changes
 
-- 7567cee: # v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
+- 7567cee: # v0.8.0 — mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
 
-  Wave C closes the platform-parity gap with the V5.3 whitepaper. Mobile gets
+  closes the platform-parity gap with the V5.3 whitepaper. Mobile gets
   first-class native SDKs, the public agent surface becomes A2A-discoverable,
   and customers gain the operational levers (residency, storage, keys, audit
   evidence) needed to run Mushi in regulated environments.

@@ -44,7 +44,7 @@
  *   - token cap: passes maxTokens to limit blast radius even if the model
  *     misbehaves.
  *   - One LLM call per dispatch — no agentic loop in M5; SEP-1686 Tasks +
- *     multi-turn lands in a future wave.
+ * multi-turn lands in a release.
  */
 
 import { generateObject, NoObjectGeneratedError } from 'npm:ai@4'
@@ -213,7 +213,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
     const codeContext = formatCodeContext(codeFiles)
     ctxSpan.end({ codeFileCount: codeFiles.length, repo: `${repo.owner}/${repo.repo}` })
 
-    // ---- 3b. Wave E: Firecrawl auto-augment when local RAG is sparse OR
+    // ---- 3b. Firecrawl auto-augment when local RAG is sparse OR
     //          the report has a poor prior judge score (a "stubborn" report).
     //          The whole block is best-effort: if Firecrawl is missing the key,
     //          rate-limited, or otherwise unhappy, the worker proceeds with

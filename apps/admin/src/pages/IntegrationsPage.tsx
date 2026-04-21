@@ -44,7 +44,7 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
-  // Wave P: gate on the merged loading + error so a failing routing query
+  // gate on the merged loading + error so a failing routing query
   // can't silently leave the platform card half-rendered (and so the user
   // gets one retry button instead of three).
   const merged = useMergedErrors([

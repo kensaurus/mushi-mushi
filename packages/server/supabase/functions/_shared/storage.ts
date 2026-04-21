@@ -1,5 +1,5 @@
 /**
- * Wave C C8: BYO Storage abstraction.
+ * C8: BYO Storage abstraction.
  *
  * One adapter shape, four backends:
  *   - 'supabase' → built-in Supabase Storage (default)

@@ -1,4 +1,4 @@
--- M4 (Wave A v0.6.0): RAG codebase indexer schema
+-- M4: RAG codebase indexer schema
 -- Adds symbol-aware columns to project_codebase_files so each row represents a
 -- coherent code chunk (function, class, top-level block) rather than a whole
 -- file. Tombstone-on-delete pattern enables incremental re-indexing without

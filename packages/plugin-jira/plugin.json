@@ -1,0 +1,22 @@
+{
+  "slug": "jira",
+  "displayName": "Jira",
+  "tagline": "Open Jira issues from Mushi reports; mirror status changes back.",
+  "oauth": {
+    "provider": "atlassian",
+    "scopes": ["read:jira-work", "write:jira-work", "offline_access"],
+    "authorizeUrl": "https://auth.atlassian.com/authorize",
+    "tokenUrl": "https://auth.atlassian.com/oauth/token",
+    "pkce": true
+  },
+  "subscribes": [
+    "report.created",
+    "report.classified",
+    "report.status_changed",
+    "fix.applied"
+  ],
+  "publishes": [
+    "jira.issue.status_changed",
+    "jira.issue.commented"
+  ]
+}

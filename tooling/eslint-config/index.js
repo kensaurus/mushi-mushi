@@ -2,7 +2,7 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import noEmptyOnClick from './rules/no-empty-onclick.js';
 
-// Local plugin that exposes Wave-T-era custom rules (currently just one) so
+// Local plugin that exposes -era custom rules (currently just one) so
 // every workspace inherits them without needing a published npm package.
 const mushiPlugin = {
   rules: {

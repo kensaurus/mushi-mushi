@@ -6,7 +6,21 @@ import { createTrace } from './observability.ts'
 import { resolveLlmKey } from './byok.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
 
-const DANGEROUS_PATTERNS = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|exec|execute)\b/i
+// SEC (Wave S1 / D-12): widen the blocklist. The original regex missed
+// administrative and filesystem-style verbs that happen to be valid Postgres
+// statements or extensions — e.g. `COPY ... TO PROGRAM`, `LOCK TABLE`,
+// `REFRESH MATERIALIZED VIEW`, `SET ROLE`, `SELECT pg_read_server_files(...)`.
+// None of these belong in a self-serve NL-to-SQL flow. The RPC is also
+// recommended to run as SECURITY INVOKER under a dedicated `nl_query_reader`
+// role (see migration 20260421_nl_query_reader_role.sql) so even if this
+// guard were bypassed the role has no rights on system catalogs.
+const DANGEROUS_PATTERNS = /\b(insert|update|delete|drop|truncate|alter|create|grant|revoke|exec|execute|copy|lock|refresh|reindex|vacuum|analyze|cluster|listen|notify|set\s+role|reset\s+role|pg_read_server_files|pg_write_server_files|pg_ls_dir|dblink|current_setting\s*\(\s*'pgrst|pg_sleep|pg_terminate_backend|pg_cancel_backend)\b/i
+
+// Catch queries that try to reach beyond the approved read schema. We only
+// bless `public` + curated views. Any reference to `pg_catalog`, `information_schema`,
+// `auth`, `storage`, etc. gets rejected regardless of SELECT semantics — those
+// schemas either hold secrets (auth.users) or administrative surface area.
+const FORBIDDEN_SCHEMAS = /\b(pg_catalog|information_schema|auth|storage|realtime|supabase_functions|vault|pgsodium|extensions)\s*\./i
 
 const sqlSchema = z.object({
   sql: z.string().describe('A SELECT-only SQL query. Use $1 as placeholder for project_id.'),
@@ -31,7 +45,7 @@ export async function executeNaturalLanguageQuery(
   projectIds: string[],
   question: string,
 ): Promise<{ sql: string; explanation: string; results: unknown[]; summary: string }> {
-  // Wave E §3d: short-circuit graph-shaped questions (blast radius, depends
+  // §3d: short-circuit graph-shaped questions (blast radius, depends
   // on, path between) into a recursive-CTE traversal. Avoids the LLM SQL
   // generator hand-writing buggy `WITH RECURSIVE` queries against
   // graph_nodes/graph_edges, and gives deterministic answers.
@@ -56,7 +70,7 @@ export async function executeNaturalLanguageQuery(
     }
   }
 
-  // Wave E §3a: BYOK-resolve Anthropic against the first project the user
+  // §3a: BYOK-resolve Anthropic against the first project the user
   // owns. Falls back to the env key if the project hasn't configured BYOK.
   // Resolution failures are non-fatal — `resolved` is null and we use env.
   const resolved = projectIds.length > 0
@@ -82,6 +96,14 @@ export async function executeNaturalLanguageQuery(
 
   if (DANGEROUS_PATTERNS.test(queryPlan.sql)) {
     throw new Error('Query contains disallowed operations. Only SELECT queries are permitted.')
+  }
+
+  if (FORBIDDEN_SCHEMAS.test(queryPlan.sql)) {
+    throw new Error('Query references a restricted schema. Only the curated `public` tables are queryable.')
+  }
+
+  if (!/^\s*(with\s|select\s)/i.test(queryPlan.sql.trim())) {
+    throw new Error('Only SELECT / WITH queries are permitted.')
   }
 
   if (!queryPlan.sql.toLowerCase().includes('$1')) {

@@ -41,7 +41,7 @@ Latest tag: `v0.4.0`
 - `create-mushi-mushi` → 0.4.0
 - `mushi-mushi` → 0.4.0
 
-## 7567cee: # v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
+## 7567cee: # v0.8.0 — mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
 
 Latest tag: `v0.3.1`
 
@@ -64,7 +64,7 @@ Latest tag: `v0.3.1`
 
 - `@mushi-mushi/capacitor` → 0.3.1
 
-## 7567cee: # v0.6.0 — Wave A: hardening + agentic-fix orchestration
+## 7567cee: # v0.6.0 — hardening + agentic-fix orchestration
 
 Latest tag: `v0.2.1`
 

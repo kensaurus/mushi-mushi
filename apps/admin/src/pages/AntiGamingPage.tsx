@@ -137,7 +137,7 @@ export function AntiGamingPage() {
   const allDevices = devicesQuery.data?.devices ?? []
   const events = eventsQuery.data?.events ?? []
   // Merge both queries' loading + error into one decision so we never render
-  // half a page when one feed fails (Wave P recovery UX).
+  // half a page when one feed fails
   const merged = useMergedErrors([
     { ...devicesQuery, label: 'devices' },
     { ...eventsQuery, label: 'audit events' },
@@ -177,7 +177,7 @@ export function AntiGamingPage() {
 
   // Today-vs-7d-avg delta on each KPI: derived from device.created_at (tracked,
   // flagged, cross-account) and device.report_count_today is not stored, so the
-  // reports KPI gets a static delta. Audit Wave I P2 — surface direction of
+  // reports KPI gets a static delta. surface direction of
   // travel without waiting on a server-side rollup.
   const deltas = useMemo(() => buildDeltas(allDevices, events), [allDevices, events])
 

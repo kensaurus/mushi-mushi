@@ -1,6 +1,6 @@
-# Handover — Wave L, 2026-04-20
+# Handover — Onboarding UX overhaul, 2026-04-20
 
-> Picking this up? Read this top to bottom (≈5 min). Wave L is the **first-time-user UX overhaul + post-QA fix wave** that sits on top of Wave K. The premise: end-users were landing on the admin console and not knowing what to do; the 23-page nav drowned them; the PDCA narrative was muddled across pages; and a routine QA pass surfaced four cloud-vs-local drift gaps. All of that is now closed. Pair this with [`HANDOVER-wave-k-2026-04-20.md`](HANDOVER-wave-k-2026-04-20.md) for the microinteraction context this wave assumes is in place, and with [`audit-2026-04-20/QA-VERIFICATION.md`](audit-2026-04-20/QA-VERIFICATION.md) for the verification receipts.
+> Picking this up? Read this top to bottom (≈5 min). This release is the **first-time-user UX overhaul + post-QA fix pass**. The premise: end-users were landing on the admin console and not knowing what to do; the 23-page nav drowned them; the PDCA narrative was muddled across pages; and a routine QA pass surfaced four cloud-vs-local drift gaps. All of that is now closed. Pair this with [`HANDOVER-2026-04-20-polish.md`](HANDOVER-2026-04-20-polish.md) for the microinteraction context release assumes is in place, and with [`audit-2026-04-20/QA-VERIFICATION.md`](audit-2026-04-20/QA-VERIFICATION.md) for the verification receipts.
 
 ---
 
@@ -8,7 +8,7 @@
 
 - **Beginner / Advanced mode is now a global toggle.** Every admin lands in **Beginner** by default. The sidebar collapses from 23 routes to a curated 9-page linear loop (`Dashboard → Get started → Reports → Graph → Fixes → Judge → Health → Integrations → Settings`); a single header chip flips to Advanced and persists per-browser via `localStorage` (`apps/admin/src/lib/mode.ts`). Routes still resolve in either mode — only the sidebar is filtered, so deep links + bookmarks survive. A safety-net banner appears in the sidebar when a beginner deep-links into an advanced-only route, telling them what they're looking at and how to keep it visible.
 - **Persistent Next-Best-Action strip.** New `<NextBestAction />` (rendered above every page in Beginner mode) reads setup status + recent activity and surfaces the single highest-leverage action. It points the user through Plan → Do → Check → Act in lockstep with `lib/pdca.ts > PDCA_STAGE_OUTCOMES`. Closes a long-standing "what do I do first?" complaint.
-- **One PDCA model, four surfaces, one source of truth.** Added `PDCA_STAGE_OUTCOMES` to `apps/admin/src/lib/pdca.ts` — a single map of `{ headline, outcome, pipelineLabel }` per stage. The Dashboard storyboard, the first-run loop card, the new `LivePdcaPipeline`, and the Next-Best-Action strip all read from it. Future copy changes land in one file and propagate everywhere. Drift between `PdcaCockpit / GettingStartedEmpty / LivePdcaPipeline / NextBestAction` was a recurring audit finding pre-Wave-L; it's now structurally impossible.
+- **One PDCA model, four surfaces, one source of truth.** Added `PDCA_STAGE_OUTCOMES` to `apps/admin/src/lib/pdca.ts` — a single map of `{ headline, outcome, pipelineLabel }` per stage. The Dashboard storyboard, the first-run loop card, the new `LivePdcaPipeline`, and the Next-Best-Action strip all read from it. Future copy changes land in one file and propagate everywhere. Drift between `PdcaCockpit / GettingStartedEmpty / LivePdcaPipeline / NextBestAction` was a recurring audit finding pre-; it's now structurally impossible.
 - **First-run loop is now 4-stage, not 3.** `GettingStartedEmpty` was the last surface still framing the loop as Plan / Do / Check; it now matches the cockpit, sidebar, and pipeline at four (Plan / Do / Check / Act). Each card pulls its headline + status from `PDCA_STAGE_OUTCOMES` instead of carrying its own copy. The card grid scales `1 → 2 → 4` columns across breakpoints with arrow connectors between cards on `lg+`. Replaced the prior generic spinner with a layout-shaped `GettingStartedSkeleton` so first paint matches the loaded layout.
 - **Hero illustrations on every empty state.** `<EmptyState>` and `<SetupNudge>` now accept `icon` / `emptyIcon` / `blockedIcon` + `hints`. New `apps/admin/src/components/illustrations/` houses lightweight SVG hero graphics for the Onboarding plug, the empty Reports inbox, the empty Graph, the dispatched-but-not-merged Fixes lane, and so on. Every empty state in Beginner mode is now visually anchored — no more "blank panel + grey sentence" problem.
 - **KPI tiles tell you what they mean.** Added `meaning` tooltip prop to every `<KpiTile>` instance on Dashboard, Reports, Fixes, Judge, Anti-Gaming, Queue, Prompt Lab, Health and Intelligence. A first-time admin can hover any number and see a one-paragraph plain-language explanation of what it measures, what "good" looks like, and what to do if it's wrong. Coverage is 100% across the beginner pages.
@@ -19,7 +19,7 @@
   2. **Cloud DB errors weren't reaching Sentry** → added `dbError(c, err)` helper in `packages/server/supabase/functions/api/index.ts` that calls `reportError(...)` then returns the same shape; replaced 48 inline `c.json({ ok: false, error: { code: 'DB_ERROR', ... } }, 500)` call sites with it.
   3. **Query history rendered raw Postgres on `42703`** → endpoint now special-cases `42703` and returns `{ ok: true, data: { history: [], degraded: 'schema_pending' } }` plus a `migration_drift`-tagged Sentry capture.
   4. **No CI guard against "code deployed without migration"** → new `scripts/smoke-admin-endpoints.mjs` (also `pnpm --filter @mushi-mushi/server smoke`) probes the 8 most schema-sensitive endpoints; non-5xx required, `degraded: schema_pending` reported as a warning.
-- **Build / lint / typecheck green.** `pnpm --filter @mushi-mushi/admin {build,lint,typecheck}` all pass after the wave. No new dependencies.
+- **Build / lint / typecheck green.** `pnpm --filter @mushi-mushi/admin {build,lint,typecheck}` all pass after this release. No new dependencies.
 
 ---
 
@@ -38,8 +38,8 @@
 | `apps/admin/src/lib/copy.ts` | Centralised plain-language copy library |
 | `scripts/smoke-admin-endpoints.mjs` | Post-deploy CI smoke for schema-sensitive endpoints |
 | `scripts/audit-buttons.mjs` | Static-analysis helper: every CTA → endpoint mapping |
-| `docs/HANDOVER-wave-l-2026-04-20.md` | This file |
-| `docs/audit-2026-04-20/REPORT.md` | Wave L audit report (heuristic scorecard, gap analysis) |
+| `docs/HANDOVER-2026-04-20-onboarding.md` | This file |
+| `docs/audit-2026-04-20/REPORT.md` | audit report (heuristic scorecard, gap analysis) |
 | `docs/audit-2026-04-20/QA-VERIFICATION.md` | Playwright + REST verification + same-day resolution log |
 | `docs/audit-2026-04-20/BASELINE.md` | Pre-overhaul baseline (heuristic + perf) |
 
@@ -60,7 +60,7 @@
 | `packages/server/supabase/functions/api/index.ts` | `dbError(c, err)` helper, 48 call-site replacements, `42703` graceful-degrade for `query/history` |
 | `packages/server/supabase/migrations/20260420000000_blast_radius_indexes.sql` | Removed `CONCURRENTLY` (incompatible with Supabase tx-wrapped migrations) |
 | `packages/server/package.json` | Added `"smoke": "node ../../scripts/smoke-admin-endpoints.mjs"` |
-| `README.md` | Wave L row + handover pointer |
+| `README.md` | row + handover pointer |
 
 ---
 
@@ -94,7 +94,7 @@ MUSHI_ADMIN_JWT="<paste jwt from devtools>" pnpm --filter @mushi-mushi/server sm
 ## What I deliberately did NOT do
 
 - **No new third-party dependencies.** Every new component is local SVG + Tailwind tokens + existing primitives.
-- **No backend schema additions** beyond pushing the three already-authored 04-20 migrations to cloud. Wave J/K already shipped the column work; Wave L just got it into prod.
+- **No backend schema additions** beyond pushing the three already-authored 04-20 migrations to cloud. Prior releases already shipped the column work; just got it into prod.
 - **No mobile breakpoint pass.** Desktop-first; the layout adapts (storyboard collapses to 1 column at `sm`), but I didn't audit each page on mobile.
 - **No auth-flow rework** (sign-up, OAuth, password reset) — out of scope.
 - **No real-time / SSE refactor.** The Reports/Fixes streaming UIs were verified visually but no code changes.
@@ -105,7 +105,7 @@ MUSHI_ADMIN_JWT="<paste jwt from devtools>" pnpm --filter @mushi-mushi/server sm
 ## Known follow-ups (non-blocking)
 
 1. **Wire `pnpm smoke` into CI.** The script is ready; it just needs a GitHub Actions step that pulls a service-role JWT from secrets and runs after every Edge Function deploy. Single workflow file change.
-2. **Mobile pass.** Beginner storyboard + sidebar drawer behave well at `sm`; `Reports`, `Graph`, and `Fixes` tables overflow horizontally. Worth a dedicated mobile sweep in a future wave.
+2. **Mobile pass.** Beginner storyboard + sidebar drawer behave well at `sm`; `Reports`, `Graph`, and `Fixes` tables overflow horizontally. Worth a dedicated mobile sweep in a release.
 3. **Empty-state illustration set is intentionally minimal.** Add more as new empty states appear; the pattern is `<EmptyState icon={<HeroIllustration variant="..." />} ... />`.
 4. **`PDCA_STAGE_OUTCOMES.act.outcome` is the most likely sentence to want tweaking** as the integrations roster grows. One-line change in `lib/pdca.ts` propagates everywhere.
 
@@ -119,4 +119,4 @@ MUSHI_ADMIN_JWT="<paste jwt from devtools>" pnpm --filter @mushi-mushi/server sm
 - `docs/audit-2026-04-20/dashboard-{beginner,advanced}.png` — sidebar comparison
 - `docs/audit-2026-04-20/reports-{page,list}.png` — table polish receipts
 
-If anything in this wave is unclear, the audit report explains the why; this handover explains the what + where.
+If anything in release is unclear, the audit report explains the why; this handover explains the what + where.

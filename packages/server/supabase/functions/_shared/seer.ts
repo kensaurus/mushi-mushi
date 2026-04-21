@@ -1,5 +1,5 @@
 /**
- * _shared/seer.ts — Wave E §3b
+ * _shared/seer.ts — §3b
  *
  * Shared Sentry-Seer logic used by both:
  *   1. `sentry-seer-poll` (cron-driven pull every 15 min)

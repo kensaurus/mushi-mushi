@@ -2,7 +2,7 @@
 /**
  * scripts/pdca-bounded-loop.mjs
  *
- * Wave E §5: bounded PDCA orchestrator.
+ * §5: bounded PDCA orchestrator.
  *
  * Fires curated bug reports through Mushi → polls for triage + judge →
  * dispatches fixes for classified reports → polls fix-attempt status →

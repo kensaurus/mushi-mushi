@@ -1,8 +1,8 @@
 -- Migration: 20260420000200_llm_cost_usd
--- Purpose:   Wave J §1 — promote LLM cost from a frontend-side estimate to a
+-- Purpose: §1 — promote LLM cost from a frontend-side estimate to a
 --            first-class column on `llm_invocations`. Two reasons it matters:
 --              1. Health, Billing, and Prompt Lab all need the SAME number
---                 (single source of truth) — Wave I had three different
+-- (single source of truth) — had three different
 --                 estimators drifting apart.
 --              2. We want $-spent-per-project rolled into Billing so customers
 --                 can see their actual COGS alongside report quota usage.

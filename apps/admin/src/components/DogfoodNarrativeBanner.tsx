@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/DogfoodNarrativeBanner.tsx
  * PURPOSE: One-sentence narrative banner that ties the Reports inbox to
- *          the user's actual project (Wave O, §2.3 of the audit). Today
+ * the user's actual project Today
  *          glot-it components surface as raw strings — there's no story
  *          connecting "these reports" to "your project."
  *

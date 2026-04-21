@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/lib/copy.ts
- * PURPOSE: Plain-language copy registry for beginner mode (Wave L).
+ * PURPOSE: Plain-language copy registry for beginner mode
  *
  *  Two parallel string maps (`beginner` / `advanced`) keyed by page route
  *  and field. Beginner mode pulls from `beginner`; advanced preserves the
@@ -45,7 +45,7 @@ export const COPY: CopyRegistry = {
   // Quickstart mode: only 3 routes are surfaced in the sidebar (Inbox /
   // Drafts / Setup), so we override copy on just those plus the dashboard
   // landing. Everything else falls through to beginner copy via
-  // `usePageCopy`. Wave N.
+  // `usePageCopy`..
   quickstart: {
     '/': {
       title: 'Bugs to fix',
@@ -328,7 +328,7 @@ export function usePageCopy(path: string): PageCopy | null {
  * One-sentence narrative used by <DogfoodNarrativeBanner> to tie the
  * Reports inbox to the user's actual project. Lives here so future
  * projects (not just the glot-it dogfood) inherit the same voice — change
- * the wording in one place and every project gets it. Wave O §2.3.
+ * the wording in one place and every project gets it. §2.3.
  */
 export function renderDogfoodNarrative(params: {
   projectName: string

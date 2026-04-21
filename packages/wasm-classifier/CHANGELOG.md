@@ -16,9 +16,9 @@
 
 ### Minor Changes
 
-- 7567cee: # v0.7.0 — Wave B: on-device classification, real-time triage, AG-UI, fine-tune pipeline, intelligence reports, AGE phase 1
+- 7567cee: # v0.7.0 — on-device classification, real-time triage, AG-UI, fine-tune pipeline, intelligence reports, AGE phase 1
 
-  Wave B focuses on intelligence and operator UX: cheaper inference (move junk
+  focuses on intelligence and operator UX: cheaper inference (move junk
   filtering on-device), live collaboration on the report queue, a typed
   agent↔frontend streaming protocol, and a real fine-tune lifecycle.
 
@@ -91,9 +91,9 @@
     or `piiLeakageDetected = true`. Override requires re-running validation
     against a corrected eval set; there is intentionally no force-promote.
 
-- 7567cee: # v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
+- 7567cee: # v0.8.0 — mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
 
-  Wave C closes the platform-parity gap with the V5.3 whitepaper. Mobile gets
+  closes the platform-parity gap with the V5.3 whitepaper. Mobile gets
   first-class native SDKs, the public agent surface becomes A2A-discoverable,
   and customers gain the operational levers (residency, storage, keys, audit
   evidence) needed to run Mushi in regulated environments.

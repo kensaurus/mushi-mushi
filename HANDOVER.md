@@ -1,14 +1,14 @@
-# Handover — Wave D ("120% of whitepaper") in flight
+# Handover — ("120% of whitepaper") in flight
 
 > Snapshot at the end of the long agentic session that took the repo from
-> v0.8.0 (Wave C) through Wave D D1–D8. Use this as the single entry point
+> v0.8.0through D1–D8. Use this as the single entry point
 > for the next dev picking up the v1.0.0 release.
 
 ---
 
 ## TL;DR — what to do next
 
-1. **Pick up Wave D D9** (READMEs partly done, demo video pending).
+1. **Pick up D9** (READMEs partly done, demo video pending).
 2. **Cut the v1.0.0 release** — changeset + whitepaper V6.0 annotations.
 3. **Resolve the deferred follow-ups** listed in
    [§ Deferred follow-ups](#deferred-follow-ups) below — none of them block
@@ -20,7 +20,7 @@ written down here. Read first, ask only when the doc is silent.
 
 ---
 
-## Wave D status board
+## status board
 
 Mirrors the in-session todo list. ✅ = merged / written. ⏳ = in flight.
 🟡 = blocked by external system or content classifier.
@@ -151,7 +151,7 @@ gh run list --branch master --limit 5
 
 # 2. Create the major-bump changeset
 pnpm changeset            # pick "major" for every package, leave server/admin private
-# Title: "v1.0.0 — Wave D: marketplace, cloud, multi-repo fixes, hardened LLM I/O"
+# Title: "v1.0.0 — marketplace, cloud, multi-repo fixes, hardened LLM I/O"
 # Body: pull from CHANGELOG drafts in .changeset/v0_*.md and condense
 
 # 3. Aggregate changelogs into the docs site
@@ -167,8 +167,8 @@ pnpm install --lockfile-only
 
 # 6. Open a release PR
 git checkout -b release/v1.0.0
-git add -A && git commit -m "chore(release): v1.0.0 — Wave D"
-gh pr create --title "Release v1.0.0 — Wave D" --body "See HANDOVER.md"
+git add -A && git commit -m "chore(release): v1.0.0"
+gh pr create --title "Release v1.0.0" --body "See HANDOVER.md"
 
 # 7. After merge, the existing release.yml workflow publishes to npm.
 ```
@@ -191,16 +191,16 @@ pnpm --filter cloud dev                # http://localhost:3000
 #   cloud:/dashboard — shows "Start subscription" CTA when unauth'd subscription
 ```
 
-If anything fails, file an issue with `wave:D` + `status:blocker` and
+If anything fails, file an issue with `phase:D` + `status:blocker` and
 ping the release.
 
 ### Last verified smoke (2026-04-17)
 
 Ran a Playwright smoke against `http://localhost:6470` (admin), pointed at
 the production Supabase project (which has **not** been re-deployed with
-the Wave D edge functions yet). Result:
+the edge functions yet). Result:
 
-| Route          | Wave | UI shell | Backend wired? | Notes                                         |
+| Route | Phase | UI shell | Backend wired? | Notes |
 | -------------- | :--: | :------: | :------------: | --------------------------------------------- |
 | `/`            |  —   |    ✅    |       ✅       | Dashboard renders, 5 reports                  |
 | `/marketplace` |  D1  |    ✅    | ⏳ (404 prod)  | Empty-state + Retry render correctly          |
@@ -224,7 +224,7 @@ backend wires before opening the v1.0.0 PR.
 
 ## Conventions reminders for the next dev
 
-- **Never edit the original Wave D plan file.** Mark todos as you go.
+- **Never edit the original plan file.** Mark todos as you go.
 - **Match existing patterns.** `pii-scrubber.ts` is mirrored in both
   `_shared/` (Deno) and `core/` (Node) — that is the template for any
   pure-text shared utility.

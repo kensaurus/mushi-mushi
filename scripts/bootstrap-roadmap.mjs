@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// Wave D D6: bootstrap the public Mushi roadmap (Projects v2).
+// D6: bootstrap the public Mushi roadmap (Projects v2).
 //
 // Idempotent. Run once by a maintainer with the `project` scope:
 //
@@ -11,7 +11,7 @@
 // with these single-select fields + canonical options:
 //
 //   * Status   = Backlog | In Progress | In Review | Blocked | Done
-//   * Wave     = A | B | C | D | E
+//   * Phase    = A | B | C | D | E
 //   * Area     = Web SDK | Mobile SDK | Admin | Server | LLM Pipeline |
 //                Knowledge Graph | Fix Orchestrator | Plugins | Billing |
 //                Docs | Security
@@ -33,7 +33,7 @@ const FIELDS = [
     name: 'Status',
     options: ['Backlog', 'In Progress', 'In Review', 'Blocked', 'Done'],
   },
-  { name: 'Wave', options: ['A', 'B', 'C', 'D', 'E'] },
+  { name: 'Phase', options: ['A', 'B', 'C', 'D', 'E'] },
   {
     name: 'Area',
     options: [

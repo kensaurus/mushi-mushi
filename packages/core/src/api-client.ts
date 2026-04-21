@@ -53,7 +53,7 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
       clearTimeout(timer);
 
-      // Wave C C7: data residency — follow a one-shot redirect when the
+      // C7: data residency — follow a one-shot redirect when the
       // gateway tells us the project lives in a different region. Cache the
       // new base URL so subsequent calls go straight to the right cluster.
       if (response.status === 307 || response.status === 308) {
