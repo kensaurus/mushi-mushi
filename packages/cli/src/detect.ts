@@ -37,6 +37,24 @@ export interface PackageJson {
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun'
 
+export const FRAMEWORK_IDS: ReadonlyArray<FrameworkId> = [
+  'next',
+  'react',
+  'vue',
+  'nuxt',
+  'svelte',
+  'sveltekit',
+  'angular',
+  'expo',
+  'react-native',
+  'capacitor',
+  'vanilla',
+]
+
+export function isFrameworkId(value: unknown): value is FrameworkId {
+  return typeof value === 'string' && (FRAMEWORK_IDS as ReadonlyArray<string>).includes(value)
+}
+
 export const FRAMEWORKS: Record<FrameworkId, Framework> = {
   next: {
     id: 'next',

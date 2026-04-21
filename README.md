@@ -8,6 +8,9 @@ Sentry sees what your code throws. Mushi sees what your users *feel*.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
+[![Security](https://github.com/kensaurus/mushi-mushi/actions/workflows/security.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/security.yml)
+[![Socket](https://socket.dev/api/badge/npm/package/mushi-mushi)](https://socket.dev/npm/package/mushi-mushi)
+[![Snyk](https://snyk.io/advisor/npm-package/mushi-mushi/badge.svg)](https://snyk.io/advisor/npm-package/mushi-mushi)
 [![License](https://img.shields.io/badge/SDK-MIT-blue.svg)](./LICENSE)
 [![Server](https://img.shields.io/badge/server-BSL%201.1-orange.svg)](./packages/server/LICENSE)
 [![React 19](https://img.shields.io/badge/React-19-149eca.svg)](https://react.dev)
