@@ -25,14 +25,14 @@
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
     "@sentry/vite-plugin": "^5.2.0",
-    "@tailwindcss/vite": "^4.2.2",
+    "@tailwindcss/vite": "^4.2.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.2.0",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "^4.2.3",
     "typescript": "^6.0.2",
-    "vite": "^8.0.8"
+    "vite": "^8.0.9"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

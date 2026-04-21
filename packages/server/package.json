@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@mushi-mushi/tsconfig": "workspace:*",
-    "supabase": "^2.22.0",
+    "supabase": "^2.93.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.4"
   },
