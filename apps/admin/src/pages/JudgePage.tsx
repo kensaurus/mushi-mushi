@@ -14,6 +14,8 @@ import {
   Section,
   RelativeTime,
   Tooltip,
+  ResultChip,
+  type ResultChipTone,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import {
@@ -205,6 +207,13 @@ export function JudgePage() {
   const copy = usePageCopy('/judge')
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
+  // Sticky inline receipt for "Run judge now" — toast disappears, this stays
+  // on screen until the next run so the user can see the pending refresh
+  // countdown and the dispatched count without scrolling back up.
+  const [runResult, setRunResult] = useState<
+    | { tone: ResultChipTone; message: string; at: string | null }
+    | null
+  >(null)
   // Drives both the leaderboard-row "selected" highlight and the
   // /evaluations query filter. Wave M P0 fixes the inert leaderboard rows
   // the PageHelp claimed were clickable.
@@ -243,13 +252,20 @@ export function JudgePage() {
 
   async function runNow() {
     setRunning(true)
+    setRunResult({ tone: 'running', message: 'Dispatching judge batch…', at: null })
     const res = await apiFetch<{ dispatched: number }>('/v1/admin/judge/run', { method: 'POST' })
     setRunning(false)
+    const at = new Date().toISOString()
     if (res.ok) {
-      toast.success('Judge batch dispatched', `${res.data?.dispatched ?? 0} project(s). Refreshing in ~30s.`)
+      const count = res.data?.dispatched ?? 0
+      const message = `Dispatched ${count} project${count === 1 ? '' : 's'} — refreshing in ~30s`
+      toast.success('Judge batch dispatched', `${count} project(s). Refreshing in ~30s.`)
+      setRunResult({ tone: 'success', message, at })
       setTimeout(loadAll, 30_000)
     } else {
-      toast.error('Failed to run judge batch', res.error?.message)
+      const message = res.error?.message ?? 'Judge batch failed'
+      toast.error('Failed to run judge batch', message)
+      setRunResult({ tone: 'error', message, at })
     }
   }
 
@@ -281,8 +297,13 @@ export function JudgePage() {
           loading={running}
           leadingIcon={<PlayIcon />}
         >
-          {running ? 'Dispatching…' : 'Run judge now'}
+          Run judge now
         </Btn>
+        {runResult && (
+          <ResultChip tone={runResult.tone} at={runResult.at}>
+            {runResult.message}
+          </ResultChip>
+        )}
       </PageHeader>
 
       <PageHelp

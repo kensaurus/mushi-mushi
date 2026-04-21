@@ -7,8 +7,8 @@ Backend for Mushi Mushi — Supabase Edge Functions powering the LLM pipeline, k
 ```
 supabase/functions/
   api/                       Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins, SSO, integrations)
-  fast-filter/               Stage 1 — Haiku extracts key facts and a structured evidence object, blocks spam (prompt-cached)
-  classify-report/           Stage 2 — Sonnet deep analysis with vision + RAG. AIR-GAPPED: only consumes Stage 1's structured evidence, never raw user strings (prompt-cached)
+  fast-filter/               Stage 1 — Haiku extracts key facts and a structured evidence object, blocks spam (prompt-cached). **Internal-only** — rejects callers without `MUSHI_INTERNAL_CALLER_SECRET` / `SUPABASE_SERVICE_ROLE_KEY` since 2026-04-21 (SEC-1)
+  classify-report/           Stage 2 — Sonnet deep analysis with vision + RAG. AIR-GAPPED: only consumes Stage 1's structured evidence, never raw user strings (prompt-cached). **Internal-only + `airGap=true` required** — any caller omitting the flag gets `400 AIR_GAP_REQUIRED` (SEC-7, belt-and-braces around OWASP LLM01 prompt injection)
   judge-batch/               Nightly LLM quality scoring + prompt A/B auto-promotion
   intelligence-report/       Automated weekly summary generation
   generate-synthetic/        Synthetic test data generator
@@ -16,12 +16,15 @@ supabase/functions/
   usage-aggregator/          Wave D D5 — hourly cron pushing usage_events to Stripe Meter Events
   webhooks-github-indexer/   GitHub App webhook → codebase RAG indexer; `?mode=sweep` reindexes all installed repos for cron use
   sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
-  fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests)
+  fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
   _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
                              telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit, ...)
 
 supabase/templates/          Branded HTML email templates (confirmation, recovery)
-supabase/migrations/         PostgreSQL schema + RLS policies (latest: SSO state, plugin marketplace alias view security_invoker, search_path hardening)
+supabase/migrations/         PostgreSQL schema + RLS policies (latest: audit-remediation —
+                             20 FK indexes, Anthropic prompt-cache columns on llm_invocations,
+                             nightly prompt_versions reconciliation cron, O(1) early-exit
+                             guard on recover_stranded_pipeline)
 ```
 
 ## Development
@@ -74,8 +77,9 @@ Set these as Supabase secrets:
 | `STRIPE_PRICE_ID_REPORTS` | Cloud | Metered price ID used by checkout |
 | `E2B_API_KEY` | No | Managed sandbox provider for fix agents |
 | `MUSHI_REGION` | No | `us` / `eu` / `jp` — data residency tag |
+| `MUSHI_INTERNAL_CALLER_SECRET` | Yes (prod) | Shared secret for cross-function + `pg_cron` → edge-function calls. Must also be mirrored into `public.mushi_runtime_config` (`key='service_role_key'`) so `pg_net` can read it from SQL. See [Internal-caller authentication](#internal-caller-authentication-sec-1) below |
 | `SUPABASE_URL` | Auto | Set by Supabase runtime |
-| `SUPABASE_SERVICE_ROLE_KEY` | Auto | Set by Supabase runtime |
+| `SUPABASE_SERVICE_ROLE_KEY` | Auto | Set by Supabase runtime — auto-injected inside edge functions, not reachable from `pg_net`/`pg_cron`, which is why `MUSHI_INTERNAL_CALLER_SECRET` exists |
 
 ## API Routes
 
@@ -101,7 +105,24 @@ All routes are served from the `api` function under `/v1/`:
 - `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD (Wave D D1)
 - `GET /.well-known/agent-card` — A2A agent card (Wave C C5)
+- `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. Wave T's contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
+- `POST /v1/admin/auth/token` (Wave S) — OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
+- `POST /v1/admin/projects/:id/keys/rotate` (Wave S) — atomic API key rotation. Revokes every active key for the project (audit-logged with the revoked prefixes), generates a new one, and returns it in the same response (`mushi_<32hex>`, 201). The plaintext is shown exactly once — clients store it immediately or rotate again. Project ownership is enforced via `jwtAuth` + `owner_id` check, so cross-project rotation is impossible
 - See `supabase/functions/api/index.ts` for the full route table
+
+## Manifest contract test (Wave T)
+
+`src/__tests__/manifest-contract.test.ts` parses
+`supabase/functions/api/index.ts`, extracts every URL listed inside
+`/v1/admin/auth/manifest`, and asserts each one is registered as a Hono
+route via `app.<method>(<path>, ...)`. If a future PR adds an entry to the
+manifest without wiring up the route — or deletes a route the manifest still
+advertises — `pnpm test` fails with the offending URL named in the error.
+
+This was added because Wave R's static audit found two manifest entries
+(`/v1/admin/auth/token`, `/v1/admin/projects/:id/keys/rotate`) that were
+advertised but returned 404 in production. The test now blocks that class
+of bug before it reaches a deploy.
 
 ## Error handling (Wave L)
 
@@ -130,6 +151,40 @@ network failures (no bodies), reproducer steps. `classify-report` consumes only
 that object plus the screenshot. Raw `description`, `userIntent`, console /
 network bodies stay in the DB but never enter Stage 2 prompts. This closes the
 prompt-injection / data-exfiltration vector raised in `MushiMushi_Critical_Analysis.md`.
+
+## Internal-caller authentication (SEC-1)
+
+Three internal-only edge functions — `fast-filter`, `classify-report`, and `fix-worker` — previously accepted any caller because Supabase deploys without `--no-verify-jwt` still pass anonymous `anon` requests through. The 2026-04-21 remediation (audit SEC-1) gates them behind a shared middleware in `_shared/auth.ts`:
+
+```ts
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
+
+const authErr = requireServiceRoleAuth(req)
+if (authErr) return authErr
+```
+
+The middleware accepts **either** token in the `Authorization: Bearer …` header:
+
+1. `MUSHI_INTERNAL_CALLER_SECRET` — a non-reserved shared secret. Used by `pg_cron` → `pg_net.http_post` callers, because Postgres cannot read runtime-injected Supabase env vars. The same value is mirrored into `public.mushi_runtime_config` (row `key='service_role_key'`) so migrations like `recover_stranded_pipeline()` can look it up without a deploy.
+2. `SUPABASE_SERVICE_ROLE_KEY` — auto-injected into the edge runtime. Used for function-to-function calls (`api` → `fast-filter`, `fast-filter` → `classify-report`, etc.) without any bespoke plumbing.
+
+Both paths return `401 UNAUTHORIZED` otherwise. `classify-report` *additionally* requires `body.airGap === true` (SEC-7) so a compromised Stage 1 cannot bypass the air-gap by handing Stage 2 raw user strings.
+
+**To rotate the secret**:
+
+```bash
+export NEW_SECRET="$(openssl rand -hex 32)"
+supabase secrets set MUSHI_INTERNAL_CALLER_SECRET="$NEW_SECRET" --project-ref <ref>
+# Mirror into the DB so pg_cron reads the new value on its next tick.
+# mushi_runtime_config is a (key, value) table — update the service_role_key row.
+supabase db query --linked <<SQL
+UPDATE public.mushi_runtime_config
+   SET value = '$NEW_SECRET', updated_at = now()
+ WHERE key = 'service_role_key';
+SQL
+supabase functions deploy fast-filter classify-report fix-worker judge-batch api \
+  usage-aggregator soc2-evidence intelligence-report --project-ref <ref>
+```
 
 ## Security: prompt-injection defense (Wave D D8)
 

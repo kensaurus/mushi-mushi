@@ -58,6 +58,7 @@ import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts'
 import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log as rootLog } from '../_shared/logger.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 // ----------------------------------------------------------------------------
 // Structured fix output. The LLM gets a strict shape — no shell, no tool calls.
@@ -116,6 +117,14 @@ interface ResolvedRepo {
 }
 
 Deno.serve(withSentry('fix-worker', async (req) => {
+  // SEC-1: Internal-only — invoked by the `api` function after a user
+  // dispatches a fix. `verify_jwt = false` in config.toml; we require the
+  // service-role key that `api` already sends. Without this guard an
+  // attacker could trigger arbitrary fix-worker runs (PR creation, LLM
+  // calls billed to the project).
+  const unauthorized = requireServiceRoleAuth(req)
+  if (unauthorized) return unauthorized
+
   const log = rootLog.child('fix-worker')
   let body: FixRequestBody
   try {

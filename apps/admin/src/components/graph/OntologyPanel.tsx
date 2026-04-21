@@ -87,8 +87,8 @@ export function OntologyPanel() {
             onChange={(e) => setDescription(e.target.value)}
           />
           <div className="flex justify-end">
-            <Btn size="sm" onClick={submit} disabled={saving}>
-              {saving ? 'Adding…' : 'Add to ontology'}
+            <Btn size="sm" onClick={submit} disabled={saving} loading={saving}>
+              Add to ontology
             </Btn>
           </div>
         </div>

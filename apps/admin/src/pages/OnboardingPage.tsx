@@ -13,7 +13,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn, Card, Input, PageHelp, ErrorAlert } from '../components/ui'
+import { Btn, Card, Input, PageHelp, ErrorAlert, ResultChip, type ResultChipTone } from '../components/ui'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
@@ -80,6 +80,7 @@ export function OnboardingPage() {
   const [generatingKey, setGeneratingKey] = useState(false)
   const [keyCopied, setKeyCopied] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
+  const [testRanAt, setTestRanAt] = useState<string | null>(null)
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [error, setError] = useState('')
@@ -149,9 +150,11 @@ export function OnboardingPage() {
   async function submitTestReport() {
     if (!project) return
     setTestStatus('running')
+    setError('')
     // Use the admin pipeline-test endpoint so we don't need the user to have
     // copied the key yet — we're already JWT-authenticated as the owner.
     const res = await apiFetch(`/v1/admin/projects/${project.project_id}/test-report`, { method: 'POST' })
+    setTestRanAt(new Date().toISOString())
     setTestStatus(res.ok ? 'pass' : 'fail')
     if (res.ok) {
       toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
@@ -161,6 +164,16 @@ export function OnboardingPage() {
       setError(msg)
       toast.error('Test report failed', msg)
     }
+  }
+
+  // Maps the local 4-state lifecycle to the shared ResultChip tone vocabulary.
+  // Co-located with the consumer because the mapping is page-specific (idle is
+  // suppressed at the call site so the chip never appears before first run).
+  function testTone(status: 'idle' | 'running' | 'pass' | 'fail'): ResultChipTone {
+    if (status === 'running') return 'running'
+    if (status === 'pass') return 'success'
+    if (status === 'fail') return 'error'
+    return 'idle'
   }
 
   function copyToClipboard(text: string, setter: (v: boolean) => void) {
@@ -226,8 +239,8 @@ export function OnboardingPage() {
                 autoFocus
               />
             </div>
-            <Btn onClick={createProject} disabled={creating || !projectName.trim()}>
-              {creating ? 'Creating…' : 'Create'}
+            <Btn onClick={createProject} loading={creating} disabled={creating || !projectName.trim()}>
+              Create
             </Btn>
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
@@ -245,8 +258,8 @@ export function OnboardingPage() {
           </div>
           {!apiKey ? (
             <>
-              <Btn onClick={generateKey} disabled={generatingKey}>
-                {generatingKey ? 'Generating…' : 'Generate API Key'}
+              <Btn onClick={generateKey} loading={generatingKey} disabled={generatingKey}>
+                Generate API Key
               </Btn>
               {error && <p className="text-xs text-danger">{error}</p>}
             </>
@@ -268,16 +281,25 @@ export function OnboardingPage() {
           <ConnectionStatus />
           <div className="border-t border-edge-subtle pt-3">
             <p className="text-xs text-fg-muted mb-2">Submit a test report to verify the full pipeline:</p>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Btn
                 onClick={submitTestReport}
+                loading={testStatus === 'running'}
                 disabled={testStatus === 'running'}
                 variant={testStatus === 'pass' ? 'ghost' : 'primary'}
               >
-                {testStatus === 'running' ? 'Submitting…' : testStatus === 'pass' ? '✓ Test passed' : 'Submit test report'}
+                {testStatus === 'pass' ? 'Send another' : 'Submit test report'}
               </Btn>
-              {testStatus === 'pass' && <span className="text-xs text-ok">Pipeline is working.</span>}
-              {testStatus === 'fail' && <span className="text-xs text-danger">{error || 'Submission failed'}</span>}
+              {testStatus !== 'idle' && (
+                <ResultChip
+                  tone={testTone(testStatus)}
+                  at={testStatus === 'pass' || testStatus === 'fail' ? testRanAt : null}
+                >
+                  {testStatus === 'running' && 'Submitting test report…'}
+                  {testStatus === 'pass' && 'Pipeline is working — open /reports to see the row'}
+                  {testStatus === 'fail' && (error || 'Submission failed')}
+                </ResultChip>
+              )}
             </div>
           </div>
         </Card>

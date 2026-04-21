@@ -1,5 +1,14 @@
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
+import noEmptyOnClick from './rules/no-empty-onclick.js';
+
+// Local plugin that exposes Wave-T-era custom rules (currently just one) so
+// every workspace inherits them without needing a published npm package.
+const mushiPlugin = {
+  rules: {
+    'no-empty-onclick': noEmptyOnClick,
+  },
+};
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
@@ -13,10 +22,12 @@ export default [
       parserOptions: {
         ecmaVersion: 'latest',
         sourceType: 'module',
+        ecmaFeatures: { jsx: true },
       },
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
+      mushi: mushiPlugin,
     },
     rules: {
       '@typescript-eslint/no-unused-vars': [
@@ -29,6 +40,7 @@ export default [
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
       ],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'mushi/no-empty-onclick': 'error',
     },
   },
 ];

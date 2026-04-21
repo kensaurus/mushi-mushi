@@ -209,9 +209,10 @@ export function DLQPage() {
           variant="ghost"
           onClick={flushCircuitBreakerQueue}
           disabled={flushingQueued}
+          loading={flushingQueued}
           title="Replays reports parked because the circuit breaker tripped (rate limits, LLM outages)."
         >
-          {flushingQueued ? 'Flushing…' : 'Flush queued'}
+          Flush queued
         </Btn>
         <Btn
           size="sm"
@@ -222,7 +223,7 @@ export function DLQPage() {
           leadingIcon={<RefreshIcon />}
           title="Re-fires fast-filter for any report stuck older than 5 minutes plus pending queue items past their SLA."
         >
-          {flushing ? 'Recovering…' : 'Recover stranded'}
+          Recover stranded
         </Btn>
       </PageHeader>
 
