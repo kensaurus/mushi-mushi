@@ -1,13 +1,21 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, afterAll } from 'vitest'
 import { loadConfig, saveConfig } from './config.js'
-import { chmodSync, existsSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
-const TEST_PATH = join(tmpdir(), `.mushirc-test-${Date.now()}`)
+// Use mkdtempSync (not a predictable `${Date.now()}` path) so the test cannot
+// be hijacked via symlink-race on a shared tmp dir. Each run gets its own
+// private directory with mode 0o700.
+const TEST_DIR = mkdtempSync(join(tmpdir(), 'mushirc-test-'))
+const TEST_PATH = join(TEST_DIR, '.mushirc')
 
 afterEach(() => {
   if (existsSync(TEST_PATH)) unlinkSync(TEST_PATH)
+})
+
+afterAll(() => {
+  rmSync(TEST_DIR, { recursive: true, force: true })
 })
 
 describe('loadConfig', () => {

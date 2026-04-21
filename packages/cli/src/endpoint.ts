@@ -36,7 +36,18 @@ export function assertEndpoint(url: string): string {
   return parsed.origin + (parsed.pathname === '/' ? '' : parsed.pathname)
 }
 
-/** Strip trailing slashes so `${endpoint}/v1/...` never double-slashes. */
+/**
+ * Strip trailing slashes so `${endpoint}/v1/...` never double-slashes.
+ *
+ * Uses a character-by-character trim (not a regex) so we do not create a
+ * ReDoS surface on attacker-controlled endpoints: a string of thousands of
+ * trailing slashes would otherwise make even `/\/+$/` more expensive than
+ * necessary on older engines, and CodeQL flags `+` on repeatable characters
+ * regardless. Linear time, no backtracking.
+ */
 export function normalizeEndpoint(url: string | undefined): string {
-  return (url ?? DEFAULT_ENDPOINT).replace(/\/+$/, '')
+  const input = url ?? DEFAULT_ENDPOINT
+  let end = input.length
+  while (end > 0 && input.charCodeAt(end - 1) === 47 /* '/' */) end--
+  return input.slice(0, end)
 }
