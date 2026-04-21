@@ -355,12 +355,12 @@ export function AntiGamingPage() {
                           {isExpanded ? 'Hide' : 'Details'}
                         </Btn>
                         {d.flagged_as_suspicious ? (
-                          <Btn variant="ghost" size="sm" onClick={() => unflag(d.id)} disabled={isBusy}>
-                            {isBusy ? 'Working…' : 'Unflag'}
+                          <Btn variant="ghost" size="sm" onClick={() => unflag(d.id)} disabled={isBusy} loading={isBusy}>
+                            Unflag
                           </Btn>
                         ) : (
-                          <Btn variant="ghost" size="sm" onClick={() => flag(d.id)} disabled={isBusy}>
-                            {isBusy ? 'Working…' : 'Flag'}
+                          <Btn variant="ghost" size="sm" onClick={() => flag(d.id)} disabled={isBusy} loading={isBusy}>
+                            Flag
                           </Btn>
                         )}
                       </div>

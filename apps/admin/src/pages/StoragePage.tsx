@@ -336,16 +336,18 @@ export function StoragePage() {
                 size="sm"
                 onClick={() => checkHealth(s.project_id)}
                 disabled={!existing || savingId === s.project_id || checkingId === s.project_id}
+                loading={checkingId === s.project_id}
                 title={!existing ? 'Save the configuration first to enable health checks' : undefined}
               >
-                {checkingId === s.project_id ? 'Checking…' : 'Health check'}
+                Health check
               </Btn>
               <Btn
                 size="sm"
                 onClick={() => save(s.project_id, !existing)}
                 disabled={(existing && !dirty) || savingId === s.project_id || checkingId === s.project_id}
+                loading={savingId === s.project_id}
               >
-                {savingId === s.project_id ? 'Saving…' : existing ? 'Save' : 'Save & enable'}
+                {existing ? 'Save' : 'Save & enable'}
               </Btn>
             </div>
           </Card>

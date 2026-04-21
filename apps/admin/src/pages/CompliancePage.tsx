@@ -208,8 +208,8 @@ export function CompliancePage() {
         projectScope={projectName}
         description="Track GDPR, SOC2, and audit obligations against the data Mushi holds for this project."
       >
-        <Btn onClick={refreshEvidence} disabled={refreshing}>
-          {refreshing ? 'Refreshing…' : 'Refresh evidence'}
+        <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing}>
+          Refresh evidence
         </Btn>
         <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
           Export PDF
@@ -401,8 +401,8 @@ export function CompliancePage() {
                 onChange={(e) => setDsarForm((f) => ({ ...f, notes: e.target.value }))}
               />
               <div className="md:col-span-4 flex justify-end">
-                <Btn size="sm" onClick={fileDsar} disabled={filing}>
-                  {filing ? 'Filing…' : 'File DSAR'}
+                <Btn size="sm" onClick={fileDsar} disabled={filing} loading={filing}>
+                  File DSAR
                 </Btn>
               </div>
             </div>

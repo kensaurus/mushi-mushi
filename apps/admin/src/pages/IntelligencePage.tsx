@@ -199,8 +199,8 @@ export function IntelligencePage() {
         title="Bug Intelligence"
         description="Aggregate signals across reports \u2014 hotspot components, regression patterns, and shifting severity trends."
       >
-        <Btn onClick={generateNow} disabled={generating || !!activeJob}>
-          {activeJob ? 'Generating…' : generating ? 'Enqueuing…' : 'Generate this week'}
+        <Btn onClick={generateNow} disabled={generating || !!activeJob} loading={generating || !!activeJob}>
+          {activeJob ? 'Generating' : 'Generate this week'}
         </Btn>
       </PageHeader>
 
@@ -287,8 +287,8 @@ function ThisWeekNarrative({ latest, loading, generating, onGenerate }: ThisWeek
           severity drift in narrative form.
         </p>
         <div className="mt-2.5">
-          <Btn size="sm" variant="primary" onClick={onGenerate} disabled={generating}>
-            {generating ? 'Generating…' : 'Generate this week'}
+          <Btn size="sm" variant="primary" onClick={onGenerate} disabled={generating} loading={generating}>
+            Generate this week
           </Btn>
         </div>
       </section>

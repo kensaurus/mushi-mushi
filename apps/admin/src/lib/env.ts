@@ -11,6 +11,9 @@
  */
 
 export const CLOUD_SUPABASE_URL = 'https://dxptnwrhwsqckaftyymj.supabase.co'
+// Supabase anon key is public by design — it is the client-facing JWT that
+// lets the browser talk to Supabase under RLS. Not a secret.
+// check-no-secrets: ignore-next-line
 export const CLOUD_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM'
 export const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
 

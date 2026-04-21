@@ -189,8 +189,8 @@ export function GroupsPanel() {
             </div>
             <div className="flex justify-end gap-1.5">
               <Btn variant="ghost" onClick={() => setMergeSource(null)}>Cancel</Btn>
-              <Btn onClick={performMerge} disabled={merging || !mergeTarget}>
-                {merging ? 'Merging…' : 'Merge groups'}
+              <Btn onClick={performMerge} disabled={merging || !mergeTarget} loading={merging}>
+                Merge groups
               </Btn>
             </div>
           </Card>

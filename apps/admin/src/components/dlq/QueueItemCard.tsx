@@ -70,9 +70,10 @@ export function QueueItemCard({ item, retrying, onRetry }: Props) {
           size="sm"
           onClick={onRetry}
           disabled={retrying}
+          loading={retrying}
           className="ml-3 flex-shrink-0"
         >
-          {retrying ? 'Retrying…' : 'Retry'}
+          Retry
         </Btn>
       </div>
     </Card>
