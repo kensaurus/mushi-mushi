@@ -294,8 +294,8 @@ export function QueryPage() {
               disabled={loading}
               className="flex-1"
             />
-            <Btn onClick={() => handleSubmit()} disabled={loading || !question.trim()}>
-              {loading ? 'Thinking…' : 'Ask'}
+            <Btn onClick={() => handleSubmit()} disabled={loading || !question.trim()} loading={loading}>
+              Ask
             </Btn>
           </div>
 

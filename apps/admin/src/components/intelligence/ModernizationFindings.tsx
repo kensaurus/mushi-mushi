@@ -74,9 +74,10 @@ export function ModernizationFindings({ findings, dispatchingId, onDispatch, onD
                 size="sm"
                 onClick={() => onDispatch(f.id)}
                 disabled={!f.related_report_id || dispatchingId === f.id}
+                loading={dispatchingId === f.id}
                 title={f.related_report_id ? 'Dispatch fix-worker' : 'Minor finding — no auto-dispatch'}
               >
-                {dispatchingId === f.id ? 'Dispatching…' : 'Dispatch fix'}
+                Dispatch fix
               </Btn>
               <Btn size="sm" variant="ghost" onClick={() => onDismiss(f.id)}>
                 Dismiss

@@ -11,6 +11,7 @@
 
 import { useMemo } from 'react'
 import { usePageData } from './usePageData'
+import { SetupResponseSchema } from './apiSchemas'
 
 export type SetupStepId =
   | 'project_created'
@@ -93,7 +94,12 @@ const EMPTY_SELECTORS: SetupSelectors = {
 }
 
 export function useSetupStatus(activeProjectId?: string | null): UseSetupStatusResult {
-  const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup')
+  // FE-API-1: Zod-validate the response. Setup drives the onboarding gate,
+  // the banner, and every per-page "finish setup first" nudge — silent
+  // drift here sends users into a broken empty state with no diagnostic.
+  const { data, loading, error, reload } = usePageData<SetupResponse>('/v1/admin/setup', {
+    schema: SetupResponseSchema,
+  })
 
   return useMemo(() => {
     const projects = data?.projects ?? []

@@ -14,7 +14,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
-import { Btn } from '../ui'
+import { Btn, ResultChip, type ResultChipTone } from '../ui'
 
 interface Props {
   projectId: string
@@ -25,20 +25,38 @@ interface Props {
 const HERO_CLASS =
   'relative overflow-hidden rounded-lg border border-brand/30 bg-gradient-to-br from-brand/8 via-surface-raised/40 to-surface-raised/10 p-4 mb-4'
 
+type SendStatus = 'idle' | 'running' | 'pass' | 'fail'
+
+// Rendered next to the CTA so the result is sticky after the toast fades.
+// Mapping lives close to the consumer because the CTA semantics — pass after
+// running, error message preserved on fail — are specific to this hero.
+function statusToTone(status: SendStatus): ResultChipTone {
+  if (status === 'running') return 'running'
+  if (status === 'pass') return 'success'
+  if (status === 'fail') return 'error'
+  return 'idle'
+}
+
 export function FirstReportHero({ projectId, projectName, onReportSent }: Props) {
   const toast = useToast()
-  const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
+  const [status, setStatus] = useState<SendStatus>('idle')
+  const [sentAt, setSentAt] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   async function send() {
     setStatus('running')
+    setErrorMessage(null)
     const res = await apiFetch(`/v1/admin/projects/${projectId}/test-report`, { method: 'POST' })
     if (res.ok) {
       setStatus('pass')
+      setSentAt(new Date().toISOString())
       toast.success('Test report queued', 'Watch it land in /reports within a few seconds.')
       onReportSent?.()
     } else {
+      const msg = res.error?.message ?? 'Check your project keys and try again.'
       setStatus('fail')
-      toast.error('Test report failed', res.error?.message ?? 'Check your project keys and try again.')
+      setErrorMessage(msg)
+      toast.error('Test report failed', msg)
     }
   }
 
@@ -65,19 +83,28 @@ export function FirstReportHero({ projectId, projectName, onReportSent }: Props)
               size="sm"
               variant={status === 'pass' ? 'ghost' : 'primary'}
               onClick={send}
+              loading={status === 'running'}
               disabled={status === 'running' || status === 'pass'}
             >
-              {status === 'running'
-                ? 'Sending…'
-                : status === 'pass'
-                  ? '✓ Test sent — open /reports'
-                  : 'Send test report'}
+              {status === 'pass' ? 'Send another' : 'Send test report'}
             </Btn>
+            {status !== 'idle' && (
+              <ResultChip tone={statusToTone(status)} at={status === 'pass' ? sentAt : null}>
+                {status === 'running' && 'Submitting test report…'}
+                {status === 'pass' && 'Queued — opening /reports'}
+                {status === 'fail' && (errorMessage ?? 'Submission failed')}
+              </ResultChip>
+            )}
+            {status === 'pass' && (
+              <Link to="/reports" className="text-2xs text-brand hover:underline">
+                Open /reports →
+              </Link>
+            )}
             <Link
               to="/onboarding"
-              className="text-2xs text-brand hover:underline"
+              className="text-2xs text-fg-faint hover:text-fg-muted"
             >
-              Or open the full setup guide →
+              Open the full setup guide →
             </Link>
           </div>
         </div>

@@ -132,7 +132,7 @@ export function SsoPage() {
             className="col-span-2"
           />
         </div>
-        <Btn onClick={addProvider} disabled={submitting}>{submitting ? 'Registering…' : 'Add Provider'}</Btn>
+        <Btn onClick={addProvider} disabled={submitting} loading={submitting}>Add Provider</Btn>
         <p className="text-2xs text-fg-faint">
           {form.providerType === 'saml'
             ? 'On submit, Mushi calls the Supabase Auth Admin API to register the SAML provider. We surface the resulting ACS URL + Entity ID below for you to paste into your IdP.'
@@ -217,8 +217,9 @@ export function SsoPage() {
                         variant="ghost"
                         onClick={() => disconnectProvider(c)}
                         disabled={disconnecting === c.id}
+                        loading={disconnecting === c.id}
                       >
-                        {disconnecting === c.id ? 'Disconnecting…' : 'Disconnect'}
+                        Disconnect
                       </Btn>
                     )}
                   </td>

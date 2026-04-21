@@ -223,6 +223,80 @@ app.get('/v1/admin/auth/manifest', (c) => {
   })
 })
 
+// Token endpoint advertised by the auth manifest above. Wave S P0: previously
+// the manifest pointed at this URL but no Hono route existed, so any external
+// A2A agent following the discovery doc hit a 404 immediately.
+//
+// Two modes, both following RFC 6749 conventions so generic OAuth clients can
+// talk to us without bespoke code:
+//
+//   1. Refresh exchange — POST { grant_type: 'refresh_token', refresh_token }
+//      Returns { access_token, token_type, expires_in, refresh_token }.
+//      Backed by Supabase's refresh-session RPC so JWT rotation rules and
+//      lockouts are inherited from Auth instead of duplicated here.
+//
+//   2. Introspection — POST with `Authorization: Bearer <jwt>` and no body.
+//      Returns { active, sub, email, exp } — RFC 7662 shape minus claims an
+//      A2A agent doesn't need (aud, iss, scope are constant per cluster).
+//
+// Anything else returns 400 with a typed error so the agent can react.
+app.post('/v1/admin/auth/token', async (c) => {
+  const db = getServiceClient()
+  let body: Record<string, unknown> = {}
+  // The introspection mode has no body, so an empty/invalid JSON parse is
+  // expected — only fail loudly on a non-empty malformed payload.
+  try {
+    const raw = await c.req.text()
+    if (raw.trim().length > 0) body = JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'Body must be valid JSON' } }, 400)
+  }
+
+  const grantType = typeof body.grant_type === 'string' ? body.grant_type : null
+
+  if (grantType === 'refresh_token') {
+    const refreshToken = typeof body.refresh_token === 'string' ? body.refresh_token : null
+    if (!refreshToken) {
+      return c.json({ ok: false, error: { code: 'MISSING_REFRESH_TOKEN', message: 'refresh_token is required for grant_type=refresh_token' } }, 400)
+    }
+    const { data, error } = await db.auth.refreshSession({ refresh_token: refreshToken })
+    if (error || !data.session) {
+      return c.json({ ok: false, error: { code: 'INVALID_REFRESH_TOKEN', message: error?.message ?? 'Refresh failed' } }, 401)
+    }
+    const session = data.session
+    return c.json({
+      access_token: session.access_token,
+      token_type: 'bearer',
+      expires_in: session.expires_in,
+      expires_at: session.expires_at,
+      refresh_token: session.refresh_token,
+    })
+  }
+
+  if (grantType !== null) {
+    return c.json({ ok: false, error: { code: 'UNSUPPORTED_GRANT_TYPE', message: `grant_type '${grantType}' is not supported` } }, 400)
+  }
+
+  // Introspection fallback: no grant_type → require Bearer and report claims.
+  const authHeader = c.req.header('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return c.json({ ok: false, error: { code: 'MISSING_AUTH', message: 'Provide grant_type or Authorization: Bearer <jwt>' } }, 401)
+  }
+  const token = authHeader.slice('Bearer '.length)
+  const { data: { user }, error } = await db.auth.getUser(token)
+  if (error || !user) {
+    return c.json({ active: false }, 200)
+  }
+  // Returning RFC 7662-shape claims minus `exp` — Supabase doesn't expose the
+  // expiry from `auth.getUser()`, and callers can decode the JWT themselves
+  // for that. `active` is the primary signal an A2A agent needs.
+  return c.json({
+    active: true,
+    sub: user.id,
+    email: user.email ?? null,
+  })
+})
+
 // ============================================================
 // Shared: ingest a single report and trigger pipeline
 // ============================================================
@@ -3953,6 +4027,92 @@ app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
 
   if (error) return dbError(c, error)
   return c.json({ ok: true, data: { key: rawKey, prefix } }, 201)
+})
+
+// Rotation endpoint advertised by the auth manifest. Wave S P0: previously a
+// 404 because no Hono route existed despite being listed under
+// `mushi-api-key.rotation_endpoint`. Atomic-ish rotate-then-issue:
+//
+//   1. Mark every active key on the project as revoked (soft-delete, audit
+//      log keeps the prefix for forensics).
+//   2. Mint a fresh key with the same crypto pattern as POST /keys.
+//   3. Return only the new key once — same one-shot semantics as initial
+//      generation so callers know to copy immediately.
+//
+// "Atomic-ish" because Supabase Edge Functions don't expose transactions; in
+// the worst case (network blip between the revoke and the insert) the project
+// is keyless until the second call retries. That is strictly safer than the
+// inverse — leaking a window where both the old and new keys are valid would
+// silently extend the rotated key's effective lifetime.
+app.post('/v1/admin/projects/:id/keys/rotate', jwtAuth, async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const { data: project } = await db
+    .from('projects')
+    .select('id, name')
+    .eq('id', projectId)
+    .eq('owner_id', userId)
+    .single()
+  if (!project) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+  }
+
+  const { data: existing, error: fetchError } = await db
+    .from('project_api_keys')
+    .select('id, key_prefix')
+    .eq('project_id', projectId)
+    .eq('is_active', true)
+  if (fetchError) return dbError(c, fetchError)
+
+  const revokedAt = new Date().toISOString()
+  if (existing && existing.length > 0) {
+    const { error: revokeError } = await db
+      .from('project_api_keys')
+      .update({ is_active: false, revoked_at: revokedAt })
+      .eq('project_id', projectId)
+      .eq('is_active', true)
+    if (revokeError) return dbError(c, revokeError)
+  }
+
+  const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`
+  const prefix = rawKey.slice(0, 12)
+
+  const encoder = new TextEncoder()
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey))
+  const keyHash = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0')).join('')
+
+  const { data: newRow, error: insertError } = await db
+    .from('project_api_keys')
+    .insert({
+      project_id: projectId,
+      key_hash: keyHash,
+      key_prefix: prefix,
+      label: 'rotated',
+      is_active: true,
+    })
+    .select('id')
+    .single()
+  if (insertError) return dbError(c, insertError)
+
+  const userEmail = c.get('userEmail') as string | undefined
+  await logAudit(db, projectId, userId, 'api_key.created', 'api_key', newRow?.id, {
+    rotated: true,
+    revoked_count: existing?.length ?? 0,
+    revoked_prefixes: (existing ?? []).map((row: { key_prefix: string }) => row.key_prefix),
+  }, { email: userEmail })
+
+  return c.json({
+    ok: true,
+    data: {
+      key: rawKey,
+      prefix,
+      revoked: existing?.length ?? 0,
+      rotated_at: revokedAt,
+    },
+  }, 201)
 })
 
 app.delete('/v1/admin/projects/:id/keys/:keyId', jwtAuth, async (c) => {

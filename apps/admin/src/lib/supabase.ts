@@ -7,6 +7,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import * as Sentry from '@sentry/react'
+import type { ZodType } from 'zod'
 import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
 
@@ -88,9 +89,23 @@ export function invalidateApiCache(pathPrefix?: string): void {
   for (const key of recent.keys()) if (key.includes(pathPrefix)) recent.delete(key)
 }
 
+/**
+ * FE-API-1 (audit 2026-04-21): optional runtime validation of the response
+ * payload against a Zod schema. Without this, a backend contract drift (field
+ * renamed, nullable suddenly null) silently produces `undefined` renders or
+ * cryptic `Cannot read properties of undefined` deep inside a table row. With
+ * a schema, the failure surfaces at the fetch boundary with the actual parse
+ * error, breadcrumbed into Sentry so we see the mismatch the first time any
+ * user hits it. Passing `schema` is opt-in per call site so we can roll out
+ * validation incrementally on the top-10 endpoints first.
+ */
+export interface ApiFetchOptions<T> extends RequestInit {
+  schema?: ZodType<T>
+}
+
 export async function apiFetch<T>(
   path: string,
-  options?: RequestInit,
+  options?: ApiFetchOptions<T>,
 ): Promise<ApiResult<T>> {
   const method = (options?.method ?? 'GET').toUpperCase()
   const cacheKey = options?.cache === 'no-store'
@@ -128,7 +143,7 @@ export async function apiFetch<T>(
 
 async function doFetch<T>(
   path: string,
-  options: RequestInit | undefined,
+  options: ApiFetchOptions<T> | undefined,
   method: string,
 ): Promise<ApiResult<T>> {
   const url = `${API_BASE}${path}`
@@ -158,7 +173,10 @@ async function doFetch<T>(
       // session. 5xx is escalated to a captureMessage because server errors
       // are bugs we want to know about even when the user never crashes the
       // UI. 4xx (auth, validation) is intentionally NOT escalated to keep
-      // the issue list signal-rich; auth flows trip 401 by design.
+      // the issue list signal-rich; auth flows trip 401 by design, BUT
+      // FE-API-5 samples 4xx at a low rate so we can spot contract drift
+      // (400 validation errors that shouldn't happen) without drowning in
+      // expected 401s during login.
       Sentry.addBreadcrumb({
         category: 'api',
         type: 'http',
@@ -169,16 +187,58 @@ async function doFetch<T>(
       if (res.status >= 500) {
         Sentry.captureMessage(`API ${res.status} ${method} ${path}`, {
           level: 'error',
+          // FE-API-4: fingerprint by path+status so "POST /reports 503"
+          // events group as ONE issue, not one-per-user. Without this,
+          // every reporter session that hit the same degraded endpoint
+          // opened a fresh Sentry issue and the noise drowned the signal.
+          fingerprint: ['apiFetch', method, path, String(res.status)],
           tags: { source: 'apiFetch', http_status: String(res.status), api_path: path },
           contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
           extra: { response_snippet: body.slice(0, 500) },
         })
+      } else if (res.status === 400 || res.status === 422) {
+        // FE-API-5: sample 400/422 at 5% — these are contract-drift signals
+        // (server changed a required field, frontend sent the old shape).
+        // Normal auth 401/403 stays off the radar.
+        if (Math.random() < 0.05) {
+          Sentry.captureMessage(`API ${res.status} ${method} ${path} (sampled)`, {
+            level: 'warning',
+            fingerprint: ['apiFetch', method, path, String(res.status)],
+            tags: { source: 'apiFetch', http_status: String(res.status), api_path: path, sampled: 'true' },
+            contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
+            extra: { response_snippet: body.slice(0, 500) },
+          })
+        }
       }
       try { return JSON.parse(body) } catch { return { ok: false, error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` } } }
     }
 
-    const result = await res.json()
+    const result = await res.json() as ApiResult<T>
     debugLog('api', `${method} ${path} → ${res.status} (${ms}ms)`)
+
+    // FE-API-1: opt-in Zod validation. We only validate the `data` slice —
+    // the ApiResult envelope itself (`ok`, `error`) is stable across routes.
+    // Validation failure is reported via Sentry (fingerprinted) and degrades
+    // to returning an error result so the UI can render a fallback rather
+    // than exploding mid-render.
+    if (options?.schema && result.ok && result.data != null) {
+      const parsed = options.schema.safeParse(result.data)
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0]
+        const issueSummary = firstIssue ? `${firstIssue.path.join('.')}: ${firstIssue.message}` : 'validation failed'
+        Sentry.captureMessage(`API response failed Zod validation ${method} ${path}`, {
+          level: 'error',
+          fingerprint: ['apiFetch-zod', method, path, firstIssue?.code ?? 'unknown'],
+          tags: { source: 'apiFetch', api_path: path, validation: 'zod' },
+          contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
+          extra: { issues: parsed.error.issues.slice(0, 5) },
+        })
+        debugWarn('api', `Zod validation failed ${method} ${path}: ${issueSummary}`)
+        return { ok: false, error: { code: 'VALIDATION_ERROR', message: issueSummary } }
+      }
+      return { ok: true, data: parsed.data }
+    }
+
     return result
   } catch (err) {
     const ms = Math.round(performance.now() - t0)
@@ -205,16 +265,58 @@ async function doFetch<T>(
 
 // Same auth + base URL handling as apiFetch but returns the raw Response so
 // callers can stream non-JSON payloads (HTML, CSV, blobs) without parsing.
+//
+// FE-API-2 (audit 2026-04-21): previously this bypassed all Sentry
+// instrumentation so streaming endpoints (SSE, CSV export) were invisible
+// to observability. We now emit the same breadcrumb + 5xx capture pattern
+// as apiFetch, but leave body-parsing to the caller.
 export async function apiFetchRaw(
   path: string,
   options?: RequestInit,
 ): Promise<Response> {
-  const token = await getAccessToken()
-  return fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  })
+  const method = (options?.method ?? 'GET').toUpperCase()
+  const t0 = performance.now()
+  try {
+    const token = await getAccessToken()
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options?.headers,
+      },
+    })
+    const ms = Math.round(performance.now() - t0)
+    Sentry.addBreadcrumb({
+      category: 'api',
+      type: 'http',
+      level: res.ok ? 'info' : res.status >= 500 ? 'error' : 'warning',
+      data: { method, url: path, status_code: res.status, duration_ms: ms, raw: true },
+      message: `raw ${method} ${path} → ${res.status}`,
+    })
+    if (!res.ok && res.status >= 500) {
+      Sentry.captureMessage(`API ${res.status} ${method} ${path} (raw)`, {
+        level: 'error',
+        fingerprint: ['apiFetchRaw', method, path, String(res.status)],
+        tags: { source: 'apiFetchRaw', http_status: String(res.status), api_path: path },
+        contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
+      })
+    }
+    return res
+  } catch (err) {
+    const ms = Math.round(performance.now() - t0)
+    Sentry.addBreadcrumb({
+      category: 'api',
+      type: 'http',
+      level: 'error',
+      data: { method, url: path, duration_ms: ms, raw: true, error: String(err).slice(0, 200) },
+      message: `raw ${method} ${path} → NETWORK_ERROR`,
+    })
+    if (err instanceof Error && err.name !== 'AbortError') {
+      Sentry.captureException(err, {
+        tags: { source: 'apiFetchRaw', http_status: 'network_error', api_path: path },
+        contexts: { http: { method, url: path, duration_ms: ms } },
+      })
+    }
+    throw err
+  }
 }
