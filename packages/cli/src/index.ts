@@ -3,9 +3,11 @@ import { loadConfig, saveConfig } from './config.js'
 import type { CliConfig } from './config.js'
 import { runInit } from './init.js'
 import type { FrameworkId } from './detect.js'
+import { MUSHI_CLI_VERSION } from './version.js'
+import { assertEndpoint, DEFAULT_ENDPOINT } from './endpoint.js'
 
 async function apiCall(path: string, config: CliConfig, options: RequestInit = {}): Promise<unknown> {
-  const endpoint = config.endpoint ?? 'https://api.mushimushi.dev'
+  const endpoint = config.endpoint ?? DEFAULT_ENDPOINT
   const res = await fetch(`${endpoint}${path}`, {
     ...options,
     headers: {
@@ -22,7 +24,7 @@ async function apiCall(path: string, config: CliConfig, options: RequestInit = {
 const program = new Command()
   .name('mushi')
   .description('Mushi Mushi CLI — set up the SDK, manage bug reports, monitor pipeline')
-  .version('0.3.0')
+  .version(MUSHI_CLI_VERSION)
 
 program
   .command('init')
@@ -32,12 +34,18 @@ program
   .option('--framework <id>', 'Force a framework (next, react, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, vanilla)')
   .option('--skip-install', 'Don\'t auto-install the SDK package — print the command instead')
   .option('-y, --yes', 'Accept detected framework without prompting')
+  .option('--cwd <path>', 'Run the wizard in a different directory')
+  .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
+  .option('--skip-test-report', 'Skip the end-of-wizard "send a test report" prompt')
   .action(async (opts: {
     projectId?: string
     apiKey?: string
     framework?: FrameworkId
     skipInstall?: boolean
     yes?: boolean
+    cwd?: string
+    endpoint?: string
+    skipTestReport?: boolean
   }) => {
     await runInit({
       projectId: opts.projectId,
@@ -45,6 +53,9 @@ program
       framework: opts.framework,
       skipInstall: opts.skipInstall,
       yes: opts.yes,
+      cwd: opts.cwd,
+      endpoint: opts.endpoint,
+      sendTestReport: opts.skipTestReport ? false : undefined,
     })
   })
 
@@ -57,10 +68,10 @@ program
   .action((opts) => {
     const config = loadConfig()
     config.apiKey = opts.apiKey
-    if (opts.endpoint) config.endpoint = opts.endpoint
+    if (opts.endpoint) config.endpoint = assertEndpoint(opts.endpoint)
     if (opts.projectId) config.projectId = opts.projectId
     saveConfig(config)
-    console.log('Saved credentials to ~/.mushirc')
+    console.log('Saved credentials to ~/.mushirc (mode 0o600)')
   })
 
 program
@@ -131,9 +142,10 @@ program
   .action((key, value) => {
     const config = loadConfig()
     if (key && value) {
-      ;(config as Record<string, unknown>)[key] = value
+      const safeValue = key === 'endpoint' ? assertEndpoint(value) : value
+      ;(config as Record<string, unknown>)[key] = safeValue
       saveConfig(config)
-      console.log(`Set ${key} = ${value}`)
+      console.log(`Set ${key} = ${safeValue}`)
     } else {
       console.log(JSON.stringify(config, null, 2))
     }

@@ -32,11 +32,21 @@
 -- Partial indexes keep them small (most reports do have a group_id once
 -- classification has run, but rows landing pre-classification have NULL).
 -- Both columns sit on `reports`; no FK changes required.
-create index concurrently if not exists reports_group_token_idx
+--
+-- NOTE: We deliberately do NOT use `CONCURRENTLY` here. Supabase migrations
+-- run inside a single transaction per file (`supabase db push`), and
+-- `CREATE INDEX CONCURRENTLY` cannot run inside a transaction
+-- (PostgreSQL 25001 — "cannot run inside a transaction block"). The
+-- `reports` table is small enough on every project we've seen that the
+-- AccessExclusiveLock during the build is sub-second; if a future tenant
+-- crosses the multi-million-row mark, split this into a `supabase
+-- migration new` with a non-transactional preface (`-- supabase: --no-tx`)
+-- so the lock is released between statements.
+create index if not exists reports_group_token_idx
   on reports (report_group_id, reporter_token_hash)
   where report_group_id is not null;
 
-create index concurrently if not exists reports_group_session_idx
+create index if not exists reports_group_session_idx
   on reports (report_group_id, session_id)
   where report_group_id is not null and session_id is not null;
 

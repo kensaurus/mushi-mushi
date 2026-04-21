@@ -25,6 +25,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 
 interface ApiKey {
   id: string
@@ -212,6 +213,7 @@ export function ProjectsPage() {
 
       {projects.length === 0 ? (
         <EmptyState
+          icon={<HeroPlugIntegration />}
           title="No projects yet"
           description="Create your first project above to start receiving bug reports. You'll get an API key to use with the SDK or REST endpoint."
         />

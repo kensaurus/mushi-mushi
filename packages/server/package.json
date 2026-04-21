@@ -12,6 +12,7 @@
     "deploy": "cd supabase && supabase functions deploy",
     "deploy:api": "cd supabase && supabase functions deploy api",
     "deploy:classify": "cd supabase && supabase functions deploy classify-report",
+    "smoke": "node ../../scripts/smoke-admin-endpoints.mjs",
     "db:push": "cd supabase && supabase db push",
     "db:reset": "cd supabase && supabase db reset",
     "test": "vitest run",

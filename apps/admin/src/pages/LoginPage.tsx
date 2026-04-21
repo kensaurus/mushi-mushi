@@ -283,7 +283,7 @@ export function LoginPage() {
               <button
                 type="button"
                 onClick={() => switchMode('forgot')}
-                className="block w-full text-center text-2xs text-fg-faint hover:text-brand"
+                className="block w-full text-center text-2xs text-fg-faint hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
               >
                 Forgot your password?
               </button>
@@ -293,21 +293,21 @@ export function LoginPage() {
               {mode === 'forgot' ? (
                 <>
                   Remember your password?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover">
+                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign in
                   </button>
                 </>
               ) : mode === 'login' ? (
                 <>
                   Don't have an account?{' '}
-                  <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover">
+                  <button type="button" onClick={() => switchMode('signup')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign up
                   </button>
                 </>
               ) : (
                 <>
                   Already have an account?{' '}
-                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover">
+                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign in
                   </button>
                 </>
