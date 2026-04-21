@@ -34,8 +34,13 @@
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/kensaurus"
+  },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "files": [
     "dist",
@@ -83,6 +88,12 @@
       "import": {
         "types": "./dist/detect.d.ts",
         "default": "./dist/detect.js"
+      }
+    },
+    "./version": {
+      "import": {
+        "types": "./dist/version.d.ts",
+        "default": "./dist/version.js"
       }
     }
   },

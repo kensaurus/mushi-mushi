@@ -106,6 +106,46 @@ export const PDCA_STAGES: Record<PdcaStageId, PdcaStageMeta> = {
 export const PDCA_ORDER: PdcaStageId[] = ['plan', 'do', 'check', 'act']
 
 /**
+ * Plain-language outcomes per stage — used by the unified 4-stage first-run
+ * loop card, the live pipeline diagram, and the Next-Best-Action strip.
+ * Beginner copy is intentionally outcome-first (what does the user *get*?),
+ * not capability-first (what does the system *do*?).
+ *
+ * Adding a new beginner-facing surface? Read from this map instead of
+ * coining a new sentence — drift between PdcaCockpit, GettingStartedEmpty,
+ * LivePdcaPipeline, and NextBestAction is a recurring audit finding.
+ */
+export const PDCA_STAGE_OUTCOMES: Record<PdcaStageId, {
+  /** Verb-led headline ("Capture your first user-felt bug"). */
+  headline: string
+  /** One sentence explaining what *the user gets* from this stage. */
+  outcome: string
+  /** Sticker text for the LivePdcaPipeline node ("Capture", "Auto-fix"…). */
+  pipelineLabel: string
+}> = {
+  plan: {
+    headline: 'Capture user-felt bugs',
+    outcome: 'Your end-users flag what hurts. Mushi groups, scores, and sorts the noise.',
+    pipelineLabel: 'Capture',
+  },
+  do: {
+    headline: 'Auto-draft a fix PR',
+    outcome: 'Mushi opens a draft pull request with a one-paragraph rationale. You review the diff, not the ticket.',
+    pipelineLabel: 'Auto-fix',
+  },
+  check: {
+    headline: 'Verify the fix is real',
+    outcome: 'An independent LLM judge + screenshot diff grade the change. Bad fixes never reach you.',
+    pipelineLabel: 'Verify',
+  },
+  act: {
+    headline: 'Ship and notify your stack',
+    outcome: 'Merged fixes flow back to Sentry, Slack, and your CI — the loop closes itself.',
+    pipelineLabel: 'Ship',
+  },
+}
+
+/**
  * Reverse-map admin routes to a PDCA stage. New pages just add their path
  * here and inherit the context chip + sidebar grouping for free. Routes are
  * matched as prefixes (so `/reports/abc123` resolves to `plan`).

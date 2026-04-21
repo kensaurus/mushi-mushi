@@ -14,6 +14,7 @@ import { pluralize, pluralizeWithCount } from '../lib/format'
 import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
+import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -23,6 +24,7 @@ import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixCard } from '../components/fixes/FixCard'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
+import { usePageCopy } from '../lib/copy'
 
 type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'merged' | 'failed'
 
@@ -48,6 +50,7 @@ export function FixesPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const copy = usePageCopy('/fixes')
   const [fixes, setFixes] = useState<FixAttempt[]>([])
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
@@ -196,9 +199,9 @@ export function FixesPage() {
   return (
     <div className="space-y-3">
       <PageHeader
-        title="Auto-Fix Pipeline"
+        title={copy?.title ?? 'Auto-Fix Pipeline'}
         projectScope={projectName}
-        description="Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end."
+        description={copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
       >
         <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>
         {failedFixes.length > 0 && (
@@ -215,14 +218,14 @@ export function FixesPage() {
       </PageHeader>
 
       <PageHelp
-        title="About the Auto-Fix Pipeline"
-        whatIsIt="When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging."
-        useCases={[
+        title={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
+        useCases={copy?.help?.useCases ?? [
           'Track the full PDCA loop — Plan (LLM proposal), Do (PR), Check (CI), Act (review)',
           'Audit cost: every attempt logs the model used, token spend, and a Langfuse trace',
           'Spot patterns of failure so prompts and scope rules can be tightened',
         ]}
-        howToUse="Dispatch a fix from any classified report. Each card shows the LLM model, token usage, branch, PR, and CI status. Expand a card to read the agent's rationale and see the live branch graph."
+        howToUse={copy?.help?.howToUse ?? "Dispatch a fix from any classified report. Each card shows the LLM model, token usage, branch, PR, and CI status. Expand a card to read the agent's rationale and see the live branch graph."}
       />
 
       {summary && <FixSummaryRow summary={summary} successRate={successRate} />}
@@ -235,7 +238,13 @@ export function FixesPage() {
         <SetupNudge
           requires={['github_connected', 'first_report_received', 'byok_anthropic']}
           emptyTitle="No fix attempts yet"
-          emptyDescription="Open a classified report and click \u201cDispatch fix\u201d to start the auto-fix loop."
+          emptyDescription="Open a classified report and click \u201cDispatch fix\u201d to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."
+          emptyIcon={<HeroFixWrench />}
+          blockedIcon={<HeroFixWrench accent="text-fg-faint" />}
+          emptyHints={[
+            'Each dispatch creates one branch + one draft PR per attempt.',
+            'The judge scores every attempt before it appears in green here.',
+          ]}
         />
       ) : (
         <>
@@ -257,16 +266,17 @@ export function FixesPage() {
             </p>
           ) : (
             <div className="space-y-1.5">
-              {visibleFixes.map((fix) => (
-                <FixCard
-                  key={fix.id}
-                  fix={fix}
-                  isOpen={expanded === fix.id}
-                  timeline={timelines[fix.id]}
-                  traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
-                  onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
-                  onRetry={() => retryOne(fix.report_id)}
-                />
+              {visibleFixes.map((fix, idx) => (
+                <div key={fix.id} data-tour-id={idx === 0 ? 'fix-card' : undefined}>
+                  <FixCard
+                    fix={fix}
+                    isOpen={expanded === fix.id}
+                    timeline={timelines[fix.id]}
+                    traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
+                    onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
+                    onRetry={() => retryOne(fix.report_id)}
+                  />
+                </div>
               ))}
             </div>
           )}

@@ -23,6 +23,7 @@ import {
   EmptyState,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 
 interface AuditEntry {
   id: string
@@ -290,6 +291,7 @@ export function AuditPage() {
         <ErrorAlert message={`Failed to load audit logs: ${error}`} onRetry={reload} />
       ) : logs.length === 0 ? (
         <EmptyState
+          icon={<HeroSearch accent={activeFilterCount > 0 ? 'text-fg-faint' : 'text-info'} />}
           title={activeFilterCount > 0 ? 'No entries match these filters' : 'No audit entries yet'}
           description={
             activeFilterCount > 0

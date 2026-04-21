@@ -70,6 +70,14 @@ nul
 # Temporary edge-function payload bundles produced by scripts/build-edge-payload.mjs
 .tmp-deploy/
 
+# Archive holding-pens for ad-hoc audit screenshots (Wave I/J/K). Kept out of
+# git so they can't grow unbounded; the canonical product screenshots live in
+# docs/screenshots/ and the historical audit reports in docs/audit-* still
+# reference these paths but the rendered docs no longer require the assets.
+audit-after/
+audit-before/
+audit-after-wave-*/
+
 # Sentry
 .sentryclirc
 # Sourcemaps must never be served from the public S3 bucket. The Vite plugin

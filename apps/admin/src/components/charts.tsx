@@ -45,9 +45,40 @@ export interface KpiTileProps {
    *  cursor-help hint on the tile so the dashboard answers a question
    *  rather than dumping a number. Audit P0 from 2026-04-19. */
   meaning?: string
+  /** Optional trend series rendered as a tiny sparkline footer. Round 2
+   *  polish: every KPI row now shows momentum, not just a snapshot.
+   *  Series should be in chronological order (oldest → newest). */
+  series?: number[]
+  /** Optional accent class for the sparkline (Tailwind `text-*`). Defaults to
+   *  matching the tile accent so the spark visually anchors to the number. */
+  seriesAccent?: string
+  /** Optional aria label for the sparkline. Defaults to `${label} trend`. */
+  seriesAriaLabel?: string
 }
 
-export function KpiTile({ label, value, sublabel, to, accent, delta, meaning }: KpiTileProps) {
+const TONE_SPARK_ACCENT: Record<Tone, string> = {
+  ok: 'text-ok/70',
+  warn: 'text-warn/70',
+  danger: 'text-danger/70',
+  brand: 'text-brand/70',
+  muted: 'text-fg-faint',
+  info: 'text-info/70',
+}
+
+export function KpiTile({
+  label,
+  value,
+  sublabel,
+  to,
+  accent,
+  delta,
+  meaning,
+  series,
+  seriesAccent,
+  seriesAriaLabel,
+}: KpiTileProps) {
+  const showSpark = Array.isArray(series) && series.length >= 2 && series.some((v) => v > 0)
+  const sparkColour = seriesAccent ?? (accent ? TONE_SPARK_ACCENT[accent] : 'text-fg-faint')
   const inner = (
     <div className="px-3 py-2.5">
       <div className="flex items-center gap-1 truncate">
@@ -83,6 +114,16 @@ export function KpiTile({ label, value, sublabel, to, accent, delta, meaning }: 
       </div>
       {sublabel && (
         <div className="text-2xs text-fg-faint mt-0.5 truncate">{sublabel}</div>
+      )}
+      {showSpark && (
+        <div className="-mx-1 mt-1.5" aria-hidden={seriesAriaLabel ? undefined : true}>
+          <LineSparkline
+            values={series!}
+            accent={sparkColour}
+            ariaLabel={seriesAriaLabel ?? `${label} trend`}
+            height={18}
+          />
+        </div>
       )}
     </div>
   )
@@ -213,30 +254,35 @@ function shortDay(iso: string): string {
 
 export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
   const max = Math.max(1, ...data.map((d) => d.total))
+  const totalReports = data.reduce((sum, d) => sum + d.total, 0)
   return (
     <div>
-      <div className="flex items-end gap-1 h-24" role="group" aria-label="Daily severity breakdown">
-        {data.map((d) => {
-          // Two-step scaling: `totalH` sets the column height as a % of the
-          // chart (so a half-max day reads as half the chart height), and
-          // `seg` distributes severity within that already-scaled column as
-          // a % of its OWN height. Multiplying seg by totalH would compose
-          // the two ratios and quadratically squish every non-max column —
-          // a half-max day would render at 25%, not 50%.
-          const totalH = (d.total / max) * 100
-          const seg = (n: number) => (d.total > 0 ? (n / d.total) * 100 : 0)
-          return (
-            <SeverityBarColumn
-              key={d.day}
-              day={d}
-              totalH={totalH}
-              seg={seg}
-            />
-          )
-        })}
+      <div className="flex gap-1.5">
+        <div
+          className="flex flex-col justify-between items-end h-24 text-3xs text-fg-faint font-mono select-none"
+          aria-hidden="true"
+        >
+          <span>{max}</span>
+          <span>0</span>
+        </div>
+        <div className="flex items-end gap-1 h-24 flex-1" role="group" aria-label={`Daily severity breakdown · ${totalReports} reports across ${data.length} days`}>
+          {data.map((d) => {
+            const totalH = (d.total / max) * 100
+            const seg = (n: number) => (d.total > 0 ? (n / d.total) * 100 : 0)
+            return (
+              <SeverityBarColumn
+                key={d.day}
+                day={d}
+                totalH={totalH}
+                seg={seg}
+              />
+            )
+          })}
+        </div>
       </div>
-      <div className="flex justify-between text-3xs text-fg-faint font-mono mt-1">
+      <div className="flex justify-between text-3xs text-fg-faint font-mono mt-1 pl-5">
         <span>{shortDay(data[0]?.day ?? '')}</span>
+        <span className="text-fg-faint/70">reports per day</span>
         <span>{shortDay(data[data.length - 1]?.day ?? '')}</span>
       </div>
       <div className="flex flex-wrap gap-2 mt-2 text-3xs text-fg-muted">
@@ -261,31 +307,64 @@ function SeverityBarColumn({
   totalH: number
   seg: (n: number) => number
 }) {
-  // Hover surfaces a count badge above the column so users get quantitative
-  // answers without leaving the chart.
+  // Hover surfaces a rich breakdown popover so users can answer "what's in
+  // that spike?" without leaving the chart. Round 2 polish — replaces the
+  // plain `title` attribute that only worked after a long browser delay.
+  // The popover is purely presentational; assistive tech reads the column's
+  // aria-label below for the same content in one synchronous announcement.
+  const ariaSummary = `${shortDay(day.day)}: ${day.total} reports — ${day.critical} critical, ${day.high} high, ${day.medium} medium, ${day.low} low${
+    day.unscored != null ? `, ${day.unscored} unscored` : ''
+  }`
   return (
-    <div className="group relative flex-1 h-full">
+    <div
+      className="group relative flex-1 h-full"
+      role="img"
+      aria-label={ariaSummary}
+    >
       {day.total > 0 && (
-        <span
-          className="pointer-events-none absolute -top-4 left-1/2 -translate-x-1/2 z-10 rounded-sm bg-surface-overlay border border-edge-subtle px-1 text-3xs font-mono text-fg shadow-card opacity-0 group-hover:opacity-100 motion-safe:transition-opacity"
+        <div
+          className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-1 min-w-[10rem] rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1.5 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
           aria-hidden="true"
         >
-          {day.total}
-        </span>
+          <div className="flex items-baseline justify-between gap-2 mb-1">
+            <span className="font-medium">{shortDay(day.day)}</span>
+            <span className="font-mono text-fg-muted">{day.total} total</span>
+          </div>
+          <ul className="space-y-0.5 font-mono">
+            {day.critical > 0 && (
+              <li className="flex justify-between"><span className="text-danger">● critical</span><span>{day.critical}</span></li>
+            )}
+            {day.high > 0 && (
+              <li className="flex justify-between"><span className="text-warn">● high</span><span>{day.high}</span></li>
+            )}
+            {day.medium > 0 && (
+              <li className="flex justify-between"><span className="text-info">● medium</span><span>{day.medium}</span></li>
+            )}
+            {day.low > 0 && (
+              <li className="flex justify-between"><span className="text-ok">● low</span><span>{day.low}</span></li>
+            )}
+            {day.unscored != null && day.unscored > 0 && (
+              <li className="flex justify-between"><span className="text-fg-faint">● unscored</span><span>{day.unscored}</span></li>
+            )}
+            {day.total === 0 && <li className="text-fg-faint">No reports</li>}
+          </ul>
+        </div>
       )}
-      <div
-        className="absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch gap-px"
-        title={`${shortDay(day.day)}: ${day.total} reports (C${day.critical} H${day.high} M${day.medium} L${day.low})`}
+      <button
+        type="button"
+        tabIndex={day.total > 0 ? 0 : -1}
+        aria-label={ariaSummary}
+        className="absolute inset-x-0 bottom-0 flex flex-col-reverse items-stretch gap-px focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 rounded-sm cursor-default"
         style={{ height: `${Math.max(2, totalH)}%` }}
       >
-        <div className="bg-danger motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.critical)}%` }} />
-        <div className="bg-warn motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.high)}%` }} />
-        <div className="bg-info motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.medium)}%` }} />
-        <div className="bg-ok motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.low)}%` }} />
+        <span aria-hidden="true" className="block bg-danger motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.critical)}%` }} />
+        <span aria-hidden="true" className="block bg-warn motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.high)}%` }} />
+        <span aria-hidden="true" className="block bg-info motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.medium)}%` }} />
+        <span aria-hidden="true" className="block bg-ok motion-safe:transition-opacity group-hover:opacity-90" style={{ height: `${seg(day.low)}%` }} />
         {day.unscored != null && (
-          <div className="bg-fg-faint/40" style={{ height: `${seg(day.unscored)}%` }} />
+          <span aria-hidden="true" className="block bg-fg-faint/40" style={{ height: `${seg(day.unscored)}%` }} />
         )}
-      </div>
+      </button>
     </div>
   )
 }
@@ -363,17 +442,33 @@ export function Histogram({
         className="flex items-end gap-1 w-full"
         style={{ height: `${height}px` }}
       >
-        {buckets.map((v, i) => (
-          <div
-            key={i}
-            className={`flex-1 ${accent} rounded-t-sm`}
-            style={{
-              height: `${(v / max) * 100}%`,
-              minHeight: v > 0 ? '2px' : '0',
-            }}
-            title={`${labels?.[i] ?? i}: ${v}`}
-          />
-        ))}
+        {buckets.map((v, i) => {
+          const label = labels?.[i] ?? String(i)
+          const summary = `${label}: ${v}`
+          return (
+            <div key={i} className="group relative flex-1 h-full">
+              {v > 0 && (
+                <div
+                  className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-1 whitespace-nowrap rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                  aria-hidden="true"
+                >
+                  <span className="font-medium">{label}</span>
+                  <span className="ml-2 font-mono text-fg-muted">{v}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                tabIndex={v > 0 ? 0 : -1}
+                aria-label={summary}
+                className={`absolute inset-x-0 bottom-0 ${accent} rounded-t-sm motion-safe:transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 cursor-default`}
+                style={{
+                  height: `${(v / max) * 100}%`,
+                  minHeight: v > 0 ? '2px' : '0',
+                }}
+              />
+            </div>
+          )
+        })}
       </div>
       {labels && (
         <div className="flex justify-between text-3xs text-fg-faint font-mono mt-1">

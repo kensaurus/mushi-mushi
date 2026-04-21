@@ -14,15 +14,19 @@ import {
   RecommendedAction,
   Tooltip,
   Kbd,
+  Btn,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
+import { usePageCopy } from '../lib/copy'
+import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { HelpOverlay } from '../components/reports/HelpOverlay'
 import { ReportsFilterBar, type ContextChip } from '../components/reports/ReportsFilterBar'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
+import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -31,6 +35,7 @@ export function ReportsPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const copy = usePageCopy('/reports')
 
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -394,9 +399,9 @@ export function ReportsPage() {
   return (
     <div>
       <PageHeader
-        title="Reports"
+        title={copy?.title ?? 'Reports'}
         projectScope={projectName}
-        description="User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise."
+        description={copy?.description ?? 'User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise.'}
       >
         <span className="text-xs text-fg-muted font-mono tabular-nums">
           {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
@@ -413,15 +418,17 @@ export function ReportsPage() {
         </Tooltip>
       </PageHeader>
 
+      <DogfoodNarrativeBanner />
+
       <PageHelp
-        title="About Reports"
-        whatIsIt="The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes."
-        useCases={[
+        title={copy?.help?.title ?? 'About Reports'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'}
+        useCases={copy?.help?.useCases ?? [
           'Triage incoming reports — sort by severity, filter by status',
           'Bulk-dismiss noise or escalate a batch of regressions in one click',
           'Drill into a single report for the original payload, screenshots, and pipeline timeline',
         ]}
-        howToUse="Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions."
+        howToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
       />
 
       <ReportsKpiStrip
@@ -468,7 +475,25 @@ export function ReportsPage() {
       ) : error ? (
         <ErrorAlert message={`Failed to load reports: ${error}`} onRetry={reload} />
       ) : reports.length === 0 && hasFilters ? (
-        <EmptyState title="No reports match the selected filters." />
+        <EmptyState
+          icon={<HeroSearch accent="text-fg-faint" />}
+          title="No reports match the selected filters."
+          description="Try clearing a filter or widening the time window in the search bar."
+          action={
+            hasFilters ? (
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setSearchInput('')
+                  setSearchParams({})
+                }}
+              >
+                Clear all filters
+              </Btn>
+            ) : undefined
+          }
+        />
       ) : reports.length === 0 ? (
         // RecommendedAction above already shows "No reports yet" — don't
         // double-paint a contradictory empty state. Audit Wave K bugfix.
