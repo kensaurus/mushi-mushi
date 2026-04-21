@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/adapters",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "description": "Bidirectional adapters — translate Datadog, Honeycomb, New Relic, Grafana Loki errors into Mushi reports (and vice versa). Each adapter is tree-shakeable from its own subpath import.",
   "type": "module",
@@ -8,13 +8,37 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "import": "./dist/index.js", "require": "./dist/index.cjs", "types": "./dist/index.d.ts" },
-    "./datadog": { "import": "./dist/datadog.js", "require": "./dist/datadog.cjs", "types": "./dist/datadog.d.ts" },
-    "./honeycomb": { "import": "./dist/honeycomb.js", "require": "./dist/honeycomb.cjs", "types": "./dist/honeycomb.d.ts" },
-    "./new-relic": { "import": "./dist/new-relic.js", "require": "./dist/new-relic.cjs", "types": "./dist/new-relic.d.ts" },
-    "./grafana-loki": { "import": "./dist/grafana-loki.js", "require": "./dist/grafana-loki.cjs", "types": "./dist/grafana-loki.d.ts" }
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./datadog": {
+      "import": "./dist/datadog.js",
+      "require": "./dist/datadog.cjs",
+      "types": "./dist/datadog.d.ts"
+    },
+    "./honeycomb": {
+      "import": "./dist/honeycomb.js",
+      "require": "./dist/honeycomb.cjs",
+      "types": "./dist/honeycomb.d.ts"
+    },
+    "./new-relic": {
+      "import": "./dist/new-relic.js",
+      "require": "./dist/new-relic.cjs",
+      "types": "./dist/new-relic.d.ts"
+    },
+    "./grafana-loki": {
+      "import": "./dist/grafana-loki.js",
+      "require": "./dist/grafana-loki.cjs",
+      "types": "./dist/grafana-loki.d.ts"
+    }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsup",
     "lint": "eslint src/",
@@ -40,8 +64,21 @@
   },
   "author": "Kenji Sakuramoto",
   "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/adapters#readme",
-  "bugs": { "url": "https://github.com/kensaurus/mushi-mushi/issues" },
-  "publishConfig": { "access": "public" },
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
-  "keywords": ["mushi-mushi", "adapters", "datadog", "honeycomb", "new-relic", "grafana-loki", "observability", "glue"]
+  "keywords": [
+    "mushi-mushi",
+    "adapters",
+    "datadog",
+    "honeycomb",
+    "new-relic",
+    "grafana-loki",
+    "observability",
+    "glue"
+  ]
 }

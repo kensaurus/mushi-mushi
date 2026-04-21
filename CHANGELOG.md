@@ -45,7 +45,7 @@ Latest tag: `v0.4.0`
 
 ## v0.3.x
 
-Latest tag: `v0.3.1`
+Latest tag: `v0.3.2`
 
 ### Highlights
 
@@ -64,11 +64,16 @@ Latest tag: `v0.3.1`
 
 ### Packages bumped
 
-- `@mushi-mushi/capacitor` → 0.3.1
+- `@mushi-mushi/capacitor` → 0.3.2
+- `@mushi-mushi/core` → 0.3.0
+- `@mushi-mushi/mcp` → 0.3.0
+- `@mushi-mushi/plugin-sdk` → 0.3.0
+- `@mushi-mushi/react` → 0.3.0
+- `@mushi-mushi/web` → 0.3.0
 
 ## v0.2.x
 
-Latest tag: `v0.2.1`
+Latest tag: `v0.2.2`
 
 ### Highlights
 
@@ -87,19 +92,24 @@ Latest tag: `v0.2.1`
 
 ### Packages bumped
 
-- `@mushi-mushi/angular` → 0.2.1
+- `@mushi-mushi/adapters` → 0.2.0
+- `@mushi-mushi/angular` → 0.2.2
 - `@mushi-mushi/cli` → 0.2.0
 - `@mushi-mushi/core` → 0.2.1
 - `@mushi-mushi/mcp` → 0.2.1
-- `@mushi-mushi/plugin-linear` → 0.2.1
-- `@mushi-mushi/plugin-pagerduty` → 0.2.1
+- `@mushi-mushi/mcp-ci` → 0.2.0
+- `@mushi-mushi/node` → 0.2.0
+- `@mushi-mushi/plugin-jira` → 0.2.0
+- `@mushi-mushi/plugin-linear` → 0.2.2
+- `@mushi-mushi/plugin-pagerduty` → 0.2.2
 - `@mushi-mushi/plugin-sdk` → 0.2.1
-- `@mushi-mushi/plugin-sentry` → 0.2.1
-- `@mushi-mushi/plugin-zapier` → 0.2.1
+- `@mushi-mushi/plugin-sentry` → 0.2.2
+- `@mushi-mushi/plugin-slack-app` → 0.2.0
+- `@mushi-mushi/plugin-zapier` → 0.2.2
 - `@mushi-mushi/react` → 0.2.1
-- `@mushi-mushi/react-native` → 0.2.1
-- `@mushi-mushi/svelte` → 0.2.1
-- `@mushi-mushi/vue` → 0.2.1
+- `@mushi-mushi/react-native` → 0.2.2
+- `@mushi-mushi/svelte` → 0.2.2
+- `@mushi-mushi/vue` → 0.2.2
 - `@mushi-mushi/wasm-classifier` → 0.2.1
 - `@mushi-mushi/web` → 0.2.1
 

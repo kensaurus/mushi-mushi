@@ -107,6 +107,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.3.2",
       "0.3.1",
       "0.3.0"
     ],
@@ -163,7 +164,27 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.3.1"
+        "version": "0.3.2"
+      },
+      {
+        "name": "@mushi-mushi/core",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-sdk",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "0.3.0"
       }
     ]
   },
@@ -172,6 +193,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.2",
       "0.2.1",
       "0.2.0"
     ],
@@ -227,8 +249,12 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/adapters",
+        "version": "0.2.0"
+      },
+      {
         "name": "@mushi-mushi/angular",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -243,12 +269,24 @@
         "version": "0.2.1"
       },
       {
+        "name": "@mushi-mushi/mcp-ci",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/node",
+        "version": "0.2.0"
+      },
+      {
+        "name": "@mushi-mushi/plugin-jira",
+        "version": "0.2.0"
+      },
+      {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -256,11 +294,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.1"
+        "version": "0.2.2"
+      },
+      {
+        "name": "@mushi-mushi/plugin-slack-app",
+        "version": "0.2.0"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/react",
@@ -268,15 +310,15 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/wasm-classifier",
