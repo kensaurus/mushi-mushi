@@ -19,7 +19,7 @@ import {
   Btn,
   Input,
   Section,
-  Loading,
+  Skeleton,
   ErrorAlert,
   RelativeTime,
 } from '../components/ui'
@@ -290,7 +290,17 @@ export function ResearchPage() {
             </span>
           </div>
         )}
-        {historyLoading && <Loading text="Loading history..." />}
+        {historyLoading && (
+          <div className="space-y-2" aria-busy="true" aria-label="Loading history">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="rounded-md border border-edge-subtle p-3 space-y-1.5">
+                <Skeleton className="h-3 w-2/3" />
+                <Skeleton className="h-2 w-1/3" />
+                <Skeleton className="h-2 w-1/2" />
+              </div>
+            ))}
+          </div>
+        )}
         {historyError && <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />}
         {sessions && sessions.length === 0 && (
           <div className="text-2xs text-fg-muted">No sessions yet — your first search will land here.</div>

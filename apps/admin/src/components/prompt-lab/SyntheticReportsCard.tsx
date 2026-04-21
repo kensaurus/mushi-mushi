@@ -5,6 +5,7 @@ import { TableSkeleton } from '../skeletons/TableSkeleton'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import { formatPct } from '../charts'
+import { PromptDialog } from '../ConfirmDialog'
 import type { SyntheticReportRow } from './types'
 
 interface SyntheticPayload {
@@ -15,21 +16,17 @@ export function SyntheticReportsCard() {
   const toast = useToast()
   const { data, loading, error, reload } = usePageData<SyntheticPayload>('/v1/admin/synthetic')
   const [generating, setGenerating] = useState(false)
+  const [askingCount, setAskingCount] = useState(false)
 
-  async function generate() {
-    const raw = window.prompt('How many synthetic reports to generate? (1–50)', '10')
-    if (!raw) return
+  async function commitGenerate(raw: string) {
     const count = Math.max(1, Math.min(50, Math.round(Number(raw))))
-    if (!Number.isFinite(count) || count <= 0) {
-      toast.push({ tone: 'error', message: 'Enter a number between 1 and 50' })
-      return
-    }
     setGenerating(true)
     const res = await apiFetch<{ generated?: number }>('/v1/admin/synthetic', {
       method: 'POST',
       body: JSON.stringify({ count }),
     })
     setGenerating(false)
+    setAskingCount(false)
     if (res.ok) {
       toast.push({
         tone: 'success',
@@ -60,7 +57,7 @@ export function SyntheticReportsCard() {
               {passed}/{scored} matched
             </span>
           )}
-          <Btn size="sm" onClick={generate} disabled={generating}>
+          <Btn size="sm" onClick={() => setAskingCount(true)} disabled={generating}>
             {generating ? 'Generating…' : 'Generate'}
           </Btn>
         </div>
@@ -126,6 +123,25 @@ export function SyntheticReportsCard() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {askingCount && (
+        <PromptDialog
+          title="Generate synthetic reports"
+          body="LLM-authored bug reports flow through Stage 1 → Stage 2 just like real ones. Use them to validate prompt changes before shipping. Cap is 50 per batch."
+          label="How many reports? (1–50)"
+          inputType="number"
+          defaultValue="10"
+          confirmLabel="Generate"
+          loading={generating}
+          validate={(v) => {
+            const n = Number(v)
+            if (!Number.isFinite(n) || n < 1 || n > 50) return 'Enter a whole number between 1 and 50.'
+            return null
+          }}
+          onConfirm={commitGenerate}
+          onCancel={() => setAskingCount(false)}
+        />
       )}
     </Card>
   )

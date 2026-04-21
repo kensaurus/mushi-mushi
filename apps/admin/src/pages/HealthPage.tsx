@@ -20,7 +20,6 @@ import {
   Badge,
   Btn,
   EmptyState,
-  Loading,
   ErrorAlert,
   StatCard,
   RecommendedAction,
@@ -28,8 +27,11 @@ import {
   FilterSelect,
   RelativeTime,
 } from '../components/ui'
+import { HealthSkeleton } from '../components/skeletons/HealthSkeleton'
+import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
 
 interface LlmRecent {
   function_name: string
@@ -109,6 +111,7 @@ export function HealthPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const copy = usePageCopy('/health')
   const [searchParams, setSearchParams] = useSearchParams()
   const window = searchParams.get('window') ?? '24h'
   const recentFilter = searchParams.get('recent') ?? ''
@@ -159,7 +162,7 @@ export function HealthPage() {
     }
   }
 
-  if (llmQuery.loading || cronQuery.loading) return <Loading text="Loading health metrics..." />
+  if (llmQuery.loading || cronQuery.loading) return <HealthSkeleton />
   if (llmQuery.error || !llm) return <ErrorAlert message={`Failed to load health metrics: ${llmQuery.error ?? 'no data'}`} onRetry={reloadAll} />
 
   const fallbackPct = ((llm.fallbackRate ?? 0) * 100).toFixed(1)
@@ -171,9 +174,9 @@ export function HealthPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="System Health"
+        title={copy?.title ?? 'System Health'}
         projectScope={projectName}
-        description="Real-time LLM and scheduled-job telemetry. Updates as events arrive."
+        description={copy?.description ?? 'Real-time LLM and scheduled-job telemetry. Updates as events arrive.'}
       >
         <SelectField
           label="Window"
@@ -189,14 +192,14 @@ export function HealthPage() {
       </PageHeader>
 
       <PageHelp
-        title="About System Health"
-        whatIsIt="Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime."
-        useCases={[
+        title={copy?.help?.title ?? 'About System Health'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
+        useCases={copy?.help?.useCases ?? [
           'Catch when Anthropic rate-limits cause a fallback storm',
           'See if scheduled jobs (cron) are actually running, succeeding, and on time',
           'Spot model-level latency regressions before they impact users',
         ]}
-        howToUse="No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."
+        howToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
       />
 
       {(() => {
@@ -270,7 +273,15 @@ export function HealthPage() {
       <section>
         <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">Per-function breakdown</h3>
         {fnNames.length === 0 ? (
-          <EmptyState title={`No LLM activity in the last ${window}`} />
+          <EmptyState
+            icon={<HeroPulseHealth />}
+            title={`No LLM activity in the last ${window}`}
+            description="Once your project starts classifying, fixing, or judging reports, every model call will land here with latency, cost, and a Langfuse trace deep-link."
+            hints={[
+              'Send a demo bug from the Dashboard to light up Classify and Fix in real time.',
+              'Switch the time window above to look back further if your traffic is bursty.',
+            ]}
+          />
         ) : (
           <div className="space-y-1">
             {fnNames.map((fn) => {
@@ -311,7 +322,11 @@ export function HealthPage() {
       <section>
         <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">Per-model breakdown</h3>
         {Object.keys(byModel).length === 0 ? (
-          <EmptyState title={`No LLM activity in the last ${window}`} />
+          <EmptyState
+            icon={<HeroPulseHealth accent="text-info" />}
+            title={`No LLM activity in the last ${window}`}
+            description="When models start serving traffic, you'll see Haiku, Sonnet, and the judge each broken out with their own latency and cost."
+          />
         ) : (
           <div className="space-y-1">
             {Object.entries(byModel).map(([model, m]) => (
@@ -392,8 +407,11 @@ export function HealthPage() {
         </div>
         {filteredRecent.length === 0 ? (
           <EmptyState
+            icon={recentFilter || fnFilter ? <HeroSearch accent="text-fg-faint" /> : <HeroPulseHealth />}
             title={recentFilter || fnFilter ? 'No calls match these filters' : 'No recent calls'}
-            description={recentFilter || fnFilter ? 'Try clearing filters or widening the time window.' : undefined}
+            description={recentFilter || fnFilter
+              ? 'Try clearing filters or widening the time window.'
+              : 'Once Mushi processes a report, every model call lands here with the full trace one click away in Langfuse.'}
           />
         ) : (
           <div className="space-y-0.5 font-mono text-2xs">

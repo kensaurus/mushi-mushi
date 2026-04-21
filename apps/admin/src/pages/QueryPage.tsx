@@ -10,6 +10,7 @@ import {
   RelativeTime,
   Section,
   Loading,
+  Skeleton,
   ErrorAlert,
 } from '../components/ui'
 import { useToast } from '../lib/toast'
@@ -402,7 +403,14 @@ export function QueryPage() {
           )}
           <Section title="History">
             {historyLoading ? (
-              <Loading text="Loading…" />
+              <ul className="space-y-1.5" aria-busy="true" aria-label="Loading history">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <li key={i} className="space-y-1">
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-2 w-1/3" />
+                  </li>
+                ))}
+              </ul>
             ) : historyError ? (
               <ErrorAlert message={`Could not load history: ${historyError}`} onRetry={loadHistory} />
             ) : recent.length === 0 ? (

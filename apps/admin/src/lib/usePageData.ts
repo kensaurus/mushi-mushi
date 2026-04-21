@@ -58,7 +58,11 @@ export function usePageData<T>(
     setError(null)
     void (async () => {
       try {
-        const res = await apiFetch<T>(path)
+        // `tick > 0` means the user hit "Retry" or "Refresh" — bypass the
+        // micro-cache so we never serve a stale value to a user who explicitly
+        // asked for fresh data. The first mount (`tick === 0`) still uses
+        // dedup so concurrent component mounts share one request.
+        const res = await apiFetch<T>(path, tick > 0 ? { cache: 'no-store' } : undefined)
         if (aborted.current) return
         if (res.ok && res.data !== undefined) {
           setData(res.data as T)

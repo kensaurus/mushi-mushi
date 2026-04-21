@@ -25,6 +25,7 @@ import type { PromptLabData, PromptVersion } from '../components/prompt-lab/type
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
 import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
 import { PromptDiffModal } from '../components/prompt-lab/PromptDiffModal'
+import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
 import { EvalDatasetCard } from '../components/prompt-lab/EvalDatasetCard'
 import { FineTuningJobsCard } from '../components/prompt-lab/FineTuningJobsCard'
 import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsCard'
@@ -34,6 +35,8 @@ export function PromptLabPage() {
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [trafficTarget, setTrafficTarget] = useState<PromptVersion | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<PromptVersion | null>(null)
   const toast = useToast()
 
   const grouped = useMemo(() => {
@@ -89,11 +92,14 @@ export function PromptLabPage() {
     }
   }
 
-  async function setTraffic(p: PromptVersion) {
-    const next = window.prompt('A/B traffic % (0–100):', String(p.traffic_percentage))
-    if (next == null) return
-    const n = Number(next)
-    if (!Number.isFinite(n)) return
+  function setTraffic(p: PromptVersion) {
+    setTrafficTarget(p)
+  }
+
+  async function commitTraffic(raw: string) {
+    if (!trafficTarget) return
+    const p = trafficTarget
+    const n = Number(raw)
     const pct = Math.max(0, Math.min(100, Math.round(n)))
     setBusy(p.id)
     const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, {
@@ -101,6 +107,7 @@ export function PromptLabPage() {
       body: JSON.stringify({ trafficPercentage: pct }),
     })
     setBusy(null)
+    setTrafficTarget(null)
     if (res.ok) {
       toast.push({ tone: 'success', message: `Traffic set to ${pct}%` })
       reload()
@@ -109,11 +116,17 @@ export function PromptLabPage() {
     }
   }
 
-  async function deletePrompt(p: PromptVersion) {
-    if (!window.confirm(`Delete prompt "${p.version}"? This cannot be undone.`)) return
+  function deletePrompt(p: PromptVersion) {
+    setDeleteTarget(p)
+  }
+
+  async function commitDelete() {
+    if (!deleteTarget) return
+    const p = deleteTarget
     setBusy(p.id)
     const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, { method: 'DELETE' })
     setBusy(null)
+    setDeleteTarget(null)
     if (res.ok) {
       toast.push({ tone: 'success', message: 'Prompt deleted' })
       reload()
@@ -180,23 +193,27 @@ export function PromptLabPage() {
           label="Active prompts"
           value={data.prompts.filter((p) => p.is_active).length}
           sublabel="serving production traffic"
+          meaning="Prompts currently classifying live reports. One active per stage; the rest are candidates or archived."
         />
         <KpiTile
           label="Candidates"
           value={candidates}
           accent={candidates > 0 ? 'info' : 'muted'}
           sublabel="awaiting eval"
+          meaning="Cloned prompts collecting evaluations before they can be promoted. Each one needs a few hundred scored reports for confidence."
         />
         <KpiTile
           label="Best score"
           value={bestPrompt?.avg_judge_score != null ? formatPct(bestPrompt.avg_judge_score) : '—'}
           accent={'ok'}
           sublabel={bestPrompt ? `${bestPrompt.stage}/${bestPrompt.version}` : 'no scored prompts yet'}
+          meaning="Highest mean judge score across all prompts (active + candidate). If a candidate beats the active one significantly, consider promoting it."
         />
         <KpiTile
           label="Eval dataset"
           value={data.dataset.labelled.toLocaleString()}
           sublabel={`labelled / ${data.dataset.total.toLocaleString()} total reports`}
+          meaning="Reports that have a human-labelled ground truth. Bigger = stronger eval signal. Build it up by triaging reports yourself."
         />
       </KpiRow>
 
@@ -236,6 +253,38 @@ export function PromptLabPage() {
           onClose={() => setEditing(null)}
           onSave={saveEdit}
           saving={busy === editing.id}
+        />
+      )}
+
+      {trafficTarget && (
+        <PromptDialog
+          title={`A/B traffic for ${trafficTarget.version}`}
+          body="Set the percentage of live classifications routed to this prompt. The remainder stays on the currently-active prompt."
+          label="Traffic share (0–100)"
+          inputType="number"
+          defaultValue={String(trafficTarget.traffic_percentage)}
+          confirmLabel="Update traffic"
+          loading={busy === trafficTarget.id}
+          validate={(v) => {
+            const n = Number(v)
+            if (!Number.isFinite(n)) return 'Enter a number between 0 and 100.'
+            if (n < 0 || n > 100) return 'Traffic must be between 0 and 100.'
+            return null
+          }}
+          onConfirm={commitTraffic}
+          onCancel={() => setTrafficTarget(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={`Delete prompt ${deleteTarget.version}?`}
+          body={`This removes "${deleteTarget.version}" from the prompt registry. Its historical evaluations stay in the dataset, but the prompt can no longer serve traffic. This cannot be undone.`}
+          confirmLabel="Delete prompt"
+          tone="danger"
+          loading={busy === deleteTarget.id}
+          onConfirm={commitDelete}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>

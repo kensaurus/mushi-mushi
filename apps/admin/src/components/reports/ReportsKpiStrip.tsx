@@ -6,14 +6,43 @@
  *          severity in one click.
  */
 
+import { useMemo } from 'react'
 import { usePageData } from '../../lib/usePageData'
-import { KpiTile } from '../charts'
+import { KpiTile, type KpiDelta } from '../charts'
 import type { Tone } from '../charts'
+
+type SeverityKey = 'critical' | 'high' | 'medium' | 'low'
 
 interface SeverityStats {
   window_days: number
-  bySeverity: { critical: number; high: number; medium: number; low: number }
+  bySeverity: Record<SeverityKey, number>
+  byDay?: Array<{ day: string } & Record<SeverityKey | 'total', number>>
   total: number
+}
+
+function buildSeveritySpark(
+  byDay: SeverityStats['byDay'],
+  key: SeverityKey,
+): number[] {
+  if (!byDay) return []
+  return byDay.map((d) => d[key] ?? 0)
+}
+
+function severityDelta(values: number[]): KpiDelta | null {
+  // Compare the last 7d window against the prior 7d window. More reports of
+  // a given severity is bad → tone flips to warn on rises.
+  if (values.length < 14) return null
+  const last7 = values.slice(-7).reduce((a, n) => a + n, 0)
+  const prev7 = values.slice(0, values.length - 7).reduce((a, n) => a + n, 0)
+  if (last7 === 0 && prev7 === 0) return null
+  if (prev7 === 0) return { value: 'new', direction: 'up', tone: 'warn' }
+  const pct = Math.round(((last7 - prev7) / prev7) * 100)
+  if (pct === 0) return { value: '0%', direction: 'flat', tone: 'muted' }
+  return {
+    value: `${Math.abs(pct)}%`,
+    direction: pct > 0 ? 'up' : 'down',
+    tone: pct > 0 ? 'warn' : 'ok',
+  }
 }
 
 interface Props {
@@ -47,6 +76,15 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
   )
 
   const counts = data?.bySeverity ?? { critical: 0, high: 0, medium: 0, low: 0 }
+  const sparks = useMemo(
+    () => ({
+      critical: buildSeveritySpark(data?.byDay, 'critical'),
+      high: buildSeveritySpark(data?.byDay, 'high'),
+      medium: buildSeveritySpark(data?.byDay, 'medium'),
+      low: buildSeveritySpark(data?.byDay, 'low'),
+    }),
+    [data?.byDay],
+  )
 
   // Surface fetch failures inline instead of silently rendering zeros — the
   // audit found this row claiming "0 critical · 0 high" when the endpoint
@@ -94,6 +132,9 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
               sublabel={`last ${windowDays}d${isActive ? ' · filtering' : ''}`}
               accent={tile.accent}
               meaning={tile.meaning}
+              series={sparks[tile.key]}
+              delta={severityDelta(sparks[tile.key])}
+              seriesAriaLabel={`${tile.label} reports per day, last ${windowDays} days`}
             />
           </button>
         )
