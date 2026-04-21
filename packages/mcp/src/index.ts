@@ -191,6 +191,90 @@ server.tool(
   },
 );
 
+// --- Wave G2: control-plane tools (trigger judge, dispatch fix, transition ---
+//     status, run NL query, traverse knowledge graph) ---
+
+server.tool(
+  'trigger_judge',
+  'Run the Sonnet-as-Judge over a batch of classified reports. Returns batch id; results land in judge_results.',
+  {
+    limit: z.number().optional().describe('Max reports to judge in this batch (default 25, max 100)'),
+    projectId: z.string().optional().describe('Restrict to one project when the API key owns multiple'),
+  },
+  async (args) => {
+    const data = await apiCall('/v1/admin/judge/run', {
+      method: 'POST',
+      body: JSON.stringify({ limit: Math.min(args.limit ?? 25, 100), projectId: args.projectId }),
+    }) as { ok: boolean; data: unknown }
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
+  },
+)
+
+server.tool(
+  'dispatch_fix',
+  'Dispatch the agentic fix orchestrator for a classified report. Returns fix_attempt id; stream progress via get_fix_progress.',
+  {
+    reportId: z.string().describe('Report UUID to fix'),
+    agent: z.enum(['claude_code', 'codex', 'rest_worker', 'mcp']).optional().describe('Override the agent adapter'),
+  },
+  async (args) => {
+    const data = await apiCall('/v1/admin/fixes/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({ reportId: args.reportId, agent: args.agent }),
+    }) as { ok: boolean; data: unknown }
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
+  },
+)
+
+server.tool(
+  'transition_status',
+  'Move a report between workflow states. Enforces the same transition rules as the admin UI.',
+  {
+    reportId: z.string().describe('Report UUID'),
+    status: z.enum(['pending', 'classified', 'grouped', 'fixing', 'fixed', 'dismissed']).describe('Target status'),
+    reason: z.string().optional().describe('Reason for the transition (audit trail)'),
+  },
+  async (args) => {
+    const data = await apiCall(`/v1/admin/reports/${args.reportId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: args.status, reason: args.reason }),
+    }) as { ok: boolean; data: unknown }
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
+  },
+)
+
+server.tool(
+  'run_nl_query',
+  'Natural-language question → SQL query run against your project data. Read-only, 60/hour rate-limited, no privileged schemas.',
+  {
+    question: z.string().describe('Question in plain English, e.g. "Which components had the most critical bugs this week?"'),
+  },
+  async (args) => {
+    const data = await apiCall('/v1/admin/query', {
+      method: 'POST',
+      body: JSON.stringify({ question: args.question }),
+    }) as { ok: boolean; data: unknown }
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
+  },
+)
+
+server.tool(
+  'get_knowledge_graph',
+  'Traverse the knowledge graph from a seed component or page. Returns nodes + edges within a depth budget.',
+  {
+    seed: z.string().describe('Starting node id or label'),
+    depth: z.number().optional().describe('Traversal depth (default 2, max 4)'),
+  },
+  async (args) => {
+    const params = new URLSearchParams({
+      seed: args.seed,
+      depth: String(Math.min(args.depth ?? 2, 4)),
+    })
+    const data = await apiCall(`/v1/admin/graph/traverse?${params}`) as { ok: boolean; data: unknown }
+    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
+  },
+)
+
 // --- Resources ---
 
 server.resource(

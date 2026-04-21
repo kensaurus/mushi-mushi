@@ -1,5 +1,5 @@
 // ============================================================
-// Wave V5.3 — Stage 2 air-gap injection isolation contract.
+// V5.3 — Stage 2 air-gap injection isolation contract.
 //
 // Stage 1 (fast-filter) faces untrusted user input directly. Stage 2
 // (classify-report) must NEVER see raw `console_logs`, `network_logs`,

@@ -5,6 +5,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 const synthLog = log.child('synthetic')
 
@@ -23,12 +24,9 @@ const syntheticSchema = z.object({
 })
 
 Deno.serve(withSentry('generate-synthetic', async (req) => {
-  const auth = req.headers.get('Authorization')
-  const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
-  if (!token || !expectedKey || token !== expectedKey) {
-    return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
-  }
+  // SEC-1 (Wave S1 / D-14): unified internal auth.
+  const unauthorized = requireServiceRoleAuth(req)
+  if (unauthorized) return unauthorized
 
   const db = getServiceClient()
   const body = await req.json().catch(() => ({}))

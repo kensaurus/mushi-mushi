@@ -1,5 +1,5 @@
 -- =============================================================================
--- V5.3 §2.15 Wave B B4 — fine-tune export → validate → promote pipeline.
+-- V5.3 §2.15 B4 — fine-tune export → validate → promote pipeline.
 --
 -- Adds the columns the pipeline needs on top of the existing fine_tuning_jobs
 -- table:

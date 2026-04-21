@@ -1,5 +1,5 @@
 /**
- * Wave C C7: Data residency.
+ * C7: Data residency.
  *
  * The Mushi cloud runs three regional Supabase projects:
  *   - us  → api.us.mushimushi.dev  (legacy / default)

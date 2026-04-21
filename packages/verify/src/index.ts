@@ -84,37 +84,142 @@ export async function verifyFix(options: VerifyOptions): Promise<VerifyResult> {
   }
 }
 
+/**
+ * Parse a repro step into a `{ action, ... }` descriptor.
+ *
+ * Wave S5: the step interpreter used to only dispatch `click` and
+ * `navigate` — everything else silently reported success. The judge
+ * treated that as a passing verification, which quietly hid real
+ * regressions. We now parse `type`, `fill`, `assertText`, `waitFor`,
+ * `press`, and `select` with explicit target/value extraction.
+ *
+ * We keep parsing permissive on purpose: repro steps come from an LLM and
+ * humans, so we match the common natural-language phrasings without
+ * forcing a DSL. Anything that can't be parsed falls through to a 1s
+ * settle (the old `observe`) and is flagged `parsed: false` so the judge
+ * can distinguish "we did nothing on purpose" from "the step failed".
+ */
+interface ParsedStep {
+  action: 'click' | 'navigate' | 'type' | 'press' | 'select' | 'assertText' | 'waitFor' | 'observe'
+  target?: string
+  value?: string
+}
+
+export function parseStep(step: string): ParsedStep {
+  const s = step.trim()
+  const lc = s.toLowerCase()
+
+  // type|fill|enter "something" in|into <target>
+  const typeMatch = s.match(/^(?:type|fill|enter)\s+(?:in\s+|into\s+)?(?:["'](.+?)["']|(.+?))\s+(?:in|into)\s+(.+?)$/i)
+  if (typeMatch) {
+    return { action: 'type', value: typeMatch[1] ?? typeMatch[2], target: typeMatch[3].trim() }
+  }
+
+  // fill|type <target> with "value"
+  const fillWithMatch = s.match(/^(?:type|fill|enter)\s+(.+?)\s+with\s+["'](.+?)["']$/i)
+  if (fillWithMatch) {
+    return { action: 'type', target: fillWithMatch[1].trim(), value: fillWithMatch[2] }
+  }
+
+  // press Enter / press Escape
+  const pressMatch = s.match(/^press\s+(.+?)$/i)
+  if (pressMatch) return { action: 'press', value: pressMatch[1].trim() }
+
+  // select "value" from <target>
+  const selectMatch = s.match(/^select\s+["'](.+?)["']\s+from\s+(.+?)$/i)
+  if (selectMatch) return { action: 'select', value: selectMatch[1], target: selectMatch[2].trim() }
+
+  // assert / verify / expect "something" (is visible | to be visible | visible)
+  const assertMatch = s.match(/^(?:assert|verify|expect|check)\s+(?:that\s+)?["'](.+?)["']/i)
+    ?? s.match(/^(?:assert|verify|expect|check)\s+(?:that\s+)?(.+?)\s+(?:is|to be|be)\s+visible$/i)
+  if (assertMatch) return { action: 'assertText', value: assertMatch[1].trim() }
+
+  // wait for <target> / wait 3s
+  const waitForMatch = s.match(/^wait\s+for\s+(.+?)$/i)
+  if (waitForMatch) return { action: 'waitFor', target: waitForMatch[1].trim() }
+  const waitMsMatch = s.match(/^wait\s+(\d+)\s*(ms|s|seconds?)?$/i)
+  if (waitMsMatch) {
+    const num = Number(waitMsMatch[1])
+    const unit = (waitMsMatch[2] ?? 'ms').toLowerCase()
+    const ms = unit.startsWith('s') ? num * 1000 : num
+    return { action: 'waitFor', value: String(ms) }
+  }
+
+  if (lc.startsWith('click')) {
+    return { action: 'click', target: s.replace(/^click\s*(on\s*)?/i, '').trim() }
+  }
+
+  if (lc.startsWith('navigate') || lc.startsWith('go to') || lc.startsWith('open ')) {
+    const urlMatch = s.match(/^(?:navigate\s*to|go\s*to|open)\s+(.+?)$/i)
+    if (urlMatch) return { action: 'navigate', target: urlMatch[1].trim() }
+  }
+
+  return { action: 'observe' }
+}
+
 async function executeStep(page: Page, step: string): Promise<Record<string, unknown>> {
-  const stepLower = step.toLowerCase()
-
+  const parsed = parseStep(step)
   try {
-    if (stepLower.includes('click')) {
-      const target = step.replace(/click\s*(on\s*)?/i, '').trim()
-      const element = page.locator(`text=${target}`).first()
-      if (await element.isVisible({ timeout: 3000 })) {
+    switch (parsed.action) {
+      case 'click': {
+        const target = parsed.target ?? ''
+        const element = page.locator(`text=${target}`).first()
+        if (!(await element.isVisible({ timeout: 3000 }))) {
+          return { step, success: false, action: 'click', parsed, error: 'Element not found' }
+        }
         await element.click({ timeout: 5000 })
-        return { step, success: true, action: 'click' }
+        return { step, success: true, action: 'click', parsed }
       }
-      return { step, success: false, action: 'click', error: 'Element not found' }
-    }
-
-    if (stepLower.includes('navigate') || stepLower.includes('go to')) {
-      const urlMatch = step.match(/(?:navigate|go)\s*to\s*(.+)/i)
-      if (urlMatch) {
-        await page.goto(urlMatch[1].trim(), { waitUntil: 'networkidle', timeout: 15000 })
-        return { step, success: true, action: 'navigate' }
+      case 'navigate': {
+        await page.goto(parsed.target ?? '', { waitUntil: 'networkidle', timeout: 15000 })
+        return { step, success: true, action: 'navigate', parsed }
       }
+      case 'type': {
+        const input = page.locator(parsed.target ?? '').first()
+        const visible = await input.isVisible({ timeout: 3000 }).catch(() => false)
+        if (!visible) {
+          // Fall back to label-text search; LLM-written repro steps
+          // commonly reference inputs by their visible label.
+          const byLabel = page.getByLabel(parsed.target ?? '')
+          if (await byLabel.count()) {
+            await byLabel.fill(parsed.value ?? '')
+            return { step, success: true, action: 'type', parsed, matcher: 'label' }
+          }
+          return { step, success: false, action: 'type', parsed, error: 'Input not found' }
+        }
+        await input.fill(parsed.value ?? '')
+        return { step, success: true, action: 'type', parsed, matcher: 'locator' }
+      }
+      case 'press': {
+        await page.keyboard.press(parsed.value ?? '')
+        return { step, success: true, action: 'press', parsed }
+      }
+      case 'select': {
+        await page.locator(parsed.target ?? '').selectOption({ label: parsed.value ?? '' })
+        return { step, success: true, action: 'select', parsed }
+      }
+      case 'assertText': {
+        const found = await page.getByText(parsed.value ?? '', { exact: false })
+          .first()
+          .isVisible({ timeout: 5000 })
+          .catch(() => false)
+        return { step, success: found, action: 'assertText', parsed, error: found ? undefined : 'Text not visible' }
+      }
+      case 'waitFor': {
+        if (parsed.target) {
+          await page.locator(parsed.target).first().waitFor({ timeout: 10000 })
+          return { step, success: true, action: 'waitFor', parsed }
+        }
+        await page.waitForTimeout(Math.min(Number(parsed.value ?? 1000), 10000))
+        return { step, success: true, action: 'waitFor', parsed }
+      }
+      case 'observe':
+      default:
+        await page.waitForTimeout(1000)
+        return { step, success: true, action: 'observe', parsed, parsedOk: false }
     }
-
-    if (stepLower.includes('type') || stepLower.includes('enter') || stepLower.includes('fill')) {
-      return { step, success: true, action: 'type', note: 'Skipped — no target input specified' }
-    }
-
-    // Default: wait and observe
-    await page.waitForTimeout(1000)
-    return { step, success: true, action: 'observe' }
   } catch (err) {
-    return { step, success: false, error: String(err) }
+    return { step, success: false, parsed, error: String(err) }
   }
 }
 

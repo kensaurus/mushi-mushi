@@ -1,0 +1,88 @@
+# =============================================================================
+# Mushi Mushi — .gitattributes
+# =============================================================================
+# Enforce deterministic line endings (LF) across Windows / macOS / Linux,
+# keep generated files out of diffs and language stats, and mark binaries so
+# git never tries to text-merge them.
+
+# --- Default: auto-normalize text, enforce LF on checkin ---------------------
+* text=auto eol=lf
+
+# --- Explicit text types (belt-and-suspenders) -------------------------------
+*.ts        text eol=lf
+*.tsx       text eol=lf
+*.js        text eol=lf
+*.jsx       text eol=lf
+*.mjs       text eol=lf
+*.cjs       text eol=lf
+*.json      text eol=lf
+*.jsonc     text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.md        text eol=lf
+*.mdx       text eol=lf
+*.css       text eol=lf
+*.scss      text eol=lf
+*.html      text eol=lf
+*.svg       text eol=lf
+*.sql       text eol=lf
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Makefile    text eol=lf
+
+# --- Windows-only files: keep CRLF ------------------------------------------
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# --- Binary (never diff, never text-merge) ----------------------------------
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.webp      binary
+*.ico       binary
+*.pdf       binary
+*.zip       binary
+*.tgz       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.mp4       binary
+*.mov       binary
+*.webm      binary
+
+# --- Linguist overrides (cleaner GitHub language bar) ------------------------
+# Generated lock files: keep in git, keep out of diffs and language stats.
+pnpm-lock.yaml        linguist-generated=true -diff merge=ours
+package-lock.json     linguist-generated=true -diff merge=ours
+yarn.lock             linguist-generated=true -diff merge=ours
+
+# Documentation and vendored assets: don't count as "source" in language stats.
+docs/**               linguist-documentation=true
+*.md                  linguist-documentation=true
+apps/docs/content/**  linguist-documentation=true
+
+# Vendored MCP plugin bundles and generated TypeScript definitions.
+**/*.d.ts             linguist-generated=true
+**/vendor/**          linguist-vendored=true
+**/dist/**            linguist-generated=true
+
+# --- Archive hygiene (`git archive` / `npm pack`) ----------------------------
+# Keep these out of release tarballs published to npm / GitHub.
+.github/              export-ignore
+.changeset/           export-ignore
+.playwright-mcp/      export-ignore
+.cursor/              export-ignore
+.husky/               export-ignore
+.gitattributes        export-ignore
+.gitignore            export-ignore
+.editorconfig         export-ignore
+CHANGELOG.md          export-ignore
+HANDOVER.md           export-ignore
+docs/                 export-ignore
+scripts/              export-ignore
+audit-*/              export-ignore
+e2e/                  export-ignore

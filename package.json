@@ -26,6 +26,7 @@
   },
   "packageManager": "pnpm@10.33.0",
   "scripts": {
+    "prepare": "node scripts/install-git-hooks.mjs",
     "build": "turbo run build",
     "predev": "node scripts/kill-port.mjs 6464 && turbo daemon stop",
     "dev": "turbo run dev --force --concurrency=30",
@@ -51,7 +52,10 @@
     "onlyBuiltDependencies": [
       "esbuild",
       "supabase"
-    ]
+    ],
+    "overrides": {
+      "undici@<6.24.0": ">=6.24.0"
+    }
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.4",

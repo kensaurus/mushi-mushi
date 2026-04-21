@@ -10,11 +10,28 @@
  *   3. Otherwise → cloud (uses hardcoded cloud defaults)
  */
 
-export const CLOUD_SUPABASE_URL = 'https://dxptnwrhwsqckaftyymj.supabase.co'
-// Supabase anon key is public by design — it is the client-facing JWT that
-// lets the browser talk to Supabase under RLS. Not a secret.
+// Cloud URL is overridable at build time via VITE_CLOUD_SUPABASE_URL so forks,
+// staging clusters, and region replicas can reuse the same dogfood fallback
+// path without patching source. Defaults to the primary production project.
+export const CLOUD_SUPABASE_URL =
+  (import.meta.env.VITE_CLOUD_SUPABASE_URL ?? '').trim() ||
+  'https://dxptnwrhwsqckaftyymj.supabase.co'
+
+// The Supabase anon key is public by design — a signed JWT that grants the
+// browser the `anon` role under RLS. It is shipped to every client on every
+// request. Historically we hardcoded the cloud value here so `npm install &&
+// npm start` "just worked" without a .env file.
+//
+// SEC (Wave S1 / D-13): the hardcoded value is now a build-time fallback of
+// last resort. In CI we set VITE_CLOUD_SUPABASE_ANON_KEY so rotating the cloud
+// JWT no longer requires a source patch; the fallback literal stays so forks
+// that build without any env still reach a usable cluster. Not a secret, but
+// treating it like one lets us rotate on a predictable SLA.
 // check-no-secrets: ignore-next-line
-export const CLOUD_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM'
+const HARDCODED_CLOUD_ANON_KEY_FALLBACK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4cHRud3Jod3NxY2thZnR5eW1qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYyNDk4OTQsImV4cCI6MjA5MTgyNTg5NH0.Vs09uA6QY9CPi6PLZe2lO9kS27JgSWpbzFepMRzoaaM'
+export const CLOUD_SUPABASE_ANON_KEY =
+  (import.meta.env.VITE_CLOUD_SUPABASE_ANON_KEY ?? '').trim() ||
+  HARDCODED_CLOUD_ANON_KEY_FALLBACK
 export const CLOUD_API_URL = `${CLOUD_SUPABASE_URL}/functions/v1/api`
 
 // Resolved env values with cloud fallback baked in. Use these everywhere

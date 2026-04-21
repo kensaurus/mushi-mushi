@@ -56,7 +56,7 @@
 
   /* ── Aliases — older code references these names. Keep them mapped to
        the canonical tokens above so stale class names still render the
-       right colour instead of silently dropping out. Audit Wave K. */
+       right colour instead of silently dropping out. */
   --color-warning: var(--color-warn);
   --color-warning-subtle: var(--color-warn-muted);
   --color-danger-subtle: var(--color-danger-muted);
@@ -97,12 +97,18 @@
 
   /* Motion duration tokens — replace ad-hoc 100/120/150/180/220ms values
      scattered through the components so timing reads consistent.
-     Wave Q: micro = button press feedback, fast = hover/colour swaps,
+     micro = button press feedback, fast = hover/colour swaps,
      base = page-level transitions, slow = modals + skeletons fading out. */
   --duration-micro: 100ms;
   --duration-fast: 150ms;
   --duration-base: 220ms;
   --duration-slow: 320ms;
+
+  /* Responsive table density tokens. `ResponsiveTable` reads the active
+     density off a CSS variable on its wrapper so child rows pick it up via
+     inheritance without prop drilling. */
+  --row-py-comfy: 0.625rem;
+  --row-py-compact: 0.375rem;
 }
 
 /* ---------------------------------------------------------------------------
@@ -283,7 +289,7 @@ select, input, textarea {
 
 /* ---------------------------------------------------------------------------
    MODAL + TOAST MOTION
-   Backdrop fade, panel scale-in, toast slide-in. Wave K microinteractions —
+   Backdrop fade, panel scale-in, toast slide-in microinteractions —
    gives async UI a perceived weight without bloating bundle with framer-motion.
 --------------------------------------------------------------------------- */
 
@@ -341,11 +347,162 @@ select, input, textarea {
 .animate-mushi-success-pulse  { animation: mushi-success-pulse 600ms var(--ease-out-expo) both; }
 .animate-mushi-confetti-fall  { animation: mushi-confetti-fall 1400ms cubic-bezier(.18,.78,.42,1) both; }
 
+/* ---------------------------------------------------------------------------
+   FLOW-CANVAS MOTION (PDCA loop + FixAttemptFlow)
+   Animations used inside the React Flow canvases. Kept here (not inline)
+   so one @media (prefers-reduced-motion) clause at the bottom of the file
+   can disable them all. Count-pop highlights a freshly-incremented counter;
+   celebrate-burst is fired once when a bottleneck clears; drawer-in is the
+   side-sheet slide-in; dot-travel drives the animated dots along edges.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-count-pop {
+  0%   { transform: scale(1); color: var(--color-fg); }
+  40%  { transform: scale(1.25); color: var(--color-brand); }
+  100% { transform: scale(1); }
+}
+.animate-mushi-count-pop { animation: mushi-count-pop 420ms var(--ease-out-expo) both; }
+
+@keyframes mushi-celebrate-burst {
+  0%   { opacity: 0; transform: scale(0.6); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.8); }
+}
+.mushi-celebrate-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid var(--color-ok);
+  pointer-events: none;
+  animation: mushi-celebrate-burst 900ms var(--ease-out-expo) both;
+}
+
+@keyframes mushi-drawer-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-mushi-drawer-in { animation: mushi-drawer-in 220ms var(--ease-out-expo) both; }
+
+@keyframes mushi-drawer-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.animate-mushi-drawer-backdrop-in { animation: mushi-drawer-backdrop-in 160ms var(--ease-out-expo) both; }
+
+/* Traveling dots along an edge. Each dot gets its own animation-delay so
+   the pulse reads as a moving caravan rather than a simultaneous blink.
+   The SVG path length is normalised to 1 via pathLength="1" at the
+   consumer site so stroke-dashoffset produces the "cursor" effect. */
+@keyframes mushi-dot-travel {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Running-node glow — applied to a node when it's the currently-executing
+   stage (e.g. a dispatch is in flight on Do). */
+@keyframes mushi-running-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--color-brand) 45%, transparent); }
+  50%      { box-shadow: 0 0 0 6px color-mix(in oklch, var(--color-brand) 0%, transparent); }
+}
+.mushi-running-glow { animation: mushi-running-glow 1.8s var(--ease-out-expo) infinite; }
+
+/* React Flow v12 sets `pointer-events: none` on `.react-flow__node` when
+   `nodesDraggable && nodesConnectable && selectable` are all false. Our
+   custom nodes host real <button>/<a> children that MUST stay clickable
+   (they open the stage drawer / navigate to stage pages). Opt back in
+   globally so every custom node in the app inherits interactivity — no
+   per-node Tailwind class to forget. Panels (legend, controls, activity
+   log) also need this since they're rendered above `.react-flow__pane`. */
+.react-flow__node { pointer-events: auto !important; }
+
+/* ---------------------------------------------------------------------------
+   RESPONSIVE TABLE
+   Chrome for `ResponsiveTable`: density-driven row padding, edge fade masks
+   when the table horizontally overflows, and a sticky-first-column helper.
+--------------------------------------------------------------------------- */
+
+.responsive-table {
+  --row-py: var(--row-py-comfy);
+}
+.responsive-table[data-density="compact"] {
+  --row-py: var(--row-py-compact);
+}
+.responsive-table table td,
+.responsive-table table th {
+  padding-top: var(--row-py);
+  padding-bottom: var(--row-py);
+}
+.responsive-table-scroll {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.responsive-table-scroll[data-overflow-left="true"] {
+  mask-image: linear-gradient(to right, transparent 0, #000 24px);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px);
+}
+.responsive-table-scroll[data-overflow-right="true"] {
+  mask-image: linear-gradient(to left, transparent 0, #000 24px);
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 24px);
+}
+.responsive-table-scroll[data-overflow-left="true"][data-overflow-right="true"] {
+  mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
+.responsive-table[data-sticky-first="true"] table thead th:first-child,
+.responsive-table[data-sticky-first="true"] table tbody td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--color-surface-raised);
+  z-index: 1;
+}
+.responsive-table[data-sticky-first="true"] table thead th:first-child {
+  z-index: 2;
+}
+
 /* Section + page rhythm helpers — keep vertical spacing consistent across
    pages. The audit found rhythm drifted: some pages used `mb-3`, others
    `mb-4`, others bare `space-y-2`. Standardise on these two utilities.   */
 .page-stack > * + * { margin-top: 1rem; }     /* between page sections */
 .section-stack > * + * { margin-top: 0.625rem; } /* inside a card section */
+
+/* ---------------------------------------------------------------------------
+   COMMAND PALETTE (cmdk)
+   Item-level styles — colours, hover, selected. cmdk drives selection
+   via data-selected on the active Command.Item; we wire it to the brand
+   surface tint so arrow-key movement is visible at a glance.
+--------------------------------------------------------------------------- */
+
+.cmdk-list { scroll-padding-block: 0.5rem; }
+
+.cmdk-group [cmdk-group-heading] {
+  padding: 0.5rem 0.75rem 0.25rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-fg-faint);
+}
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--color-fg-secondary);
+  cursor: pointer;
+  border-radius: 0.125rem;
+  margin: 0 0.25rem;
+}
+.cmdk-item[data-selected="true"] {
+  background: color-mix(in oklch, var(--color-brand) 15%, transparent);
+  color: var(--color-fg);
+}
+.cmdk-item[data-disabled="true"] {
+  opacity: 0.5;
+  pointer-events: none;
+}
 
 /* ---------------------------------------------------------------------------
    REDUCED MOTION
@@ -364,7 +521,7 @@ select, input, textarea {
    PRINT (compliance PDF export, audit log printouts)
    Strips chrome (sidebar, headers, action buttons) and forces a printable
    palette. Pages opt out of printing via the .no-print utility on transient
-   elements (banners, toasts, tooltips). Audit Wave I §5 compliance.
+   elements (banners, toasts, tooltips). Compliance print hygiene.
 --------------------------------------------------------------------------- */
 
 @media print {

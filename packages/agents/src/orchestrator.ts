@@ -144,12 +144,30 @@ export class FixOrchestrator {
 
   async run(reportId: string): Promise<{ fixId: string; result: FixResult; prUrl?: string }> {
     const context = await this.assembleContext(reportId)
+    return this.runWithContext(context)
+  }
+
+  /**
+   * Wave S5: run with a pre-assembled context, so multi-repo coordinators
+   * can override `config.repoUrl` and narrow `relevantCode` per task. The
+   * optional `coordination` metadata is stamped on the created fix_attempt
+   * row so downstream tooling (PR cross-linking, rollup status) can find
+   * siblings without a second round-trip.
+   */
+  async runWithContext(
+    context: FixContext,
+    coordination?: { coordinationId?: string; repoId?: string; repoRole?: string },
+  ): Promise<{ fixId: string; result: FixResult; prUrl?: string }> {
+    const reportId = context.reportId
 
     const { data: fix } = await this.db.from('fix_attempts').insert({
       report_id: reportId,
       project_id: context.projectId,
       agent: 'claude_code',
       status: 'running',
+      coordination_id: coordination?.coordinationId ?? null,
+      repo_id: coordination?.repoId ?? null,
+      repo_role: coordination?.repoRole ?? null,
     }).select('id').single()
 
     const fixId = fix!.id

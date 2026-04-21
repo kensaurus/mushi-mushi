@@ -428,7 +428,7 @@ interface PageHeaderProps {
   contextChip?: ReactNode | null
   /** Project name to anchor the page in the user's reality
    *  (e.g. `Reports · glot-it`). Pass `null` or omit to keep the bare title.
-   *  Audit Wave K: every PDCA page surfaces the active project so the user
+   * every PDCA page surfaces the active project so the user
    *  can tell which app a bug came from without scanning the switcher. */
   projectScope?: string | null
 }
@@ -532,7 +532,7 @@ function writePageHelpDismissed(title: string, dismissed: boolean) {
 /** Returning users (anyone who has visited the admin before) shouldn't be
  *  bombarded with help disclosures on every page. We mark the visit on first
  *  page-help mount and use it to flip the default from open -> closed for
- *  subsequent sessions on pages they haven't explicitly opened. Audit Wave K. */
+ * subsequent sessions on pages they haven't explicitly opened. . */
 function isReturningUser(): boolean {
   if (typeof window === 'undefined') return false
   try {
@@ -874,7 +874,7 @@ interface EmptyStateProps {
    * Optional inline learning cues. Rendered as a tight bullet list under the
    * description so the user can see "what should I try?" without navigating
    * away. Follows the third leg of NN/G's empty-state guidelines (status +
-   * learning cue + direct path). Audit Wave I §6.
+   * learning cue + direct path).
    */
   hints?: string[]
   /** Optional small icon glyph rendered above the title. */
@@ -931,7 +931,7 @@ export function Skeleton({ className = '' }: { className?: string }) {
  * Toasts disappear; this stays put next to the button until the next run.
  *
  * Tones map directly to status semantics so the chip can be passed a single
- * tone prop and never needs to think about colour. Wave K microinteraction.
+ * tone prop and never needs to think about colour. microinteraction.
  */
 
 export type ResultChipTone = 'idle' | 'running' | 'success' | 'error' | 'info'

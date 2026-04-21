@@ -20,6 +20,7 @@ import {
   Section,
   FilterSelect,
 } from '../components/ui'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { DispatchTable } from '../components/marketplace/DispatchTable'
 import { InstallForm } from '../components/marketplace/InstallForm'
@@ -181,24 +182,30 @@ export function MarketplacePage() {
     }
   }, [installTarget, draftWebhookUrl, draftWebhookSecret, draftEvents, toast, cancelInstall, reloadAll])
 
+  const [uninstallTarget, setUninstallTarget] = useState<{ slug: string; name: string } | null>(null)
+
+  const confirmUninstall = useCallback(async () => {
+    if (!uninstallTarget) return
+    const { slug, name } = uninstallTarget
+    setInstalling(slug)
+    try {
+      const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error(res.error?.message ?? 'Uninstall failed')
+      toast.success(`Removed ${name}`)
+      reloadAll()
+      setUninstallTarget(null)
+    } catch (err) {
+      toast.error('Uninstall failed', err instanceof Error ? err.message : String(err))
+    } finally {
+      setInstalling(null)
+    }
+  }, [uninstallTarget, toast, reloadAll])
+
   const uninstall = useCallback(
-    async (slug: string, name: string) => {
-      if (!confirm(`Remove "${name}"? Webhook secret will be wiped from Vault.`)) return
-      setInstalling(slug)
-      try {
-        const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, {
-          method: 'DELETE',
-        })
-        if (!res.ok) throw new Error(res.error?.message ?? 'Uninstall failed')
-        toast.success(`Removed ${name}`)
-        reloadAll()
-      } catch (err) {
-        toast.error('Uninstall failed', err instanceof Error ? err.message : String(err))
-      } finally {
-        setInstalling(null)
-      }
-    },
-    [toast, reloadAll],
+    (slug: string, name: string) => setUninstallTarget({ slug, name }),
+    [],
   )
 
   if (loading) return <TableSkeleton rows={6} columns={4} showFilters label="Loading marketplace" />
@@ -312,6 +319,18 @@ export function MarketplacePage() {
           />
         )}
       </Section>
+
+      {uninstallTarget && (
+        <ConfirmDialog
+          title={`Remove ${uninstallTarget.name}?`}
+          body="The webhook secret will be wiped from Vault. This action cannot be undone."
+          confirmLabel="Remove"
+          tone="danger"
+          loading={installing === uninstallTarget.slug}
+          onConfirm={confirmUninstall}
+          onCancel={() => setUninstallTarget(null)}
+        />
+      )}
     </div>
   )
 }

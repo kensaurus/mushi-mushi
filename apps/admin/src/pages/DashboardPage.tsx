@@ -23,13 +23,26 @@ import { FirstReportHero } from '../components/dashboard/FirstReportHero'
 import { QuotaBanner } from '../components/dashboard/QuotaBanner'
 import { HeroIntro } from '../components/dashboard/HeroIntro'
 import { PdcaCockpit } from '../components/dashboard/PdcaCockpit'
+import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { LivePdcaPipeline } from '../components/dashboard/LivePdcaPipeline'
 import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
 import type { DashboardData } from '../components/dashboard/types'
+import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
+
+function inferRunningStage(data: DashboardData): PdcaStageId | null {
+  const activity = data.activity ?? []
+  const recent = activity[0]
+  if (!recent) return null
+  const ageMs = Date.now() - new Date(recent.at).getTime()
+  if (ageMs > 60_000) return null
+  if (recent.kind === 'report') return 'plan'
+  if (recent.kind === 'fix') return 'do'
+  return null
+}
 
 export function DashboardPage() {
   const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
@@ -51,7 +64,7 @@ export function DashboardPage() {
   // dashboard payload every 15s while the tab is visible so stage counts
   // stay current and the pipeline can pulse the right node when a real
   // report / fix / judge / merge lands. Pauses on tab hide to avoid
-  // burning Supabase function-invocations in the background. (Wave O.)
+  // burning Supabase function-invocations in the background.
   useEffect(() => {
     if (loading || error || !data || data.empty) return
     let timer: ReturnType<typeof setInterval> | null = null
@@ -103,7 +116,7 @@ export function DashboardPage() {
     !!setup.activeProject &&
     sdkInstalled &&
     setup.activeProject.report_count === 0
-  // First-action clarity (Wave K Phase 1): when required setup steps are
+  // First-action clarity: when required setup steps are
   // missing, hide the wall of KPIs/charts/cockpit by default. Show only the
   // checklist + hero intro so the user has exactly one thing to do.
   const setupIncomplete = !!setup.activeProject && !setup.selectors.done && setup.selectors.required_complete < setup.selectors.required_total
@@ -185,7 +198,39 @@ export function DashboardPage() {
           <QuotaBanner />
 
           {data.pdcaStages && data.pdcaStages.length > 0 && (
-            <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
+            <>
+              {/* Live React Flow canvas at sm+ breakpoints — pairs the four
+                  stages with live counts, bottlenecks, and an animated
+                  gradient edge out of the current focus stage so the eye
+                  lands on the bottleneck without reading text. */}
+              <div className="hidden sm:block mb-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
+                    Loop status &mdash; Plan, Do, Check, Act
+                  </h2>
+                  <span className="text-2xs text-fg-faint">
+                    Plan → Do → Check → Act (loops back)
+                  </span>
+                </div>
+                <PdcaFlow
+                  variant="live"
+                  stages={data.pdcaStages}
+                  focusStage={data.focusStage}
+                  runningStage={inferRunningStage(data)}
+                  activity={activity}
+                  interactive
+                  showActionPanel
+                  showActivityLog
+                  ariaLabel="Live PDCA loop — live counts per stage with the current bottleneck highlighted. Click a stage to inspect it."
+                />
+              </div>
+              {/* Stacked-cards fallback on narrow viewports where a React
+                  Flow canvas doesn't read well; the cockpit already has a
+                  mobile-optimised vertical layout so we keep it verbatim. */}
+              <div className="sm:hidden">
+                <PdcaCockpit stages={data.pdcaStages} focusStage={data.focusStage} />
+              </div>
+            </>
           )}
 
           <KpiRow counts={counts} fixSummary={fixSummary} reportsByDay={reportsByDay} llmByDay={llmByDay} />

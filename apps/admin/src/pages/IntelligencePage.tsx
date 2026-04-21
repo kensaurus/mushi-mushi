@@ -271,7 +271,7 @@ interface ThisWeekNarrativeProps {
 // Surface the most-recent generated report as a one-paragraph "this week"
 // strip so the Intelligence page leads with insight, not a wall of buttons.
 // Falls back to NN/G-shape empty state (status + learning cue + CTA) when
-// no report exists yet. Audit Wave I P1.
+// no report exists yet. .
 function ThisWeekNarrative({ latest, loading, generating, onGenerate }: ThisWeekNarrativeProps) {
   if (loading) return null
 

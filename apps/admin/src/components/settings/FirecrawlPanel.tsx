@@ -112,7 +112,7 @@ export function FirecrawlPanel() {
     <Section title="Firecrawl (BYOK — Web Research)" className="space-y-3">
       <div className="text-2xs text-fg-muted space-y-1">
         <p>
-          <strong className="text-fg-secondary">Wave E: optional.</strong> Brings <span className="font-mono">firecrawl.dev</span> under your own key for three flows:
+          <strong className="text-fg-secondary">Optional integration.</strong> Brings <span className="font-mono">firecrawl.dev</span> under your own key for three flows:
         </p>
         <ul className="ml-4 list-disc space-y-0.5">
           <li><strong>Research page</strong> — manually search the web from the admin during triage.</li>

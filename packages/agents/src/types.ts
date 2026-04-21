@@ -64,7 +64,7 @@ export interface ReviewResult {
 }
 
 // ============================================================
-// Wave D D7: Multi-repo coordination types
+// D7: Multi-repo coordination types
 // ============================================================
 export type RepoRole = 'frontend' | 'backend' | 'mobile' | 'ai' | 'infra' | 'docs' | 'monorepo' | 'other'
 

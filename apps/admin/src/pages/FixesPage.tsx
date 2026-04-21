@@ -140,7 +140,7 @@ export function FixesPage() {
 
   // Pre-bucket every fix once so the segmented filter and the per-bucket
   // counts in the segmented control stay in sync without re-scanning the
-  // list per render. Audit Wave I — closes the missing FixesPage status
+  // list per render. closes the missing FixesPage status
   // filter finding.
   const bucketCounts = useMemo(() => {
     const counts: Record<StatusBucket, number> = { all: fixes.length, inflight: 0, pr_open: 0, merged: 0, failed: 0 }
@@ -157,7 +157,7 @@ export function FixesPage() {
   }, [fixes, statusBucket])
 
   // Capped at 12 entries so a freshly-loaded list of 100+ fixes still finishes
-  // its entrance animation in well under half a second (Wave U polish).
+  // its entrance animation in well under half a second
   const stagger = useStaggeredAppear({ stepMs: 28, max: 12 })
 
   const retryOne = useCallback(

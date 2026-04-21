@@ -1,5 +1,5 @@
 // =============================================================================
-// V5.3 §2.17 Wave B B6 — Apache AGE parallel-write client.
+// V5.3 §2.17 B6 — Apache AGE parallel-write client.
 //
 // Phase 1 contract:
 //   - SQL graph_nodes / graph_edges remain the source of truth.

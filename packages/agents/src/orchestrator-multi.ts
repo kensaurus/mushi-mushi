@@ -1,5 +1,5 @@
 // ============================================================
-// Wave D D7: Multi-repo coordinated fix orchestrator.
+// D7: Multi-repo coordinated fix orchestrator.
 //
 // One bug → many repos. The flow:
 //
@@ -33,6 +33,29 @@ import type {
   RepoRole,
 } from './types.js'
 import { FixOrchestrator, type OrchestratorConfig } from './orchestrator.js'
+
+/**
+ * Lightweight order-preserving concurrent map. Imported here rather than
+ * shared because `@mushi-mushi/agents` deliberately has zero runtime deps
+ * outside `@supabase/supabase-js`.
+ */
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let cursor = 0
+  const runners = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (true) {
+      const i = cursor++
+      if (i >= items.length) return
+      results[i] = await worker(items[i]!, i)
+    }
+  })
+  await Promise.all(runners)
+  return results
+}
 
 interface MultiRepoConfig extends OrchestratorConfig {
   /**
@@ -160,7 +183,20 @@ export class MultiRepoFixOrchestrator {
     return { coordinationId: coord.id as string, plan }
   }
 
-  /** Step 2 — fan out one single-repo fix per task. */
+  /**
+   * Step 2 — fan out one single-repo fix per task.
+   *
+   * Wave S5: the previous implementation called `singleRepoOrchestrator.run(reportId)`
+   * once per task but always targeted the *primary* repo (because `run()`
+   * reads `project_settings.github_repo_url`). That produced N duplicate
+   * PRs on the same repo, which is worse than not fanning out at all.
+   *
+   * The fix: filter `relevantCode` to the files that match the task's
+   * `path_globs` (via the heuristic planner's globbing), override
+   * `context.config.repoUrl` with the per-repo URL, and let each task run
+   * concurrently (max 4 at a time — GitHub secondary rate limits punish
+   * higher bursts hard).
+   */
   async execute(coordinationId: string): Promise<CoordinatedFixResult> {
     const { data: coord, error } = await this.db
       .from('fix_coordinations')
@@ -175,38 +211,56 @@ export class MultiRepoFixOrchestrator {
       .eq('id', coordinationId)
 
     const tasks = ((coord.plan as { tasks?: CoordinationTask[] } | null)?.tasks ?? []) as CoordinationTask[]
-    const attempts: CoordinatedFixResult['attempts'] = []
+    const repos = await this.fetchRepos(coord.project_id as string)
+    const repoById = new Map(repos.map((r) => [r.id, r]))
 
-    for (const task of tasks) {
+    // Assemble the shared context once so every task sees the same graph /
+    // Sentry / report payload. Per-task we narrow `relevantCode` to the
+    // repo's path globs so each agent sees only its slice of the codebase.
+    const baseContext = await this.singleRepoOrchestrator.assembleContext(coord.report_id as string)
+
+    const runTask = async (task: CoordinationTask): Promise<CoordinatedFixResult['attempts'][number]> => {
+      const repo = repoById.get(task.repoId)
+      if (!repo) {
+        return { fixId: '', repoId: task.repoId, role: task.role, success: false, error: 'repo not found in project_repos' }
+      }
+
+      const relevantCode = task.pathHints.length
+        ? baseContext.relevantCode.filter((f) => task.pathHints.includes(f.path))
+        : baseContext.relevantCode.filter((f) => repo.pathGlobs.some((g) => matchesGlob(f.path, g)))
+
+      const repoContext: FixContext = {
+        ...baseContext,
+        relevantCode,
+        config: { ...baseContext.config, repoUrl: repo.repoUrl },
+      }
+
       try {
-        const { fixId, result } = await this.singleRepoOrchestrator.run(coord.report_id as string)
-        await this.db
-          .from('fix_attempts')
-          .update({
-            coordination_id: coordinationId,
-            repo_id: task.repoId,
-            repo_role: task.role,
-          })
-          .eq('id', fixId)
-
-        attempts.push({
+        const { fixId, result } = await this.singleRepoOrchestrator.runWithContext(repoContext, {
+          coordinationId,
+          repoId: repo.id,
+          repoRole: repo.role,
+        })
+        return {
           fixId,
           repoId: task.repoId,
           role: task.role,
           success: result.success,
           prUrl: result.prUrl,
           error: result.error,
-        })
+        }
       } catch (err) {
-        attempts.push({
+        return {
           fixId: '',
           repoId: task.repoId,
           role: task.role,
           success: false,
           error: err instanceof Error ? err.message : String(err),
-        })
+        }
       }
     }
+
+    const attempts = await mapWithConcurrency(tasks, 4, runTask)
 
     const successCount = attempts.filter((a) => a.success).length
     let parentStatus: CoordinatedFixResult['status']

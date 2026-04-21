@@ -1,4 +1,4 @@
--- M1 (Wave A v0.6.0): Vision air-gap closure
+-- M1: Vision air-gap closure
 -- Adds telemetry columns capturing OCR text and prompt-injection detections from
 -- the dedicated vision-only LLM call. The vision_analysis JSONB already exists.
 -- These dedicated columns let us index/alert on injection attempts cheaply.

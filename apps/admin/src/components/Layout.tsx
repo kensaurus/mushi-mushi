@@ -17,12 +17,17 @@ import {
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { ProjectSwitcher } from './ProjectSwitcher'
+import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { Tooltip } from './ui'
 import { NextBestAction } from './NextBestAction'
 import { QuickstartMegaCta } from './QuickstartMegaCta'
 import { FirstRunTour } from './FirstRunTour'
+import { CommandPalette } from './CommandPalette'
+import { SearchButton } from './SearchButton'
+import { useCommandPalette } from '../lib/useCommandPalette'
+import { useHotkeys } from '../lib/useHotkeys'
 
 interface NavItem {
   label: string
@@ -185,12 +190,72 @@ function isActive(currentPath: string, itemPath: string) {
   return currentPath === itemPath || currentPath.startsWith(itemPath + '/')
 }
 
+/**
+ * Scroll to `#hash` once the destination page and any lazy chunk has mounted.
+ * Runs on every location change. Retries up to ~500ms to handle Suspense
+ * fallbacks resolving after the hash URL lands — the element we want to
+ * scroll to may not exist on the first effect pass.
+ */
+function ScrollToHashAnchor() {
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (!hash) return
+    const id = hash.slice(1)
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 10
+    const tick = () => {
+      if (cancelled) return
+      const el = document.getElementById(id)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      if (++attempts < MAX_ATTEMPTS) setTimeout(tick, 50)
+    }
+    tick()
+    return () => {
+      cancelled = true
+    }
+  }, [hash])
+  return null
+}
+
 export function Layout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
   const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
+  const palette = useCommandPalette()
+
+  // Global Cmd/Ctrl+K opens the command palette. `allowInInputs: true`
+  // because the shortcut's whole point is to be reachable while the user
+  // is mid-type in a search box or filter field.
+  useHotkeys(
+    [
+      {
+        key: 'k',
+        description: 'Open command palette',
+        handler: (e) => {
+          e.preventDefault()
+          palette.toggle()
+        },
+        meta: true,
+        allowInInputs: true,
+      },
+      {
+        key: 'k',
+        description: 'Open command palette',
+        handler: (e) => {
+          e.preventDefault()
+          palette.toggle()
+        },
+        ctrl: true,
+        allowInInputs: true,
+      },
+    ],
+  )
 
   const activeStage = stageForPath(pathname)
 
@@ -387,13 +452,17 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className="text-brand">mushi</span>
             <span className="text-fg-secondary">mushi</span>
           </span>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <SearchButton />
+            <PlanBadge />
             <ProjectSwitcher />
           </div>
         </header>
 
         {/* Desktop sub-header — project switcher pinned to the right */}
         <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
+          <SearchButton />
+          <PlanBadge />
           <ProjectSwitcher />
         </header>
 
@@ -401,11 +470,13 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="max-w-6xl mx-auto px-5 py-4">
             <QuickstartMegaCta />
             <NextBestAction />
+            <ScrollToHashAnchor />
             {children}
           </div>
         </main>
       </div>
       <FirstRunTour />
+      <CommandPalette />
     </div>
   )
 }

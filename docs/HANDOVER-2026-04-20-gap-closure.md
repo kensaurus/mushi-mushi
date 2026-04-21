@@ -1,6 +1,6 @@
-# Handover — Wave I, 2026-04-20
+# Handover — Gap closure, 2026-04-20
 
-> Picking this up? Read this top to bottom (≈8 min) before touching code. This wave closes the audit gap left by Wave H — the PDCA cockpit reframing — and lands the last P0/P1/P2 findings from [`docs/audit-2026-04-19.md`](audit-2026-04-19.md). All 23 admin pages now carry the same loop-aware affordances: status progression, blast radius, KPI strips, NN/G empty states, and PDCA receipts.
+> Picking this up? Read this top to bottom (≈8 min) before touching code. This release closes the audit gap left by the PDCA cockpit reframing — and lands the last P0/P1/P2 findings from [`docs/audit-2026-04-19.md`](audit-2026-04-19.md). All 23 admin pages now carry the same loop-aware affordances: status progression, blast radius, KPI strips, NN/G empty states, and PDCA receipts.
 
 ---
 
@@ -24,7 +24,7 @@
 |---|---|---|
 | Real blast radius | `packages/server/supabase/functions/api/index.ts` (`/v1/admin/reports`) | Calls new `report_group_blast_radius(group_ids uuid[])` RPC, joins the result into the per-row enrichment map as `unique_users` and `unique_sessions`. Dedup count fallback preserved when RPC errors. |
 | Indexes | `packages/server/supabase/migrations/20260420000000_blast_radius_indexes.sql` | `create index concurrently … on reports (report_group_id, reporter_token_hash) where report_group_id is not null` + matching session index, both partial. RPC body lives in the same migration. |
-| Per-function health rollup | `/v1/admin/health/llm` | Now returns `p95LatencyMs`, `costUsd`, `lastFailureAt` per function. Cost is *estimated* on the fly using `LLM_PRICING_PER_M_TOKENS` × token counts since `llm_invocations.cost_usd` is not yet a real column — revisit when Wave J ships the column. |
+| Per-function health rollup | `/v1/admin/health/llm` | Now returns `p95LatencyMs`, `costUsd`, `lastFailureAt` per function. Cost is *estimated* on the fly using `LLM_PRICING_PER_M_TOKENS` × token counts since `llm_invocations.cost_usd` is not yet a real column — revisit when ships the column. |
 | Severity strip API | New `/v1/admin/reports/severity-stats` | 14-day severity rollup (count per severity + 7-day delta) for the Reports KPI strip. |
 | Report detail prefetch | `/v1/admin/reports/:id` | Pre-fetches related `llm_invocations`, `fix_attempts`, and `classification_evaluations` in parallel so the new `PdcaReceiptStrip` renders without N+1. |
 | Project bottleneck | `/v1/admin/projects` | Each project row carries `pdca_bottleneck` + `pdca_bottleneck_label`, computed from `reports` (Plan), `fix_attempts` (Do), and `classification_evaluations` (Check). |
@@ -80,8 +80,8 @@
 
 - `apps/admin/src/components/ui.tsx` — `EmptyState` primitive extended: `hints?: string[]` (bullet list of learning cues) + `icon?: ReactNode`. Description gets `max-w-prose mx-auto leading-relaxed` so long copy reads cleanly.
 - `apps/admin/README.md` — Pages table updated for `/reports`, `/reports/:id`, `/onboarding`, `/projects`, `/billing`, `/audit`, `/storage`, `/compliance`, `/integrations`, `/graph`, `/query`. New endpoints section updated with the 8 new/extended endpoints. Dashboard composition section updated for `FirstReportHero` and the retired `QuickFiltersCard`. UI primitives section re-points `EmptyState` to the new shape.
-- Root `README.md` — added a "Wave I gap-closure (Apr 2026)" paragraph under the existing "PDCA cockpit reframing" paragraph linking back to this handover.
-- This document is the per-handover delta — the Wave H handover (`HANDOVER-2026-04-18.md`) remains the source of truth for everything that landed before.
+- Root `README.md` — added a "gap-closure (Apr 2026)" paragraph under the existing "PDCA cockpit reframing" paragraph linking back to this handover.
+- This document is the per-handover delta — the handover (`HANDOVER-2026-04-18.md`) remains the source of truth for everything that landed before.
 
 ---
 

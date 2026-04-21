@@ -75,7 +75,7 @@ function resolveBuiltinHook(
 }
 
 // ============================================================
-// Wave D D1: Webhook plugin dispatcher
+// D1: Webhook plugin dispatcher
 //
 // Marketplace plugins are stand-alone HTTPS services. We POST a signed
 // JSON envelope to each subscribed plugin, then log the delivery

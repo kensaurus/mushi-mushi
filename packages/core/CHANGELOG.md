@@ -12,7 +12,7 @@
   - **All SDK READMEs**: discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa.
   - **Root README**: quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher.
 
-- 41b6aa7: **Wave K — admin console UX overhaul + microinteraction sweep + 4 frontend bug fixes (no SDK behaviour change).**
+- 41b6aa7: **admin console UX overhaul + microinteraction sweep + 4 frontend bug fixes (no SDK behaviour change).**
 
   The published SDKs are unchanged in this release; the bump is to align the npm tarball with the updated cross-link README + the new admin console (`@mushi-mushi/admin@0.1.0`) that SDK consumers are pointed at from the dashboard.
 
@@ -39,7 +39,7 @@
 
 ### Minor Changes
 
-- 7567cee: # v0.6.0 — Wave A: hardening + agentic-fix orchestration
+- 7567cee: # v0.6.0 — hardening + agentic-fix orchestration
 
   This release closes the highest-priority gaps between the V5 whitepaper and the
   running code. It is the first of four releases on the [V5.3 roadmap](../MushiMushi_Whitepaper_V5.md#appendix-c-implementation-roadmap)
@@ -101,9 +101,9 @@
   None for SDK consumers. Operators with custom `autofix_agent = 'generic_mcp'`
   should migrate to `'rest_fix_worker'` (deprecated alias still works through v0.7).
 
-- 7567cee: # v0.7.0 — Wave B: on-device classification, real-time triage, AG-UI, fine-tune pipeline, intelligence reports, AGE phase 1
+- 7567cee: # v0.7.0 — on-device classification, real-time triage, AG-UI, fine-tune pipeline, intelligence reports, AGE phase 1
 
-  Wave B focuses on intelligence and operator UX: cheaper inference (move junk
+  focuses on intelligence and operator UX: cheaper inference (move junk
   filtering on-device), live collaboration on the report queue, a typed
   agent↔frontend streaming protocol, and a real fine-tune lifecycle.
 
@@ -176,9 +176,9 @@
     or `piiLeakageDetected = true`. Override requires re-running validation
     against a corrected eval set; there is intentionally no force-promote.
 
-- 7567cee: # v0.8.0 — Wave C: mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
+- 7567cee: # v0.8.0 — mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK
 
-  Wave C closes the platform-parity gap with the V5.3 whitepaper. Mobile gets
+  closes the platform-parity gap with the V5.3 whitepaper. Mobile gets
   first-class native SDKs, the public agent surface becomes A2A-discoverable,
   and customers gain the operational levers (residency, storage, keys, audit
   evidence) needed to run Mushi in regulated environments.

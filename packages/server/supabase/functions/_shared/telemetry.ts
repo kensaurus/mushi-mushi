@@ -29,7 +29,7 @@ export interface LlmInvocationRecord {
   inputTokens?: number | null
   outputTokens?: number | null
   promptVersion?: string | null
-  /** Wave C C9: where the API key came from. Audited so customers can prove
+  /** C9: where the API key came from. Audited so customers can prove
    *  their BYOK key was actually used for billing/compliance reasons. */
   keySource?: 'byok' | 'env' | null
   /** Langfuse trace UUID, when observability is configured. Persisted so the
@@ -66,7 +66,7 @@ export function logLlmInvocation(
   // Compute cost at write time using the centralized pricing table so Health,
   // Billing COGS, and Prompt Lab all read the same number from one column.
   // See `_shared/pricing.ts` and migration `20260420000200_llm_cost_usd.sql`
-  // (Wave J §1) — both must mirror to keep historical and live data aligned.
+  //— both must mirror to keep historical and live data aligned.
   const costUsd = estimateCallCostUsd(
     rec.usedModel,
     rec.inputTokens ?? 0,

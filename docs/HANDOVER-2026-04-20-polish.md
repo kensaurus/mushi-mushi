@@ -1,6 +1,6 @@
-# Handover — Wave K, 2026-04-20
+# Handover — Admin polish, 2026-04-20
 
-> Picking this up? Read this top to bottom (≈7 min) before touching the admin console. Wave K is a UX + microinteraction sweep across all 24 admin routes — the goal was to make first-action obvious, project narrative coherent, broken buttons audible, design tokens canonical, page loads visually shaped, and async actions tactile. No backend schema changes; everything ships behind HMR. Pair this with [`HANDOVER-wave-j-2026-04-20.md`](HANDOVER-wave-j-2026-04-20.md) for cost-tracking context that this wave assumes is already in place.
+> Picking this up? Read this top to bottom (≈7 min) before touching the admin console. This release is a UX + microinteraction sweep across all 24 admin routes — the goal was to make first-action obvious, project narrative coherent, broken buttons audible, design tokens canonical, page loads visually shaped, and async actions tactile. No backend schema changes; everything ships behind HMR. Pair this with [`HANDOVER-2026-04-20-real-cost.md`](HANDOVER-2026-04-20-real-cost.md) for cost-tracking context that release assumes is already in place.
 
 ---
 
@@ -62,7 +62,7 @@
 
 | Component | New file | Used by |
 |---|---|---|
-| `DashboardSkeleton` | `apps/admin/src/components/skeletons/DashboardSkeleton.tsx` | `DashboardPage` (existed before Wave K, now wired) |
+| `DashboardSkeleton` | `apps/admin/src/components/skeletons/DashboardSkeleton.tsx` | `DashboardPage` (existed before, now wired) |
 | `TableSkeleton` | `apps/admin/src/components/skeletons/TableSkeleton.tsx` | Reports, Fixes, Judge, Audit, DLQ, Notifications, Anti-gaming, Marketplace, Storage, SSO, Projects, PromptLab, Intelligence, Ontology, Groups, SyntheticReports |
 | `DetailSkeleton` | `apps/admin/src/components/skeletons/DetailSkeleton.tsx` | ReportDetailPage (both `loading` and `!report` branches) |
 | `PanelSkeleton` | `apps/admin/src/components/skeletons/PanelSkeleton.tsx` | Integrations, Billing, Compliance, BYOK, Firecrawl, General, GraphBackend |
@@ -87,11 +87,11 @@ Each skeleton accepts `label` for `aria-label`, sets `role="status" aria-busy="t
 - Vite HMR processed every edit cleanly — no `Failed to resolve import`, no `Failed to reload` errors after the wave-J fixup baseline. (Confirmed against `terminals/1.txt` — all updates `[vite] (client) hmr update` with no follow-up errors.)
 - `rg "bg-black|bg-white|text-black|text-white"` in `apps/admin/src` → 0 matches.
 - `rg "<Loading"` page-level usages went from 22 → 5 (App Suspense fallback, OnboardingPage setup gate, ResearchPage inline history, QueryPage inline result, GraphPage canvas).
-- **Not done in this wave** (deliberately deferred so the surface area stays reviewable): Playwright walk of the 5 critical journeys (onboarding, first report, triage, dispatch fix, view fix PR) and a Sentry delta check. The codebase changes are isolated and additive (no schema, no API contract changes except the DSAR fix), so this can be verified post-merge via the next deploy smoke instead of pre-merge.
+- **Not done in release** (deliberately deferred so the surface area stays reviewable): Playwright walk of the 5 critical journeys (onboarding, first report, triage, dispatch fix, view fix PR) and a Sentry delta check. The codebase changes are isolated and additive (no schema, no API contract changes except the DSAR fix), so this can be verified post-merge via the next deploy smoke instead of pre-merge.
 
 ---
 
-## Things to know before next wave
+## Things to know before release
 
 1. **Token aliases are a transition tool, not a permanent home.** `--color-warning`, `--color-fg-primary` etc. exist so this PR doesn't churn 100+ files. The next housekeeping pass should grep-and-replace them to canonical names (`--color-warn`, `--color-fg`) and delete the aliases. Don't add new code that uses the alias names.
 2. **Skeletons share one `<Skeleton>` primitive — keep it cheap.** The pulsing animation is `motion-safe:animate-pulse` from Tailwind's defaults. If we ever shimmer (left-to-right gradient), do it in the primitive, not per-skeleton, so motion stays consistent.
@@ -162,40 +162,40 @@ apps/admin/src/pages/StoragePage.tsx
 
 ## Verification log — 2026-04-20 (live Playwright + Sentry + Supabase MCP)
 
-After the Wave K code passes shipped, the user asked for full live verification.
+After the code passes shipped, the user asked for full live verification.
 Three checks were run end-to-end against the running dev server (mushi `:6464`,
 glot.it `:3000`) and production Supabase / Sentry. Results below.
 
 ### 1. Critical-path Playwright walk — PASS
 
-Ran a real-browser walk through every Wave-K-touched surface, checked the
+Ran a real-browser walk through every surface, checked the
 console on each page, and snapped a screenshot per stop.
 
-| Stop | URL | Wave K assertions |
+| Stop | URL | assertions |
 |---|---|---|
 | Dashboard | `/` | `PageHeader` reads "Dashboard / Your loop on glot.it"; "Loop status — Plan, Do, Check, Act" heading (renamed from "PDCA cockpit"); HeroIntro shows "Check — next action / on glot.it · 17h ago / 19 disagreements between LLM and judge / Open Judge"; setup checklist collapsed ("✓ All set — optional integrations available"); Check tile shows `Current focus + Bottleneck` ringed amber. **0 console errors.** |
-| Reports | `/reports` | Header reads "Reports · glot.it"; PLAN chip; `PageHelp` default-collapsed (the `mushi:visited` flag set after dashboard visit); `Conf.` column header rendered with `<abbr title="Confidence">`; single primary action "Dispatch fix →" per row. **KPI silent-zero bug exposed via Wave K Phase 3:** `severity-stats` 404s and the new `ErrorAlert` shows "Couldn't load severity stats · Retry". The 404 is a pre-existing prod bug Wave K finally surfaces; before, this page rendered four silent zero tiles. |
+| Reports | `/reports` | Header reads "Reports · glot.it"; PLAN chip; `PageHelp` default-collapsed (the `mushi:visited` flag set after dashboard visit); `Conf.` column header rendered with `<abbr title="Confidence">`; single primary action "Dispatch fix →" per row. **KPI silent-zero bug exposed via:** `severity-stats` 404s and the new `ErrorAlert` shows "Couldn't load severity stats · Retry". The 404 is a pre-existing prod bug finally surfaces; before, this page rendered four silent zero tiles. |
 | Report detail | `/reports/6cf4833e-…` | `PdcaReceiptStrip` renders `P CLOSED → D NOT YET → C NOT YET → A NOT YET`; triage bar uses `<Btn>` for `Sync to 0 destinations` + `Dispatch fix`; "About this report" `PageHelp` collapsed by default. **0 console errors.** |
 | Settings | `/settings` | Sliding tab indicator visible under `General`; tablist labeled "Settings sections"; "About Settings" collapsed. |
 | Settings → Health & test | `/settings?tab=health` | Sliding indicator slid to `Health & test` (URL deep-link preserved); `Run diagnostics` Btn executed and reported `REST 88ms / GoTrue 85ms / Edge Functions 344ms` with green "All systems are reachable and healthy"; **`<Btn loading>` state observed on the diagnostics button** (it switched to `Re-check`). |
 | Pipeline quick test | (same) | Clicked `Send test report` → real `POST /v1/admin/reports` succeeded → `<ResultChip tone="success">` appeared next to the button: `✓ Report a0222156-24ff-465e-a7b4-41512cfa7a6e submitted to glot.it · now`. Persistent (no auto-dismiss). |
 | Settings → BYOK | `/settings?tab=byok` | Sliding indicator slid to `LLM keys (BYOK)`; clicked `Test connection` on OpenAI/OpenRouter row → `<ResultChip>` shows `✓ …cf11 · now` and the row metadata refreshes to `tested 4/20/2026, 2:13:05 PM (93 ms)`. |
-| Fixes | `/fixes` | Header reads "Auto-Fix Pipeline · glot.it"; KPI strip renders real numbers `ATTEMPTS 2 / COMPLETED 2 / FAILED 0 / IN FLIGHT 0 / PRS OPEN 2` (no Wave K silent zeros); two `FixCard`s with PDCA receipt strips and live `View PR #4` / `View PR #3` links. **0 console errors.** |
+| Fixes | `/fixes` | Header reads "Auto-Fix Pipeline · glot.it"; KPI strip renders real numbers `ATTEMPTS 2 / COMPLETED 2 / FAILED 0 / IN FLIGHT 0 / PRS OPEN 2` (no silent zeros); two `FixCard`s with PDCA receipt strips and live `View PR #4` / `View PR #3` links. **0 console errors.** |
 
 Screenshots saved under `apps/admin/.playwright-mcp/wave-k-01-dashboard.png` … `wave-k-12-fixes.png`.
 
 **One transient issue noted:** on the first visit to `/fixes` the page hit a
 CORS storm (every Edge Function call rejected). Reloading once cleared it
 and a subsequent visit was clean. Likely a brief Supabase Edge Function
-cold-start hiccup, not Wave K related — call out for monitoring.
+cold-start hiccup, not related — call out for monitoring.
 
 ### 2. DSAR end-to-end — PASS
 
-Verified the snake_case + `projectId` contract fix Wave K shipped.
+Verified the snake_case + `projectId` contract fix shipped.
 
 1. Navigated to `/compliance` (header reads "Compliance · glot.it").
 2. Filled DSAR form: type=`Access`, email=`wave-k-verify@example.com`,
-   notes=`Wave K verification — DSAR contract fix smoke test`.
+   notes=`verification — DSAR contract fix smoke test`.
 3. Clicked `File DSAR`.
 
 Network: `POST /v1/admin/compliance/dsars → 200`, followed by
@@ -211,11 +211,11 @@ data_subject_requests
   request_type= access
   subject_email = wave-k-verify@example.com
   status      = pending
-  notes       = Wave K verification — DSAR contract fix smoke test
+  notes = verification — DSAR contract fix smoke test
   created_at  = 2026-04-20 05:14:05.768182+00
 ```
 
-Wave K's `CompliancePage.tsx` snake_case + `projectId` payload now flows
+`CompliancePage.tsx` snake_case + `projectId` payload now flows
 cleanly all the way to the database.
 
 ### 3. Sentry delta — PASS for admin, **uncovered a separate server bug**
@@ -223,7 +223,7 @@ cleanly all the way to the database.
 Queried Sentry MCP for issues `firstSeen:-24h` in both projects:
 
 - **`mushi-mushi-admin`** → **0 new issues** in the last 24h. No regressions
-  from Wave K's frontend code passes.
+  from frontend code passes.
 - **`mushi-mushi-server`** → **1 new issue, `MUSHI-MUSHI-SERVER-6` "Insert
   failed"**, first seen `2026-04-20T05:14:05Z` — i.e. the exact moment of the
   DSAR test above.
@@ -333,7 +333,7 @@ the Edge Function.
 
 ### Summary
 
-- Wave K admin code: **clean** — 0 new Sentry issues, every Wave K
+- admin code: **clean** — 0 new Sentry issues, every Wave K
   surface verified live.
 - Surfaced one pre-existing prod bug (`/v1/admin/reports/severity-stats`
   404) which is now visibly reported to the user instead of silently

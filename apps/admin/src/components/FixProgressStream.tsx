@@ -96,7 +96,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
   }, [reportId, dispatchStatus])
 
   const stage = dispatchState.status
-  // Wave Q: while we fetch the historic attempt, show a layout-shaped
+  // while we fetch the historic attempt, show a layout-shaped
   // placeholder *only* if the live dispatch is in flight — the UI then
   // visibly reserves the row instead of silently popping in once the
   // network round-trip completes. Pre-dispatch reports stay clean.

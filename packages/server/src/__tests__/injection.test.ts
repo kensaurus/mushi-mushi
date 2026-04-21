@@ -1,5 +1,5 @@
 // ============================================================
-// Wave D D8: prompt-injection regression — port-shaped test.
+// D8: prompt-injection regression — port-shaped test.
 //
 // The canonical sanitizer lives in
 // `packages/server/supabase/functions/_shared/sanitize.ts` (Deno).

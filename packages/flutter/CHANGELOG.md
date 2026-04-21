@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-- Initial pub.dev release as part of Mushi Mushi Wave C C3.
+- Initial pub.dev release as part of Mushi Mushi C3.
 - Pure-Dart implementation: HTTP transport via `package:http`, file-backed
   offline queue, shake-to-report via `sensors_plus`, screenshot via
   `RepaintBoundary`, device context via `device_info_plus`/`package_info_plus`.

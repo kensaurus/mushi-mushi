@@ -1,5 +1,5 @@
 /**
- * Wave E §3c — stable device fingerprint hash.
+ * §3c — stable device fingerprint hash.
  *
  * Hashes a deliberately small set of long-lived device characteristics so
  * the same browser keeps the same hash across sessions, but moving to a

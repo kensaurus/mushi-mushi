@@ -1,8 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/useMergedErrors.ts
  * PURPOSE: Merge the loading + error state of N parallel `usePageData` queries
- *          into one decision the page can render against (Wave P, recovery
- *          UX).
+ *          into one decision the page can render against (recovery UX).
  *
  *          Multi-query pages today render a partial UI when one query
  *          succeeds and another fails — the user sees half a page, no

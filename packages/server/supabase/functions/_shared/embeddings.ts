@@ -12,7 +12,7 @@ const DEFAULT_DEDUP_THRESHOLD = 0.82
 export interface EmbeddingOptions {
   model?: string
   /**
-   * Wave E §3a: when provided, the OpenAI key is BYOK-resolved against the
+   * §3a: when provided, the OpenAI key is BYOK-resolved against the
    * project's `byok_openai_key_ref`, with optional `byok_openai_base_url`
    * for OpenRouter / OpenAI-compatible gateways. Falls back to env if not
    * configured. Omitting projectId preserves the legacy env-only behaviour.

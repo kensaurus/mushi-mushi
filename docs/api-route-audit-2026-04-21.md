@@ -1,6 +1,6 @@
 # API Route Audit — 2026-04-21
 
-Wave T audit of `packages/server/supabase/functions/api/index.ts` against
+audit of `packages/server/supabase/functions/api/index.ts` against
 front-end consumers in `apps/admin/src/**`. Goal: zero advertised-but-missing
 endpoints, zero unreachable handlers, every JWT-gated route accounted for.
 
@@ -14,17 +14,17 @@ endpoints, zero unreachable handlers, every JWT-gated route accounted for.
    wire / gate / delete.
 
 The structural matching also runs on every commit via
-`packages/server/src/__tests__/manifest-contract.test.ts` (Wave T deliverable),
+`packages/server/src/__tests__/manifest-contract.test.ts`,
 which guarantees every endpoint advertised by `/v1/admin/auth/manifest` is a
 real registered route.
 
-## Manifest contract (P0 — fixed in Wave S)
+## Manifest contract (P0 — fixed in)
 
 The auth manifest at `app.get('/v1/admin/auth/manifest')` advertises an OAuth-style
 discovery doc consumed by external A2A agents. Two endpoints were advertised
 without a Hono route, returning 404 to any conforming client:
 
-| Endpoint                                      | Status before | Status after Wave S          | Test                          |
+| Endpoint | Status before | Status after | Test |
 | --------------------------------------------- | ------------- | ---------------------------- | ----------------------------- |
 | `POST /v1/admin/auth/token`                   | 404 (missing) | Implemented (refresh + introspect) | Contract test enforces parity |
 | `POST /v1/admin/projects/:id/keys/rotate`     | 404 (missing) | Implemented (atomic-ish rotate)    | Contract test enforces parity |
@@ -53,7 +53,7 @@ external scripts, or a deliberate background job.
 | `POST /v1/admin/storage/:projectId/health`         | WIRE         | Replace the placeholder "Test" button on the storage panel with a real probe.                |
 | `GET  /v1/admin/residency`                         | WIRE         | Surface on `/compliance` — needed for multi-region tenants to confirm pinning.               |
 
-Wiring is queued for Wave U (each pairs with a list/table polish on the
+Wiring is queued for (each pairs with a list/table polish on the
 target page). None are deleted because all have valid backend behaviour
 worth surfacing — the gap is the UI affordance.
 
@@ -83,7 +83,7 @@ the point is that the contract test catches regressions. Spot-check examples:
 
 ## Next step
 
-Wave U paths:
+paths:
 
 - Wire each WIRE-marked endpoint to a UI affordance + add `ResultChip` /
   skeleton parity at the same time so the user gets feedback the moment

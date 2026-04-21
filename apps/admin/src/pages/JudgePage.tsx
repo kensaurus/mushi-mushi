@@ -18,6 +18,7 @@ import {
   type ResultChipTone,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
   KpiTile,
   KpiRow,
@@ -215,7 +216,7 @@ export function JudgePage() {
     | null
   >(null)
   // Drives both the leaderboard-row "selected" highlight and the
-  // /evaluations query filter. Wave M P0 fixes the inert leaderboard rows
+  // /evaluations query filter. fixes the inert leaderboard rows
   // the PageHelp claimed were clickable.
   const [promptFilter, setPromptFilter] = useState<{ version: string; stage: string } | null>(null)
 
@@ -231,7 +232,7 @@ export function JudgePage() {
   const prompts = promptsQuery.data?.prompts ?? []
   const dist = distQuery.data ?? null
   // Single source of truth for first-paint loading + error gating across
-  // the four panels of this page (Wave P recovery UX). Background refetches
+  // the four panels of this page Background refetches
   // (e.g. after `runNow`) no longer flash a skeleton because `merged.loading`
   // only blocks until each query has resolved at least once.
   const merged = useMergedErrors([
@@ -444,7 +445,7 @@ export function JudgePage() {
             No prompt versions registered yet. The Prompt Lab can create candidates.
           </p>
         ) : (
-          <div className="overflow-x-auto -mx-3">
+          <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-fg-muted text-left border-b border-edge">
@@ -511,7 +512,7 @@ export function JudgePage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </ResponsiveTable>
         )}
       </Section>
 
@@ -551,7 +552,7 @@ export function JudgePage() {
         {evals.length === 0 ? (
           <p className="text-xs text-fg-muted">No evaluations match.</p>
         ) : (
-          <div className="overflow-x-auto -mx-3">
+          <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-fg-muted text-left border-b border-edge">
@@ -590,7 +591,7 @@ export function JudgePage() {
                   // Surface the judge's disagreement reasoning inline so
                   // operators don't have to click into the report to see why
                   // the classifier and judge diverged. Tooltip carries the
-                  // full text. Audit Wave I P1.
+                  // full text. .
                   const disagreementReason =
                     e.classification_agreed === false ? e.judge_reasoning?.trim() : null
                   return (
@@ -647,13 +648,13 @@ export function JudgePage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </ResponsiveTable>
         )}
       </Section>
 
       {weeks.length > 0 && (
         <Section title="Weekly history">
-          <div className="overflow-x-auto -mx-3">
+          <ResponsiveTable className="-mx-3">
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-fg-muted text-left border-b border-edge">
@@ -690,7 +691,7 @@ export function JudgePage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResponsiveTable>
         </Section>
       )}
 

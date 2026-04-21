@@ -1,4 +1,4 @@
--- Wave I (M1): Real blast-radius for /v1/admin/reports.
+-- (M1): Real blast-radius for /v1/admin/reports.
 --
 -- Today the admin Reports table shows `dedup_count` (= report_groups.report_count)
 -- as a proxy for "how many users felt this." That number conflates one user
@@ -13,7 +13,7 @@
 --     authenticated user id out of report.metadata.user.id, which is empty
 --     for the dominant shake-to-report / anonymous-feedback case. Counting
 --     distinct values would silently undercount to ~0.
---   - Product intent (per README + apps/admin/README + Wave I handover) is
+-- - Product intent (per README + apps/admin/README + handover) is
 --     "how many distinct people felt this," and device-stable token is the
 --     correct proxy in the absence of auth.
 --
@@ -80,7 +80,7 @@ as $$
 $$;
 
 comment on function report_group_blast_radius(uuid[]) is
-  'Wave I: per-group COUNT(*) + COUNT(DISTINCT reporter_token_hash/session_id). Backs the real blast-radius column on /v1/admin/reports. Index-only scan via reports_group_token_idx / reports_group_session_idx.';
+  'per-group COUNT(*) + COUNT(DISTINCT reporter_token_hash/session_id). Backs the real blast-radius column on /v1/admin/reports. Index-only scan via reports_group_token_idx / reports_group_session_idx.';
 
 -- API runs as service_role; restrict the RPC accordingly so anon/authenticated
 -- callers cannot reach it directly (they have RLS-scoped access via the

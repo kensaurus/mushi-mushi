@@ -1,4 +1,4 @@
--- M2 (Wave A v0.6.0): judge-batch OpenAI fallback
+-- M2: judge-batch OpenAI fallback
 -- Adds per-project fallback configuration and a flag tracking when the
 -- fallback path was actually used (for cost attribution + provider-health
 -- dashboards).

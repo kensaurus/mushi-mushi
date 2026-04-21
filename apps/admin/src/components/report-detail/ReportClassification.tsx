@@ -82,7 +82,7 @@ export function ScreenshotBlock({ url }: { url: string | null }) {
  * ScreenshotHero — promotes the user-captured screenshot to a full-width
  * hero strip immediately under the report header. The screenshot is the
  * single most useful piece of triage evidence; tucking it inside the
- * "User report" card buries it. Audit Wave I P0 (2026-04-19).
+ * "User report" card buries it. (2026-04-19).
  */
 export function ScreenshotHero({ url, className = '' }: { url: string; className?: string }) {
   return (

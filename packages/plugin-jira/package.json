@@ -1,0 +1,47 @@
+{
+  "name": "@mushi-mushi/plugin-jira",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "First-party Jira plugin for Mushi Mushi — OAuth 2.0 (3LO) connect flow, bidirectional sync (create issues from reports, mirror status changes back), and Jira webhook handler.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE", "plugin.json"],
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mushi-mushi/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.2.0",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/plugin-jira"
+  },
+  "author": "Kenji Sakuramoto",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/plugin-jira#readme",
+  "bugs": { "url": "https://github.com/kensaurus/mushi-mushi/issues" },
+  "publishConfig": { "access": "public" },
+  "sideEffects": false,
+  "keywords": ["mushi-mushi", "plugin", "jira", "bug-tracking", "atlassian", "oauth", "bidirectional-sync"]
+}

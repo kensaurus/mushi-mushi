@@ -170,7 +170,7 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
       />
 
       {/* Screenshot hero — promoted out of the User-report section so it's
-          the first piece of evidence triagers see. Wave I audit P0. */}
+          the first piece of evidence triagers see. audit P0. */}
       {report.screenshot_url && (
         <ScreenshotHero url={report.screenshot_url} className="mb-3" />
       )}

@@ -191,7 +191,7 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     let fallbackReason: string | null = null
 
     let tokenUsage: { promptTokens?: number; completionTokens?: number } = {}
-    // Wave C C9: resolve BYOK first; falls back to env automatically.
+    // C9: resolve BYOK first; falls back to env automatically.
     const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic')
     let keySource: 'byok' | 'env' | null = anthropicResolved?.source ?? null
     try {

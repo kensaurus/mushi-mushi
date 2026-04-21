@@ -1,5 +1,5 @@
 -- =============================================================================
--- PDCA full-sweep wave 2.3: hourly repo indexer sweep.
+-- PDCA full-sweep .3: hourly repo indexer sweep.
 --
 -- The webhooks-github-indexer function only re-indexes a repo on push events.
 -- Projects that haven't pushed (or that never installed the GitHub App) end up

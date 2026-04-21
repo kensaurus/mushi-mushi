@@ -5,7 +5,7 @@
 -- but were created out-of-band on the live `dxptnwrhwsqckaftyymj` cloud and
 -- never recorded as migrations, so they would be missing on a fresh local stack.
 --
--- Captured from the live cloud schema (see the wave-0 audit notes); the
+-- Captured from the live cloud schema (see the cloud-drift audit notes); the
 -- definitions here are bit-for-bit equivalents (columns, defaults, FKs, checks,
 -- indexes, RLS, policies, trigger). Idempotent: re-running on a DB that already
 -- has the tables is a no-op thanks to `IF NOT EXISTS` and `pg_policies` guards.
@@ -129,7 +129,7 @@ DO $policies$ BEGIN
 END $policies$;
 
 COMMENT ON TABLE public.project_members IS
-  'Project membership + role for multi-tenant access control. Mirrors live cloud schema; reconciled in wave-0 of the admin redesign.';
+  'Project membership + role for multi-tenant access control. Mirrors live cloud schema; reconciled during cloud-drift reconciliation.';
 
 -- -------------------------------------------------------------------------
 -- integration_health_history

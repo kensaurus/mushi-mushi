@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/pages/ResearchPage.tsx
- * PURPOSE: Wave E — manual web research powered by BYOK Firecrawl. Admin types
+ * PURPOSE: manual web research powered by BYOK Firecrawl. Admin types
  *          a query during triage, snippets land here, and the user can attach
  *          any snippet to a specific report as evidence.
  *
@@ -83,7 +83,7 @@ export function ResearchPage() {
   const sessions = historyData?.sessions ?? null
   // Mode + age filters live in the FE: history is small (<= 20 sessions) and
   // adding server-side params would require an API change for marginal gain.
-  // Audit Wave I P2 — Research history needed mode/since filters.
+  // Research history needed mode/since filters.
   const filteredSessions = sessions
     ? sessions.filter((s) => {
         if (modeFilter !== 'all' && s.mode !== modeFilter) return false

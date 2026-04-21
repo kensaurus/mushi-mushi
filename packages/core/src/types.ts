@@ -108,6 +108,21 @@ export interface MushiOfflineConfig {
   enabled?: boolean;
   maxQueueSize?: number;
   syncOnReconnect?: boolean;
+  /**
+   * Encrypt queued reports at rest (IndexedDB + localStorage) with AES-GCM.
+   *
+   * Wave S1 / D-16: on a shared device (kiosks, iPads, support-agent
+   * laptops) any queued report sits in plaintext until the next online flush.
+   * With this flag set we generate a non-extractable AES-GCM key at first use,
+   * stash it in a single tightly-scoped IndexedDB record, and wrap every
+   * queued report payload under it. The key never leaves the origin's
+   * IndexedDB; stealing the DB file on disk still requires the OS-level
+   * Web Crypto keystore to decrypt.
+   *
+   * Defaults to `true`. Set false only if you need to inspect raw queue
+   * contents during local dev.
+   */
+  encryptAtRest?: boolean;
 }
 
 export interface MushiRewardsConfig {
@@ -150,7 +165,7 @@ export interface MushiReport {
   sessionId?: string;
   reporterToken: string;
   /**
-   * Wave E §3c — stable per-device hash from `getDeviceFingerprintHash()`.
+   * §3c — stable per-device hash from `getDeviceFingerprintHash()`.
    * Sent so the server can run the cross-account anti-gaming check; falls
    * back to IP+UA fingerprinting when omitted.
    */
@@ -255,6 +270,38 @@ export interface MushiSDKInstance {
   open(): void;
   close(): void;
   destroy(): void;
+
+  /**
+   * Wave G4 — unified `captureEvent` API. Submits a bug report
+   * programmatically without opening the widget. Useful for adapters
+   * that translate errors from Datadog / Honeycomb / Sentry /
+   * Grafana into Mushi reports.
+   *
+   * Returns the server-assigned report id when the submit succeeds.
+   */
+  captureEvent(event: MushiCaptureEventInput): Promise<string | null>;
+
+  /**
+   * Wave G4 — sugar alias for `setUser()`. Name mirrors the
+   * identify/track/capture vocabulary that PostHog/Segment/Mixpanel
+   * users already know.
+   */
+  identify(userId: string, traits?: { email?: string; name?: string; [k: string]: unknown }): void;
+}
+
+export interface MushiCaptureEventInput {
+  /** Human-readable summary; becomes `reports.description`. */
+  description: string;
+  category?: MushiReportCategory;
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  component?: string;
+  /** Arbitrary tags merged into `reports.metadata.tags`. */
+  tags?: Record<string, string | number | boolean>;
+  /** Source-of-truth adapter that produced this event (e.g. `'datadog'`). */
+  source?: string;
+  /** Optional error payload (name/message/stack) captured from the host app. */
+  error?: { name?: string; message?: string; stack?: string };
+  metadata?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

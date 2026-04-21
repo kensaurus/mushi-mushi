@@ -1,4 +1,4 @@
-# Data residency (Wave C C7)
+# Data residency
 
 The Mushi Mushi cloud runs three regional Supabase projects:
 
