@@ -284,8 +284,14 @@ export function ProjectsPage() {
                     >
                       Send test report
                     </Btn>
-                    <Btn variant="ghost" size="sm" onClick={() => generateKey(project.id)} disabled={isBusy}>
-                      {isBusy ? 'Working…' : 'Generate API key'}
+                    <Btn
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => generateKey(project.id)}
+                      disabled={isBusy}
+                      loading={isBusy}
+                    >
+                      Generate API key
                     </Btn>
                   </div>
                 </div>

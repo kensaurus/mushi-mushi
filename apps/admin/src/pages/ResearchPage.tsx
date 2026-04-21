@@ -197,8 +197,8 @@ export function ResearchPage() {
             placeholder="error signature, library name, doc topic…"
             className="flex-1"
           />
-          <Btn type="submit" disabled={searching}>
-            {searching ? 'Searching…' : 'Search'}
+          <Btn type="submit" disabled={searching} loading={searching}>
+            Search
           </Btn>
         </form>
         <div className="flex flex-wrap gap-1.5">

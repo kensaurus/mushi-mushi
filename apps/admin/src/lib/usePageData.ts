@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ZodType } from 'zod'
 import { apiFetch } from './supabase'
 
 export interface PageDataState<T> {
@@ -23,18 +24,25 @@ export interface PageDataState<T> {
   reload: () => void
 }
 
-export interface UsePageDataOptions {
+export interface UsePageDataOptions<T> {
   /** When false the hook will not auto-fetch on mount. Defaults to true. */
   autoLoad?: boolean
   /** Re-runs the fetch whenever any of these change (deep-eq via JSON). */
   deps?: ReadonlyArray<unknown>
+  /**
+   * FE-API-1 (audit 2026-04-21): optional runtime Zod validation. See
+   * apiSchemas.ts. A failed parse is reported to Sentry and surfaced here
+   * as a conventional `error` string so pages can render their existing
+   * error UI rather than crashing inside a render commit.
+   */
+  schema?: ZodType<T>
 }
 
 export function usePageData<T>(
   path: string | null,
-  opts: UsePageDataOptions = {},
+  opts: UsePageDataOptions<T> = {},
 ): PageDataState<T> {
-  const { autoLoad = true, deps = [] } = opts
+  const { autoLoad = true, deps = [], schema } = opts
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState<boolean>(autoLoad && path != null)
   const [error, setError] = useState<string | null>(null)
@@ -62,7 +70,10 @@ export function usePageData<T>(
         // micro-cache so we never serve a stale value to a user who explicitly
         // asked for fresh data. The first mount (`tick === 0`) still uses
         // dedup so concurrent component mounts share one request.
-        const res = await apiFetch<T>(path, tick > 0 ? { cache: 'no-store' } : undefined)
+        const res = await apiFetch<T>(path, {
+          ...(tick > 0 ? { cache: 'no-store' } : {}),
+          ...(schema ? { schema } : {}),
+        })
         if (aborted.current) return
         if (res.ok && res.data !== undefined) {
           setData(res.data as T)
@@ -81,7 +92,7 @@ export function usePageData<T>(
     }
     // depKey is the JSON-serialised version of `deps`, so we intentionally
     // depend on it instead of `deps` itself to avoid array-identity churn.
-  }, [path, autoLoad, tick, depKey])
+  }, [path, autoLoad, tick, depKey, schema])
 
   return { data, loading, error, reload }
 }

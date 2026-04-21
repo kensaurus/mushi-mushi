@@ -118,7 +118,15 @@ Deno.serve(withSentry('judge-batch', async (req) => {
       if (!settings?.judge_enabled) continue
 
       const sampleSize = settings.judge_sample_size ?? 50
-      const modelId = settings.judge_model ?? 'claude-opus-4-6'
+      // LLM-1/LLM-2 (audit 2026-04-21): default judge flipped from
+      // claude-opus-4-6 to claude-sonnet-4-6. Opus is $15/$75 per 1M tokens
+      // vs Sonnet's $3/$15 — running Opus as judge of a Sonnet classifier
+      // was ~5x over-spec and the audit measured 100% primary-path
+      // failure + 62% disagreement, suggesting Opus was being rate-limited
+      // under load and silently handing every eval to the OpenAI fallback.
+      // Sonnet-on-Sonnet is the same-tier baseline; upgrade to Opus
+      // deliberately (not by default) if disagreement trends high.
+      const modelId = settings.judge_model ?? 'claude-sonnet-4-6'
       const fallbackProvider = (settings.judge_fallback_provider ?? 'openai') as 'openai' | 'none'
       const fallbackModelId = settings.judge_fallback_model ?? 'gpt-4.1'
 
@@ -199,6 +207,19 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
               evaluation = result.object
               usage = result.usage
             } catch (err) {
+              // Preserve diagnostic fidelity on the first failure — AI SDK
+              // wraps provider errors in AI_APICallError which hides the
+              // status code unless inspected. Without this log the audit
+              // (LLM-1) couldn't distinguish "529 overloaded" (ok, retry)
+              // from "invalid_request_error" (config bug) or "401 auth"
+              // (missing BYOK key) — all 3 appeared as "100% fallback".
+              const e = err as { statusCode?: number; responseBody?: string; message?: string }
+              rootLog.child('judge').warn('Primary judge call failed — falling through to fallback', {
+                reportId: report.id,
+                model: modelId,
+                statusCode: e.statusCode ?? null,
+                detail: (e.responseBody ?? e.message ?? String(err)).slice(0, 200),
+              })
               primaryErr = err
             }
           }

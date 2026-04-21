@@ -22,7 +22,7 @@ Sentry sees what your code throws. Mushi sees what your users *feel*.
 [Quick start](#quick-start) · [Live admin demo](https://kensaur.us/mushi-mushi/) · [Docs](./apps/docs) · [Self-hosting](./SELF_HOSTED.md) · [Architecture](#architecture)
 
 <a href="https://kensaur.us/mushi-mushi/" title="Open the live admin demo">
-  <img src="./docs/screenshots/report-detail-dark.png" alt="A real classified bug report inside Mushi Mushi — Plan/Do/Check/Act receipt strip, 4 px severity stripe, LLM classification panel (category, severity, summary, component, confidence), environment + perf metrics, and a one-click Dispatch fix button" width="100%" />
+  <img src="./docs/screenshots/report-detail-dark.png" alt="A real classified user-felt bug inside Mushi Mushi — Plan / Do / Check / Act receipt strip across the top showing CLOSED on Plan and Check (judge agreed, score 0.98), the user's own report, the LLM classification (Confusing UX, Medium, 78% confidence, Sing Along Completion/Celebration Screen), environment, performance metrics, and a single one-click Dispatch fix CTA" width="100%" />
 </a>
 
 <sub>↑ click to open the live admin demo · the admin is dark-only by design</sub>
@@ -61,7 +61,7 @@ Mushi Mushi is the missing layer. Drop a small SDK into your app — users press
 
 ## Tour
 
-A walk through the rooms inside, after the Wave I → Q admin overhaul. Click any panel to land on it in the live demo.
+A walk through the rooms inside, after the Wave I → U admin overhaul. Click any panel to land on it in the live demo.
 
 <table width="100%">
 <tr>
@@ -76,42 +76,62 @@ A walk through the rooms inside, after the Wave I → Q admin overhaul. Click an
 </tr>
 <tr>
   <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/onboarding"><img src="./docs/screenshots/onboarding-dark.png" alt="Plug-n-play onboarding wizard with PDCA storyboard — four cards across the top (Plan capture, Do dispatch, Check verify, Act standardise) showing where the loop starts and ends, then a 'You're set up · 4/4 required · 100%' progress bar above a checklist of Done steps (project, API key, SDK install, first bug report, GitHub) and an Add API key CTA on the optional Anthropic step." /></a>
+    <p align="center"><b>Plug-n-play onboarding</b> · <sub>Wave R rewrite — the wizard now opens with a Plan→Do→Check→Act storyboard so you see the loop before the checklist. Required steps drive the green progress bar; optional steps stay tagged.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/judge"><img src="./docs/screenshots/judge-runresult-dark.png" alt="Judge scores page right after clicking 'Run judge now' — a green sticky ResultChip beside the button reads '✓ Dispatched 3 projects — refreshing in ~30s · now', the rest of the page shows latest week 65% / 24 evals KPIs, 12-week multi-line score trend, score distribution histogram, prompt leaderboard, and recent evaluations table with summaries instead of report hashes." /></a>
+    <p align="center"><b>Sticky run receipts</b> · <sub>Wave U — every Run / Generate / Dispatch button now leaves a persistent <code>ResultChip</code> next to it, so the user never has to wonder "did it actually work?" after the toast fades.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/dashboard-dark.png" alt="Advanced-mode dashboard with PDCA cockpit — full 23-page sidebar grouped by Plan / Do / Check / Act, Plan / Do / Check / Act tiles with one living number per stage, a coloured ring on the Do bottleneck, 14d severity-stacked histogram, LLM tokens & calls sparklines, and a Next-Best-Action strip pointing at the failed fix" /></a>
     <p align="center"><b>Dashboard (Advanced)</b> · <sub>Wave L PDCA cockpit — one living number per stage, bottleneck ring, Next-Best-Action strip, 14d severity-stacked histogram, LLM tokens & calls sparklines.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/reports"><img src="./docs/screenshots/reports-dark.png" alt="Reports triage queue — 4 px severity stripe per row, 14d Critical/High/Medium/Low KPI strip, dedup-aware blast-radius column, status / category / severity filters, single primary action per row (Triage → or Dispatch fix →)" /></a>
-    <p align="center"><b>Reports</b> · <sub>Wave I triage queue — 4 px severity stripe, 14d severity KPIs, blast-radius dedup, single primary action per row.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/reports"><img src="./docs/screenshots/reports-dark.png" alt="Reports triage queue — 4 px severity stripe per row, 14d Critical/High/Medium/Low KPI strip, dedup-aware blast-radius column, status / category / severity filters, single 'Dispatch fix →' primary action per row, and a real Sing Along bug at the top showing 'Hero CTA Start lesson button overlaps the bottom navigation by approximately 14 px'" /></a>
+    <p align="center"><b>Reports</b> · <sub>Wave I queue + Wave U Btn parity — 4 px severity stripe, 14d severity KPIs, blast-radius dedup, single primary action per row, every action button on a stable verb with a spinner instead of a label swap.</sub></p>
   </td>
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/fixes"><img src="./docs/screenshots/fixes-dark.png" alt="Auto-fix pipeline — per-attempt PDCA stage cards (Plan / Do / Check / Act each with status pill), live KPI strip with 30d sparklines (Attempts / Completed / Failed / In flight / PRs Open), Langfuse trace links, real GitHub PR numbers, error tail for failed attempts" /></a>
-    <p align="center"><b>Fixes</b> · <sub>Wave K auto-fix pipeline — per-attempt PDCA cards, 30d KPI sparklines, Langfuse trace per run, real PR links, retry-failed CTA.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/fixes"><img src="./docs/screenshots/fixes-dark.png" alt="Auto-fix pipeline — per-attempt PDCA stage cards (Plan / Do / Check / Act each with status pill), live KPI strip with 30d sparklines (Attempts 4, Completed 3, Failed 1, In flight 0, PRs open 3), real GitHub PR #5 link, Langfuse trace deeplink, error tail 'AI_NoObjectGeneratedError: No object generated' on the failed attempt, 'Retry 1 failed' bulk action top-right" /></a>
+    <p align="center"><b>Fixes</b> · <sub>Wave K pipeline + Wave U stagger — per-attempt PDCA cards, 30d KPI sparklines, Langfuse trace per run, real PR links, retry-failed CTA. Cards now cascade-fade in via <code>useStaggeredAppear</code>.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/judge"><img src="./docs/screenshots/judge-dark.png" alt="Judge scores — latest week / total evals / prompt versions / mean score KPIs, 12-week multi-line score trend (Overall / Accuracy / Severity / Component / Reproducibility), score distribution histogram, prompt leaderboard with active vs candidate, recent evaluations table surfacing report summaries instead of hashes" /></a>
-    <p align="center"><b>Judge</b> · <sub>Wave I — live KPIs, 12w trend, distribution histogram, prompt leaderboard, recent evals show summaries (not hashes) with column tooltips.</sub></p>
-  </td>
-</tr>
-<tr>
-  <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/health"><img src="./docs/screenshots/health-dark.png" alt="LLM health — per-function & per-model breakdown, p50/p95 latency, fallback rate, cost-per-call, cron job runner with manual Trigger now buttons, recent LLM calls feed with deeplinks to report + Langfuse trace" /></a>
-    <p align="center"><b>Health</b> · <sub>Wave J — real `cost_usd` per call, per-function / per-model breakdown, p50/p95 latency, fallback rate, cron triggers, Langfuse deeplinks.</sub></p>
-  </td>
-  <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/prompt-lab"><img src="./docs/screenshots/prompt-lab-dark.png" alt="Prompt Lab — Stage 1 fast-filter and Stage 2 classify version tables with active vs candidate rows, traffic split percentages, judge score, eval counts, clone / promote actions, fine-tuning jobs table, synthetic reports generator" /></a>
-    <p align="center"><b>Prompt Lab</b> · <sub>Replaces Fine-Tuning. A/B traffic split between active and candidate prompts per stage, eval dataset preview, synthetic report generator.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/judge"><img src="./docs/screenshots/judge-dark.png" alt="Judge scores at rest — latest week 65% / total evals 24 / prompt versions 4 (2 active, 2 candidate) / mean score 66% KPIs, 12-week multi-line score trend (Overall 65, Accuracy 100, Severity 72, Component 34, Repro 29), score distribution histogram, prompt leaderboard with stage1 / stage2 baselines and v2-experiment candidates, recent evaluations table surfacing report summaries instead of hashes" /></a>
+    <p align="center"><b>Judge (at rest)</b> · <sub>Wave I baseline — live KPIs, 12w trend, distribution histogram, prompt leaderboard, recent evals show summaries (not hashes) with column tooltips per dimension.</sub></p>
   </td>
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/graph"><img src="./docs/screenshots/graph-dark.png" alt="Knowledge graph — Sankey-style storyboard auto-engaged when fewer than 12 nodes, component → page columns, edge thickness = co-occurring bug count, regression / fragile / fix-coverage quick views, ontology browser, Apache AGE backend status" /></a>
-    <p align="center"><b>Knowledge graph</b> · <sub>Auto-switches to Sankey storyboard under 12 nodes; full React Flow canvas with cluster layout above. Apache AGE backed.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/health"><img src="./docs/screenshots/health-dark.png" alt="LLM health — 'All systems nominal' green banner, 24h KPIs (10 calls / 0% fallback / 0% errors / p50 6733 ms · p95 14867 ms), per-function breakdown (classify-report, fast-filter with $/call), per-model breakdown (claude-sonnet-4-6 9.4k tokens, claude-haiku-4-5-20251001 6.1k tokens), cron job runner with Trigger now buttons (judge-batch success, intelligence-report never run, data-retention success), recent LLM calls feed with report + trace deeplinks" /></a>
+    <p align="center"><b>Health</b> · <sub>Wave J — real <code>cost_usd</code> per call, per-function / per-model breakdown, p50/p95 latency, fallback rate, cron triggers, Langfuse deeplinks.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/compliance"><img src="./docs/screenshots/compliance-dark.png" alt="Compliance dashboard — latest control evidence rows (A1.2 availability snapshot, CC6.1 RLS coverage, CC6.7 retention windows, CC7.2 audit volume, CC8.1 DSAR fulfilment) with PASS/WARN status pills and JSON payloads, per-project data residency pinning (US/EU/JP/SELF), Refresh evidence + Export PDF actions" /></a>
-    <p align="center"><b>Compliance</b> · <sub>SOC 2 control evidence pack, region pinning per project, print-styled Export PDF, DSAR workflow tracking.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/prompt-lab"><img src="./docs/screenshots/prompt-lab-dark.png" alt="Prompt Lab — KPIs (2 active prompts / 2 candidates / no scored prompts yet / 49 of 52 reports labelled in eval dataset), Stage 1 fast-filter and Stage 2 classify version tables each with v1-baseline (Active, 100% traffic) and v2-experiment (Candidate, 0% traffic) rows, two pending fine-tuning jobs on claude-sonnet-4-6, and an empty Synthetic reports section with a Generate CTA" /></a>
+    <p align="center"><b>Prompt Lab</b> · <sub>Replaces Fine-Tuning. A/B traffic split between active and candidate prompts per stage, eval dataset preview, synthetic report generator, fine-tuning jobs queue.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/graph"><img src="./docs/screenshots/graph-dark.png" alt="Knowledge graph in Sankey storyboard mode (8/27 nodes, 4/4 edges) — two columns labelled COMPONENT (top: confusing) and PAGE (top: /glot-it/sing-along/complete) with bezier links between confusing↔/glot-it/sing-along/complete, visual↔/glot-it/, slow↔/glot-it/drills/vocab, bug↔/glot-it/lessons; legend reads 'thicker = more bugs touching both'; quick-view chips for All / Regressions / Fragile / Fix coverage; Graph backend status (SQL only / AGE not installed) and Bug ontology editor below" /></a>
+    <p align="center"><b>Knowledge graph</b> · <sub>Auto-switches to Sankey storyboard under 12 nodes; full React Flow canvas above. Apache AGE backed when installed, falls back to plain SQL adjacency otherwise.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/compliance"><img src="./docs/screenshots/compliance-dark.png" alt="Compliance dashboard — Refresh evidence + Export PDF actions top-right, Latest control evidence table with rows for A1.2 (Availability snapshot, WARN), CC6.1 (RLS coverage, PASS), CC6.7 (Data retention windows, WARN — default_used true), CC7.2 (Operational monitoring · audit_log volume 7d, mixed PASS/WARN), CC8.1 (DSAR fulfilment >30 days, PASS) with JSON payloads inline, then Data residency table with US/EU/JP/SELF radio per project (glot.it / Mushi Test Project / Test Project)" /></a>
+    <p align="center"><b>Compliance</b> · <sub>SOC 2 control evidence pack with PASS / WARN pills and inline JSON, region pinning per project, print-styled Export PDF, DSAR workflow tracking.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/marketplace"><img src="./docs/screenshots/marketplace-dark.png" alt="Plugin marketplace — Available plugins (4/4) showing PagerDuty Escalation (Official, Incident response, report.classified + sla.breached events), Linear Sync (Project management, report.created + report.classified + report.status_changed), Zapier Bridge (Integration, generic webhook fan-out), and Sentry Mirror (Observability, report.classified + fix.proposed + fix.applied), each with Source link and Install button. Installed section is empty with 'No plugins installed' empty state. Recent deliveries (0/0) below" /></a>
+    <p align="center"><b>Marketplace</b> · <sub>Wave D D1 — toggleable extension layer for the loop. Each plugin declares the events it subscribes to and ships with HMAC-signed webhooks; deliveries are logged with HTTP status + first 512 chars of the response.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/reports/352fff1f-141f-4856-ab95-d2424831b589"><img src="./docs/screenshots/report-detail-dark.png" alt="Report detail page for a Sing Along Medium-severity bug — top strip with Classified / Medium / Confusing UX pills, then a 4-stamp PDCA receipt (Plan CLOSED, Do NOT YET, Check CLOSED 'judge agreed score 0.98', Act NOT YET 'needs fix + check first'), a Triage this report info card with a Dispatch fix CTA, status / severity dropdowns, Sync to 0 destinations + Dispatch fix actions, then User report (description + user category + user intent), LLM classification (Confusing UX, Medium, summary, component path, 78% confidence, claude-haiku-4-5 in 3876 ms), Environment (URL /glot-it/sing-along/complete, browser, viewport), Performance metrics" /></a>
+    <p align="center"><b>Report detail</b> · <sub>The PDCA receipt strip compresses one user-felt bug's full lifecycle into 4 stamps — fed by <code>llm_invocations</code>, <code>fix_attempts</code>, and <code>classification_evaluations</code> in a single round-trip so it never N+1s.</sub></p>
   </td>
 </tr>
 </table>
@@ -243,6 +263,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 |  K   | Admin polish — first-action gating, layout-shaped skeletons, `ResultChip`, microinteractions       |   ✅    |
 |  L   | Beginner/Advanced mode toggle, Next-Best-Action strip, unified 4-stage PDCA, post-QA fixes (Sentry-wrapped DB errors, smoke-test, graceful schema-drift) |   ✅    |
 | M–Q  | 23-page audit + fix-spec sweep — **Quickstart "plug-n-play" mode** (3-page sidebar, verb-led labels, zero PDCA jargon), **first-run interactive tour** (5-stop spotlight, custom 250-line component, no extra deps), themed `Confirm/PromptDialog` (replaces jarring `window.confirm/prompt`), `useMergedErrors` recovery hook, `apiFetch` request dedup + 200 ms micro-cache (kills the 24× N+1 storm on `/v1/admin/setup`), Sentry breadcrumbs + `captureException` wired into every API call, self-disabling Sentry transport on rotated DSN | ✅    |
+|  R   | 7-axis audit + full remediation (2026-04-21) — SEC-1 internal-only middleware locks `fast-filter` / `classify-report` / `fix-worker` behind `MUSHI_INTERNAL_CALLER_SECRET` or `SUPABASE_SERVICE_ROLE_KEY`, SEC-7 `airGap=true` gate on `classify-report`, expanded PII scrubber (IPv4/IPv6, `mushi_*` / `sntryu_*` / `ghp_*` tokens) on the Stage 2 prompt path, 20 missing FK indexes materialised (DB-1), Anthropic `cache_creation_input_tokens` / `cache_read_input_tokens` captured on `llm_invocations` (LLM-3), nightly `reconcile_prompt_version_scores()` cron so A/B leaderboards self-heal (LLM-5), `recover_stranded_pipeline()` gets an O(1) early-exit + passes the internal secret, admin `apiFetch` gets Zod runtime schema validation (`lib/apiSchemas.ts`, surfaces contract drift as a `VALIDATION_ERROR` + fingerprinted Sentry message), Vite `manualChunks` splits `node_modules` into `vendor-react / -sentry / -supabase / -charts / -maps / -markdown / -table / -misc` (PERF-3), `scripts/check-no-secrets.mjs` + `pnpm check:secrets` precommit scanner. Full audit docs in [`docs/audit-summary-2026-04-21.md`](./docs/audit-summary-2026-04-21.md) | ✅    |
 
 **Currently published:** SDK packages at `0.2.x` ([`@mushi-mushi/web`](https://www.npmjs.com/package/@mushi-mushi/web), [`react`](https://www.npmjs.com/package/@mushi-mushi/react), [`vue`](https://www.npmjs.com/package/@mushi-mushi/vue), [`svelte`](https://www.npmjs.com/package/@mushi-mushi/svelte), [`angular`](https://www.npmjs.com/package/@mushi-mushi/angular), [`react-native`](https://www.npmjs.com/package/@mushi-mushi/react-native), [`capacitor`](https://www.npmjs.com/package/@mushi-mushi/capacitor)), CLI + launcher at `0.4.x` ([`mushi-mushi`](https://www.npmjs.com/package/mushi-mushi), [`@mushi-mushi/cli`](https://www.npmjs.com/package/@mushi-mushi/cli)), admin web at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) (auto-deployed to S3 + CloudFront on every push to `master`). Latest handover: [`docs/HANDOVER-wave-l-2026-04-20.md`](./docs/HANDOVER-wave-l-2026-04-20.md).
 
@@ -392,7 +413,7 @@ docker compose up -d
 
 Or via Supabase CLI directly — see [SELF_HOSTED.md](./SELF_HOSTED.md). A Helm chart lives at `deploy/helm/` (incomplete — missing migrations ConfigMap).
 
-> Internal edge functions (`judge-batch`, `intelligence-report`, `generate-synthetic`) authenticate via `SUPABASE_SERVICE_ROLE_KEY`. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet.
+> **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware, which accepts **either** `MUSHI_INTERNAL_CALLER_SECRET` (used by `pg_cron` → `pg_net`, mirrored into `public.mushi_runtime_config.service_role_key`) or the auto-injected `SUPABASE_SERVICE_ROLE_KEY` (used for function-to-function calls). Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet. See [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 
 ---
 
