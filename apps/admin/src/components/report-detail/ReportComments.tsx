@@ -94,9 +94,15 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
           <button
             type="submit"
             disabled={submitting || !body.trim()}
-            className="text-xs px-3 py-1 rounded-md bg-accent text-fg-on-accent disabled:opacity-50 hover:bg-accent-hover motion-safe:transition-colors"
+            className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-md bg-accent text-fg-on-accent disabled:opacity-50 hover:bg-accent-hover motion-safe:transition-colors"
           >
-            {submitting ? 'Posting…' : 'Post'}
+            {submitting && (
+              <span
+                className="inline-block w-3 h-3 rounded-full border border-current/30 border-t-current motion-safe:animate-spin"
+                aria-hidden="true"
+              />
+            )}
+            <span>Post</span>
           </button>
         </div>
       </form>

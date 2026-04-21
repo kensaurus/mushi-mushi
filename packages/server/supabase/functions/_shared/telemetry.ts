@@ -36,12 +36,33 @@ export interface LlmInvocationRecord {
    *  admin UI can deep-link straight to the trace + cost + token breakdown
    *  without having to search Langfuse by metadata. */
   langfuseTraceId?: string | null
+  /** LLM-3 (audit 2026-04-21): Anthropic prompt-caching tokens. `cache_creation`
+   *  is billed at 1.25x regular input; `cache_read` is billed at 0.1x. Stage 2
+   *  caches the ~1.2k-token system prompt, so on the 2nd+ call per day we
+   *  should see cache_read_input_tokens >> input_tokens with dramatically
+   *  lower cost. Tracking both lets the Billing rollup prove the cache is
+   *  actually saving money (audit measured per-report cost at ~10x whitepaper
+   *  claim; this plus the judge-model fix closes the gap). */
+  cacheCreationInputTokens?: number | null
+  cacheReadInputTokens?: number | null
 }
 
 export function logLlmInvocation(
   db: SupabaseClient,
   rec: LlmInvocationRecord,
 ): Promise<void> {
+  // LLM-4 (audit 2026-04-21): Langfuse trace coverage measured 65% —
+  // digest / modernizer / auto-tune stages weren't passing langfuseTraceId
+  // through. Emit a single warn when Langfuse is configured in this isolate
+  // but the caller didn't supply a trace id. Throttled visibility via the
+  // log-child; we can't hard-fail without losing the cost data for ops
+  // stages that legitimately pre-date Langfuse.
+  if (!rec.langfuseTraceId && Deno.env.get('LANGFUSE_PUBLIC_KEY')) {
+    log.warn('LLM invocation missing langfuse_trace_id — trace linkage degrades to 0 for this call', {
+      functionName: rec.functionName,
+      stage: rec.stage ?? null,
+    })
+  }
   // Compute cost at write time using the centralized pricing table so Health,
   // Billing COGS, and Prompt Lab all read the same number from one column.
   // See `_shared/pricing.ts` and migration `20260420000200_llm_cost_usd.sql`
@@ -69,6 +90,8 @@ export function logLlmInvocation(
     prompt_version: rec.promptVersion ?? null,
     key_source: rec.keySource ?? null,
     langfuse_trace_id: rec.langfuseTraceId ?? null,
+    cache_creation_input_tokens: rec.cacheCreationInputTokens ?? null,
+    cache_read_input_tokens: rec.cacheReadInputTokens ?? null,
   }).then(({ error }) => {
     if (error) log.warn('llm_invocations insert failed', { error: error.message })
   })

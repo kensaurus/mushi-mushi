@@ -126,8 +126,14 @@ export function NotificationsPage() {
           options={TYPE_OPTIONS}
           onChange={(e) => updateParam('type', e.currentTarget.value)}
         />
-        <Btn variant="ghost" size="sm" onClick={markAllRead} disabled={bulking || unreadCount === 0}>
-          {bulking ? 'Marking…' : `Mark all read${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
+        <Btn
+          variant="ghost"
+          size="sm"
+          onClick={markAllRead}
+          disabled={bulking || unreadCount === 0}
+          loading={bulking}
+        >
+          {`Mark all read${unreadCount > 0 ? ` (${unreadCount})` : ''}`}
         </Btn>
       </PageHeader>
 

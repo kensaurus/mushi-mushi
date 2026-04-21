@@ -25,6 +25,7 @@ import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixCard } from '../components/fixes/FixCard'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
 import { usePageCopy } from '../lib/copy'
+import { useStaggeredAppear } from '../lib/useStaggeredAppear'
 
 type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'merged' | 'failed'
 
@@ -155,6 +156,10 @@ export function FixesPage() {
     return fixes.filter((f) => bucketize(f) === statusBucket)
   }, [fixes, statusBucket])
 
+  // Capped at 12 entries so a freshly-loaded list of 100+ fixes still finishes
+  // its entrance animation in well under half a second (Wave U polish).
+  const stagger = useStaggeredAppear({ stepMs: 28, max: 12 })
+
   const retryOne = useCallback(
     async (reportId: string) => {
       const res = await apiFetch('/v1/admin/fixes/dispatch', {
@@ -267,7 +272,12 @@ export function FixesPage() {
           ) : (
             <div className="space-y-1.5">
               {visibleFixes.map((fix, idx) => (
-                <div key={fix.id} data-tour-id={idx === 0 ? 'fix-card' : undefined}>
+                <div
+                  key={fix.id}
+                  data-tour-id={idx === 0 ? 'fix-card' : undefined}
+                  className="motion-safe:animate-mushi-fade-in"
+                  style={stagger(idx)}
+                >
                   <FixCard
                     fix={fix}
                     isOpen={expanded === fix.id}
