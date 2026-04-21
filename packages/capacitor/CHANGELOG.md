@@ -1,5 +1,12 @@
 # @mushi-mushi/capacitor
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [81336e9]
+  - @mushi-mushi/core@0.3.0
+
 ## 0.3.1
 
 ### Patch Changes
