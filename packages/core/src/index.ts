@@ -21,6 +21,7 @@ export type {
   MushiEventType,
   MushiEventHandler,
   MushiSDKInstance,
+  MushiCaptureEventInput,
   MushiApiClient,
   MushiApiResponse,
   MushiOnDeviceClassifier,

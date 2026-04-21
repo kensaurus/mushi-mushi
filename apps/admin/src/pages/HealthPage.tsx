@@ -56,7 +56,7 @@ interface LlmHealth {
   errors: number
   errorRate: number
   avgLatencyMs: number
-  // Wave I added p95LatencyMs to the API. Optional here so older deployed
+  // added p95LatencyMs to the API. Optional here so older deployed
   // Edge Functions (or partial-rollout staging envs) don't crash the page —
   // the render uses `?? 0` everywhere this is read.
   p95LatencyMs?: number
@@ -66,7 +66,7 @@ interface LlmHealth {
     errors: number
     fallbacks: number
     avgLatencyMs: number
-    // Same Wave I rollout: optional so a stale Edge Function doesn't break
+    // Same rollout: optional so a stale Edge Function doesn't break
     // the per-function rows. Render with `?? 0`.
     p95LatencyMs?: number
     costUsd?: number

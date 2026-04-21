@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave C C8: Bring Your Own Storage
+-- C8: Bring Your Own Storage
 --
 -- Adds project_storage_settings — per-project pointer to where binary
 -- artifacts (screenshots, intelligence-report PDFs, fix attachments) live.
@@ -61,11 +61,11 @@ CREATE TRIGGER storage_settings_touch_updated_at
   FOR EACH ROW EXECUTE FUNCTION mushi_touch_updated_at();
 
 COMMENT ON TABLE project_storage_settings IS
-  'Wave C C8: per-project storage backend. NULL row = use the cluster default Supabase Storage bucket.';
+  'per-project storage backend. NULL row = use the cluster default Supabase Storage bucket.';
 COMMENT ON COLUMN project_storage_settings.access_key_vault_ref IS
   'Name of the Supabase Vault secret holding the S3-compatible access key. Never store raw keys here.';
 
--- Wave C C8: vault_lookup helper used by the storage adapter.
+-- C8: vault_lookup helper used by the storage adapter.
 -- SECURITY DEFINER so service-role Edge Functions can resolve secrets
 -- without granting blanket vault.* read access.
 CREATE OR REPLACE FUNCTION vault_lookup(secret_name TEXT)

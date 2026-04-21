@@ -1,5 +1,5 @@
 // ============================================================
-// Wave D D8: prompt-injection defense.
+// D8: prompt-injection defense.
 //
 // `sanitizeForLLM` is the canonical pre-LLM scrub for any user-supplied
 // text that will be embedded in an LLM prompt. It:

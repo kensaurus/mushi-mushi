@@ -1,5 +1,5 @@
 -- =============================================================================
--- V5.3 §2.16 Wave B B5 — persistent bug intelligence reports + opt-in
+-- V5.3 §2.16 B5 — persistent bug intelligence reports + opt-in
 -- cross-customer benchmarking.
 --
 -- The intelligence-report Edge Function already runs weekly via pg_cron and

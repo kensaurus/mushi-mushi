@@ -12,8 +12,8 @@ supabase/functions/
   judge-batch/               Nightly LLM quality scoring + prompt A/B auto-promotion
   intelligence-report/       Automated weekly summary generation
   generate-synthetic/        Synthetic test data generator
-  stripe-webhooks/           Wave D D5 — handles Stripe subscription + invoice events
-  usage-aggregator/          Wave D D5 — hourly cron pushing usage_events to Stripe Meter Events
+  stripe-webhooks/ D5 — handles Stripe subscription + invoice events
+  usage-aggregator/ D5 — hourly cron pushing usage_events to Stripe Meter Events
   webhooks-github-indexer/   GitHub App webhook → codebase RAG indexer; `?mode=sweep` reindexes all installed repos for cron use
   sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
   fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
@@ -89,9 +89,9 @@ All routes are served from the `api` function under `/v1/`:
 - `POST /v1/reports/batch` — Batch report submission (up to 10), same quota gate
 - `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console. Each returned row carries a `dedup_count` (number of reports sharing the same `report_group_id`) so the admin UI can collapse duplicates into a `+N similar` badge without an N+1 fetch
 - `GET /v1/admin/stats` — Dashboard statistics
-- `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, a `cta` deep-link, **and a 7-day `series: number[]` for sparkline rendering — Wave L**) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
-- `GET /v1/admin/reports/severity-stats` — 14-day severity rollup. **Wave L:** also returns a `byDay: Array<{ day, critical, high, medium, low, total }>` matrix so the FE can render per-tile sparklines without a second round-trip
-- `GET /v1/admin/query/history` — Returns `{ ok: true, history: [], degraded: 'schema_pending' }` instead of 500 when the `is_saved` column is missing (`pg_code='42703'`) so the Query page keeps rendering during partial schema deploys (Wave L)
+- `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, a `cta` deep-link, **and a 7-day `series: number[]` for sparkline rendering**) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
+- `GET /v1/admin/reports/severity-stats` — 14-day severity rollup. Also returns a `byDay: Array<{ day, critical, high, medium, low, total }>` matrix so the FE can render per-tile sparklines without a second round-trip
+- `GET /v1/admin/query/history` — Returns `{ ok: true, history: [], degraded: 'schema_pending' }` instead of 500 when the `is_saved` column is missing (`pg_code='42703'`) so the Query page keeps rendering during partial schema deploys
 - `GET /v1/admin/judge/evaluations` — Hydrates each row with the underlying report's `summary`, `severity`, and `status` so judge UIs can show human-readable summaries instead of opaque `report_id` hashes
 - `GET /v1/admin/graph/*` — Knowledge graph queries
 - `POST /v1/admin/query` — Natural language data queries
@@ -103,14 +103,14 @@ All routes are served from the `api` function under `/v1/`:
 - `POST /v1/admin/queue/flush-queued` — Force-process reports stuck in `status='queued'` (kicks `fast-filter` for each)
 - `GET | POST | DELETE /v1/admin/integrations[/:type]` — Integration credentials CRUD. `GET` masks secrets; `POST` merges with existing masked values so partial updates don't drop tokens
 - `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
-- `GET/POST /v1/admin/plugins` — Marketplace registry CRUD (Wave D D1)
-- `GET /.well-known/agent-card` — A2A agent card (Wave C C5)
-- `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. Wave T's contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
-- `POST /v1/admin/auth/token` (Wave S) — OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
-- `POST /v1/admin/projects/:id/keys/rotate` (Wave S) — atomic API key rotation. Revokes every active key for the project (audit-logged with the revoked prefixes), generates a new one, and returns it in the same response (`mushi_<32hex>`, 201). The plaintext is shown exactly once — clients store it immediately or rotate again. Project ownership is enforced via `jwtAuth` + `owner_id` check, so cross-project rotation is impossible
+- `GET/POST /v1/admin/plugins` — Marketplace registry CRUD
+- `GET /.well-known/agent-card` — A2A agent card
+- `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
+- `POST /v1/admin/auth/token`— OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
+- `POST /v1/admin/projects/:id/keys/rotate`— atomic API key rotation. Revokes every active key for the project (audit-logged with the revoked prefixes), generates a new one, and returns it in the same response (`mushi_<32hex>`, 201). The plaintext is shown exactly once — clients store it immediately or rotate again. Project ownership is enforced via `jwtAuth` + `owner_id` check, so cross-project rotation is impossible
 - See `supabase/functions/api/index.ts` for the full route table
 
-## Manifest contract test (Wave T)
+## Manifest contract test
 
 `src/__tests__/manifest-contract.test.ts` parses
 `supabase/functions/api/index.ts`, extracts every URL listed inside
@@ -119,12 +119,12 @@ route via `app.<method>(<path>, ...)`. If a future PR adds an entry to the
 manifest without wiring up the route — or deletes a route the manifest still
 advertises — `pnpm test` fails with the offending URL named in the error.
 
-This was added because Wave R's static audit found two manifest entries
+This was added because static audit found two manifest entries
 (`/v1/admin/auth/token`, `/v1/admin/projects/:id/keys/rotate`) that were
 advertised but returned 404 in production. The test now blocks that class
 of bug before it reaches a deploy.
 
-## Error handling (Wave L)
+## Error handling
 
 Every Postgres error returned to the admin API flows through one helper —
 `dbError(c, err)` in `supabase/functions/api/index.ts`. It:
@@ -141,7 +141,7 @@ Sentry. **If you add a new admin route, use `return dbError(c, error)` instead
 of building the 500 by hand** — otherwise the new route's errors will be
 invisible to the on-call dashboard.
 
-## Stage 2 air-gap (Wave D — 2026-04-18)
+## Stage 2 air-gap
 
 Stage 2 (`classify-report`) **never receives raw user-supplied strings**. The
 contract is enforced at the boundary: `fast-filter` produces a typed
@@ -186,7 +186,7 @@ supabase functions deploy fast-filter classify-report fix-worker judge-batch api
   usage-aggregator soc2-evidence intelligence-report --project-ref <ref>
 ```
 
-## Security: prompt-injection defense (Wave D D8)
+## Security: prompt-injection defense
 
 `_shared/sanitize.ts` exposes `sanitizeForLLM` and `wrapUserContent`. Every
 user-supplied string headed for an LLM prompt **must** flow through one of

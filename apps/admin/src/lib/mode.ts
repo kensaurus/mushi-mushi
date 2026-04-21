@@ -2,7 +2,7 @@
  * FILE: apps/admin/src/lib/mode.ts
  * PURPOSE: Quickstart / Beginner / Advanced admin mode primitive.
  *
- *  Quickstart mode (Wave N) is the default for first-time visitors. It:
+ * Quickstart modeis the default for first-time visitors. It:
  *    1. Shows ONLY 3 sidebar routes — Inbox, Drafts, Setup
  *    2. Pins a "Resolve next bug →" mega-CTA above page content
  *    3. Hides PDCA terminology entirely; uses verb-led labels

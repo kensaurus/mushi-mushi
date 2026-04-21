@@ -4,6 +4,7 @@ import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -179,7 +180,7 @@ export function CompliancePage() {
       return
     }
     setFiling(true)
-    // Backend expects snake_case + explicit projectId. Audit Wave K bugfix:
+    // Backend expects snake_case + explicit projectId.
     // the previous camelCase body produced a persistent 400 from the validator.
     const res = await apiFetch('/v1/admin/compliance/dsars', {
       method: 'POST',
@@ -214,6 +215,7 @@ export function CompliancePage() {
         <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
           Export PDF
         </Btn>
+        <TableDensityToggle />
       </PageHeader>
 
       <PageHelp
@@ -239,7 +241,7 @@ export function CompliancePage() {
                 description="Click Refresh evidence to generate the first snapshot."
               />
             ) : (
-              <div className="overflow-x-auto">
+              <ResponsiveTable>
                 <table className="w-full text-xs">
                   <thead className="text-fg-muted uppercase tracking-wider text-3xs">
                     <tr className="border-b border-edge-subtle">
@@ -268,7 +270,7 @@ export function CompliancePage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ResponsiveTable>
             )}
           </Card>
 
@@ -410,7 +412,7 @@ export function CompliancePage() {
             {dsars.length === 0 ? (
               <EmptyState title="No DSARs filed yet" />
             ) : (
-              <div className="overflow-x-auto">
+              <ResponsiveTable>
                 <table className="w-full text-xs">
                   <thead className="text-fg-muted uppercase tracking-wider text-3xs">
                     <tr className="border-b border-edge-subtle">
@@ -442,7 +444,7 @@ export function CompliancePage() {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ResponsiveTable>
             )}
           </Card>
         </>

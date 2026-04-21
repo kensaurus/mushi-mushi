@@ -1,7 +1,7 @@
 -- Migration: 20260418000800_byok_keys
 -- Purpose:   Add Bring-Your-Own-Key (BYOK) columns for LLM providers (V5.3 §2.7,
 --            §2.18, M-cross-cutting). Schema only — end-to-end wiring lands in
---            Wave C C9. Until then, the `_shared/byok.ts` helper resolves
+-- C9. Until then, the `_shared/byok.ts` helper resolves
 --            effective keys (BYOK first, env fallback) and stays a no-op.
 --
 -- SECURITY:

@@ -37,7 +37,7 @@ export interface PlatformDef {
   /**
    * Concrete capabilities the platform unlocks once configured. Rendered as a
    * tight bullet list under whyItMatters so the user can see "what do I get
-   * for connecting this?" before they hand over a token. Audit Wave I P1.
+   * for connecting this?" before they hand over a token. .
    */
   capabilitiesOnceConnected: string[]
   fields: PlatformFieldDef[]

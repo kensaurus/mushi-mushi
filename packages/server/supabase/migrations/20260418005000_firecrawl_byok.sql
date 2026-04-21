@@ -1,6 +1,6 @@
 -- Migration: 20260418005000_firecrawl_byok
 -- Purpose:   Add Firecrawl as a first-class BYOK provider for the new
---            "Wave E" research / fix-augmentation / library-modernizer flows.
+--            research / fix-augmentation / library-modernizer flows.
 --
 --            Firecrawl is NOT an LLM — it has no Anthropic-style key shape,
 --            no baseUrl flavour, and no quota/billing entanglement with the
@@ -27,15 +27,15 @@ ALTER TABLE project_settings
     CHECK (firecrawl_max_pages_per_call BETWEEN 1 AND 50);
 
 COMMENT ON COLUMN project_settings.byok_firecrawl_key_ref IS
-  'Wave E BYOK: vault://<id> reference for the project''s Firecrawl API key. '
+  'vault://<id> reference for the project''s Firecrawl API key. '
   'Used by _shared/firecrawl.ts for research / fix-augmentation / modernizer crons.';
 
 COMMENT ON COLUMN project_settings.firecrawl_allowed_domains IS
-  'Wave E: hostname allow-list for Firecrawl scrape calls. Empty array = unrestricted; '
+  'hostname allow-list for Firecrawl scrape calls. Empty array = unrestricted; '
   'non-empty = deny by default unless the URL hostname matches one of the entries.';
 
 COMMENT ON COLUMN project_settings.firecrawl_max_pages_per_call IS
-  'Wave E: hard cap on results per firecrawlSearch / pages per crawl call.';
+  'hard cap on results per firecrawlSearch / pages per crawl call.';
 
 -- Extend byok_audit_log so firecrawl rotations / uses are auditable next to
 -- the LLM keys. The original CHECK only allowed ('anthropic','openai').

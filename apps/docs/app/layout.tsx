@@ -26,7 +26,7 @@ export const metadata: Metadata = {
 
 const banner = (
   <Banner storageKey="v0-8-0-wave-c">
-    Wave C shipped — native iOS / Android / Flutter / Capacitor SDKs, A2A
+    shipped — native iOS / Android / Flutter / Capacitor SDKs, A2A
     discovery, SOC 2 readiness, residency, BYO storage, BYOK.{' '}
     <a href="/changelog" className="underline">
       See changelog

@@ -11,6 +11,8 @@ import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { mapWithConcurrency } from '../_shared/concurrency.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -52,7 +54,7 @@ const judgeSchema = z.object({
     severity: z.string().nullable().describe('Suggested severity, or null if no change'),
     component: z.string().nullable().describe('Suggested component, or null if no change'),
   }).nullable().describe('If classification_agreed is false, suggest corrections; otherwise null'),
-  // Wave E §4: short failure-mode tag for prompt-auto-tune bucketing.
+  // §4: short failure-mode tag for prompt-auto-tune bucketing.
   // Constrained to a small vocabulary so the auto-tuner can group failures
   // numerically rather than re-running the full reasoning blob through an LLM.
   disagreement_reason: z
@@ -78,12 +80,12 @@ Deno.serve(withSentry('judge-batch', async (req) => {
   let db: ReturnType<typeof getServiceClient> | null = null
 
   try {
-    const auth = req.headers.get('Authorization')
-    const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
-    if (!token || !expectedKey || token !== expectedKey) {
-      return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
-    }
+    // SEC-1 (Wave S1 / D-14): unify internal auth across all internal-only
+    // Edge Functions on `requireServiceRoleAuth`. Accepts both the
+    // service-role key (edge-to-edge) and MUSHI_INTERNAL_CALLER_SECRET
+    // (pg_net cron). Ad-hoc header checks used to drift per-file.
+    const unauthorized = requireServiceRoleAuth(req)
+    if (unauthorized) return unauthorized
 
     db = getServiceClient()
     const body = await req.json().catch(() => ({}))
@@ -143,7 +145,11 @@ Deno.serve(withSentry('judge-batch', async (req) => {
 
       const trace = createTrace('judge-batch', { projectId: project.id, reportCount: reports.length })
 
-      for (const report of reports) {
+      // Wave S3 (PERF): fan out judge evaluations with concurrency=5 so a
+      // 50-report batch completes in ~10× fewer wall-clock seconds. The
+      // provider rate limit (~50 req/min) tolerates this; DB pool pressure
+      // stays bounded because the per-report insert is a single round-trip.
+      await mapWithConcurrency(reports, 5, async (report) => {
         const span = trace.span('judge.evaluate')
         const start = Date.now()
 
@@ -176,7 +182,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           let usedJudgeModel = modelId
           let judgeFallbackUsed = false
 
-          // Wave C C9: per-project BYOK resolution.
+          // C9: per-project BYOK resolution.
           const anthropicResolved = await resolveLlmKey(db, project.id, 'anthropic')
           // V5.3 §2.7 + §2.18: BYOK-only deployments commonly run on a single
           // OpenAI-compatible gateway (OpenRouter, Together, …) instead of a
@@ -284,7 +290,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             judge_reasoning: evaluation.reasoning,
             classification_agreed: evaluation.classification_agreed,
             suggested_correction: evaluation.suggested_correction ?? null,
-            // Wave E §4: link the eval back to the prompt that was used so
+            // §4: link the eval back to the prompt that was used so
             // prompt-auto-tune can bucket failures by prompt version. Stage 2
             // wins when both are present (it's the deciding classification).
             prompt_version: report.stage2_prompt_version ?? report.stage1_prompt_version ?? null,
@@ -300,7 +306,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
             judge_evaluated_at: new Date().toISOString(),
           }).eq('id', report.id)
 
-          // Wave D D1: surface judge scores to webhook plugins (e.g. low-score
+          // D1: surface judge scores to webhook plugins (e.g. low-score
           // alerts to Slack/Linear). Async; failures must not affect batch.
           void dispatchPluginEvent(db, project.id, 'judge.score_recorded', {
             report: { id: report.id },
@@ -345,7 +351,7 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           evalErrors.push({ reportId: report.id, err: errMsg })
           span.end({ error: errMsg })
         }
-      }
+      })
 
       // Drift detection
       const { data: drift } = await db.rpc('weekly_judge_scores', {

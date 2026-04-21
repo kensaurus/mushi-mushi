@@ -1,5 +1,5 @@
 /**
- * Wave C C7: Data residency region resolution.
+ * C7: Data residency region resolution.
  *
  * The SDK supports four regional clouds:
  *   - 'us'   → United States (default; legacy `dxptnwrhwsqckaftyymj`)

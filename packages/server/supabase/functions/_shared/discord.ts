@@ -23,7 +23,12 @@ export async function sendDiscordNotification(
   webhookUrl: string,
   payload: DiscordPayload,
 ): Promise<void> {
-  const embed = {
+  const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? null
+  const reportUrl =
+    payload.reportUrl ??
+    (adminBase ? `${adminBase}/reports?id=${encodeURIComponent(payload.reportId)}` : null)
+
+  const embed: Record<string, unknown> = {
     title: `New ${payload.category} report in ${payload.projectName}`,
     description: payload.summary ?? 'No summary available',
     fields: [
@@ -34,14 +39,20 @@ export async function sendDiscordNotification(
     color: SEVERITY_COLORS[payload.severity ?? 'low'] ?? 0x7C3AED,
     timestamp: new Date().toISOString(),
   }
+  if (reportUrl) embed.url = reportUrl
 
-  const res = await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embeds: [embed] }),
-  })
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ embeds: [embed] }),
+    })
 
-  if (!res.ok) {
-    discordLog.error('Webhook failed', { status: res.status, body: await res.text() })
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      discordLog.error('Webhook failed', { status: res.status, body: text.slice(0, 400) })
+    }
+  } catch (err) {
+    discordLog.error('Webhook delivery failed', { err: String(err) })
   }
 }

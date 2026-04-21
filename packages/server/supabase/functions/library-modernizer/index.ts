@@ -1,5 +1,5 @@
 /**
- * library-modernizer — Wave E weekly cron.
+ * library-modernizer — weekly cron.
  *
  * For each project_repos row that's primary + indexed, fetch the top-level
  * dependency manifest (package.json / pyproject.toml / requirements.txt /

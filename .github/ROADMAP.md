@@ -9,7 +9,7 @@ It's a GitHub Projects v2 board with these single-select fields:
 | Field   | Values                                                                                       |
 | ------- | -------------------------------------------------------------------------------------------- |
 | Status  | Backlog · In Progress · In Review · Blocked · Done                                           |
-| Wave    | A · B · C · D · E                                                                             |
+| Phase | A · B · C · D · E |
 | Area    | Web SDK · Mobile SDK · Admin · Server · LLM Pipeline · Knowledge Graph · Fix Orchestrator · Plugins · Billing · Docs · Security |
 | Impact  | P0 · P1 · P2 · P3                                                                             |
 | Type    | Bug · Enhancement · RFC · Docs · Ops                                                          |
@@ -24,7 +24,7 @@ you add a `status:*` label, the workflow also flips the project's
 ## How to file a roadmap request
 
 1. Open an issue using the **Feature Request** template.
-2. Add `wave:?` if you have an opinion on which release train it
+2. Add `phase:?` if you have an opinion on which release train it
    belongs to (we'll re-bucket if needed).
 3. Add `area:*` (web-sdk, server, llm-pipeline, …) so it lands in the
    right swim lane.
@@ -58,12 +58,12 @@ status:done      →  Done
 Adding any of those labels to an issue/PR is mirrored to the project's
 **Status** column by `.github/scripts/sync-roadmap-status.mjs`.
 
-## Wave plan
+## Release plan
 
 See the [whitepaper](../MushiMushi_Whitepaper_V5.md) for the full
 architectural target. The high-level shape:
 
-| Wave | Theme                                                  | Status     |
+| Phase | Theme | Status |
 | ---- | ------------------------------------------------------ | ---------- |
 | A    | Vision air-gap, MCP correctness, RAG, sandbox          | Shipped    |
 | B    | WASM SLM, real-time collab, AG-UI, fine-tune           | Shipped    |

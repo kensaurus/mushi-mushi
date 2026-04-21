@@ -35,7 +35,7 @@ import {
 } from '../_shared/stripe.ts'
 import { getPlan, getPlanByBaseLookupKey } from '../_shared/plans.ts'
 import { invalidateQuotaCache } from '../_shared/quota.ts'
-import { withSentry } from '../_shared/sentry.ts'
+import { reportMessage, withSentry } from '../_shared/sentry.ts'
 import { notifyOperator, type NotifyField } from '../_shared/operator-notify.ts'
 
 const wlog = log.child('stripe-webhooks')
@@ -299,6 +299,19 @@ async function notifySubscriptionDeleted(
     url: customerId ? `${STRIPE_DASHBOARD_ROOT}/customers/${customerId}` : undefined,
     footer: 'event: customer.subscription.deleted',
   }).catch(() => {})
+
+  // Fingerprint so Sentry clusters one issue per plan_id rather than one per
+  // subscription id. Paid-plan churn is high-signal — we want a dashboard
+  // alert for every lost customer so the operator can reach out.
+  reportMessage('stripe.subscription.deleted', 'warning', {
+    tags: { event: 'customer.subscription.deleted', plan: planId ?? 'unknown' },
+    extra: {
+      subscription_id: subId,
+      customer_id: customerId,
+      project: projectName(meta),
+      cancel_reason: cancelReason ?? null,
+    },
+  })
 }
 
 async function notifyPaymentFailed(
@@ -334,6 +347,26 @@ async function notifyPaymentFailed(
     url: invoiceId ? `${STRIPE_DASHBOARD_ROOT}/invoices/${invoiceId}` : undefined,
     footer: 'event: invoice.payment_failed',
   }).catch(() => {})
+
+  // Surface paid-plan payment failures as Sentry warnings — this is a
+  // revenue-affecting blocker the operator must see alongside any other
+  // paid-plan incident, not just in a Slack channel that can be muted.
+  // Level is 'warning' on the first attempt, 'error' once Stripe has
+  // retried multiple times — by then it's almost certainly real churn risk.
+  const level: 'warning' | 'error' = (attempt ?? 0) >= 3 ? 'error' : 'warning'
+  reportMessage('stripe.invoice.payment_failed', level, {
+    tags: {
+      event: 'invoice.payment_failed',
+      attempt: String(attempt ?? 0),
+    },
+    extra: {
+      invoice_id: invoiceId,
+      customer_id: customerId,
+      amount_due: amountDue,
+      currency,
+      next_attempt_at: nextAttempt ? new Date(nextAttempt * 1000).toISOString() : null,
+    },
+  })
 }
 
 async function notifyPaymentRecovered(
@@ -459,6 +492,22 @@ const handler = async (req: Request): Promise<Response> => {
         await linkCustomerOnCheckout(db, event.data.object)
         await notifyCheckoutCompleted(event.data.object)
         break
+      case 'checkout.session.async_payment_failed': {
+        // Async payment methods (ACH, SEPA, etc.) fail after the checkout
+        // redirect succeeded — the subscription row still exists but the
+        // payment never cleared. Surface to Sentry so the operator reaches
+        // out before the customer even notices their account isn't active.
+        const session = event.data.object
+        reportMessage('stripe.checkout.async_payment_failed', 'error', {
+          tags: { event: 'checkout.session.async_payment_failed' },
+          extra: {
+            session_id: session.id as string | undefined,
+            customer_id: session.customer as string | undefined,
+            amount_total: session.amount_total as number | undefined,
+          },
+        })
+        break
+      }
       case 'invoice.payment_failed':
         await markPaymentDelinquent(db, event.data.object)
         await notifyPaymentFailed(event.data.object)

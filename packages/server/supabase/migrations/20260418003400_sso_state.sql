@@ -1,4 +1,4 @@
--- Wave 4.1: Real SAML/OIDC integration with Supabase Auth Admin API.
+-- v4.1: Real SAML/OIDC integration with Supabase Auth Admin API.
 --
 -- Until now, `enterprise_sso_configs` stored config metadata only — admins
 -- entered an IdP metadata URL but no provider was ever registered with

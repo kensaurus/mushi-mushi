@@ -41,8 +41,16 @@ Four tiers, seeded in `pricing_plans` (see `packages/server/supabase/migrations/
 
 Hourly `usage-aggregator` Edge Function pushes per-day report counts
 to Stripe Meter Events with idempotent identifiers. The admin
-`/billing` page reads the same `pricing_plans` row and renders an
-`LLM $X.XX` cost chip from `llm_invocations.cost_usd` (Wave J).
+`/billing` page reads the same `pricing_plans` rows and renders them
+as an always-visible **"Plans at a glance"** comparison table (4 tiers
+side-by-side, feature-grouped, "Your plan" highlight), a per-project
+**`PlanBenefitsList`** (✓/— entitlements spelling out retention, seats,
+BYOK, plugins, audit log, intelligence reports, SSO, SOC 2, self-hosted,
+SLA hours), and a real **`LLM $X.XX`** cost chip from
+`llm_invocations.cost_usd`. The admin shell header also mounts a
+**`PlanBadge`** (tier-toned pill next to the project switcher, deep-links
+to `/billing`) so paid members always see their tier and free users see
+quota usage without opening the billing page.
 
 ## Required environment variables
 

@@ -1,4 +1,4 @@
--- Wave E §3c: extend `reporter_devices` with the columns the SDK fingerprint
+-- §3c: extend `reporter_devices` with the columns the SDK fingerprint
 -- pipeline depends on. The columns were applied directly on the cloud project
 -- ahead of this file landing; this migration codifies them so a fresh
 -- `supabase db reset` replays the schema correctly.

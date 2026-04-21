@@ -1,7 +1,6 @@
 /**
  * FILE: apps/admin/src/components/FirstRunTour.tsx
- * PURPOSE: First-run interactive coach-marks tour (Wave N, §2.2 of the
- *          MushiMushi Audit Fix-Spec). Auto-launches once when:
+ * PURPOSE: First-run interactive coach-marks tour. Auto-launches once when:
  *            • localStorage:'mushi:tour-v1-completed' !== 'true'
  *            • the active project exists (post-onboarding)
  *            • the user is on the dashboard (so anchors are mounted)
@@ -41,9 +40,12 @@ const STOPS: Stop[] = [
   {
     id: 'plan',
     routes: ['/'],
-    anchor: '[data-tour-id="pdca-plan"]',
+    // Match either the live React Flow canvas (sm+) or the stacked-card
+    // fallback (narrow viewports). Both carry a `pdca-*` anchor so the
+    // tour highlight lands on whichever layout is active.
+    anchor: '[data-tour-id="pdca-flow"], [data-tour-id="pdca-plan"]',
     title: 'Plan — bugs your users felt',
-    body: 'Each tile is a stage of the loop. Plan is where real user complaints land, get classified, and get scored by severity. Click any tile to drill in.',
+    body: 'This is the Plan, Do, Check, Act loop. Plan is where real user complaints land, get classified, and get scored. Follow the animated edge to see where the current bottleneck sits.',
   },
   {
     id: 'reports',

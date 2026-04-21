@@ -1,4 +1,4 @@
--- M5 (Wave A v0.6.0): Admin-triggered fix dispatch queue
+-- M5: Admin-triggered fix dispatch queue
 -- The Edge Function cannot itself host @mushi-mushi/agents (Node-only with
 -- GitHub SDK + sandboxes). Pattern: admin POSTs to a thin enqueue endpoint
 -- which writes a row to fix_dispatch_jobs; the agents worker process polls

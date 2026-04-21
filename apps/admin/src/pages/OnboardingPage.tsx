@@ -18,9 +18,11 @@ import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
+import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
+import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 
@@ -75,7 +77,6 @@ export function OnboardingPage() {
   const copy = usePageCopy('/onboarding')
 
   const [projectName, setProjectName] = useState('')
-  const [creating, setCreating] = useState(false)
   const [apiKey, setApiKey] = useState<ApiKey | null>(null)
   const [generatingKey, setGeneratingKey] = useState(false)
   const [keyCopied, setKeyCopied] = useState(false)
@@ -84,6 +85,16 @@ export function OnboardingPage() {
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [error, setError] = useState('')
+
+  // Must be called unconditionally on every render — the skeleton/error
+  // early-returns below would otherwise produce a different hook count
+  // between first (loading) and subsequent (loaded) renders.
+  const { create: createProjectRaw, creating } = useCreateProject({
+    onCreated: () => {
+      setProjectName('')
+      setup.reload()
+    },
+  })
 
   const project = setup.activeProject
 
@@ -108,26 +119,9 @@ export function OnboardingPage() {
   if (setup.error) return <ErrorAlert message={setup.error} onRetry={setup.reload} />
 
   async function createProject() {
-    if (!projectName.trim()) return
-    setCreating(true)
     setError('')
-    // Backend returns `data: { id, slug }` — not `data: { project: { ... } }`.
-    // The previous code keyed off `res.data?.project` and silently fell back to
-    // a GET on every success, masking the actual happy path.
-    const res = await apiFetch<{ id: string; slug: string }>('/v1/admin/projects', {
-      method: 'POST',
-      body: JSON.stringify({ name: projectName.trim() }),
-    })
-    setCreating(false)
-    if (res.ok && res.data?.id) {
-      toast.success('Project created', projectName.trim())
-      setProjectName('')
-      setup.reload()
-    } else {
-      const msg = res.error?.message ?? 'Failed to create project'
-      setError(msg)
-      toast.error('Could not create project', msg)
-    }
+    const result = await createProjectRaw(projectName)
+    if (!result) setError('Failed to create project')
   }
 
   async function generateKey() {
@@ -217,6 +211,20 @@ export function OnboardingPage() {
         ]}
         howToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings.'}
       />
+
+      {/* Explainer diagram: shows first-run users the four stages of the
+          loop they're about to enter, with outcome copy instead of empty
+          zero-counts. Wrapped in a section so the FirstRunTour's "plan"
+          stop can anchor on the Plan node via `data-tour-id="pdca-flow"`. */}
+      <section aria-label="What the loop does" className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-sm font-semibold text-fg">How Mushi closes the loop</h3>
+          <span className="text-2xs text-fg-faint hidden sm:block">
+            Plan → Do → Check → Act (loops back)
+          </span>
+        </div>
+        <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
+      </section>
 
       {project && <SetupChecklist project={project} mode="wizard" />}
 

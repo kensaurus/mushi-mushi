@@ -3,7 +3,7 @@
 _Generated: 2026-04-20. Plan: `mushi_ux_polish_round_2`._
 
 This is the live-verification + code-audit output that drives Round 2. The
-Wave-L overhaul (`REPORT.md`) is the new baseline; this file tracks the deeper
+overhaul (`REPORT.md`) is the new baseline; this file tracks the deeper
 polish layered on top.
 
 ## Live verification snapshot
@@ -117,5 +117,5 @@ buttons fired). Findings:
 
 - Whitepaper P0 architecture from `MushiMushi_Critical_Analysis.md`
   (structured outputs, prompt caching, LLM-as-judge enrichment) — separate
-  engineering wave.
-- Throwing away anything in the existing Wave-L diff.
+  release.
+- Throwing away anything in the existing diff.

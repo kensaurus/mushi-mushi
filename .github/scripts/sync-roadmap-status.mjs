@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// Wave D D6: mirror a `status:*` label change onto the Status
+// D6: mirror a `status:*` label change onto the Status
 // single-select field of the public roadmap project.
 //
 // Inputs (env): GH_TOKEN, LABEL (e.g. status:in-flight), ITEM_NODE

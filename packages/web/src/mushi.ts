@@ -353,6 +353,60 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       instance = null;
       log.debug('Destroyed');
     },
+
+    // Wave G4 — unified `captureEvent` API for programmatic/adapter-driven
+    // reports. Skips the widget, runs the same PII scrub + rate limit +
+    // offline-queue path as `submit()`, and returns the server report id.
+    async captureEvent(input) {
+      if (!rateLimiter.tryConsume()) {
+        log.warn('captureEvent throttled — rate limit exceeded');
+        return null;
+      }
+      const description = piiScrubber.scrub(preFilter.truncate(input.description));
+      const category = input.category ?? 'bug';
+      const report: MushiReport = {
+        id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        projectId: config.projectId,
+        category,
+        description,
+        environment: captureEnvironment(),
+        metadata: {
+          ...(input.metadata ?? {}),
+          ...(userInfo ? { user: userInfo } : {}),
+          ...(input.tags ? { tags: input.tags } : {}),
+          ...(input.error ? { error: input.error } : {}),
+          ...(input.severity ? { severity: input.severity } : {}),
+          ...(input.component ? { component: input.component } : {}),
+          ...(input.source ? { source: input.source } : { source: 'captureEvent' }),
+        },
+        sessionId: getSessionId(),
+        reporterToken: getReporterToken(),
+        createdAt: new Date().toISOString(),
+      };
+      emit('report:submitted', { reportId: report.id });
+      if (typeof navigator !== 'undefined' && !navigator.onLine) {
+        await offlineQueue.enqueue(report);
+        emit('report:queued', { reportId: report.id });
+        return null;
+      }
+      const res = await apiClient.submitReport(report);
+      if (res.ok) {
+        emit('report:sent', { reportId: res.data?.reportId });
+        return res.data?.reportId ?? null;
+      }
+      await offlineQueue.enqueue(report);
+      emit('report:failed', { reportId: report.id, error: res.error });
+      return null;
+    },
+
+    identify(userId, traits) {
+      userInfo = { id: userId, ...(traits?.email ? { email: traits.email } : {}), ...(traits?.name ? { name: traits.name } : {}) };
+      if (traits) {
+        for (const [k, v] of Object.entries(traits)) {
+          if (k !== 'email' && k !== 'name') customMetadata[`user.${k}`] = v;
+        }
+      }
+    },
   };
 
   return sdk;
@@ -370,5 +424,7 @@ function createNoopInstance(): MushiSDKInstance {
     destroy: () => {
       instance = null;
     },
+    captureEvent: async () => null,
+    identify: () => {},
   };
 }

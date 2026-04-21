@@ -2,6 +2,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 /**
  * SOC 2 Type 1 evidence collector.
@@ -11,7 +12,7 @@ import { withSentry } from '../_shared/sentry.ts'
  * `soc2_evidence` table. The admin Compliance page reads from this table to
  * produce the auditor-ready evidence pack.
  *
- * Controls covered (Wave C C6 baseline — the SOC 2 Trust Services Criteria
+ * Controls covered (the SOC 2 Trust Services Criteria
  * relevant for a managed-cloud autofix platform):
  *
  *   CC2.1   System monitoring                — Sentry + Langfuse health
@@ -35,12 +36,9 @@ interface ControlResult {
 }
 
 Deno.serve(withSentry('soc2-evidence', async (req) => {
-  const auth = req.headers.get('Authorization')
-  const expectedKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
-  if (!token || !expectedKey || token !== expectedKey) {
-    return new Response(JSON.stringify({ error: 'Requires valid service_role key' }), { status: 401 })
-  }
+  // SEC-1 (Wave S1 / D-14): unified internal auth.
+  const unauthorized = requireServiceRoleAuth(req)
+  if (unauthorized) return unauthorized
 
   const db = getServiceClient()
   const body = await req.json().catch(() => ({}))

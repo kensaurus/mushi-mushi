@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/NextBestAction.tsx
  * PURPOSE: Persistent "what should I do next?" strip rendered below the
- *          PageHeader on every page in beginner mode (Wave L).
+ * PageHeader on every page in beginner mode
  *
  *          The strip computes the *single* next action the user should take
  *          across the whole loop, sourced from setup status + active project

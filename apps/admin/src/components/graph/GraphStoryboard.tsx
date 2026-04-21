@@ -61,7 +61,7 @@ export function GraphStoryboard({
   // Also pre-compute a per-column "most-affected" node (highest degree) so
   // the column header can read like a sentence — "3 components · top
   // CommandPalette" — instead of just dumping the type name and a count.
-  // Audit Wave I P0 partial — closes the GraphStoryboard chapter labels gap.
+  // partial — closes the GraphStoryboard chapter labels gap.
   const columns = useMemo(() => {
     const grouped = new Map<NodeType, GraphNode[]>()
     for (const n of nodes) {

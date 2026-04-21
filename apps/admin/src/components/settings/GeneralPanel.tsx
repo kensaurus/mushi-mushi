@@ -55,15 +55,17 @@ export function GeneralPanel() {
 
   return (
     <div className="space-y-4 max-w-2xl">
-      <Section title="Notifications" className="space-y-3">
-        <Input
-          label="Slack Webhook URL"
-          type="url"
-          value={settings.slack_webhook_url ?? ''}
-          onChange={(e) => update({ slack_webhook_url: e.target.value })}
-          placeholder="https://hooks.slack.com/services/..."
-        />
-      </Section>
+      <div id="slack" className="scroll-mt-6">
+        <Section title="Notifications" className="space-y-3">
+          <Input
+            label="Slack Webhook URL"
+            type="url"
+            value={settings.slack_webhook_url ?? ''}
+            onChange={(e) => update({ slack_webhook_url: e.target.value })}
+            placeholder="https://hooks.slack.com/services/..."
+          />
+        </Section>
+      </div>
 
       <Section title="Sentry Integration" className="space-y-3">
         <Input

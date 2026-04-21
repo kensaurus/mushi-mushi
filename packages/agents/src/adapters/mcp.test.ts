@@ -52,7 +52,7 @@ describe('McpFixAgent — JSON-RPC tools/call (V5.3 §2.10)', () => {
       },
     }), { status: 200 }))
 
-    const agent = new McpFixAgent({ serverUrl: 'http://mcp.example.com' })
+    const agent = new McpFixAgent({ serverUrl: 'http://mcp.example.com', sdkMode: 'hand-rolled' })
     const r = await agent.generateFix(ctx)
     expect(r.success).toBe(true)
     expect(r.linesChanged).toBe(12)
@@ -64,7 +64,7 @@ describe('McpFixAgent — JSON-RPC tools/call (V5.3 §2.10)', () => {
       jsonrpc: '2.0', id: 1,
       result: { content: [{ type: 'text', text: JSON.stringify({ success: true, filesChanged: [], linesChanged: 0, summary: 'noop' }) }] },
     }), { status: 200 }))
-    const r = await new McpFixAgent({ serverUrl: 'http://x' }).generateFix(ctx)
+    const r = await new McpFixAgent({ serverUrl: 'http://x', sdkMode: 'hand-rolled' }).generateFix(ctx)
     expect(r.success).toBe(true)
   })
 
@@ -73,7 +73,7 @@ describe('McpFixAgent — JSON-RPC tools/call (V5.3 §2.10)', () => {
       jsonrpc: '2.0', id: 1,
       result: { isError: true, content: [{ type: 'text', text: 'OOM' }] },
     }), { status: 200 }))
-    const r = await new McpFixAgent({ serverUrl: 'http://x' }).generateFix(ctx)
+    const r = await new McpFixAgent({ serverUrl: 'http://x', sdkMode: 'hand-rolled' }).generateFix(ctx)
     expect(r.success).toBe(false)
     expect(r.error).toContain('OOM')
   })
@@ -82,7 +82,7 @@ describe('McpFixAgent — JSON-RPC tools/call (V5.3 §2.10)', () => {
     setFetch(() => new Response(JSON.stringify({
       jsonrpc: '2.0', id: 1, error: { code: -32601, message: 'Method not found' },
     }), { status: 200 }))
-    const r = await new McpFixAgent({ serverUrl: 'http://x' }).generateFix(ctx)
+    const r = await new McpFixAgent({ serverUrl: 'http://x', sdkMode: 'hand-rolled' }).generateFix(ctx)
     expect(r.success).toBe(false)
     expect(r.error).toContain('-32601')
     expect(r.error).toContain('Method not found')
@@ -95,7 +95,7 @@ describe('McpFixAgent — JSON-RPC tools/call (V5.3 §2.10)', () => {
       return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'json', data: { success: true, filesChanged: [], linesChanged: 0, summary: '' } }] } }), { status: 200 })
     }) as unknown as typeof fetch
 
-    await new McpFixAgent({ serverUrl: 'http://x', bearer: 'sekret' }).generateFix(ctx)
+    await new McpFixAgent({ serverUrl: 'http://x', bearer: 'sekret', sdkMode: 'hand-rolled' }).generateFix(ctx)
     expect(captured).toBe('Bearer sekret')
   })
 })
@@ -122,7 +122,7 @@ describe('McpFixAgent — SEP-1686 Tasks polling (V5.3 §2.10)', () => {
     let i = 0
     setFetch(() => sequence[i++]())
 
-    const agent = new McpFixAgent({ serverUrl: 'http://x', pollIntervalMs: 1, timeoutMs: 5_000 })
+    const agent = new McpFixAgent({ serverUrl: 'http://x', pollIntervalMs: 1, timeoutMs: 5_000, sdkMode: 'hand-rolled' })
     const r = await agent.generateFix(ctx)
     expect(r.success).toBe(true)
     expect(r.linesChanged).toBe(3)
@@ -145,7 +145,7 @@ describe('McpFixAgent — SEP-1686 Tasks polling (V5.3 §2.10)', () => {
       return new Response('', { status: 500 })
     })
 
-    const agent = new McpFixAgent({ serverUrl: 'http://x', pollIntervalMs: 5, timeoutMs: 20 })
+    const agent = new McpFixAgent({ serverUrl: 'http://x', pollIntervalMs: 5, timeoutMs: 20, sdkMode: 'hand-rolled' })
     const r = await agent.generateFix(ctx)
     expect(r.success).toBe(false)
     expect(r.error).toMatch(/timed out/)
@@ -164,7 +164,7 @@ describe('McpFixAgent — SEP-1686 Tasks polling (V5.3 §2.10)', () => {
         result: { id: 't', status: 'failed', error: { code: 1, message: 'context exceeded' } },
       }), { status: 200 })
     })
-    const r = await new McpFixAgent({ serverUrl: 'http://x', pollIntervalMs: 1 }).generateFix(ctx)
+    const r = await new McpFixAgent({ serverUrl: 'http://x', pollIntervalMs: 1, sdkMode: 'hand-rolled' }).generateFix(ctx)
     expect(r.success).toBe(false)
     expect(r.error).toContain('context exceeded')
   })

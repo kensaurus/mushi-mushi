@@ -4,7 +4,7 @@
  *          Each one is a 64×64 outline glyph rendered with the current text
  *          color so it inherits dark/light mode without extra work. Goal is
  *          to give beginner-mode pages a friendly visual anchor instead of a
- *          blank "no data yet" wall — see audit Wave I §6 (NN/G empty-state
+ * blank "no data yet" wall — see audit §6 (NN/G empty-state
  *          guidelines) and the Phase 5 follow-up tasks in
  *          docs/audit-2026-04-20/REPORT.md.
  *
