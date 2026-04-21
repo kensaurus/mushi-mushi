@@ -1,5 +1,13 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
     "majorMinor": "0.5",
     "headline": null,
     "pending": false,
@@ -96,7 +104,7 @@
   },
   {
     "majorMinor": "0.3",
-    "headline": "7567cee: # v0.8.0 — mobile parity, A2A discovery, SOC 2 readiness, residency, BYO storage, BYOK",
+    "headline": null,
     "pending": false,
     "versions": [
       "0.3.1",
@@ -161,7 +169,7 @@
   },
   {
     "majorMinor": "0.2",
-    "headline": "7567cee: # v0.6.0 — hardening + agentic-fix orchestration",
+    "headline": null,
     "pending": false,
     "versions": [
       "0.2.1",
