@@ -22,6 +22,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
+import { restartFirstRunTour } from '../components/FirstRunTour'
 
 interface ApiKey {
   key: string
@@ -341,12 +342,22 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      <p className="text-center">
+      <p className="text-center flex items-center justify-center gap-3">
         <button
           onClick={() => navigate('/')}
           className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
         >
           Skip setup — go to dashboard
+        </button>
+        <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
+        <button
+          onClick={() => {
+            restartFirstRunTour()
+            navigate('/')
+          }}
+          className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
+        >
+          Restart tour
         </button>
       </p>
     </div>

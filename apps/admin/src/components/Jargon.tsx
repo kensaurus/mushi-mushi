@@ -25,9 +25,11 @@ interface JargonProps {
 }
 
 export function Jargon({ term, children, definition }: JargonProps) {
-  const { isBeginner } = useAdminMode()
+  const { isAdvanced } = useAdminMode()
   const def = definition ?? JARGON[term]
-  if (!isBeginner || !def) return <>{children ?? term}</>
+  // Show the dotted-underline + tooltip for both Quickstart and Beginner.
+  // Advanced mode strips decoration so power users see the bare term.
+  if (isAdvanced || !def) return <>{children ?? term}</>
   return (
     <abbr
       title={def}

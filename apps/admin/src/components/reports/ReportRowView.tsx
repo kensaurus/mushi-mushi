@@ -93,6 +93,7 @@ export function ReportRowView({
   return (
     <tr
       data-row-index={index}
+      data-tour-id={index === 0 ? 'reports-row' : undefined}
       style={staggerDelayMs > 0 ? { animationDelay: `${staggerDelayMs}ms` } : undefined}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button, input, a')) return
@@ -212,6 +213,7 @@ export function ReportRowView({
             <Tooltip content="Dispatch an agentic fix attempt for this report (creates a draft PR).">
               <button
                 type="button"
+                data-tour-id={index === 0 ? 'dispatch-fix-button' : undefined}
                 onClick={(e) => {
                   e.stopPropagation()
                   onDispatchFix()

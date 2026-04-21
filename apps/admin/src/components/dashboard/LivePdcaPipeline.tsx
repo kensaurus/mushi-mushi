@@ -18,19 +18,28 @@
  *          Hidden in advanced mode (the PdcaCockpit covers power-user needs).
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Btn, Card } from '../ui'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { useAdminMode } from '../../lib/mode'
 import { PDCA_ORDER, PDCA_STAGES, PDCA_STAGE_OUTCOMES, type PdcaStageId } from '../../lib/pdca'
+import type { PdcaStage } from './types'
 
 interface Props {
   /** Active project id — required to fire the demo test report. */
   projectId?: string | null
   /** Called after a demo report lands so the dashboard can refresh. */
   onDemoReportSent?: () => void
+  /**
+   * Live PDCA stage counts from /v1/admin/dashboard. When passed, this
+   * component pulses the matching node any time a stage's count increases
+   * vs the previous render — turning the static narrative into a live
+   * heartbeat of real bug-flow activity. Backed by parent's polling /
+   * SSE rather than a duplicate fetch here.
+   */
+  pdcaStages?: PdcaStage[]
 }
 
 type DemoState = 'idle' | 'running' | 'done' | 'error'
@@ -47,20 +56,62 @@ const STAGE_CTA: Record<PdcaStageId, { to: string; label: string }> = {
 // of the real synthetic report.
 const STAGE_MS = 1100
 
-export function LivePdcaPipeline({ projectId, onDemoReportSent }: Props) {
+export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Props) {
   const { isBeginner } = useAdminMode()
   const toast = useToast()
   const navigate = useNavigate()
   const [demoState, setDemoState] = useState<DemoState>('idle')
   const [activeStage, setActiveStage] = useState<PdcaStageId | null>(null)
   const [doneStages, setDoneStages] = useState<Set<PdcaStageId>>(new Set())
+  const [livePulse, setLivePulse] = useState<PdcaStageId | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const livePulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
+      if (livePulseTimer.current) clearTimeout(livePulseTimer.current)
     }
   }, [])
+
+  // Snapshot stage counts on each render so we can diff against the next
+  // payload. We compare to a ref instead of state to avoid an extra render
+  // cycle per poll, but we still need the snapshot to be initialised on the
+  // first non-null payload (otherwise mount would falsely flag every stage
+  // as "increased from 0").
+  const stageCounts = useMemo(() => {
+    if (!pdcaStages) return null
+    const out: Partial<Record<PdcaStageId, number>> = {}
+    for (const s of pdcaStages) out[s.id] = s.count
+    return out
+  }, [pdcaStages])
+  const prevStageCounts = useRef<Partial<Record<PdcaStageId, number>> | null>(null)
+
+  useEffect(() => {
+    if (!stageCounts) return
+    const prev = prevStageCounts.current
+    prevStageCounts.current = stageCounts
+    // Skip the first payload — there's nothing to diff against.
+    if (!prev) return
+    // Don't fight the demo animation.
+    if (demoState === 'running') return
+    // Find the most-recently-bumped stage (in PDCA order so 'plan' wins ties).
+    let bumped: PdcaStageId | null = null
+    for (const id of PDCA_ORDER) {
+      const before = prev[id] ?? 0
+      const after = stageCounts[id] ?? 0
+      if (after > before) {
+        bumped = id
+        break
+      }
+    }
+    if (!bumped) return
+    setLivePulse(bumped)
+    if (livePulseTimer.current) clearTimeout(livePulseTimer.current)
+    // 1.6s is long enough for the pulse + ring fade to register but short
+    // enough that two near-simultaneous bumps don't collide on the same node.
+    livePulseTimer.current = setTimeout(() => setLivePulse(null), 1600)
+  }, [demoState, stageCounts])
 
   const animate = useCallback(
     (index: number) => {
@@ -160,7 +211,7 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent }: Props) {
           <PipelineNode
             key={stage}
             stage={stage}
-            isActive={activeStage === stage}
+            isActive={activeStage === stage || livePulse === stage}
             isDone={doneStages.has(stage)}
             isLast={i === PDCA_ORDER.length - 1}
           />

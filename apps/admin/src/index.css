@@ -94,6 +94,15 @@
 
   /* ── Transition timing ───────────────────────────────────────────────── */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Motion duration tokens — replace ad-hoc 100/120/150/180/220ms values
+     scattered through the components so timing reads consistent.
+     Wave Q: micro = button press feedback, fast = hover/colour swaps,
+     base = page-level transitions, slow = modals + skeletons fading out. */
+  --duration-micro: 100ms;
+  --duration-fast: 150ms;
+  --duration-base: 220ms;
+  --duration-slow: 320ms;
 }
 
 /* ---------------------------------------------------------------------------

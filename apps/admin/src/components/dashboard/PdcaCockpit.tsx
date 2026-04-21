@@ -73,7 +73,7 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
   const numberTone = TONE_NUMBER[stage.tone]
   const dot = TONE_DOT[stage.tone]
   return (
-    <div className="relative">
+    <div className="relative" data-tour-id={`pdca-${stage.id}`}>
       <Card
         elevated
         interactive

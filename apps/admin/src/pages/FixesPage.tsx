@@ -266,16 +266,17 @@ export function FixesPage() {
             </p>
           ) : (
             <div className="space-y-1.5">
-              {visibleFixes.map((fix) => (
-                <FixCard
-                  key={fix.id}
-                  fix={fix}
-                  isOpen={expanded === fix.id}
-                  timeline={timelines[fix.id]}
-                  traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
-                  onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
-                  onRetry={() => retryOne(fix.report_id)}
-                />
+              {visibleFixes.map((fix, idx) => (
+                <div key={fix.id} data-tour-id={idx === 0 ? 'fix-card' : undefined}>
+                  <FixCard
+                    fix={fix}
+                    isOpen={expanded === fix.id}
+                    timeline={timelines[fix.id]}
+                    traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
+                    onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
+                    onRetry={() => retryOne(fix.report_id)}
+                  />
+                </div>
               ))}
             </div>
           )}

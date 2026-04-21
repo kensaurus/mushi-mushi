@@ -7,7 +7,7 @@
  *          evolve independently and stay below the 30-line-function limit.
  */
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -47,6 +47,33 @@ export function DashboardPage() {
   // SPA-route via `navigate` rather than `window.location.assign` — the
   // latter discards in-memory state (toast queue, scroll, focus) on what
   // should be a celebratory in-app jump.
+  // Lightweight live-pulse poll for the LivePdcaPipeline. We refresh the
+  // dashboard payload every 15s while the tab is visible so stage counts
+  // stay current and the pipeline can pulse the right node when a real
+  // report / fix / judge / merge lands. Pauses on tab hide to avoid
+  // burning Supabase function-invocations in the background. (Wave O.)
+  useEffect(() => {
+    if (loading || error || !data || data.empty) return
+    let timer: ReturnType<typeof setInterval> | null = null
+    const start = () => {
+      if (timer) return
+      timer = setInterval(() => {
+        if (document.visibilityState === 'visible') reload()
+      }, 15_000)
+    }
+    const stop = () => {
+      if (timer) clearInterval(timer)
+      timer = null
+    }
+    const onVis = () => (document.visibilityState === 'visible' ? start() : stop())
+    start()
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [data, error, loading, reload])
+
   const onFirstMergedFix = useCallback(() => {
     toast.success(
       'Your first auto-fix was merged 🎉',
@@ -99,6 +126,7 @@ export function DashboardPage() {
 
       <LivePdcaPipeline
         projectId={setup.activeProject?.project_id}
+        pdcaStages={data.pdcaStages}
         onDemoReportSent={() => {
           setup.reload()
           reload()

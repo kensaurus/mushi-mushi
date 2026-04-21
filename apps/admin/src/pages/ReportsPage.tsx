@@ -26,6 +26,7 @@ import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
+import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -416,6 +417,8 @@ export function ReportsPage() {
           </button>
         </Tooltip>
       </PageHeader>
+
+      <DogfoodNarrativeBanner />
 
       <PageHelp
         title={copy?.help?.title ?? 'About Reports'}

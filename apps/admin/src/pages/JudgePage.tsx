@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { useMergedErrors } from '../lib/useMergedErrors'
 import {
   PageHeader,
   PageHelp,
@@ -204,10 +205,14 @@ export function JudgePage() {
   const copy = usePageCopy('/judge')
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
+  // Drives both the leaderboard-row "selected" highlight and the
+  // /evaluations query filter. Wave M P0 fixes the inert leaderboard rows
+  // the PageHelp claimed were clickable.
+  const [promptFilter, setPromptFilter] = useState<{ version: string; stage: string } | null>(null)
 
   const weeksQuery = usePageData<{ weeks: WeekData[] }>('/v1/admin/judge-scores')
   const evalsQuery = usePageData<{ evaluations: EvalRow[] }>(
-    `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}`,
+    `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}${promptFilter ? `&prompt_version=${encodeURIComponent(promptFilter.version)}` : ''}`,
   )
   const promptsQuery = usePageData<{ prompts: PromptRow[] }>('/v1/admin/judge/prompts')
   const distQuery = usePageData<Distribution>('/v1/admin/judge/distribution')
@@ -216,8 +221,18 @@ export function JudgePage() {
   const evals = evalsQuery.data?.evaluations ?? []
   const prompts = promptsQuery.data?.prompts ?? []
   const dist = distQuery.data ?? null
-  const loading = weeksQuery.loading || evalsQuery.loading || promptsQuery.loading || distQuery.loading
-  const error = weeksQuery.error ?? evalsQuery.error ?? promptsQuery.error ?? distQuery.error
+  // Single source of truth for first-paint loading + error gating across
+  // the four panels of this page (Wave P recovery UX). Background refetches
+  // (e.g. after `runNow`) no longer flash a skeleton because `merged.loading`
+  // only blocks until each query has resolved at least once.
+  const merged = useMergedErrors([
+    { ...weeksQuery, label: 'weekly trend' },
+    { ...evalsQuery, label: 'recent evaluations' },
+    { ...promptsQuery, label: 'prompt leaderboard' },
+    { ...distQuery, label: 'score distribution' },
+  ])
+  const loading = merged.loading
+  const error = merged.error
 
   const loadAll = useCallback(() => {
     weeksQuery.reload()
@@ -239,7 +254,7 @@ export function JudgePage() {
   }
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />
-  if (error) return <ErrorAlert message={`Failed to load judge data: ${error}`} onRetry={loadAll} />
+  if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'judge data'}: ${error}`} onRetry={merged.retry} />
 
   const latest = weeks[0]
   const previous = weeks[1]
@@ -331,7 +346,7 @@ export function JudgePage() {
             <EmptyState
               icon={<HeroJudgeScale />}
               title="No evaluations yet"
-              description="The judge is an independent LLM that grades how good each fix attempt is. Once it's run, you'll see weekly scores, prompt-version trends, and which classifier is winning."
+              description="The judge is an independent LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Once it's run, you'll see weekly scores, prompt-version trends, and which classifier prompt is winning."
               hints={[
                 'Run judge now scores the most recent reports against the active prompt.',
                 'Aim for ≥80% mean score before promoting a candidate prompt.',
@@ -421,29 +436,58 @@ export function JudgePage() {
                 </tr>
               </thead>
               <tbody>
-                {prompts.map((p) => (
-                  <tr key={p.id} className="border-b border-edge-subtle text-fg-secondary">
-                    <td className="py-1.5 px-3 font-mono text-fg-faint">{p.stage}</td>
-                    <td className="py-1.5 px-3 font-mono text-fg">{p.version}</td>
-                    <td className="py-1.5 px-3">
-                      {p.is_active && (
-                        <Badge className="bg-ok/15 text-ok border border-ok/30">active</Badge>
-                      )}
-                      {p.is_candidate && (
-                        <Badge className="bg-info/15 text-info border border-info/30 ml-1">candidate</Badge>
-                      )}
-                    </td>
-                    <td className="py-1.5 px-3 text-right">
-                      <ScorePill value={p.avg_judge_score} />
-                    </td>
-                    <td className="py-1.5 px-3 text-right font-mono tabular-nums">
-                      {p.total_evaluations}
-                    </td>
-                    <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-faint">
-                      {p.traffic_percentage}%
-                    </td>
-                  </tr>
-                ))}
+                {prompts.map((p) => {
+                  const isSelected =
+                    promptFilter?.version === p.version && promptFilter?.stage === p.stage
+                  const toggle = () =>
+                    setPromptFilter(
+                      isSelected ? null : { version: p.version, stage: p.stage },
+                    )
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={toggle}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          toggle()
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-pressed={isSelected}
+                      aria-label={`Filter recent evaluations by prompt ${p.version}`}
+                      title={
+                        isSelected
+                          ? 'Click to clear the filter'
+                          : `Click to filter Recent evaluations by ${p.version}`
+                      }
+                      className={`cursor-pointer border-b border-edge-subtle text-fg-secondary outline-none transition-colors hover:bg-surface-overlay/40 focus-visible:bg-surface-overlay/60 focus-visible:ring-1 focus-visible:ring-brand/60 ${
+                        isSelected ? 'bg-brand/10 text-fg' : ''
+                      }`}
+                    >
+                      <td className="py-1.5 px-3 font-mono text-fg-faint">{p.stage}</td>
+                      <td className="py-1.5 px-3 font-mono text-fg">{p.version}</td>
+                      <td className="py-1.5 px-3">
+                        {p.is_active && (
+                          <Badge className="bg-ok/15 text-ok border border-ok/30">active</Badge>
+                        )}
+                        {p.is_candidate && (
+                          <Badge className="bg-info/15 text-info border border-info/30 ml-1">candidate</Badge>
+                        )}
+                      </td>
+                      <td className="py-1.5 px-3 text-right">
+                        <ScorePill value={p.avg_judge_score} />
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-mono tabular-nums">
+                        {p.total_evaluations}
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-faint">
+                        {p.traffic_percentage}%
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -453,18 +497,30 @@ export function JudgePage() {
       <Section
         title="Recent evaluations"
         action={
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {promptFilter && (
+              <button
+                type="button"
+                onClick={() => setPromptFilter(null)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-brand/40 bg-brand/10 text-brand hover:bg-brand/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60"
+                aria-label={`Clear filter on prompt ${promptFilter.version}`}
+                title="Clear prompt filter"
+              >
+                <span>Filtered: {promptFilter.version}</span>
+                <span aria-hidden="true">×</span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setSort('recent')}
-              className={`px-2 py-0.5 text-2xs rounded-sm border ${sort === 'recent' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
+              className={`px-2 py-0.5 text-2xs rounded-sm border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60 ${sort === 'recent' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
             >
               Recent
             </button>
             <button
               type="button"
               onClick={() => setSort('score_asc')}
-              className={`px-2 py-0.5 text-2xs rounded-sm border ${sort === 'score_asc' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
+              className={`px-2 py-0.5 text-2xs rounded-sm border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/60 ${sort === 'score_asc' ? 'border-edge bg-surface-raised text-fg' : 'border-edge-subtle text-fg-faint'}`}
             >
               Lowest score
             </button>

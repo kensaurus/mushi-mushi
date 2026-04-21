@@ -36,11 +36,78 @@ interface PageCopy {
 }
 
 interface CopyRegistry {
+  quickstart: Record<string, PageCopy>
   beginner: Record<string, PageCopy>
   advanced: Record<string, PageCopy>
 }
 
 export const COPY: CopyRegistry = {
+  // Quickstart mode: only 3 routes are surfaced in the sidebar (Inbox /
+  // Drafts / Setup), so we override copy on just those plus the dashboard
+  // landing. Everything else falls through to beginner copy via
+  // `usePageCopy`. Wave N.
+  quickstart: {
+    '/': {
+      title: 'Bugs to fix',
+      description: "Your real users hit these. Click any to see the screenshot, console, and steps — then send to auto-fix.",
+      help: {
+        title: 'How Mushi helps',
+        whatIsIt:
+          'Mushi catches bugs your users hit, drafts a fix as a pull request, and sends it back to your repo. Three pages in Quickstart: bugs to fix, fixes ready to merge, setup.',
+        useCases: [
+          'See the bugs your real users felt today',
+          'Open the worst one, send it to the auto-fix agent',
+          'Review the draft pull request, merge if it looks right',
+        ],
+        howToUse:
+          'Use the big "Resolve next bug" button at the top to jump to the highest-priority report. The auto-fix agent does the heavy lifting.',
+      },
+    },
+    '/reports': {
+      title: 'Bugs to fix',
+      description: 'Your most-felt bugs first. Click one to see the proof — screenshot, console, and reproduction steps.',
+      help: {
+        title: 'About bugs',
+        whatIsIt:
+          'A list of bugs your end-users flagged, automatically grouped, scored, and ranked by how many people are affected.',
+        useCases: [
+          'Find the worst bug today and send it to the auto-fix agent',
+          'See real screenshots and reproduction steps before deciding',
+          'Mute or close noisy reports so the model learns',
+        ],
+        howToUse: 'Click any bug to open the full proof. Click "Send to auto-fix" to draft a pull request.',
+      },
+    },
+    '/fixes': {
+      title: 'Fixes ready to merge',
+      description: 'Pull requests Mushi drafted from your real bugs. Review the diff and click "Open PR" to merge.',
+      help: {
+        title: 'About drafted fixes',
+        whatIsIt:
+          'Each item is a draft pull request the auto-fix agent opened on your behalf, with a one-paragraph rationale and a screenshot diff.',
+        useCases: [
+          'Review fixes like a junior engineer\u2019s first attempt',
+          'Re-run with a different prompt if the first miss',
+          'Open the PR to land it in GitHub',
+        ],
+        howToUse: 'Click any fix to see the side-by-side diff. Use "Open PR" to land it.',
+      },
+    },
+    '/onboarding': {
+      title: 'Setup',
+      description: 'Three short steps: create a project, install the widget, send a test bug.',
+      help: {
+        title: 'About setup',
+        whatIsIt: 'Get Mushi connected to your app in about 10 minutes — copy a snippet, paste your URL, send a test bug.',
+        useCases: [
+          'First-time setup of a new project',
+          'Add a second project (e.g. staging)',
+          'Re-install the widget on a new app',
+        ],
+        howToUse: 'Follow the steps in order. The checklist tracks your progress automatically.',
+      },
+    },
+  },
   beginner: {
     '/': {
       title: 'Your bug-fix loop',
@@ -110,19 +177,20 @@ export const COPY: CopyRegistry = {
       },
     },
     '/judge': {
-      title: 'Is the AI getting smarter?',
-      description: 'An independent LLM grades every fix Mushi drafts. This page tracks whether scores are trending up or down.',
+      title: 'Is the classifier getting smarter?',
+      description:
+        "An independent LLM grades every classification Mushi makes — accuracy, severity, component, repro. This page tracks whether scores are trending up or down.",
       help: {
         title: 'About the AI judge',
         whatIsIt:
-          'A second LLM independently grades every fix Mushi drafts — for code quality, screenshot match, and rationale clarity. We chart those scores over time so you can tell if the model is improving.',
+          "A second LLM independently grades the classifier's output on every report — was the category right, was the severity right, was the affected component right, and were the repro steps usable. We chart those scores over time so you can tell if the model is improving.",
         useCases: [
           'See whether judge scores are improving week-over-week',
-          'Find prompts that produce consistently low scores so you can rewrite them',
-          'Catch a regression in the auto-fix model before it ships bad code',
+          'Find classifier prompts that produce consistently low scores so you can rewrite them',
+          'Catch a regression in the classifier before bad triage decisions ship',
         ],
         howToUse:
-          'Hover the trend line to see per-day scores. Click any low-score row to inspect the original fix.',
+          'Click any prompt row in the leaderboard to filter Recent evaluations to just that version. Click any low-score row to inspect the original report and the judge\u2019s reasoning.',
       },
     },
     '/health': {
@@ -247,7 +315,45 @@ export const COPY: CopyRegistry = {
  */
 export function usePageCopy(path: string): PageCopy | null {
   const { mode } = useAdminMode()
+  // Quickstart only overrides 4 routes; everything else falls back to
+  // beginner copy (still plain-language) so quickstart users don't see
+  // raw advanced jargon when they deep-link into a non-quickstart page.
+  if (mode === 'quickstart') {
+    return COPY.quickstart[path] ?? COPY.beginner[path] ?? null
+  }
   return COPY[mode][path] ?? null
+}
+
+/**
+ * One-sentence narrative used by <DogfoodNarrativeBanner> to tie the
+ * Reports inbox to the user's actual project. Lives here so future
+ * projects (not just the glot-it dogfood) inherit the same voice — change
+ * the wording in one place and every project gets it. Wave O §2.3.
+ */
+export function renderDogfoodNarrative(params: {
+  projectName: string
+  component: string
+  componentReports: number
+  draftedFixes: number
+  mergedFixes: number
+}): string {
+  const { component, componentReports, draftedFixes, mergedFixes } = params
+  const reportsWord = componentReports === 1 ? 'report' : 'reports'
+  const headline = `${component} is your most fragile area — ${componentReports} ${reportsWord} in the last 14 days.`
+
+  if (mergedFixes > 0) {
+    const merged = mergedFixes === 1 ? '1 fix already merged' : `${mergedFixes} fixes already merged`
+    const drafted =
+      draftedFixes > mergedFixes
+        ? ` and ${draftedFixes - mergedFixes} more drafted.`
+        : '.'
+    return `${headline} ${merged}${drafted}`
+  }
+  if (draftedFixes > 0) {
+    const drafted = draftedFixes === 1 ? '1 fix drafted' : `${draftedFixes} fixes drafted`
+    return `${headline} ${drafted} — ready for your review.`
+  }
+  return `${headline} No fixes drafted yet — open one and let Mushi try.`
 }
 
 /**
@@ -278,5 +384,6 @@ export const JARGON: Record<string, string> = {
   'reporter token':
     'A short-lived token the SDK uses to attach a report to the right project without exposing your API key.',
   'PDCA': 'Plan → Do → Check → Act. The four-stage loop Mushi runs every bug through.',
-  'judge': 'A second, independent LLM that grades the auto-fix agent\u2019s work.',
+  'judge':
+    "A second, independent LLM that grades the classifier's output on every report — accuracy, severity, component, and repro quality.",
 }

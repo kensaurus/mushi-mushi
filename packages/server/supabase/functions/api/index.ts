@@ -179,6 +179,50 @@ app.get('/v1/agent-card', (c) => {
   })
 })
 
+// Public auth-discovery manifest advertised by the A2A agent card under
+// `capabilities.auth.discovery`. Lets external agents enumerate the auth
+// schemes Mushi accepts without a JWT — they need this to know how to call
+// us in the first place. Audit Wave M P0: previously the agent card pointed
+// at a 404. Mirrors RFC 8414 (OAuth Authorization Server Metadata) shape
+// where it makes sense, but adapted to our two minimal schemes.
+app.get('/v1/admin/auth/manifest', (c) => {
+  const url = new URL(c.req.raw.url)
+  const apiBase = `${url.protocol}//${url.host}`
+  const manifest = {
+    issuer: apiBase,
+    schemes: [
+      {
+        id: 'bearer',
+        type: 'bearer',
+        description:
+          'Supabase-issued JWT in the Authorization header. Use the project_id you own; ' +
+          'enforced by row-level security and ownedProjectIds().',
+        header: 'Authorization',
+        format: 'Bearer <jwt>',
+        token_endpoint: `${apiBase}/v1/admin/auth/token`,
+        scopes: ['admin:reports', 'admin:fixes', 'admin:billing', 'admin:judge'],
+      },
+      {
+        id: 'mushi-api-key',
+        type: 'api_key',
+        description:
+          'Per-project ingestion key for the SDK. Restricted to /v1/reports and the ' +
+          'public agent-card endpoints; cannot read admin data.',
+        header: 'X-Mushi-Api-Key',
+        format: 'mushi_<env>_<32-byte-hex>',
+        rotation_endpoint: `${apiBase}/v1/admin/projects/:id/keys/rotate`,
+        scopes: ['ingest:reports'],
+      },
+    ],
+    documentation: 'https://docs.mushimushi.dev/api/auth',
+    generatedAt: new Date().toISOString(),
+  }
+  return new Response(JSON.stringify(manifest, null, 2), {
+    status: 200,
+    headers: AGENT_CARD_HEADERS,
+  })
+})
+
 // ============================================================
 // Shared: ingest a single report and trigger pipeline
 // ============================================================
@@ -2107,11 +2151,19 @@ app.get('/v1/admin/judge/evaluations', jwtAuth, async (c) => {
 
   const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200)
   const sort = c.req.query('sort') === 'score_asc' ? { col: 'judge_score', asc: true } : { col: 'created_at', asc: false }
+  // Optional filter so the JudgePage leaderboard rows can drill into a
+  // specific prompt version's evaluations. Audit Wave M P0: PageHelp
+  // previously promised "click a row to see the evaluations that drove it"
+  // but rows were inert. Filter is a string match on the stored prompt
+  // version label (e.g. "v3-active", "v4-cand").
+  const promptVersion = c.req.query('prompt_version')?.trim() || null
 
-  const { data, error } = await db
+  let q = db
     .from('classification_evaluations')
     .select('id, report_id, project_id, judge_model, judge_score, accuracy_score, severity_score, component_score, repro_score, classification_agreed, judge_reasoning, prompt_version, created_at, judge_fallback_used')
     .in('project_id', projectIds)
+  if (promptVersion) q = q.eq('prompt_version', promptVersion)
+  const { data, error } = await q
     .order(sort.col, { ascending: sort.asc })
     .limit(limit)
   if (error) return dbError(c, error)
@@ -6722,7 +6774,11 @@ app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
     line_items: lineItems.length,
   })
 
-  return c.json({ ok: true, url: session.url, plan_id: plan.id })
+  // Wrap in `data` to match the admin-API envelope all other admin routes
+  // use (`{ ok, data }`). The frontend reads `res.data.url`; returning `url`
+  // at the top level previously caused the BillingPage checkout button to
+  // silently no-op. Audit Wave M P0.
+  return c.json({ ok: true, data: { url: session.url, plan_id: plan.id } })
 })
 
 app.post('/v1/admin/billing/portal', jwtAuth, async (c) => {
@@ -6744,7 +6800,8 @@ app.post('/v1/admin/billing/portal', jwtAuth, async (c) => {
 
   const cfg = stripeFromEnv()
   const session = await createBillingPortalSession(cfg, customer.stripe_customer_id)
-  return c.json({ ok: true, url: session.url })
+  // Wrap in `data` for envelope parity. Audit Wave M P0.
+  return c.json({ ok: true, data: { url: session.url } })
 })
 
 // List Stripe invoices for a project. Wraps Stripe's /v1/invoices and

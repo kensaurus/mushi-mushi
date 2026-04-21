@@ -7,6 +7,7 @@
 import { Link } from 'react-router-dom'
 import { Card } from '../ui'
 import { HealthPill } from '../charts'
+import { useStaggeredAppear } from '../../lib/useStaggeredAppear'
 import { relTime, type ActivityItem, type IntegrationStatus } from './types'
 
 interface Props {
@@ -102,6 +103,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
 }
 
 function ActivityCard({ activity }: { activity: ActivityItem[] }) {
+  const stagger = useStaggeredAppear({ stepMs: 30, max: 8 })
   return (
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2.5">
@@ -115,7 +117,8 @@ function ActivityCard({ activity }: { activity: ActivityItem[] }) {
             <Link
               key={`${a.kind}-${a.id}-${i}`}
               to={a.kind === 'fix' ? '/fixes' : `/reports/${a.id}`}
-              className="flex items-center gap-2 py-1 px-1.5 rounded-sm hover:bg-surface-overlay/50 transition-colors group"
+              style={stagger(i)}
+              className="flex items-center gap-2 py-1 px-1.5 rounded-sm hover:bg-surface-overlay/50 transition-colors group motion-safe:animate-mushi-fade-in"
             >
               <span
                 className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${

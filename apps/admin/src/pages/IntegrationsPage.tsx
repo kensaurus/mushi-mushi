@@ -13,6 +13,7 @@ import { apiFetch } from '../lib/supabase'
 import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
+import { useMergedErrors } from '../lib/useMergedErrors'
 import { useToast } from '../lib/toast'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
@@ -43,8 +44,16 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
-  const loading = platformQuery.loading || historyQuery.loading || routingQuery.loading
-  const error = platformQuery.error
+  // Wave P: gate on the merged loading + error so a failing routing query
+  // can't silently leave the platform card half-rendered (and so the user
+  // gets one retry button instead of three).
+  const merged = useMergedErrors([
+    { ...platformQuery, label: 'platform integrations' },
+    { ...historyQuery, label: 'integration history' },
+    { ...routingQuery, label: 'routing rules' },
+  ])
+  const loading = merged.loading
+  const error = merged.error
 
   const reloadAll = useCallback(() => {
     platformQuery.reload()
@@ -191,7 +200,7 @@ export function IntegrationsPage() {
   }
 
   if (loading) return <PanelSkeleton rows={5} label="Loading integrations" />
-  if (error) return <ErrorAlert message={`Failed to load integrations: ${error}`} onRetry={reloadAll} />
+  if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'integrations'}: ${error}`} onRetry={merged.retry} />
 
   return (
     <div className="space-y-4">

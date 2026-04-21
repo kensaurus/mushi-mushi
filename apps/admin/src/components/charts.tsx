@@ -442,17 +442,33 @@ export function Histogram({
         className="flex items-end gap-1 w-full"
         style={{ height: `${height}px` }}
       >
-        {buckets.map((v, i) => (
-          <div
-            key={i}
-            className={`flex-1 ${accent} rounded-t-sm`}
-            style={{
-              height: `${(v / max) * 100}%`,
-              minHeight: v > 0 ? '2px' : '0',
-            }}
-            title={`${labels?.[i] ?? i}: ${v}`}
-          />
-        ))}
+        {buckets.map((v, i) => {
+          const label = labels?.[i] ?? String(i)
+          const summary = `${label}: ${v}`
+          return (
+            <div key={i} className="group relative flex-1 h-full">
+              {v > 0 && (
+                <div
+                  className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-1 whitespace-nowrap rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                  aria-hidden="true"
+                >
+                  <span className="font-medium">{label}</span>
+                  <span className="ml-2 font-mono text-fg-muted">{v}</span>
+                </div>
+              )}
+              <button
+                type="button"
+                tabIndex={v > 0 ? 0 : -1}
+                aria-label={summary}
+                className={`absolute inset-x-0 bottom-0 ${accent} rounded-t-sm motion-safe:transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 cursor-default`}
+                style={{
+                  height: `${(v / max) * 100}%`,
+                  minHeight: v > 0 ? '2px' : '0',
+                }}
+              />
+            </div>
+          )
+        })}
       </div>
       {labels && (
         <div className="flex justify-between text-3xs text-fg-faint font-mono mt-1">
