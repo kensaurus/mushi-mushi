@@ -45,12 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - uses: github/codeql-action/init@cc2ad45d6f0a0faa54f96f7b8a77da6aff80ddeb  # v3.30.9
+      - uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225  # v4.35.2
         with:
           languages: ${{ matrix.language }}
           queries: security-extended
 
-      - uses: github/codeql-action/analyze@cc2ad45d6f0a0faa54f96f7b8a77da6aff80ddeb  # v3.30.9
+      - uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225  # v4.35.2
         with:
           category: '/language:${{ matrix.language }}'
 
