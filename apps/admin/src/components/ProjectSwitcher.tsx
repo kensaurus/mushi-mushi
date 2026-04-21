@@ -54,7 +54,7 @@ export function ProjectSwitcher() {
   }, [open])
 
   if (setup.loading || !setup.data) {
-    // Audit Wave K: never collapse the chrome anchor while loading. A skeleton
+    // never collapse the chrome anchor while loading. A skeleton
     // chip keeps the header layout stable so links don't reflow under the
     // user's cursor and the user always sees "I'm in a project context".
     return (

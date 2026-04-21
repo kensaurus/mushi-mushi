@@ -1,7 +1,7 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/agui.ts
  * PURPOSE: AG-UI (Agent-User Interaction) protocol envelopes layered over SSE.
- *          V5.3 §2.14, Wave B B3.
+ * V5.3 §2.14, B3.
  *
  * BACKGROUND:
  *   The bare SSE format we shipped in V5.3.1 just sends `data: {status, prUrl}`

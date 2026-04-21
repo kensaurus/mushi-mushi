@@ -2,7 +2,7 @@
  * Contract test: every endpoint advertised by `/v1/admin/auth/manifest`
  * must exist as a Hono route in `api/index.ts`.
  *
- * Wave T closes a real Wave S audit finding: the manifest used to point at
+ * closes a real audit finding: the manifest used to point at
  * `/v1/admin/auth/token` and `/v1/admin/projects/:id/keys/rotate` despite
  * neither route existing — any A2A agent that followed the discovery doc hit
  * a 404 immediately. This test reads the source, extracts the URL templates
@@ -84,7 +84,7 @@ describe('auth manifest contract', () => {
     expect(registeredPaths.has('/v1/admin/auth/manifest')).toBe(true)
   })
 
-  it('extracts the two endpoints Wave S implemented', () => {
+  it('extracts the two endpoints implemented', () => {
     expect(advertised).toEqual(
       expect.arrayContaining([
         '/v1/admin/auth/token',

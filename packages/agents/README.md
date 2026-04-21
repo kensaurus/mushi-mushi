@@ -41,7 +41,7 @@ const orchestrator = new FixOrchestrator(supabaseClient, {
 await orchestrator.run(reportId)
 ```
 
-## Usage — multi-repo (Wave D D7)
+## Usage — multi-repo
 
 When a single bug spans multiple repos (FE + BE, monorepo + infra, etc.), register
 each repo in `project_repos` with `path_globs` and a `role` (`primary`,
@@ -78,7 +78,7 @@ The orchestrator reads `autofix_agent` and `autofix_mcp_server_url` from the pro
 
 If deploying fix agents in production, you must implement your own container isolation. The generated spec can be used as a reference for configuring Docker/gVisor/Firecracker constraints.
 
-## Sandbox Provider (Wave A M6)
+## Sandbox Provider
 
 Beyond the JSON spec, the package now ships a runtime provider abstraction:
 

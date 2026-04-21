@@ -1,0 +1,17 @@
+{
+  "slug": "slack-app",
+  "displayName": "Slack",
+  "tagline": "Triage Mushi reports inside Slack. Slash commands, buttons, App Home.",
+  "oauth": {
+    "provider": "slack",
+    "scopes": ["chat:write", "commands", "users:read", "users:read.email"],
+    "authorizeUrl": "https://slack.com/oauth/v2/authorize",
+    "tokenUrl": "https://slack.com/api/oauth.v2.access"
+  },
+  "subscribes": [
+    "report.created",
+    "report.classified",
+    "report.status_changed",
+    "sla.breached"
+  ]
+}

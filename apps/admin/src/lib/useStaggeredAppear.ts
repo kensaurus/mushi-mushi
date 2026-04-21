@@ -3,7 +3,7 @@
  * PURPOSE: Tiny helper that returns a `style` prop for each item in a list
  *          so consecutive children fade in with a small stagger. Used by
  *          dashboard rows and tables that previously popped in all at once
- *          when fresh data arrived (Wave Q polish).
+ * when fresh data arrived
  *
  *          Usage:
  *            const stagger = useStaggeredAppear({ stepMs: 40, max: 12 })

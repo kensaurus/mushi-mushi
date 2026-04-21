@@ -1,0 +1,45 @@
+name: 'Mushi Mushi CI Gate'
+description: 'Run Mushi Mushi MCP tools from GitHub Actions — trigger judge, dispatch fixes, gate PR merges on classification coverage.'
+author: 'Kenji Sakuramoto'
+branding:
+  icon: bug
+  color: green
+
+inputs:
+  api-key:
+    description: 'Mushi project API key (store as a repo secret).'
+    required: true
+  project-id:
+    description: 'Mushi project UUID.'
+    required: true
+  api-endpoint:
+    description: 'Override API endpoint for self-hosted instances.'
+    required: false
+    default: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+  command:
+    description: 'Which MCP tool to run: trigger-judge | dispatch-fix | check-coverage | query'
+    required: true
+  report-id:
+    description: 'Report UUID — required for dispatch-fix.'
+    required: false
+  question:
+    description: 'NL query text — required for command=query.'
+    required: false
+  min-coverage:
+    description: 'For check-coverage: minimum classified/total ratio to pass.'
+    required: false
+    default: '0.8'
+  fail-on-quota:
+    description: 'Whether to fail the action when Mushi returns 402 QUOTA_EXCEEDED.'
+    required: false
+    default: 'true'
+
+outputs:
+  result:
+    description: 'JSON payload returned by the MCP tool.'
+  coverage:
+    description: 'For check-coverage: observed classified ratio.'
+
+runs:
+  using: 'node20'
+  main: 'dist/cli.js'

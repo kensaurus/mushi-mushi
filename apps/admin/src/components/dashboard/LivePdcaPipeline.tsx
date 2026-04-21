@@ -220,9 +220,7 @@ export function LivePdcaPipeline({ projectId, onDemoReportSent, pdcaStages }: Pr
 
       <footer className="border-t border-edge-subtle px-4 py-2">
         <p className="text-3xs text-fg-faint leading-relaxed">
-          Click any stage to jump straight in. The loop is dogfooded against{' '}
-          <span className="font-mono text-fg-secondary">glot-it</span> — every bug your users feel runs
-          through the same four steps.
+          Click any stage to jump straight in. Every bug your users feel runs through the same four steps.
         </p>
       </footer>
     </section>

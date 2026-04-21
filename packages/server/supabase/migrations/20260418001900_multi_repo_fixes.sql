@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave D D7: Multi-repo coordinated fix agents.
+-- D7: Multi-repo coordinated fix agents.
 --
 -- A single bug is often a "the FE sends bad shape → BE 400s" story.
 -- Mushi already has one repo per project. This migration adds:
@@ -39,9 +39,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_project_repos_one_primary
   ON project_repos (project_id) WHERE is_primary = TRUE;
 
 COMMENT ON COLUMN project_repos.path_globs IS
-  'Wave D D7: glob patterns (e.g. {apps/web/**,packages/ui/**}) used by the multi-repo orchestrator to route file changes to the right repo. Empty array = no path constraint.';
+  'glob patterns (e.g. {apps/web/**,packages/ui/**}) used by the multi-repo orchestrator to route file changes to the right repo. Empty array = no path constraint.';
 COMMENT ON COLUMN project_repos.is_primary IS
-  'Wave D D7: exactly one primary repo per project — backref for legacy single-repo flows that haven''t been re-pointed at project_repos yet.';
+  'exactly one primary repo per project — backref for legacy single-repo flows that haven''t been re-pointed at project_repos yet.';
 
 -- ----------------------------------------------------------------
 -- Coordination group: links N fix_attempts as one customer-facing unit.
@@ -62,9 +62,9 @@ CREATE INDEX IF NOT EXISTS idx_fix_coord_project ON fix_coordinations (project_i
 CREATE INDEX IF NOT EXISTS idx_fix_coord_report ON fix_coordinations (report_id);
 
 COMMENT ON TABLE fix_coordinations IS
-  'Wave D D7: parent of N fix_attempts that together resolve one report across multiple repos. The status rolls up child statuses: succeeded only if every child PR merged.';
+  'parent of N fix_attempts that together resolve one report across multiple repos. The status rolls up child statuses: succeeded only if every child PR merged.';
 COMMENT ON COLUMN fix_coordinations.plan IS
-  'Wave D D7: the planning agent''s decomposition. Shape: {tasks:[{repo_id,role,description,path_hints}]}.';
+  'the planning agent''s decomposition. Shape: {tasks:[{repo_id,role,description,path_hints}]}.';
 
 -- ----------------------------------------------------------------
 -- fix_attempts: link to coordination + repo

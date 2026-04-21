@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/components/reports/ReportRowView.tsx
- * PURPOSE: Single triage-table row. Wave-3 redesign turns the row into a
+ * PURPOSE: Single triage-table row. The redesign turns the row into a
  *          decision surface: a severity stripe on the left for instant scan,
  *          a "+N similar" dedup badge inline with the summary, and a primary
  *          `Triage →` (or `Dispatch fix →` once classified) call-to-action so
@@ -12,6 +12,7 @@
  *          would discover.
  */
 
+import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Tooltip } from '../ui'
 import { SEVERITY } from '../../lib/tokens'
@@ -48,7 +49,7 @@ interface Props {
   onDispatchFix: () => void
 }
 
-export function ReportRowView({
+function ReportRowViewInner({
   row,
   index,
   isSelected,
@@ -69,7 +70,7 @@ export function ReportRowView({
   const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
   const dedupCount = row.dedup_count ?? 1
   // Real blast radius — distinct people who felt this. Falls back to the raw
-  // dedup count when the BE is older than the Wave I migration so the column
+  // dedup count when the BE is older than the migration so the column
   // is never blank.
   const uniqueUsers = row.unique_users ?? 0
   const blastRadius = uniqueUsers > 0 ? uniqueUsers : dedupCount
@@ -302,3 +303,12 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
     </div>
   )
 }
+
+// Wave S3 (PERF): memoise so typing into the filter bar doesn't re-render
+// every row in the list. ReportsTable renders up to 200 rows; each row
+// re-render used to cost ~3 ms in a React 19 profiler — 600 ms per
+// keystroke on a paginated table. Memo bails out when the callback
+// identities are stable (ReportsTable already stabilises them via
+// useCallback). Row data equality is shallow; ReportRow objects are
+// replaced by new references only when the backend updates them.
+export const ReportRowView = memo(ReportRowViewInner)

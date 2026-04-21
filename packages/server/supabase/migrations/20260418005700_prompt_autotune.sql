@@ -1,5 +1,5 @@
 -- =============================================================================
--- Wave E §4: prompt-auto-tune support columns.
+-- §4: prompt-auto-tune support columns.
 --
 -- Adds the metadata needed by the new `prompt-auto-tune` Edge Function:
 --   - classification_evaluations.disagreement_reason: short tag (e.g.

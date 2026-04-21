@@ -13,6 +13,7 @@ import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
 import { PdcaReceipt } from './PdcaReceipt'
 import { pluralizeWithCount } from '../../lib/format'
 import { ciBadge, type FixAttempt } from './types'
+import { FixAttemptFlow } from './FixAttemptFlow'
 
 interface Props {
   fix: FixAttempt
@@ -53,6 +54,8 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
       </div>
 
       {fix.summary && <p className="text-xs text-fg-secondary">{fix.summary}</p>}
+
+      <FixAttemptFlow fix={fix} className="mt-1" />
 
       <PdcaReceipt fix={fix} timeline={timeline} className="pt-1" />
 

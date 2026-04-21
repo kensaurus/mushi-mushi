@@ -1,4 +1,4 @@
--- M3 (Wave A v0.6.0): blast_radius_cache MV refresh enforcement
+-- M3: blast_radius_cache MV refresh enforcement
 -- Without this cron, the cache silently goes stale and downstream agentic
 -- recommendations work off old graph state. Refreshes are CONCURRENT (the
 -- existing idx_blast_radius_pair unique index makes this possible) so reads

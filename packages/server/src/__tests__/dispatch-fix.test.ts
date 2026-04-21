@@ -1,6 +1,6 @@
 /**
  * FILE: dispatch-fix.test.ts
- * PURPOSE: Validates the M5 (Wave A) admin fix-dispatch endpoint contract.
+ * PURPOSE: Validates the M5admin fix-dispatch endpoint contract.
  *          Covers happy path enqueueing, dedup of in-flight dispatches,
  *          membership enforcement, and autofix_enabled gating.
  */

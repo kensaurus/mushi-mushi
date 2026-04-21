@@ -26,7 +26,7 @@ export function SetupChecklist({ project, mode, onRefresh }: SetupChecklistProps
   const allDone = project.complete >= project.total
   const pct = Math.round((project.required_complete / Math.max(1, project.required_total)) * 100)
   // Highlight the next required step with a "Do this next" chip + brand ring,
-  // mirroring the dashboard HeroIntro language. Audit Wave I P1.
+  // mirroring the dashboard HeroIntro language. .
   const nextRequiredId = project.steps.find((s) => s.required && !s.complete)?.id ?? null
 
   if (mode === 'banner') {
@@ -71,7 +71,7 @@ function BannerChecklist({
 }: InternalProps & { allDone: boolean }) {
   // Default: collapsed once required steps pass OR the user is >=80% through
   // overall setup so the dashboard hero stops fighting a near-complete
-  // checklist for attention. Audit Wave I P2.
+  // checklist for attention. .
   const overallPct = project.complete / Math.max(1, project.total)
   const [open, setOpen] = useState(!(requiredDone || overallPct >= 0.8))
 

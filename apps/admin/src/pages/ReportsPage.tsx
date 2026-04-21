@@ -496,7 +496,7 @@ export function ReportsPage() {
         />
       ) : reports.length === 0 ? (
         // RecommendedAction above already shows "No reports yet" — don't
-        // double-paint a contradictory empty state. Audit Wave K bugfix.
+        // double-paint a contradictory empty state. .
         null
       ) : (
         <ReportsTable

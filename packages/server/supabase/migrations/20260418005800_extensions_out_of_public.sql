@@ -1,4 +1,4 @@
--- Wave E §6: clear the `extension_in_public` Supabase security advisor
+-- §6: clear the `extension_in_public` Supabase security advisor
 -- warning for `vector` by relocating it into a dedicated `extensions` schema.
 --
 -- Why this is safe:

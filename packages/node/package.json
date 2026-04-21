@@ -1,0 +1,75 @@
+{
+  "name": "@mushi-mushi/node",
+  "version": "0.1.0",
+  "description": "Server-side Node SDK — framework middleware (Express / Fastify / Hono), unhandled-rejection hook, OTel trace propagation, bidirectional Sentry correlation. The 'glue' SDK for server-originated reports.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    },
+    "./express": {
+      "import": { "types": "./dist/express.d.ts", "default": "./dist/express.js" },
+      "require": { "types": "./dist/express.d.cts", "default": "./dist/express.cjs" }
+    },
+    "./fastify": {
+      "import": { "types": "./dist/fastify.d.ts", "default": "./dist/fastify.js" },
+      "require": { "types": "./dist/fastify.d.cts", "default": "./dist/fastify.cjs" }
+    },
+    "./hono": {
+      "import": { "types": "./dist/hono.d.ts", "default": "./dist/hono.js" },
+      "require": { "types": "./dist/hono.d.cts", "default": "./dist/hono.cjs" }
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/node"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/node#readme",
+  "bugs": { "url": "https://github.com/kensaurus/mushi-mushi/issues" },
+  "keywords": [
+    "mushi-mushi", "node", "express", "fastify", "hono", "middleware",
+    "error-tracking", "unhandled-rejection", "opentelemetry", "otel",
+    "sentry", "distributed-tracing", "glue"
+  ],
+  "publishConfig": { "access": "public" },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mushi-mushi/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "express": ">=4.18.0",
+    "fastify": ">=4.0.0",
+    "hono": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": { "optional": true },
+    "fastify": { "optional": true },
+    "hono": { "optional": true }
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.2.0",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "author": "Kenji Sakuramoto"
+}

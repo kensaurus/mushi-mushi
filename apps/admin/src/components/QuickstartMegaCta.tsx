@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/components/QuickstartMegaCta.tsx
  * PURPOSE: The single dominant CTA pinned above page content in Quickstart
- *          mode (Wave N). Replaces the more verbose <NextBestAction> strip.
+ * mode Replaces the more verbose <NextBestAction> strip.
  *
  *          Computes the next thing the user should do across the whole loop
  *          and renders ONE big button:

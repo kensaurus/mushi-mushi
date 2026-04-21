@@ -7,7 +7,7 @@
  *          here matches the cockpit, sidebar, narrative strip, and live
  *          pipeline diagram everywhere else in the app).
  *
- *          Wave L: unified to 4 stages (was 3) and pulls outcome copy from
+ * unified to 4 stages (was 3) and pulls outcome copy from
  *          `lib/pdca.ts > PDCA_STAGE_OUTCOMES` so a future wording change
  *          updates first-run, cockpit, and pipeline in lock-step.
  *
@@ -296,7 +296,7 @@ function StageCta({ cta, isLocked }: { cta: LoopStage['cta']; isLocked: boolean 
 /**
  * Layout-shaped skeleton that matches the rendered first-run loop so the
  * page doesn't jolt when setup data resolves. Replaces the prior
- * <Loading text="Checking your account..." /> spinner (Wave L).
+ * <Loading text="Checking your account..." /> spinner
  */
 function GettingStartedSkeleton() {
   return (

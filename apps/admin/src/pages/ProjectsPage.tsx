@@ -24,6 +24,7 @@ import {
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { useCreateProject } from '../lib/useCreateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 
@@ -89,31 +90,21 @@ export function ProjectsPage() {
   const activeProjectId = useActiveProjectId()
 
   const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
   const [busyProject, setBusyProject] = useState<string | null>(null)
   const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
 
   const { data, loading, error, reload } = usePageData<{ projects: Project[] }>('/v1/admin/projects')
   const projects = useMemo(() => data?.projects ?? [], [data])
 
-  async function createProject() {
-    const name = newName.trim()
-    if (!name) return
-    setCreating(true)
-    try {
-      const res = await apiFetch<{ id: string; slug: string }>('/v1/admin/projects', {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      })
-      if (!res.ok) throw new Error(res.error?.message ?? 'Create failed')
-      toast.success('Project created', name)
+  const { create: createProjectRaw, creating } = useCreateProject({
+    onCreated: () => {
       setNewName('')
       reload()
-    } catch (err) {
-      toast.error('Failed to create project', err instanceof Error ? err.message : String(err))
-    } finally {
-      setCreating(false)
-    }
+    },
+  })
+
+  async function createProject() {
+    await createProjectRaw(newName)
   }
 
   async function generateKey(projectId: string) {

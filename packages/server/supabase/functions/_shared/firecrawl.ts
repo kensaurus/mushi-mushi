@@ -1,6 +1,6 @@
 /**
  * FILE: packages/server/supabase/functions/_shared/firecrawl.ts
- * PURPOSE: Wave E — BYOK Firecrawl client used by:
+ * PURPOSE: BYOK Firecrawl client used by:
  *            * /v1/admin/research/* (manual triage research)
  *            * fix-worker (auto-augment when local RAG is sparse)
  *            * library-modernizer cron (release-notes scraping)

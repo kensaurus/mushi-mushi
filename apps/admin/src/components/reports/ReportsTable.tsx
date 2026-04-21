@@ -12,6 +12,7 @@
 
 import { useMemo } from 'react'
 import { Btn, Kbd } from '../ui'
+import { ResponsiveTable } from '../ResponsiveTable'
 import { ReportRowView } from './ReportRowView'
 import { SortHeader } from './SortHeader'
 import type { ReportRow, SortDir, SortField } from './types'
@@ -130,7 +131,7 @@ export function ReportsTable({
 
   return (
     <div className="border border-edge-subtle rounded-md overflow-hidden bg-surface-raised/30">
-      <div className="overflow-x-auto">
+      <ResponsiveTable stickyFirstColumn ariaLabel="Bug reports">
         <table className="w-full text-sm" aria-label="Bug reports">
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
@@ -219,7 +220,7 @@ export function ReportsTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </ResponsiveTable>
 
       <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-edge-subtle text-2xs text-fg-muted">
         <span>

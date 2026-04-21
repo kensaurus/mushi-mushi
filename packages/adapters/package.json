@@ -1,0 +1,47 @@
+{
+  "name": "@mushi-mushi/adapters",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "Bidirectional adapters — translate Datadog, Honeycomb, New Relic, Grafana Loki errors into Mushi reports (and vice versa). Each adapter is tree-shakeable from its own subpath import.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "require": "./dist/index.cjs", "types": "./dist/index.d.ts" },
+    "./datadog": { "import": "./dist/datadog.js", "require": "./dist/datadog.cjs", "types": "./dist/datadog.d.ts" },
+    "./honeycomb": { "import": "./dist/honeycomb.js", "require": "./dist/honeycomb.cjs", "types": "./dist/honeycomb.d.ts" },
+    "./new-relic": { "import": "./dist/new-relic.js", "require": "./dist/new-relic.cjs", "types": "./dist/new-relic.d.ts" },
+    "./grafana-loki": { "import": "./dist/grafana-loki.js", "require": "./dist/grafana-loki.cjs", "types": "./dist/grafana-loki.d.ts" }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@mushi-mushi/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "eslint": "^10.2.0",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/adapters"
+  },
+  "author": "Kenji Sakuramoto",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/adapters#readme",
+  "bugs": { "url": "https://github.com/kensaurus/mushi-mushi/issues" },
+  "publishConfig": { "access": "public" },
+  "sideEffects": false,
+  "keywords": ["mushi-mushi", "adapters", "datadog", "honeycomb", "new-relic", "grafana-loki", "observability", "glue"]
+}

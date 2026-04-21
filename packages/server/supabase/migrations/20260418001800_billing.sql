@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave D D5: Stripe metered billing + apps/cloud sign-up
+-- D5: Stripe metered billing + apps/cloud sign-up
 --
 -- Three tables back the Cloud product:
 --   * `billing_customers`    — 1:1 with Stripe Customer, scoped to project
@@ -107,6 +107,6 @@ CREATE OR REPLACE FUNCTION billing_usage_unsynced_summary(
   ORDER BY 1, 2
 $$;
 
-COMMENT ON TABLE billing_customers IS 'Wave D D5: 1:1 with Stripe Customer, project-scoped.';
-COMMENT ON TABLE billing_subscriptions IS 'Wave D D5: mirror of Stripe Subscription state, drives access gating.';
-COMMENT ON TABLE usage_events IS 'Wave D D5: append-only meter of billable units (reports_ingested, fixes_attempted, classifier_tokens).';
+COMMENT ON TABLE billing_customers IS '1:1 with Stripe Customer, project-scoped.';
+COMMENT ON TABLE billing_subscriptions IS 'mirror of Stripe Subscription state, drives access gating.';
+COMMENT ON TABLE usage_events IS 'append-only meter of billable units (reports_ingested, fixes_attempted, classifier_tokens).';

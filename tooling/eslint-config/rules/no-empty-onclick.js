@@ -1,7 +1,7 @@
 /**
  * Custom ESLint rule: no-empty-onclick
  *
- * Wave T closes the "dead button" finding from the static audit: empty
+ * closes the "dead button" finding from the static audit: empty
  * `onClick={() => {}}`, `onClick={noop}`, or `onClick={()=>null}` handlers
  * silently render an unresponsive button. Users click; nothing happens; we
  * have no telemetry to find it because the handler succeeds.

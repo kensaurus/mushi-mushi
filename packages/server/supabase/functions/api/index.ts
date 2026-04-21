@@ -32,7 +32,7 @@ import {
 import { getPlan, listPlans } from '../_shared/plans.ts'
 import { notifyOperator } from '../_shared/operator-notify.ts'
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../_shared/support.ts'
-// LLM cost estimation. Wave J §1: the canonical pricing table now lives in
+// LLM cost estimation. §1: the canonical pricing table now lives in
 // `_shared/pricing.ts` so it feeds telemetry writes (`logLlmInvocation`) AND
 // the migrations (`20260420000200_llm_cost_usd.sql`). Health + Billing read
 // the persisted `cost_usd` column from `llm_invocations` directly; this
@@ -48,7 +48,7 @@ const app = new Hono().basePath('/api')
 app.onError(sentryHonoErrorHandler)
 
 /**
- * Wave L: capture a Supabase / Postgres error to Sentry AND return the
+ * capture a Supabase / Postgres error to Sentry AND return the
  * canonical 500 JSON response in one call. Most DB errors here returned
  * `c.json({ ok: false, error: { code: 'DB_ERROR', ... } }, 500)` directly
  * which sidesteps Hono's `app.onError` (no throw → no capture). That made
@@ -83,15 +83,67 @@ function dbError(
   )
 }
 
-app.use('*', cors({
+// SEC (Wave S1 / D-18 + S-5): split CORS policy.
+//
+// SDK ingest endpoints (/v1/reports, /v1/region/*, /v1/webhooks/*, /.well-known/*)
+// must accept any Origin — any host embedding the widget may post bugs.
+//
+// Admin endpoints (/v1/admin/**) carry a Supabase JWT and sensitive tenant
+// data. `origin: '*'` + `credentials: true` is forbidden by the browser, and
+// even without credentials a wildcard invites cross-origin XHR from anywhere
+// to drain the admin JSON surface post-login via leaked tokens. We restrict
+// those to an env-driven allowlist, defaulting to the production admin host.
+const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
+  const raw = (Deno.env.get('MUSHI_ADMIN_ORIGIN_ALLOWLIST') ?? '').trim()
+  const defaults = [
+    'https://admin.mushimushi.dev',
+    'https://app.mushimushi.dev',
+    // Local dev for the admin Vite server. Operators running on different
+    // ports can extend via MUSHI_ADMIN_ORIGIN_ALLOWLIST.
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ]
+  const extra = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : []
+  return Array.from(new Set([...defaults, ...extra]))
+})()
+
+// Public SDK / widget / webhook paths: Access-Control-Allow-Origin: *
+app.use('/v1/reports/*', cors({
   origin: '*',
   allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Sentry-Hook-Signature'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+}))
+app.use('/v1/webhooks/*', cors({
+  origin: '*',
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Sentry-Hook-Signature', 'X-GitHub-Event', 'X-Hub-Signature-256', 'Sentry-Hook-Signature'],
+  allowMethods: ['POST', 'OPTIONS'],
+}))
+app.use('/v1/region/*', cors({ origin: '*' }))
+app.use('/v1/public/*', cors({ origin: '*' }))
+app.use('/.well-known/*', cors({ origin: '*' }))
+app.use('/health', cors({ origin: '*' }))
+
+// Admin paths: allowlist. Hono's cors() already reflects the request Origin
+// back as Access-Control-Allow-Origin when it matches; unknown origins get
+// no ACAO header so the browser blocks the response.
+app.use('/v1/admin/*', cors({
+  origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+  allowHeaders: ['Content-Type', 'Authorization'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+}))
+
+// Fallback: anything we haven't classified (rare — mcp, internal) gets the
+// safer admin allowlist. Explicit beats implicit.
+app.use('*', cors({
+  origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project'],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 }))
 
 app.get('/health', (c) => c.json({ status: 'ok', version: '1.0.0', region: currentRegion() }))
 
-// Wave C C7: data residency — public lookup so SDKs can prime their region
+// C7: data residency — public lookup so SDKs can prime their region
 // cache before the first call. No auth required; only exposes the region tag.
 app.get('/v1/region/resolve', async (c) => {
   const projectId = c.req.query('project_id')
@@ -103,13 +155,13 @@ app.get('/v1/region/resolve', async (c) => {
   return c.json({ ok: true, region, endpoint, currentRegion: currentRegion() })
 })
 
-// Wave C C7: redirect cross-region calls before they hit project-scoped DB
+// C7: redirect cross-region calls before they hit project-scoped DB
 // queries. Bound to `/v1/*` so static endpoints (health, agent-card, region
 // resolve) keep working uniformly across all clusters.
 app.use('/v1/*', regionRouter)
 
 // ============================================================
-// A2A Agent Card (Wave C C5)
+// A2A Agent Card
 //
 // Public discovery document for the Mushi Mushi autofix agent, following the
 // Agent-to-Agent (A2A) protocol pattern at `/.well-known/agent-card`.
@@ -182,7 +234,7 @@ app.get('/v1/agent-card', (c) => {
 // Public auth-discovery manifest advertised by the A2A agent card under
 // `capabilities.auth.discovery`. Lets external agents enumerate the auth
 // schemes Mushi accepts without a JWT — they need this to know how to call
-// us in the first place. Audit Wave M P0: previously the agent card pointed
+// us in the first place. previously the agent card pointed
 // at a 404. Mirrors RFC 8414 (OAuth Authorization Server Metadata) shape
 // where it makes sense, but adapted to our two minimal schemes.
 app.get('/v1/admin/auth/manifest', (c) => {
@@ -223,7 +275,7 @@ app.get('/v1/admin/auth/manifest', (c) => {
   })
 })
 
-// Token endpoint advertised by the auth manifest above. Wave S P0: previously
+// Token endpoint advertised by the auth manifest above.: previously
 // the manifest pointed at this URL but no Hono route existed, so any external
 // A2A agent following the discovery doc hit a 404 immediately.
 //
@@ -377,7 +429,7 @@ async function ingestReport(
         const ext = contentType === 'image/png' ? 'png' : 'jpg'
         const key = `${projectId}/${crypto.randomUUID()}.${ext}`
 
-        // Wave C C8: route through BYO storage adapter so customer-pinned
+        // C8: route through BYO storage adapter so customer-pinned
         // S3/R2/GCS/MinIO buckets receive screenshots directly. Falls back
         // to the cluster default Supabase bucket on misconfiguration.
         const adapter = await getStorageAdapter(projectId)
@@ -432,7 +484,7 @@ async function ingestReport(
   })
   if (queueError) log.error('Queue insert failed', { reportId, error: queueError.message })
 
-  // Wave D D5: meter the ingest. Fire-and-forget — billing must never
+  // D5: meter the ingest. Fire-and-forget — billing must never
   // block ingest. The hourly `usage-aggregator` cron rolls these up and
   // pushes a Stripe Meter Event per (project, day_utc).
   void db
@@ -447,7 +499,7 @@ async function ingestReport(
       if (error) log.warn('Usage event insert failed', { reportId, error: error.message })
     })
 
-  // Wave D D1: fire `report.created` to all webhook plugins. Fully async —
+  // D1: fire `report.created` to all webhook plugins. Fully async —
   // plugin failures must not impact ingest latency or block the pipeline.
   void dispatchPluginEvent(db, projectId, 'report.created', {
     report: { id: reportId, status: 'new', category: report.category, title: report.description?.slice(0, 80) },
@@ -680,7 +732,13 @@ app.post('/v1/webhooks/sentry', async (c) => {
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body))
   const expected = Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
 
-  if (expected !== signature) {
+  // SEC (Wave S1 / D-19): constant-time compare to prevent timing side-channel.
+  // Same bookkeeping pattern as verifyGithubSignature below.
+  let diff = expected.length ^ signature.length
+  for (let i = 0, n = Math.max(expected.length, signature.length); i < n; i++) {
+    diff |= (expected.charCodeAt(i) || 0) ^ (signature.charCodeAt(i) || 0)
+  }
+  if (diff !== 0) {
     return c.json({ ok: false, error: 'Invalid signature' }, 401)
   }
 
@@ -718,7 +776,7 @@ app.post('/v1/webhooks/sentry', async (c) => {
 })
 
 // ============================================================
-// SENTRY SEER WEBHOOK (Wave E §3b — push complement to /sentry-seer-poll)
+// SENTRY SEER WEBHOOK
 // ============================================================
 //
 // Configure in Sentry: Settings → Developer Settings → Internal Integration
@@ -868,11 +926,17 @@ app.post('/v1/webhooks/github', async (c) => {
     return c.json({ ok: true, data: { reason: 'no matching fix_attempt' } })
   }
 
-  // Verify against any matched project's secret. If no project has a secret
-  // configured (dev fallback), we accept the event but mark as unverified.
+  // SEC (Wave S1 / D-11): verify against any matched project's secret.
+  //
+  // The previous behaviour accepted unverified events "as a dev fallback"
+  // when no project had a secret configured, which let an attacker who
+  // guessed a commit_sha in fix_attempts forge check-run status updates and
+  // steer our dashboards (appearing to pass required CI). The correct
+  // posture is FAIL CLOSED: if we can't verify the signature, we refuse the
+  // write entirely. Operators must either configure a github_webhook_secret
+  // per project or stop sending the webhook.
   let verified = false
   let verifiedProjectId: string | null = null
-  let anySecretConfigured = false
   for (const cand of candidates) {
     const { data: settings } = await db
       .from('project_settings')
@@ -881,7 +945,6 @@ app.post('/v1/webhooks/github', async (c) => {
       .single()
     const secret = settings?.github_webhook_secret as string | undefined
     if (!secret) continue
-    anySecretConfigured = true
     if (await verifyGithubSignature(sig, body, secret)) {
       verified = true
       verifiedProjectId = cand.project_id
@@ -889,8 +952,14 @@ app.post('/v1/webhooks/github', async (c) => {
     }
   }
 
-  if (anySecretConfigured && !verified) {
-    return c.json({ ok: false, error: { code: 'INVALID_SIGNATURE' } }, 401)
+  if (!verified) {
+    return c.json({
+      ok: false,
+      error: {
+        code: 'INVALID_SIGNATURE',
+        message: 'Webhook signature did not match any configured github_webhook_secret for the matched fix_attempts. Configure project_settings.github_webhook_secret per project.',
+      },
+    }, 401)
   }
 
   const updates = {
@@ -946,6 +1015,48 @@ app.get('/v1/reports/:id/status', apiKeyAuth, async (c) => {
   return c.json({ ok: true, data })
 })
 
+/**
+ * Wave G1 — bidirectional Sentry correlation endpoint.
+ *
+ * Exchanges a W3C trace id / Sentry trace id for the Mushi reports that
+ * share it. Lets Sentry → Mushi deep-linking work (click "See user bug
+ * reports for this event" and land on the right report) without exposing
+ * the whole `reports` table. Auth is via the project api-key, so other
+ * tenants can't enumerate a neighbour's traces.
+ *
+ * Query params:
+ *   - traceId       W3C trace id (32-hex)
+ *   - sentryTraceId Sentry trace id (32-hex)
+ * One of the two must be provided.
+ */
+app.get('/v1/reports/by-trace', apiKeyAuth, async (c) => {
+  const projectId = c.get('projectId') as string
+  const traceId = c.req.query('traceId')?.toLowerCase()
+  const sentryTraceId = c.req.query('sentryTraceId')?.toLowerCase()
+  if (!traceId && !sentryTraceId) {
+    return c.json({ ok: false, error: { code: 'MISSING_TRACE', message: 'traceId or sentryTraceId required' } }, 400)
+  }
+  const hexRe = /^[0-9a-f]{32}$/
+  if ((traceId && !hexRe.test(traceId)) || (sentryTraceId && !hexRe.test(sentryTraceId))) {
+    return c.json({ ok: false, error: { code: 'INVALID_TRACE', message: 'Trace id must be 32-char hex' } }, 400)
+  }
+
+  const db = getServiceClient()
+  let query = db
+    .from('reports')
+    .select('id, status, category, severity, summary, created_at')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(25)
+
+  if (traceId) query = query.filter('environment->>traceContext', 'neq', null).filter('environment->traceContext->>traceId', 'eq', traceId)
+  if (sentryTraceId) query = query.filter('environment->traceContext->>sentryTraceId', 'eq', sentryTraceId)
+
+  const { data, error } = await query
+  if (error) return dbError(c, error)
+  return c.json({ ok: true, data: { reports: data ?? [] } })
+})
+
 // Reporter reputation
 app.get('/v1/reputation', apiKeyAuth, async (c) => {
   const projectId = c.get('projectId') as string
@@ -963,7 +1074,7 @@ app.get('/v1/reputation', apiKeyAuth, async (c) => {
 
 // Reporter notifications
 //
-// Auth model (Wave 2.8): two flows are accepted, in priority order:
+// Auth model: two flows are accepted, in priority order:
 //
 //   (A) HMAC-signed (preferred). The SDK proves possession of the reporter
 //       token without sending it on the wire:
@@ -1517,7 +1628,7 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   //                      "people" in the dominant anonymous shake-to-report case
   //                      where reporter_user_id is NULL.
   //   unique_sessions  = COUNT(DISTINCT session_id) — how many distinct visits
-  // Powered by the report_group_blast_radius RPC (Wave I migration) so we get
+  // Powered by the report_group_blast_radius RPCso we get
   // one round-trip regardless of how many groups are visible on this page.
   const groupIds = Array.from(new Set(
     (reports ?? [])
@@ -1548,6 +1659,94 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
   })
 
   return c.json({ ok: true, data: { reports: enriched, total: count ?? 0 } })
+})
+
+// Wave S3 (PERF / MCP): server-side semantic similarity for reports.
+//
+// The MCP client used to fetch every report in a project and run cosine
+// similarity in JS — O(N) bytes over the wire per tool call. On a project
+// with 10k reports this was ~6 MB transfer and 300 ms of client compute.
+// We push it down into pgvector here; the response is the top-K report
+// headers with a similarity score attached.
+//
+// The query text is embedded on the server (voyage-3 or fallback) so the
+// caller never has to ship vectors. That also keeps the embedding model
+// pinned server-side, matching what `getRelevantCode` uses for RAG.
+app.post('/v1/admin/reports/similarity', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => ({})) as {
+    query?: string
+    projectId?: string
+    k?: number
+    threshold?: number
+  }
+  const query = body.query?.trim()
+  if (!query) return c.json({ ok: false, error: { code: 'MISSING_QUERY' } }, 400)
+
+  const db = getServiceClient()
+
+  // Scope: owned projects only. Optional projectId narrows further.
+  const { data: owned } = await db.from('projects').select('id').eq('owner_id', userId)
+  let projectIds = owned?.map((p) => p.id) ?? []
+  if (body.projectId) {
+    if (!projectIds.includes(body.projectId)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+    }
+    projectIds = [body.projectId]
+  }
+  if (projectIds.length === 0) return c.json({ ok: true, data: { results: [] } })
+
+  const k = Math.min(Math.max(Number(body.k) || 20, 1), 100)
+  const threshold = Math.min(Math.max(Number(body.threshold) || 0.2, 0), 1)
+
+  try {
+    const { createEmbedding } = await import('../_shared/embeddings.ts')
+    const embedding = await createEmbedding(query, { projectId: projectIds[0] })
+    const embeddingLiteral = `[${embedding.join(',')}]`
+
+    // Fan out match_report_embeddings per project concurrently; merge,
+    // sort, and trim. Per-project RPC lets us reuse the existing index.
+    const perProject = await Promise.all(projectIds.map(async (pid) => {
+      const { data, error } = await db.rpc('match_report_embeddings', {
+        query_embedding: embeddingLiteral,
+        match_threshold: threshold,
+        match_count: k,
+        p_project_id: pid,
+      })
+      if (error) throw error
+      return (data ?? []) as Array<{
+        report_id: string
+        similarity: number
+        description: string
+        category: string
+        created_at: string
+        report_group_id: string | null
+      }>
+    }))
+
+    const merged = perProject
+      .flat()
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, k)
+      .map((r) => ({
+        reportId: r.report_id,
+        similarity: r.similarity,
+        description: r.description,
+        category: r.category,
+        createdAt: r.created_at,
+        reportGroupId: r.report_group_id,
+      }))
+
+    return c.json({ ok: true, data: { results: merged } })
+  } catch (err) {
+    return c.json({
+      ok: false,
+      error: {
+        code: 'SIMILARITY_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+      },
+    }, 500)
+  }
 })
 
 app.get('/v1/admin/reports/:id', jwtAuth, async (c) => {
@@ -2226,7 +2425,7 @@ app.get('/v1/admin/judge/evaluations', jwtAuth, async (c) => {
   const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 50), 1), 200)
   const sort = c.req.query('sort') === 'score_asc' ? { col: 'judge_score', asc: true } : { col: 'created_at', asc: false }
   // Optional filter so the JudgePage leaderboard rows can drill into a
-  // specific prompt version's evaluations. Audit Wave M P0: PageHelp
+  // specific prompt version's evaluations. PageHelp
   // previously promised "click a row to see the evaluations that drove it"
   // but rows were inert. Filter is a string match on the stored prompt
   // version label (e.g. "v3-active", "v4-cand").
@@ -2349,7 +2548,7 @@ app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
   const projectIds = await ownedProjectIds(db, userId)
 
   // Prompts: include global defaults (project_id IS NULL) + this user's own.
-  // Wave E §4: also expose auto-generated metadata + parent_version_id so the
+  // §4: also expose auto-generated metadata + parent_version_id so the
   // Prompt Lab UI can surface auto candidates and diff them against parent.
   let promptsQuery = db
     .from('prompt_versions')
@@ -2362,7 +2561,7 @@ app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
     : promptsQuery.or(`project_id.is.null,project_id.in.(${projectIds.join(',')})`)
   const { data: prompts } = await promptsQuery
 
-  // Wave J §2: per-prompt-version cost rollup so the Prompt Lab modal can
+  // §2: per-prompt-version cost rollup so the Prompt Lab modal can
   // show "$ per evaluation" alongside avg judge score. Reads directly from
   // the persisted cost_usd column written by telemetry.ts.
   const promptCostByVersion = new Map<string, { totalCostUsd: number; calls: number }>()
@@ -2594,7 +2793,7 @@ app.patch('/v1/admin/settings', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Wave C C9: Bring-Your-Own-Key admin endpoints
+// C9: Bring-Your-Own-Key admin endpoints
 //
 // Customers register their own Anthropic / OpenAI keys per project. The raw
 // key never lands in `project_settings`; it is stashed in Supabase Vault and
@@ -2864,7 +3063,7 @@ app.post('/v1/admin/byok/:provider/test', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Wave E: Firecrawl BYOK admin endpoints
+// Firecrawl BYOK admin endpoints
 //
 // Firecrawl is a non-LLM provider (web scraping / search) used by the new
 // research page, fix-worker auto-augmentation, and the library-modernizer
@@ -3033,7 +3232,7 @@ app.post('/v1/admin/byok/firecrawl/test', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Wave E: Research page admin endpoints
+// Research page admin endpoints
 //
 // Manual web research powered by Firecrawl. Admin types a query, we hit
 // Firecrawl, persist the session + snippets, and let the user attach any
@@ -3204,7 +3403,7 @@ app.post('/v1/admin/research/snippets/:id/attach', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// LIBRARY MODERNIZATION (Wave E §2c)
+// LIBRARY MODERNIZATION
 // ============================================================
 //
 // Read-only listing + dispatch/dismiss for findings produced by the weekly
@@ -3517,7 +3716,7 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
       .select('project_id, event_name, quantity, occurred_at')
       .in('project_id', projectIds)
       .gte('occurred_at', periodStart.toISOString()),
-    // Wave J §2: real LLM cost (COGS) for the current billing month so the
+    // §2: real LLM cost (COGS) for the current billing month so the
     // Billing page can show "$ spent on LLM this month" alongside report
     // quota. Reads the persisted cost_usd column written by telemetry.ts.
     db.from('llm_invocations')
@@ -3579,7 +3778,7 @@ app.get('/v1/admin/billing', jwtAuth, async (c) => {
       customer: cust,
       period_start: periodStart.toISOString(),
       usage: u,
-      // Wave J §2: actual LLM dollars spent this billing month, summed from
+      // §2: actual LLM dollars spent this billing month, summed from
       // the persisted `llm_invocations.cost_usd` column. Rounded to four
       // decimals so a $0.0001 Haiku call is still visible.
       llm_cost_usd_this_month: Math.round((llmCostByProject.get(p.id) ?? 0) * 10000) / 10000,
@@ -3853,7 +4052,7 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
   // having 31 reports because mushi-mushi (sister project) had pushed it past
   // the limit window.
   // PDCA bottleneck rollup is computed per-project so the projects list can
-  // show "where this project is stuck" inline. Audit Wave I P1: previously
+  // show "where this project is stuck" inline. previously
   // the only signal was last_report_at, which doesn't tell the user whether
   // they need to triage, ship a fix, or wire integrations.
   const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString()
@@ -4029,7 +4228,7 @@ app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { key: rawKey, prefix } }, 201)
 })
 
-// Rotation endpoint advertised by the auth manifest. Wave S P0: previously a
+// Rotation endpoint advertised by the auth manifest.: previously a
 // 404 because no Hono route existed despite being listed under
 // `mushi-api-key.rotation_endpoint`. Atomic-ish rotate-then-issue:
 //
@@ -4309,7 +4508,7 @@ app.post('/v1/admin/queue/:id/retry', jwtAuth, async (c) => {
   return c.json({ ok: true })
 })
 
-// Wave 2.2: bulk flush for circuit-breaker queued reports.
+// v2.2: bulk flush for circuit-breaker queued reports.
 // When `checkCircuitBreaker` trips, ingestReport sets `reports.status='queued'`
 // and skips the per-report fast-filter invoke. Once the breaker clears, those
 // reports stay queued until manually rerun. This endpoint replays them in a
@@ -4517,6 +4716,64 @@ app.get('/v1/admin/graph/edges', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { edges: data ?? [] } })
 })
 
+/**
+ * Wave G2 — graph traversal for the MCP `get_knowledge_graph` tool and any
+ * caller that wants more than blast-radius. Returns nodes + edges within a
+ * BFS depth budget, starting from a node id OR a label match. Capped at
+ * depth=4 and 500 nodes so an LLM can't blow up the response budget.
+ */
+app.get('/v1/admin/graph/traverse', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const seed = (c.req.query('seed') ?? '').trim()
+  const depth = Math.max(1, Math.min(Number(c.req.query('depth') ?? 2), 4))
+  if (!seed) return c.json({ ok: false, error: { code: 'MISSING_SEED', message: 'seed is required' } }, 400)
+
+  const db = getServiceClient()
+  const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
+  const projectIds = projects?.map(p => p.id) ?? []
+  if (!projectIds.length) return c.json({ ok: true, data: { nodes: [], edges: [] } })
+
+  const { data: seedNode } = await db
+    .from('graph_nodes')
+    .select('id, node_type, label, project_id')
+    .in('project_id', projectIds)
+    .or(`id.eq.${seed.replace(/[^a-f0-9-]/gi, '')},label.ilike.${seed.replace(/[%,]/g, '')}`)
+    .limit(1)
+    .maybeSingle()
+  if (!seedNode) return c.json({ ok: false, error: { code: 'SEED_NOT_FOUND' } }, 404)
+
+  const visitedNodes = new Map<string, { id: string; node_type: string; label: string }>()
+  visitedNodes.set(seedNode.id, { id: seedNode.id, node_type: seedNode.node_type, label: seedNode.label })
+  const edges: Array<{ from_node_id: string; to_node_id: string; edge_type: string }> = []
+  let frontier = [seedNode.id]
+
+  for (let d = 0; d < depth && frontier.length && visitedNodes.size < 500; d++) {
+    const { data: nextEdges } = await db
+      .from('graph_edges')
+      .select('from_node_id, to_node_id, edge_type')
+      .in('project_id', projectIds)
+      .or(`from_node_id.in.(${frontier.join(',')}),to_node_id.in.(${frontier.join(',')})`)
+      .limit(500)
+
+    const nextIds = new Set<string>()
+    for (const e of nextEdges ?? []) {
+      edges.push(e)
+      if (!visitedNodes.has(e.from_node_id)) nextIds.add(e.from_node_id)
+      if (!visitedNodes.has(e.to_node_id)) nextIds.add(e.to_node_id)
+    }
+    if (nextIds.size === 0) break
+
+    const { data: newNodes } = await db
+      .from('graph_nodes')
+      .select('id, node_type, label')
+      .in('id', Array.from(nextIds).slice(0, 500 - visitedNodes.size))
+    for (const n of newNodes ?? []) visitedNodes.set(n.id, n)
+    frontier = newNodes?.map(n => n.id) ?? []
+  }
+
+  return c.json({ ok: true, data: { nodes: Array.from(visitedNodes.values()), edges } })
+})
+
 app.get('/v1/admin/graph/blast-radius/:nodeId', jwtAuth, async (c) => {
   const nodeId = c.req.param('nodeId')
   const userId = c.get('userId') as string
@@ -4571,6 +4828,31 @@ app.post('/v1/admin/query', jwtAuth, async (c) => {
   if (!question) return c.json({ ok: false, error: { code: 'MISSING_QUESTION', message: 'question is required' } }, 400)
 
   const db = getServiceClient()
+
+  // SEC (Wave S1 / S-3): per-user hourly rate limit. The NL endpoint fans
+  // out to an LLM, a SECURITY DEFINER SQL RPC, and a summariser LLM —
+  // easily the most expensive path in the API. An atomic UPSERT inside
+  // nl_query_rate_limit_claim either increments the counter or raises
+  // `rate_limit_exceeded` (P0001). We surface a 429 so SDKs back off.
+  const { error: rateErr } = await db.rpc('nl_query_rate_limit_claim', {
+    p_user_id: userId,
+    p_max_per_hour: 60,
+  })
+  if (rateErr) {
+    const msg = rateErr.message ?? ''
+    if (msg.includes('rate_limit_exceeded')) {
+      return c.json({
+        ok: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: 'NL-query rate limit reached (60 queries/hour). Try again next hour or contact support for a higher cap.',
+        },
+      }, 429)
+    }
+    // Unknown RPC failure — fall through rather than block the user; log.
+    console.warn('[nl-query] rate limit RPC failed:', msg)
+  }
+
   const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
   const projectIds = projects?.map(p => p.id) ?? []
   if (!projectIds.length) return c.json({ ok: true, data: { results: [], summary: 'No projects found.' } })
@@ -4621,7 +4903,7 @@ app.get('/v1/admin/query/history', jwtAuth, async (c) => {
   if (onlySaved) query = query.eq('is_saved', true)
   const { data, error } = await query
   if (error) {
-    // Wave L resilience: if the deploy is mid-flight (Edge Function is on
+    // resilience: if the deploy is mid-flight (Edge Function is on
     // the new bundle but the `is_saved` migration hasn't landed yet — the
     // exact failure mode that bit the 04-20 dogfood), return an empty
     // history list with a soft-warning instead of 500. The saved sidebar
@@ -4744,14 +5026,29 @@ app.get('/v1/admin/fixes', jwtAuth, async (c) => {
   const projectIds = (memberships ?? []).map(m => m.project_id)
   if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } })
 
-  const { data } = await db
+  // Optional `q` substring search — the admin command palette needs fast
+  // alias-matching against summary/rationale/branch, otherwise live search
+  // never surfaces in-flight or completed fixes by their change text.
+  const search = c.req.query('q')?.trim()
+  const queryLimit = Math.min(Number(c.req.query('limit')) || 50, 200)
+
+  let query = db
     .from('fix_attempts')
     .select(
       'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, error',
     )
     .in('project_id', projectIds)
     .order('started_at', { ascending: false })
-    .limit(50)
+    .limit(queryLimit)
+
+  if (search) {
+    const escaped = search.replace(/[%,]/g, '')
+    query = query.or(
+      `summary.ilike.%${escaped}%,rationale.ilike.%${escaped}%,branch.ilike.%${escaped}%`,
+    )
+  }
+
+  const { data } = await query
 
   return c.json({ ok: true, data: { fixes: data ?? [] } })
 })
@@ -5243,7 +5540,7 @@ app.get('/v1/admin/audit', jwtAuth, async (c) => {
   const resourceType = c.req.query('resource_type')
   const actor = c.req.query('actor')
   // actor_type is derived from actor_id shape so the FE can split human vs
-  // agent vs system bots (cron / webhook / migration). Audit Wave I P2.
+  // agent vs system bots (cron / webhook / migration). .
   // Mapping:
   //   human  -> actor_id is a uuid (auth.users.id) AND actor_email is set
   //   agent  -> actor_id starts with 'agent_' or actor_email like 'agent-%@'
@@ -5361,6 +5658,135 @@ app.post('/v1/admin/fine-tuning/:id/export', jwtAuth, async (c) => {
   }
 })
 
+// V5.3 §2.15 (B4) — Wave S5: submit the exported JSONL to the training
+// vendor. This moves the job from `exported` → `training` and stores the
+// vendor job ID in `metrics.vendor_job_id`. Must be paired with the `poll`
+// endpoint (or the vendor webhook) to advance to `trained`.
+app.post('/v1/admin/fine-tuning/:id/submit', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const jobId = c.req.param('id')
+  const db = getServiceClient()
+
+  const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single()
+  if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: project } = await db.from('projects').select('id').eq('id', job.project_id).eq('owner_id', userId).single()
+  if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  if (job.status !== 'exported') {
+    return c.json({ ok: false, error: { code: 'INVALID_STATE', message: `Job is ${job.status}; submit only valid from exported` } }, 409)
+  }
+
+  try {
+    const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts')
+    const vendor = resolveVendor(job.base_model)
+    const adapter = getAdapter(vendor)
+    const result = await adapter.submit(db, job)
+    await logAudit(db, job.project_id, userId, 'settings.updated', 'fine_tuning_submit', jobId, {
+      vendor: result.vendor,
+      vendorJobId: result.vendorJobId,
+    })
+    return c.json({ ok: true, data: result })
+  } catch (e) {
+    await db.from('fine_tuning_jobs').update({
+      status: 'failed',
+      rejected_reason: e instanceof Error ? e.message : String(e),
+    }).eq('id', jobId)
+    return c.json({ ok: false, error: { code: 'SUBMIT_FAILED', message: e instanceof Error ? e.message : String(e) } }, 500)
+  }
+})
+
+// Poll the vendor for completion. Usually called by cron every ~5 min;
+// kept as an admin endpoint so operators can also force a check.
+app.post('/v1/admin/fine-tuning/:id/poll', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const jobId = c.req.param('id')
+  const db = getServiceClient()
+
+  const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single()
+  if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: project } = await db.from('projects').select('id').eq('id', job.project_id).eq('owner_id', userId).single()
+  if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  if (job.status !== 'training') {
+    return c.json({ ok: false, error: { code: 'INVALID_STATE', message: `Job is ${job.status}; poll only valid while training` } }, 409)
+  }
+
+  try {
+    const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts')
+    const vendor = resolveVendor(job.base_model)
+    const adapter = getAdapter(vendor)
+    const result = await adapter.poll(job)
+
+    if (result.status === 'succeeded') {
+      await db.from('fine_tuning_jobs').update({
+        status: 'trained',
+        fine_tuned_model_id: result.fineTunedModelId,
+        completed_at: new Date().toISOString(),
+      }).eq('id', jobId)
+    } else if (result.status === 'failed') {
+      await db.from('fine_tuning_jobs').update({
+        status: 'failed',
+        rejected_reason: result.error ?? 'vendor reported failure',
+        completed_at: new Date().toISOString(),
+      }).eq('id', jobId)
+    }
+    return c.json({ ok: true, data: result })
+  } catch (e) {
+    return c.json({ ok: false, error: { code: 'POLL_FAILED', message: e instanceof Error ? e.message : String(e) } }, 500)
+  }
+})
+
+// Vendor webhook (OpenAI today). We don't rely on it — `/poll` is the
+// source of truth — but when OpenAI supports signed webhooks it lets us
+// advance jobs without waiting for the next cron tick. Fails closed: if
+// `OPENAI_WEBHOOK_SECRET` is unset, any payload is rejected.
+app.post('/v1/webhooks/fine-tuning/openai', async (c) => {
+  const secret = Deno.env.get('OPENAI_WEBHOOK_SECRET')
+  if (!secret) {
+    return c.json({ ok: false, error: { code: 'WEBHOOK_NOT_CONFIGURED' } }, 503)
+  }
+  const given = c.req.header('x-openai-signature') ?? ''
+  // OpenAI will document the signing scheme once webhooks GA; until then we
+  // enforce a constant-time equality on a shared secret in the header so
+  // operators can pre-wire the route.
+  let diff = secret.length ^ given.length
+  for (let i = 0, n = Math.max(secret.length, given.length); i < n; i++) {
+    diff |= (secret.charCodeAt(i) || 0) ^ (given.charCodeAt(i) || 0)
+  }
+  if (diff !== 0) return c.json({ ok: false, error: { code: 'INVALID_SIGNATURE' } }, 401)
+
+  type Evt = { type?: string; data?: { id?: string; fine_tuned_model?: string; status?: string; error?: { message?: string } } }
+  const body = await c.req.json().catch(() => ({})) as Evt
+  const vendorJobId = body.data?.id
+  if (!vendorJobId) return c.json({ ok: false, error: { code: 'MISSING_JOB_ID' } }, 400)
+
+  const db = getServiceClient()
+  const { data: row } = await db
+    .from('fine_tuning_jobs')
+    .select('id')
+    .eq('status', 'training')
+    .filter('metrics->>vendor_job_id', 'eq', vendorJobId)
+    .maybeSingle()
+  if (!row) return c.json({ ok: true, data: { matched: false } })
+
+  if (body.type === 'fine_tuning.job.succeeded' && body.data?.fine_tuned_model) {
+    await db.from('fine_tuning_jobs').update({
+      status: 'trained',
+      fine_tuned_model_id: body.data.fine_tuned_model,
+      completed_at: new Date().toISOString(),
+    }).eq('id', row.id)
+  } else if (body.type === 'fine_tuning.job.failed' || body.type === 'fine_tuning.job.cancelled') {
+    await db.from('fine_tuning_jobs').update({
+      status: 'failed',
+      rejected_reason: body.data?.error?.message ?? body.type,
+      completed_at: new Date().toISOString(),
+    }).eq('id', row.id)
+  }
+  return c.json({ ok: true, data: { matched: true } })
+})
+
 // V5.3 §2.15 (B4): validate step — run eval over a held-out set.
 // The actual `predict` function depends on the trained model; here we delegate
 // to the project's currently-promoted classification path, which is enough
@@ -5383,16 +5809,13 @@ app.post('/v1/admin/fine-tuning/:id/validate', jwtAuth, async (c) => {
   await db.from('fine_tuning_jobs').update({ status: 'validating' }).eq('id', jobId)
   try {
     const { validateTrainedModel } = await import('../_shared/fine-tune.ts')
-    // Stub predictor: in production, swap with a real call to the trained model.
-    // We mirror the labelled truth so this baseline always validates as 'passed'
-    // when the input set is clean — the real predictor is wired in by the worker
-    // once an actual fine-tune lands. This makes the endpoint testable today.
-    const report = await validateTrainedModel(db, job, async (s) => ({
-      category: s.category,
-      severity: s.severity,
-      summary: s.summary,
-      component: s.component,
-    }))
+    const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts')
+    // Wave S5: use the real vendor adapter so a broken fine-tune is caught
+    // here instead of being silently promoted. `stub:` base models keep the
+    // old mirror-truth behaviour for deterministic tests.
+    const vendor = resolveVendor(job.base_model)
+    const adapter = getAdapter(vendor)
+    const report = await validateTrainedModel(db, job, (s) => adapter.predict(job, s))
     await logAudit(db, job.project_id, userId, 'settings.updated', 'fine_tuning_validate', jobId, {
       passed: report.passed,
       accuracy: report.accuracy,
@@ -5739,7 +6162,7 @@ app.post('/v1/admin/plugins', jwtAuth, async (c) => {
   const pluginVersion = body.pluginVersion ?? body.version ?? '1.0.0'
   if (!pluginName) return c.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'pluginName is required' } }, 400)
 
-  // Wave D D1: webhook plugins carry a slug + URL + signing secret. Built-in
+  // D1: webhook plugins carry a slug + URL + signing secret. Built-in
   // plugins (legacy path) keep the slug-less shape for backwards compat.
   const isWebhook = typeof body.webhookUrl === 'string' && body.webhookUrl.length > 0
   let webhookSecretRef: string | null = null
@@ -5785,7 +6208,7 @@ app.delete('/v1/admin/plugins/:slug', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Wave D D1: Plugin marketplace browse + dispatch log
+// D1: Plugin marketplace browse + dispatch log
 // ============================================================
 
 app.get('/v1/marketplace/plugins', async (c) => {
@@ -5799,6 +6222,76 @@ app.get('/v1/marketplace/plugins', async (c) => {
 
   if (error) return dbError(c, error)
   return c.json({ ok: true, data: { plugins: data ?? [] } })
+})
+
+/**
+ * Wave G3 — community-plugin submission.
+ *
+ * Any authenticated user can propose a new plugin listing. Submissions land
+ * in `plugin_submissions` with `status='pending_review'`; admin triage
+ * flips them to `approved` (moves row into `plugin_registry`) or
+ * `rejected` (stays in submissions with a reason). Keeps public
+ * `plugin_registry` curated without blocking community contributions.
+ */
+app.post('/v1/marketplace/submissions', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const body = await c.req.json() as {
+    slug?: string
+    name?: string
+    shortDescription?: string
+    longDescription?: string
+    publisher?: string
+    sourceUrl?: string
+    manifest?: Record<string, unknown>
+    requiredScopes?: string[]
+    category?: string
+  }
+  if (!body.slug || !/^[a-z][a-z0-9-]{1,48}[a-z0-9]$/.test(body.slug)) {
+    return c.json({ ok: false, error: { code: 'INVALID_SLUG', message: 'slug must be kebab-case, 3-50 chars' } }, 400)
+  }
+  if (!body.name || !body.shortDescription || !body.sourceUrl) {
+    return c.json({ ok: false, error: { code: 'MISSING_FIELDS', message: 'name, shortDescription, sourceUrl are required' } }, 400)
+  }
+  if (body.name.length > 100 || body.shortDescription.length > 280 || (body.longDescription?.length ?? 0) > 8000 || (body.publisher?.length ?? 0) > 100) {
+    return c.json({ ok: false, error: { code: 'FIELD_TOO_LONG', message: 'name ≤100, shortDescription ≤280, longDescription ≤8000, publisher ≤100' } }, 400)
+  }
+  if (!/^https:\/\/(github\.com|gitlab\.com|bitbucket\.org)\//.test(body.sourceUrl)) {
+    return c.json({ ok: false, error: { code: 'INVALID_SOURCE_URL', message: 'sourceUrl must be a GitHub/GitLab/Bitbucket https URL' } }, 400)
+  }
+  if (Array.isArray(body.requiredScopes) && (body.requiredScopes.length > 32 || body.requiredScopes.some(s => typeof s !== 'string' || s.length > 100))) {
+    return c.json({ ok: false, error: { code: 'INVALID_SCOPES', message: 'requiredScopes must be ≤32 strings of ≤100 chars' } }, 400)
+  }
+  if (body.manifest && JSON.stringify(body.manifest).length > 32_000) {
+    return c.json({ ok: false, error: { code: 'MANIFEST_TOO_LARGE', message: 'manifest JSON must be ≤32kB' } }, 400)
+  }
+  const db = getServiceClient()
+  const { data: existing } = await db
+    .from('plugin_registry')
+    .select('slug')
+    .eq('slug', body.slug)
+    .maybeSingle()
+  if (existing) {
+    return c.json({ ok: false, error: { code: 'SLUG_TAKEN', message: 'Slug already registered' } }, 409)
+  }
+  const { data, error } = await db
+    .from('plugin_submissions')
+    .insert({
+      slug: body.slug,
+      name: body.name,
+      short_description: body.shortDescription,
+      long_description: body.longDescription ?? null,
+      publisher: body.publisher ?? null,
+      source_url: body.sourceUrl,
+      manifest: body.manifest ?? {},
+      required_scopes: body.requiredScopes ?? [],
+      category: body.category ?? 'other',
+      submitted_by: userId,
+      status: 'pending_review',
+    })
+    .select('id, slug, status')
+    .single()
+  if (error) return dbError(c, error)
+  return c.json({ ok: true, data }, 201)
 })
 
 app.get('/v1/admin/plugins/dispatch-log', jwtAuth, async (c) => {
@@ -6192,7 +6685,7 @@ app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
       }
     }
     if (r.fallback_used) fnAgg.fallbacks += 1
-    // Prefer the persisted cost_usd column (Wave J §1). Fall back to the
+    // Prefer the persisted cost_usd column Fall back to the
     // shared estimator for ancient rows the backfill missed.
     fnAgg.costUsd += r.cost_usd != null
       ? Number(r.cost_usd)
@@ -6452,7 +6945,7 @@ app.post('/v1/admin/notifications/read-all', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// SOC 2 Type 1 (Wave C C6)
+// SOC 2 Type 1
 // ============================================================
 app.get('/v1/admin/compliance/retention', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
@@ -6647,7 +7140,7 @@ app.post('/v1/admin/compliance/evidence/refresh', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Wave C C7: Data residency admin endpoints
+// C7: Data residency admin endpoints
 // ============================================================
 
 // List residency-pinned regions for the caller's projects.
@@ -6729,7 +7222,7 @@ app.put('/v1/admin/residency/:projectId', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Wave C C8: BYO Storage admin endpoints
+// C8: BYO Storage admin endpoints
 // ============================================================
 
 app.get('/v1/admin/storage', jwtAuth, async (c) => {
@@ -6749,7 +7242,7 @@ app.get('/v1/admin/storage', jwtAuth, async (c) => {
   return c.json({ ok: true, settings: data ?? [], data: { settings: data ?? [] } })
 })
 
-// Per-project storage usage rollup (Audit Wave I §5 storage). Counts uploaded
+// Per-project storage usage rollup Counts uploaded
 // artefacts (reports.screenshot_path IS NOT NULL is the only artefact kind we
 // track today) and the last write timestamp. Object-bytes is intentionally
 // omitted until we land a `screenshot_size_bytes` column — counting objects is
@@ -6835,7 +7328,7 @@ app.post('/v1/admin/storage/:projectId/health', jwtAuth, async (c) => {
 })
 
 // ----------------------------------------------------------------
-// Wave D D5: Cloud billing endpoints
+// D5: Cloud billing endpoints
 //   * GET    /v1/admin/billing             — current customer + subscription state
 //                                             (defined earlier — aggregate per-owner)
 //   * POST   /v1/admin/billing/checkout    — create Stripe Checkout Session, return URL
@@ -6937,7 +7430,7 @@ app.post('/v1/admin/billing/checkout', jwtAuth, async (c) => {
   // Wrap in `data` to match the admin-API envelope all other admin routes
   // use (`{ ok, data }`). The frontend reads `res.data.url`; returning `url`
   // at the top level previously caused the BillingPage checkout button to
-  // silently no-op. Audit Wave M P0.
+  // silently no-op. .
   return c.json({ ok: true, data: { url: session.url, plan_id: plan.id } })
 })
 
@@ -6960,7 +7453,7 @@ app.post('/v1/admin/billing/portal', jwtAuth, async (c) => {
 
   const cfg = stripeFromEnv()
   const session = await createBillingPortalSession(cfg, customer.stripe_customer_id)
-  // Wrap in `data` for envelope parity. Audit Wave M P0.
+  // Wrap in `data` for envelope parity. .
   return c.json({ ok: true, data: { url: session.url } })
 })
 
@@ -7002,7 +7495,7 @@ app.get('/v1/admin/billing/invoices', jwtAuth, async (c) => {
 })
 
 // ============================================================
-// Support inbox (Wave 4.3)
+// Support inbox
 //
 // Goals:
 //   - Give paid customers a one-click "Talk to a human" channel from the

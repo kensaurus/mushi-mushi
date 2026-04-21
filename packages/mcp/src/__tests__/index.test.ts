@@ -53,6 +53,11 @@ const EXPECTED_TOOLS = [
   'submit_fix_result',
   'get_similar_bugs',
   'get_blast_radius',
+  'trigger_judge',
+  'dispatch_fix',
+  'transition_status',
+  'run_nl_query',
+  'get_knowledge_graph',
 ]
 
 const originalExit = process.exit

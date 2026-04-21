@@ -1,6 +1,6 @@
 /**
  * FILE: apps/admin/src/pages/BillingPage.tsx
- * PURPOSE: Wave 4.2 — first-class billing surface for the Mushi Cloud
+ * PURPOSE: v4.2 — first-class billing surface for the Mushi Cloud
  *          product. Replaces the old "go to Stripe and squint" workflow
  *          with a real plan + usage + invoices view per project.
  *
@@ -38,6 +38,8 @@ import {
   SelectField,
 } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { PlanComparisonTable } from '../components/billing/PlanComparisonTable'
+import { PlanBenefitsList } from '../components/billing/PlanBenefitsList'
 
 interface PlanCatalog {
   id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
@@ -91,7 +93,7 @@ interface BillingProject {
     tokens: number
   }
   /**
-   * Wave J §2: real LLM dollars spent this billing month, summed server-side
+   * §2: real LLM dollars spent this billing month, summed server-side
    * from llm_invocations.cost_usd. Always present (0 when no calls). Lets the
    * Billing page show "what is this project actually costing me?" alongside
    * report quota usage.
@@ -153,9 +155,15 @@ const formatMoney = (amountMinor: number, currency: string) => {
 export function BillingPage() {
   const toast = useToast()
   const { user } = useAuth()
+  const activeProjectId = useActiveProjectId()
   const billingQuery = usePageData<BillingResponse>('/v1/admin/billing')
   const billing = billingQuery.data
   const projects = billing?.projects ?? []
+  const activeProject = useMemo(
+    () => projects.find(p => p.project_id === activeProjectId) ?? projects[0] ?? null,
+    [projects, activeProjectId],
+  )
+  const activeTierId = activeProject?.tier?.id ?? 'hobby'
 
   const [actioning, setActioning] = useState<string | null>(null)
   // Project ID whose plan picker is open. null = no picker open.
@@ -226,6 +234,13 @@ export function BillingPage() {
         ]}
         howToUse="Each project bills independently. Click Upgrade to start a Stripe Checkout session, or Manage to jump into the customer portal. Recent invoices appear inline once Stripe sends the first one."
       />
+
+      {(billing?.plans?.length ?? 0) > 0 && (
+        <PlanComparisonTable
+          plans={billing!.plans!}
+          currentPlanId={activeTierId}
+        />
+      )}
 
       {projects.length === 0 ? (
         <EmptyState
@@ -371,6 +386,16 @@ function ProjectBillingCard({
         llmCostUsd={project.llm_cost_usd_this_month}
       />
 
+      {tier && (
+        <PlanBenefitsList
+          planId={tier.id}
+          planName={tier.display_name}
+          flags={tier.feature_flags as Parameters<typeof PlanBenefitsList>[0]['flags']}
+          retentionDays={tier.retention_days}
+          seatLimit={(tier as { seat_limit?: number | null }).seat_limit ?? null}
+        />
+      )}
+
       <InvoicesSection projectId={project.project_id} hasCustomer={!!project.customer?.stripe_customer_id} />
     </Card>
   )
@@ -441,7 +466,7 @@ interface UsageBarProps {
   limitReports: number | null
   pct: number | null
   periodStart: string | null
-  /** Wave J §3: real $ spent on LLM calls this billing month. */
+  /** §3: real $ spent on LLM calls this billing month. */
   llmCostUsd?: number
 }
 
@@ -648,7 +673,7 @@ function InvoicesSection({ projectId, hasCustomer }: InvoicesSectionProps) {
 }
 
 // ============================================================
-// Support contact (Wave 4.3)
+// Support contact
 //
 // Lives inside Billing because that's where paid customers go when
 // something is wrong with their account. Future versions will surface this

@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave C C6: SOC 2 Type 1 readiness
+-- C6: SOC 2 Type 1 readiness
 --
 -- Adds:
 --   * project_retention_policies — per-project retention windows for the

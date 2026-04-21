@@ -4,6 +4,7 @@ import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import { Card, Btn, ErrorAlert, EmptyState, Badge, RelativeTime } from '../ui'
+import { Modal } from '../Modal'
 import { TableSkeleton } from '../skeletons/TableSkeleton'
 
 interface ReportGroup {
@@ -149,24 +150,28 @@ export function GroupsPanel() {
         </div>
       )}
 
-      {mergeSource && (
-        <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 motion-safe:animate-mushi-fade-in"
-          onClick={() => setMergeSource(null)}
-        >
-          <Card
-            elevated
-            className="w-full max-w-lg p-4 space-y-3 motion-safe:animate-mushi-modal-in"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div>
-              <h3 className="text-sm font-semibold text-fg">Merge group</h3>
-              <p className="text-2xs text-fg-faint mt-1">
-                All {mergeSource.report_count} reports from{' '}
-                <span className="font-mono text-fg-muted">{mergeSource.representative_summary?.slice(0, 60) ?? mergeSource.id.slice(0, 8)}</span>
-                {' '}will move into the destination group. The source group is then deleted.
-              </p>
-            </div>
+      <Modal
+        open={Boolean(mergeSource)}
+        size="md"
+        title="Merge group"
+        onClose={() => setMergeSource(null)}
+        dismissible={!merging}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setMergeSource(null)} disabled={merging}>Cancel</Btn>
+            <Btn onClick={performMerge} disabled={merging || !mergeTarget} loading={merging} data-primary>
+              Merge groups
+            </Btn>
+          </>
+        }
+      >
+        {mergeSource && (
+          <div className="space-y-3">
+            <p className="text-2xs text-fg-faint">
+              All {mergeSource.report_count} reports from{' '}
+              <span className="font-mono text-fg-muted">{mergeSource.representative_summary?.slice(0, 60) ?? mergeSource.id.slice(0, 8)}</span>
+              {' '}will move into the destination group. The source group is then deleted.
+            </p>
             <div>
               <label className="text-2xs text-fg-muted block mb-1">Destination group</label>
               <select
@@ -187,15 +192,9 @@ export function GroupsPanel() {
                 </p>
               )}
             </div>
-            <div className="flex justify-end gap-1.5">
-              <Btn variant="ghost" onClick={() => setMergeSource(null)}>Cancel</Btn>
-              <Btn onClick={performMerge} disabled={merging || !mergeTarget} loading={merging}>
-                Merge groups
-              </Btn>
-            </div>
-          </Card>
-        </div>
-      )}
+          </div>
+        )}
+      </Modal>
     </Card>
   )
 }

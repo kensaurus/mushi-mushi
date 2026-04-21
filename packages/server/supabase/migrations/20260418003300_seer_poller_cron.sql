@@ -1,5 +1,5 @@
 -- =============================================================================
--- PDCA full-sweep wave 2.4: Sentry Seer poller cron.
+-- PDCA full-sweep .4: Sentry Seer poller cron.
 --
 -- Triggers `sentry-seer-poll` every 15 minutes to pull Seer root-cause analyses
 -- into matching reports. The function itself is gated by `sentry_seer_enabled`

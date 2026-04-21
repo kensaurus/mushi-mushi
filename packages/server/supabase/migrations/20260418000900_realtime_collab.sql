@@ -1,5 +1,5 @@
 -- =============================================================================
--- V5.3 §2.13 Wave B B2 — real-time triage collaboration
+-- V5.3 §2.13 B2 — real-time triage collaboration
 --
 -- Adds two tables:
 --   1. report_comments     — threaded comments per report, optionally addressed

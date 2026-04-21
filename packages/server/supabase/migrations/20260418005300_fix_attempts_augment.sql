@@ -10,8 +10,8 @@ ALTER TABLE fix_attempts
     CHECK (augment_reason IS NULL OR augment_reason IN ('rag_sparse','low_judge_score','manual'));
 
 COMMENT ON COLUMN fix_attempts.augment_trace_id IS
-  'Wave E: Langfuse trace id for the firecrawl.search span used to augment this fix.';
+  'Langfuse trace id for the firecrawl.search span used to augment this fix.';
 COMMENT ON COLUMN fix_attempts.augment_sources IS
-  'Wave E: JSON array of {url,title,snippet} entries from Firecrawl injected into the LLM prompt.';
+  'JSON array of {url,title,snippet} entries from Firecrawl injected into the LLM prompt.';
 COMMENT ON COLUMN fix_attempts.augment_reason IS
-  'Wave E: why the augmentation fired (rag_sparse | low_judge_score | manual).';
+  'why the augmentation fired (rag_sparse | low_judge_score | manual).';

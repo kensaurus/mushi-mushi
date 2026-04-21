@@ -92,7 +92,7 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
   )
 }
 
-// Performance vs baseline strip. Wave J §3 — `Avg $ / eval` now reads real
+// Performance vs baseline strip. §3 — `Avg $ / eval` now reads real
 // cost data from llm_invocations.cost_usd via /v1/admin/prompt-lab. The
 // 3-cell layout lets ops see "did the candidate get more accurate AND
 // cheaper?" without leaving the diff.

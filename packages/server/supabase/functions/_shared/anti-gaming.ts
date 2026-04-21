@@ -4,13 +4,13 @@ export interface DeviceContext {
   fingerprint: string
   ipAddress?: string
   /**
-   * Wave E §3c: SDK-supplied SHA-256 hex of stable device characteristics.
+   * §3c: SDK-supplied SHA-256 hex of stable device characteristics.
    * When present we use this for the cross-account check because it
    * survives token rotation and IP changes.
    */
   fingerprintHash?: string
   /**
-   * Wave E §3c: optional reporter user identifier (e.g. authenticated
+   * §3c: optional reporter user identifier (e.g. authenticated
    * userId from the host app). Used to count distinct users per device.
    */
   reporterUserId?: string
@@ -44,7 +44,7 @@ export async function checkAntiGaming(
 }
 
 /**
- * Wave E §3c: detect the same physical device backing many distinct
+ * §3c: detect the same physical device backing many distinct
  * reporter accounts. Stronger signal than the legacy multi-account check
  * because the SDK fingerprint hash is independent of the reporter token
  * (which the gamer can rotate freely).

@@ -6,7 +6,7 @@
  * `sentry_seer_enabled = true` it fetches Seer-flagged issues, pulls the
  * autofix analysis, and persists into `reports.sentry_seer_analysis`.
  *
- * Wave E §3b: the parsing + writeback logic now lives in `_shared/seer.ts`
+ * §3b: the parsing + writeback logic now lives in `_shared/seer.ts`
  * so the new push-based webhook (`POST /v1/webhooks/sentry/seer`) can reuse
  * the same persistence code path.
  */
@@ -21,6 +21,8 @@ import {
   fetchSeerAnalysis,
   type SeerAnalysisPayload,
 } from '../_shared/seer.ts'
+import { mapWithConcurrency } from '../_shared/concurrency.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('sentry-seer-poll')
 
@@ -36,10 +38,11 @@ function getDb() {
   )
 }
 
-function authorized(req: Request): boolean {
-  const expected = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
-  const got = req.headers.get('Authorization') ?? ''
-  return Boolean(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) && got === expected
+// Wave S1 / D-14: delegate to shared helper so future auth-policy changes
+// (MUSHI_INTERNAL_CALLER_SECRET rotation, timing-safe compare, etc.) land
+// everywhere at once.
+function authorizationFailure(req: Request): Response | null {
+  return requireServiceRoleAuth(req)
 }
 
 async function readVaultSecret(
@@ -80,15 +83,19 @@ async function pollProject(
     since: settings.sentry_seer_last_polled_at,
   })
 
+  // Wave S3 (PERF): fetch Seer analyses in parallel (concurrency=5). Sentry
+  // rate-limits issue detail at 40 req/s; 5 in-flight × ~500ms gives us
+  // 10 req/s steady-state, well under the cap. Sequential fetches were
+  // measured at >9s per project on a 20-issue queue.
   let matched = 0
   let updated = 0
-  for (const issue of issues) {
+  const perIssue = await mapWithConcurrency(issues, 5, async (issue) => {
     const analysis = await fetchSeerAnalysis({
       token,
-      orgSlug: settings.sentry_org_slug,
+      orgSlug: settings.sentry_org_slug!,
       issueId: issue.id,
     })
-    if (!analysis) continue
+    if (!analysis) return { matched: 0, updated: 0 }
 
     const payload: SeerAnalysisPayload = {
       issueId: issue.id,
@@ -98,12 +105,13 @@ async function pollProject(
       fixSuggestion: analysis.fixSuggestion,
       fixabilityScore: issue.seerFixability?.fixabilityScore ?? null,
       fetchedAt: new Date().toISOString(),
-      source: 'poll',
+      source: 'poll' as const,
     }
-
-    const result = await applySeerAnalysis(db, settings.project_id, payload)
-    matched += result.matched
-    updated += result.updated
+    return applySeerAnalysis(db, settings.project_id, payload)
+  })
+  for (const r of perIssue) {
+    matched += r.matched
+    updated += r.updated
   }
 
   await db
@@ -117,9 +125,8 @@ async function pollProject(
 app.get('/sentry-seer-poll/health', (c) => c.json({ ok: true }))
 
 app.post('/sentry-seer-poll', async (c) => {
-  if (!authorized(c.req.raw)) {
-    return c.json({ error: 'unauthorized' }, 401)
-  }
+  const unauthorized = authorizationFailure(c.req.raw)
+  if (unauthorized) return unauthorized
 
   const db = getDb()
   const { data: rows, error } = await db
@@ -133,17 +140,18 @@ app.post('/sentry-seer-poll', async (c) => {
     return c.json({ ok: false, error: error.message }, 500)
   }
 
-  const summary: Array<{ projectId: string; matched: number; updated: number; skipped: string | null }> = []
-  for (const r of rows ?? []) {
+  // Wave S3 (PERF): poll up to 5 projects in parallel. Each project's
+  // pollProject already internally parallelises its issue fetches.
+  const summary = await mapWithConcurrency(rows ?? [], 5, async (r) => {
     try {
       const result = await pollProject(db, r)
-      summary.push({ projectId: r.project_id, ...result })
+      return { projectId: r.project_id, ...result }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       log.error('project poll failed', { projectId: r.project_id, err: msg })
-      summary.push({ projectId: r.project_id, matched: 0, updated: 0, skipped: `error:${msg.slice(0, 80)}` })
+      return { projectId: r.project_id, matched: 0, updated: 0, skipped: `error:${msg.slice(0, 80)}` }
     }
-  }
+  })
 
   return c.json({ ok: true, polled: summary.length, results: summary })
 })

@@ -1,5 +1,5 @@
 -- Migration: 20260418005400_library_modernizer
--- Purpose:   Wave E weekly cron: scrapes upstream release-notes for outdated
+-- Purpose: weekly cron: scrapes upstream release-notes for outdated
 --            top-level dependencies and files them as enhancement reports
 --            so they land in the same triage queue as user-reported bugs.
 --

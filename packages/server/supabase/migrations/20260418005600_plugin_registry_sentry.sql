@@ -1,5 +1,5 @@
 -- =============================================================================
--- Wave E §3e: Register `@mushi-mushi/plugin-sentry` in plugin_registry.
+-- §3e: Register `@mushi-mushi/plugin-sentry` in plugin_registry.
 --
 -- The plugin is the outbound complement to the inbound Sentry Seer
 -- integration (`sentry-seer-poll` + `/v1/webhooks/sentry/seer`):

@@ -1,5 +1,5 @@
 -- ============================================================
--- Wave C C9: Track which key source served each LLM invocation.
+-- C9: Track which key source served each LLM invocation.
 --
 -- Adds llm_invocations.key_source so customers can prove their BYOK
 -- credentials were actually used (billing reconciliation, SOC 2 evidence).
@@ -12,7 +12,7 @@ ALTER TABLE llm_invocations
     CHECK (key_source IN ('byok', 'env'));
 
 COMMENT ON COLUMN llm_invocations.key_source IS
-  'Wave C C9: ''byok'' = customer-supplied key, ''env'' = platform default key.';
+  '''byok'' = customer-supplied key, ''env'' = platform default key.';
 
 -- Convenience alias so byok.ts (which uses vault_get_secret) and storage.ts
 -- (which uses vault_lookup) share a single Vault resolution path.

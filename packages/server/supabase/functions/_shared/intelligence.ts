@@ -1,5 +1,5 @@
 // =============================================================================
-// V5.3 §2.16 Wave B B5 — bug intelligence reports + cross-customer benchmarks.
+// V5.3 §2.16 B5 — bug intelligence reports + cross-customer benchmarks.
 //
 // Pure(-ish) helpers reused by both the scheduled `intelligence-report` cron
 // and the on-demand admin endpoint. No Edge-only globals at module load so

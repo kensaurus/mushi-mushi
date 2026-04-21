@@ -88,7 +88,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
 
   // Surface fetch failures inline instead of silently rendering zeros — the
   // audit found this row claiming "0 critical · 0 high" when the endpoint
-  // 500'd, which is actively misleading. Audit Wave K bugfix.
+  // 500'd, which is actively misleading. .
   if (error) {
     return (
       <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2">

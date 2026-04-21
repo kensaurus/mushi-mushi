@@ -1,5 +1,5 @@
 /**
- * prompt-auto-tune — Wave E §4 weekly cron.
+ * prompt-auto-tune — §4 weekly cron.
  *
  * For each project with judge_enabled and at least N recent failed
  * evaluations, propose a candidate prompt that addresses the dominant

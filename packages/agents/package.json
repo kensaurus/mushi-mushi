@@ -16,6 +16,12 @@
     "@octokit/rest": "^21.0.0",
     "@supabase/supabase-js": "^2.49.0"
   },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": ">=1.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@modelcontextprotocol/sdk": { "optional": true }
+  },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
     "@types/node": "^22.0.0",

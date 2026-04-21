@@ -1,55 +1,90 @@
-# Dependencies
+# =============================================================================
+# Mushi Mushi — .gitignore
+# =============================================================================
+# Rule of thumb: if it is generated, machine-specific, or sensitive, it belongs
+# here. Secrets live in .env / .env.local / 1Password and MUST never be staged.
+
+# --- Dependencies ------------------------------------------------------------
 node_modules/
 .pnpm-store/
 
-# Build
+# --- Build output ------------------------------------------------------------
 dist/
+build/
+out/
 *.tsbuildinfo
 .next/
 
-# Turbo
+# --- Turbo / Vite / Rollup caches -------------------------------------------
 .turbo/
+.vite/
+.rollup.cache/
 
-# Environment
+# --- Environment files (NEVER commit) ---------------------------------------
+# Includes every common variant so a misnamed local file still stays out.
 .env
 .env.local
 .env.*.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
 apps/admin/.env
+apps/admin/.env.local
+packages/server/.env
+packages/server/.env.local
 
-# Supabase local state
+# --- Secrets / credential files ---------------------------------------------
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.keystore
+.npmrc.local
+.netrc
+secrets/
+**/credentials.json
+**/service-account*.json
+
+# --- Supabase local state ----------------------------------------------------
 **/supabase/.temp/
+**/supabase/.branches/
 
-# IDE
+# --- IDE / editor ------------------------------------------------------------
 .vscode/
 !.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# --- OS ----------------------------------------------------------------------
 .DS_Store
 Thumbs.db
 
-# Test / coverage
+# --- Test / coverage ---------------------------------------------------------
 coverage/
 .nyc_output/
 
-# Debug
+# --- Logs --------------------------------------------------------------------
 *.log
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Playwright
+# --- Playwright --------------------------------------------------------------
 .playwright-mcp/
 test-results/
 playwright-report/
 
-# Screenshots — never commit ad-hoc test screenshots into the repo root.
-# Real product screenshots belong in docs/screenshots/ and are explicitly
-# allow-listed below.
+# --- Screenshots --------------------------------------------------------------
+# Never commit ad-hoc test screenshots into the repo root. Real product
+# screenshots belong in docs/screenshots/ and are explicitly allow-listed.
 screenshots/
 !docs/screenshots/
 *.png
@@ -58,11 +93,12 @@ screenshots/
 !apps/admin/public/**/*.png
 !packages/**/assets/**/*.png
 
-# Windows shells sometimes leave behind a literal `nul` file when commands
-# redirect to NUL on the wrong shell. Always ignore it.
+# --- Windows shell artefacts -------------------------------------------------
+# PowerShell/cmd sometimes leave a literal `nul` file when commands redirect to
+# NUL on the wrong shell. Always ignore it.
 nul
 
-# Misc
+# --- Misc --------------------------------------------------------------------
 *.tgz
 .eslintcache
 .cache/
@@ -70,17 +106,21 @@ nul
 # Temporary edge-function payload bundles produced by scripts/build-edge-payload.mjs
 .tmp-deploy/
 
-# Archive holding-pens for ad-hoc audit screenshots (Wave I/J/K). Kept out of
-# git so they can't grow unbounded; the canonical product screenshots live in
+# Archive holding-pens for ad-hoc audit screenshots. Kept out of git so they
+# can't grow unbounded; the canonical product screenshots live in
 # docs/screenshots/ and the historical audit reports in docs/audit-* still
 # reference these paths but the rendered docs no longer require the assets.
 audit-after/
 audit-before/
-audit-after-wave-*/
+audit-after-*/
 
-# Sentry
+# --- Sentry ------------------------------------------------------------------
 .sentryclirc
 # Sourcemaps must never be served from the public S3 bucket. The Vite plugin
 # already deletes them after upload (apps/admin/vite.config.ts), this is
 # belt-and-suspenders so a stray local build can't accidentally commit one.
 apps/admin/dist/**/*.map
+
+# --- Git-filter-repo artefacts ----------------------------------------------
+.filter-repo-replacements.txt
+.git-rewrite/
