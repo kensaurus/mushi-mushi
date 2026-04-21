@@ -30,8 +30,68 @@ import {
   useNavigationType,
 } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
+import { makeFetchTransport, createTransport } from '@sentry/react'
+
+// Sentry's transport-related types (Transport, Envelope, BrowserTransportOptions,
+// TransportMakeRequestResponse) live inside @sentry/core and are NOT re-exported
+// from @sentry/react's public surface (verified against @sentry/react@10.49.0
+// and @sentry/browser@10.49.0). Rather than reach into an internal subpath
+// that could move between minor versions, derive the few we need from the
+// public function signatures.
+type BrowserTransportOptions = Parameters<typeof makeFetchTransport>[0]
+type Transport = ReturnType<typeof makeFetchTransport>
+type SendArg = Parameters<Transport['send']>[0]
+type SendResult = Awaited<ReturnType<Transport['send']>>
 
 const TOKEN_QUERY_RX = /([?&](?:api_key|apiKey|token|key|access_token|session)=)[^&]+/gi
+
+// ─── Self-disabling transport ───────────────────────────────────────────────
+//
+// Why: a rotated / disabled DSN returns 403 from the ingest endpoint forever.
+// With Sentry's default transport, every captured event triggers another POST
+// that fails the same way, polluting devtools, wasting battery, and making
+// the real app's network panel unreadable. The transport-level circuit
+// breaker trips after a small number of consecutive auth failures
+// (403 / 401) and short-circuits subsequent sends to a no-op until the page
+// reloads. Rate-limit (429) is handled separately by the SDK and must keep
+// flowing to the upstream rate-limit logic.
+const AUTH_FAIL_THRESHOLD = 3
+let consecutiveAuthFails = 0
+let transportDisabled = false
+
+function makeCircuitBreakingTransport(options: BrowserTransportOptions): Transport {
+  const upstream = makeFetchTransport(options)
+  // `createTransport` expects a `makeRequest(request) => Promise<Response>`
+  // function, not an envelope; the upstream transport's `.send(envelope)`
+  // wraps that internally. We just delegate to upstream.send so we observe
+  // the same response shape and bookkeeping the SDK uses.
+  return createTransport(options, async (_request): Promise<SendResult> => {
+    if (transportDisabled) {
+      return { statusCode: 200 } as SendResult
+    }
+    // The createTransport `makeRequest` arg is an envelope-shaped object
+    // that we forward verbatim through the underlying fetch transport's
+    // .send(). Type narrowing isn't possible without reaching into core's
+    // internals, so cast at the boundary. Network-level failures propagate
+    // unchanged so the SDK's own retry policy handles transient issues —
+    // we only trip the breaker on auth-level rejections (401/403).
+    const response = await upstream.send(_request as unknown as SendArg)
+    const status = response?.statusCode
+    if (status === 401 || status === 403) {
+      consecutiveAuthFails += 1
+      if (consecutiveAuthFails >= AUTH_FAIL_THRESHOLD) {
+        transportDisabled = true
+        console.warn(
+          `[mushi:sentry] Sentry transport disabled — DSN rejected ${consecutiveAuthFails} envelopes (HTTP ${status}). ` +
+            'Rotate VITE_SENTRY_DSN or unset it to silence this warning.',
+        )
+      }
+    } else if (status && status >= 200 && status < 300) {
+      consecutiveAuthFails = 0
+    }
+    return response as SendResult
+  })
+}
 
 export function initSentry(): void {
   const dsn = import.meta.env.VITE_SENTRY_DSN
@@ -45,6 +105,7 @@ export function initSentry(): void {
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
+    transport: makeCircuitBreakingTransport,
     integrations: [
       Sentry.reactRouterV7BrowserTracingIntegration({
         useEffect,

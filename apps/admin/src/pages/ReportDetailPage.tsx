@@ -29,6 +29,8 @@ import {
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
+import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
+import { useAdminMode } from '../lib/mode'
 import {
   ClassificationFields,
   ScreenshotHero,
@@ -125,6 +127,7 @@ interface ReportDetailViewProps {
 }
 
 function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailViewProps) {
+  const { isAdvanced } = useAdminMode()
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
   const commentCount = comments.length
@@ -155,6 +158,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
       />
 
       <ReportDetailHeader report={report} reporterShort={reporterShort} />
+
+      {!isAdvanced && (
+        <ReportPdcaStory report={report} dispatchState={dispatchState} />
+      )}
 
       <PdcaReceiptStrip
         report={report}

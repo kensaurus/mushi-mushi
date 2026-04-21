@@ -23,6 +23,14 @@ interface SetupNudgeProps {
   emptyDescription?: string
   /** Action shown in the "no data yet" path (e.g. a Refresh button). */
   emptyAction?: ReactNode
+  /** Optional hero illustration shown above the title — beginner-mode hint. */
+  emptyIcon?: ReactNode
+  /** Optional hero illustration shown when a setup step is blocking (used so
+   *  the nudge stays visually anchored even when the copy comes from the
+   *  setup-status registry). */
+  blockedIcon?: ReactNode
+  /** Optional inline learning hints surfaced under the description. */
+  emptyHints?: string[]
 }
 
 export function SetupNudge({
@@ -30,6 +38,9 @@ export function SetupNudge({
   emptyTitle,
   emptyDescription,
   emptyAction,
+  emptyIcon,
+  blockedIcon,
+  emptyHints,
 }: SetupNudgeProps) {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -39,6 +50,7 @@ export function SetupNudge({
   if (!setup.hasAnyProject) {
     return (
       <EmptyState
+        icon={blockedIcon ?? emptyIcon}
         title="Create your first project to get started"
         description="A project groups all bug reports from one application."
         action={
@@ -50,13 +62,12 @@ export function SetupNudge({
     )
   }
 
-  // Find the first incomplete step in the user's requested order so the CTA
-  // matches the most natural next action (e.g. "no key" before "no SDK").
   for (const id of requires) {
     const step = setup.getStep(id)
     if (!step || step.complete) continue
     return (
       <EmptyState
+        icon={blockedIcon ?? emptyIcon}
         title={step.label}
         description={step.description}
         action={
@@ -70,9 +81,11 @@ export function SetupNudge({
 
   return (
     <EmptyState
+      icon={emptyIcon}
       title={emptyTitle}
       description={emptyDescription}
       action={emptyAction}
+      hints={emptyHints}
     />
   )
 }

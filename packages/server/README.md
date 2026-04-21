@@ -85,7 +85,9 @@ All routes are served from the `api` function under `/v1/`:
 - `POST /v1/reports/batch` — Batch report submission (up to 10), same quota gate
 - `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console. Each returned row carries a `dedup_count` (number of reports sharing the same `report_group_id`) so the admin UI can collapse duplicates into a `+N similar` badge without an N+1 fetch
 - `GET /v1/admin/stats` — Dashboard statistics
-- `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, and a `cta` deep-link) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
+- `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, a `cta` deep-link, **and a 7-day `series: number[]` for sparkline rendering — Wave L**) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
+- `GET /v1/admin/reports/severity-stats` — 14-day severity rollup. **Wave L:** also returns a `byDay: Array<{ day, critical, high, medium, low, total }>` matrix so the FE can render per-tile sparklines without a second round-trip
+- `GET /v1/admin/query/history` — Returns `{ ok: true, history: [], degraded: 'schema_pending' }` instead of 500 when the `is_saved` column is missing (`pg_code='42703'`) so the Query page keeps rendering during partial schema deploys (Wave L)
 - `GET /v1/admin/judge/evaluations` — Hydrates each row with the underlying report's `summary`, `severity`, and `status` so judge UIs can show human-readable summaries instead of opaque `report_id` hashes
 - `GET /v1/admin/graph/*` — Knowledge graph queries
 - `POST /v1/admin/query` — Natural language data queries
@@ -100,6 +102,23 @@ All routes are served from the `api` function under `/v1/`:
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD (Wave D D1)
 - `GET /.well-known/agent-card` — A2A agent card (Wave C C5)
 - See `supabase/functions/api/index.ts` for the full route table
+
+## Error handling (Wave L)
+
+Every Postgres error returned to the admin API flows through one helper —
+`dbError(c, err)` in `supabase/functions/api/index.ts`. It:
+
+1. Logs to Sentry via `captureException` with `tags = { pg_code, route }` so
+   alert filters can split `42703` (undefined column, signals schema drift) from
+   `42501` (RLS denial), `23505` (unique violation), etc.
+2. Returns a canonical `c.json({ error: 'database_error', code: pg_code, ... }, 500)`
+   so the FE always knows the error shape regardless of which endpoint failed.
+
+It replaced ~25 inline `if (error) { console.error(); return c.json(...) }`
+sites that previously sidestepped Hono's `app.onError` and never reached
+Sentry. **If you add a new admin route, use `return dbError(c, error)` instead
+of building the 500 by hand** — otherwise the new route's errors will be
+invisible to the on-call dashboard.
 
 ## Stage 2 air-gap (Wave D — 2026-04-18)
 

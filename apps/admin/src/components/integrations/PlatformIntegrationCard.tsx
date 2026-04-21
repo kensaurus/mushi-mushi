@@ -5,10 +5,54 @@
  *          the page via callbacks.
  */
 
-import { Card, Btn, Badge, Input, RelativeTime } from '../ui'
+import { useEffect, useRef, useState } from 'react'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip } from '../ui'
 import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
 import { PLATFORM_STATUS_MAP, type HealthRow, type PlatformDef } from './types'
+
+/**
+ * Triggers a one-shot success-pulse signal when the latest probe transitions
+ * to `ok` (so the card border briefly glows green and the user's eye is
+ * pulled to the receipt). Returns a string class to drop on the wrapper.
+ *
+ * Implementation note: we key on the probe's `checked_at` timestamp so the
+ * pulse fires every time a fresh successful probe lands — not just on the
+ * first ok. Status flips from non-ok → ok also pulse, but a sustained run
+ * of ok probes refreshes the visual feedback so users hammering "Test"
+ * still see something happen each click.
+ */
+function useSuccessPulse(probe: HealthRow | undefined): string {
+  const [pulsing, setPulsing] = useState(false)
+  const lastSeenAt = useRef<string | null>(null)
+  // Track whether we've completed the initial baseline read so the very first
+  // render with an `ok` probe doesn't trigger a phantom celebration (the user
+  // just navigated here — nothing successful just happened in front of them).
+  // Subsequent renders with a different `checked_at` are real probe refreshes
+  // and SHOULD pulse, including repeated Test-button clicks.
+  const initialised = useRef(false)
+  useEffect(() => {
+    if (!probe) return
+    if (probe.status !== 'ok') {
+      lastSeenAt.current = probe.checked_at ?? null
+      initialised.current = true
+      return
+    }
+    const at = probe.checked_at ?? null
+    if (!initialised.current) {
+      lastSeenAt.current = at
+      initialised.current = true
+      return
+    }
+    if (at && at !== lastSeenAt.current) {
+      lastSeenAt.current = at
+      setPulsing(true)
+      const t = setTimeout(() => setPulsing(false), 650)
+      return () => clearTimeout(t)
+    }
+  }, [probe?.status, probe?.checked_at])
+  return pulsing ? 'text-ok motion-safe:animate-mushi-success-pulse rounded-md' : ''
+}
 
 interface Props {
   def: PlatformDef
@@ -43,9 +87,10 @@ export function PlatformIntegrationCard({
 }: Props) {
   const requiredOk = def.fields.filter((f) => f.required).every((f) => config[f.name] != null)
   const status: HealthRow['status'] = !requiredOk ? 'unknown' : (latestProbe?.status ?? 'unknown')
+  const pulseClass = useSuccessPulse(latestProbe)
 
   return (
-    <Card className="p-3">
+    <Card className={`p-3 ${pulseClass}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -67,10 +112,25 @@ export function PlatformIntegrationCard({
             </ul>
           )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {requiredOk && testing && (
+            <ResultChip tone="running">Testing…</ResultChip>
+          )}
+          {requiredOk && !testing && latestProbe && (
+            <ResultChip
+              tone={latestProbe.status === 'ok' ? 'success' : latestProbe.status === 'degraded' ? 'info' : 'error'}
+              at={latestProbe.checked_at}
+            >
+              {latestProbe.status === 'ok'
+                ? 'Connection OK'
+                : latestProbe.status === 'degraded'
+                  ? 'Degraded'
+                  : latestProbe.message ?? 'Failed'}
+            </ResultChip>
+          )}
           {requiredOk && (
-            <Btn variant="ghost" onClick={onTest} disabled={testing}>
-              {testing ? 'Testing…' : 'Test'}
+            <Btn variant="ghost" onClick={onTest} disabled={testing} loading={testing}>
+              {testing ? 'Testing' : 'Test'}
             </Btn>
           )}
           <Btn

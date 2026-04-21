@@ -3,6 +3,7 @@ import { apiFetch } from '../../lib/supabase'
 import { Card, Badge, Btn, RelativeTime, EmptyState } from '../ui'
 import { useToast } from '../../lib/toast'
 import { formatPct } from '../charts'
+import { ConfirmDialog, PromptDialog } from '../ConfirmDialog'
 import type { FineTuningJob } from './types'
 
 interface FineTuningJobsCardProps {
@@ -26,6 +27,10 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
   const toast = useToast()
   const [busy, setBusy] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+  const [askingStage, setAskingStage] = useState(false)
+  const [promoteTarget, setPromoteTarget] = useState<FineTuningJob | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<FineTuningJob | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<FineTuningJob | null>(null)
 
   async function withBusy<T>(id: string, fn: () => Promise<T>) {
     setBusy(id)
@@ -36,23 +41,14 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
     }
   }
 
-  async function createJob() {
+  async function commitCreateJob(stage: string) {
     setCreating(true)
-    const stage = window.prompt('Promote to which stage on success? (stage1 | stage2)', 'stage2')
-    if (!stage) {
-      setCreating(false)
-      return
-    }
-    if (stage !== 'stage1' && stage !== 'stage2') {
-      toast.push({ tone: 'error', message: 'Stage must be stage1 or stage2' })
-      setCreating(false)
-      return
-    }
     const res = await apiFetch<{ jobId: string }>('/v1/admin/fine-tuning', {
       method: 'POST',
       body: JSON.stringify({ promoteToStage: stage }),
     })
     setCreating(false)
+    setAskingStage(false)
     if (res.ok) {
       toast.push({ tone: 'success', message: 'Fine-tuning job created. Hit Export to gather samples.' })
       await onChange()
@@ -99,8 +95,10 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
     })
   }
 
-  async function promoteJob(job: FineTuningJob) {
-    if (!window.confirm(`Promote ${job.id.slice(0, 8)}… to ${job.promote_to_stage ?? 'configured stage'}? This swaps the live model.`)) return
+  async function commitPromote() {
+    if (!promoteTarget) return
+    const job = promoteTarget
+    setPromoteTarget(null)
     await withBusy(job.id, async () => {
       const res = await apiFetch<{ promotedAt: string; stage: string }>(
         `/v1/admin/fine-tuning/${job.id}/promote`,
@@ -115,9 +113,10 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
     })
   }
 
-  async function rejectJob(job: FineTuningJob) {
-    const reason = window.prompt('Reject reason (audit trail):', 'Did not beat baseline accuracy')
-    if (!reason) return
+  async function commitReject(reason: string) {
+    if (!rejectTarget) return
+    const job = rejectTarget
+    setRejectTarget(null)
     await withBusy(job.id, async () => {
       const res = await apiFetch(`/v1/admin/fine-tuning/${job.id}/reject`, {
         method: 'POST',
@@ -132,8 +131,10 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
     })
   }
 
-  async function deleteJob(job: FineTuningJob) {
-    if (!window.confirm(`Delete fine-tuning job ${job.id.slice(0, 8)}…? Removes the row only — uploaded export stays in storage.`)) return
+  async function commitDelete() {
+    if (!deleteTarget) return
+    const job = deleteTarget
+    setDeleteTarget(null)
     await withBusy(job.id, async () => {
       const res = await apiFetch(`/v1/admin/fine-tuning/${job.id}`, { method: 'DELETE' })
       if (res.ok) {
@@ -163,7 +164,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             Vendor-side fine-tunes for the rare case where prompts alone aren't enough. Workflow: <span className="font-mono">Create → Export → Validate → Promote</span>.
           </p>
         </div>
-        <Btn size="sm" onClick={createJob} disabled={creating}>
+        <Btn size="sm" onClick={() => setAskingStage(true)} disabled={creating}>
           {creating ? 'Creating…' : 'New job'}
         </Btn>
       </div>
@@ -233,16 +234,16 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
                         </Btn>
                       )}
                       {actions.canPromote && (
-                        <Btn size="sm" disabled={busy === job.id} onClick={() => promoteJob(job)}>
+                        <Btn size="sm" disabled={busy === job.id} onClick={() => setPromoteTarget(job)}>
                           Promote
                         </Btn>
                       )}
                       {actions.canReject && (
-                        <Btn size="sm" variant="ghost" disabled={busy === job.id} onClick={() => rejectJob(job)}>
+                        <Btn size="sm" variant="ghost" disabled={busy === job.id} onClick={() => setRejectTarget(job)}>
                           Reject
                         </Btn>
                       )}
-                      <Btn size="sm" variant="danger" disabled={busy === job.id} onClick={() => deleteJob(job)}>
+                      <Btn size="sm" variant="danger" disabled={busy === job.id} onClick={() => setDeleteTarget(job)}>
                         Delete
                       </Btn>
                     </td>
@@ -252,6 +253,58 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
             </tbody>
           </table>
         </div>
+      )}
+
+      {askingStage && (
+        <PromptDialog
+          title="New fine-tuning job"
+          body="Pick which stage this job should replace once it passes validation. Most operators promote to stage2 (the deeper classifier) since stage1 changes are usually faster handled in Prompt Lab."
+          label="Promote to stage (stage1 or stage2)"
+          defaultValue="stage2"
+          confirmLabel="Create job"
+          loading={creating}
+          validate={(v) => (v === 'stage1' || v === 'stage2' ? null : 'Type stage1 or stage2 exactly.')}
+          onConfirm={commitCreateJob}
+          onCancel={() => setAskingStage(false)}
+        />
+      )}
+
+      {promoteTarget && (
+        <ConfirmDialog
+          title={`Promote ${promoteTarget.id.slice(0, 8)}…?`}
+          body={`This swaps the live ${promoteTarget.promote_to_stage ?? 'configured'} model for the fine-tuned variant. Real classifications start using it within seconds. You can roll back by promoting another job.`}
+          confirmLabel="Promote to live"
+          tone="default"
+          loading={busy === promoteTarget.id}
+          onConfirm={commitPromote}
+          onCancel={() => setPromoteTarget(null)}
+        />
+      )}
+
+      {rejectTarget && (
+        <PromptDialog
+          title={`Reject ${rejectTarget.id.slice(0, 8)}…`}
+          body="Captured in the audit trail so future operators understand why this candidate didn't ship. Be specific."
+          label="Reject reason"
+          defaultValue="Did not beat baseline accuracy"
+          confirmLabel="Reject job"
+          loading={busy === rejectTarget.id}
+          validate={(v) => (v.length >= 4 ? null : 'Give a short reason (≥4 chars).')}
+          onConfirm={commitReject}
+          onCancel={() => setRejectTarget(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title={`Delete fine-tuning job ${deleteTarget.id.slice(0, 8)}…?`}
+          body="Removes the row from the registry only — any uploaded export file stays in storage. The live model is unaffected."
+          confirmLabel="Delete job"
+          tone="danger"
+          loading={busy === deleteTarget.id}
+          onConfirm={commitDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </Card>
   )
