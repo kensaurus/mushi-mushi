@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp-ci",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "GitHub Action entrypoint for running Mushi Mushi MCP tools in CI — trigger judge, dispatch fixes, gate merges on classification coverage.",
   "license": "MIT",
   "type": "module",
@@ -10,17 +10,33 @@
   "main": "./dist/index.js",
   "exports": {
     ".": {
-      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
     }
   },
-  "files": ["dist", "action.yml", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/mcp-ci"
   },
-  "keywords": ["mushi-mushi", "mcp", "github-action", "ci", "dispatch-fix"],
-  "publishConfig": { "access": "public" },
+  "keywords": [
+    "mushi-mushi",
+    "mcp",
+    "github-action",
+    "ci",
+    "dispatch-fix"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsup",
     "lint": "eslint src/",
