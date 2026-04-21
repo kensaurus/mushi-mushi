@@ -46,7 +46,7 @@ export function PromptEditorModal({ prompt, onChange, onClose, onSave, saving }:
         />
         <div className="flex justify-end gap-1.5">
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn onClick={onSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Btn>
+          <Btn onClick={onSave} disabled={saving} loading={saving}>Save</Btn>
         </div>
       </Card>
     </div>

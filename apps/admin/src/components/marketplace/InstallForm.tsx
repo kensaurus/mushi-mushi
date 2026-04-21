@@ -61,8 +61,8 @@ export function InstallForm({
         <Btn variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Btn>
-        <Btn size="sm" onClick={onSubmit} disabled={installing}>
-          {installing ? 'Installing…' : 'Install'}
+        <Btn size="sm" onClick={onSubmit} disabled={installing} loading={installing}>
+          Install
         </Btn>
       </div>
     </Section>

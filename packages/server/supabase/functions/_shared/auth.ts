@@ -7,6 +7,66 @@ export interface ProjectContext {
 }
 
 /**
+ * Gate an Edge Function handler to trusted internal callers.
+ *
+ * Why this exists: Supabase Edge Functions with `verify_jwt = false` are
+ * publicly reachable by default. Functions like `fast-filter`,
+ * `classify-report`, and `fix-worker` are meant for *internal* server-to-server
+ * calls (from the `api` function and cron jobs) but used to have no auth
+ * check of their own — making it trivial to burn LLM budget or trigger
+ * fix-worker PR creation from outside.
+ *
+ * Accepted credentials (either one is sufficient):
+ *   1. `MUSHI_INTERNAL_CALLER_SECRET` — a non-reserved shared secret we
+ *      control, used by Postgres cron jobs (pg_net) that can't read the
+ *      runtime-injected `SUPABASE_SERVICE_ROLE_KEY`. The Supabase CLI
+ *      refuses to set secrets whose name starts with `SUPABASE_`, so
+ *      cron can never know the exact value of the auto-injected key.
+ *      A dedicated shared secret sidesteps that constraint entirely.
+ *   2. `SUPABASE_SERVICE_ROLE_KEY` — still accepted for callers that run
+ *      *inside* the edge runtime (e.g. `api` calling `fix-worker`), where
+ *      the env var is auto-injected and guaranteed to match.
+ *
+ * The check uses constant-time string equality on stable header values and
+ * returns a generic 401 so scanners can't distinguish "env missing" from
+ * "token mismatched".
+ *
+ * @returns null when authorized; Response (401) when not — caller returns it.
+ */
+export function requireServiceRoleAuth(req: Request): Response | null {
+  const internalSecret = Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!internalSecret && !serviceRoleKey) {
+    return new Response(
+      JSON.stringify({ error: { code: 'SERVER_MISCONFIGURED', message: 'No internal auth configured' } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const header = req.headers.get('Authorization') ?? ''
+  const token = header.startsWith('Bearer ') ? header.slice(7) : header
+  if (!token) {
+    return new Response(
+      JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const matches =
+    (internalSecret !== undefined && token === internalSecret) ||
+    (serviceRoleKey !== undefined && token === serviceRoleKey)
+
+  if (!matches) {
+    return new Response(
+      JSON.stringify({ error: { code: 'UNAUTHORIZED', message: 'Requires valid internal caller token' } }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+  return null
+}
+
+/**
  * Middleware: validate API key from X-Mushi-Api-Key header.
  * Sets projectId and projectName on the Hono context.
  */

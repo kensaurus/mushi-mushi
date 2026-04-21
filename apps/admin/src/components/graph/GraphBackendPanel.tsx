@@ -59,8 +59,8 @@ export function GraphBackendPanel() {
             Apache AGE drift audit. Only relevant if you've enabled the AGE dual-write path.
           </p>
         </div>
-        <Btn size="sm" onClick={snapshot} disabled={snapshotting || !data?.ageAvailable}>
-          {snapshotting ? 'Snapshotting…' : 'Snapshot drift'}
+        <Btn size="sm" onClick={snapshot} disabled={snapshotting || !data?.ageAvailable} loading={snapshotting}>
+          Snapshot drift
         </Btn>
       </div>
 

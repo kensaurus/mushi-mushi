@@ -111,8 +111,8 @@ export function GeneralPanel() {
       </Section>
 
       <div className="flex items-center gap-3">
-        <Btn onClick={save} disabled={saving || !draft}>
-          {saving ? 'Saving…' : draft ? 'Save changes' : 'No changes'}
+        <Btn onClick={save} disabled={saving || !draft} loading={saving}>
+          {draft ? 'Save changes' : 'No changes'}
         </Btn>
         {draft && (
           <Btn variant="ghost" onClick={() => setDraft(null)}>Discard</Btn>

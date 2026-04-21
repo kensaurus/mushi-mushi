@@ -177,8 +177,8 @@ export function PlatformIntegrationCard({
             </div>
           ))}
           <div className="flex items-center gap-2 pt-1">
-            <Btn onClick={onSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
+            <Btn onClick={onSave} disabled={saving} loading={saving}>
+              Save
             </Btn>
             <Btn variant="ghost" onClick={onCancelEdit}>Cancel</Btn>
           </div>

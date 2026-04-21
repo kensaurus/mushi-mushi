@@ -342,8 +342,13 @@ function ProjectBillingCard({
             </Btn>
           )}
           {project.customer?.stripe_customer_id && (
-            <Btn variant="ghost" onClick={onManage} disabled={actioning === `portal:${project.project_id}`}>
-              {actioning === `portal:${project.project_id}` ? 'Opening…' : 'Manage'}
+            <Btn
+              variant="ghost"
+              onClick={onManage}
+              disabled={actioning === `portal:${project.project_id}`}
+              loading={actioning === `portal:${project.project_id}`}
+            >
+              Manage
             </Btn>
           )}
         </div>
@@ -413,8 +418,9 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
               className="mt-2 w-full"
               onClick={() => onPick(p.id)}
               disabled={busy}
+              loading={busy}
             >
-              {busy ? 'Opening Stripe…' : `Select ${p.display_name}`}
+              {`Select ${p.display_name}`}
             </Btn>
           </article>
         ))}
@@ -827,8 +833,13 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
         <p className="text-2xs text-fg-faint">
           Sent to <span className="font-mono">{supportEmail}</span>. Don't include passwords or API keys.
         </p>
-        <Btn type="submit" size="sm" disabled={submitting || subject.length < 3 || body.length < 10}>
-          {submitting ? 'Sending…' : 'Send ticket'}
+        <Btn
+          type="submit"
+          size="sm"
+          disabled={submitting || subject.length < 3 || body.length < 10}
+          loading={submitting}
+        >
+          Send ticket
         </Btn>
       </div>
     </form>

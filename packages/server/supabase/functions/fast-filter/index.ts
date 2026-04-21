@@ -16,6 +16,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import { logLlmInvocation } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -108,6 +109,13 @@ Rules:
 
 Deno.serve(withSentry('fast-filter', async (req) => {
   try {
+    // SEC-1: `verify_jwt = false` in config.toml for internal pipeline calls
+    // (api -> fast-filter -> classify-report). Without this guard the
+    // endpoint is publicly invokable — any caller knowing a (reportId,
+    // projectId) could burn Anthropic budget. We require the service-role
+    // key that `api` already passes when dispatching.
+    const unauthorized = requireServiceRoleAuth(req)
+    if (unauthorized) return unauthorized
     const { reportId, projectId } = await req.json()
     if (!reportId || !projectId) {
       return new Response(JSON.stringify({ error: 'reportId and projectId required' }), { status: 400 })

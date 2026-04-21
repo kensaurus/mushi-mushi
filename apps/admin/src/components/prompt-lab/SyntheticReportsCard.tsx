@@ -57,8 +57,8 @@ export function SyntheticReportsCard() {
               {passed}/{scored} matched
             </span>
           )}
-          <Btn size="sm" onClick={() => setAskingCount(true)} disabled={generating}>
-            {generating ? 'Generating…' : 'Generate'}
+          <Btn size="sm" onClick={() => setAskingCount(true)} disabled={generating} loading={generating}>
+            Generate
           </Btn>
         </div>
       </div>

@@ -142,8 +142,8 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
         <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">
           {cloud ? 'Mushi Mushi Cloud' : 'Connection Health'}
         </h3>
-        <Btn variant="ghost" size="sm" onClick={runChecks} disabled={running}>
-          {running ? 'Checking…' : anyPending ? 'Run diagnostics' : 'Re-check'}
+        <Btn variant="ghost" size="sm" onClick={runChecks} disabled={running} loading={running}>
+          {anyPending ? 'Run diagnostics' : 'Re-check'}
         </Btn>
       </div>
 
