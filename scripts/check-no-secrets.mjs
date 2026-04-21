@@ -22,7 +22,7 @@
  *   2 — invoked incorrectly (unknown flag, git command failed)
  */
 import { execSync } from 'node:child_process'
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { relative } from 'node:path'
 
 // Patterns: [name, regex]. Regexes MUST be anchored so we never scan the
@@ -76,25 +76,31 @@ function listAllTracked() {
 }
 
 function scanFile(path) {
+  // Read the file first, then validate size — checking size via stat() and
+  // then reading is a TOCTOU race (CodeQL js/io/file-system-race-condition).
+  // Going buffer-first means we inspect the exact bytes we'll scan.
+  let buf
   try {
-    const st = statSync(path)
-    if (!st.isFile()) return []
-    if (st.size > MAX_FILE_SIZE_BYTES) {
-      return [{ path, line: 0, pattern: 'FILE_TOO_LARGE', snippet: `${st.size} bytes` }]
-    }
+    buf = readFileSync(path)
   } catch {
     return []
   }
-  let text
-  try {
-    text = readFileSync(path, 'utf8')
-  } catch {
-    return []
+  if (buf.length > MAX_FILE_SIZE_BYTES) {
+    return [{ path, line: 0, pattern: 'FILE_TOO_LARGE', snippet: `${buf.length} bytes` }]
   }
+  const text = buf.toString('utf8')
   const hits = []
   const lines = text.split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
+    // Inline ignore: either a trailing `check-no-secrets: ignore-line` on the
+    // same line, or `check-no-secrets: ignore-next-line` on the line above
+    // (useful when the line itself is a long literal we cannot append to).
+    // Used for known-safe public values such as Supabase anon keys, which
+    // are intentionally client-exposed and protected server-side by RLS.
+    const prev = i > 0 ? lines[i - 1] : ''
+    if (line.includes('check-no-secrets: ignore-line')) continue
+    if (prev.includes('check-no-secrets: ignore-next-line')) continue
     for (const [name, rx] of PATTERNS) {
       if (rx.test(line)) {
         hits.push({
