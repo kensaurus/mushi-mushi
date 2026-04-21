@@ -47,7 +47,7 @@
  *     multi-turn lands in a future wave.
  */
 
-import { generateObject } from 'npm:ai@4'
+import { generateObject, NoObjectGeneratedError } from 'npm:ai@4'
 import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
 import { createOpenAI } from 'npm:@ai-sdk/openai@1'
 import { z } from 'npm:zod@3'
@@ -286,9 +286,16 @@ Deno.serve(withSentry('fix-worker', async (req) => {
       if (anthropicResolved) {
         usedModel = DEFAULT_ANTHROPIC_MODEL
         const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
+        // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): pin temperature to 0 so
+        // the structured tool-call output is deterministic. Without it, the
+        // `files[].contents` string would occasionally break the schema's
+        // min/max constraints (e.g. a summary under 10 chars) and throw
+        // AI_NoObjectGeneratedError with no retry path. maxTokens was
+        // already sufficient; temperature was the missing knob.
         const { object, usage } = await generateObject({
           model: anthropic(usedModel),
           schema: fixSchema,
+          temperature: 0,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userPrompt },
@@ -314,6 +321,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
         const { object, usage } = await generateObject({
           model: openai(usedModel),
           schema: fixSchema,
+          temperature: 0,
           system: SYSTEM_PROMPT,
           prompt: userPrompt,
           maxTokens: 8_000,
@@ -323,6 +331,25 @@ Deno.serve(withSentry('fix-worker', async (req) => {
         outputTokens = usage?.completionTokens ?? 0
       }
     } catch (llmErr) {
+      // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): preserve diagnostic detail
+      // for NoObjectGeneratedError — otherwise the wrapping Error below loses
+      // `.text` (the raw model output) and `.cause.issues` (the Zod failures)
+      // and the operator sees only "LLM call failed: AI_NoObjectGeneratedError"
+      // with nothing to act on. Log structured fields to Sentry before
+      // re-throwing so the first recurrence is already actionable.
+      if (NoObjectGeneratedError.isInstance(llmErr)) {
+        const cause = llmErr.cause as { issues?: Array<{ path: (string|number)[]; message: string; code?: string }> } | undefined
+        log.error('Fix worker structured-output schema violation', {
+          dispatchId: dispatch.id,
+          model: usedModel,
+          modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
+          zodIssues: cause?.issues?.slice(0, 5).map(i => ({
+            path: i.path.join('.'),
+            code: i.code,
+            message: i.message,
+          })) ?? null,
+        })
+      }
       llmSpan.end({ error: String(llmErr).slice(0, 500) })
       throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`)
     }
