@@ -13,13 +13,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn, Card, Input, PageHelp, Loading, ErrorAlert } from '../components/ui'
+import { Btn, Card, Input, PageHelp, ErrorAlert } from '../components/ui'
+import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
+import { usePageCopy } from '../lib/copy'
+import { restartFirstRunTour } from '../components/FirstRunTour'
 
 interface ApiKey {
   key: string
@@ -69,6 +72,7 @@ export function OnboardingPage() {
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
+  const copy = usePageCopy('/onboarding')
 
   const [projectName, setProjectName] = useState('')
   const [creating, setCreating] = useState(false)
@@ -99,7 +103,7 @@ export function OnboardingPage() {
     }
   }, [setup.loading, project, apiKey, testStatus, navigate])
 
-  if (setup.loading) return <Loading text="Loading setup status…" />
+  if (setup.loading) return <OnboardingSkeleton />
   if (setup.error) return <ErrorAlert message={setup.error} onRetry={setup.reload} />
 
   async function createProject() {
@@ -191,14 +195,14 @@ export function OnboardingPage() {
       )}
 
       <PageHelp
-        title="About this wizard"
-        whatIsIt="A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices."
-        useCases={[
+        title={copy?.help?.title ?? 'About this wizard'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
+        useCases={copy?.help?.useCases ?? [
           'Create the project that will receive bug reports from your app',
           'Mint and copy the API key that authenticates SDK requests',
           'Confirm the ingest pipeline is reachable before shipping any code',
         ]}
-        howToUse="Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings."
+        howToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings.'}
       />
 
       {project && <SetupChecklist project={project} mode="wizard" />}
@@ -338,12 +342,22 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      <p className="text-center">
+      <p className="text-center flex items-center justify-center gap-3">
         <button
           onClick={() => navigate('/')}
           className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
         >
           Skip setup — go to dashboard
+        </button>
+        <span className="text-2xs text-fg-faint" aria-hidden="true">·</span>
+        <button
+          onClick={() => {
+            restartFirstRunTour()
+            navigate('/')
+          }}
+          className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
+        >
+          Restart tour
         </button>
       </p>
     </div>
@@ -356,7 +370,13 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
       <div className="bg-surface-raised border border-ok/30 rounded-sm px-3 py-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
-          <button onClick={onCopy} className="text-2xs text-brand hover:text-brand-hover">
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label={copied ? 'API key copied' : 'Copy API key to clipboard'}
+            className="inline-flex items-center gap-1 text-2xs font-medium text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors motion-safe:active:scale-[0.97]"
+          >
+            <span aria-hidden="true">{copied ? '✓' : '⎘'}</span>
             {copied ? 'Copied!' : 'Copy'}
           </button>
         </div>

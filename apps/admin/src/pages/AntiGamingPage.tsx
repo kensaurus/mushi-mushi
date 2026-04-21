@@ -24,6 +24,8 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile, type KpiDelta } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
+import { PromptDialog } from '../components/ConfirmDialog'
+import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
 
 interface ReporterDevice {
@@ -121,6 +123,7 @@ export function AntiGamingPage() {
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [flagTarget, setFlagTarget] = useState<string | null>(null)
   const [aggregateEvents, setAggregateEvents] = useState(true)
   const [expandedEventGroup, setExpandedEventGroup] = useState<string | null>(null)
 
@@ -133,8 +136,14 @@ export function AntiGamingPage() {
 
   const allDevices = devicesQuery.data?.devices ?? []
   const events = eventsQuery.data?.events ?? []
-  const loading = devicesQuery.loading || eventsQuery.loading
-  const error = devicesQuery.error
+  // Merge both queries' loading + error into one decision so we never render
+  // half a page when one feed fails (Wave P recovery UX).
+  const merged = useMergedErrors([
+    { ...devicesQuery, label: 'devices' },
+    { ...eventsQuery, label: 'audit events' },
+  ])
+  const loading = merged.loading
+  const error = merged.error
 
   const reloadAll = useCallback(() => {
     devicesQuery.reload()
@@ -186,10 +195,15 @@ export function AntiGamingPage() {
     }
   }
 
-  async function flag(deviceId: string) {
-    const reason = window.prompt('Why are you flagging this device?', 'Suspicious activity confirmed')?.trim()
-    if (!reason) return
+  function flag(deviceId: string) {
+    setFlagTarget(deviceId)
+  }
+
+  async function commitFlag(reason: string) {
+    if (!flagTarget) return
+    const deviceId = flagTarget
     setBusy(deviceId)
+    setFlagTarget(null)
     try {
       const res = await apiFetch(`/v1/admin/anti-gaming/devices/${deviceId}/flag`, {
         method: 'POST',
@@ -232,20 +246,31 @@ export function AntiGamingPage() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiTile label="Tracked devices" value={stats.total} delta={deltas.tracked} />
+        <KpiTile
+          label="Tracked devices"
+          value={stats.total}
+          delta={deltas.tracked}
+          meaning="Distinct device fingerprints the SDK has seen submitting reports. A growing number means broader reach; a flat one means the SDK isn't installed widely."
+        />
         <KpiTile
           label="Flagged"
           value={stats.flagged}
           accent={stats.flagged > 0 ? 'danger' : undefined}
           delta={deltas.flagged}
+          meaning="Devices our heuristics or you have marked as abusive. Their reports still ingest but won't dispatch fixes automatically."
         />
         <KpiTile
           label="Cross-account"
           value={stats.crossAccount}
           accent={stats.crossAccount > 0 ? 'warn' : undefined}
           delta={deltas.crossAccount}
+          meaning="Devices that have submitted reports under more than one reporter token in the same window. A common abuse signal — but also fires for shared NAT."
         />
-        <KpiTile label="Total reports" value={stats.totalReports} />
+        <KpiTile
+          label="Total reports"
+          value={stats.totalReports}
+          meaning="Cumulative reports ingested from any tracked device. Compare against the dashboard's 14d intake to see if abuse is inflating volume."
+        />
       </div>
 
       <section>
@@ -264,7 +289,10 @@ export function AntiGamingPage() {
         {loading ? (
           <TableSkeleton rows={6} columns={4} showFilters={false} label="Loading devices" />
         ) : error ? (
-          <ErrorAlert message={`Failed to load devices: ${error}`} onRetry={devicesQuery.reload} />
+          <ErrorAlert
+            message={`Failed to load ${merged.failedLabel ?? 'data'}: ${error}`}
+            onRetry={merged.retry}
+          />
         ) : devices.length === 0 ? (
           search ? (
             <EmptyState title="No devices match this search" description="Try a different fingerprint, token, or IP fragment." />
@@ -465,6 +493,20 @@ export function AntiGamingPage() {
           </div>
         )}
       </section>
+
+      {flagTarget && (
+        <PromptDialog
+          title="Flag this device?"
+          body="Captured in the audit trail for compliance + future reviewers. Flagged devices stop earning rewards immediately."
+          label="Reason"
+          defaultValue="Suspicious activity confirmed"
+          confirmLabel="Flag device"
+          loading={busy === flagTarget}
+          validate={(v) => (v.length >= 4 ? null : 'Give a short reason (≥4 chars).')}
+          onConfirm={commitFlag}
+          onCancel={() => setFlagTarget(null)}
+        />
+      )}
     </div>
   )
 }

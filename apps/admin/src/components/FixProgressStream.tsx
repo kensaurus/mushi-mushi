@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
+import { Skeleton } from './ui'
 import type { DispatchState } from '../lib/dispatchFix'
 
 interface FixAttempt {
@@ -95,13 +96,33 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
   }, [reportId, dispatchStatus])
 
   const stage = dispatchState.status
-  // Hide entirely if there's nothing to show — keeps the report page clean
-  // for reports that haven't been dispatched and have no historic attempt.
-  if (loading) return null
+  // Wave Q: while we fetch the historic attempt, show a layout-shaped
+  // placeholder *only* if the live dispatch is in flight — the UI then
+  // visibly reserves the row instead of silently popping in once the
+  // network round-trip completes. Pre-dispatch reports stay clean.
+  const isInFlightStage = stage === 'queueing' || stage === 'queued' || stage === 'running'
+  if (loading) {
+    if (!isInFlightStage) return null
+    return (
+      <div
+        role="status"
+        aria-busy="true"
+        aria-label="Loading fix progress"
+        className="rounded-md border border-edge-subtle bg-surface-raised/40 px-3 py-2.5 mb-3 space-y-2"
+      >
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-20 rounded" />
+          <Skeleton className="h-3 w-24" />
+        </div>
+        <Skeleton className="h-3 w-full" />
+        <Skeleton className="h-3 w-2/3" />
+      </div>
+    )
+  }
   if (stage === 'idle' && !latest) return null
 
   const traceUrl = platform.traceUrl(latest?.langfuse_trace_id)
-  const isInFlight = stage === 'queueing' || stage === 'queued' || stage === 'running'
+  const isInFlight = isInFlightStage
   const tokenStr = totalTokens(latest)
 
   return (

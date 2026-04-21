@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { useMergedErrors } from '../lib/useMergedErrors'
 import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { useToast } from '../lib/toast'
@@ -72,13 +73,14 @@ export function CompliancePage() {
   const residency = residencyQuery.data?.projects ?? []
   const currentRegion = residencyQuery.data?.currentRegion ?? 'us'
 
-  const loading =
-    policiesQuery.loading ||
-    dsarsQuery.loading ||
-    evidenceQuery.loading ||
-    residencyQuery.loading
-  const error =
-    policiesQuery.error ?? dsarsQuery.error ?? evidenceQuery.error ?? residencyQuery.error
+  const merged = useMergedErrors([
+    { ...policiesQuery, label: 'retention policies' },
+    { ...dsarsQuery, label: 'DSAR queue' },
+    { ...evidenceQuery, label: 'evidence vault' },
+    { ...residencyQuery, label: 'residency map' },
+  ])
+  const loading = merged.loading
+  const error = merged.error
   const reloadAll = useCallback(() => {
     policiesQuery.reload()
     dsarsQuery.reload()
@@ -226,7 +228,7 @@ export function CompliancePage() {
       />
 
       {loading ? <PanelSkeleton rows={5} label="Loading compliance data" /> : error ? (
-        <ErrorAlert message={`Failed to load compliance data: ${error}`} onRetry={reloadAll} />
+        <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'compliance data'}: ${error}`} onRetry={merged.retry} />
       ) : (
         <>
           <Card className="p-3">

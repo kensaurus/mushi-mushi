@@ -28,7 +28,7 @@ export function PromptDiffModal({ prompt, parent, onClose }: PromptDiffModalProp
           </h3>
           <button
             type="button"
-            className="text-fg-muted hover:text-fg text-lg leading-none"
+            className="text-fg-muted hover:text-fg text-lg leading-none w-6 h-6 flex items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
             onClick={onClose}
             aria-label="Close"
           >

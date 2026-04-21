@@ -3,6 +3,13 @@
  * PURPOSE: Tiny toast system. Every mutation site uses this to surface
  *          success/error feedback. Replaces silent apiFetch failures across
  *          Projects, SSO, Storage, DLQ, Fine-Tuning, etc.
+ *
+ *          Wave L hardening:
+ *           - Pause auto-dismiss on hover/focus (so the user can read it)
+ *           - Optional `action` slot for "Undo" / "View report" CTAs
+ *           - Stack cap (3) — oldest auto-dismisses if a 4th arrives
+ *           - `focus-visible` ring + larger hit-target on dismiss
+ *           - Dismiss = real button (not a glyph) for screen readers
  */
 
 import {
@@ -21,17 +28,28 @@ export type ToastTone = 'success' | 'error' | 'info' | 'warn'
 // say `tone: 'warning'` keep working alongside the canonical names.
 type ToastInputTone = ToastTone | 'warning'
 
+interface ToastAction {
+  /** Visible button label (e.g. "Undo", "View report"). */
+  label: string
+  onClick: () => void
+}
+
 interface ToastItem {
   id: string
   tone: ToastTone
   title: string
   description?: string
   duration: number
+  action?: ToastAction
   /** When true, the toast is animating out and will be unmounted shortly. */
   closing?: boolean
+  /** When true, the auto-dismiss countdown is paused (hover/focus). The
+   *  drain animation pauses with it so the user sees how long they have. */
+  paused?: boolean
 }
 
 const EXIT_ANIMATION_MS = 140
+const STACK_LIMIT = 3
 
 // `message` is accepted as an alias for `title` because most call sites in
 // the admin console reach for the more colloquial property name. We map it
@@ -42,14 +60,15 @@ type ToastInput = {
   message?: string
   description?: string
   duration?: number
+  action?: ToastAction
 }
 
 interface ToastContextValue {
   push: (toast: ToastInput) => void
-  success: (title: string, description?: string) => void
-  error: (title: string, description?: string) => void
-  info: (title: string, description?: string) => void
-  warn: (title: string, description?: string) => void
+  success: (title: string, description?: string, action?: ToastAction) => void
+  error: (title: string, description?: string, action?: ToastAction) => void
+  info: (title: string, description?: string, action?: ToastAction) => void
+  warn: (title: string, description?: string, action?: ToastAction) => void
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null)
@@ -72,51 +91,98 @@ let counter = 0
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([])
-  const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  // We keep two parallel maps:
+  //  - `dismissTimers`  → the auto-dismiss countdown (cancelled/restarted on hover)
+  //  - `exitTimers`     → the unmount-after-animation timer (never paused)
+  // and one `remaining` map that tracks how much of the auto-dismiss budget
+  // is left, so a 2-second hover doesn't reset the toast back to its full
+  // duration when the user moves the mouse away.
+  const dismissTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const exitTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const remaining = useRef<Map<string, { startedAt: number; ms: number }>>(new Map())
 
   const dismiss = useCallback((id: string) => {
-    const timer = timers.current.get(id)
-    if (timer) {
-      clearTimeout(timer)
-      timers.current.delete(id)
+    const dt = dismissTimers.current.get(id)
+    if (dt) {
+      clearTimeout(dt)
+      dismissTimers.current.delete(id)
     }
-    // If a previous dismiss already scheduled the unmount, leave it alone —
-    // re-entering would leak the original timer and double-fire setToasts.
-    const exitKey = `${id}-exit`
-    if (timers.current.has(exitKey)) return
-    // Mark as closing first so the exit animation can play. Schedule the
-    // actual unmount after the keyframe completes; if the user pushes a new
-    // toast in that window, React's keyed reconciliation handles it cleanly.
+    remaining.current.delete(id)
+    if (exitTimers.current.has(id)) return
     setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, closing: true } : t)))
     const exitTimer = setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id))
-      timers.current.delete(exitKey)
+      exitTimers.current.delete(id)
     }, EXIT_ANIMATION_MS)
-    timers.current.set(exitKey, exitTimer)
+    exitTimers.current.set(id, exitTimer)
   }, [])
 
+  const scheduleDismiss = useCallback((id: string, ms: number) => {
+    const existing = dismissTimers.current.get(id)
+    if (existing) clearTimeout(existing)
+    remaining.current.set(id, { startedAt: Date.now(), ms })
+    const timer = setTimeout(() => dismiss(id), ms)
+    dismissTimers.current.set(id, timer)
+  }, [dismiss])
+
+  const pauseDismiss = useCallback((id: string) => {
+    const t = dismissTimers.current.get(id)
+    if (!t) return
+    clearTimeout(t)
+    dismissTimers.current.delete(id)
+    const tracker = remaining.current.get(id)
+    if (!tracker) return
+    const elapsed = Date.now() - tracker.startedAt
+    const left = Math.max(800, tracker.ms - elapsed)
+    remaining.current.set(id, { startedAt: 0, ms: left })
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, paused: true } : t)))
+  }, [])
+
+  const resumeDismiss = useCallback((id: string) => {
+    const tracker = remaining.current.get(id)
+    if (!tracker) return
+    if (dismissTimers.current.has(id)) return
+    scheduleDismiss(id, tracker.ms)
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, paused: false } : t)))
+  }, [scheduleDismiss])
+
   const push = useCallback<ToastContextValue['push']>(
-    ({ tone, title, message, description, duration }) => {
+    ({ tone, title, message, description, duration, action }) => {
       const id = `t${Date.now()}-${counter++}`
       const normalisedTone: ToastTone = tone === 'warning' ? 'warn' : tone
       const dur = duration ?? (normalisedTone === 'error' ? 6000 : 3500)
       const finalTitle = title ?? message ?? ''
       if (!finalTitle) return
-      setToasts((prev) => [
-        ...prev,
-        { id, tone: normalisedTone, title: finalTitle, description, duration: dur },
-      ])
-      const timer = setTimeout(() => dismiss(id), dur)
-      timers.current.set(id, timer)
+      setToasts((prev) => {
+        const next = [
+          ...prev,
+          { id, tone: normalisedTone, title: finalTitle, description, duration: dur, action },
+        ]
+        // Cap the stack: when over the limit, dismiss the oldest non-closing
+        // toast immediately so the new one has room. We don't dismiss closing
+        // ones (already animating out) to avoid double-fire.
+        if (next.length > STACK_LIMIT) {
+          const overflow = next.find((t) => !t.closing)
+          if (overflow) {
+            queueMicrotask(() => dismiss(overflow.id))
+          }
+        }
+        return next
+      })
+      scheduleDismiss(id, dur)
     },
-    [dismiss],
+    [scheduleDismiss, dismiss],
   )
 
   useEffect(() => {
-    const map = timers.current
+    const dt = dismissTimers.current
+    const et = exitTimers.current
     return () => {
-      for (const t of map.values()) clearTimeout(t)
-      map.clear()
+      for (const t of dt.values()) clearTimeout(t)
+      for (const t of et.values()) clearTimeout(t)
+      dt.clear()
+      et.clear()
+      remaining.current.clear()
     }
   }, [])
 
@@ -127,10 +193,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ToastContextValue>(
     () => ({
       push,
-      success: (title, description) => push({ tone: 'success', title, description }),
-      error: (title, description) => push({ tone: 'error', title, description }),
-      info: (title, description) => push({ tone: 'info', title, description }),
-      warn: (title, description) => push({ tone: 'warn', title, description }),
+      success: (title, description, action) => push({ tone: 'success', title, description, action }),
+      error: (title, description, action) => push({ tone: 'error', title, description, action }),
+      info: (title, description, action) => push({ tone: 'info', title, description, action }),
+      warn: (title, description, action) => push({ tone: 'warn', title, description, action }),
     }),
     [push],
   )
@@ -146,8 +212,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            role="status"
-            className={`pointer-events-auto rounded-md border ${TONE_CLS[t.tone]} bg-surface-raised shadow-raised p-3 flex items-start gap-2 ${t.closing ? 'motion-safe:animate-mushi-toast-out' : 'motion-safe:animate-mushi-toast-in'}`}
+            role={t.tone === 'error' ? 'alert' : 'status'}
+            aria-live={t.tone === 'error' ? 'assertive' : 'polite'}
+            onMouseEnter={() => pauseDismiss(t.id)}
+            onMouseLeave={() => resumeDismiss(t.id)}
+            onFocusCapture={() => pauseDismiss(t.id)}
+            onBlurCapture={() => resumeDismiss(t.id)}
+            className={`relative overflow-hidden pointer-events-auto rounded-md border ${TONE_CLS[t.tone]} bg-surface-raised shadow-raised p-3 flex items-start gap-2 ${t.closing ? 'motion-safe:animate-mushi-toast-out' : 'motion-safe:animate-mushi-toast-in'}`}
           >
             <span
               className={`shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${TONE_CLS[t.tone]}`}
@@ -162,15 +233,35 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   {t.description}
                 </div>
               )}
+              {t.action && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    t.action?.onClick()
+                    dismiss(t.id)
+                  }}
+                  className="mt-1.5 inline-flex items-center gap-1 text-2xs font-medium text-brand hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
+                >
+                  {t.action.label}
+                  <span aria-hidden="true">→</span>
+                </button>
+              )}
             </div>
             <button
               type="button"
               onClick={() => dismiss(t.id)}
-              className="shrink-0 text-fg-faint hover:text-fg text-xs leading-none px-1"
-              aria-label="Dismiss"
+              className="shrink-0 inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint hover:text-fg hover:bg-surface-overlay text-xs leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
+              aria-label="Dismiss notification"
             >
-              ✕
+              <span aria-hidden="true">✕</span>
             </button>
+            {!t.closing && (
+              <span
+                aria-hidden="true"
+                className={`absolute bottom-0 left-0 h-0.5 w-full bg-current opacity-30 origin-left motion-safe:animate-mushi-toast-progress ${t.paused ? '[animation-play-state:paused]' : ''}`}
+                style={{ animationDuration: `${t.duration}ms` }}
+              />
+            )}
           </div>
         ))}
       </div>

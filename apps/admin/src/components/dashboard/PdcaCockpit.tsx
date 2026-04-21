@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { PDCA_STAGES } from '../../lib/pdca'
 import { Card } from '../ui'
+import { LineSparkline } from '../charts'
 import type { PdcaStage, PdcaStageId, PdcaStageTone } from './types'
 
 interface Props {
@@ -72,7 +73,7 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
   const numberTone = TONE_NUMBER[stage.tone]
   const dot = TONE_DOT[stage.tone]
   return (
-    <div className="relative">
+    <div className="relative" data-tour-id={`pdca-${stage.id}`}>
       <Card
         elevated
         interactive
@@ -123,6 +124,23 @@ function StageTile({ stage, isFocus, connector }: TileProps) {
             </span>
             <span className="text-2xs text-fg-muted truncate">{stage.countLabel}</span>
           </div>
+
+          {stage.series && stage.series.length >= 2 && stage.series.some((v) => v > 0) && (
+            <div className="mt-1.5 -mx-1" aria-hidden="true">
+              <LineSparkline
+                values={stage.series}
+                accent={
+                  stage.tone === 'urgent'
+                    ? 'text-danger/70'
+                    : stage.tone === 'warn'
+                      ? 'text-warn/70'
+                      : 'text-fg-faint'
+                }
+                ariaLabel={`${meta.label} trend, last ${stage.series.length} days`}
+                height={16}
+              />
+            </div>
+          )}
 
           <p className="mt-2 text-2xs text-fg-secondary leading-snug min-h-[2.25rem] line-clamp-2">
             {stage.bottleneck ?? <span className="text-fg-faint">Clean — nothing waiting in this stage.</span>}

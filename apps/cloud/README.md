@@ -30,11 +30,19 @@ Marketing landing + sign-up + billing dashboard for **Mushi Mushi Cloud**
 
 ## Billing model
 
-- $0 / 1,000 reports per month (free tier, no card required)
-- $0.0025 per ingested report after that
-- No seat tax, no minimum spend
-- Hourly `usage-aggregator` Edge Function pushes per-day report counts
-  to Stripe Meter Events with idempotent identifiers
+Four tiers, seeded in `pricing_plans` (see `packages/server/supabase/migrations/20260419000000_billing_plans.sql`):
+
+| Tier       | Base / month | Included reports | Overage / report | Retention | Notable feature flags                       |
+| ---------- | -----------: | ---------------: | ---------------: | --------: | ------------------------------------------- |
+| Hobby      |        $0.00 |            1,000 |          (none)  |    7 days | 3 seats max                                 |
+| Starter    |       $19.00 |           10,000 |         $0.0025  |   30 days | BYOK, plugins, audit log, 48h SLA           |
+| Pro        |       $99.00 |           50,000 |         $0.0020  |   90 days | + SSO, intelligence reports, 8h SLA         |
+| Enterprise |  Sales-led   |        Unlimited |   Custom         |  365 days | + self-hosted, SOC 2, 4h SLA                |
+
+Hourly `usage-aggregator` Edge Function pushes per-day report counts
+to Stripe Meter Events with idempotent identifiers. The admin
+`/billing` page reads the same `pricing_plans` row and renders an
+`LLM $X.XX` cost chip from `llm_invocations.cost_usd` (Wave J).
 
 ## Required environment variables
 

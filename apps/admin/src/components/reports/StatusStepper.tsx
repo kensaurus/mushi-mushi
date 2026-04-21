@@ -82,13 +82,21 @@ export function StatusStepper({
   const activeIdx = STATUS_TO_INDEX[status] ?? 0
   const activeTone = ACTIVE_TONE[severity ?? ''] ?? 'bg-brand'
 
+  const activeLabel = STEP_LABELS[STATUS_STEPS[activeIdx]]
+
   return (
     <div
-      className={`inline-flex items-stretch ${size === 'full' ? 'flex-col gap-1' : ''} ${className}`}
+      className={`inline-flex items-stretch ${size === 'full' ? 'flex-col gap-1' : 'flex-col gap-0.5'} ${className}`}
       role="group"
-      aria-label={`Report progress: ${STEP_LABELS[STATUS_STEPS[activeIdx]]}`}
+      aria-label={`Report progress: ${activeLabel}`}
     >
-      <div className="flex items-center gap-0.5 w-full">
+      {size === 'compact' && (
+        <span className="text-2xs text-fg-muted leading-none font-medium">
+          {activeLabel}
+          <span className="text-fg-faint font-normal"> · {activeIdx + 1}/4</span>
+        </span>
+      )}
+      <div className={`flex items-center gap-0.5 w-full ${size === 'compact' ? 'min-w-[7rem]' : ''}`}>
         {STATUS_STEPS.map((step, i) => {
           const completed = i < activeIdx
           const active = i === activeIdx
@@ -100,11 +108,13 @@ export function StatusStepper({
           const ts = timestamps?.[step]
           const tooltipBase = STEP_LABELS[step]
           const tooltip = ts ? `${tooltipBase} · ${new Date(ts).toLocaleString()}` : tooltipBase
+          const heightCls = size === 'full' ? 'h-2.5' : 'h-2'
+          const activeRing = active ? 'ring-1 ring-inset ring-fg/10' : ''
           return (
             <Tooltip key={step} content={tooltip}>
               <span
                 aria-label={tooltipBase}
-                className={`h-1.5 flex-1 rounded-full motion-safe:transition-colors ${tint}`}
+                className={`${heightCls} flex-1 rounded-full motion-safe:transition-colors ${tint} ${activeRing}`}
               />
             </Tooltip>
           )
