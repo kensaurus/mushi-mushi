@@ -18,9 +18,11 @@ Sentry sees what your code throws. Mushi sees what your users *feel*.
 
 [Quick start](#quick-start) · [Live admin demo](https://kensaur.us/mushi-mushi/) · [Docs](./apps/docs) · [Self-hosting](./SELF_HOSTED.md) · [Architecture](#architecture)
 
-<a href="https://kensaur.us/mushi-mushi/">
-  <img src="./docs/screenshots/report-detail-dark.png" alt="A real classified report inside Mushi Mushi: user description, captured console error, environment, triage thread, and a one-click Dispatch fix button" width="100%" />
+<a href="https://kensaur.us/mushi-mushi/" title="Open the live admin demo">
+  <img src="./docs/screenshots/report-detail-dark.png" alt="A real classified bug report inside Mushi Mushi — Plan/Do/Check/Act receipt strip, 4 px severity stripe, LLM classification panel (category, severity, summary, component, confidence), environment + perf metrics, and a one-click Dispatch fix button" width="100%" />
 </a>
+
+<sub>↑ click to open the live admin demo · the admin is dark-only by design</sub>
 
 </div>
 
@@ -56,35 +58,47 @@ Mushi Mushi is the missing layer. Drop a small SDK into your app — users press
 
 ## Tour
 
+A walk through the rooms inside, after the Wave I → L admin overhaul. Click any panel to land on it in the live demo.
+
 <table width="100%">
 <tr>
   <td width="50%" valign="top">
-    <a href="./docs/screenshots/dashboard-dark.png"><img src="./docs/screenshots/dashboard-dark.png" alt="Admin dashboard showing total/new/classified/dismissed counters" /></a>
-    <p align="center"><b>Dashboard</b><br/>At-a-glance counters, severity histogram, weekly trend.</p>
+    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/dashboard-dark.png" alt="Dashboard with PDCA cockpit — Plan / Do / Check / Act tiles with one living number per stage, a coloured ring on the bottleneck, 14d severity-stacked histogram, LLM tokens & calls sparklines, and a Next-Best-Action strip pointing at the failed fix" /></a>
+    <p align="center"><b>Dashboard</b> · <sub>Wave L PDCA cockpit — one living number per stage, bottleneck ring, Next-Best-Action strip, 14d severity-stacked histogram, LLM tokens & calls sparklines.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="./docs/screenshots/reports-dark.png"><img src="./docs/screenshots/reports-dark.png" alt="Reports list filtered by status, category, severity" /></a>
-    <p align="center"><b>Reports</b><br/>Triage queue with status / category / severity filters.</p>
-  </td>
-</tr>
-<tr>
-  <td width="50%" valign="top">
-    <a href="./docs/screenshots/graph-dark.png"><img src="./docs/screenshots/graph-dark.png" alt="Knowledge graph linking bug nodes to affected pages" /></a>
-    <p align="center"><b>Knowledge graph</b><br/>Bug ↔ component ↔ page ↔ version, traversable in NL.</p>
-  </td>
-  <td width="50%" valign="top">
-    <a href="./docs/screenshots/health-dark.png"><img src="./docs/screenshots/health-dark.png" alt="System health: per-model LLM telemetry, fallback rate, latency p50/p95, cron job status" /></a>
-    <p align="center"><b>System health</b><br/>Live LLM telemetry, fallback rate, latency p50/p95, cron status.</p>
+    <a href="https://kensaur.us/mushi-mushi/reports"><img src="./docs/screenshots/reports-dark.png" alt="Reports triage queue — 4 px severity stripe per row, 14d Critical/High/Medium/Low KPI strip, dedup-aware blast-radius column, status / category / severity filters, single primary action per row (Triage → or Dispatch fix →)" /></a>
+    <p align="center"><b>Reports</b> · <sub>Wave I triage queue — 4 px severity stripe, 14d severity KPIs, blast-radius dedup, single primary action per row.</sub></p>
   </td>
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="./docs/screenshots/marketplace-dark.png"><img src="./docs/screenshots/marketplace-dark.png" alt="Plugin marketplace with PagerDuty Escalation, Linear Sync, Zapier Bridge" /></a>
-    <p align="center"><b>Plugin marketplace</b><br/>HMAC-signed webhooks. PagerDuty / Linear / Zapier ship in-tree.</p>
+    <a href="https://kensaur.us/mushi-mushi/fixes"><img src="./docs/screenshots/fixes-dark.png" alt="Auto-fix pipeline — per-attempt PDCA stage cards (Plan / Do / Check / Act each with status pill), live KPI strip with 30d sparklines (Attempts / Completed / Failed / In flight / PRs Open), Langfuse trace links, real GitHub PR numbers, error tail for failed attempts" /></a>
+    <p align="center"><b>Fixes</b> · <sub>Wave K auto-fix pipeline — per-attempt PDCA cards, 30d KPI sparklines, Langfuse trace per run, real PR links, retry-failed CTA.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="./docs/screenshots/compliance-dark.png"><img src="./docs/screenshots/compliance-dark.png" alt="Compliance dashboard: latest control evidence, data residency, retention policies, DSARs" /></a>
-    <p align="center"><b>Compliance</b><br/>SOC 2 evidence pack, data residency pinning, DSAR workflow.</p>
+    <a href="https://kensaur.us/mushi-mushi/judge"><img src="./docs/screenshots/judge-dark.png" alt="Judge scores — latest week / total evals / prompt versions / mean score KPIs, 12-week multi-line score trend (Overall / Accuracy / Severity / Component / Reproducibility), score distribution histogram, prompt leaderboard with active vs candidate, recent evaluations table surfacing report summaries instead of hashes" /></a>
+    <p align="center"><b>Judge</b> · <sub>Wave I — live KPIs, 12w trend, distribution histogram, prompt leaderboard, recent evals show summaries (not hashes) with column tooltips.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/health"><img src="./docs/screenshots/health-dark.png" alt="LLM health — per-function & per-model breakdown, p50/p95 latency, fallback rate, cost-per-call, cron job runner with manual Trigger now buttons, recent LLM calls feed with deeplinks to report + Langfuse trace" /></a>
+    <p align="center"><b>Health</b> · <sub>Wave J — real `cost_usd` per call, per-function / per-model breakdown, p50/p95 latency, fallback rate, cron triggers, Langfuse deeplinks.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/prompt-lab"><img src="./docs/screenshots/prompt-lab-dark.png" alt="Prompt Lab — Stage 1 fast-filter and Stage 2 classify version tables with active vs candidate rows, traffic split percentages, judge score, eval counts, clone / promote actions, fine-tuning jobs table, synthetic reports generator" /></a>
+    <p align="center"><b>Prompt Lab</b> · <sub>Replaces Fine-Tuning. A/B traffic split between active and candidate prompts per stage, eval dataset preview, synthetic report generator.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/graph"><img src="./docs/screenshots/graph-dark.png" alt="Knowledge graph — Sankey-style storyboard auto-engaged when fewer than 12 nodes, component → page columns, edge thickness = co-occurring bug count, regression / fragile / fix-coverage quick views, ontology browser, Apache AGE backend status" /></a>
+    <p align="center"><b>Knowledge graph</b> · <sub>Auto-switches to Sankey storyboard under 12 nodes; full React Flow canvas with cluster layout above. Apache AGE backed.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/compliance"><img src="./docs/screenshots/compliance-dark.png" alt="Compliance dashboard — latest control evidence rows (A1.2 availability snapshot, CC6.1 RLS coverage, CC6.7 retention windows, CC7.2 audit volume, CC8.1 DSAR fulfilment) with PASS/WARN status pills and JSON payloads, per-project data residency pinning (US/EU/JP/SELF), Refresh evidence + Export PDF actions" /></a>
+    <p align="center"><b>Compliance</b> · <sub>SOC 2 control evidence pack, region pinning per project, print-styled Export PDF, DSAR workflow tracking.</sub></p>
   </td>
 </tr>
 </table>
