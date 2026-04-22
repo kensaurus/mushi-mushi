@@ -26,6 +26,23 @@ interface ResolvedOpenAi {
   source: 'byok' | 'env'
 }
 
+/**
+ * Normalise a BYOK / env base URL to the form the embeddings call expects.
+ *
+ * Convention: callers of `createEmbedding` append `/v1/embeddings` to the
+ * returned `baseUrl`. If the stored BYOK value already includes the `/v1`
+ * version prefix (which is the OpenAI SDK default — e.g. OpenRouter stores
+ * `https://openrouter.ai/api/v1`), we'd hit `/api/v1/v1/embeddings` and get
+ * a Next.js 404 HTML page — the exact failure that kept the glot.it repo
+ * index at 0 rows. Strip the trailing `/v1` (and any trailing slash) so both
+ * forms land on `<base>/v1/embeddings`.
+ */
+function normalizeOpenAiBaseUrl(raw: string | null | undefined): string {
+  const trimmed = (raw ?? '').replace(/\/+$/, '')
+  if (!trimmed) return 'https://api.openai.com'
+  return trimmed.replace(/\/v1$/i, '')
+}
+
 async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null> {
   if (projectId) {
     try {
@@ -34,7 +51,7 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
       if (r) {
         return {
           key: r.key,
-          baseUrl: r.baseUrl ?? 'https://api.openai.com',
+          baseUrl: normalizeOpenAiBaseUrl(r.baseUrl),
           source: r.source,
         }
       }
@@ -44,7 +61,11 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
   }
   const envKey = Deno.env.get('OPENAI_API_KEY')
   if (!envKey) return null
-  return { key: envKey, baseUrl: 'https://api.openai.com', source: 'env' }
+  return {
+    key: envKey,
+    baseUrl: normalizeOpenAiBaseUrl(Deno.env.get('OPENAI_BASE_URL') ?? 'https://api.openai.com'),
+    source: 'env',
+  }
 }
 
 export async function createEmbedding(
@@ -191,10 +212,20 @@ export async function findSimilarReports(
     return []
   }
 
-  return (data ?? [])
-    .filter((r: any) => r.report_id !== reportId)
+  interface MatchRow {
+    report_id: string
+    similarity: number
+    description: string
+    category: string
+    created_at: string
+    report_group_id?: string
+  }
+
+  const rows = (data ?? []) as MatchRow[]
+  return rows
+    .filter(r => r.report_id !== reportId)
     .slice(0, limit)
-    .map((r: any) => ({
+    .map(r => ({
       reportId: r.report_id,
       similarity: r.similarity,
       description: r.description,

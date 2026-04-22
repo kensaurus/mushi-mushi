@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import type { EnvStatus } from '../lib/env'
 import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from '../lib/env'
-import { PageHelp } from '../components/ui'
+import { PageHelp, Btn } from '../components/ui'
 
 const CLOUD_ENV_TEMPLATE = `VITE_SUPABASE_URL=${CLOUD_SUPABASE_URL}
 VITE_SUPABASE_ANON_KEY=${CLOUD_SUPABASE_ANON_KEY}`
@@ -159,12 +159,9 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
             <p className="text-2xs text-fg-muted">
               After creating <code className="bg-surface-raised px-1 py-0.5 rounded">.env</code>, restart the dev server.
             </p>
-            <button
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover shadow-sm transition-all"
-            >
+            <Btn variant="primary" onClick={() => window.location.reload()}>
               Refresh
-            </button>
+            </Btn>
           </div>
         </div>
       </div>

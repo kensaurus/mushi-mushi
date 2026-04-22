@@ -46,9 +46,14 @@ if (!existsSync(hooksDir)) mkdirSync(hooksDir, { recursive: true })
 
 const HOOK_BODY = `#!/bin/sh
 # Auto-installed by scripts/install-git-hooks.mjs. Do not edit by hand.
-# Source of truth: scripts/check-no-secrets.mjs (run manually via
-# \`pnpm check:secrets\` or bypass once with \`git commit --no-verify\`).
+# Runs fast repo-wide lint guards before every commit:
+#   - secret scanner       (scripts/check-no-secrets.mjs)
+#   - design-token drift   (scripts/check-design-tokens.mjs)
+#   - MCP catalog sync     (scripts/check-mcp-catalog-sync.mjs)
+# Bypass once with \`git commit --no-verify\` in an emergency.
 node scripts/check-no-secrets.mjs || exit 1
+node scripts/check-design-tokens.mjs || exit 1
+node scripts/check-mcp-catalog-sync.mjs || exit 1
 `
 
 const target = join(hooksDir, 'pre-commit')

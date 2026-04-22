@@ -646,6 +646,81 @@ export function FilterSelect({ label, options, ...rest }: FilterSelectProps) {
   )
 }
 
+/* ── SegmentedControl (brand-pill radio group) ─────────────────────────── */
+
+export interface SegmentedControlOption<T extends string> {
+  id: T
+  label: string
+  count?: number | string
+}
+
+interface SegmentedControlProps<T extends string> {
+  value: T
+  options: readonly SegmentedControlOption<T>[]
+  onChange: (next: T) => void
+  /** Optional tiny prefix label rendered to the left of the track. */
+  label?: string
+  ariaLabel?: string
+  size?: 'sm' | 'md'
+  className?: string
+}
+
+const SEGMENT_SIZE = {
+  sm: 'px-1.5 py-0.5 text-2xs',
+  md: 'px-2 py-1 text-2xs font-medium',
+} as const
+
+export function SegmentedControl<T extends string>({
+  value,
+  options,
+  onChange,
+  label,
+  ariaLabel,
+  size = 'md',
+  className = '',
+}: SegmentedControlProps<T>) {
+  const track = (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel ?? label}
+      className={`inline-flex items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised/50 p-0.5 ${className}`}
+    >
+      {options.map((opt) => {
+        const active = opt.id === value
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(opt.id)}
+            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+              active
+                ? 'bg-brand text-brand-fg'
+                : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
+            }`}
+          >
+            {opt.label}
+            {opt.count !== undefined && (
+              <span className={`ml-1 font-mono ${active ? 'text-brand-fg/80' : 'text-fg-faint'}`}>
+                {opt.count}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  if (!label) return track
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className="text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
+      {track}
+    </div>
+  )
+}
+
 /* ── Btn (primary / ghost / danger variants) ────────────────────────────── */
 
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {

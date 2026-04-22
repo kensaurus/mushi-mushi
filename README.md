@@ -265,7 +265,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 - **N+1 slayed** — `apiFetch` now dedups in-flight requests + keeps a 200 ms micro-cache. The old 24× storm on `/v1/admin/setup` is now 1 request.
 - **Sentry telemetry** — every non-2xx API response leaves a breadcrumb; 5xx captures a message; rotated DSNs self-disable after 3 consecutive 401/403 so your devtools stay clean.
 - **Slack quick-fix** — Block Kit messages with `Triage` + `Dispatch fix` buttons wired to a signed `slack-interactions` Edge Function. The loop starts and ends in Slack.
-- **Pre-commit secret scanner** — `pnpm install` auto-installs a `.git/hooks/pre-commit` that runs `scripts/check-no-secrets.mjs` against staged files. Catches AWS / Stripe / Slack / GitHub / OpenAI / Anthropic keys and JWTs before they ever hit a commit.
+- **Pre-commit lint guards** — `pnpm install` auto-installs a `.git/hooks/pre-commit` that chains three zero-dependency guards: `check-no-secrets.mjs` (AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / JWT leak scanner), `check-design-tokens.mjs` (flags retired Tailwind aliases that would render transparently in the admin console), and `check-mcp-catalog-sync.mjs` (keeps the MCP catalog and its admin mirror in lockstep). Bypass once with `git commit --no-verify`, skip install with `MUSHI_SKIP_GIT_HOOKS=1`.
 
 <details>
 <summary><b>Full phase history</b></summary>
@@ -508,7 +508,9 @@ Requires Node.js ≥ 22 and pnpm ≥ 10.
 | `pnpm format`      | Prettier                                                     |
 | `pnpm changeset`   | Create a changeset                                           |
 | `pnpm release`     | Build + publish to npm                                       |
-| `pnpm check:secrets` | Scan the whole tree for leaked AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Supabase / JWT tokens. The same `scripts/check-no-secrets.mjs` runs on staged files automatically via a `pre-commit` hook installed by `pnpm install`. |
+| `pnpm check:secrets` | Scan the whole tree for leaked AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Supabase / JWT tokens. Also runs staged-only on every commit via the auto-installed `pre-commit` hook. |
+| `pnpm check:design-tokens` | Flag Tailwind classes in `apps/admin/` that reference retired aliases (`success*` / `error*` / `surface-subtle`) or typo against real `--color-*` namespaces defined in `apps/admin/src/index.css`. Catches the "invisible transparent element" bug class at commit time. |
+| `pnpm check:catalog-sync` | Verify `packages/mcp/src/catalog.ts` and its admin mirror `apps/admin/src/lib/mcpCatalog.ts` haven't drifted. |
 
 #### Admin console (zero-config)
 

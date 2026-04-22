@@ -22,9 +22,13 @@
   ],
   "scripts": {
     "build": "tsup",
+    "clean:types": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "dev": "tsup --watch",
     "lint": "eslint src/",
     "test": "vitest run",
+    "test:smoke": "node scripts/smoke-stdio.mjs",
+    "test:localhost": "node scripts/localhost-e2e.mjs",
+    "demo": "node scripts/demo-terminal-config.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

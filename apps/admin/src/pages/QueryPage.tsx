@@ -369,7 +369,7 @@ export function QueryPage() {
                       <summary className="text-fg-faint cursor-pointer hover:text-fg-muted">
                         SQL · {run.result.results.length} row{run.result.results.length === 1 ? '' : 's'}
                       </summary>
-                      <pre className="mt-1.5 p-2 bg-surface-root rounded-sm text-fg-muted overflow-x-auto font-mono whitespace-pre-wrap">
+                      <pre className="mt-1.5 px-3 py-2 bg-surface-raised border border-edge-subtle rounded-sm text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
                         {run.result.sql}
                       </pre>
                     </details>

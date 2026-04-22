@@ -166,7 +166,7 @@ export function PromptLabPage() {
     : undefined
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <PageHeader
         title="Prompt Lab"
         description="Test prompt versions live before promoting them to production. Diff outputs side-by-side."

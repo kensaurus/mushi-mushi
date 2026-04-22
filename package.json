@@ -41,6 +41,8 @@
     "version-packages": "changeset version",
     "check:publish": "node scripts/check-workspace-protocol.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
+    "check:design-tokens": "node scripts/check-design-tokens.mjs",
+    "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs",
     "release": "turbo run build && pnpm check:publish && changeset publish",
     "changelog:aggregate": "node scripts/aggregate-changelogs.mjs",
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",
