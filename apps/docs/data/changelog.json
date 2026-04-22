@@ -4,21 +4,59 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.1",
       "0.5.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+      },
+      {
+        "title": "`publishConfig.provenance: true` everywhere.",
+        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
+      },
+      {
+        "title": "`.github/FUNDING.yml`",
+        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      },
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+      },
+      {
+        "title": "`publishConfig.provenance: true` everywhere.",
+        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
+      },
+      {
+        "title": "`.github/FUNDING.yml`",
+        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      },
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+      },
+      {
+        "title": "`publishConfig.provenance: true` everywhere.",
+        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
+      },
+      {
+        "title": "`.github/FUNDING.yml`",
+        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "mushi-mushi",
-        "version": "0.5.0"
+        "version": "0.5.1"
       }
     ]
   },
@@ -99,11 +137,24 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.3.3",
       "0.3.2",
       "0.3.1",
       "0.3.0"
     ],
     "highlights": [
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+      },
+      {
+        "title": "`publishConfig.provenance: true` everywhere.",
+        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
+      },
+      {
+        "title": "`.github/FUNDING.yml`",
+        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      },
       {
         "title": "`@mushi-mushi/cli` `0.3.0`",
         "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
@@ -139,44 +190,32 @@
       {
         "title": "Flutter SDK",
         "description": "(`mushi_mushi` on pub.dev): pure-Dart with platform"
-      },
-      {
-        "title": "Capacitor plugin",
-        "description": "(`@mushi-mushi/capacitor`): web fallback delegates"
-      },
-      {
-        "title": "A2A Agent Card discovery",
-        "description": "public endpoints"
-      },
-      {
-        "title": "SOC 2 Type 1 readiness module",
-        "description": "new tables"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.3.2"
+        "version": "0.3.3"
       },
       {
         "name": "@mushi-mushi/core",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.3.0"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/react",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "0.3.0"
+        "version": "0.3.1"
       }
     ]
   },
@@ -185,11 +224,36 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.3",
       "0.2.2",
       "0.2.1",
       "0.2.0"
     ],
     "highlights": [
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+      },
+      {
+        "title": "`publishConfig.provenance: true` everywhere.",
+        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
+      },
+      {
+        "title": "`.github/FUNDING.yml`",
+        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      },
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
+      },
+      {
+        "title": "`publishConfig.provenance: true` everywhere.",
+        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
+      },
+      {
+        "title": "`.github/FUNDING.yml`",
+        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      },
       {
         "title": "`@mushi-mushi/cli` `0.3.0`",
         "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
@@ -213,40 +277,16 @@
       {
         "title": "Root README",
         "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
-      },
-      {
-        "title": "Vision air-gap",
-        "description": "Stage-2 vision analysis now sees the screenshot only with"
-      },
-      {
-        "title": "Judge OpenAI fallback",
-        "description": "`judge-batch` now falls back to OpenAI"
-      },
-      {
-        "title": "Blast-radius MV refresh",
-        "description": "`blast_radius_cache` is now refreshed every"
-      },
-      {
-        "title": "RAG codebase indexer",
-        "description": "GitHub App webhook + `mushi index <path>` CLI"
-      },
-      {
-        "title": "Fix dispatch end-to-end",
-        "description": "Admin can dispatch fixes from the report detail"
-      },
-      {
-        "title": "Sandbox provider abstraction",
-        "description": "`local-noop` (tests) and `e2b` (managed"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -262,23 +302,23 @@
       },
       {
         "name": "@mushi-mushi/mcp-ci",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/node",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-jira",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -286,15 +326,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.0"
+        "version": "0.2.1"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/react",
@@ -302,19 +342,19 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/wasm-classifier",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/web",
