@@ -101,6 +101,11 @@ export function Drawer({
 
   if (!open) return null
 
+  // When `dimmed`, the backdrop `<div>` covers the outer wrapper with
+  // `absolute inset-0` — clicks on the dim area land on the backdrop itself,
+  // so the Modal-style `e.target === e.currentTarget` check on the outer
+  // wrapper always fails. Attach the dismiss handler to each dismissable
+  // layer directly rather than gating on target equality.
   const onBackdropClick = (e: MouseEvent<HTMLDivElement>) => {
     if (!dismissible) return
     if (e.target === e.currentTarget) onClose()
@@ -117,6 +122,7 @@ export function Drawer({
       {dimmed && (
         <div
           aria-hidden="true"
+          onClick={dismissible ? onClose : undefined}
           className="absolute inset-0 bg-overlay backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in motion-safe:duration-150"
         />
       )}

@@ -16,7 +16,7 @@
  *              navigation shortcut.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
@@ -138,22 +138,31 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
   // (≤50 rows) and the API server-side-derives events for legacy rows.
   useRealtimeReload(['fix_events', 'fix_attempts'], load, { debounceMs: 400 })
 
-  const unread = useMemo(() => {
-    if (!events.length) return 0
-    return events.filter((e) => new Date(e.at).getTime() > lastSeenRef.current).length
-  }, [events])
-
   // Notify the trigger + mark everything seen when the drawer opens.
+  //
+  // Unread is computed inline (not via useMemo) because it depends on both
+  // `events` AND `lastSeenRef.current`. A memo keyed on `events` alone would
+  // hold the pre-open count after the drawer opens (which bumps the ref) and
+  // then closes without new events — the badge would flash back to the old
+  // value even though the user just saw everything.
   useEffect(() => {
-    onUnreadChange?.(open ? 0 : unread)
-    if (open && events[0]) {
-      const newest = new Date(events[0].at).getTime()
-      if (newest > lastSeenRef.current) {
-        lastSeenRef.current = newest
-        writeLastSeen(newest)
+    if (open) {
+      onUnreadChange?.(0)
+      if (events[0]) {
+        const newest = new Date(events[0].at).getTime()
+        if (newest > lastSeenRef.current) {
+          lastSeenRef.current = newest
+          writeLastSeen(newest)
+        }
       }
+      return
     }
-  }, [open, unread, events, onUnreadChange])
+    const unread = events.reduce(
+      (count, e) => (new Date(e.at).getTime() > lastSeenRef.current ? count + 1 : count),
+      0,
+    )
+    onUnreadChange?.(unread)
+  }, [open, events, onUnreadChange])
 
   return (
     <Drawer
