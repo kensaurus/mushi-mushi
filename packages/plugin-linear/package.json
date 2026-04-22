@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-linear",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "license": "MIT",
   "description": "Reference Mushi Mushi plugin: create and bidirectionally sync Linear issues from Mushi reports.",
   "type": "module",
@@ -18,7 +18,10 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -45,7 +48,8 @@
   },
   "author": "Kenji Sakuramoto",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "sideEffects": false,
   "keywords": [

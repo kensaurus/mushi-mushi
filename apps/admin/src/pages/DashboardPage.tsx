@@ -123,7 +123,7 @@ export function DashboardPage() {
   const renderFullDashboard = !setupIncomplete || showFullDashboard
 
   return (
-    <div>
+    <div className="space-y-5">
       <Confetti triggerKey={confettiKey} />
       <PageHeader
         title={copy?.title ?? 'Dashboard'}
@@ -171,7 +171,7 @@ export function DashboardPage() {
       )}
 
       {setupIncomplete && !showFullDashboard && (
-        <div className="mt-4 flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+        <div className="flex items-center justify-between rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
           <p className="text-xs text-fg-muted">
             Finish setup above to unlock the full dashboard. You can peek now if you like.
           </p>
@@ -203,7 +203,7 @@ export function DashboardPage() {
                   stages with live counts, bottlenecks, and an animated
                   gradient edge out of the current focus stage so the eye
                   lands on the bottleneck without reading text. */}
-              <div className="hidden sm:block mb-4">
+              <div className="hidden sm:block">
                 <div className="flex items-baseline justify-between mb-2">
                   <h2 className="text-2xs font-semibold text-fg-muted uppercase tracking-wider">
                     Loop status &mdash; Plan, Do, Check, Act

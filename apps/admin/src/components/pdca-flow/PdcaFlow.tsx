@@ -15,16 +15,27 @@
  *
  *          We lock pan/zoom by default; the `interactive` prop opts in to
  *          pan+zoom+the flow-controls panel, and (always-on) click-to-open
- *          the stage drawer.
+ *          the stage drawer. The interactive variant additionally exposes:
+ *            • MiniMap for quick orientation + click-to-focus
+ *            • Tidy button (re-apply canonical layout + fit view)
+ *            • Edge inspector popover (click edge → what's flowing here)
+ *            • Right-click context menu on nodes
+ *            • Log ↔ node focus sync (click activity → node highlights)
+ *
+ *          The outer component owns hash-sync + drawer state; the inner
+ *          canvas component lives inside ReactFlowProvider so we can call
+ *          `useReactFlow` for imperative focus + fitBounds operations.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   BackgroundVariant,
+  MiniMap,
   Panel,
+  useReactFlow,
   type Edge,
   type Node,
 } from '@xyflow/react'
@@ -41,6 +52,7 @@ import {
 import type { PdcaStage } from '../dashboard/types'
 import type { PdcaStageId } from '../../lib/pdca'
 import { PDCA_STAGES } from '../../lib/pdca'
+import { STAGE_HEX } from '../flow-primitives/flowTokens'
 import { PdcaFlowContext } from './PdcaFlowContext'
 import { StageDrawer } from '../flow-primitives/StageDrawer'
 import { StageDrawerContent } from './StageDrawerContent'
@@ -48,6 +60,8 @@ import { PdcaFlowControls } from '../flow-primitives/PdcaFlowControls'
 import { PdcaLegendPanel } from '../flow-primitives/PdcaLegendPanel'
 import { PipelineActivityLog } from './PipelineActivityLog'
 import { PipelineActionPanel } from './PipelineActionPanel'
+import { EdgeInspector } from './EdgeInspector'
+import { NodeContextMenu } from './NodeContextMenu'
 import { useFlowKeyboardNav } from '../flow-primitives/useFlowKeyboardNav'
 import type { ActivityItem } from '../dashboard/types'
 
@@ -55,8 +69,8 @@ const NODE_TYPES = { pdcaStep: PdcaStepNode }
 const EDGE_TYPES = { pdcaGradient: PdcaGradientEdge }
 
 const VARIANT_HEIGHT: Record<PdcaFlowVariant, string> = {
-  live: 'h-[380px] sm:h-[420px]',
-  onboarding: 'h-[360px] sm:h-[380px]',
+  live: 'h-[440px] sm:h-[480px]',
+  onboarding: 'h-[400px] sm:h-[430px]',
 }
 
 const DRAWER_HASH_PREFIX = '#pdca='
@@ -88,29 +102,18 @@ interface PdcaFlowProps {
   ariaLabel?: string
 }
 
-export function PdcaFlow({
-  variant,
-  stages = [],
-  focusStage = null,
-  runningStage = null,
-  activity,
-  interactive = false,
-  showActionPanel = false,
-  showActivityLog = false,
-  className = '',
-  ariaLabel,
-}: PdcaFlowProps) {
+export function PdcaFlow(props: PdcaFlowProps) {
+  const {
+    variant,
+    stages = [],
+    focusStage = null,
+    runningStage = null,
+    className = '',
+    ariaLabel,
+  } = props
+
   const [openStage, setOpenStage] = useState<PdcaStageId | null>(() => readInitialHash())
   const [replayKey, setReplayKey] = useState(0)
-
-  const nodes: Node<PdcaNodeData>[] = useMemo(
-    () => buildNodes(variant, stages, focusStage, runningStage),
-    [variant, stages, focusStage, runningStage],
-  )
-  const edges: Edge<PdcaEdgeData>[] = useMemo(
-    () => buildEdges(focusStage, runningStage),
-    [focusStage, runningStage, replayKey],
-  )
 
   const onOpenStage = useCallback((stage: PdcaStageId | null) => {
     setOpenStage(stage)
@@ -127,30 +130,12 @@ export function PdcaFlow({
   // back button or edits the URL).
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const onHash = () => {
-      const next = readInitialHash()
-      setOpenStage(next)
-    }
+    const onHash = () => setOpenStage(readInitialHash())
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
   const onReplay = useCallback(() => setReplayKey((k) => k + 1), [])
-
-  // Canonical React Flow click path — fires even if the custom-node
-  // <button> inside is obscured or CSS accidentally pins pointer-events.
-  // Guarded to the live variant so the onboarding explainer keeps its
-  // Link-based navigation.
-  const onNodeClick = useCallback(
-    (_: unknown, node: Node<PdcaNodeData>) => {
-      if (variant !== 'live') return
-      const id = node.data.stageId
-      if (id === 'plan' || id === 'do' || id === 'check' || id === 'act') {
-        onOpenStage(id)
-      }
-    },
-    [variant, onOpenStage],
-  )
 
   useFlowKeyboardNav({
     enabled: variant === 'live',
@@ -182,64 +167,13 @@ export function PdcaFlow({
         data-tour-id="pdca-flow"
       >
         <ReactFlowProvider>
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={NODE_TYPES}
-            edgeTypes={EDGE_TYPES}
-            fitView
-            fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
-            proOptions={{ hideAttribution: true }}
-            onNodeClick={onNodeClick}
-            nodesDraggable={false}
-            nodesConnectable={false}
-            elementsSelectable={variant === 'live'}
-            panOnDrag={interactive}
-            panOnScroll={false}
-            zoomOnScroll={interactive}
-            zoomOnPinch={interactive}
-            zoomOnDoubleClick={false}
-            preventScrolling={false}
-            minZoom={0.6}
-            maxZoom={1.4}
-            defaultEdgeOptions={{ type: 'pdcaGradient' }}
-          >
-            <Background
-              variant={BackgroundVariant.Dots}
-              gap={16}
-              size={1}
-              color="var(--color-edge-subtle)"
-            />
-
-            {variant === 'live' && (
-              <Panel position="top-left">
-                <PdcaLegendPanel
-                  focusStage={focusStage}
-                  runningStage={runningStage}
-                  focusCount={openStageData?.count}
-                  focusCountLabel={openStageData?.countLabel}
-                />
-              </Panel>
-            )}
-
-            {interactive && (
-              <Panel position="bottom-right">
-                <PdcaFlowControls onReplay={onReplay} />
-              </Panel>
-            )}
-
-            {showActionPanel && variant === 'live' && (
-              <Panel position="top-right">
-                <PipelineActionPanel />
-              </Panel>
-            )}
-
-            {showActivityLog && variant === 'live' && activity && (
-              <Panel position="bottom-center">
-                <PipelineActivityLog activity={activity} />
-              </Panel>
-            )}
-          </ReactFlow>
+          <PdcaFlowCanvas
+            {...props}
+            openStage={openStage}
+            onOpenStage={onOpenStage}
+            onReplay={onReplay}
+            replayKey={replayKey}
+          />
         </ReactFlowProvider>
       </div>
 
@@ -268,5 +202,254 @@ export function PdcaFlow({
         </StageDrawer>
       )}
     </PdcaFlowContext.Provider>
+  )
+}
+
+interface PdcaFlowCanvasProps extends PdcaFlowProps {
+  openStage: PdcaStageId | null
+  onOpenStage: (stage: PdcaStageId | null) => void
+  onReplay: () => void
+  replayKey: number
+}
+
+function PdcaFlowCanvas({
+  variant,
+  stages = [],
+  focusStage = null,
+  runningStage = null,
+  activity,
+  interactive = false,
+  showActionPanel = false,
+  showActivityLog = false,
+  onOpenStage,
+  onReplay,
+  replayKey,
+}: PdcaFlowCanvasProps) {
+  const rf = useReactFlow<Node<PdcaNodeData>, Edge<PdcaEdgeData>>()
+  const containerRef = useRef<HTMLDivElement>(null)
+  const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [logFocusStage, setLogFocusStage] = useState<PdcaStageId | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<{
+    id: string
+    data: PdcaEdgeData
+    centerX: number
+    centerY: number
+  } | null>(null)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; node: PdcaNodeData } | null>(null)
+
+  const nodes: Node<PdcaNodeData>[] = useMemo(
+    () => buildNodes(variant, stages, focusStage, runningStage),
+    [variant, stages, focusStage, runningStage],
+  )
+  const edges: Edge<PdcaEdgeData>[] = useMemo(
+    // replayKey isn't read by buildEdges, but bumping it is how the parent
+    // asks us to remount/reanimate the edges (replay button).
+    () => buildEdges(focusStage, runningStage, stages),
+    [focusStage, runningStage, stages, replayKey],
+  )
+
+  const onNodeClick = useCallback(
+    (_: unknown, node: Node<PdcaNodeData>) => {
+      if (variant !== 'live') return
+      const id = node.data.stageId
+      if (id === 'plan' || id === 'do' || id === 'check' || id === 'act') {
+        onOpenStage(id)
+      }
+    },
+    [variant, onOpenStage],
+  )
+
+  // Right-click = "show me every action on this stage". We anchor the menu
+  // to the container so it survives React Flow's transform; the cursor
+  // position is relative to the container so the menu appears where the
+  // pointer is regardless of zoom.
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node<PdcaNodeData>) => {
+      if (variant !== 'live') return
+      event.preventDefault()
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setCtxMenu({
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        node: node.data,
+      })
+    },
+    [variant],
+  )
+
+  // Clicking an edge opens the inspector at the bezier's midpoint —
+  // screen-space so the popover stays put while the user pans/zooms.
+  const onEdgeClick = useCallback(
+    (event: React.MouseEvent, edge: Edge<PdcaEdgeData>) => {
+      event.stopPropagation()
+      const rect = containerRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setSelectedEdge({
+        id: edge.id,
+        data: (edge.data ?? {}) as PdcaEdgeData,
+        centerX: event.clientX - rect.left,
+        centerY: event.clientY - rect.top,
+      })
+    },
+    [],
+  )
+
+  const onPaneClick = useCallback(() => {
+    setSelectedEdge(null)
+    setCtxMenu(null)
+  }, [])
+
+  const onTidy = useCallback(() => {
+    // Our layout is fixed (buildNodes sets canonical positions every render),
+    // so "tidy" == re-fit the view with a gentle animation.
+    rf.fitView({ duration: 400, padding: 0.2 })
+  }, [rf])
+
+  // Imperative focus for the activity-log sync path. When a user clicks an
+  // activity row we fly the canvas to the matching stage node and briefly
+  // highlight it so they can verify cause→effect.
+  const focusStageNode = useCallback(
+    (stageId: PdcaStageId) => {
+      const node = rf.getNode(stageId)
+      if (!node) return
+      rf.setCenter(node.position.x + 120, node.position.y + 40, { zoom: 1.1, duration: 450 })
+      setLogFocusStage(stageId)
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current)
+      focusTimerRef.current = setTimeout(() => {
+        setLogFocusStage((s) => (s === stageId ? null : s))
+        focusTimerRef.current = null
+      }, 1400)
+    },
+    [rf],
+  )
+
+  // Cancel any pending focus-reset timer if the canvas unmounts mid-pulse so
+  // React doesn't warn about state updates on an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (focusTimerRef.current) clearTimeout(focusTimerRef.current)
+    }
+  }, [])
+
+  // Drive the node-highlight pulse entirely through a data-attribute on the
+  // outer wrapper — child nodes pick it up via CSS [data-flash-stage="…"]
+  // so we don't re-render React Flow's node tree just to nudge a style.
+  useEffect(() => {
+    if (!containerRef.current) return
+    if (logFocusStage) {
+      containerRef.current.dataset.flashStage = logFocusStage
+    } else {
+      delete containerRef.current.dataset.flashStage
+    }
+  }, [logFocusStage])
+
+  const minimapNodeColor = useCallback(
+    (node: Node<PdcaNodeData>) => STAGE_HEX[node.data.stageId] ?? '#60a5fa',
+    [],
+  )
+
+  return (
+    <div ref={containerRef} className="relative h-full w-full">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
+        fitView
+        fitViewOptions={{ padding: 0.2, includeHiddenNodes: false }}
+        proOptions={{ hideAttribution: true }}
+        onNodeClick={onNodeClick}
+        onNodeContextMenu={onNodeContextMenu}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={variant === 'live'}
+        panOnDrag={interactive}
+        panOnScroll={false}
+        zoomOnScroll={interactive}
+        zoomOnPinch={interactive}
+        zoomOnDoubleClick={false}
+        preventScrolling={false}
+        minZoom={0.6}
+        maxZoom={1.4}
+        defaultEdgeOptions={{ type: 'pdcaGradient' }}
+      >
+        <Background
+          variant={BackgroundVariant.Dots}
+          gap={16}
+          size={1}
+          color="var(--color-edge-subtle)"
+        />
+
+        {variant === 'live' && (
+          <Panel position="top-left">
+            <PdcaLegendPanel
+              focusStage={focusStage}
+              runningStage={runningStage}
+              focusCount={stages.find((s) => s.id === focusStage)?.count}
+              focusCountLabel={stages.find((s) => s.id === focusStage)?.countLabel}
+            />
+          </Panel>
+        )}
+
+        {interactive && (
+          <Panel position="bottom-right">
+            <PdcaFlowControls onReplay={onReplay} onTidy={onTidy} />
+          </Panel>
+        )}
+
+        {showActionPanel && variant === 'live' && (
+          <Panel position="top-right">
+            <PipelineActionPanel />
+          </Panel>
+        )}
+
+        {showActivityLog && variant === 'live' && activity && (
+          <Panel position="bottom-left" className="!m-2 max-w-[17rem]">
+            <PipelineActivityLog activity={activity} onFocusStage={focusStageNode} />
+          </Panel>
+        )}
+
+        {interactive && (
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor={minimapNodeColor}
+            nodeStrokeWidth={2}
+            maskColor="rgba(0, 0, 0, 0.35)"
+            className="!bg-surface-overlay/90 !border !border-edge/60 !rounded-md !backdrop-blur-sm"
+            style={{ width: 132, height: 88 }}
+            onNodeClick={(_, node) => {
+              const id = (node.data as PdcaNodeData | undefined)?.stageId
+              if (id === 'plan' || id === 'do' || id === 'check' || id === 'act') {
+                focusStageNode(id)
+                if (variant === 'live') onOpenStage(id)
+              }
+            }}
+          />
+        )}
+      </ReactFlow>
+
+      {selectedEdge && (
+        <EdgeInspector
+          edge={selectedEdge}
+          stages={stages}
+          onClose={() => setSelectedEdge(null)}
+        />
+      )}
+
+      {ctxMenu && (
+        <NodeContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          node={ctxMenu.node}
+          onClose={() => setCtxMenu(null)}
+          onInspect={() => onOpenStage(ctxMenu.node.stageId)}
+          onFocusLog={() => focusStageNode(ctxMenu.node.stageId)}
+        />
+      )}
+    </div>
   )
 }

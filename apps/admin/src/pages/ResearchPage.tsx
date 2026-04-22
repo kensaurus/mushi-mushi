@@ -19,6 +19,7 @@ import {
   Btn,
   Input,
   Section,
+  SegmentedControl,
   Skeleton,
   ErrorAlert,
   RelativeTime,
@@ -265,7 +266,8 @@ export function ResearchPage() {
       <Section title="Recent sessions" className="space-y-2">
         {sessions && sessions.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 text-2xs">
-            <SegmentedFilter
+            <SegmentedControl
+              size="sm"
               label="Mode"
               value={modeFilter}
               options={[
@@ -275,7 +277,8 @@ export function ResearchPage() {
               ]}
               onChange={setModeFilter}
             />
-            <SegmentedFilter
+            <SegmentedControl
+              size="sm"
               label="Since"
               value={ageFilter}
               options={[
@@ -356,38 +359,3 @@ export function ResearchPage() {
   )
 }
 
-interface SegmentedFilterProps<T extends string> {
-  label: string
-  value: T
-  options: { id: T; label: string }[]
-  onChange: (next: T) => void
-}
-
-function SegmentedFilter<T extends string>({ label, value, options, onChange }: SegmentedFilterProps<T>) {
-  return (
-    <div role="radiogroup" aria-label={label} className="inline-flex items-center gap-1">
-      <span className="text-3xs uppercase tracking-wider text-fg-faint">{label}</span>
-      <div className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-raised/50">
-        {options.map((opt) => {
-          const active = opt.id === value
-          return (
-            <button
-              key={opt.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(opt.id)}
-              className={`px-1.5 py-0.5 text-2xs ${
-                active
-                  ? 'bg-brand text-brand-fg'
-                  : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
-              }`}
-            >
-              {opt.label}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}

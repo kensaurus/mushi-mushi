@@ -14,10 +14,12 @@ import { useCallback } from 'react'
 interface PdcaFlowControlsProps {
   /** When true, render a replay button that fires `onReplay`. */
   onReplay?: () => void
+  /** When provided, renders a "Tidy" button that re-applies canonical layout. */
+  onTidy?: () => void
   className?: string
 }
 
-export function PdcaFlowControls({ onReplay, className = '' }: PdcaFlowControlsProps) {
+export function PdcaFlowControls({ onReplay, onTidy, className = '' }: PdcaFlowControlsProps) {
   const rf = useReactFlow()
 
   const onZoomIn = useCallback(() => rf.zoomIn({ duration: 200 }), [rf])
@@ -49,6 +51,16 @@ export function PdcaFlowControls({ onReplay, className = '' }: PdcaFlowControlsP
           <path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </ControlBtn>
+      {onTidy && (
+        <ControlBtn label="Tidy — re-apply layout and fit view" onClick={onTidy}>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="4" height="4" rx="0.5" />
+            <rect x="9.5" y="2.5" width="4" height="4" rx="0.5" />
+            <rect x="2.5" y="9.5" width="4" height="4" rx="0.5" />
+            <rect x="9.5" y="9.5" width="4" height="4" rx="0.5" />
+          </svg>
+        </ControlBtn>
+      )}
       {onReplay && (
         <>
           <span className="h-4 w-px bg-edge/60" aria-hidden="true" />

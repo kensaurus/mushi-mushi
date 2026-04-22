@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/angular",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "license": "MIT",
   "description": "Angular SDK for Mushi Mushi — NgModule, injectable service, global ErrorHandler",
   "main": "./dist/index.js",
@@ -36,12 +36,16 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "sideEffects": false,
   "keywords": [

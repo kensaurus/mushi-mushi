@@ -17,6 +17,7 @@ import {
   PageHeader,
   PageHelp,
   Card,
+  Section,
   Badge,
   Btn,
   EmptyState,
@@ -252,8 +253,7 @@ export function HealthPage() {
         )
       })()}
 
-      <section>
-        <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">LLM Health ({window})</h2>
+      <Section title={`LLM Health (${window})`}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <StatCard label="Total calls" value={llm.totalCalls.toString()} />
           <StatCard
@@ -268,10 +268,9 @@ export function HealthPage() {
           />
           <StatCard label="Latency p50 / p95" value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`} />
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">Per-function breakdown</h3>
+      <Section title="Per-function breakdown">
         {fnNames.length === 0 ? (
           <EmptyState
             icon={<HeroPulseHealth />}
@@ -317,10 +316,9 @@ export function HealthPage() {
             })}
           </div>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide mb-2">Per-model breakdown</h3>
+      <Section title="Per-model breakdown">
         {Object.keys(byModel).length === 0 ? (
           <EmptyState
             icon={<HeroPulseHealth accent="text-info" />}
@@ -343,12 +341,9 @@ export function HealthPage() {
             ))}
           </div>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">Cron Jobs</h2>
-        </div>
+      <Section title="Cron Jobs">
         <div className="space-y-1">
           {KNOWN_JOBS.map(job => {
             const j = cron?.byJob[job]
@@ -390,21 +385,19 @@ export function HealthPage() {
             )
           })}
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
-          <h3 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
-            Recent LLM calls
-            {fnFilter && <span className="ml-2 text-fg normal-case">· filtered to <code className="font-mono">{fnFilter}</code></span>}
-          </h3>
+      <Section
+        title={fnFilter ? `Recent LLM calls · filtered to ${fnFilter}` : 'Recent LLM calls'}
+        action={
           <FilterSelect
             label="Show"
             value={recentFilter}
             options={RECENT_FILTER_OPTIONS}
             onChange={(e) => updateParam('recent', e.currentTarget.value)}
           />
-        </div>
+        }
+      >
         {filteredRecent.length === 0 ? (
           <EmptyState
             icon={recentFilter || fnFilter ? <HeroSearch accent="text-fg-faint" /> : <HeroPulseHealth />}
@@ -453,7 +446,7 @@ export function HealthPage() {
             })}
           </div>
         )}
-      </section>
+      </Section>
     </div>
   )
 }

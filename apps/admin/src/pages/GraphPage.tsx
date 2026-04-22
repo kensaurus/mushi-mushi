@@ -12,6 +12,7 @@ import { useToast } from '../lib/toast'
 import {
   PageHeader,
   PageHelp,
+  SegmentedControl,
   ErrorAlert,
 } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
@@ -299,7 +300,13 @@ export function GraphPage() {
             {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
             {filteredEdges.length}/{rawEdges.length} edges
           </span>
-          <ViewModeToggle view={view} onChange={setView} />
+          <SegmentedControl<ViewMode>
+            size="sm"
+            ariaLabel="Graph view mode"
+            value={view}
+            options={VIEW_MODE_OPTIONS}
+            onChange={setView}
+          />
         </div>
       </PageHeader>
 
@@ -425,37 +432,10 @@ export function GraphPage() {
   )
 }
 
-interface ViewModeToggleProps {
-  view: ViewMode
-  onChange: (v: ViewMode) => void
-}
-
-function ViewModeToggle({ view, onChange }: ViewModeToggleProps) {
-  return (
-    <div
-      role="group"
-      aria-label="Graph view mode"
-      className="inline-flex border border-edge rounded-sm overflow-hidden"
-    >
-      <button
-        type="button"
-        onClick={() => onChange('graph')}
-        aria-pressed={view === 'graph'}
-        className={`px-2 py-0.5 text-2xs ${view === 'graph' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
-      >
-        Graph
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange('table')}
-        aria-pressed={view === 'table'}
-        className={`px-2 py-0.5 text-2xs border-l border-edge ${view === 'table' ? 'bg-surface-raised text-fg' : 'text-fg-faint hover:text-fg-muted'}`}
-      >
-        Table
-      </button>
-    </div>
-  )
-}
+const VIEW_MODE_OPTIONS = [
+  { id: 'graph' as const, label: 'Graph' },
+  { id: 'table' as const, label: 'Table' },
+]
 
 interface StoryboardNarrativeProps {
   nodes: GraphNode[]

@@ -56,6 +56,27 @@ Tokens are defined in `src/index.css` using Tailwind v4's `@theme` directive. Sh
 
 `brand` (amber), `accent` (violet), `ok` (green), `warn` (amber), `danger` (red), `info` (blue)
 
+**Retired aliases — never use these.** Tailwind silently drops classes whose `--color-*` variable is undefined, so `bg-success-muted` / `text-error` / `bg-surface-subtle` render **transparently** in production. Map them to the live roots:
+
+| Retired | Use instead |
+|---------|-------------|
+| `success*` | `ok*` (`bg-ok-muted`, `text-ok`, `border-ok`) |
+| `error*` | `danger*` (`bg-danger-muted`, `text-danger`, `border-danger`) |
+| `surface-subtle` | `surface-raised/30` (canonical inset-panel pattern) |
+
+Enforced by `scripts/check-design-tokens.mjs`, wired into the pre-commit hook and available as `pnpm --filter @mushi-mushi/admin lint:tokens` or `pnpm check:design-tokens` at the root. The guard extracts every `--color-<root>` from `src/index.css`, scans TSX/TS/CSS for semantic-prefixed Tailwind classes, and fails the build on retired aliases or typos against real namespaces (e.g. `bg-brand-subdued` when no `--color-brand-subdued` exists).
+
+### Canonical page rhythm
+
+New pages and any refactor should follow these defaults — every admin page already does, and the token guard plus pattern conventions keep drift out at commit time:
+
+- **Page root:** `<div className="space-y-5">` (or `space-y-6` only when the page's top section is a hero). Never stack ad-hoc `mt-4` / `mb-4` spacers between rows — rely on the parent's `space-y-*`.
+- **Section wrapper:** use `<Section title="…" action={…}>` for every titled block, not a bare `<section>`. Filters / segmented controls go in the `action` slot so the header height is consistent.
+- **Card density:** `<Card className="p-5 space-y-4">` with an `h3` header is the canonical rhythm. `p-3` is only for dense inline cards inside tables or panels.
+- **Segmented filters / tabs:** use `<SegmentedControl>` from `ui.tsx`. Do not hand-roll a `rounded-md border bg-surface-raised` row of buttons — the primitive handles focus rings, `role="radiogroup"`, and the active-tone swap.
+- **Button-shaped links:** link-in-disguise chips use the shared `LINK_CHIP_CLASS` pattern (see `ProjectsPage.tsx`). Never wrap `<Btn>` in `<Link>` — that produces invalid nested-button markup.
+- **Code snippets in UI:** `<pre>` blocks showing SQL / JSON / env lines use `px-3 py-2 bg-surface-raised border border-edge-subtle rounded-sm text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap` (see `QueryPage.tsx`).
+
 ### UI primitives (`src/components/ui.tsx`)
 
 Layout & content:
@@ -83,6 +104,7 @@ Media:
 Forms & controls:
 
 - `Btn`, `Input`, `Textarea`, `Checkbox`, `Toggle`, `SelectField`, `FilterSelect`, `Tooltip`, `Kbd`, `Badge`. `Btn` accepts a `loading` prop that swaps the leading icon for a spinner and sets `aria-busy`, so callers don't have to toggle text manually — adopted across `ReportTriageBar`, `HealthPage` cron triggers, BYOK / Firecrawl / Health quick-tests, and Billing invoice retry
+- **`SegmentedControl<T>`** — brand-pill radio group for mode / filter switches. Generic over a string-literal union, accepts `options: { id, label, count? }[]`, renders as `role="radiogroup"` with proper `aria-checked` semantics, and ships with a `size: 'sm' | 'md'` variant plus an optional leading `label` prefix. Used by `FixesPage` (status buckets with counts), `ResearchPage` (mode + since), `GraphPage` (canvas / storyboard / table view). New filter / toggle UIs should reach for this before hand-rolling buttons — see [Canonical page rhythm](#canonical-page-rhythm).
 
 Dense data:
 
@@ -122,7 +144,7 @@ The sidebar (`src/components/Layout.tsx`) groups the 23 admin pages into the sam
 - **Plan — capture & classify** — `Reports`, `Graph`, `Anti-Gaming`, `Queue`
 - **Do — dispatch fixes** — `Fixes`, `Prompt Lab`
 - **Check — verify quality** — `Judge`, `Health`, `Intelligence`, `Research`
-- **Act — integrate & scale** — `Integrations`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in
+- **Act — integrate & scale** — `Integrations`, `MCP`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
 - **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
 
 `SSO` and `Billing` deliberately sit in **Workspace**, not Act — they're one-time admin / account concerns that don't iterate every loop. Act is reserved for tabs that turn a verified fix into something the rest of the team's toolchain consumes.
@@ -223,8 +245,9 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 | `/judge` | Judge dashboard — KPI row, score-over-time trend with a colour-coded dimension legend (Overall / Accuracy / Severity / Component / Repro), score distribution histogram, prompt-version leaderboard, "Run judge now" button. Recent evaluations table renders the **report summary** (not the opaque `report_id` hash) and abbreviated columns (`Acc / Sev / Comp / Repro / Agreed`) carry hover tooltips explaining each dimension |
 | `/query` | Ask Your Data — natural-language → SQL with a **Saved sidebar** (pin a question with `★`), persistent history (per user, with rerun / unpin / delete row actions), an **SQL hints card** that seeds the input with effective phrasings, sanitised LLM output (trailing `;` and inline comments stripped), explanation, generated SQL, and result table |
 | `/fixes` | Auto-fix PDCA — KPI summary (last 30d), daily volume sparkline, per-fix branch graph (`FixGitGraph`) overlaying dispatch → branch → commit → PR → CI → merge, retry button |
-| `/projects` | Project management + API keys, with toast feedback for create / generate / revoke. Each project card surfaces a **`PdcaBottleneckPill`** (Plan / Do / Check / Act tone) labelled with the most-urgent stalled stage and deep-linking straight to that page (e.g. "3 fixes need retry → /fixes") |
+| `/projects` | Project management + API keys, with toast feedback for create / generate / revoke. Each project card surfaces a **`PdcaBottleneckPill`** (Plan / Do / Check / Act tone) labelled with the most-urgent stalled stage and deep-linking straight to that page (e.g. "3 fixes need retry → /fixes"). Newly minted API keys render through **`RevealedKeyCard`** (`src/components/RevealedKeyCard.tsx`) — the plain-text secret is shown **once**, with tabbed "copy as" output for the three real consumption modes: raw token, a `MUSHI_API_KEY=…` block for `.env.local` / CI, and a full `.cursor/mcp.json` snippet pre-filled with the project id so the user can paste it into a repo and the agent Just Works. Scope badges are inlined so `mcp:read` vs `mcp:write` is obvious before dismissal, and a "Learn more" link points at `/mcp` for the full catalog |
 | `/integrations` | Sentry, Langfuse, GitHub App + routing destinations (Jira, Linear, GitHub Issues, PagerDuty) — `HealthPill` per integration, full CRUD editor for routing credentials with masked-secret pass-through, sidebar health dot. Each unconfigured platform / provider card lists `capabilitiesOnceConnected` ("what you can do once it's connected") so the user can see the value before handing over a token |
+| `/mcp` | **MCP (Model Context Protocol) beginner console** — the production-ready onboarding surface for `@mushi-mushi/mcp`. Top strip: live connection status based on whether the active project has minted an `mcp:read` / `mcp:write` key. Install block: toggles between `.cursor/mcp.json` and `.env.local` snippets, each pre-filled with the active `project_id` and a `MUSHI_API_KEY` placeholder, one-click copy via `useToast`. Use-cases grid explains the honest wins (triage from chat, scoped autofix, cross-IDE parity). Full catalog of every advertised tool / resource / prompt (rendered from `src/lib/mcpCatalog.ts`, mirrored from `packages/mcp/src/catalog.ts`) with scope badges (`mcp:read` / `mcp:write`) and behaviour hints (`readOnly` / `destructive` / `idempotent` / `openWorld`) so an agent operator can see at a glance which tools are safe to auto-invoke. Deep-links to `/projects` for key minting |
 | `/sso` | SAML / OIDC self-service — provider name, metadata URL, entity ID, email domains. SAML registers via Supabase Auth Admin API and surfaces ACS URL + Entity ID for the IdP; OIDC currently writes config and shows a "register in dashboard" hint pending GoTrue admin support. Disconnect drops the row + the registered provider |
 | `/audit` | Audit log with CSV export and an **Actor type** filter (`human` / `agent (LLM)` / `system (cron / webhook)`), driven by an `actor_type` query param on the API |
 | `/prompt-lab` | Prompt Lab (replaces `/fine-tuning`) — leaderboard of prompt versions, A/B traffic split, dataset preview, clone / activate / delete. Diff modal compares parent vs candidate across `Evaluations`, `Avg judge score`, **and `Avg $ / eval`** (real cost from `llm_invocations.cost_usd`, lower-is-better tone). `/fine-tuning` redirects here |

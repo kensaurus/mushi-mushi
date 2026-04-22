@@ -265,7 +265,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 - **N+1 slayed** — `apiFetch` now dedups in-flight requests + keeps a 200 ms micro-cache. The old 24× storm on `/v1/admin/setup` is now 1 request.
 - **Sentry telemetry** — every non-2xx API response leaves a breadcrumb; 5xx captures a message; rotated DSNs self-disable after 3 consecutive 401/403 so your devtools stay clean.
 - **Slack quick-fix** — Block Kit messages with `Triage` + `Dispatch fix` buttons wired to a signed `slack-interactions` Edge Function. The loop starts and ends in Slack.
-- **Pre-commit secret scanner** — `pnpm install` auto-installs a `.git/hooks/pre-commit` that runs `scripts/check-no-secrets.mjs` against staged files. Catches AWS / Stripe / Slack / GitHub / OpenAI / Anthropic keys and JWTs before they ever hit a commit.
+- **Pre-commit lint guards** — `pnpm install` auto-installs a `.git/hooks/pre-commit` that chains three zero-dependency guards: `check-no-secrets.mjs` (AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / JWT leak scanner), `check-design-tokens.mjs` (flags retired Tailwind aliases that would render transparently in the admin console), and `check-mcp-catalog-sync.mjs` (keeps the MCP catalog and its admin mirror in lockstep). Bypass once with `git commit --no-verify`, skip install with `MUSHI_SKIP_GIT_HOOKS=1`.
 
 <details>
 <summary><b>Full phase history</b></summary>
@@ -294,9 +294,9 @@ Handover docs (most recent first) live under [`docs/`](./docs/) — they're the 
 | -------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | Classification       | Haiku fast-filter, Sonnet deep, **vision air-gap closed + contract-tested**, structured outputs, prompt-cached prompts, **`pg_cron` self-healing every 5 min** | Stage 2 response streaming (Wave S5) — see below               |
 | Judge / self-improve | Sonnet judge with **OpenAI fallback** wired, prompt A/B auto-promotion loop (judge → `prompt_versions.avg_judge_score` → `promoteCandidate`) | **Fine-tune vendor promotion**: `finetune_runs` schema exists, the submit-to-OpenAI/Anthropic worker is a stub. Prompt A/B promotion is the shipping mechanism today. |
-| Fix orchestrator     | Single-repo `validateResult` gating, GitHub PR creation, **MCP JSON-RPC 2.0** client, multi-repo **data model** (`fix_coordinations`, `fix_coordination_repos`) | Multi-repo **execution** — the coordinator worker that fans out per-repo fix attempts lands in Wave S5. First-party Claude Code / Codex adapters still wait on vendor APIs. |
+| Fix orchestrator     | Single-repo `validateResult` gating, GitHub PR creation, **MCP JSON-RPC 2.0** client, multi-repo **data model** + **coordinator worker** (fans out per-repo fix attempts, aggregates per-repo pass/fail) | First-party Claude Code / Codex adapters still wait on vendor APIs. |
 | Sandbox              | Provider abstraction; `local-noop` (tests) + `e2b` / `modal` / `cloudflare` (prod-ready, deny-by-default egress, audit-event stream) | —                                                              |
-| Verify               | Screenshot diff via Playwright + pixelmatch; **`@mushi-mushi/verify` step interpreter is proof-of-concept** — supports `navigate` + `click` only. `type`, `assertText`, and `waitFor` ship in Wave S5. | See left. |
+| Verify               | Screenshot diff via Playwright + pixelmatch; **`@mushi-mushi/verify` step interpreter feature-complete** — `navigate`, `click`, `type`, `press`, `select`, `assertText`, `waitFor`, `observe`. | —                                                              |
 | Enterprise           | Plugin marketplace + HMAC, audit ingest, region pinning, retention CRUD, Stripe metering + `/billing` UI + invoice list, **SAML SSO via Supabase Auth Admin API** (ACS / Entity ID surfaced for IdP setup), routing-destination CRUD with masked secrets | **OIDC SSO intentionally returns `501 Not Implemented`** — Supabase GoTrue does not yet expose the admin endpoints we'd need. The admin UI exposes the config form so the settings round-trip is tested, but the endpoint is gated. Track Supabase changelog for GoTrue OIDC admin support. |
 | Graph backend        | Plain SQL adjacency over `graph_nodes` / `graph_edges` ships in every deployment. | **Apache AGE is a hosted-tier enhancement**: when the AGE extension is installed (self-hosted Postgres 16 or Supabase Enterprise tier) we route graph queries through AGE for >10× traversal speedup. Supabase's managed tier does not ship AGE, so cloud deployments stay on SQL adjacency. |
 | Streaming            | Fix-dispatch SSE (CVE-2026-29085-safe sanitization)                                                  | Classification reasoning still arrives whole. Stage 2 `streamObject` conversion lands in Wave S5. |
@@ -363,6 +363,8 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 | `npm i @mushi-mushi/react-native`  | React Native / Expo     | Shake-to-report, bottom-sheet widget, navigation capture, offline queue                   |
 | `npm i @mushi-mushi/capacitor`     | Capacitor / Ionic       | iOS + Android via Capacitor — shake-to-report, screenshot, offline queue                  |
 | `npm i @mushi-mushi/web`           | Vanilla / any framework | Framework-agnostic SDK — Shadow-DOM widget, screenshot, console + network capture         |
+| `npm i @mushi-mushi/node`          | Node (Express/Fastify/Hono) | **Server-side** SDK — error-handler middleware, `uncaughtException` hook, W3C trace context |
+| `npm i @mushi-mushi/adapters`      | Any Node webhook server | Translate Datadog / New Relic / Honeycomb / Grafana alerts into Mushi reports              |
 
 [![mushi-mushi](https://img.shields.io/npm/v/mushi-mushi?label=mushi-mushi%20(launcher)&color=cb3837)](https://www.npmjs.com/package/mushi-mushi)
 [![@mushi-mushi/react](https://img.shields.io/npm/v/@mushi-mushi/react?label=react&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
@@ -372,8 +374,11 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 [![@mushi-mushi/react-native](https://img.shields.io/npm/v/@mushi-mushi/react-native?label=react-native&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react-native)
 [![@mushi-mushi/capacitor](https://img.shields.io/npm/v/@mushi-mushi/capacitor?label=capacitor&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/capacitor)
 [![@mushi-mushi/web](https://img.shields.io/npm/v/@mushi-mushi/web?label=web&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/web)
+[![@mushi-mushi/node](https://img.shields.io/npm/v/@mushi-mushi/node?label=node&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/node)
+[![@mushi-mushi/adapters](https://img.shields.io/npm/v/@mushi-mushi/adapters?label=adapters&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/adapters)
 [![@mushi-mushi/cli](https://img.shields.io/npm/v/@mushi-mushi/cli?label=cli&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/cli)
 [![@mushi-mushi/mcp](https://img.shields.io/npm/v/@mushi-mushi/mcp?label=mcp&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp)
+[![@mushi-mushi/mcp-ci](https://img.shields.io/npm/v/@mushi-mushi/mcp-ci?label=mcp-ci&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/mcp-ci)
 
 <details>
 <summary><b>Internal & native packages</b></summary>
@@ -382,7 +387,12 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | [`@mushi-mushi/core`](./packages/core) | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, structured logger. Auto-installed.       |
 | [`@mushi-mushi/cli`](./packages/cli)   | CLI for project setup, report listing, triage. `npm i -g @mushi-mushi/cli`                                              |
-| [`@mushi-mushi/mcp`](./packages/mcp)   | MCP server — lets Cursor / Copilot / Claude read and triage bug reports                                                 |
+| [`@mushi-mushi/mcp`](./packages/mcp)   | MCP server — lets Cursor / Copilot / Claude read, triage, classify, dispatch fixes, and run NL queries                  |
+| [`@mushi-mushi/mcp-ci`](./packages/mcp-ci) | GitHub Action that calls the MCP tools from CI — gate PR merges on classification coverage, dispatch fixes on label  |
+| [`@mushi-mushi/plugin-sdk`](./packages/plugin-sdk) | Build third-party plugins — signed webhook verification, REST callback client, framework adapters              |
+| [`@mushi-mushi/plugin-jira`](./packages/plugin-jira) | Bidirectional Mushi ↔ Jira Cloud sync (OAuth 3LO, status transitions, fix comments)                          |
+| [`@mushi-mushi/plugin-slack-app`](./packages/plugin-slack-app) | First-class Slack app — `/mushi` slash command, signing-secret verification, App Manifest           |
+| [`@mushi-mushi/plugin-linear`](./packages/plugin-linear) | Reference plugin — create + sync Linear issues from Mushi reports                                        |
 | [`packages/ios`](./packages/ios)       | Native iOS SDK (Swift Package Manager) — early dev                                                                      |
 | [`packages/android`](./packages/android) | Native Android SDK (Maven `dev.mushimushi:mushi-android`) — early dev                                                  |
 
@@ -394,8 +404,8 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 | Package                | Purpose                                                                                                                                              |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@mushi-mushi/server`  | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer, vision air-gap, judge with OpenAI fallback, plugin runtime |
-| `@mushi-mushi/agents`  | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction, MCP JSON-RPC 2.0 client                                  |
-| `@mushi-mushi/verify`  | Playwright fix verification — screenshot visual diff. **Step interpreter is proof-of-concept** (supports `navigate` + `click`; `type` / `assertText` / `waitFor` ship in Wave S5). For complex fix verification today, write the Playwright test directly and attach its output to the fix attempt via the REST API. |
+| `@mushi-mushi/agents`  | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction, MCP JSON-RPC 2.0 client, multi-repo coordinator                                  |
+| `@mushi-mushi/verify`  | Playwright fix verification — screenshot visual diff + feature-complete step interpreter (`navigate`, `click`, `type`, `press`, `select`, `assertText`, `waitFor`, `observe`). Attach step arrays to a fix attempt via the REST API and the verifier replays + diffs automatically. |
 
 </details>
 
@@ -498,7 +508,9 @@ Requires Node.js ≥ 22 and pnpm ≥ 10.
 | `pnpm format`      | Prettier                                                     |
 | `pnpm changeset`   | Create a changeset                                           |
 | `pnpm release`     | Build + publish to npm                                       |
-| `pnpm check:secrets` | Scan the whole tree for leaked AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Supabase / JWT tokens. The same `scripts/check-no-secrets.mjs` runs on staged files automatically via a `pre-commit` hook installed by `pnpm install`. |
+| `pnpm check:secrets` | Scan the whole tree for leaked AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Supabase / JWT tokens. Also runs staged-only on every commit via the auto-installed `pre-commit` hook. |
+| `pnpm check:design-tokens` | Flag Tailwind classes in `apps/admin/` that reference retired aliases (`success*` / `error*` / `surface-subtle`) or typo against real `--color-*` namespaces defined in `apps/admin/src/index.css`. Catches the "invisible transparent element" bug class at commit time. |
+| `pnpm check:catalog-sync` | Verify `packages/mcp/src/catalog.ts` and its admin mirror `apps/admin/src/lib/mcpCatalog.ts` haven't drifted. |
 
 #### Admin console (zero-config)
 

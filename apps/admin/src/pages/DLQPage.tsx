@@ -180,7 +180,7 @@ export function DLQPage() {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <PageHeader
         title="Processing Queue"
         description="Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here."

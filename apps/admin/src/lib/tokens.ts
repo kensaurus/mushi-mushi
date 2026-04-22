@@ -24,10 +24,14 @@ export const PIPELINE_STATUS: Record<string, string> = {
   validated:  'bg-ok-muted text-ok',
   promoted:   'bg-ok-muted text-ok',
   rejected:   'bg-danger-muted text-danger',
-  completed:  'bg-ok-muted text-ok',
-  failed:     'bg-danger-muted text-danger',
-  error:      'bg-danger-muted text-danger',
-  dead_letter:'bg-danger-muted text-danger',
+  completed:         'bg-ok-muted text-ok',
+  failed:            'bg-danger-muted text-danger',
+  error:             'bg-danger-muted text-danger',
+  dead_letter:       'bg-danger-muted text-danger',
+  skipped:                    'bg-warn-muted text-warn',
+  skipped_no_context:         'bg-warn-muted text-warn',
+  skipped_no_sandbox:         'bg-warn-muted text-warn',
+  skipped_unsupported_agent:  'bg-warn-muted text-warn',
 }
 
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -64,10 +68,14 @@ export const PIPELINE_STATUS_LABELS: Record<string, string> = {
   validated:   'Validated',
   promoted:    'Promoted',
   rejected:    'Rejected',
-  completed:   'Completed',
-  failed:      'Failed',
-  error:       'Error',
-  dead_letter: 'Dead letter',
+  completed:          'Completed',
+  failed:             'Failed',
+  error:              'Error',
+  dead_letter:        'Dead letter',
+  skipped:                   'Skipped',
+  skipped_no_context:        'Skipped (no context)',
+  skipped_no_sandbox:        'Skipped (no sandbox)',
+  skipped_unsupported_agent: 'Skipped (unsupported agent)',
 }
 
 export function statusLabel(s: string | null | undefined): string {

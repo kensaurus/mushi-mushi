@@ -10,7 +10,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
-import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Section, ErrorAlert } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
@@ -21,6 +21,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
+import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
 import {
   PLATFORM_DEFS,
   ROUTING_PROVIDERS,
@@ -230,8 +231,7 @@ export function IntegrationsPage() {
         howToUse={copy?.help?.howToUse ?? 'For each card, click Edit to add credentials, then Test to probe live. Status pills, latency, and a 7-day sparkline live-update with each probe.'}
       />
 
-      <section>
-        <h2 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Core platform</h2>
+      <Section title="Core platform">
         <div className="space-y-2">
           {PLATFORM_DEFS.map((def) => (
             <PlatformIntegrationCard
@@ -253,11 +253,11 @@ export function IntegrationsPage() {
               onTest={() => void testKind(def.kind)}
             />
           ))}
+          {activeProjectId && <CodebaseIndexCard projectId={activeProjectId} />}
         </div>
-      </section>
+      </Section>
 
-      <section>
-        <h2 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Routing destinations</h2>
+      <Section title="Routing destinations">
         <p className="text-2xs text-fg-muted mb-2">
           Forward triaged reports to your ticketing or paging system. Each provider has its own
           credentials; severity + category routing lives in Settings → Routing.
@@ -288,7 +288,7 @@ export function IntegrationsPage() {
             )
           })}
         </div>
-      </section>
+      </Section>
     </div>
   )
 }

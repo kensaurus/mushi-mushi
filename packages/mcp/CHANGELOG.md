@@ -1,5 +1,32 @@
 # @mushi-mushi/mcp
 
+## 0.3.2
+
+### Patch Changes
+
+- 6e01dc7: Ship `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md` inside every published tarball, and enable npm provenance (sigstore-signed build attestation) for every publishable package. Both changes target package-health signals surfaced by Snyk (`security.snyk.io/package/npm/<name>`) and Socket (`socket.dev/npm/package/<name>`):
+  - **Community files in-tarball.** Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift.
+  - **`publishConfig.provenance: true` everywhere.** The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match.
+  - **`.github/FUNDING.yml`** points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI.
+
+  No runtime behaviour changes. No breaking changes for consumers.
+
+- Updated dependencies [6e01dc7]
+  - @mushi-mushi/core@0.3.1
+
+## 0.3.1
+
+### Patch Changes
+
+- 38d3879: Refactor the MCP server entry point into a testable `createMushiServer` factory (`server.ts`) plus a thin `index.ts` stdio bridge, and formalise tool/resource/prompt metadata in `catalog.ts`. The catalog is mirrored into the admin UI and guarded by `scripts/check-mcp-catalog-sync.mjs` to prevent drift.
+
+  Public changes:
+  - New `bin` entry `mushi-mcp` so MCP clients can launch the server without pointing at `dist/index.js` directly.
+  - New `test:smoke`, `test:localhost`, and `demo` scripts; integration test suite (`__tests__/server.integration.test.ts`) exercises the real MCP protocol via `InMemoryTransport` with a stubbed `fetch`.
+  - README rewritten around the "MCP for beginners" admin page, with 2025-10 spec alignment, tool-annotation semantics (`readOnly` / `destructive` / `openWorld`), scope model (`mcp:read` / `mcp:write`), and a testing matrix.
+
+  No breaking changes for consumers. Existing `MUSHI_API_ENDPOINT` / `MUSHI_API_KEY` / `MUSHI_PROJECT_ID` env vars and the stdio transport contract are unchanged.
+
 ## 0.3.0
 
 ### Minor Changes

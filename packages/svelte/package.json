@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/svelte",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "license": "MIT",
   "description": "Svelte SDK for Mushi Mushi — context-based init, SvelteKit error hook integration",
   "main": "./dist/index.js",
@@ -37,12 +37,16 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "sideEffects": false,
   "keywords": [
