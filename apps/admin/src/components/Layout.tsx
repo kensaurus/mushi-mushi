@@ -30,6 +30,10 @@ import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
+import { DensitySidebarToggle } from './DensitySidebarToggle'
+import { ThemeSidebarToggle } from './ThemeSidebarToggle'
+import { WhatsNewModal, useWhatsNew } from './WhatsNew'
+import { AIAssistSidebar } from './AIAssistSidebar'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 
@@ -237,6 +241,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [hotkeysOpen, setHotkeysOpen] = useState(false)
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
+  const [aiOpen, setAiOpen] = useState(false)
+  const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
 
   // Global Cmd/Ctrl+K opens the command palette. `allowInInputs: true`
@@ -274,6 +280,24 @@ export function Layout({ children }: { children: ReactNode }) {
           e.preventDefault()
           setHotkeysOpen((v) => !v)
         },
+      },
+      {
+        key: 'j',
+        description: 'Toggle AI sidebar (scoped to current page)',
+        handler: (e) => {
+          e.preventDefault()
+          setAiOpen((v) => !v)
+        },
+        meta: true,
+      },
+      {
+        key: 'j',
+        description: 'Toggle AI sidebar (scoped to current page)',
+        handler: (e) => {
+          e.preventDefault()
+          setAiOpen((v) => !v)
+        },
+        ctrl: true,
       },
     ],
   )
@@ -437,7 +461,9 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-2.5 border-t border-edge/60">
+      <div className="px-3 py-2.5 border-t border-edge/60 space-y-2">
+        <DensitySidebarToggle />
+        <ThemeSidebarToggle />
         <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
         <button
           onClick={signOut}
@@ -540,6 +566,32 @@ export function Layout({ children }: { children: ReactNode }) {
               <span aria-hidden className="font-mono text-xs leading-none">?</span>
             </button>
           </Tooltip>
+          <Tooltip content={whatsNew.hasUnread ? 'What\'s new — new release notes' : 'What\'s new'}>
+            <button
+              type="button"
+              onClick={whatsNew.openPanel}
+              aria-label={whatsNew.hasUnread ? 'Open what\'s new (unread updates)' : 'Open what\'s new'}
+              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <span aria-hidden className="font-mono text-xs leading-none">✦</span>
+              {whatsNew.hasUnread && (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse"
+                />
+              )}
+            </button>
+          </Tooltip>
+          <Tooltip content="AI sidebar (Cmd/Ctrl+J)">
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              aria-label="Open AI sidebar"
+              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <span aria-hidden className="font-mono text-xs leading-none">✨</span>
+            </button>
+          </Tooltip>
           <PlanBadge />
           <ProjectSwitcher />
         </header>
@@ -560,6 +612,16 @@ export function Layout({ children }: { children: ReactNode }) {
         open={activityOpen}
         onClose={() => setActivityOpen(false)}
         onUnreadChange={setActivityUnread}
+      />
+      <WhatsNewModal
+        open={whatsNew.open}
+        onClose={whatsNew.closePanel}
+        entries={whatsNew.entries}
+      />
+      <AIAssistSidebar
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        route={pathname}
       />
     </div>
   )

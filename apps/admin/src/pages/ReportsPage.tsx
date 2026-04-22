@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
+import { usePublishPageContext } from '../lib/pageContext'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { useHotkeys } from '../lib/useHotkeys'
@@ -23,6 +24,9 @@ import { usePageCopy } from '../lib/copy'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { HelpOverlay } from '../components/reports/HelpOverlay'
 import { ReportsFilterBar, type ContextChip } from '../components/reports/ReportsFilterBar'
+import { ReportsQuickFilters } from '../components/reports/ReportsQuickFilters'
+import { ReportPreviewDrawer } from '../components/reports/ReportPreviewDrawer'
+import { SavedViewsRow } from '../components/SavedViewsRow'
 import { ReportsKpiStrip } from '../components/reports/ReportsKpiStrip'
 import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
@@ -224,6 +228,83 @@ export function ReportsPage() {
     if (r) navigate(`/reports/${r.id}`)
   }, [cursor, reports, navigate])
 
+  // Publish page context so the AI sidebar, hotkeys modal, and command
+  // palette all see the user's current filters, the number of matches,
+  // and the focused/previewed report. Recomputed on every render so
+  // closures over `reports` / `cursor` stay fresh; the registry dedupes
+  // via a JSON key in `usePublishPageContext`.
+  const previewId = searchParams.get('preview') ?? ''
+  const focusedReport = reports[cursor] ?? null
+  const selection = previewId
+    ? {
+        kind: 'report',
+        id: previewId,
+        label: reports.find((r) => r.id === previewId)?.description?.slice(0, 80) ?? previewId.slice(0, 8),
+      }
+    : focusedReport
+      ? {
+          kind: 'report',
+          id: focusedReport.id,
+          label: focusedReport.description?.slice(0, 80) ?? focusedReport.id.slice(0, 8),
+        }
+      : undefined
+
+  usePublishPageContext({
+    route: '/reports',
+    title: projectName ? `Reports · ${projectName}` : 'Reports',
+    summary: loading
+      ? 'Loading reports…'
+      : total === 0
+        ? 'No reports match the current filters'
+        : `${pluralizeWithCount(total, 'report')} · page ${page + 1} of ${totalPages}${selected.size > 0 ? ` · ${selected.size} selected` : ''}`,
+    filters: {
+      status: status || 'all',
+      severity: severity || 'all',
+      category: category || 'all',
+      component: component || undefined,
+      reporter: reporter || undefined,
+      search: q || undefined,
+      group: groupCollapse ? 'fingerprint' : 'none',
+    },
+    selection,
+    actions: [
+      {
+        id: 'reports:triage-next',
+        label: 'Triage next new report',
+        hint: 'Jumps to the oldest unresolved new-status report',
+        shortcut: 'g n',
+        run: () => {
+          const next = reports.find((r) => r.status === 'new')
+          if (next) navigate(`/reports/${next.id}`)
+          else toast.info('No new reports to triage', 'Switch status filter to "new" to find them')
+        },
+      },
+      {
+        id: 'reports:clear-filters',
+        label: 'Clear all filters',
+        hint: 'Reset status / severity / category / search',
+        run: () => setSearchParams(new URLSearchParams(), { replace: true }),
+      },
+      {
+        id: 'reports:select-all',
+        label: allSelected ? 'Clear selection' : 'Select all on this page',
+        shortcut: 'A',
+        run: toggleSelectAll,
+      },
+    ],
+    questions: [
+      status === 'new'
+        ? 'Which of these new reports should I dispatch first?'
+        : severity === 'critical'
+          ? 'Summarize the critical bugs in this view'
+          : 'What is the oldest unresolved report here?',
+      'Are any of these reports likely duplicates?',
+      selection
+        ? `Explain the focused report (${selection.id.slice(0, 8)}) and why it matters`
+        : 'How should I prioritise what is on screen?',
+    ],
+  })
+
   const moveCursor = useCallback(
     (delta: number) => {
       setCursor((c) => {
@@ -253,6 +334,19 @@ export function ReportsPage() {
         },
       },
       { key: 'Enter', description: 'Open report', handler: openCursor },
+      {
+        key: ' ',
+        description: 'Preview report (keeps list scroll)',
+        handler: (e) => {
+          e.preventDefault()
+          const r = reports[cursor]
+          if (!r) return
+          const next = new URLSearchParams(searchParams)
+          if (next.get('preview') === r.id) next.delete('preview')
+          else next.set('preview', r.id)
+          setSearchParams(next)
+        },
+      },
       {
         key: 'Escape',
         description: 'Clear selection / close help',
@@ -452,6 +546,18 @@ export function ReportsPage() {
         />
       )}
 
+      <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
+
+      <SavedViewsRow
+        scope="reports"
+        currentQuery={searchParams.toString()}
+        onApply={(q) => {
+          const next = new URLSearchParams(q)
+          setSearchParams(next)
+          setSearchInput(next.get('q') ?? '')
+        }}
+      />
+
       <ReportsFilterBar
         searchInput={searchInput}
         onSearchInputChange={setSearchInput}
@@ -532,6 +638,15 @@ export function ReportsPage() {
           onDispatchFix={handleDispatchFix}
         />
       )}
+
+      <ReportPreviewDrawer
+        previewId={searchParams.get('preview')}
+        onClose={() => {
+          const next = new URLSearchParams(searchParams)
+          next.delete('preview')
+          setSearchParams(next)
+        }}
+      />
 
       {showHelp && <HelpOverlay onClose={() => setShowHelp(false)} />}
     </div>

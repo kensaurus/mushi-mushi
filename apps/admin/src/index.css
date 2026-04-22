@@ -121,6 +121,97 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* --ui-scale is toggled by html[data-density]. Multiplying the base
+     font size in the body applies proportionally to every `em`-based
+     Tailwind size (text-xs, text-sm, text-base …). Padding that uses
+     rem (like `p-3`) stays constant so the density change mostly moves
+     typography + line-height, not layout geometry — which is what
+     power users actually want when they pick "compact" (more rows on
+     screen, not a squashed sidebar). */
+  font-size: calc(14px * var(--ui-scale, 1));
+  line-height: calc(1.5 * var(--ui-line-scale, 1));
+}
+
+/* ── UI Density ────────────────────────────────────────────────────────
+   html[data-density] toggle set by useDensity(). The density preference
+   persists in localStorage and is applied pre-React via hydrateDensity()
+   so the first paint already reflects the user's choice. */
+html[data-density="compact"] {
+  --ui-scale: 0.92;
+  --ui-line-scale: 0.95;
+}
+html[data-density="comfortable"] {
+  --ui-scale: 1.08;
+  --ui-line-scale: 1.05;
+}
+
+/* ── Light theme ────────────────────────────────────────────────────────
+   html[data-theme="light"] overrides the @theme tokens so every Tailwind
+   utility (bg-surface, text-fg, border-edge …) automatically adapts.
+   The mapping preserves the same information hierarchy as dark — root
+   is the chrome shade (sidebar), surface is the content bg, raised is
+   slightly lighter for cards. Contrast ratios audited against WCAG AA
+   at each foreground/background pairing.
+
+   Surface lightness choices:
+     root    0.99   – sidebar, nav chrome (near-white with a whisper of blue)
+     surface 0.97   – main canvas
+     raised  0.995  – cards / wells (subtly brighter than canvas)
+     overlay 1.00   – hover & active states
+
+   Brand/accent chroma is nudged up slightly because light backgrounds
+   desaturate colour perception relative to dark ones.
+*/
+html[data-theme="light"] {
+  --color-surface-root:    oklch(0.98 0.002 285);
+  --color-surface:         oklch(0.965 0.002 285);
+  --color-surface-raised:  oklch(0.995 0.002 285);
+  --color-surface-overlay: oklch(0.92 0.004 285);
+
+  --color-edge:         oklch(0.82 0.004 285);
+  --color-edge-subtle:  oklch(0.88 0.003 285);
+
+  --color-fg:           oklch(0.22 0.008 285);
+  --color-fg-secondary: oklch(0.36 0.006 285);
+  --color-fg-muted:     oklch(0.48 0.005 285);
+  --color-fg-faint:     oklch(0.60 0.004 285);
+
+  --color-brand:        oklch(0.62 0.18 80);
+  --color-brand-hover:  oklch(0.56 0.18 80);
+  --color-brand-fg:     oklch(0.985 0.01 80);
+
+  --color-accent:        oklch(0.48 0.22 280);
+  --color-accent-hover:  oklch(0.42 0.22 280);
+  --color-accent-muted:  oklch(0.92 0.05 280);
+
+  --color-ok:            oklch(0.48 0.19 155);
+  --color-ok-fg:         oklch(0.99 0.02 155);
+  --color-ok-muted:      oklch(0.93 0.06 155);
+  --color-warn:          oklch(0.60 0.16 80);
+  --color-warn-muted:    oklch(0.95 0.05 80);
+  --color-danger:        oklch(0.52 0.22 25);
+  --color-danger-muted:  oklch(0.94 0.06 25);
+  --color-info:          oklch(0.48 0.17 240);
+  --color-info-muted:    oklch(0.94 0.05 240);
+
+  --color-overlay:       oklch(0.22 0.006 285 / 0.35);
+
+  --color-nav-active-bg:     oklch(0.95 0.02 80);
+  --color-nav-active-border: oklch(0.62 0.16 80);
+  --color-nav-hover-bg:      oklch(0.94 0.004 285);
+  --color-nav-section-label: oklch(0.50 0.005 285);
+
+  --shadow-card:   0 1px 2px oklch(0.35 0.01 285 / 0.10);
+  --shadow-raised: 0 2px 8px oklch(0.35 0.01 285 / 0.12);
+}
+html[data-theme="light"] body {
+  color-scheme: light;
+}
+html[data-theme="light"] select,
+html[data-theme="light"] input,
+html[data-theme="light"] textarea {
+  color-scheme: light;
 }
 
 /* Scrollbar — thin, unobtrusive */

@@ -1492,6 +1492,141 @@ export function Loading({ text = 'Loading…' }: { text?: string }) {
   )
 }
 
+/* ── FilterChip ─────────────────────────────────────────────────────────── */
+
+export type FilterChipTone = 'default' | 'brand' | 'ok' | 'warn' | 'danger' | 'info'
+
+interface FilterChipProps {
+  label: string
+  /** Live count shown next to the label — skipped when undefined so the
+   *  chip can be used as a plain toggle (e.g. "Only mine"). */
+  count?: number | null
+  active: boolean
+  onClick: () => void
+  tone?: FilterChipTone
+  /** Optional hover tooltip. */
+  hint?: string
+  /** Icon rendered left of the label. */
+  icon?: ReactNode
+}
+
+const CHIP_ACTIVE: Record<FilterChipTone, string> = {
+  default: 'bg-surface-overlay text-fg border-fg-faint/40',
+  brand:   'bg-brand/15 text-brand border-brand/40',
+  ok:      'bg-ok-muted text-ok border-ok/40',
+  warn:    'bg-warn-muted text-warn border-warn/40',
+  danger:  'bg-danger/15 text-danger border-danger/40',
+  info:    'bg-info-muted text-info border-info/40',
+}
+
+const CHIP_IDLE: Record<FilterChipTone, string> = {
+  default: 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/60 border-edge/60',
+  brand:   'text-fg-secondary hover:text-brand hover:bg-brand/10 border-edge/60',
+  ok:      'text-fg-secondary hover:text-ok hover:bg-ok-muted/60 border-edge/60',
+  warn:    'text-fg-secondary hover:text-warn hover:bg-warn-muted/60 border-edge/60',
+  danger:  'text-fg-secondary hover:text-danger hover:bg-danger/10 border-edge/60',
+  info:    'text-fg-secondary hover:text-info hover:bg-info-muted/60 border-edge/60',
+}
+
+/**
+ * Pill-shaped toggle button for a single-value filter. Stackable with
+ * siblings to form a horizontal chip rail (e.g. the Reports quick filter
+ * row showing "All · New 12 · Triaged 3 · …").
+ *
+ * Use `tone` to match the underlying semantic — warn for "needs
+ * triage", ok for "resolved", danger for "failed". `active=true` locks
+ * the chip into the tone colour so the user always sees which filter
+ * is on, even at a glance.
+ */
+export function FilterChip({ label, count, active, onClick, tone = 'default', hint, icon }: FilterChipProps) {
+  const classes = active ? CHIP_ACTIVE[tone] : CHIP_IDLE[tone]
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      title={hint}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${classes}`}
+    >
+      {icon && <span aria-hidden className="inline-flex items-center">{icon}</span>}
+      <span>{label}</span>
+      {typeof count === 'number' && (
+        <span
+          className={`inline-flex min-w-[1rem] justify-center rounded-full px-1 font-mono text-[0.6rem] font-semibold leading-tight ${
+            active ? 'bg-fg/10' : 'bg-surface-raised/70'
+          }`}
+          aria-label={`${count} results`}
+        >
+          {count > 999 ? '999+' : count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/* ── Breadcrumbs ────────────────────────────────────────────────────────── */
+
+export interface BreadcrumbItem {
+  /** Display label. Kept short — a breadcrumb is a trail, not a sentence. */
+  label: string
+  /** Destination route. Omit for the current page (rendered plain text). */
+  to?: string
+  /** Optional tooltip shown on hover, e.g. the full report title when the
+   *  label is a truncated id. */
+  hint?: string
+}
+
+/**
+ * Thin, single-line breadcrumb trail intended for detail pages. Sits above
+ * the page title so users always know which list they came from and can
+ * walk back one click at a time — important on deep links from Slack /
+ * email where the browser back-button takes you out of the SPA.
+ *
+ * Design notes:
+ *   - Uses `›` (U+203A) separator instead of `/` — reads faster and avoids
+ *     visual collision with URL paths shown nearby (e.g. branch names).
+ *   - Leaf item (current page) is rendered as plain text with aria-current
+ *     so screen readers don't mis-read it as an active link.
+ *   - Truncates each item independently with min-w-0 so a long title in
+ *     one slot doesn't push the rest off-screen.
+ */
+export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
+  if (!items.length) return null
+  return (
+    <nav aria-label="Breadcrumb" className="mb-2 flex items-center gap-1 text-2xs text-fg-muted">
+      <ol className="flex items-center gap-1 min-w-0 flex-wrap">
+        {items.map((item, i) => {
+          const isLast = i === items.length - 1
+          return (
+            <li key={`${item.label}-${i}`} className="flex items-center gap-1 min-w-0">
+              {item.to && !isLast ? (
+                <Link
+                  to={item.to}
+                  title={item.hint}
+                  className="truncate max-w-[16rem] hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:underline"
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <span
+                  className={`truncate max-w-[24rem] ${isLast ? 'text-fg-secondary' : ''}`}
+                  title={item.hint}
+                  aria-current={isLast ? 'page' : undefined}
+                >
+                  {item.label}
+                </span>
+              )}
+              {!isLast && (
+                <span aria-hidden className="text-fg-faint">›</span>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </nav>
+  )
+}
+
 /* ── Skeleton placeholder ──────────────────────────────────────────────── */
 
 export function Skeleton({ className = '' }: { className?: string }) {

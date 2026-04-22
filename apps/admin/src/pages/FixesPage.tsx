@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
+import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { PageHeader, PageHelp, SegmentedControl, ErrorAlert } from '../components/ui'
@@ -183,38 +184,116 @@ export function FixesPage() {
     return fixes.filter((f) => bucketize(f) === statusBucket)
   }, [fixes, statusBucket])
 
+  // Publish page context so the AI sidebar and command palette can react
+  // to the current bucket + counts (e.g. "Retry all failed fixes" only
+  // makes sense when `failedFixes.length > 0`).
+  usePublishPageContext({
+    route: '/fixes',
+    title: projectName ? `Fixes · ${projectName}` : 'Fixes',
+    summary: loading
+      ? 'Loading fix pipeline…'
+      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${bucketCounts.failed} failed`,
+    filters: {
+      bucket: statusBucket,
+    },
+    selection: expanded
+      ? { kind: 'fix', id: expanded, label: fixes.find((f) => f.id === expanded)?.report_id ?? expanded.slice(0, 8) }
+      : undefined,
+    questions: [
+      bucketCounts.failed > 0
+        ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
+        : 'Is the auto-fix pipeline healthy right now?',
+      bucketCounts.inflight > 0
+        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
+        : 'Which report should I dispatch next?',
+      'Which fixes are waiting on a human review?',
+    ],
+  })
+
   // Capped at 12 entries so a freshly-loaded list of 100+ fixes still finishes
   // its entrance animation in well under half a second
   const stagger = useStaggeredAppear({ stepMs: 28, max: 12 })
 
+  // Optimistic-only dispatch rows: inserted synchronously when the user
+  // clicks retry so the InflightDispatches panel updates within a frame
+  // instead of waiting for the POST + realtime round-trip (typically
+  // 300–800ms). Each optimistic row has an `optimistic_` id prefix so
+  // `mergeDispatches` below can tell it apart from real ones returned by
+  // the server and swap it out once the backend confirms. Failed POSTs
+  // also flip the row to status=failed so the user sees why.
+  const [optimisticDispatches, setOptimisticDispatches] = useState<DispatchJob[]>([])
+
+  const pushOptimistic = useCallback((reportId: string): string => {
+    const id = `optimistic_${reportId}_${Date.now().toString(36)}`
+    setOptimisticDispatches((prev) => [
+      {
+        id,
+        project_id: activeProjectId ?? 'unknown',
+        report_id: reportId,
+        status: 'queued',
+        created_at: new Date().toISOString(),
+      },
+      ...prev,
+    ])
+    return id
+  }, [activeProjectId])
+
+  const settleOptimistic = useCallback((id: string, outcome: 'ok' | 'error', message?: string) => {
+    if (outcome === 'ok') {
+      // Drop immediately — loadFixes will replace it with the real row.
+      setOptimisticDispatches((prev) => prev.filter((d) => d.id !== id))
+      return
+    }
+    setOptimisticDispatches((prev) =>
+      prev.map((d) =>
+        d.id === id ? { ...d, status: 'failed' as const, error: message, finished_at: new Date().toISOString() } : d,
+      ),
+    )
+    // Clear failed optimistic rows after a short grace period so the panel
+    // doesn't accumulate stale error rows if the user ignores them.
+    setTimeout(() => {
+      setOptimisticDispatches((prev) => prev.filter((d) => d.id !== id))
+    }, 8000)
+  }, [])
+
   const retryOne = useCallback(
     async (reportId: string) => {
+      const optimisticId = pushOptimistic(reportId)
       const res = await apiFetch('/v1/admin/fixes/dispatch', {
         method: 'POST',
         body: JSON.stringify({ reportId }),
       })
       if (res.ok) {
         toast.push({ tone: 'success', message: 'Fix re-dispatched' })
+        settleOptimistic(optimisticId, 'ok')
         void loadFixes()
       } else {
         toast.push({ tone: 'error', message: res.error?.message ?? 'Re-dispatch failed' })
+        settleOptimistic(optimisticId, 'error', res.error?.message)
       }
     },
-    [loadFixes, toast],
+    [loadFixes, pushOptimistic, settleOptimistic, toast],
   )
 
   const retryAllFailed = useCallback(async () => {
     if (failedFixes.length === 0) return
     setRetryingAll(true)
+    const optimisticIds = failedFixes.map((f) => ({ reportId: f.report_id, id: pushOptimistic(f.report_id) }))
     const results = await Promise.allSettled(
-      failedFixes.map((f) =>
+      optimisticIds.map(({ reportId }) =>
         apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId: f.report_id }),
+          body: JSON.stringify({ reportId }),
         }),
       ),
     )
     setRetryingAll(false)
+    results.forEach((r, idx) => {
+      const { id } = optimisticIds[idx]
+      const ok = r.status === 'fulfilled' && (r.value as { ok: boolean }).ok
+      const msg = r.status === 'fulfilled' ? (r.value as { error?: { message?: string } }).error?.message : 'Request failed'
+      settleOptimistic(id, ok ? 'ok' : 'error', msg)
+    })
     const ok = results.filter((r) => r.status === 'fulfilled' && (r.value as { ok: boolean }).ok).length
     const failed = results.length - ok
     if (failed === 0) {
@@ -223,7 +302,17 @@ export function FixesPage() {
       toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
     }
     void loadFixes()
-  }, [failedFixes, loadFixes, toast])
+  }, [failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast])
+
+  // Merge optimistic rows with server rows — server wins if the same
+  // report_id + status appears in both, keeping the list non-duplicative
+  // once the real dispatch record lands via realtime.
+  const mergedDispatches = useMemo(() => {
+    if (optimisticDispatches.length === 0) return dispatches
+    const realReportIds = new Set(dispatches.map((d) => d.report_id))
+    const keptOptimistic = optimisticDispatches.filter((d) => !realReportIds.has(d.report_id))
+    return [...keptOptimistic, ...dispatches]
+  }, [dispatches, optimisticDispatches])
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
@@ -280,9 +369,9 @@ export function FixesPage() {
 
       {summary && <FixSummaryRow summary={summary} successRate={successRate} />}
 
-      <FixRecommendation fixes={fixes} dispatches={dispatches} />
+      <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
 
-      <InflightDispatches dispatches={dispatches} />
+      <InflightDispatches dispatches={mergedDispatches} />
 
       {fixes.length === 0 ? (
         <SetupNudge

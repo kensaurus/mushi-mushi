@@ -23,6 +23,7 @@ import { useCommandPalette } from '../lib/useCommandPalette'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { apiFetch } from '../lib/supabase'
 import { STATIC_ROUTES, type PaletteGroup, type StaticRoute } from '../lib/searchIndex'
+import { usePageContext } from '../lib/pageContext'
 
 interface LiveReport {
   id: string
@@ -84,6 +85,7 @@ export function CommandPalette() {
   const { isOpen, close } = useCommandPalette()
   const navigate = useNavigate()
   const { mode, setMode } = useAdminMode()
+  const pageCtx = usePageContext()
 
   const [query, setQuery] = useState('')
   const [recents, setRecents] = useState<string[]>(() => readRecents())
@@ -201,6 +203,27 @@ export function CommandPalette() {
           <Command.Empty className="px-4 py-6 text-center text-xs text-fg-muted">
             No matches. Try "reports", "prompt", or a bug description.
           </Command.Empty>
+
+          {/* Page-contributed actions — promoted above everything else so
+              the most context-relevant commands are the first things the
+              user sees when opening the palette from a working page. */}
+          {pageCtx && pageCtx.actions && pageCtx.actions.length > 0 && (
+            <Command.Group
+              heading={`On this page — ${pageCtx.title}`}
+              className="cmdk-group"
+            >
+              {pageCtx.actions.map((a) => (
+                <PaletteActionItem
+                  key={`page:${a.id}`}
+                  id={`page:${a.id}`}
+                  label={a.label}
+                  hint={a.hint ?? pageCtx.summary ?? ''}
+                  keywords={['page', 'here', 'current', pageCtx.title.toLowerCase()]}
+                  onSelect={() => handleSelect(`page:${a.id}`, a.run)}
+                />
+              ))}
+            </Command.Group>
+          )}
 
           {recentRoutes.length > 0 && (
             <Command.Group heading="Recent" className="cmdk-group">
