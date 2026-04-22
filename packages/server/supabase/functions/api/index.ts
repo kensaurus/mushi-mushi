@@ -98,8 +98,12 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
   const defaults = [
     'https://admin.mushimushi.dev',
     'https://app.mushimushi.dev',
-    // Local dev for the admin Vite server. Operators running on different
-    // ports can extend via MUSHI_ADMIN_ORIGIN_ALLOWLIST.
+    // Local dev for the admin Vite server. `apps/admin/README.md` pins the
+    // canonical dev port to 6464; the legacy 5173 entries are kept for
+    // operators who overrode Vite's port. Extend via
+    // MUSHI_ADMIN_ORIGIN_ALLOWLIST for anything else.
+    'http://localhost:6464',
+    'http://127.0.0.1:6464',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
   ]

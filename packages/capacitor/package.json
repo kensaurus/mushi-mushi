@@ -36,10 +36,14 @@
     "android/build.gradle",
     "MushiMushiCapacitor.podspec",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "sideEffects": false,
   "scripts": {

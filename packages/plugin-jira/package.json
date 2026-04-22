@@ -18,7 +18,10 @@
     "dist",
     "README.md",
     "LICENSE",
-    "plugin.json"
+    "plugin.json",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsup",
@@ -49,7 +52,8 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "sideEffects": false,
   "keywords": [

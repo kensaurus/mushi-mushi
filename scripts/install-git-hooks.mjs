@@ -50,10 +50,12 @@ const HOOK_BODY = `#!/bin/sh
 #   - secret scanner       (scripts/check-no-secrets.mjs)
 #   - design-token drift   (scripts/check-design-tokens.mjs)
 #   - MCP catalog sync     (scripts/check-mcp-catalog-sync.mjs)
+#   - community-file drift (scripts/sync-community-files.mjs --check)
 # Bypass once with \`git commit --no-verify\` in an emergency.
 node scripts/check-no-secrets.mjs || exit 1
 node scripts/check-design-tokens.mjs || exit 1
 node scripts/check-mcp-catalog-sync.mjs || exit 1
+node scripts/sync-community-files.mjs --check || exit 1
 `
 
 const target = join(hooksDir, 'pre-commit')

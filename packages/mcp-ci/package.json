@@ -20,7 +20,10 @@
     "dist",
     "action.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "repository": {
     "type": "git",
@@ -35,7 +38,8 @@
     "dispatch-fix"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "build": "tsup",
