@@ -6,15 +6,17 @@ import { useToast } from '../lib/toast'
 import {
   Section,
   Field,
-  IdField,
   PageHelp,
   RecommendedAction,
   EmptyState,
   ErrorAlert,
   Btn,
+  Badge,
+  Callout,
+  InfoHint,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
-import { statusLabel, severityLabel, CATEGORY_LABELS } from '../lib/tokens'
+import { statusLabel, severityLabel, CATEGORY_LABELS, CATEGORY_BADGE } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
@@ -39,6 +41,7 @@ import {
   PerformanceMetrics,
   ConsoleLogs,
   NetworkLogs,
+  EnvironmentFields,
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
@@ -196,16 +199,27 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Section title="User report" icon={<IconUser />}>
-          <Field label="Description" value={report.description} />
-          <Field
-            label="User category"
-            value={CATEGORY_LABELS[report.user_category] ?? report.user_category}
-            tooltip="What the reporter said the issue was about, before LLM classification."
-          />
+          {report.user_category && (
+            <div className="mb-2.5">
+              <div className="flex items-center gap-1 text-xs text-fg-muted font-medium">
+                User category
+                <InfoHint content="What the reporter said the issue was about, before LLM classification." />
+              </div>
+              <div className="mt-1">
+                <Badge
+                  className={CATEGORY_BADGE[report.user_category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
+                >
+                  {CATEGORY_LABELS[report.user_category] ?? report.user_category}
+                </Badge>
+              </div>
+            </div>
+          )}
+          <Field label="Description" value={report.description} longForm />
           {report.user_intent && (
             <Field
               label="User intent"
               value={report.user_intent}
+              longForm
               tooltip="What the reporter said they were trying to do when the issue happened."
             />
           )}
@@ -220,41 +234,21 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
           {report.stage1_classification ? (
             <ClassificationFields report={report} />
           ) : report.processing_error ? (
-            <div className="rounded-sm border border-danger/30 bg-danger-muted/15 px-2 py-2 text-xs text-danger">
-              <p className="font-medium mb-0.5">Classification failed</p>
-              <p className="text-fg-secondary break-words">{report.processing_error}</p>
-            </div>
+            <Callout tone="danger" label="Classification failed">
+              <p className="text-[0.8125rem] font-mono text-fg-secondary leading-relaxed wrap-break-word">
+                {report.processing_error}
+              </p>
+            </Callout>
           ) : (
             <div className="text-fg-muted text-xs italic">Pending classification — refresh in a few seconds.</div>
           )}
         </Section>
 
         <Section title="Environment" icon={<IconGlobe />}>
-          <Field
-            label="URL"
-            value={report.environment?.url ?? 'Unknown'}
-            mono
-            copyable={Boolean(report.environment?.url)}
+          <EnvironmentFields
+            environment={report.environment}
+            sessionId={report.session_id}
           />
-          <Field label="Browser" value={report.environment?.userAgent ?? 'Unknown'} />
-          <Field
-            label="Viewport"
-            value={
-              report.environment?.viewport
-                ? `${report.environment.viewport.width} × ${report.environment.viewport.height}`
-                : 'Unknown'
-            }
-          />
-          <Field label="Platform" value={report.environment?.platform ?? 'Unknown'} />
-          {report.session_id ? (
-            <IdField
-              label="Session ID"
-              value={report.session_id}
-              tooltip="Unique identifier for the user's browser session at the time of the report."
-            />
-          ) : (
-            <Field label="Session ID" value="Not captured" />
-          )}
         </Section>
 
         <Section title="Performance metrics" icon={<IconGauge />}>

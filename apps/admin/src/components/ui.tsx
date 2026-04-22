@@ -116,9 +116,25 @@ interface FieldProps {
   tooltip?: string
   copyable?: boolean
   valueClassName?: string
+  /**
+   * Force prose rendering (max-w-prose, paragraph splitting, word-safe
+   * wrapping). When undefined, Field auto-detects: values longer than
+   * ~140 chars or containing a newline render as prose. Short labels like
+   * "Visual" or "95%" stay on one line.
+   */
+  longForm?: boolean
 }
 
-export function Field({ label, value, mono, tooltip, copyable, valueClassName = '' }: FieldProps) {
+// Heuristic: if the value looks like long-form prose, route it to
+// LongFormText instead of `break-all` — the latter shreds natural English
+// mid-word (e.g. "Starte\nd") which is never what we want for user-written
+// descriptions.
+function looksLikeProse(value: string) {
+  return value.length > 140 || /\n/.test(value)
+}
+
+export function Field({ label, value, mono, tooltip, copyable, valueClassName = '', longForm }: FieldProps) {
+  const useProse = longForm ?? (!mono && looksLikeProse(value))
   return (
     <div className="mb-2 last:mb-0">
       <span className="flex items-center gap-1 text-xs text-fg-muted font-medium">
@@ -126,14 +142,121 @@ export function Field({ label, value, mono, tooltip, copyable, valueClassName = 
         {tooltip && <InfoHint content={tooltip} />}
       </span>
       <div className="flex items-start gap-1.5 mt-0.5">
-        <p className={`text-sm text-fg break-all ${mono ? 'font-mono' : ''} ${valueClassName}`}>{value}</p>
-        {copyable && <CopyButton value={value} />}
+        {useProse ? (
+          <LongFormText value={value} className={valueClassName} />
+        ) : (
+          // `wrap-break-word` = overflow-wrap: break-word — only breaks words
+          // that actually overflow, not normal English mid-syllable. Never use
+          // `break-all` for user copy.
+          <p className={`text-sm text-fg wrap-break-word ${mono ? 'font-mono' : ''} ${valueClassName}`}>{value}</p>
+        )}
+        {copyable && <CopyButton value={value} className="shrink-0" />}
       </div>
     </div>
   )
 }
 
-/* ── InfoHint (i icon that reveals a tooltip) ───────────────────────────── */
+/* ── LongFormText (prose rendering for descriptions, rationales, intents) ─ */
+
+/**
+ * Optimised for readability of paragraph-length user copy:
+ *   - `max-w-prose` caps lines around 65ch — the research-backed optimal
+ *     reading length (NN/g, Baymard). Without this, wide cards stretch
+ *     lines past 100ch and reading accuracy collapses.
+ *   - `leading-relaxed` (1.625) gives sentences breathing room.
+ *   - `whitespace-pre-wrap` preserves user-entered line breaks.
+ *   - `wrap-break-word` wraps only when a token would overflow, never
+ *     mid-syllable like `break-all` does.
+ *   - Double newlines become true <p> paragraphs so a long rationale
+ *     isn't one unbroken block.
+ */
+interface LongFormTextProps {
+  value: string
+  className?: string
+}
+
+export function LongFormText({ value, className = '' }: LongFormTextProps) {
+  const paragraphs = value.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
+  const base = 'text-sm text-fg leading-relaxed max-w-prose whitespace-pre-wrap wrap-break-word'
+  if (paragraphs.length <= 1) {
+    return <p className={`${base} ${className}`}>{value}</p>
+  }
+  return (
+    <div className={`max-w-prose space-y-2 ${className}`}>
+      {paragraphs.map((para, i) => (
+        <p key={i} className={base}>{para}</p>
+      ))}
+    </div>
+  )
+}
+
+/* ── Callout (emphasized block: summaries, notes) ─────────────────────── */
+
+type CalloutTone = 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
+
+const CALLOUT_TONE: Record<CalloutTone, string> = {
+  neutral: 'border-l-2 border-edge-subtle bg-surface-overlay/35',
+  info:    'border-l-2 border-info/55 bg-info-muted/12',
+  ok:      'border-l-2 border-ok/50 bg-ok-muted/10',
+  warn:    'border-l-2 border-warn/50 bg-warn-muted/12',
+  danger:  'border-l-2 border-danger/45 bg-danger-muted/10',
+}
+
+interface CalloutProps {
+  children: ReactNode
+  tone?: CalloutTone
+  label?: string
+  icon?: ReactNode
+  className?: string
+}
+
+export function Callout({ children, tone = 'neutral', label, icon, className = '' }: CalloutProps) {
+  return (
+    <div className={`rounded-md border border-edge-subtle/80 px-2.5 py-2 ${CALLOUT_TONE[tone]} ${className}`}>
+      {label && (
+        <div className="mb-1.5 flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-muted">
+          {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
+          <span>{label}</span>
+        </div>
+      )}
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
+
+/* ── DefinitionChips (label + value cells for triage metadata) ────────── */
+
+export interface DefinitionChipItem {
+  label: string
+  value: ReactNode
+  hint?: string
+}
+
+export function DefinitionChips({ items, className = '' }: { items: DefinitionChipItem[]; className?: string }) {
+  if (items.length === 0) return null
+  return (
+    <ul
+      className={`mb-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-x-2 ${className}`}
+      aria-label="Key attributes"
+    >
+      {items.map((item) => (
+        <li
+          key={item.label}
+          className="flex min-w-0 flex-col rounded-sm border border-edge-subtle bg-surface-overlay/25 px-2 py-1.5"
+        >
+          <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint" title={item.hint}>
+            {item.label}
+          </span>
+          <div className="mt-0.5 min-w-0 text-sm text-fg wrap-break-word [&_.inline-flex]:max-w-full">
+            {item.value}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/* ── InfoHint (i icon that reveals a tooltip) ──────────────────────────── */
 
 export function InfoHint({ content }: { content: string }) {
   return (
@@ -187,6 +310,67 @@ export function CopyButton({ value, className = '' }: { value: string; className
   )
 }
 
+/* ── CodeValue (monospace technical string with code-block chrome) ──────── */
+
+/**
+ * Semantic <code> block for rendering URLs, IDs, session tokens, hashes,
+ * and other technical strings that look like noise when rendered as plain
+ * prose. Gives the value:
+ *   - A tinted surface background so it visually separates from surrounding
+ *     label text (users scan "this is data, not copy").
+ *   - JetBrains-Mono font + `text-fg` full-contrast colour so characters
+ *     like `l`/`1`/`I` and `0`/`O` are distinguishable.
+ *   - `wrap-anywhere` so very long strings (JWTs, data-URLs) wrap inside
+ *     the card without forcing horizontal scroll or ellipsis truncation.
+ *   - Optional accent tone — `url` greens the protocol hint like devtools,
+ *     `id` uses the soft brand tint. Adding a new tone is a single-line
+ *     change in TONES below.
+ *   - Built-in copy affordance.
+ *
+ * Defaults intentionally show the full value — truncation belongs in list
+ * views, not detail pages where the user came specifically to read the data.
+ */
+type CodeValueTone = 'neutral' | 'id' | 'url' | 'hash'
+
+const CODE_TONES: Record<CodeValueTone, string> = {
+  neutral: 'text-fg',
+  id:      'text-brand',
+  url:     'text-info',
+  hash:    'text-accent',
+}
+
+interface CodeValueProps {
+  value: string
+  tone?: CodeValueTone
+  copyable?: boolean
+  className?: string
+  /** When true the <code> is rendered inline (no fill, no padding). Useful
+   *  for embedding a single token inside a sentence, e.g. "branch `fix/123`
+   *  opened". Detail-page callers should leave this false. */
+  inline?: boolean
+}
+
+export function CodeValue({ value, tone = 'neutral', copyable = true, className = '', inline }: CodeValueProps) {
+  const baseFont = `font-mono text-[0.8125rem] leading-relaxed ${CODE_TONES[tone]}`
+  if (inline) {
+    return (
+      <code className={`${baseFont} px-1 py-0.5 rounded-sm bg-surface-overlay/50 border border-edge-subtle wrap-anywhere ${className}`}>
+        {value}
+      </code>
+    )
+  }
+  return (
+    <div className={`group/code inline-flex max-w-full items-start gap-1.5 ${className}`}>
+      <code
+        className={`${baseFont} block w-full rounded-sm bg-surface-overlay/60 border border-edge-subtle px-2 py-1 wrap-anywhere`}
+      >
+        {value}
+      </code>
+      {copyable && <CopyButton value={value} className="mt-0.5 shrink-0" />}
+    </div>
+  )
+}
+
 /* ── IdField (UUID / hash / session id with copy + full-value tooltip) ─── */
 
 interface IdFieldProps {
@@ -194,9 +378,26 @@ interface IdFieldProps {
   value: string
   prefixLength?: number
   tooltip?: string
+  /** Render the full value as a code block instead of a truncated prefix.
+   *  Use on detail pages where the ID is evidence the user came to see;
+   *  keep the default truncated form for tables and list rows. */
+  full?: boolean
+  /** Accent tone when `full` is set (defaults to `id` — soft brand tint). */
+  tone?: CodeValueTone
 }
 
-export function IdField({ label, value, prefixLength = 12, tooltip }: IdFieldProps) {
+export function IdField({ label, value, prefixLength = 12, tooltip, full, tone = 'id' }: IdFieldProps) {
+  if (full) {
+    return (
+      <div className="mb-2 last:mb-0">
+        <span className="flex items-center gap-1 text-xs text-fg-muted font-medium mb-1">
+          {label}
+          {tooltip && <InfoHint content={tooltip} />}
+        </span>
+        <CodeValue value={value} tone={tone} />
+      </div>
+    )
+  }
   const display = value.length > prefixLength ? `${value.slice(0, prefixLength)}…` : value
   return (
     <div className="mb-2 last:mb-0">
@@ -313,7 +514,11 @@ export function RecommendedAction({ title, description, cta, tone = 'info' }: Re
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-fg leading-tight">{title}</p>
-        {description && <p className="text-xs text-fg-muted mt-1 leading-snug">{description}</p>}
+        {description && (
+          <p className="text-xs text-fg-muted mt-1 max-w-2xl leading-relaxed text-pretty wrap-break-word">
+            {description}
+          </p>
+        )}
       </div>
       {cta && <RecommendedActionCtaEl cta={cta} />}
     </div>
@@ -452,7 +657,11 @@ export function PageHeader({ title, description, children, contextChip, projectS
             </>
           )}
         </h2>
-        {description && <p className="text-xs text-fg-muted mt-0.5">{description}</p>}
+        {description && (
+          <p className="text-xs text-fg-muted mt-1.5 max-w-2xl leading-relaxed text-pretty">
+            {description}
+          </p>
+        )}
       </div>
       {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
     </div>
@@ -601,7 +810,7 @@ export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: P
         </svg>
         <span className="font-medium">{title}</span>
       </summary>
-      <div className="space-y-2.5 border-t border-edge-subtle px-3 py-2.5 text-2xs leading-relaxed text-fg-secondary">
+      <div className="max-w-3xl space-y-2.5 border-t border-edge-subtle px-3 py-2.5 text-2xs leading-relaxed text-fg-secondary text-pretty">
         <div>
           <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">What it is</p>
           <p>{whatIsIt}</p>
@@ -961,7 +1170,11 @@ export function EmptyState({ title, description, action, hints, icon }: EmptySta
     <Card className="p-6 text-center">
       {icon && <div aria-hidden="true" className="mx-auto mb-2 text-fg-faint">{icon}</div>}
       <p className="text-fg-muted text-sm">{title}</p>
-      {description && <p className="text-fg-faint text-xs mt-1 max-w-prose mx-auto leading-relaxed">{description}</p>}
+      {description && (
+        <p className="text-fg-faint text-xs mt-1 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
+          {description}
+        </p>
+      )}
       {hints && hints.length > 0 && (
         <ul className="mt-2 inline-block text-left text-2xs text-fg-faint space-y-0.5">
           {hints.map((hint) => (

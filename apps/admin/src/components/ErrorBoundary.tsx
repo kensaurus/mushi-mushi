@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <Card className="m-6 p-6 text-center">
           <p className="text-sm font-medium text-danger mb-1">Something went wrong</p>
-          <p className="text-xs text-fg-muted mb-3 font-mono break-all">
+          <p className="text-xs text-fg-muted mb-3 font-mono wrap-break-word">
             {this.state.error.message}
           </p>
           <Btn
