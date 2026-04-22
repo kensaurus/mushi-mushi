@@ -205,8 +205,11 @@ async function run() {
     console.log('\nTools — read')
     const recent = jsonFromTool(await client.callTool({ name: 'get_recent_reports', arguments: { limit: 5 } }))
     check('get_recent_reports returns 2 rows', recent.total, 2)
-    check('get_recent_reports forwards API key', calls.at(-1).headers['x-mushi-api-key'], API_KEY_READ)
-    check('get_recent_reports forwards project id', calls.at(-1).headers['x-mushi-project'], PROJECT_ID)
+    // Compare as booleans so the raw API key value never reaches `check()` — which
+    // would otherwise echo it via console.error on assertion failure and trip
+    // CodeQL's js/clear-text-logging rule.
+    check('get_recent_reports forwards API key', calls.at(-1).headers['x-mushi-api-key'] === API_KEY_READ, true)
+    check('get_recent_reports forwards project id', calls.at(-1).headers['x-mushi-project'] === PROJECT_ID, true)
 
     const detail = jsonFromTool(await client.callTool({ name: 'get_report_detail', arguments: { reportId: 'rep_1' } }))
     check('get_report_detail component', detail.component, 'Dashboard/HeroCTA')

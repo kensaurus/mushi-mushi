@@ -23,7 +23,7 @@
 // (`"private": true`). Every synced file is prefixed with an AUTO-SYNCED
 // banner so humans edit only the root copy.
 
-import { readFile, writeFile, readdir, stat } from 'node:fs/promises'
+import { readFile, writeFile, readdir } from 'node:fs/promises'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -54,14 +54,15 @@ async function findPackageDirs() {
     }
     for (const entry of entries) {
       const pkgJsonPath = join(base, entry, 'package.json')
+      // Read directly — separate stat() + readFile() would be a TOCTOU race
+      // (js/file-system-race). ENOENT / EISDIR bubble up as a caught error.
       try {
-        const st = await stat(pkgJsonPath)
-        if (!st.isFile()) continue
-        const pkg = JSON.parse(await readFile(pkgJsonPath, 'utf8'))
+        const raw = await readFile(pkgJsonPath, 'utf8')
+        const pkg = JSON.parse(raw)
         if (pkg.private === true) continue
         dirs.push(join(base, entry))
       } catch {
-        // no package.json — skip
+        // no package.json, unreadable, or malformed — skip
       }
     }
   }

@@ -81,7 +81,7 @@ console.log('\n— Spawning MCP binary exactly as Cursor would —')
 console.log(JSON.stringify({
   command: 'node',
   args: [serverPath],
-  env: { MUSHI_API_ENDPOINT: cfg.endpoint, MUSHI_API_KEY: cfg.apiKey.slice(0, 12) + '…', MUSHI_PROJECT_ID: cfg.projectId },
+  env: { MUSHI_API_ENDPOINT: cfg.endpoint, MUSHI_API_KEY: '••• (redacted)', MUSHI_PROJECT_ID: cfg.projectId },
 }, null, 2))
 
 const transport = new StdioClientTransport({

@@ -26,11 +26,12 @@
 
 import { Link } from 'react-router-dom'
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import { RelativeTime } from '../ui'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail, ReportFixAttempt } from './types'
 
-type StoryState = 'done' | 'pending' | 'failed' | 'idle'
+type StoryState = StageStamp
 
 interface StoryNode {
   id: PdcaStageId
@@ -74,33 +75,41 @@ export function ReportPdcaStory({ report, dispatchState }: Props) {
   )
 }
 
-const STATE_TONE: Record<StoryState, { dot: string; ring: string; copy: string; label: string; pulse?: boolean }> = {
-  done:    { dot: 'bg-ok',     ring: 'ring-ok/30',     copy: 'text-ok',     label: '✓ done' },
-  pending: { dot: 'bg-info',   ring: 'ring-info/30',   copy: 'text-info',   label: '⏳ in progress', pulse: true },
-  failed:  { dot: 'bg-danger', ring: 'ring-danger/30', copy: 'text-danger', label: '✗ failed' },
-  idle:    { dot: 'bg-fg-faint/50', ring: 'ring-edge', copy: 'text-fg-faint', label: '○ pending' },
-}
-
 function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
   const meta = PDCA_STAGES[node.id]
-  const tone = STATE_TONE[node.state]
+  const v = STAMP_VISUAL[node.state]
+  const isDone = node.state === 'done'
+  const isIdle = node.state === 'idle'
   const detailsClean = (node.details ?? []).filter((d): d is string => Boolean(d && d.trim()))
   return (
-    <li className="relative pl-7 pb-3 last:pb-0">
-      {/* Vertical connector line. Skipped on last row. */}
+    <li className={`relative pl-7 pb-3 last:pb-0 ${isIdle ? 'opacity-75' : ''}`}>
+      {/* Vertical connector line. Coloured green for completed stages so the
+          loop visually "fills in" top-down as work lands — gives the whole
+          timeline a progress-bar feel. Skipped on last row. */}
       {!isLast && (
         <span
           aria-hidden="true"
-          className="absolute left-[10px] top-3.5 bottom-0 w-px bg-edge-subtle"
+          className={`absolute left-[10px] top-3.5 bottom-0 w-px ${
+            isDone ? 'bg-ok/40' : 'bg-edge-subtle'
+          }`}
         />
       )}
-      {/* Stage dot */}
+      {/* Stage dot — done gets a filled green disc with ✓, idle is a hollow
+          dashed ring, pending pulses, failed is a filled red disc with ✕. */}
       <span
         aria-hidden="true"
-        className={`absolute left-1 top-1 inline-flex h-4 w-4 items-center justify-center rounded-full ring-2 ${tone.ring} ${tone.dot} ${
-          tone.pulse ? 'mushi-pulse' : ''
+        className={`absolute left-0 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${
+          isDone
+            ? 'bg-ok text-ok-fg mushi-glow-ok'
+            : node.state === 'failed'
+              ? 'bg-danger text-white mushi-glow-danger'
+              : node.state === 'pending'
+                ? `ring-2 ${v.ring} ${v.dot} mushi-pulse`
+                : `ring-2 ring-dashed ${v.ring} bg-transparent`
         }`}
-      />
+      >
+        {isDone ? '✓' : node.state === 'failed' ? '✕' : ''}
+      </span>
       <div className="flex items-baseline gap-2 flex-wrap">
         <span
           className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-[10px] ${meta.badgeBg} ${meta.badgeFg}`}
@@ -108,9 +117,9 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
         >
           {meta.letter}
         </span>
-        <span className="text-xs font-semibold text-fg">{meta.label}</span>
-        <span className={`text-2xs font-medium ${tone.copy}`} aria-label={`Status: ${tone.label}`}>
-          {tone.label}
+        <span className={`text-xs font-semibold ${isIdle ? 'text-fg-muted' : 'text-fg'}`}>{meta.label}</span>
+        <span className={`text-2xs font-semibold ${v.copy}`} aria-label={`Status: ${v.label}`}>
+          {v.glyph} {v.label}
         </span>
         {node.at && (
           <span className="text-2xs text-fg-faint ml-auto">
@@ -118,7 +127,7 @@ function StoryRow({ node, isLast }: { node: StoryNode; isLast: boolean }) {
           </span>
         )}
       </div>
-      <p className="mt-0.5 text-xs text-fg-secondary leading-snug">{node.headline}</p>
+      <p className={`mt-0.5 text-xs leading-snug ${isIdle ? 'text-fg-faint' : 'text-fg-secondary'}`}>{node.headline}</p>
       {(detailsClean.length > 0 || node.thumbnail || node.link) && (
         <div className="mt-1.5 flex items-center gap-2 flex-wrap">
           {node.thumbnail && (
