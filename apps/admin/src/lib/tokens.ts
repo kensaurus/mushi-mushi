@@ -42,6 +42,23 @@ export const CATEGORY_LABELS: Record<string, string> = {
   other:     'Other',
 }
 
+/** Badge chrome per category — pairs with `SEVERITY` for scan-friendly triage rows. */
+export const CATEGORY_BADGE: Record<string, string> = {
+  bug:       'bg-danger-muted/35 text-danger border border-danger/25',
+  slow:      'bg-warn-muted/40 text-warn border border-warn/20',
+  visual:    'bg-info-muted/40 text-info border border-info/20',
+  confusing: 'bg-accent-muted/40 text-accent border border-accent/25',
+  other:     'bg-surface-overlay text-fg-secondary border border-edge-subtle',
+}
+
+/** Styling for LLM confidence percentage chips (0–1). */
+export function confidenceBadgeClass(c: number | null | undefined): string {
+  if (c == null) return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
+  if (c >= 0.85) return 'bg-ok-muted/50 text-ok border border-ok/25'
+  if (c >= 0.65) return 'bg-warn-muted/50 text-warn border border-warn/20'
+  return 'bg-danger-muted/40 text-danger border border-danger/25'
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   new:        'New',
   classified: 'Classified',

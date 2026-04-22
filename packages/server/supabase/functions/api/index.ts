@@ -448,34 +448,52 @@ async function ingestReport(
 
   const reportId = report.id || crypto.randomUUID()
 
+  // Strip null bytes (`\u0000`) from user-supplied TEXT fields: Postgres
+  // TEXT columns reject them with 22P05 (invalid_text_representation → 400),
+  // which is the most plausible root-cause of the rare `reports` insert 400s
+  // we see when clients paste HTML/binary-ish content into the description
+  // (Sentry scrubs the server-side error, so we also rename the log field
+  // from `error` → `errMsg` below so it survives default scrubbers).
+  const sanitizeText = (s: string | undefined | null): string | null =>
+    typeof s === 'string' ? s.replace(/\u0000/g, '') : (s ?? null)
+
   const { error: insertError } = await db.from('reports').insert({
     id: reportId,
     project_id: projectId,
-    description: report.description,
+    description: sanitizeText(report.description) ?? '',
     user_category: report.category,
-    user_intent: report.userIntent,
+    user_intent: sanitizeText(report.userIntent),
     screenshot_url: screenshotUrl,
     screenshot_path: screenshotPath,
-    environment: report.environment,
+    environment: report.environment ?? {},
     console_logs: report.consoleLogs,
     network_logs: report.networkLogs,
     performance_metrics: report.performanceMetrics,
     selected_element: report.selectedElement,
     custom_metadata: report.metadata,
-    proactive_trigger: report.proactiveTrigger,
-    category: report.category,
+    proactive_trigger: sanitizeText(report.proactiveTrigger),
+    category: report.category ?? 'other',
     status: 'new',
     reporter_token_hash: tokenHash,
     reporter_user_id: (report.metadata as any)?.user?.id,
-    session_id: report.sessionId,
-    app_version: report.appVersion,
+    session_id: sanitizeText(report.sessionId),
+    app_version: sanitizeText(report.appVersion),
     queued_at: report.queuedAt,
     synced_at: new Date().toISOString(),
     created_at: report.createdAt,
   })
 
   if (insertError) {
-    log.error('Report insert failed', { reportId, error: insertError.message })
+    log.error('Report insert failed', {
+      reportId,
+      // Renamed from `error` → `errMsg` so Sentry's default data scrubbers
+      // don't mask the actual Postgres failure. Without this we only see
+      // `"[Filtered]"` in Sentry and can't triage the root cause.
+      errMsg: insertError.message,
+      errCode: (insertError as { code?: string }).code,
+      errDetails: (insertError as { details?: string }).details,
+      errHint: (insertError as { hint?: string }).hint,
+    })
     return { ok: false, error: 'Failed to store report' }
   }
 
