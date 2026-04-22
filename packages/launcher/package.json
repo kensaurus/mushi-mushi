@@ -2,7 +2,7 @@
   "name": "mushi-mushi",
   "version": "0.5.1",
   "license": "MIT",
-  "description": "Mushi Mushi launcher — `npx mushi-mushi` (or `npx mushi-mushi init`) auto-detects your framework and installs the right SDK. Bug-reporting + AI triage SDK for React, Vue, Svelte, Angular, React Native, Expo, Capacitor, and vanilla JS.",
+  "description": "Ship a shake-to-report button and get AI-classified, deduped, ready-to-fix bug reports — one `npx mushi-mushi` command for React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS. Companion to Sentry: catches the user-felt bugs crash trackers can't see. Wires into GitHub, Slack, Jira, Linear, PagerDuty, Langfuse, and any MCP-compatible AI agent (Cursor, Claude Code, Copilot).",
   "bin": {
     "mushi-mushi": "./dist/index.js"
   },

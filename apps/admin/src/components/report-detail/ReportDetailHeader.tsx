@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Badge, RelativeTime, CopyButton, Tooltip } from '../ui'
-import { STATUS, SEVERITY, CATEGORY_LABELS, statusLabel, severityLabel } from '../../lib/tokens'
+import { Badge, CodeValue, RelativeTime } from '../ui'
+import { STATUS, SEVERITY, CATEGORY_BADGE, CATEGORY_LABELS, statusLabel, severityLabel } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import type { ReportDetail } from './types'
 
@@ -16,13 +16,15 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             <Badge className={SEVERITY[report.severity] ?? ''}>{severityLabel(report.severity)}</Badge>
           )}
           {report.category && (
-            <Badge className="bg-surface-overlay text-fg-secondary border border-edge-subtle">
+            <Badge
+              className={CATEGORY_BADGE[report.category] ?? 'bg-surface-overlay text-fg-secondary border border-edge-subtle'}
+            >
               {CATEGORY_LABELS[report.category] ?? report.category}
             </Badge>
           )}
         </div>
-        <h2 className="mt-1.5 text-lg font-semibold text-fg leading-snug">
-          {report.summary ?? report.description?.slice(0, 120) ?? 'Untitled report'}
+        <h2 className="mt-1.5 text-lg font-semibold text-fg leading-snug text-balance max-w-4xl wrap-break-word">
+          {(report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'}
         </h2>
         <div className="mt-1.5 flex items-center gap-2 text-xs text-fg-muted flex-wrap">
           <span className="text-fg-secondary">
@@ -45,11 +47,8 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             <span className="text-fg-faint underline-offset-2 hover:underline">view all</span>
           </Link>
           <span aria-hidden="true" className="text-fg-faint">·</span>
-          <span className="inline-flex items-center gap-1">
-            <Tooltip content={report.id}>
-              <span className="font-mono text-2xs cursor-help">{report.id.slice(0, 8)}…</span>
-            </Tooltip>
-            <CopyButton value={report.id} />
+          <span className="inline-flex min-w-0 max-w-full items-center gap-1" title={report.id}>
+            <CodeValue value={report.id} inline tone="id" className="max-w-[min(100%,24rem)]" />
           </span>
         </div>
       </div>
