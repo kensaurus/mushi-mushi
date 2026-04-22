@@ -27,7 +27,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mushi-mushi/plugin-sdk": "workspace:*"
+    "@mushi-mushi/plugin-sdk": "workspace:^"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
