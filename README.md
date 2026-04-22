@@ -67,7 +67,7 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 <tr>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/quickstart-dark.png" alt="Quickstart mode — three-page sidebar (Setup, Bugs to fix, Fixes ready), verb-led labels, zero PDCA jargon, 'You're caught up' caught-up banner, 'Open inbox →' single primary action above page content. The user's plug-and-play answer to a 23-page admin." /></a>
-    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors. Pill-toggle up to Beginner (9 pages) or Advanced (23 pages) anytime.</sub></p>
+    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors. Pill-toggle up to Beginner (9 pages) or Advanced (24 pages) anytime.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/first-run-tour-dark.png" alt="First-run interactive tour — spotlight cutout around the Plan tile, dark backdrop dimming everything else, coach-mark panel reading 'TOUR - 1 OF 5 · Plan — bugs your users felt · Each tile is a stage of the loop. Plan is where real user complaints land, get classified, and get scored by severity. Click any tile to drill in.' with a Next button and a Don't show again link." /></a>
@@ -259,7 +259,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 - **Global command palette** — press `⌘K` (macOS) or `Ctrl+K` (Linux/Windows) anywhere in the admin to jump to any page, filtered view, or real report / fix by name. `cmdk`-backed, keyword aliases (`bugs` → Reports, `pr` → Fixes, `spam` → Anti-Gaming), debounced live API search, recents persist per browser.
 - **PDCA as a live React Flow canvas** — the dashboard loop is now a diamond of Plan / Do / Check / Act nodes with gradient bezier edges and a marching-ants animation on the current bottleneck. Narrow viewports keep the stacked cockpit fallback; onboarding ships the same flow as an explainer.
 - **Responsive tables** — new `ResponsiveTable` primitive with edge-fade scroll shadows, opt-in sticky first column, and a global comfy / compact density toggle that persists per browser. Reports, Judge leaderboards, and Compliance evidence / DSAR tables already use it.
-- **Quickstart mode** — the default 3-page admin (`Setup → Bugs to fix → Fixes ready`) for humans who'd rather not know what PDCA stands for. Pill-toggle up to Beginner (9 pages) or Advanced (23 pages) when you're ready.
+- **Quickstart mode** — the default 3-page admin (`Setup → Bugs to fix → Fixes ready`) for humans who'd rather not know what PDCA stands for. Pill-toggle up to Beginner (9 pages) or Advanced (24 pages) when you're ready.
 - **First-run tour** — a 5-stop spotlight that auto-launches once, skips stops that need real data, and resumes when the first report lands. No `react-joyride` dep, inherits dark theme tokens.
 - **Themed dialogs** — native `window.confirm/prompt` retired in favour of focus-trapped `<ConfirmDialog>` / `<PromptDialog>` with proper `tone="danger"` for destructive actions.
 - **N+1 slayed** — `apiFetch` now dedups in-flight requests + keeps a 200 ms micro-cache. The old 24× storm on `/v1/admin/setup` is now 1 request.

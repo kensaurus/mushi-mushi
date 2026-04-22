@@ -133,8 +133,25 @@ function looksLikeProse(value: string) {
   return value.length > 140 || /\n/.test(value)
 }
 
+// Recognise URLs, UUIDs, JWT-ish tokens, long hex hashes. When `mono` is
+// set we upgrade these to `CodeValue` so the row gets a real code-block
+// surface (tinted background, JetBrains-Mono, copy affordance) rather
+// than a bare `<p class="font-mono">` that previously used `break-all`.
+const UUID_RE   = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+const HEX_RE    = /^[0-9a-fA-F]{16,}$/
+const JWT_RE    = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
+function looksLikeCodeValue(value: string): 'url' | 'id' | 'hash' | null {
+  const trimmed = value.trim()
+  if (/^https?:\/\//i.test(trimmed)) return 'url'
+  if (UUID_RE.test(trimmed)) return 'id'
+  if (JWT_RE.test(trimmed)) return 'hash'
+  if (HEX_RE.test(trimmed)) return 'hash'
+  return null
+}
+
 export function Field({ label, value, mono, tooltip, copyable, valueClassName = '', longForm }: FieldProps) {
   const useProse = longForm ?? (!mono && looksLikeProse(value))
+  const codeTone = mono ? looksLikeCodeValue(value) : null
   return (
     <div className="mb-2 last:mb-0">
       <span className="flex items-center gap-1 text-xs text-fg-muted font-medium">
@@ -144,13 +161,18 @@ export function Field({ label, value, mono, tooltip, copyable, valueClassName = 
       <div className="flex items-start gap-1.5 mt-0.5">
         {useProse ? (
           <LongFormText value={value} className={valueClassName} />
+        ) : codeTone ? (
+          // Mono data that looks like a URL/UUID/hash gets the code-block
+          // chrome automatically — the previous `<p class="font-mono break-all">`
+          // was unreadable once values went past a few chars.
+          <CodeValue value={value} tone={codeTone} copyable={copyable ?? true} className={valueClassName} />
         ) : (
           // `wrap-break-word` = overflow-wrap: break-word — only breaks words
           // that actually overflow, not normal English mid-syllable. Never use
           // `break-all` for user copy.
           <p className={`text-sm text-fg wrap-break-word ${mono ? 'font-mono' : ''} ${valueClassName}`}>{value}</p>
         )}
-        {copyable && <CopyButton value={value} className="shrink-0" />}
+        {copyable && !codeTone && <CopyButton value={value} className="shrink-0" />}
       </div>
     </div>
   )
@@ -173,16 +195,28 @@ export function Field({ label, value, mono, tooltip, copyable, valueClassName = 
 interface LongFormTextProps {
   value: string
   className?: string
+  /** Colour emphasis. `fg` (default) = body-text contrast for descriptions.
+   *  `muted` fades to `text-fg-secondary` for supporting copy (footnotes,
+   *  secondary paragraphs) without dropping below AA contrast. */
+  tone?: 'fg' | 'muted'
+  /** Optional max-width override in Tailwind syntax (e.g. `max-w-2xl`).
+   *  Defaults to `max-w-prose` (~65ch) which is research-backed optimal
+   *  reading length. Wider blocks hurt scan accuracy. */
+  maxWidth?: string
 }
 
-export function LongFormText({ value, className = '' }: LongFormTextProps) {
+export function LongFormText({ value, className = '', tone = 'fg', maxWidth = 'max-w-prose' }: LongFormTextProps) {
   const paragraphs = value.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
-  const base = 'text-sm text-fg leading-relaxed max-w-prose whitespace-pre-wrap wrap-break-word'
+  const toneCls = tone === 'muted' ? 'text-fg-secondary' : 'text-fg'
+  // `text-pretty` asks the browser to balance the last lines of every
+  // paragraph so we don't end on a single orphan word. Safe to apply
+  // unconditionally — browsers that don't support it simply ignore it.
+  const base = `text-sm ${toneCls} leading-relaxed ${maxWidth} whitespace-pre-wrap wrap-break-word text-pretty`
   if (paragraphs.length <= 1) {
     return <p className={`${base} ${className}`}>{value}</p>
   }
   return (
-    <div className={`max-w-prose space-y-2 ${className}`}>
+    <div className={`${maxWidth} space-y-2 ${className}`}>
       {paragraphs.map((para, i) => (
         <p key={i} className={base}>{para}</p>
       ))}
@@ -207,16 +241,25 @@ interface CalloutProps {
   tone?: CalloutTone
   label?: string
   icon?: ReactNode
+  /** Optional right-aligned action (link, button, badge). Sits on the same
+   *  row as the label so calls like "Classification failed — Retry" fit
+   *  without bespoke flex markup at the call site. */
+  action?: ReactNode
   className?: string
 }
 
-export function Callout({ children, tone = 'neutral', label, icon, className = '' }: CalloutProps) {
+export function Callout({ children, tone = 'neutral', label, icon, action, className = '' }: CalloutProps) {
   return (
     <div className={`rounded-md border border-edge-subtle/80 px-2.5 py-2 ${CALLOUT_TONE[tone]} ${className}`}>
-      {label && (
-        <div className="mb-1.5 flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-muted">
-          {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
-          <span>{label}</span>
+      {(label || action) && (
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          {label && (
+            <div className="flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-wider text-fg-muted min-w-0">
+              {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
+              <span className="truncate">{label}</span>
+            </div>
+          )}
+          {action && <div className="shrink-0">{action}</div>}
         </div>
       )}
       <div className="min-w-0">{children}</div>
@@ -232,22 +275,55 @@ export interface DefinitionChipItem {
   hint?: string
 }
 
-export function DefinitionChips({ items, className = '' }: { items: DefinitionChipItem[]; className?: string }) {
+interface DefinitionChipsProps {
+  items: DefinitionChipItem[]
+  className?: string
+  /** Column count at the `sm:` breakpoint and above. Below that we always
+   *  render 1 column so each row breathes on phones. `'auto'` lets the
+   *  grid pack as many columns as fit (min cell width ~12rem). */
+  columns?: 1 | 2 | 3 | 4 | 'auto'
+  /** Compact padding + smaller label — for footers and dense metadata
+   *  strips where the default airy cell would steal too much vertical
+   *  space. */
+  dense?: boolean
+}
+
+export function DefinitionChips({ items, className = '', columns = 2, dense }: DefinitionChipsProps) {
   if (items.length === 0) return null
+  const colsCls =
+    columns === 'auto'
+      ? 'sm:[grid-template-columns:repeat(auto-fit,minmax(12rem,1fr))]'
+      : columns === 1
+      ? ''
+      : columns === 2
+      ? 'sm:grid-cols-2'
+      : columns === 3
+      ? 'sm:grid-cols-2 lg:grid-cols-3'
+      : 'sm:grid-cols-2 lg:grid-cols-4'
+  const cellCls = dense ? 'px-1.5 py-1' : 'px-2 py-1.5'
+  // `text-3xs` (10px) is already the scale floor — going smaller hurts
+  // a11y. The dense label instead recedes by dropping the "airy caption"
+  // chrome (uppercase + tracking-wider), which in the default variant adds
+  // ~2-3px of letterspacing and visually loudens the label. Normal-case +
+  // tight tracking reads as a compact inline caption instead of a header.
+  const labelCls = dense
+    ? 'text-3xs font-medium tracking-normal text-fg-faint'
+    : 'text-3xs font-medium uppercase tracking-wider text-fg-faint'
+  const valueCls = dense ? 'mt-0.5 text-xs' : 'mt-0.5 text-sm'
   return (
     <ul
-      className={`mb-2 grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-x-2 ${className}`}
+      className={`mb-2 grid grid-cols-1 gap-1.5 sm:gap-x-2 ${colsCls} ${className}`}
       aria-label="Key attributes"
     >
       {items.map((item) => (
         <li
           key={item.label}
-          className="flex min-w-0 flex-col rounded-sm border border-edge-subtle bg-surface-overlay/25 px-2 py-1.5"
+          className={`flex min-w-0 flex-col rounded-sm border border-edge-subtle bg-surface-overlay/25 ${cellCls}`}
         >
-          <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint" title={item.hint}>
+          <span className={labelCls} title={item.hint}>
             {item.label}
           </span>
-          <div className="mt-0.5 min-w-0 text-sm text-fg wrap-break-word [&_.inline-flex]:max-w-full">
+          <div className={`${valueCls} min-w-0 text-fg wrap-break-word [&_.inline-flex]:max-w-full`}>
             {item.value}
           </div>
         </li>
@@ -348,15 +424,32 @@ interface CodeValueProps {
    *  for embedding a single token inside a sentence, e.g. "branch `fix/123`
    *  opened". Detail-page callers should leave this false. */
   inline?: boolean
+  /** Render as a semantic `<pre><code>` block with `whitespace-pre-wrap`
+   *  so line-breaks in the source are preserved (e.g. pasted curl commands,
+   *  short SQL snippets, YAML fragments). Longer multi-line content should
+   *  use `LogBlock` instead — it adds scrolling + max-height. */
+  multiline?: boolean
 }
 
-export function CodeValue({ value, tone = 'neutral', copyable = true, className = '', inline }: CodeValueProps) {
+export function CodeValue({ value, tone = 'neutral', copyable = true, className = '', inline, multiline }: CodeValueProps) {
   const baseFont = `font-mono text-[0.8125rem] leading-relaxed ${CODE_TONES[tone]}`
   if (inline) {
     return (
       <code className={`${baseFont} px-1 py-0.5 rounded-sm bg-surface-overlay/50 border border-edge-subtle wrap-anywhere ${className}`}>
         {value}
       </code>
+    )
+  }
+  if (multiline) {
+    return (
+      <div className={`group/code relative max-w-full ${className}`}>
+        <pre
+          className={`${baseFont} w-full rounded-sm bg-surface-overlay/60 border border-edge-subtle px-2 py-1.5 pr-8 whitespace-pre-wrap wrap-anywhere`}
+        >
+          <code className="block min-w-0">{value}</code>
+        </pre>
+        {copyable && <CopyButton value={value} className="absolute right-1 top-1" />}
+      </div>
     )
   }
   return (
@@ -367,6 +460,83 @@ export function CodeValue({ value, tone = 'neutral', copyable = true, className 
         {value}
       </code>
       {copyable && <CopyButton value={value} className="mt-0.5 shrink-0" />}
+    </div>
+  )
+}
+
+/* ── LogBlock (multi-line code/log output with scroll + copy) ───────────── */
+
+/**
+ * Use for any block of technical output longer than a few lines:
+ *   - Console logs, error stacks, webhook payloads, SQL results
+ *   - curl examples, edge-function logs, diff hunks
+ *
+ * Renders a semantic `<pre><code>` so screen readers announce it as code,
+ * wraps safely (`wrap-anywhere` + `whitespace-pre-wrap`) so long tokens
+ * don't force horizontal scroll, caps height at `maxHeightClass` with
+ * vertical scroll, and exposes copy + optional download action.
+ *
+ * Replaces the recurring `<pre class="... break-all">` pattern found across
+ * NotificationsPage, AuditPage, McpPage, DispatchTable, FineTuningJobsCard,
+ * CodebaseIndexCard, RevealedKeyCard. Those used character-level breaking
+ * that was fine for single-line JWTs but shredded multi-line logs.
+ */
+type LogBlockTone = 'neutral' | 'info' | 'ok' | 'warn' | 'danger'
+
+const LOG_TONES: Record<LogBlockTone, string> = {
+  neutral: 'bg-surface-overlay/60 border-edge-subtle text-fg',
+  info:    'bg-info-muted/12 border-info/35 text-fg',
+  ok:      'bg-ok-muted/10 border-ok/40 text-fg',
+  warn:    'bg-warn-muted/12 border-warn/40 text-fg',
+  danger:  'bg-danger-muted/10 border-danger/40 text-fg',
+}
+
+interface LogBlockProps {
+  value: string
+  tone?: LogBlockTone
+  className?: string
+  /** Tailwind max-height class. Defaults to `max-h-64` (~16rem) which is
+   *  short enough to leave room for other content on detail pages but
+   *  tall enough for a meaningful stack trace. */
+  maxHeightClass?: string
+  copyable?: boolean
+  /** Optional label shown as a muted caption above the block. */
+  label?: string
+  /** Optional right-aligned actions (download, raw link). Sits next to
+   *  the copy button. */
+  action?: ReactNode
+}
+
+export function LogBlock({
+  value,
+  tone = 'neutral',
+  className = '',
+  maxHeightClass = 'max-h-64',
+  copyable = true,
+  label,
+  action,
+}: LogBlockProps) {
+  const trimmed = value ?? ''
+  return (
+    <div className={`min-w-0 ${className}`}>
+      {(label || action || copyable) && (
+        <div className="mb-1 flex items-center justify-between gap-2">
+          {label ? (
+            <span className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">{label}</span>
+          ) : (
+            <span />
+          )}
+          <div className="flex shrink-0 items-center gap-1">
+            {action}
+            {copyable && <CopyButton value={trimmed} />}
+          </div>
+        </div>
+      )}
+      <pre
+        className={`font-mono text-[0.78125rem] leading-relaxed rounded-sm border px-2 py-1.5 overflow-auto whitespace-pre-wrap wrap-anywhere ${maxHeightClass} ${LOG_TONES[tone]}`}
+      >
+        <code className="block min-w-0">{trimmed || '\u00A0'}</code>
+      </pre>
     </div>
   )
 }
@@ -592,6 +762,109 @@ export function ImageZoom({ src, alt, thumbClassName = '' }: ImageZoomProps) {
   )
 }
 
+/* ── Sparkline ──────────────────────────────────────────────────────────── */
+
+interface SparklineProps {
+  /** Ordered time series, oldest → newest. A single point renders a flat
+   *  line — the consumer is expected to pass a sensible sampling window
+   *  (e.g. 14 daily buckets for a 14-day StatCard). */
+  values: number[]
+  /** CSS color. Defaults to currentColor so the chart inherits the
+   *  StatCard's accent tone (text-ok / text-danger / text-brand). */
+  color?: string
+  /** Filled area under the curve adds weight without clutter. Defaults
+   *  true — it reads as "trend" rather than "noise line". */
+  filled?: boolean
+  /** Optional accessible label. Falls back to a generic description. */
+  ariaLabel?: string
+  /** Grid dimensions in px. Height stays small so sparklines fit inside
+   *  dense admin cards without pushing content. */
+  width?: number
+  height?: number
+}
+
+/**
+ * Minimal SVG sparkline. Deliberately dependency-free — Recharts is
+ * overkill for a 14-point line and its `<ResponsiveContainer>` imposes
+ * a noticeable mount cost per card when you've got six StatCards on
+ * one page.
+ *
+ * The curve is normalised to the full value range so tiny deltas (e.g.
+ * "error rate went from 2 to 4") still show as a visible swing.
+ */
+export function Sparkline({
+  values,
+  color,
+  filled = true,
+  ariaLabel,
+  width = 80,
+  height = 20,
+}: SparklineProps) {
+  if (!values || values.length === 0) {
+    return <span aria-hidden className="inline-block" style={{ width, height }} />
+  }
+
+  const n = values.length
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const range = max - min || 1
+  const stepX = n > 1 ? width / (n - 1) : 0
+
+  const points = values.map((v, i) => {
+    const x = n > 1 ? i * stepX : width / 2
+    // Invert Y because SVG y grows downward but the human-eye reading
+    // is "higher value = higher on the chart".
+    const y = height - ((v - min) / range) * (height - 2) - 1
+    return [x, y] as const
+  })
+
+  const path = points
+    .map(([x, y], i) => (i === 0 ? `M ${x.toFixed(2)} ${y.toFixed(2)}` : `L ${x.toFixed(2)} ${y.toFixed(2)}`))
+    .join(' ')
+
+  const areaPath = filled
+    ? `${path} L ${points[points.length - 1][0].toFixed(2)} ${height} L ${points[0][0].toFixed(2)} ${height} Z`
+    : null
+
+  const stroke = color ?? 'currentColor'
+  const trend = values[n - 1] - values[0]
+  const label =
+    ariaLabel ??
+    `Trend over last ${n} points: ${trend > 0 ? 'up' : trend < 0 ? 'down' : 'flat'}`
+
+  return (
+    <svg
+      role="img"
+      aria-label={label}
+      viewBox={`0 0 ${width} ${height}`}
+      width={width}
+      height={height}
+      className="shrink-0"
+      preserveAspectRatio="none"
+    >
+      {areaPath && (
+        <path d={areaPath} fill={stroke} opacity={0.12} />
+      )}
+      <path
+        d={path}
+        fill="none"
+        stroke={stroke}
+        strokeWidth={1.25}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.9}
+      />
+      {/* End-dot anchors the eye to the current value. */}
+      <circle
+        cx={points[n - 1][0]}
+        cy={points[n - 1][1]}
+        r={1.5}
+        fill={stroke}
+      />
+    </svg>
+  )
+}
+
 /* ── StatCard ───────────────────────────────────────────────────────────── */
 
 interface StatCardProps {
@@ -599,12 +872,22 @@ interface StatCardProps {
   value: number | string
   accent?: string
   delta?: { value: string; positive?: boolean }
+  /** Optional trend series — rendered as a right-aligned sparkline that
+   *  inherits the card's accent color. Pass a short, evenly-sampled
+   *  series (e.g. 14 daily points). Omit to render the legacy card. */
+  trend?: number[]
+  /** Hover tooltip for the metric. Appears on the label pill so a user
+   *  can learn "what does p95 mean in this context?" without leaving. */
+  hint?: string
 }
 
-export function StatCard({ label, value, accent, delta }: StatCardProps) {
+export function StatCard({ label, value, accent, delta, trend, hint }: StatCardProps) {
   return (
     <Card elevated className="px-3 py-2.5">
-      <div className="text-2xs text-fg-muted mb-1">{label}</div>
+      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1" title={hint}>
+        <span>{label}</span>
+        {hint && <InfoHint content={hint} />}
+      </div>
       <div className="flex items-baseline gap-2">
         <div className={`text-xl font-semibold font-mono stat-value ${accent ?? 'text-fg'}`}>
           {value}
@@ -612,6 +895,11 @@ export function StatCard({ label, value, accent, delta }: StatCardProps) {
         {delta && (
           <span className={`text-3xs font-medium font-mono ${delta.positive ? 'text-ok' : 'text-danger'}`}>
             {delta.positive ? '↑' : '↓'} {delta.value}
+          </span>
+        )}
+        {trend && trend.length > 1 && (
+          <span className={`ml-auto ${accent ?? 'text-fg-secondary'}`} aria-hidden>
+            <Sparkline values={trend} width={64} height={18} />
           </span>
         )}
       </div>

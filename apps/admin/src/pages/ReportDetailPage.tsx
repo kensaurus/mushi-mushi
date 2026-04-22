@@ -32,7 +32,9 @@ import { ReportDetailHeader } from '../components/report-detail/ReportDetailHead
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
+import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
 import { useAdminMode } from '../lib/mode'
+import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import {
   ClassificationFields,
   ScreenshotHero,
@@ -134,6 +136,8 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
   const { state: dispatchState, dispatch } = useDispatchFix(report.id, report.project_id)
   const { comments } = useReportComments({ reportId: report.id, projectId: report.project_id })
   const commentCount = comments.length
+  const platform = usePlatformIntegrations()
+  const latestFix = report.fix_attempts?.[0]
 
   const recommendation = useMemo(
     () => deriveRecommendation(report, dispatchState, commentCount, dispatch),
@@ -171,6 +175,14 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
         dispatchState={dispatchState}
         className="mb-3"
       />
+
+      {latestFix && (
+        <ReportBranchGraph
+          fix={latestFix}
+          traceUrl={platform.traceUrl(latestFix.langfuse_trace_id)}
+          className="mb-3"
+        />
+      )}
 
       {/* Screenshot hero — promoted out of the User-report section so it's
           the first piece of evidence triagers see. audit P0. */}

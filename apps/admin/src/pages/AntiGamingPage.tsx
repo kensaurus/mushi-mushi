@@ -341,7 +341,7 @@ export function AntiGamingPage() {
                           </span>
                         </div>
                         {d.flag_reason && (
-                          <p className="mt-1 text-xs text-danger">{d.flag_reason}</p>
+                          <p className="mt-1 text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
                         )}
                         <p className="mt-1 text-2xs text-fg-faint">
                           First seen {new Date(d.created_at).toLocaleString()} · last activity {new Date(d.updated_at).toLocaleString()}

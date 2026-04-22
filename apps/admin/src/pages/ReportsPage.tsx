@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
+import { useRealtimeReload } from '../lib/realtime'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { useHotkeys } from '../lib/useHotkeys'
@@ -88,6 +89,12 @@ export function ReportsPage() {
     `/v1/admin/reports?${queryString}`,
     { deps: [queryString] },
   )
+
+  // Realtime: reports can be inserted by the public /v1/reports capture
+  // endpoint, updated by triage, and touched when a fix attempt lands.
+  // Debounced so a burst of reports (Sentry playback, e2e runs) doesn't
+  // refetch per insert. Reload is idempotent on the server side.
+  useRealtimeReload(['reports', 'fix_attempts'], reload)
 
   const reports = data?.reports ?? []
   const total = data?.total ?? 0

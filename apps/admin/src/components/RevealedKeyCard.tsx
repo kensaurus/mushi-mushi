@@ -131,7 +131,7 @@ export function RevealedKeyCard({ projectId, projectName, apiKey, scopes, onDism
       </div>
 
       <pre
-        className="font-mono text-xs text-fg bg-surface-raised px-2 py-1 rounded-sm block whitespace-pre-wrap break-all select-all max-h-48 overflow-auto"
+        className="font-mono text-xs text-fg bg-surface-raised px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all max-h-48 overflow-auto"
         data-testid={`revealed-key-payload-${mode}`}
       >
         {payload}

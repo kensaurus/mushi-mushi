@@ -236,7 +236,7 @@ export function StoragePage() {
             <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-fg truncate">{projectName}</div>
-                <code className="text-3xs opacity-70 font-mono break-all">{s.project_id}</code>
+                <code className="text-3xs opacity-70 font-mono wrap-anywhere">{s.project_id}</code>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {!existing ? (

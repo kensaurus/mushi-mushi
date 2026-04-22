@@ -21,6 +21,8 @@ import {
   SelectField,
   ErrorAlert,
   EmptyState,
+  LogBlock,
+  CodeValue,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
@@ -331,14 +333,15 @@ export function AuditPage() {
                     )}
                   </button>
                   {isExpanded && hasMeta && (
-                    <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2">
-                      <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">Metadata</div>
-                      <pre className="text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap break-all">
-                        {JSON.stringify(entry.metadata, null, 2)}
-                      </pre>
+                    <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2 space-y-2">
+                      <LogBlock
+                        value={JSON.stringify(entry.metadata, null, 2)}
+                        label="Metadata"
+                      />
                       {entry.resource_id && (
-                        <div className="text-2xs text-fg-faint mt-2">
-                          Full resource ID: <span className="font-mono text-fg-secondary">{entry.resource_id}</span>
+                        <div className="text-2xs text-fg-faint space-y-1">
+                          <span>Full resource ID</span>
+                          <CodeValue value={entry.resource_id} tone="id" />
                         </div>
                       )}
                     </div>

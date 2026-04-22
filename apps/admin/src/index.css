@@ -375,6 +375,16 @@ select, input, textarea {
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 
+/* Git-pulse — gentle radiating halo on pending nodes in FixGitGraph so the
+   timeline visibly breathes while CI / a fix is still running. Used as an
+   inline animation via the arbitrary variant in FixGitGraph.tsx so it shows
+   up on the SVG <circle> that represents the pending node. */
+@keyframes mushi-git-pulse {
+  0%   { r: 5; stroke-opacity: 0.8; }
+  70%  { r: 14; stroke-opacity: 0; }
+  100% { r: 14; stroke-opacity: 0; }
+}
+
 /* Confetti burst — pure CSS celebration for the first merged fix. Single
    shape that drifts and rotates while fading. We render ~14 of these in
    different colours/positions for the burst effect. */

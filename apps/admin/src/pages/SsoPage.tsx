@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, ErrorAlert, EmptyState, CodeValue } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 
@@ -146,23 +146,23 @@ export function SsoPage() {
           <p className="text-2xs text-fg-secondary">
             Paste these values into your identity provider so it can post SAML responses back to Supabase Auth.
           </p>
-          <div className="grid grid-cols-1 gap-1.5 text-2xs">
+          <div className="grid grid-cols-1 gap-2">
             {lastRegister.acsUrl && (
-              <div>
-                <div className="text-fg-faint">ACS URL (Reply URL)</div>
-                <div className="font-mono text-fg break-all">{lastRegister.acsUrl}</div>
+              <div className="space-y-1">
+                <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">ACS URL (Reply URL)</div>
+                <CodeValue value={lastRegister.acsUrl} tone="url" />
               </div>
             )}
             {lastRegister.entityId && (
-              <div>
-                <div className="text-fg-faint">Audience / Entity ID</div>
-                <div className="font-mono text-fg break-all">{lastRegister.entityId}</div>
+              <div className="space-y-1">
+                <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Audience / Entity ID</div>
+                <CodeValue value={lastRegister.entityId} tone="hash" />
               </div>
             )}
             {lastRegister.providerId && (
-              <div>
-                <div className="text-fg-faint">Supabase provider id</div>
-                <div className="font-mono text-fg break-all">{lastRegister.providerId}</div>
+              <div className="space-y-1">
+                <div className="text-3xs font-semibold uppercase tracking-wider text-fg-faint">Supabase provider id</div>
+                <CodeValue value={lastRegister.providerId} tone="id" />
               </div>
             )}
           </div>
@@ -207,7 +207,7 @@ export function SsoPage() {
                       {c.registration_status}
                     </Badge>
                   </td>
-                  <td className="py-1.5 px-3 text-fg-muted font-mono text-2xs break-all">
+                  <td className="py-1.5 px-3 text-fg-muted font-mono text-2xs wrap-anywhere">
                     {c.sso_provider_id ?? '—'}
                   </td>
                   <td className="py-1.5 px-3 text-right">

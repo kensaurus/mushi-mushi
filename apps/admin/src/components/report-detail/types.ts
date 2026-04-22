@@ -15,15 +15,22 @@ export interface ReportFixAttempt {
   pr_url: string | null
   pr_number: number | null
   branch: string | null
+  commit_sha: string | null
   files_changed: string[] | null
   lines_changed: number | null
   review_passed: boolean | null
   check_run_status: string | null
   check_run_conclusion: string | null
+  /** GitHub PR lifecycle state (merged / closed / draft / open). Updated by
+   *  the `webhooks-github-indexer` on pull_request events. Null when we
+   *  haven't received a webhook yet. */
+  pr_state: 'open' | 'closed' | 'merged' | 'draft' | null
+  llm_model: string | null
   error: string | null
   started_at: string | null
   completed_at: string | null
   created_at: string
+  langfuse_trace_id?: string | null
 }
 
 export interface ReportJudgeEval {

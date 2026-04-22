@@ -88,8 +88,13 @@ Layout & content:
 
 Field rendering:
 
-- `Field` — label / value pair; supports `tooltip` (jargon hint), `copyable`, and a custom `valueClassName`
+- `Field` — label / value pair; supports `tooltip` (jargon hint), `copyable`, a custom `valueClassName`, a `longForm` flag that routes the value through `LongFormText` for prose-grade wrapping, and an auto-route: when `mono` is on but the value matches a URL / UUID / hash, `Field` promotes it to `CodeValue` with the right tone (`url` / `id` / `hash`) so data rows never leak `break-all` onto user-visible strings
 - `IdField` — UUID/hash renderer with truncated prefix, copy-on-click, and a tooltip showing the full value
+- **`CodeValue`** (`src/components/ui.tsx`) — monospace chip for technical strings (URLs, API keys, UUIDs, commit SHAs, webhook endpoints). Tones: `url` / `id` / `hash` / `neutral`. Ships with an integrated `CopyButton` and `wrap-anywhere` so long opaque strings stay selectable and copyable without shredding natural English. A `multiline` variant renders content inside a `<pre><code>` block with `whitespace-pre-wrap` for short multi-line snippets (pasted curl commands, YAML fragments). For long logs / payloads / stack traces, reach for `LogBlock` instead
+- **`LongFormText`** — prose renderer for descriptions, user-reported bodies, and AI-generated summaries. Defaults to `text-pretty` (browser line-balancing), `max-w-prose` (~65ch optimal reading length), `leading-relaxed`, and `wrap-break-word`. Accepts `tone?: 'muted' | 'fg'` for emphasis and `maxWidth?: string` to override the prose cap. Use this (or `longForm` on `Field`) anywhere prose would otherwise render as a flat text wall
+- **`LogBlock`** — semantic `<pre><code>` primitive for logs, error stacks, webhook payloads, JSON dumps, SQL output. Wraps safely with `whitespace-pre-wrap` + `wrap-anywhere`, caps height with `maxHeightClass` (default `max-h-64`) with scroll, ships an integrated copy button, optional `label` caption, optional `action` slot next to the copy button, and tone (`neutral` / `info` / `ok` / `warn` / `danger`). Replaces every ad-hoc `<pre class="... break-all">` pattern that used to litter `NotificationsPage`, `AuditPage`, `McpPage`, `DispatchTable`, `RevealedKeyCard`, and the integrations / prompt-lab cards
+- `Callout` — emphasis block for short notes ("Classification failed — retry"). Supports tone + optional right-aligned `action` slot for inline CTA links
+- `DefinitionChips` — structured label-value metadata row (status + time + id + user). Accepts `columns?: 1 | 2 | 3 | 4 | 'auto'` for responsive layout and a `dense` variant for compact footers
 - `RelativeTime` — "3h ago" with the full ISO timestamp on hover
 - `CopyButton`, `InfoHint` — one-click copy and an `i`-icon tooltip for inline use
 
@@ -116,7 +121,7 @@ Action receipts:
 
 Loading + entrance animations:
 
-- **`Btn loading={...}`** — every Test / Run / Save / Generate / Dispatch button across the 23 pages goes through the same `loading` prop instead of swapping its label to a `-ing` form. The verb stays stable, the spinner does the work, and buttons no longer change width mid-click. Audit + sweep landed in 25 files including `ConnectionStatus`, `ReportComments` Post, `DLQPage` Flush queued, `StoragePage` Health check + Save, `BillingPage` Manage + Plan select + Send ticket, `IntelligencePage` Generate, every `prompt-lab` / `marketplace` / `graph` modal save, and the `AntiGamingPage` Flag / Unflag row actions
+- **`Btn loading={...}`** — every Test / Run / Save / Generate / Dispatch button across the 24 pages goes through the same `loading` prop instead of swapping its label to a `-ing` form. The verb stays stable, the spinner does the work, and buttons no longer change width mid-click. Audit + sweep landed in 25 files including `ConnectionStatus`, `ReportComments` Post, `DLQPage` Flush queued, `StoragePage` Health check + Save, `BillingPage` Manage + Plan select + Send ticket, `IntelligencePage` Generate, every `prompt-lab` / `marketplace` / `graph` modal save, and the `AntiGamingPage` Flag / Unflag row actions
 - **`useStaggeredAppear`** (`src/lib/useStaggeredAppear.ts`) — returns a `style` callback for `.map()` callsites so consecutive items fade in with a small per-index delay (default 35ms step, capped at index 10). `motion-safe:animate-mushi-fade-in` does the actual keyframe; the hook just sets `animationDelay` + `animationFillMode: 'both'` so the very first paint doesn't flash items at full opacity. Used by `InsightsRow` and `FixesPage`'s fix-card list, with `ReportsPage` running an inline equivalent per-row
 
 ### Label helpers (`src/lib/tokens.ts`)
@@ -138,11 +143,11 @@ Pure, dependency-free string utilities. Use these instead of inline `count === 1
 
 ## Information architecture (PDCA loop)
 
-The sidebar (`src/components/Layout.tsx`) groups the 23 admin pages into the same Plan → Do → Check → Act loop the README sells, so first-day users see the story instead of jargon-heavy nav items:
+The sidebar (`src/components/Layout.tsx`) groups the 24 admin pages into the same Plan → Do → Check → Act loop the README sells, so first-day users see the story instead of jargon-heavy nav items:
 
 - **Start here** — `Dashboard`, `Get started`
 - **Plan — capture & classify** — `Reports`, `Graph`, `Anti-Gaming`, `Queue`
-- **Do — dispatch fixes** — `Fixes`, `Prompt Lab`
+- **Do — dispatch fixes** — `Fixes`, `Repo`, `Prompt Lab`
 - **Check — verify quality** — `Judge`, `Health`, `Intelligence`, `Research`
 - **Act — integrate & scale** — `Integrations`, `MCP`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
 - **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
@@ -161,7 +166,7 @@ The console ships in **Quickstart mode**by default. A 3-state pill at the top of
 |------|---------|-----------|--------|
 | **Quickstart** (default) | **3 verb-led pages** — Setup, Bugs to fix, Fixes ready | Verb-first, jargon-free from `lib/copy.ts` ("Bugs to fix", "Fixes ready") — **no PDCA terminology surfaces at all** | "Resolve next bug →" mega-CTA above page content; `<LivePdcaPipeline>` storyboard on Dashboard; `<FirstRunTour>` auto-launches once |
 | **Beginner** | 9 loop-essential pages (Dashboard, Get started, Reports, Graph, Fixes, Judge, Health, Integrations, Settings) | Outcome-first ("Your bug-fix loop", "Bugs your users felt") | `<NextBestAction>` strip on every page; `<LivePdcaPipeline>` storyboard; `<Jargon>` underlines tooltips for jargon nouns |
-| **Advanced** | All 23 pages | Dense, jargon-rich ("PDCA cockpit", "Triage queue") | Power-user density; no NBA strip; `<Jargon>` is a no-op |
+| **Advanced** | All 24 pages | Dense, jargon-rich ("PDCA cockpit", "Triage queue") | Power-user density; no NBA strip; `<Jargon>` is a no-op |
 
 Routes resolve in **every mode** — only the sidebar is filtered, so deep links + bookmarks survive. If a quickstart/beginner user lands on a route hidden from their sidebar (autocomplete, link-share), the sidebar surfaces a "this page lives in Advanced mode — switch to keep it in your sidebar" hint.
 
@@ -181,7 +186,7 @@ Auto-launches once when `localStorage:'mushi:tour-v1-completed' !== 'true'` AND 
 
 The header (desktop + mobile) mounts a **`<SearchButton>`** that advertises the shortcut and opens a **`<CommandPalette>`** (`src/components/CommandPalette.tsx`, built on [`cmdk`](https://cmdk.paco.me)). The palette blends three result groups into a single list:
 
-- **Static routes** — all 23 admin pages with keyword aliases (`src/lib/searchIndex.ts`): type `bugs` → Reports, `pr` → Fixes, `spam` → Anti-Gaming.
+- **Static routes** — all 24 admin pages with keyword aliases (`src/lib/searchIndex.ts`): type `bugs` → Reports, `pr` → Fixes, `spam` → Anti-Gaming.
 - **Quick actions** — jump to a filtered view (e.g. "reports — new only", "reports — critical only") or flip admin mode (Quickstart / Beginner / Advanced) without touching the sidebar pill.
 - **Live API search** — debounced (~250 ms) queries against `/v1/admin/reports?q=` and `/v1/admin/fixes?q=` so real report summaries and fix-branch names surface as results.
 
@@ -189,7 +194,7 @@ State is a Zustand-free singleton: `useCommandPalette()` (`src/lib/useCommandPal
 
 Three primitives back the mode split:
 
-- **`lib/copy.ts`** — `COPY: { beginner, advanced }` keyed by route → `{ title, description, sections, help }`. `usePageCopy(path)` returns the active block; pages do `<PageHeader title={copy?.title ?? 'Reports'} />` with the hard-coded fallback. Adding outcome copy for a new route is one entry, not a sweep across 23 pages.
+- **`lib/copy.ts`** — `COPY: { beginner, advanced }` keyed by route → `{ title, description, sections, help }`. `usePageCopy(path)` returns the active block; pages do `<PageHeader title={copy?.title ?? 'Reports'} />` with the hard-coded fallback. Adding outcome copy for a new route is one entry, not a sweep across 24 pages.
 - **`lib/mode.ts`** — `useAdminMode()` returns `{ mode, setMode, toggle, isBeginner, isAdvanced }`. Cross-tab via `storage` event, in-tab via custom event, both wrapped in try/catch for private-browsing safety.
 - **`components/Jargon.tsx`** — `<Jargon term="dispatch">Dispatch fix</Jargon>` renders an `<abbr>` with a dotted underline + plain-language tooltip in beginner mode and the bare word in advanced. Definitions live in `JARGON` in `lib/copy.ts` so renaming a term updates every surface.
 
@@ -239,7 +244,8 @@ Email templates are branded HTML stored in `packages/server/supabase/templates/`
 | `/` | Dashboard — **`PdcaCockpit`** strip up top (4 stage tiles with the bottleneck stage ringed + a single-sentence callout), then stat cards and category/severity breakdowns; **`QuotaBanner`** above KPIs surfaces any project ≥50% of its monthly free-tier report quota (warn / danger tones, deep-links to `/billing`); **`FirstReportHero`** when the SDK is installed but no reports have landed (one-tap "Send test report" CTA); PDCA-framed `GettingStartedEmpty` when no project exists yet |
 | `/onboarding` | First-run setup wizard (project, API key, test, SDK snippet). The active step is highlighted with a "do this next" chip + brand ring on the checklist row, and the banner version auto-collapses once required steps are done **or** completion ≥ 80% |
 | `/reports` | Filterable report list (status / category / severity / `component` / `reporter`); top of page shows a **`ReportsKpiStrip`** with 14-day severity rollups; rows render a **`StatusStepper`** (`new → classified → fixing → fixed`) instead of a static badge, a 4 px left-edge severity stripe, a `+N similar` badge for deduped reports (driven by `report_group_id`), an **`unique_users` blast-radius column** powered by a `COUNT(DISTINCT)` Postgres RPC, and a single primary action button — `Triage →` / `Dispatch fix →` (gated on `DISPATCH_ELIGIBLE_STATUSES`). Group-by-fingerprint collapse is on by default (`?group=fingerprint`); expanded groups persist in `?expand=<id>` so deep links restore state |
-| `/reports/:id` | Report detail — **`ScreenshotHero`** at the top (large zoomable screenshot), then a **`PdcaReceiptStrip`** that compresses the lifecycle into 4 stamps (Plan / Do / Check / Act) using `llm_invocations`, `fix_attempts`, and `classification_evaluations` data fetched in a single API round-trip; recommended next action, triage bar, LLM classification, environment, console / network / performance (always rendered with empty states), related cross-links (component, reporter, graph, fix) |
+| `/reports/:id` | Report detail — **`ScreenshotHero`** at the top (large zoomable screenshot), then a **`PdcaReceiptStrip`** that compresses the lifecycle into 4 stamps (Plan / Do / Check / Act) using `llm_invocations`, `fix_attempts`, and `classification_evaluations` data fetched in a single API round-trip. When a fix attempt exists, **`ReportBranchGraph`** (`src/components/report-detail/ReportBranchGraph.tsx`) renders right below the strip: a collapsible section that fetches `/v1/admin/fixes/:id/timeline`, reuses the existing `FixGitGraph` to draw the dispatch → branch → commit → PR → CI → merge timeline, and surfaces branch name (in `CodeValue`, hash tone), base branch, PR link, CI badge, files changed, commit SHA, and the Langfuse trace link. Open/closed state persists in `localStorage`; the block polls while the fix is still live (`queued` / `running`). Then: recommended next action, triage bar, LLM classification, environment, console / network / performance (always rendered with empty states), related cross-links (component, reporter, graph, fix) |
+| `/repo` | Repo-wide branch & PR overview — **`PageHeader`** surfaces the configured GitHub App repo URL (as a `CodeValue`, `url` tone), default branch, and install state; a **`DefinitionChips`** summary row counts Open PRs / CI passing / CI failing / Merged / Stuck across every `fix_attempt` in the project. Main panel lists every auto-fix branch grouped and filterable by status via a **`SegmentedControl`**; each `BranchRow` card shows branch name (`CodeValue`, hash tone), PR link, CI badge, the triggering report summary, and a narrow inline **`FixGitGraph`** synthesised from the fix attempt's events. Right column is a **`LogBlock`** of recent repo activity (dispatched → branch → commit → PR opened → CI resolved → completed), fed by `/v1/admin/repo/activity`. Empty state deep-links to `/integrations` when no GitHub App is installed |
 | `/queue` | Pipeline queue — paginated backlog by stage/status, throughput sparkline, retry actions, **Force-process queued** button (kicks `POST /v1/admin/queue/flush-queued` to drain stuck `status='queued'` reports), DLQ inspector |
 | `/graph` | Knowledge graph — auto-switches between two views: a Sankey-style **`GraphStoryboard`** (left-to-right columns by `node_type` with bezier links + the **most-affected node** named under each column header + an inline edge-weight legend) when fewer than 12 nodes exist, and the full React Flow canvas otherwise. Filter chips are grouped (`Show node types` / `Connect via edges`) with `all` toggles. Minimap is suppressed on small graphs to avoid clutter. Toggleable "Table" view renders nodes + edges as accessible HTML tables for screen readers; canvas has `role="region"` + descriptive `aria-label`. A "Force canvas view" override is available when the storyboard threshold trips by accident |
 | `/judge` | Judge dashboard — KPI row, score-over-time trend with a colour-coded dimension legend (Overall / Accuracy / Severity / Component / Repro), score distribution histogram, prompt-version leaderboard, "Run judge now" button. Recent evaluations table renders the **report summary** (not the opaque `report_id` hash) and abbreviated columns (`Acc / Sev / Comp / Repro / Agreed`) carry hover tooltips explaining each dimension |
@@ -268,7 +274,7 @@ Every analytical page reuses the same visual vocabulary from `src/components/cha
 - `KpiRow` + `KpiTile` — clickable KPIs with `accent`, `delta` ({ value, direction, tone }), and optional `to` deep link
 - `LineSparkline`, `BarSparkline`, `Histogram`, `SeverityStackedBars` — minimal SVG/HTML charts that respect the design tokens
 - `StatusPill`, `HealthPill`, `LegendDot` — semantic status rendering shared between Dashboard, Judge, Queue, Fixes, and Prompt Lab
-- `FixGitGraph` (`src/components/FixGitGraph.tsx`) — inline SVG branch graph for a single fix attempt's PDCA timeline
+- `FixGitGraph` (`src/components/FixGitGraph.tsx`) — inline SVG branch graph for a single fix attempt's PDCA timeline (dispatch → branch → commit → PR → CI → merge). Reused verbatim on `/fixes` (inside expanded `FixCard`), on `/reports/:id` (inside `ReportBranchGraph` below `PdcaReceiptStrip`), and on `/repo` (narrow variant inside each `BranchRow`)
 
 ### Dashboard composition
 
@@ -326,6 +332,8 @@ These were added to support the page rebuilds and live in `packages/server/supab
 - `GET  /v1/admin/judge/evaluations | /distribution | /prompts`, `POST /v1/admin/judge/run` — `evaluations` rows are hydrated with `report_summary`, `report_severity`, and `report_status` from the `reports` table so the Judge UI can show "Submit button on /checkout has wrong size" instead of `f9b3c2…`
 - `POST /v1/admin/query`, `GET /v1/admin/query/history` (supports `?saved=1`), `DELETE /v1/admin/query/history/:id`, **`PATCH /v1/admin/query/history/:id`** (toggles the `is_saved` column, partial-indexed via `20260420000100_nl_query_saved.sql`). The `GET /history` endpoint is migration-drift resilient — if the `is_saved` column is missing during a partial deploy (`pg_code='42703'`), it returns `{ ok: true, history: [], degraded: 'schema_pending' }` instead of a 500, so the page keeps rendering and the FE shows a yellow degradation banner
 - `GET  /v1/admin/fixes/:id/timeline`, `GET /v1/admin/fixes/summary`
+- `GET  /v1/admin/repo/overview?project_id=...` — repo-level rollup for the `/repo` page. Returns `repo` (repo URL, default branch, GitHub App install id, `last_indexed_at`), `counts` (open, ci_passing, ci_failed, merged, failed_to_open), and up to 50 recent fix attempts with branch / PR / CI / `files_changed` / `report_summary`. RLS mirrors `fix_attempts` policies
+- `GET  /v1/admin/repo/activity?project_id=...&limit=100` — chronological synthesis of branch / PR events across every fix attempt in the project (dispatched → branch created → commit → PR opened → CI resolved → completed / failed). Powers the repo-wide `LogBlock` on `/repo`
 - `GET  /v1/admin/queue` (paginated), `GET /v1/admin/queue/summary`, `GET /v1/admin/queue/throughput`, `POST /v1/admin/queue/:id/retry`, `POST /v1/admin/queue/flush-queued`
 - `GET /v1/admin/prompt-lab` (each `PromptVersion` carries `cost_usd_total` + `avg_cost_usd` rolled up server-side from `llm_invocations.cost_usd` filtered by project + `prompt_version`, ), `POST | PATCH | DELETE /v1/admin/prompt-lab/prompts[/:id]`
 - `POST /v1/admin/intelligence` (async, enqueues a job), `GET /v1/admin/intelligence/jobs`, `POST /v1/admin/intelligence/jobs/:id/cancel`

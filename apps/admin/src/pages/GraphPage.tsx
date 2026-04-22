@@ -473,7 +473,7 @@ function StoryboardNarrative({ nodes, onSwitchToCanvas }: StoryboardNarrativePro
 
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-raised/40">
-      <p className="text-xs text-fg-secondary leading-snug">
+      <p className="text-xs text-fg-secondary leading-relaxed max-w-prose wrap-break-word text-pretty">
         <span className="text-2xs uppercase tracking-wider text-fg-faint mr-1">Story</span>
         {sentence}
       </p>

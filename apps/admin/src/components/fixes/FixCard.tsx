@@ -121,7 +121,13 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
               <FixGitGraph
                 events={timeline}
                 prUrl={fix.pr_url}
+                prNumber={fix.pr_number}
+                prState={fix.pr_state}
                 branchName={fix.branch}
+                commitSha={fix.commit_sha}
+                agentModel={fix.llm_model ?? fix.agent}
+                filesChanged={fix.files_changed}
+                linesChanged={fix.lines_changed}
               />
             </div>
           ) : (

@@ -1796,7 +1796,7 @@ app.get('/v1/admin/reports/:id', adminOrApiKey(), async (c) => {
       .limit(20),
     db
       .from('fix_attempts')
-      .select('id, status, agent, pr_url, pr_number, branch, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, error, started_at, completed_at, created_at')
+      .select('id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id')
       .eq('report_id', reportId)
       .order('created_at', { ascending: false })
       .limit(5),
@@ -5314,7 +5314,7 @@ app.get('/v1/admin/fixes', jwtAuth, async (c) => {
   let query = db
     .from('fix_attempts')
     .select(
-      'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, error',
+      'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, error',
     )
     .in('project_id', projectIds)
     .order('started_at', { ascending: false })
@@ -5523,7 +5523,7 @@ app.get('/v1/admin/fixes/:id/timeline', adminOrApiKey(), async (c) => {
     .eq('fix_attempt_id', fixId)
     .maybeSingle()
 
-  type EventKind = 'dispatched' | 'started' | 'branch' | 'commit' | 'pr_opened' | 'ci_started' | 'ci_resolved' | 'completed' | 'failed'
+  type EventKind = 'dispatched' | 'started' | 'branch' | 'commit' | 'pr_opened' | 'ci_started' | 'ci_resolved' | 'pr_state_changed' | 'completed' | 'failed'
   interface TimelineEvent {
     kind: EventKind
     at: string
@@ -5531,6 +5531,45 @@ app.get('/v1/admin/fixes/:id/timeline', adminOrApiKey(), async (c) => {
     detail?: string | null
     status?: 'ok' | 'fail' | 'pending' | null
   }
+
+  // Preferred source: the append-only `fix_events` stream written by the
+  // GitHub webhook handler (push / pull_request / check_run). When we have
+  // any rows for this attempt we use them verbatim so multi-commit /
+  // multi-CI timelines render faithfully. Falls back to the synthesised
+  // stream below for pre-`fix_events` attempts.
+  const { data: storedEvents } = await db
+    .from('fix_events')
+    .select('kind, status, label, detail, at')
+    .eq('fix_attempt_id', fixId)
+    .order('at', { ascending: true })
+    .limit(200)
+
+  if (storedEvents && storedEvents.length > 0) {
+    const events = storedEvents.map((e) => ({
+      kind: e.kind as EventKind,
+      at: e.at,
+      label: e.label,
+      detail: e.detail ?? undefined,
+      status: (e.status ?? undefined) as 'ok' | 'fail' | 'pending' | undefined,
+    }))
+    // Always prepend the dispatch/start events so the graph's top always
+    // shows the "how we got here" context even if the webhook stream starts
+    // mid-way through (e.g. feature was enabled after the fix ran).
+    const leading: TimelineEvent[] = []
+    if (dispatch) {
+      leading.push({ kind: 'dispatched', at: dispatch.created_at, label: 'Dispatch requested', status: 'pending' })
+      if (dispatch.started_at) {
+        leading.push({ kind: 'started', at: dispatch.started_at, label: 'Worker started', status: 'pending' })
+      }
+    } else if (fix.created_at) {
+      leading.push({ kind: 'dispatched', at: fix.created_at, label: 'Fix attempt created', status: 'pending' })
+    }
+    const combined = [...leading, ...events].sort(
+      (a, b) => new Date(a.at).getTime() - new Date(b.at).getTime(),
+    )
+    return c.json({ ok: true, data: { fix, dispatch, events: combined, source: 'fix_events' } })
+  }
+
   const events: TimelineEvent[] = []
 
   if (dispatch) {
@@ -5615,7 +5654,272 @@ app.get('/v1/admin/fixes/:id/timeline', adminOrApiKey(), async (c) => {
 
   events.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
 
-  return c.json({ ok: true, data: { fix, dispatch, events } })
+  return c.json({ ok: true, data: { fix, dispatch, events, source: 'synthesized' } })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// Repo-wide branch & PR graph endpoints
+//
+// These power the `/repo` admin page (V5.3 §2.18 — visualise the PR pipeline
+// at repo level, not just per-report). Auth model mirrors `/v1/admin/fixes`:
+// scoped to the current user's projects via `ownedProjectIds`. The caller
+// passes `project_id` so multi-project owners can toggle between repos
+// without us guessing.
+// ─────────────────────────────────────────────────────────────────────────
+app.get('/v1/admin/repo/overview', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectId = c.req.query('project_id')
+  if (!projectId) {
+    return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id is required' } }, 400)
+  }
+
+  // Membership check: owner OR project_members. Keeps collaborators seeing
+  // the same repo overview without having to own the project.
+  const { data: membership } = await db
+    .from('project_members')
+    .select('project_id')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  const { data: ownerRow } = await db
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('owner_id', userId)
+    .maybeSingle()
+  if (!membership && !ownerRow) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+  }
+
+  const [
+    { data: primaryRepo },
+    { data: settings },
+    { data: fixes },
+  ] = await Promise.all([
+    db
+      .from('project_repos')
+      .select('repo_url, default_branch, github_app_installation_id, last_indexed_at, indexing_enabled')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .maybeSingle(),
+    db
+      .from('project_settings')
+      .select('github_repo_url, codebase_repo_url')
+      .eq('project_id', projectId)
+      .maybeSingle(),
+    db
+      .from('fix_attempts')
+      .select('id, report_id, branch, pr_url, pr_number, commit_sha, pr_state, agent, llm_model, status, check_run_status, check_run_conclusion, files_changed, lines_changed, started_at, completed_at, created_at, summary')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+      .limit(50),
+  ])
+
+  // Pull the human-readable summary off the linked reports in one batch
+  // rather than joining per-row. Makes the branch list scannable without
+  // making the client do another round-trip for each card.
+  type ReportLite = { id: string; summary: string | null; user_category: string | null }
+  let reportById: Map<string, ReportLite> = new Map()
+  if (fixes && fixes.length > 0) {
+    const reportIds = Array.from(new Set(fixes.map((f) => f.report_id).filter(Boolean)))
+    if (reportIds.length > 0) {
+      const { data: reports } = await db
+        .from('reports')
+        .select('id, summary, user_category')
+        .in('id', reportIds)
+      reportById = new Map((reports ?? []).map((r) => [r.id, r as ReportLite]))
+    }
+  }
+
+  const branches = (fixes ?? []).map((f) => {
+    const r = reportById.get(f.report_id)
+    return {
+      id: f.id,
+      report_id: f.report_id,
+      branch: f.branch,
+      pr_url: f.pr_url,
+      pr_number: f.pr_number,
+      commit_sha: f.commit_sha,
+      pr_state: f.pr_state,
+      agent: f.agent,
+      llm_model: f.llm_model,
+      status: f.status,
+      check_run_status: f.check_run_status,
+      check_run_conclusion: f.check_run_conclusion,
+      files_changed: f.files_changed ?? null,
+      lines_changed: f.lines_changed,
+      started_at: f.started_at,
+      completed_at: f.completed_at,
+      created_at: f.created_at,
+      report_summary: r?.summary ?? null,
+      report_category: r?.user_category ?? null,
+      summary: f.summary ?? null,
+    }
+  })
+
+  // Counts are cheap to derive FE-side but computing them here means the
+  // header chips never disagree with the branch list rendered below.
+  let open = 0
+  let ci_passing = 0
+  let ci_failed = 0
+  let merged = 0
+  let failed_to_open = 0
+  for (const b of branches) {
+    const st = (b.status ?? '').toLowerCase()
+    const concl = (b.check_run_conclusion ?? '').toLowerCase()
+    if (st === 'failed' && !b.pr_url) failed_to_open += 1
+    if (b.pr_url && st !== 'failed') open += 1
+    if (concl === 'success') ci_passing += 1
+    if (concl === 'failure' || concl === 'timed_out') ci_failed += 1
+    if (st === 'completed' && concl === 'success' && b.pr_url) merged += 1
+  }
+
+  const repoUrl = primaryRepo?.repo_url ?? settings?.github_repo_url ?? settings?.codebase_repo_url ?? null
+
+  return c.json({
+    ok: true,
+    data: {
+      repo: {
+        repo_url: repoUrl,
+        default_branch: primaryRepo?.default_branch ?? null,
+        github_app_installation_id: primaryRepo?.github_app_installation_id ?? null,
+        last_indexed_at: primaryRepo?.last_indexed_at ?? null,
+        indexing_enabled: primaryRepo?.indexing_enabled ?? null,
+      },
+      counts: { open, ci_passing, ci_failed, merged, failed_to_open, total: branches.length },
+      branches,
+    },
+  })
+})
+
+app.get('/v1/admin/repo/activity', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectId = c.req.query('project_id')
+  const limit = Math.min(Number(c.req.query('limit')) || 100, 200)
+  if (!projectId) {
+    return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'project_id is required' } }, 400)
+  }
+  const { data: membership } = await db
+    .from('project_members')
+    .select('project_id')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle()
+  const { data: ownerRow } = await db
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('owner_id', userId)
+    .maybeSingle()
+  if (!membership && !ownerRow) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+  }
+
+  // We don't have a dedicated `fix_events` table yet, so we derive a
+  // repo-wide activity stream from the timestamps already stamped on
+  // `fix_attempts` (+ its companion dispatch row). Each fix_attempt can
+  // contribute up to 5 events; cap on row count + per-row synthesis keeps
+  // the response well under a second.
+  const { data: fixes } = await db
+    .from('fix_attempts')
+    .select('id, report_id, branch, pr_url, pr_number, status, check_run_status, check_run_conclusion, commit_sha, started_at, completed_at, created_at, check_run_updated_at')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  interface RepoActivityEvent {
+    at: string
+    kind: 'dispatched' | 'branch' | 'commit' | 'pr_opened' | 'ci_resolved' | 'completed' | 'failed'
+    fix_attempt_id: string
+    report_id: string
+    branch: string | null
+    pr_url: string | null
+    pr_number: number | null
+    label: string
+    detail?: string | null
+    status?: 'ok' | 'fail' | 'pending'
+  }
+
+  const events: RepoActivityEvent[] = []
+  for (const f of fixes ?? []) {
+    const base = {
+      fix_attempt_id: f.id,
+      report_id: f.report_id,
+      branch: f.branch,
+      pr_url: f.pr_url,
+      pr_number: f.pr_number,
+    }
+    events.push({
+      ...base,
+      at: f.created_at,
+      kind: 'dispatched',
+      label: 'Fix dispatched',
+      status: 'pending',
+    })
+    if (f.branch && f.started_at) {
+      events.push({
+        ...base,
+        at: f.started_at,
+        kind: 'branch',
+        label: `Branch ${f.branch}`,
+        detail: f.branch,
+        status: 'ok',
+      })
+    }
+    if (f.commit_sha) {
+      events.push({
+        ...base,
+        at: f.completed_at ?? f.started_at ?? f.created_at,
+        kind: 'commit',
+        label: `Commit ${f.commit_sha.slice(0, 7)}`,
+        detail: f.commit_sha,
+        status: 'ok',
+      })
+    }
+    if (f.pr_url) {
+      events.push({
+        ...base,
+        at: f.completed_at ?? f.started_at ?? f.created_at,
+        kind: 'pr_opened',
+        label: `PR #${f.pr_number ?? '—'} opened`,
+        detail: f.pr_url,
+        status: 'ok',
+      })
+    }
+    if (f.check_run_conclusion) {
+      const concl = f.check_run_conclusion.toLowerCase()
+      events.push({
+        ...base,
+        at: f.check_run_updated_at ?? f.completed_at ?? f.created_at,
+        kind: 'ci_resolved',
+        label: `CI ${concl}`,
+        status: concl === 'success' ? 'ok' : 'fail',
+      })
+    }
+    if (f.status === 'completed') {
+      events.push({
+        ...base,
+        at: f.completed_at ?? f.created_at,
+        kind: 'completed',
+        label: 'Fix completed',
+        status: 'ok',
+      })
+    } else if (f.status === 'failed') {
+      events.push({
+        ...base,
+        at: f.completed_at ?? f.created_at,
+        kind: 'failed',
+        label: 'Fix failed',
+        status: 'fail',
+      })
+    }
+  }
+
+  events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+
+  return c.json({ ok: true, data: { events: events.slice(0, limit) } })
 })
 
 app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {

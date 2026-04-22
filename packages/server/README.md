@@ -101,6 +101,8 @@ All routes are served from the `api` function under `/v1/`:
 - `POST /v1/admin/billing/checkout` — Start a Stripe Checkout session
 - `POST /v1/admin/billing/portal` — Open the Stripe Billing Portal
 - `POST /v1/admin/queue/flush-queued` — Force-process reports stuck in `status='queued'` (kicks `fast-filter` for each)
+- `GET /v1/admin/repo/overview?project_id=...` — Repo-wide rollup for the admin `/repo` page. Returns `{ repo: { repo_url, default_branch, github_app_installation_id, last_indexed_at }, counts: { open, ci_passing, ci_failed, merged, failed_to_open }, branches: FixAttempt[50] }`. Each branch row carries `id`, `branch`, `pr_url`, `pr_number`, `status`, `check_run_status`, `check_run_conclusion`, `files_changed`, `started_at`, `completed_at`, `report_id`, `report_summary`. RLS mirrors the `fix_attempts` table — requester must be a member of the project
+- `GET /v1/admin/repo/activity?project_id=...&limit=100` — Chronological timeline of branch / PR events synthesised from `fix_attempts` (and `fix_events` where available): dispatched → branch created → commit → PR opened → CI resolved → completed / failed. Default limit 100, capped at 500. Same RLS as `/repo/overview`
 - `GET | POST | DELETE /v1/admin/integrations[/:type]` — Integration credentials CRUD. `GET` masks secrets; `POST` merges with existing masked values so partial updates don't drop tokens
 - `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD

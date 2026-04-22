@@ -161,6 +161,253 @@ async function fetchFileContents(
 app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }))
 
 /**
+ * Append one row to `fix_events` for a given fix_attempt. Idempotent via
+ * `dedupe_key` — re-delivered GitHub webhooks won't duplicate.
+ *
+ * This is a best-effort observability write: if it fails we just log and
+ * move on, because the downstream endpoint will still synthesise a
+ * (lower-fidelity) timeline from the columns on `fix_attempts` itself.
+ */
+async function emitFixEvent(
+  db: ReturnType<typeof getDb>,
+  row: {
+    fix_attempt_id: string
+    project_id: string
+    kind:
+      | 'dispatched' | 'started' | 'branch' | 'commit' | 'pr_opened'
+      | 'ci_started' | 'ci_resolved' | 'pr_state_changed' | 'completed' | 'failed'
+    status?: 'ok' | 'fail' | 'pending' | null
+    label: string
+    detail?: string | null
+    at?: string | null
+    dedupe_key?: string | null
+    payload?: Record<string, unknown> | null
+  },
+): Promise<void> {
+  const { error } = await db.from('fix_events').insert({
+    fix_attempt_id: row.fix_attempt_id,
+    project_id: row.project_id,
+    kind: row.kind,
+    status: row.status ?? null,
+    label: row.label,
+    detail: row.detail ?? null,
+    at: row.at ?? new Date().toISOString(),
+    dedupe_key: row.dedupe_key ?? null,
+    payload: row.payload ?? null,
+  })
+  if (error) {
+    // Unique-violation on dedupe_key is expected on retries — don't warn.
+    if (error.code !== '23505') {
+      log.warn('fix_events insert failed (non-fatal)', { err: error.message, kind: row.kind })
+    }
+  }
+}
+
+/**
+ * Handle every `pull_request.*` action we care about for the fix graph:
+ * opened / reopened / ready_for_review / converted_to_draft / closed.
+ * Updates `fix_attempts.pr_state` and emits one `pr_state_changed` event per
+ * webhook so the graph can show the full lifecycle (draft -> open -> merged).
+ * Merges still fall through to the billing-specific handler below.
+ */
+async function handlePullRequestState(payload: {
+  action?: string
+  pull_request?: {
+    merged?: boolean
+    html_url?: string
+    number?: number
+    draft?: boolean
+    state?: string
+    delivery_id?: string
+  }
+  repository?: { full_name?: string }
+}, deliveryId: string): Promise<Response> {
+  const prUrl = payload.pull_request?.html_url
+  if (!prUrl) return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 })
+
+  const db = getDb()
+  const { data: attempt } = await db
+    .from('fix_attempts')
+    .select('id, project_id, pr_state')
+    .eq('pr_url', prUrl)
+    .maybeSingle()
+  if (!attempt) {
+    return new Response(
+      JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Derive the new lifecycle state.
+  let newState: 'open' | 'closed' | 'merged' | 'draft'
+  if (payload.pull_request?.merged) newState = 'merged'
+  else if (payload.pull_request?.state === 'closed') newState = 'closed'
+  else if (payload.pull_request?.draft) newState = 'draft'
+  else newState = 'open'
+
+  if (attempt.pr_state !== newState) {
+    await db.from('fix_attempts').update({ pr_state: newState }).eq('id', attempt.id)
+  }
+
+  await emitFixEvent(db, {
+    fix_attempt_id: attempt.id,
+    project_id: attempt.project_id,
+    kind: 'pr_state_changed',
+    status: newState === 'closed' ? 'fail' : newState === 'merged' ? 'ok' : 'pending',
+    label: `PR ${newState}`,
+    detail: `#${payload.pull_request?.number ?? '—'}`,
+    dedupe_key: `pr:${deliveryId}`,
+    payload: { action: payload.action, state: newState },
+  })
+
+  // If this is a merge, delegate to the existing billing handler so we still
+  // record the `fixes_succeeded` usage_event.
+  if (newState === 'merged') {
+    return await handleFixPrMerged(payload)
+  }
+
+  return new Response(
+    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, pr_state: newState }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  )
+}
+
+/**
+ * Handle `check_run.*` events. Emits a `ci_started` (pending) or
+ * `ci_resolved` (ok/fail) event for every check run attached to a PR branch
+ * we're tracking. We also keep `fix_attempts.check_run_status` /
+ * `check_run_conclusion` up to date so the legacy synth path in the
+ * timeline endpoint stays consistent for pre-`fix_events` attempts.
+ */
+async function handleCheckRun(payload: {
+  action?: string
+  check_run?: {
+    id?: number
+    name?: string
+    status?: string
+    conclusion?: string | null
+    completed_at?: string | null
+    started_at?: string | null
+    html_url?: string | null
+    head_sha?: string | null
+    pull_requests?: Array<{ head?: { ref?: string } }>
+  }
+  repository?: { full_name?: string }
+}, deliveryId: string): Promise<Response> {
+  const run = payload.check_run
+  if (!run) return new Response(JSON.stringify({ ok: true, ignored: 'no_check_run' }), { status: 202 })
+
+  const headRef = run.pull_requests?.[0]?.head?.ref
+  const headSha = run.head_sha
+  if (!headRef && !headSha) {
+    return new Response(JSON.stringify({ ok: true, ignored: 'check_run_no_ref' }), { status: 202 })
+  }
+
+  const db = getDb()
+  // Prefer matching by branch name; fall back to commit SHA for CI runs
+  // that only report a detached head.
+  const q = db.from('fix_attempts').select('id, project_id')
+  const { data: attempt } = await (
+    headRef ? q.eq('branch', headRef).maybeSingle() : q.eq('commit_sha', headSha).maybeSingle()
+  )
+  if (!attempt) {
+    return new Response(
+      JSON.stringify({ ok: true, ignored: 'check_not_a_mushi_fix', headRef, headSha }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const status = (run.status ?? '').toLowerCase()
+  const conclusion = (run.conclusion ?? '').toLowerCase()
+  const resolved = conclusion.length > 0
+
+  await db.from('fix_attempts').update({
+    check_run_status: status || null,
+    check_run_conclusion: conclusion || null,
+    check_run_updated_at: new Date().toISOString(),
+  }).eq('id', attempt.id)
+
+  await emitFixEvent(db, {
+    fix_attempt_id: attempt.id,
+    project_id: attempt.project_id,
+    kind: resolved ? 'ci_resolved' : 'ci_started',
+    status: resolved ? (conclusion === 'success' ? 'ok' : 'fail') : 'pending',
+    label: resolved ? `CI ${conclusion}` : `CI ${status.replace(/_/g, ' ') || 'running'}`,
+    detail: run.name ?? null,
+    at: run.completed_at ?? run.started_at ?? new Date().toISOString(),
+    dedupe_key: `check_run:${run.id ?? deliveryId}:${resolved ? 'done' : 'start'}`,
+    payload: { name: run.name, url: run.html_url },
+  })
+
+  return new Response(
+    JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: resolved ? conclusion : status }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  )
+}
+
+/**
+ * Emit a `commit` fix_event for every push to a branch that matches a
+ * known fix_attempt. Multi-commit pushes on the same agent branch (e.g.
+ * "fix lint, then fix types") each get their own row so the timeline can
+ * render the progression. Safe to call even when no fix_attempt matches.
+ */
+async function emitCommitEventsForPush(
+  db: ReturnType<typeof getDb>,
+  payload: {
+    ref?: string
+    commits?: Array<{
+      id?: string
+      message?: string
+      timestamp?: string
+      added?: string[]
+      modified?: string[]
+      removed?: string[]
+    }>
+    head_commit?: { id?: string; timestamp?: string }
+  },
+  deliveryId: string,
+): Promise<void> {
+  const branch = (payload.ref ?? '').replace(/^refs\/heads\//, '')
+  if (!branch || !payload.commits?.length) return
+
+  const { data: attempt } = await db
+    .from('fix_attempts')
+    .select('id, project_id, commit_sha')
+    .eq('branch', branch)
+    .maybeSingle()
+  if (!attempt) return
+
+  for (const commit of payload.commits) {
+    if (!commit.id) continue
+    const changedCount =
+      (commit.added?.length ?? 0) + (commit.modified?.length ?? 0) + (commit.removed?.length ?? 0)
+    await emitFixEvent(db, {
+      fix_attempt_id: attempt.id,
+      project_id: attempt.project_id,
+      kind: 'commit',
+      status: 'ok',
+      label: `Commit ${commit.id.slice(0, 7)}`,
+      detail: commit.message?.split('\n')[0]?.slice(0, 140) ?? `${changedCount} files`,
+      at: commit.timestamp ?? new Date().toISOString(),
+      dedupe_key: `commit:${commit.id}`,
+      payload: { files: changedCount },
+    })
+  }
+
+  // Keep the canonical commit_sha pointing at HEAD of the push so the
+  // report-detail chip + diff modal link-out land on the latest commit.
+  if (payload.head_commit?.id && payload.head_commit.id !== attempt.commit_sha) {
+    await db
+      .from('fix_attempts')
+      .update({ commit_sha: payload.head_commit.id })
+      .eq('id', attempt.id)
+  }
+  // deliveryId is kept in the dedupe_key for branches where the head_commit
+  // isn't known (rare — GitHub always sets head_commit on push events).
+  void deliveryId
+}
+
+/**
  * Handle a `pull_request.closed` event with `merged: true`.
  *
  * Looks up the `fix_attempts` row whose `pr_url` matches the merged PR — if
@@ -466,9 +713,12 @@ app.post('/webhooks-github-indexer', async (c) => {
     return c.json({ error: 'invalid signature' }, 401)
   }
   const event = c.req.header('X-GitHub-Event') ?? 'unknown'
+  const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID()
 
-  // pull_request.closed (merged=true) — value-based billing trigger.
-  // Record `fixes_succeeded` if this PR matches a fix we opened.
+  // pull_request.*: covers opened / reopened / converted_to_draft /
+  // ready_for_review / closed. Each updates `fix_attempts.pr_state`, emits a
+  // `pr_state_changed` fix_event, and for merged PRs records the
+  // `fixes_succeeded` usage_event via `handleFixPrMerged`.
   if (event === 'pull_request') {
     const prPayload = JSON.parse(raw) as {
       action?: string
@@ -476,13 +726,39 @@ app.post('/webhooks-github-indexer', async (c) => {
         merged?: boolean
         html_url?: string
         number?: number
+        draft?: boolean
+        state?: string
       }
       repository?: { full_name?: string }
     }
-    if (prPayload.action !== 'closed' || !prPayload.pull_request?.merged) {
+    const supportedActions = new Set([
+      'opened', 'reopened', 'ready_for_review', 'converted_to_draft', 'closed',
+    ])
+    if (!supportedActions.has(prPayload.action ?? '')) {
       return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202)
     }
-    return await handleFixPrMerged(prPayload)
+    return await handlePullRequestState(prPayload, deliveryId)
+  }
+
+  // check_run.*: emits ci_started / ci_resolved fix_events and keeps the
+  // fix_attempts.check_run_* columns fresh for the legacy synth path.
+  if (event === 'check_run') {
+    const crPayload = JSON.parse(raw) as {
+      action?: string
+      check_run?: {
+        id?: number
+        name?: string
+        status?: string
+        conclusion?: string | null
+        completed_at?: string | null
+        started_at?: string | null
+        html_url?: string | null
+        head_sha?: string | null
+        pull_requests?: Array<{ head?: { ref?: string } }>
+      }
+      repository?: { full_name?: string }
+    }
+    return await handleCheckRun(crPayload, deliveryId)
   }
 
   if (event !== 'push' && event !== 'installation_repositories') {
@@ -519,6 +795,21 @@ app.post('/webhooks-github-indexer', async (c) => {
 
   const token = await mintInstallationToken(installationId)
   const projectId = project.project_id as string
+
+  // Emit `commit` fix_events if this push is on a branch we're tracking
+  // (i.e. fix_attempts.branch == ref). Runs before the embedding pipeline so
+  // the timeline updates fast even if indexing is slow.
+  try {
+    await emitCommitEventsForPush(
+      db,
+      JSON.parse(raw) as Parameters<typeof emitCommitEventsForPush>[1],
+      deliveryId,
+    )
+  } catch (err) {
+    log.warn('emitCommitEventsForPush failed (non-fatal)', {
+      err: err instanceof Error ? err.message : String(err),
+    })
+  }
 
   const added = new Set<string>()
   const removed = new Set<string>()

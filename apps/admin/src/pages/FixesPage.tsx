@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
+import { useRealtimeReload } from '../lib/realtime'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { PageHeader, PageHelp, SegmentedControl, ErrorAlert } from '../components/ui'
@@ -116,18 +117,21 @@ export function FixesPage() {
   useEffect(() => {
     cancelledRef.current = false
     void loadFixes()
-    // Pause polling when the tab is hidden — there's no point burning the
-    // free-tier API quota refreshing a page nobody is looking at.
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.hidden) return
-      void loadFixes()
-    }
-    const t = setInterval(tick, 5000)
     return () => {
       cancelledRef.current = true
-      clearInterval(t)
     }
   }, [loadFixes])
+
+  // Realtime replaces the 5s poll. `fix_attempts` flips when an agent
+  // moves through queued → running → succeeded/failed; `fix_events` fires
+  // on every downstream GitHub webhook (push, pull_request, check_run).
+  // We debounce because a single PR merge commonly emits 3–4 events within
+  // the same second — collapsing them into one refresh keeps the list
+  // stable for users who are reading while things land.
+  useRealtimeReload(['fix_attempts', 'fix_events', 'fix_dispatch_jobs'], () => {
+    if (cancelledRef.current) return
+    void loadFixes()
+  })
 
   // Lazily fetch the per-fix PDCA timeline only once a card is expanded.
   // Cached by fix.id so re-opening is instant; refetched if status flips so
