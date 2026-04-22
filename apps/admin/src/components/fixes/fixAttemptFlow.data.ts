@@ -36,6 +36,10 @@ export interface FixEdgeData extends Record<string, unknown> {
 
 const NODE_Y = 40
 const NODE_GAP = 170
+// Explicit dims so React Flow's MiniMap (which reads user-node measurements,
+// not the internal ones) can render the stage rects at the correct scale.
+const FIX_NODE_W = 150
+const FIX_NODE_H = 88
 
 const STAGE_ORDER: Array<{ key: string; pdca: PdcaStageId; letter: string; label: string }> = [
   { key: 'report', pdca: 'plan', letter: 'P', label: 'Report' },
@@ -51,6 +55,8 @@ export function buildFixAttemptNodes(fix: FixAttempt): Node<FixStageNodeData>[] 
     id: `${fix.id}:${s.key}`,
     type: 'fixStage',
     position: { x: i * NODE_GAP, y: NODE_Y },
+    width: FIX_NODE_W,
+    height: FIX_NODE_H,
     draggable: false,
     connectable: false,
     selectable: false,

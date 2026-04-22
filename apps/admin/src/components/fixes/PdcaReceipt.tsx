@@ -11,6 +11,7 @@
  */
 
 import { PDCA_ORDER, PDCA_STAGES, type PdcaStageId } from '../../lib/pdca'
+import { STAMP_VISUAL, type StageStamp } from '../../lib/pdcaStamp'
 import type { FixAttempt } from './types'
 import type { FixTimelineEvent } from '../FixGitGraph'
 
@@ -19,8 +20,6 @@ interface PdcaReceiptProps {
   timeline?: FixTimelineEvent[]
   className?: string
 }
-
-type StageStamp = 'done' | 'pending' | 'failed' | 'idle'
 
 interface StageReceipt {
   id: PdcaStageId
@@ -39,19 +38,21 @@ export function PdcaReceipt({ fix, timeline, className = '' }: PdcaReceiptProps)
       {PDCA_ORDER.map((id) => {
         const meta = PDCA_STAGES[id]
         const r = receipts[id]
+        const v = STAMP_VISUAL[r.stamp]
         return (
           <li
             key={id}
-            className={`relative px-2.5 py-2 rounded-md border ${stampShell(r.stamp)} bg-surface-raised/40`}
+            className={`relative px-2.5 py-2 rounded-md border ${v.shell}`}
+            data-stamp={r.stamp}
           >
             <div className="flex items-center gap-1.5 text-2xs uppercase tracking-wider">
               <span className={`inline-flex h-4 w-4 items-center justify-center rounded-sm font-semibold text-[10px] ${meta.badgeBg} ${meta.badgeFg}`}>
                 {meta.letter}
               </span>
-              <span className="text-fg-muted">{meta.label}</span>
+              <span className={r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-muted'}>{meta.label}</span>
               <Stamp stamp={r.stamp} />
             </div>
-            <p className="mt-1 text-2xs text-fg-secondary leading-snug line-clamp-2">{r.proof}</p>
+            <p className={`mt-1 text-2xs leading-snug line-clamp-2 ${r.stamp === 'idle' ? 'text-fg-faint' : 'text-fg-secondary'}`}>{r.proof}</p>
             {r.link && (
               <a
                 href={r.link.href}
@@ -69,35 +70,15 @@ export function PdcaReceipt({ fix, timeline, className = '' }: PdcaReceiptProps)
   )
 }
 
-function stampShell(stamp: StageStamp): string {
-  switch (stamp) {
-    case 'done':
-      return 'border-ok/30'
-    case 'pending':
-      return 'border-info/30'
-    case 'failed':
-      return 'border-danger/30'
-    default:
-      return 'border-edge-subtle opacity-60'
-  }
-}
-
-const STAMP_STYLE: Record<StageStamp, { dot: string; label: string; copy: string }> = {
-  done: { dot: 'bg-ok', label: 'Closed', copy: 'text-ok' },
-  pending: { dot: 'bg-info animate-pulse', label: 'In flight', copy: 'text-info' },
-  failed: { dot: 'bg-danger', label: 'Failed', copy: 'text-danger' },
-  idle: { dot: 'bg-fg-faint/60', label: 'Not yet', copy: 'text-fg-faint' },
-}
-
 function Stamp({ stamp }: { stamp: StageStamp }) {
-  const s = STAMP_STYLE[stamp]
+  const v = STAMP_VISUAL[stamp]
   return (
     <span
-      className={`ml-auto flex items-center gap-1 text-[10px] font-medium ${s.copy}`}
-      aria-label={`Status: ${s.label}`}
+      className={`ml-auto flex items-center gap-1 text-[10px] font-semibold ${v.copy}`}
+      aria-label={`Status: ${v.label}`}
     >
-      <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {s.label}
+      <span aria-hidden="true" className="font-mono text-[11px] leading-none">{v.glyph}</span>
+      {v.label}
     </span>
   )
 }
@@ -200,8 +181,9 @@ function buildReceipts(
 }
 
 /**
- * Helper export for cases where a caller wants the raw stamp map (e.g. to
- * render a compact strip elsewhere). Re-using this avoids divergent logic if
- * we add new pipeline statuses.
+ * Helper export for cases where a caller wants the raw receipt shape (e.g.
+ * to render a compact strip elsewhere). `StageStamp` is re-exported from
+ * `lib/pdcaStamp` so all consumers share one type.
  */
-export type { StageStamp, StageReceipt }
+export type { StageReceipt }
+export type { StageStamp } from '../../lib/pdcaStamp'

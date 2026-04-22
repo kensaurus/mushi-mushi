@@ -42,10 +42,24 @@ function PdcaGradientEdgeInner({
     targetPosition,
   })
 
-  const gradientId = `pdca-grad-${id}`
+  // React Flow edge ids use `${source}->${target}` (e.g. `plan->do`), but the
+  // `>` character is not valid in CSS `<custom-ident>` — some browsers drop
+  // @keyframes rules whose name contains it, killing the marching-ants
+  // animation silently. Normalise to `[a-z0-9_-]` so the keyframe always
+  // resolves.
+  const safeId = id.replace(/[^a-zA-Z0-9_-]/g, '_')
+  const gradientId = `pdca-grad-${safeId}`
+  const keyframeName = `pdca-flow-${safeId}`
   const dashArray = `${DASH_LENGTH} ${GAP_LENGTH}`
   const isActive = Boolean(animated)
   const isFlowing = Boolean(edgeData.flowing)
+  const isFailing = Boolean(edgeData.failing)
+
+  // Failure dominates flow styling: swap the gradient for the danger hue
+  // + shorten the dash so the eye catches the stall before reading copy.
+  const DANGER = '#ef4444'
+  const strokeValue = isFailing ? DANGER : `url(#${gradientId})`
+  const failingDash = '6 3'
 
   return (
     <>
@@ -58,7 +72,7 @@ function PdcaGradientEdgeInner({
 
       {isActive && (
         <style>{`
-          @keyframes pdca-flow-${id} {
+          @keyframes ${keyframeName} {
             from { stroke-dashoffset: ${DASH_LENGTH + GAP_LENGTH}; }
             to { stroke-dashoffset: 0; }
           }
@@ -67,13 +81,13 @@ function PdcaGradientEdgeInner({
 
       <path
         d={edgePath}
-        stroke={`url(#${gradientId})`}
+        stroke={strokeValue}
         strokeWidth={isActive || selected ? 2.5 : 1.75}
         fill="none"
-        strokeDasharray={isActive ? dashArray : 'none'}
+        strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
           opacity: isActive || selected ? 1 : 0.7,
-          animation: isActive ? `pdca-flow-${id} ${ANIMATION_DURATION} linear infinite` : 'none',
+          animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
         }}
         markerEnd={markerEnd}
       />
@@ -81,14 +95,14 @@ function PdcaGradientEdgeInner({
       {isActive && (
         <path
           d={edgePath}
-          stroke={`url(#${gradientId})`}
+          stroke={strokeValue}
           strokeWidth={5}
           fill="none"
-          strokeDasharray={dashArray}
+          strokeDasharray={isFailing ? failingDash : dashArray}
           style={{
-            opacity: 0.25,
+            opacity: isFailing ? 0.35 : 0.25,
             filter: 'blur(2px)',
-            animation: `pdca-flow-${id} ${ANIMATION_DURATION} linear infinite`,
+            animation: `${keyframeName} ${ANIMATION_DURATION} linear infinite`,
           }}
         />
       )}

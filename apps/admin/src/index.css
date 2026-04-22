@@ -288,6 +288,51 @@ select, input, textarea {
 }
 
 /* ---------------------------------------------------------------------------
+   STAMP GLOW UTILITIES (used by PDCA receipts)
+   A static box-shadow ring that signals "this stage has landed". Matches the
+   pattern Linear / Vercel / GitHub use for closed states on dark dashboards:
+   inset 1px saturated border + outer tinted halo. No animation — motion is
+   reserved for *in-flight* stages (.mushi-pulse) so finished work stays still.
+
+   We cap the outer halo at `0 0 16px -6px` so it reads as a soft lift, not a
+   neon rim. Users on `prefers-reduced-motion` keep the glow because it's a
+   static decoration, not motion. That matches WCAG 2.3 which only restricts
+   motion, not decorative colour/shadow.
+--------------------------------------------------------------------------- */
+
+.mushi-glow-ok {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 35%, transparent),
+    0 0 16px -6px color-mix(in oklch, var(--color-ok) 45%, transparent);
+}
+
+.mushi-glow-danger {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-danger) 35%, transparent),
+    0 0 16px -6px color-mix(in oklch, var(--color-danger) 40%, transparent);
+}
+
+.mushi-glow-info {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--color-info) 30%, transparent),
+    0 0 14px -6px color-mix(in oklch, var(--color-info) 35%, transparent);
+}
+
+/* A breathing halo for the *active* done stage — fires once on mount so the
+   eye is pulled to the newly-closed stamp, then settles into the static glow.
+   Keyframe animates from 0 alpha → peak → current, so the static box-shadow
+   above takes over once the animation ends. */
+@keyframes mushi-closed-pop {
+  0%   { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 0%, transparent),  0 0 0 0   color-mix(in oklch, var(--color-ok) 0%, transparent); }
+  40%  { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 50%, transparent), 0 0 24px -2px color-mix(in oklch, var(--color-ok) 55%, transparent); }
+  100% { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--color-ok) 35%, transparent), 0 0 16px -6px color-mix(in oklch, var(--color-ok) 45%, transparent); }
+}
+.mushi-closed-pop {
+  animation: mushi-closed-pop 900ms var(--ease-out-expo) 1;
+  animation-fill-mode: forwards;
+}
+
+/* ---------------------------------------------------------------------------
    MODAL + TOAST MOTION
    Backdrop fade, panel scale-in, toast slide-in microinteractions —
    gives async UI a perceived weight without bloating bundle with framer-motion.

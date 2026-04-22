@@ -163,7 +163,7 @@ export function PlanComparisonTable({ plans, currentPlanId, busy = false, onSele
   return (
     <section
       aria-labelledby="plans-heading"
-      className="border border-edge-subtle rounded-md p-3 bg-surface-subtle"
+      className="border border-edge-subtle rounded-md p-3 bg-surface-raised/30"
     >
       <header className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
         <div>

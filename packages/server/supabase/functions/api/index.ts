@@ -6,7 +6,7 @@ import { AguiEmitter } from '../_shared/agui.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler, reportError } from '../_shared/sentry.ts'
-import { apiKeyAuth, jwtAuth } from '../_shared/auth.ts'
+import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../_shared/auth.ts'
 import { checkIngestQuota } from '../_shared/quota.ts'
 import { regionRouter, currentRegion, lookupProjectRegion, regionEndpoint } from '../_shared/region.ts'
 import { getStorageAdapter, invalidateStorageCache } from '../_shared/storage.ts'
@@ -98,8 +98,12 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
   const defaults = [
     'https://admin.mushimushi.dev',
     'https://app.mushimushi.dev',
-    // Local dev for the admin Vite server. Operators running on different
-    // ports can extend via MUSHI_ADMIN_ORIGIN_ALLOWLIST.
+    // Local dev for the admin Vite server. `apps/admin/README.md` pins the
+    // canonical dev port to 6464; the legacy 5173 entries are kept for
+    // operators who overrode Vite's port. Extend via
+    // MUSHI_ADMIN_ORIGIN_ALLOWLIST for anything else.
+    'http://localhost:6464',
+    'http://127.0.0.1:6464',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
   ]
@@ -1212,7 +1216,7 @@ app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
 // FIX DISPATCH (V5.3 §2.10) — admin-triggered, queue-based
 // ============================================================
 
-app.post('/v1/admin/fixes/dispatch', jwtAuth, async (c) => {
+app.post('/v1/admin/fixes/dispatch', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json().catch(() => ({})) as { reportId?: string; projectId?: string }
   if (!body.reportId || !body.projectId) {
@@ -1573,7 +1577,7 @@ app.get('/v1/admin/reports/severity-stats', jwtAuth, async (c) => {
   })
 })
 
-app.get('/v1/admin/reports', jwtAuth, async (c) => {
+app.get('/v1/admin/reports', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
 
@@ -1672,7 +1676,7 @@ app.get('/v1/admin/reports', jwtAuth, async (c) => {
 // The query text is embedded on the server (voyage-3 or fallback) so the
 // caller never has to ship vectors. That also keeps the embedding model
 // pinned server-side, matching what `getRelevantCode` uses for RAG.
-app.post('/v1/admin/reports/similarity', jwtAuth, async (c) => {
+app.post('/v1/admin/reports/similarity', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json().catch(() => ({})) as {
     query?: string
@@ -1749,7 +1753,7 @@ app.post('/v1/admin/reports/similarity', jwtAuth, async (c) => {
   }
 })
 
-app.get('/v1/admin/reports/:id', jwtAuth, async (c) => {
+app.get('/v1/admin/reports/:id', adminOrApiKey(), async (c) => {
   const reportId = c.req.param('id')
   const userId = c.get('userId') as string
   const db = getServiceClient()
@@ -1798,7 +1802,7 @@ app.get('/v1/admin/reports/:id', jwtAuth, async (c) => {
   })
 })
 
-app.patch('/v1/admin/reports/:id', jwtAuth, async (c) => {
+app.patch('/v1/admin/reports/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
   const reportId = c.req.param('id')
   const userId = c.get('userId') as string
   const body = await c.req.json()
@@ -1981,7 +1985,7 @@ app.post('/v1/admin/reports/bulk', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { updated: allowedIds.length, ids: allowedIds } })
 })
 
-app.get('/v1/admin/stats', jwtAuth, async (c) => {
+app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
 
@@ -2004,7 +2008,7 @@ app.get('/v1/admin/stats', jwtAuth, async (c) => {
 // triage backlog, top components, and recent activity. Powers the rebuilt
 // DashboardPage. Single round-trip so the page hydrates quickly without N
 // chained requests.
-app.get('/v1/admin/dashboard', jwtAuth, async (c) => {
+app.get('/v1/admin/dashboard', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
 
@@ -2496,7 +2500,7 @@ app.get('/v1/admin/judge/distribution', jwtAuth, async (c) => {
 })
 
 // Trigger judge-batch on demand for the user's projects (fire-and-forget).
-app.post('/v1/admin/judge/run', jwtAuth, async (c) => {
+app.post('/v1/admin/judge/run', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const projectIds = await ownedProjectIds(db, userId)
@@ -2750,7 +2754,7 @@ app.delete('/v1/admin/prompt-lab/prompts/:id', jwtAuth, async (c) => {
 })
 
 // Settings admin endpoints
-app.get('/v1/admin/settings', jwtAuth, async (c) => {
+app.get('/v1/admin/settings', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
 
@@ -4060,7 +4064,7 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
 
   const [reportCounts, allKeys, members, latestReports, planBacklogs, doFlights, checkPending] = await Promise.all([
     db.from('reports').select('project_id', { count: 'exact', head: false }).in('project_id', projectIds),
-    db.from('project_api_keys').select('id, project_id, key_prefix, created_at, is_active').in('project_id', projectIds).order('created_at', { ascending: false }),
+    db.from('project_api_keys').select('id, project_id, key_prefix, created_at, is_active, scopes, label').in('project_id', projectIds).order('created_at', { ascending: false }),
     db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
     Promise.all(projectIds.map(pid =>
       db.from('reports')
@@ -4092,7 +4096,15 @@ app.get('/v1/admin/projects', jwtAuth, async (c) => {
   const keyMap: Record<string, Array<Record<string, unknown>>> = {}
   for (const k of allKeys.data ?? []) {
     if (!keyMap[k.project_id]) keyMap[k.project_id] = []
-    keyMap[k.project_id].push({ id: k.id, key_prefix: k.key_prefix, created_at: k.created_at, is_active: k.is_active, revoked: !k.is_active })
+    keyMap[k.project_id].push({
+      id: k.id,
+      key_prefix: k.key_prefix,
+      created_at: k.created_at,
+      is_active: k.is_active,
+      revoked: !k.is_active,
+      scopes: (k as any).scopes ?? [],
+      label: (k as any).label ?? null,
+    })
   }
 
   const memberMap: Record<string, Array<{ user_id: string; role: string }>> = {}
@@ -4201,10 +4213,36 @@ app.post('/v1/admin/projects', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { id: data.id, slug } }, 201)
 })
 
+// Scopes vocabulary is enforced at the DB level (CHECK constraint from
+// migration 20260421003000_api_key_scopes.sql). We echo it here so the API
+// rejects bad input with a 400 and a helpful message, rather than letting
+// Postgres surface a noisy `23514` error.
+const ALLOWED_KEY_SCOPES = ['report:write', 'mcp:read', 'mcp:write'] as const
+type AllowedScope = typeof ALLOWED_KEY_SCOPES[number]
+
+function normaliseScopes(input: unknown): AllowedScope[] | { error: string } {
+  if (input === undefined || input === null) return ['report:write']
+  if (!Array.isArray(input) || input.length === 0) {
+    return { error: 'scopes must be a non-empty array' }
+  }
+  const unique = Array.from(new Set(input.map(String)))
+  const invalid = unique.filter((s) => !(ALLOWED_KEY_SCOPES as readonly string[]).includes(s))
+  if (invalid.length > 0) {
+    return { error: `Unknown scope(s): ${invalid.join(', ')}. Allowed: ${ALLOWED_KEY_SCOPES.join(', ')}` }
+  }
+  return unique as AllowedScope[]
+}
+
 app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
   const projectId = c.req.param('id')
   const userId = c.get('userId') as string
   const db = getServiceClient()
+
+  const body = await c.req.json().catch(() => ({})) as { scopes?: unknown; label?: string }
+  const scopes = normaliseScopes(body.scopes)
+  if ('error' in scopes) {
+    return c.json({ ok: false, error: { code: 'INVALID_SCOPES', message: scopes.error } }, 400)
+  }
 
   const { data: project } = await db.from('projects').select('id').eq('id', projectId).eq('owner_id', userId).single()
   if (!project) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
@@ -4216,16 +4254,21 @@ app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey))
   const keyHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 
+  const label = (typeof body.label === 'string' && body.label.trim().length > 0)
+    ? body.label.trim().slice(0, 64)
+    : (scopes.includes('mcp:write') ? 'mcp-readwrite' : scopes.includes('mcp:read') ? 'mcp-readonly' : 'default')
+
   const { error } = await db.from('project_api_keys').insert({
     project_id: projectId,
     key_hash: keyHash,
     key_prefix: prefix,
-    label: 'default',
+    label,
+    scopes,
     is_active: true,
   })
 
   if (error) return dbError(c, error)
-  return c.json({ ok: true, data: { key: rawKey, prefix } }, 201)
+  return c.json({ ok: true, data: { key: rawKey, prefix, scopes, label } }, 201)
 })
 
 // Rotation endpoint advertised by the auth manifest.: previously a
@@ -4383,6 +4426,224 @@ app.post('/v1/admin/projects/:id/test-report', jwtAuth, async (c) => {
     ok: true,
     data: { reportId: result.reportId, projectName: project.name },
   }, 201)
+})
+
+// ---------------------------------------------------------------------------
+// Codebase indexing (Phase 3 of the PDCA unblock).
+//
+// POST /v1/admin/projects/:id/codebase/enable
+//   - Upserts a `project_repos` row for the primary repo.
+//   - Flips `project_settings.codebase_index_enabled = true`, seeds
+//     `codebase_repo_url` + (if missing) a GitHub webhook secret.
+//   - Kicks an immediate `mode=sweep` invocation on webhooks-github-indexer
+//     so the user doesn't have to wait for the hourly `mushi-repo-indexer-hourly`
+//     cron to see indexed files show up.
+//
+// GET /v1/admin/projects/:id/codebase/stats
+//   - Returns `indexed_files`, `last_indexed_at`, `last_index_error`,
+//     `codebase_index_enabled`, `repo_url`, and `has_webhook_secret` so the
+//     IntegrationsPage card can render live state. Cheap — one count +
+//     two single-row reads.
+// ---------------------------------------------------------------------------
+
+const GITHUB_URL_RE = /^https?:\/\/(?:www\.)?github\.com\/([^\/\s]+)\/([^\/\s#?]+?)(?:\.git)?\/?$/i
+
+function parseGithubRepoUrl(url: string | null | undefined): { owner: string, repo: string } | null {
+  if (!url) return null
+  const match = GITHUB_URL_RE.exec(url.trim())
+  if (!match) return null
+  return { owner: match[1], repo: match[2] }
+}
+
+async function generateWebhookSecret(): Promise<string> {
+  // GitHub recommends at least 32 bytes of entropy for webhook secrets; we
+  // emit 48 random bytes base64url-encoded → 64 chars of URL-safe ASCII,
+  // well over the floor and friendly to copy-paste into the GitHub UI.
+  const bytes = new Uint8Array(48)
+  crypto.getRandomValues(bytes)
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+}
+
+async function kickCodebaseSweep(projectId: string): Promise<void> {
+  // Fire-and-forget — the sweep writes to project_codebase_files and
+  // updates project_repos.last_indexed_at / last_index_error, so the
+  // caller doesn't need to block. A short AbortSignal prevents a slow
+  // sweep from holding the enable response hostage.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const internalSecret = Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET')
+    ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !internalSecret) return
+  await fetch(`${supabaseUrl}/functions/v1/webhooks-github-indexer`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${internalSecret}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ mode: 'sweep', project_id: projectId }),
+    signal: AbortSignal.timeout(2_000),
+  }).catch(() => { /* worker is fire-and-forget */ })
+}
+
+app.post('/v1/admin/projects/:id/codebase/enable', jwtAuth, async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const { data: membership } = await db
+    .from('project_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+
+  let body: {
+    repo_url?: string
+    default_branch?: string
+    installation_id?: string | number | null
+    path_globs?: string[]
+  }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'Body must be JSON' } }, 400)
+  }
+
+  const parsed = parseGithubRepoUrl(body.repo_url)
+  if (!parsed) {
+    return c.json({
+      ok: false,
+      error: { code: 'INVALID_REPO_URL', message: 'repo_url must look like https://github.com/<owner>/<repo>' },
+    }, 400)
+  }
+  const repoUrl = `https://github.com/${parsed.owner}/${parsed.repo}`
+  const defaultBranch = (body.default_branch ?? 'main').trim() || 'main'
+  const installationId = body.installation_id != null && String(body.installation_id).trim() !== ''
+    ? Number(body.installation_id)
+    : null
+  if (installationId !== null && (!Number.isFinite(installationId) || installationId <= 0)) {
+    return c.json({
+      ok: false,
+      error: { code: 'INVALID_INSTALLATION_ID', message: 'installation_id must be a positive integer from the GitHub App install URL' },
+    }, 400)
+  }
+  const pathGlobs = Array.isArray(body.path_globs) ? body.path_globs.filter((g) => typeof g === 'string') : []
+
+  const { data: existingRepo } = await db
+    .from('project_repos')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('repo_url', repoUrl)
+    .maybeSingle()
+
+  const repoRow = {
+    project_id: projectId,
+    repo_url: repoUrl,
+    role: 'monorepo',
+    default_branch: defaultBranch,
+    path_globs: pathGlobs,
+    github_app_installation_id: installationId,
+    is_primary: true,
+    indexing_enabled: true,
+    updated_at: new Date().toISOString(),
+  }
+  const { error: repoErr } = existingRepo
+    ? await db.from('project_repos').update(repoRow).eq('id', existingRepo.id)
+    : await db.from('project_repos').insert(repoRow)
+  if (repoErr) return dbError(c, repoErr)
+
+  const { data: currentSettings } = await db
+    .from('project_settings')
+    .select('github_webhook_secret')
+    .eq('project_id', projectId)
+    .maybeSingle()
+
+  const webhookSecret = currentSettings?.github_webhook_secret ?? await generateWebhookSecret()
+  const { error: settingsErr } = await db
+    .from('project_settings')
+    .update({
+      codebase_index_enabled: true,
+      codebase_repo_url: repoUrl,
+      github_webhook_secret: webhookSecret,
+    })
+    .eq('project_id', projectId)
+  if (settingsErr) return dbError(c, settingsErr)
+
+  void kickCodebaseSweep(projectId)
+
+  await logAudit(db, projectId, userId, 'settings.updated', 'codebase_index', projectId, {
+    repo_url: repoUrl,
+    default_branch: defaultBranch,
+    installation_id: installationId,
+    issued_webhook_secret: !currentSettings?.github_webhook_secret,
+  }).catch(() => {})
+
+  return c.json({
+    ok: true,
+    data: {
+      repo_url: repoUrl,
+      default_branch: defaultBranch,
+      webhook_secret: webhookSecret,
+      webhook_secret_issued: !currentSettings?.github_webhook_secret,
+      indexed_files_eta_seconds: 90,
+    },
+  })
+})
+
+app.get('/v1/admin/projects/:id/codebase/stats', jwtAuth, async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const { data: membership } = await db
+    .from('project_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+
+  const [
+    { data: settings },
+    { data: primaryRepo },
+    { count: indexedFiles },
+  ] = await Promise.all([
+    db
+      .from('project_settings')
+      .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
+      .eq('project_id', projectId)
+      .maybeSingle(),
+    db
+      .from('project_repos')
+      .select('repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, github_app_installation_id, indexing_enabled')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .maybeSingle(),
+    db
+      .from('project_codebase_files')
+      .select('*', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null),
+  ])
+
+  return c.json({
+    ok: true,
+    data: {
+      codebase_index_enabled: !!settings?.codebase_index_enabled,
+      repo_url: primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null,
+      default_branch: primaryRepo?.default_branch ?? null,
+      installation_id: primaryRepo?.github_app_installation_id ?? null,
+      indexing_enabled: primaryRepo?.indexing_enabled ?? null,
+      indexed_files: indexedFiles ?? 0,
+      last_indexed_at: primaryRepo?.last_indexed_at ?? null,
+      last_index_attempt_at: primaryRepo?.last_index_attempt_at ?? null,
+      last_index_error: primaryRepo?.last_index_error ?? null,
+      has_webhook_secret: !!settings?.github_webhook_secret,
+    },
+  })
 })
 
 // DLQ admin endpoints
@@ -4722,7 +4983,7 @@ app.get('/v1/admin/graph/edges', jwtAuth, async (c) => {
  * BFS depth budget, starting from a node id OR a label match. Capped at
  * depth=4 and 500 nodes so an LLM can't blow up the response budget.
  */
-app.get('/v1/admin/graph/traverse', jwtAuth, async (c) => {
+app.get('/v1/admin/graph/traverse', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const seed = (c.req.query('seed') ?? '').trim()
   const depth = Math.max(1, Math.min(Number(c.req.query('depth') ?? 2), 4))
@@ -4774,7 +5035,7 @@ app.get('/v1/admin/graph/traverse', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { nodes: Array.from(visitedNodes.values()), edges } })
 })
 
-app.get('/v1/admin/graph/blast-radius/:nodeId', jwtAuth, async (c) => {
+app.get('/v1/admin/graph/blast-radius/:nodeId', adminOrApiKey(), async (c) => {
   const nodeId = c.req.param('nodeId')
   const userId = c.get('userId') as string
   const db = getServiceClient()
@@ -4822,7 +5083,7 @@ app.post('/v1/admin/ontology', jwtAuth, async (c) => {
 // PHASE 2: NATURAL LANGUAGE QUERY
 // ============================================================
 
-app.post('/v1/admin/query', jwtAuth, async (c) => {
+app.post('/v1/admin/query', adminOrApiKey(), async (c) => {
   const userId = c.get('userId') as string
   const { question } = await c.req.json()
   if (!question) return c.json({ ok: false, error: { code: 'MISSING_QUESTION', message: 'question is required' } }, 400)
@@ -5053,7 +5314,7 @@ app.get('/v1/admin/fixes', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { fixes: data ?? [] } })
 })
 
-app.post('/v1/admin/fixes', jwtAuth, async (c) => {
+app.post('/v1/admin/fixes', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json()
   const db = getServiceClient()
@@ -5158,10 +5419,72 @@ app.get('/v1/admin/fixes/:id', jwtAuth, async (c) => {
   return c.json({ ok: true, data })
 })
 
+// ---------------------------------------------------------------------------
+// Manual CI sync. Webhooks can drop (App not subscribed, webhook URL not
+// registered, GitHub flaky), and without a refresh the PDCA "Check" stage
+// stays null forever. This endpoint lets the user pull the latest
+// check-run conclusion on demand; the `mushi-ci-sync-10m` pg_cron runs the
+// same sync periodically for every completed attempt.
+// ---------------------------------------------------------------------------
+app.post('/v1/admin/fixes/:id/refresh-ci', jwtAuth, async (c) => {
+  const fixId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  const { data: attempt } = await db
+    .from('fix_attempts')
+    .select('id, project_id')
+    .eq('id', fixId)
+    .maybeSingle()
+  if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404)
+
+  const { data: membership } = await db
+    .from('project_members')
+    .select('role')
+    .eq('user_id', userId)
+    .eq('project_id', attempt.project_id)
+    .maybeSingle()
+  if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403)
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const internalSecret = Deno.env.get('MUSHI_INTERNAL_CALLER_SECRET')
+    ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!supabaseUrl || !internalSecret) {
+    return c.json({ ok: false, error: { code: 'SERVER_MISCONFIGURED' } }, 500)
+  }
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/ci-sync`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${internalSecret}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ fix_attempt_id: fixId }),
+      signal: AbortSignal.timeout(15_000),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      return c.json({ ok: false, error: { code: 'CI_SYNC_FAILED', message: body?.error?.message ?? `ci-sync ${res.status}` } }, 502)
+    }
+
+    const { data: refreshed } = await db
+      .from('fix_attempts')
+      .select('check_run_status, check_run_conclusion, check_run_updated_at')
+      .eq('id', fixId)
+      .maybeSingle()
+
+    return c.json({ ok: true, data: refreshed ?? body?.data ?? {} })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return c.json({ ok: false, error: { code: 'CI_SYNC_TIMEOUT', message: msg } }, 504)
+  }
+})
+
 // PDCA timeline for a single fix attempt — merges fix_dispatch_jobs +
 // fix_attempts + check-run signals into an ordered event stream so the UI
 // can render a real branch graph.
-app.get('/v1/admin/fixes/:id/timeline', jwtAuth, async (c) => {
+app.get('/v1/admin/fixes/:id/timeline', adminOrApiKey(), async (c) => {
   const fixId = c.req.param('id')
   const userId = c.get('userId') as string
   const db = getServiceClient()
@@ -5277,7 +5600,7 @@ app.get('/v1/admin/fixes/:id/timeline', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { fix, dispatch, events } })
 })
 
-app.patch('/v1/admin/fixes/:id', jwtAuth, async (c) => {
+app.patch('/v1/admin/fixes/:id', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
   const fixId = c.req.param('id')
   const userId = c.get('userId') as string
   const body = await c.req.json()

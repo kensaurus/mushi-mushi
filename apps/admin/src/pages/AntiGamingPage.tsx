@@ -14,6 +14,7 @@ import {
   PageHeader,
   PageHelp,
   Card,
+  Section,
   Badge,
   Btn,
   FilterSelect,
@@ -273,19 +274,20 @@ export function AntiGamingPage() {
         />
       </div>
 
-      <section>
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
-            {filter === 'flagged' ? 'Flagged devices' : 'All tracked devices'}
-            {search && ` · ${devices.length}/${allDevices.length} match "${search}"`}
-          </h2>
+      <Section
+        title={
+          (filter === 'flagged' ? 'Flagged devices' : 'All tracked devices') +
+          (search ? ` · ${devices.length}/${allDevices.length} match "${search}"` : '')
+        }
+        action={
           <Input
             placeholder="Search fingerprint, token, IP, reason…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-xs"
           />
-        </div>
+        }
+      >
         {loading ? (
           <TableSkeleton rows={6} columns={4} showFilters={false} label="Loading devices" />
         ) : error ? (
@@ -398,18 +400,15 @@ export function AntiGamingPage() {
             })}
           </div>
         )}
-      </section>
+      </Section>
 
-      <section>
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <h2 className="text-xs font-semibold text-fg-muted uppercase tracking-wide">
-            Recent events
-            {aggregateEvents && collapsedCount > 0 && (
-              <span className="ml-2 text-2xs font-normal normal-case text-fg-faint">
-                {eventGroups.length} groups · {collapsedCount} duplicates collapsed
-              </span>
-            )}
-          </h2>
+      <Section
+        title={
+          aggregateEvents && collapsedCount > 0
+            ? `Recent events · ${eventGroups.length} groups · ${collapsedCount} duplicates collapsed`
+            : 'Recent events'
+        }
+        action={
           <div className="flex items-center gap-2">
             <label className="inline-flex items-center gap-1.5 text-2xs text-fg-muted cursor-pointer">
               <input
@@ -427,7 +426,8 @@ export function AntiGamingPage() {
               onChange={(e) => setEventFilter(e.currentTarget.value)}
             />
           </div>
-        </div>
+        }
+      >
         {events.length === 0 ? (
           <EmptyState title="No anti-gaming events yet" description={eventFilter ? 'Try a different event type.' : undefined} />
         ) : aggregateEvents ? (
@@ -492,7 +492,7 @@ export function AntiGamingPage() {
             ))}
           </div>
         )}
-      </section>
+      </Section>
 
       {flagTarget && (
         <PromptDialog

@@ -233,7 +233,7 @@ export function CompliancePage() {
         <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'compliance data'}: ${error}`} onRetry={merged.retry} />
       ) : (
         <>
-          <Card className="p-3">
+          <Card className="p-5">
             <div className="text-xs font-medium uppercase tracking-wider mb-2">Latest control evidence</div>
             {latestEvidenceByControl.length === 0 ? (
               <EmptyState
@@ -274,7 +274,7 @@ export function CompliancePage() {
             )}
           </Card>
 
-          <Card className="p-3">
+          <Card className="p-5">
             <div className="flex items-baseline justify-between mb-2">
               <div className="text-xs font-medium uppercase tracking-wider">Data residency</div>
               <span className="text-2xs opacity-70">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
@@ -315,7 +315,7 @@ export function CompliancePage() {
             )}
           </Card>
 
-          <Card className="p-3">
+          <Card className="p-5">
             <div className="text-xs font-medium uppercase tracking-wider mb-2">Retention policies</div>
             {policies.length === 0 ? (
               <EmptyState
@@ -364,7 +364,7 @@ export function CompliancePage() {
             )}
           </Card>
 
-          <Card className="p-3">
+          <Card className="p-5">
             <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
               <div className="text-xs font-medium uppercase tracking-wider">Data subject requests</div>
               <p className="text-2xs text-fg-muted max-w-md">

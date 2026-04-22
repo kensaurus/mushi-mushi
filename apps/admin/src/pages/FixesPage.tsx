@@ -11,7 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { PageHeader, PageHelp, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, SegmentedControl, ErrorAlert } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
@@ -47,12 +47,18 @@ function bucketize(fix: FixAttempt): StatusBucket {
   return 'all'
 }
 
+interface CodebaseStats {
+  codebase_index_enabled: boolean
+  indexed_files: number
+}
+
 export function FixesPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/fixes')
   const [fixes, setFixes] = useState<FixAttempt[]>([])
+  const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
@@ -89,6 +95,23 @@ export function FixesPage() {
       if (!cancelledRef.current) setLoading(false)
     }
   }, [])
+
+  // Codebase-index state drives the "you'll get stub PRs" banner. Loaded
+  // once per project switch; cheap single-row + count read on the backend.
+  useEffect(() => {
+    if (!activeProjectId) {
+      setCodebaseStats(null)
+      return
+    }
+    let cancelled = false
+    apiFetch<CodebaseStats>(`/v1/admin/projects/${activeProjectId}/codebase/stats`)
+      .then((res) => {
+        if (cancelled) return
+        if (res.ok && res.data) setCodebaseStats(res.data)
+      })
+      .catch(() => { /* banner just won't render — not fatal */ })
+    return () => { cancelled = true }
+  }, [activeProjectId])
 
   useEffect(() => {
     cancelledRef.current = false
@@ -233,6 +256,24 @@ export function FixesPage() {
         howToUse={copy?.help?.howToUse ?? "Dispatch a fix from any classified report. Each card shows the LLM model, token usage, branch, PR, and CI status. Expand a card to read the agent's rationale and see the live branch graph."}
       />
 
+      {codebaseStats && (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn-muted/30 px-3 py-2 text-2xs text-warn"
+          data-testid="fixes-codebase-unindexed-banner"
+        >
+          <span aria-hidden="true" className="mt-[1px]">⚠</span>
+          <div className="flex-1">
+            <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
+            {codebaseStats.codebase_index_enabled
+              ? 'your codebase index is empty, so the LLM has nothing to read.'
+              : 'codebase indexing is off, so the LLM has nothing to read.'}
+            {' '}
+            <a href="/integrations" className="underline hover:no-underline">Enable it now →</a>
+          </div>
+        </div>
+      )}
+
       {summary && <FixSummaryRow summary={summary} successRate={successRate} />}
 
       <FixRecommendation fixes={fixes} dispatches={dispatches} />
@@ -253,9 +294,10 @@ export function FixesPage() {
         />
       ) : (
         <>
-          <FixesStatusFilter
+          <SegmentedControl<StatusBucket>
+            ariaLabel="Filter fixes by status"
             value={statusBucket}
-            counts={bucketCounts}
+            options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
             onChange={setStatusBucket}
           />
           {visibleFixes.length === 0 ? (
@@ -296,41 +338,3 @@ export function FixesPage() {
   )
 }
 
-interface FixesStatusFilterProps {
-  value: StatusBucket
-  counts: Record<StatusBucket, number>
-  onChange: (next: StatusBucket) => void
-}
-
-function FixesStatusFilter({ value, counts, onChange }: FixesStatusFilterProps) {
-  return (
-    <div
-      role="radiogroup"
-      aria-label="Filter fixes by status"
-      className="inline-flex items-center gap-0.5 rounded-md border border-edge-subtle bg-surface-raised/50 p-0.5"
-    >
-      {STATUS_BUCKETS.map((b) => {
-        const active = b.id === value
-        return (
-          <button
-            key={b.id}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(b.id)}
-            className={`px-2 py-1 rounded-sm text-2xs font-medium motion-safe:transition-colors ${
-              active
-                ? 'bg-brand text-brand-fg'
-                : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
-            }`}
-          >
-            {b.label}
-            <span className={`ml-1 font-mono ${active ? 'text-brand-fg/80' : 'text-fg-faint'}`}>
-              {counts[b.id]}
-            </span>
-          </button>
-        )
-      })}
-    </div>
-  )
-}

@@ -19,6 +19,7 @@ import { chunk, shouldIndex, sha256Hex } from '../_shared/code-indexer.ts'
 import { createEmbedding } from '../_shared/embeddings.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('webhooks-github-indexer')
 
@@ -242,34 +243,86 @@ async function handleFixPrMerged(payload: {
 }
 
 /**
+ * Resolve a GitHub token for a project. Preference order:
+ *   1. `project_settings.github_installation_token_ref` (PAT in vault or raw)
+ *   2. `GITHUB_TOKEN` env fallback (self-host / founder dogfood)
+ * Returns null if nothing resolves. Callers that prefer App installs should
+ * call `mintInstallationToken` first and fall through to this helper.
+ */
+async function resolveProjectGithubToken(
+  db: ReturnType<typeof getDb>,
+  projectId: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from('project_settings')
+    .select('github_installation_token_ref')
+    .eq('project_id', projectId)
+    .maybeSingle()
+
+  if (!error && data?.github_installation_token_ref) {
+    const ref = String(data.github_installation_token_ref)
+    if (ref.startsWith('vault://')) {
+      const id = ref.slice('vault://'.length)
+      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id })
+      if (!vaultErr && typeof secret === 'string' && secret.length > 0) {
+        return secret
+      }
+    } else if (ref.length > 0) {
+      return ref
+    }
+  }
+  return Deno.env.get('GITHUB_TOKEN') ?? null
+}
+
+/**
  * Sweep mode: invoked hourly by pg_cron (see migration
  * 20260418003200_repo_indexer_cron.sql). Re-indexes every project_repos row
  * whose `last_indexed_at` is older than `staleAfterHours` (default 24h).
  *
  * Authenticated via Authorization: Bearer <service_role_key>; we never accept
  * external sweep requests.
+ *
+ * Token resolution prefers a GitHub App install (`github_app_installation_id`
+ * on the row) but falls back to the project's PAT stored in
+ * `project_settings.github_installation_token_ref` so repos can be indexed
+ * without going through the App flow.
  */
-async function handleSweep(req: Request): Promise<Response> {
-  const auth = req.headers.get('Authorization') ?? ''
-  const expected = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
-  if (!Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || auth !== expected) {
-    return new Response(JSON.stringify({ error: 'unauthorized' }), {
-      status: 401, headers: { 'Content-Type': 'application/json' },
-    })
-  }
+async function handleSweep(req: Request, parsedBody: { project_id?: string } | null): Promise<Response> {
+  // Accept either the auto-injected SUPABASE_SERVICE_ROLE_KEY (edge-to-edge
+  // calls) or MUSHI_INTERNAL_CALLER_SECRET (pg_cron → pg_net callers, which
+  // cannot read the reserved Supabase env var). See packages/server/README.md
+  // §"Internal-caller authentication" for the rationale.
+  const unauthorized = requireServiceRoleAuth(req)
+  if (unauthorized) return unauthorized
 
   const db = getDb()
   const staleAfterHours = Number(Deno.env.get('MUSHI_REPO_INDEX_STALE_HOURS') ?? '24')
   const cutoff = new Date(Date.now() - staleAfterHours * 3_600_000).toISOString()
   const limit = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_BATCH') ?? '5')
 
-  const { data: repos, error } = await db
+  // Optional body filter: `{ mode:'sweep', project_id? }` scopes the sweep to a
+  // single project (used by the new `/v1/admin/projects/:id/codebase/enable`
+  // endpoint to index-now without blocking the whole hourly batch).
+  let scopedProjectId: string | null = null
+  if (parsedBody?.project_id && /^[0-9a-f-]{36}$/i.test(parsedBody.project_id)) {
+    scopedProjectId = parsedBody.project_id
+  }
+
+  let query = db
     .from('project_repos')
     .select('id, project_id, repo_url, default_branch, github_app_installation_id, last_indexed_at')
     .eq('indexing_enabled', true)
-    .or(`last_indexed_at.is.null,last_indexed_at.lt.${cutoff}`)
-    .order('last_indexed_at', { ascending: true, nullsFirst: true })
-    .limit(limit)
+
+  if (scopedProjectId) {
+    query = query.eq('project_id', scopedProjectId)
+  } else {
+    query = query
+      .or(`last_indexed_at.is.null,last_indexed_at.lt.${cutoff}`)
+      .order('last_indexed_at', { ascending: true, nullsFirst: true })
+      .limit(limit)
+  }
+
+  const { data: repos, error } = await query
 
   if (error) {
     log.error('sweep: project_repos query failed', { error: error.message })
@@ -280,17 +333,34 @@ async function handleSweep(req: Request): Promise<Response> {
 
   const summary: Array<{ repo: string; ok: boolean; error?: string }> = []
   for (const repo of repos ?? []) {
-    if (!repo.github_app_installation_id) {
-      summary.push({ repo: repo.repo_url, ok: false, error: 'no_installation' })
-      continue
-    }
     const [owner, name] = String(repo.repo_url).split('/').slice(-2)
     if (!owner || !name) {
       summary.push({ repo: repo.repo_url, ok: false, error: 'bad_repo_url' })
       continue
     }
+
+    let token: string | null = null
     try {
-      const stats = await sweepIndexRepo(db, repo.project_id, Number(repo.github_app_installation_id), owner, name, repo.default_branch ?? 'main')
+      token = repo.github_app_installation_id
+        ? await mintInstallationToken(Number(repo.github_app_installation_id))
+        : await resolveProjectGithubToken(db, repo.project_id)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      log.warn('sweep: App install token mint failed; falling back to PAT', { repo: repo.repo_url, error: msg })
+      token = await resolveProjectGithubToken(db, repo.project_id)
+    }
+
+    if (!token) {
+      summary.push({ repo: repo.repo_url, ok: false, error: 'no_token' })
+      await db.from('project_repos').update({
+        last_index_attempt_at: new Date().toISOString(),
+        last_index_error: 'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved',
+      }).eq('id', repo.id)
+      continue
+    }
+
+    try {
+      const stats = await sweepIndexRepo(db, repo.project_id, token, owner, name, repo.default_branch ?? 'main')
       await db.from('project_repos').update({
         last_indexed_at: new Date().toISOString(),
         last_index_attempt_at: new Date().toISOString(),
@@ -317,16 +387,19 @@ async function handleSweep(req: Request): Promise<Response> {
  * Index every indexable file at HEAD for `ref`. Used by sweep mode for repos
  * that have never been indexed (or are stale). Push events stick with the
  * narrower diff-walk path because it's much cheaper.
+ *
+ * Accepts an already-resolved bearer token so the caller can choose between
+ * a GitHub App installation token and a user PAT. Both authenticate the same
+ * read-only `tree` + `contents` endpoints used below.
  */
 async function sweepIndexRepo(
   db: ReturnType<typeof getDb>,
   projectId: string,
-  installationId: number,
+  token: string,
   owner: string,
   repo: string,
   branch: string,
 ): Promise<{ inserted: number; skipped: number }> {
-  const token = await mintInstallationToken(installationId)
   const treeRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     {
@@ -382,9 +455,9 @@ app.post('/webhooks-github-indexer', async (c) => {
   // Sweep mode: cron-invoked, no GitHub signature; auth via service-role bearer.
   if (raw.length > 0) {
     try {
-      const peek = JSON.parse(raw) as { mode?: string }
+      const peek = JSON.parse(raw) as { mode?: string; project_id?: string }
       if (peek?.mode === 'sweep') {
-        return await handleSweep(c.req.raw)
+        return await handleSweep(c.req.raw, peek)
       }
     } catch { /* fall through to webhook handling */ }
   }

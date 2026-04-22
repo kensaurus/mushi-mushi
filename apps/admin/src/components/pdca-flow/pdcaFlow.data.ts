@@ -52,10 +52,17 @@ export interface PdcaEdgeData extends Record<string, unknown> {
   /** Source node id — the gradient-edge animates when this stage is the
    *  current focus (i.e. the bottleneck is "here, act now"). */
   sourceStageId: PdcaStageId
+  /** Target stage id — lets the inspector/drawer key off the segment the
+   *  user clicked without parsing the edge id. */
+  targetStageId: PdcaStageId
   /** When true the edge adds the traveling-dots overlay on top of the
    *  marching-ants. Communicates "data is flowing RIGHT NOW," not just
    *  "this is the focus direction." */
   flowing?: boolean
+  /** When true the edge renders red-dashed to signal "data is getting
+   *  stuck on this segment." Derived from the target stage's tone at the
+   *  data layer so the edge component stays presentational. */
+  failing?: boolean
 }
 
 // Fixed positions. ReactFlow coordinates — we center each node manually
@@ -67,6 +74,13 @@ const POSITIONS: Record<PdcaStageId, { x: number; y: number }> = {
   check: { x: 480, y: 120 },
   act: { x: 240, y: 240 },
 }
+
+// React Flow's MiniMap reads dimensions from `node.measured` on the *user*
+// node, which stays `undefined` for custom components. Setting explicit
+// width/height makes the minimap render stage-colored rects at the right
+// scale. ResizeObserver still updates the internal measured dims for layout.
+const NODE_WIDTH = 224
+const NODE_HEIGHT = 155
 
 const STAGE_HREF: Record<PdcaStageId, string> = {
   plan: '/reports',
@@ -96,6 +110,8 @@ function buildLiveNodes(stages: PdcaStage[], opts: LiveNodeOptions): Node<PdcaNo
       id,
       type: 'pdcaStep',
       position: POSITIONS[id],
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
       draggable: false,
       connectable: false,
       selectable: false,
@@ -125,6 +141,8 @@ function buildOnboardingNodes(): Node<PdcaNodeData>[] {
       id,
       type: 'pdcaStep',
       position: POSITIONS[id],
+      width: NODE_WIDTH,
+      height: NODE_HEIGHT,
       draggable: false,
       connectable: false,
       selectable: false,
@@ -154,6 +172,7 @@ export function buildNodes(
 export function buildEdges(
   focusStage: PdcaStageId | null | undefined,
   runningStage: PdcaStageId | null | undefined = null,
+  stages: PdcaStage[] = [],
 ): Edge<PdcaEdgeData>[] {
   // P → D → C → A → P. The last edge closes the loop so users see that
   // shipped fixes re-enter the Plan stage as new signal.
@@ -163,19 +182,28 @@ export function buildEdges(
     ['check', 'act'],
     ['act', 'plan'],
   ]
-  return pairs.map(([source, target]) => ({
-    id: `${source}->${target}`,
-    source,
-    target,
-    type: 'pdcaGradient',
-    sourceHandle: 'out',
-    targetHandle: 'in',
-    animated: source === focusStage || source === runningStage,
-    data: {
-      sourceColor: STAGE_HEX[source],
-      targetColor: STAGE_HEX[target],
-      sourceStageId: source,
-      flowing: source === runningStage,
-    },
-  }))
+  const toneById = new Map(stages.map((s) => [s.id, s.tone]))
+  return pairs.map(([source, target]) => {
+    // Paint the segment red when the *target* stage is urgent — that's
+    // the node where data is piling up, so the arrow into it is the one
+    // the eye should follow.
+    const failing = toneById.get(target) === 'urgent'
+    return {
+      id: `${source}->${target}`,
+      source,
+      target,
+      type: 'pdcaGradient',
+      sourceHandle: 'out',
+      targetHandle: 'in',
+      animated: source === focusStage || source === runningStage || failing,
+      data: {
+        sourceColor: STAGE_HEX[source],
+        targetColor: STAGE_HEX[target],
+        sourceStageId: source,
+        targetStageId: target,
+        flowing: source === runningStage,
+        failing,
+      },
+    }
+  })
 }
