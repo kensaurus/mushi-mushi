@@ -128,6 +128,7 @@ const NAV: NavSection[] = [
     hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
     items: [
       { label: 'Integrations',  path: '/integrations',  icon: IconIntegrations, beginner: true },
+      { label: 'MCP',           path: '/mcp',           icon: IconIntegrations, beginner: true },
       { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
       { label: 'Notifications', path: '/notifications', icon: IconBell },
     ],

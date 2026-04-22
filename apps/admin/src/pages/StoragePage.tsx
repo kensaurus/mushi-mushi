@@ -168,7 +168,7 @@ export function StoragePage() {
   if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <PageHeader
         title="Storage"
         description="Per-project bucket usage and retention policy for screenshots, logs, and uploaded artefacts."

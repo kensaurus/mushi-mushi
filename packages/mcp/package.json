@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp",
-  "version": "0.3.0",
+  "version": "0.3.2",
   "license": "MIT",
   "description": "MCP server exposing Mushi Mushi reports to coding agents",
   "type": "module",
@@ -18,13 +18,20 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "tsup",
+    "clean:types": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
     "dev": "tsup --watch",
     "lint": "eslint src/",
     "test": "vitest run",
+    "test:smoke": "node scripts/smoke-stdio.mjs",
+    "test:localhost": "node scripts/localhost-e2e.mjs",
+    "demo": "node scripts/demo-terminal-config.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -51,7 +58,8 @@
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "sideEffects": false,
   "keywords": [

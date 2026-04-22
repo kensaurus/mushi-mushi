@@ -20,7 +20,7 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
           <span className="text-xs font-medium text-fg">Week of {report.week_start}</span>
           <span className="text-2xs text-fg-faint">{report.generated_by}</span>
           {report.benchmarks?.optedIn && (
-            <span className="text-2xs text-success">benchmarks ✓</span>
+            <span className="text-2xs text-ok">benchmarks ✓</span>
           )}
         </div>
         <div className="flex gap-1.5">

@@ -1,307 +1,47 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod';
-import { createLogger } from '@mushi-mushi/core';
+/**
+ * FILE: packages/mcp/src/index.ts
+ * PURPOSE: Stdio entry point for the Mushi Mushi MCP server. Reads env,
+ *          builds the server via `createMushiServer`, and bridges it over
+ *          `StdioServerTransport`.
+ *
+ *          Kept intentionally thin so `createMushiServer` can be unit- and
+ *          integration-tested with `InMemoryTransport` without this file
+ *          executing `main()` at import time.
+ */
 
-const log = createLogger({ scope: 'mushi:mcp', level: 'info' });
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { createRequire } from 'node:module'
+import { createLogger } from '@mushi-mushi/core'
+import { createMushiServer } from './server.js'
 
-const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? 'https://api.mushimushi.dev';
-const API_KEY = process.env.MUSHI_API_KEY ?? '';
-const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? '';
+const require = createRequire(import.meta.url)
+const VERSION = (require('../package.json') as { version: string }).version
 
-async function apiCall(path: string, options?: RequestInit): Promise<unknown> {
-  const res = await fetch(`${API_ENDPOINT}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`,
-      'X-Mushi-Api-Key': API_KEY,
-      'X-Mushi-Project': PROJECT_ID,
-      ...(options?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`Mushi API error: ${res.status} ${await res.text()}`);
-  }
-  return res.json();
-}
+const log = createLogger({ scope: 'mushi:mcp', level: 'info' })
 
-const server = new McpServer({
-  name: 'mushi-mushi',
-  version: '0.0.1',
-});
-
-// --- Tools ---
-
-server.tool(
-  'get_recent_reports',
-  'List recent bug reports with optional filters',
-  {
-    status: z.string().optional().describe('Filter by status: new, classified, grouped, fixing, fixed, dismissed'),
-    category: z.string().optional().describe('Filter by category: bug, slow, visual, confusing, other'),
-    severity: z.string().optional().describe('Filter by severity: critical, high, medium, low'),
-    limit: z.number().optional().describe('Max reports to return (default 20, max 100)'),
-  },
-  async (args) => {
-    const params = new URLSearchParams();
-    if (args.status) params.set('status', args.status);
-    if (args.category) params.set('category', args.category);
-    if (args.severity) params.set('severity', args.severity);
-    params.set('limit', String(args.limit ?? 20));
-
-    const data = await apiCall(`/v1/admin/reports?${params}`) as { ok: boolean; data: { reports: unknown[]; total: number } };
-
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  'get_report_detail',
-  'Get full details for a single bug report including classification, logs, and environment',
-  {
-    reportId: z.string().describe('The report UUID'),
-  },
-  async (args) => {
-    const data = await apiCall(`/v1/admin/reports/${args.reportId}`) as { ok: boolean; data: unknown };
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  'search_reports',
-  'Search reports by keyword in description or summary',
-  {
-    query: z.string().describe('Search query text'),
-    limit: z.number().optional().describe('Max results (default 10)'),
-  },
-  async (args) => {
-    const data = await apiCall(`/v1/admin/reports?limit=${args.limit ?? 10}`) as { ok: boolean; data: { reports: Array<{ description?: string; summary?: string; [key: string]: unknown }> } };
-
-    const q = args.query.toLowerCase();
-    const filtered = data.data.reports.filter((r) => {
-      const desc = (r.description ?? '').toLowerCase();
-      const summary = (r.summary ?? '').toLowerCase();
-      return desc.includes(q) || summary.includes(q);
-    });
-
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ results: filtered, total: filtered.length }, null, 2) }],
-    };
-  },
-);
-
-// --- Phase 2+3 Tools ---
-
-server.tool(
-  'get_fix_context',
-  'Get all context an agent needs to fix a bug: report, classification, repro steps, relevant code, graph context',
-  {
-    reportId: z.string().describe('The report UUID to fix'),
-  },
-  async (args) => {
-    const report = await apiCall(`/v1/admin/reports/${args.reportId}`) as { ok: boolean; data: Record<string, unknown> };
-    return {
-      content: [{
-        type: 'text' as const,
-        text: JSON.stringify({
-          report: report.data,
-          reproductionSteps: (report.data as Record<string, unknown>).reproduction_steps ?? [],
-          component: (report.data as Record<string, unknown>).component,
-          rootCause: ((report.data as Record<string, unknown>).stage2_analysis as Record<string, unknown>)?.rootCause,
-          bugOntologyTags: (report.data as Record<string, unknown>).bug_ontology_tags,
-        }, null, 2),
-      }],
-    };
-  },
-);
-
-server.tool(
-  'submit_fix_result',
-  'Agent reports fix outcome — branch, PR URL, files changed',
-  {
-    reportId: z.string().describe('The report UUID'),
-    branch: z.string().describe('Git branch name'),
-    prUrl: z.string().optional().describe('GitHub PR URL'),
-    filesChanged: z.array(z.string()).describe('Files modified'),
-    linesChanged: z.number().describe('Total lines changed'),
-    summary: z.string().describe('Fix summary'),
-  },
-  async (args) => {
-    const data = await apiCall('/v1/admin/fixes', {
-      method: 'POST',
-      body: JSON.stringify({ reportId: args.reportId, agent: 'mcp' }),
-    }) as { ok: boolean; data: { fixId: string } };
-
-    await apiCall(`/v1/admin/fixes/${data.data.fixId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: 'completed',
-        branch: args.branch,
-        pr_url: args.prUrl,
-        files_changed: args.filesChanged,
-        lines_changed: args.linesChanged,
-        summary: args.summary,
-        completed_at: new Date().toISOString(),
-      }),
-    });
-
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ ok: true, fixId: data.data.fixId }) }],
-    };
-  },
-);
-
-server.tool(
-  'get_similar_bugs',
-  'Find related bugs via knowledge graph or keyword search',
-  {
-    query: z.string().describe('Component name, page, or bug description'),
-    limit: z.number().optional().describe('Max results (default 5)'),
-  },
-  async (args) => {
-    const data = await apiCall(`/v1/admin/reports?limit=${args.limit ?? 5}`) as { ok: boolean; data: { reports: Array<Record<string, unknown>> } };
-
-    const q = args.query.toLowerCase();
-    const similar = data.data.reports.filter((r) => {
-      const text = `${r.summary ?? ''} ${r.component ?? ''} ${r.description ?? ''}`.toLowerCase();
-      return text.includes(q);
-    });
-
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify({ similar, total: similar.length }, null, 2) }],
-    };
-  },
-);
-
-server.tool(
-  'get_blast_radius',
-  'Graph traversal showing affected areas for a given bug group',
-  {
-    nodeId: z.string().describe('Graph node UUID'),
-  },
-  async (args) => {
-    const data = await apiCall(`/v1/admin/graph/blast-radius/${args.nodeId}`) as { ok: boolean; data: unknown };
-    return {
-      content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }],
-    };
-  },
-);
-
-// --- Wave G2: control-plane tools (trigger judge, dispatch fix, transition ---
-//     status, run NL query, traverse knowledge graph) ---
-
-server.tool(
-  'trigger_judge',
-  'Run the Sonnet-as-Judge over a batch of classified reports. Returns batch id; results land in judge_results.',
-  {
-    limit: z.number().optional().describe('Max reports to judge in this batch (default 25, max 100)'),
-    projectId: z.string().optional().describe('Restrict to one project when the API key owns multiple'),
-  },
-  async (args) => {
-    const data = await apiCall('/v1/admin/judge/run', {
-      method: 'POST',
-      body: JSON.stringify({ limit: Math.min(args.limit ?? 25, 100), projectId: args.projectId }),
-    }) as { ok: boolean; data: unknown }
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
-  },
-)
-
-server.tool(
-  'dispatch_fix',
-  'Dispatch the agentic fix orchestrator for a classified report. Returns fix_attempt id; stream progress via get_fix_progress.',
-  {
-    reportId: z.string().describe('Report UUID to fix'),
-    agent: z.enum(['claude_code', 'codex', 'rest_worker', 'mcp']).optional().describe('Override the agent adapter'),
-  },
-  async (args) => {
-    const data = await apiCall('/v1/admin/fixes/dispatch', {
-      method: 'POST',
-      body: JSON.stringify({ reportId: args.reportId, agent: args.agent }),
-    }) as { ok: boolean; data: unknown }
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
-  },
-)
-
-server.tool(
-  'transition_status',
-  'Move a report between workflow states. Enforces the same transition rules as the admin UI.',
-  {
-    reportId: z.string().describe('Report UUID'),
-    status: z.enum(['pending', 'classified', 'grouped', 'fixing', 'fixed', 'dismissed']).describe('Target status'),
-    reason: z.string().optional().describe('Reason for the transition (audit trail)'),
-  },
-  async (args) => {
-    const data = await apiCall(`/v1/admin/reports/${args.reportId}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status: args.status, reason: args.reason }),
-    }) as { ok: boolean; data: unknown }
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
-  },
-)
-
-server.tool(
-  'run_nl_query',
-  'Natural-language question → SQL query run against your project data. Read-only, 60/hour rate-limited, no privileged schemas.',
-  {
-    question: z.string().describe('Question in plain English, e.g. "Which components had the most critical bugs this week?"'),
-  },
-  async (args) => {
-    const data = await apiCall('/v1/admin/query', {
-      method: 'POST',
-      body: JSON.stringify({ question: args.question }),
-    }) as { ok: boolean; data: unknown }
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
-  },
-)
-
-server.tool(
-  'get_knowledge_graph',
-  'Traverse the knowledge graph from a seed component or page. Returns nodes + edges within a depth budget.',
-  {
-    seed: z.string().describe('Starting node id or label'),
-    depth: z.number().optional().describe('Traversal depth (default 2, max 4)'),
-  },
-  async (args) => {
-    const params = new URLSearchParams({
-      seed: args.seed,
-      depth: String(Math.min(args.depth ?? 2, 4)),
-    })
-    const data = await apiCall(`/v1/admin/graph/traverse?${params}`) as { ok: boolean; data: unknown }
-    return { content: [{ type: 'text' as const, text: JSON.stringify(data.data, null, 2) }] }
-  },
-)
-
-// --- Resources ---
-
-server.resource(
-  'project_stats',
-  'project://stats',
-  { description: 'Report counts, category breakdown, severity distribution' },
-  async () => {
-    const data = await apiCall('/v1/admin/stats') as { ok: boolean; data: unknown };
-    return {
-      contents: [{ uri: 'project://stats', mimeType: 'application/json', text: JSON.stringify(data.data, null, 2) }],
-    };
-  },
-);
-
-// --- Start ---
+const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? 'https://api.mushimushi.dev'
+const API_KEY = process.env.MUSHI_API_KEY ?? ''
+const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
 
 async function main() {
   if (!API_KEY) {
-    log.fatal('MUSHI_API_KEY environment variable is required');
-    process.exit(1);
+    log.fatal('MUSHI_API_KEY environment variable is required')
+    process.exit(1)
   }
+  log.info('Starting Mushi MCP server', { version: VERSION, endpoint: API_ENDPOINT, hasProjectId: !!PROJECT_ID })
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const server = createMushiServer({
+    version: VERSION,
+    apiEndpoint: API_ENDPOINT,
+    apiKey: API_KEY,
+    projectId: PROJECT_ID || undefined,
+  })
+
+  const transport = new StdioServerTransport()
+  await server.connect(transport)
 }
 
 main().catch((err) => {
-  log.fatal('MCP server crashed', { err: String(err) });
-  process.exit(1);
-});
+  log.fatal('MCP server crashed', { err: String(err) })
+  process.exit(1)
+})

@@ -96,3 +96,11 @@ verify_jwt = false
 # candidate diff for human approval.
 [functions.prompt-auto-tune]
 verify_jwt = false
+
+# ci-sync backfills fix_attempts.check_run_conclusion for PRs the webhook
+# path never delivered. Invoked by pg_cron (mushi-ci-sync-10m) and by the
+# api function (/v1/admin/fixes/:id/refresh-ci). Uses requireServiceRoleAuth
+# to gate both paths — external callers can never hit the GitHub API through
+# this function.
+[functions.ci-sync]
+verify_jwt = false

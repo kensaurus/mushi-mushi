@@ -410,7 +410,7 @@ interface PlanPickerProps {
 
 function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
   return (
-    <section className="border border-edge-subtle rounded-md p-3 bg-surface-subtle">
+    <section className="border border-edge-subtle rounded-md p-3 bg-surface-raised/30">
       <div className="flex items-baseline justify-between mb-2">
         <h4 className="text-2xs uppercase tracking-wider text-fg-faint">
           {currentPlanId === 'hobby' ? 'Pick a plan' : 'Switch to'}
@@ -812,7 +812,7 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
   }, [projectId, subject, body, category, supportEmail, toast, onSubmitted])
 
   return (
-    <form onSubmit={handleSubmit} className="border border-edge-subtle rounded-md p-3 bg-surface-subtle space-y-2">
+    <form onSubmit={handleSubmit} className="border border-edge-subtle rounded-md p-3 bg-surface-raised/30 space-y-2">
       <div className="grid gap-2 sm:grid-cols-2">
         <SelectField
           label="Project (optional)"

@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
-import { PageHeader, PageHelp, Btn, ErrorAlert, EmptyState } from '../components/ui'
+import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import {
@@ -194,7 +194,7 @@ export function IntelligencePage() {
   const recentJobs = jobs.slice(0, 5)
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <PageHeader
         title="Bug Intelligence"
         description="Aggregate signals across reports \u2014 hotspot components, regression patterns, and shifting severity trends."
@@ -277,37 +277,35 @@ function ThisWeekNarrative({ latest, loading, generating, onGenerate }: ThisWeek
 
   if (!latest) {
     return (
-      <section className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3.5">
-        <p className="text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1">
-          This week
-        </p>
-        <p className="text-xs text-fg-secondary leading-snug max-w-prose">
-          No intelligence digest has been generated yet. The cron writes one every Monday,
-          but you can fire one immediately to see this week's hotspots, fix velocity, and
-          severity drift in narrative form.
-        </p>
-        <div className="mt-2.5">
+      <Card className="p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-fg">This week</h3>
+          <p className="text-xs text-fg-muted mt-1 max-w-prose">
+            No intelligence digest has been generated yet. The cron writes one every Monday,
+            but you can fire one immediately to see this week's hotspots, fix velocity, and
+            severity drift in narrative form.
+          </p>
+        </div>
+        <div>
           <Btn size="sm" variant="primary" onClick={onGenerate} disabled={generating} loading={generating}>
             Generate this week
           </Btn>
         </div>
-      </section>
+      </Card>
     )
   }
 
   const headline = firstParagraph(latest.summary_md)
   return (
-    <section className="rounded-md border border-brand/20 bg-brand/5 p-3.5">
-      <div className="flex items-baseline justify-between mb-1 gap-2 flex-wrap">
-        <p className="text-2xs uppercase tracking-wider text-brand font-semibold">
-          Week of {latest.week_start}
-        </p>
+    <Card className="p-5 space-y-4 border-brand/20 bg-brand/5">
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <h3 className="text-sm font-semibold text-brand">Week of {latest.week_start}</h3>
         <span className="text-3xs text-fg-faint font-mono">{latest.llm_model ?? ''}</span>
       </div>
       <p className="text-xs text-fg-secondary leading-relaxed max-w-prose whitespace-pre-line">
         {headline}
       </p>
-    </section>
+    </Card>
   )
 }
 

@@ -27,6 +27,7 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
+import { RevealedKeyCard } from '../components/RevealedKeyCard'
 
 interface ApiKey {
   id: string
@@ -34,6 +35,46 @@ interface ApiKey {
   created_at: string
   is_active: boolean
   revoked: boolean
+  scopes?: string[]
+  label?: string | null
+}
+
+/**
+ * Scope presets surfaced in the "New key" picker. Each preset bundles one or
+ * more raw scopes so users can pick a capability (what agents do with the
+ * key) instead of reasoning about the underlying vocabulary.
+ *
+ * Mirror of the check constraint on `project_api_keys.scopes` — if you add
+ * a preset here you must also add the raw scope to migration
+ * `20260421003000_api_key_scopes.sql`.
+ */
+type ScopePresetId = 'sdk' | 'mcp-read' | 'mcp-write'
+
+const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[]; hint: string }> = [
+  {
+    id: 'sdk',
+    label: 'SDK ingest',
+    scopes: ['report:write'],
+    hint: 'For your app\'s Mushi SDK — submit reports, nothing else.',
+  },
+  {
+    id: 'mcp-read',
+    label: 'MCP read-only',
+    scopes: ['mcp:read'],
+    hint: 'Coding agent can browse reports, fixes, graph — but not act.',
+  },
+  {
+    id: 'mcp-write',
+    label: 'MCP read + write',
+    scopes: ['mcp:write'],
+    hint: 'Coding agent can dispatch fixes, run judge, transition status.',
+  },
+]
+
+function scopeBadgeTone(scope: string): string {
+  if (scope === 'mcp:write') return 'bg-danger-muted text-danger border border-danger/30'
+  if (scope === 'mcp:read') return 'bg-info-muted text-info border border-info/30'
+  return 'bg-surface-overlay text-fg-muted border border-edge-subtle'
 }
 
 interface Member {
@@ -74,6 +115,12 @@ const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
 
 const STORAGE_KEY = 'mushi:active_project_id'
 
+const LINK_CHIP_CLASS =
+  'inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-sm gap-1.5 ' +
+  'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
+  'motion-safe:transition-colors motion-safe:duration-150'
+
 function relativeTime(iso: string | null): string {
   if (!iso) return 'never'
   const ms = Date.now() - new Date(iso).getTime()
@@ -91,7 +138,10 @@ export function ProjectsPage() {
 
   const [newName, setNewName] = useState('')
   const [busyProject, setBusyProject] = useState<string | null>(null)
-  const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, { key: string; scopes: string[] }>>({})
+  // Per-project preset selection so multiple keys can be minted without
+  // losing the user's last choice on rerender.
+  const [keyScopePreset, setKeyScopePreset] = useState<Record<string, ScopePresetId>>({})
 
   const { data, loading, error, reload } = usePageData<{ projects: Project[] }>('/v1/admin/projects')
   const projects = useMemo(() => data?.projects ?? [], [data])
@@ -108,20 +158,30 @@ export function ProjectsPage() {
   }
 
   async function generateKey(projectId: string) {
+    const presetId = keyScopePreset[projectId] ?? 'sdk'
+    const preset = SCOPE_PRESETS.find((p) => p.id === presetId) ?? SCOPE_PRESETS[0]
     setBusyProject(projectId)
     try {
-      const res = await apiFetch<{ key: string; prefix: string }>(`/v1/admin/projects/${projectId}/keys`, {
-        method: 'POST',
-      })
+      const res = await apiFetch<{ key: string; prefix: string; scopes: string[] }>(
+        `/v1/admin/projects/${projectId}/keys`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ scopes: preset.scopes }),
+        },
+      )
       if (!res.ok) throw new Error(res.error?.message ?? 'Mint failed')
       const key = res.data?.key
+      const scopes = res.data?.scopes ?? preset.scopes
       if (key) {
-        setRevealedKeys((prev) => ({ ...prev, [projectId]: key }))
+        setRevealedKeys((prev) => ({ ...prev, [projectId]: { key, scopes } }))
         try {
           await navigator.clipboard.writeText(key)
-          toast.success('API key copied to clipboard', 'It will not be shown again — store it in your secrets manager.',)
+          toast.success(
+            `${preset.label} key copied to clipboard`,
+            'It will not be shown again — store it in your secrets manager.',
+          )
         } catch {
-          toast.success('API key minted', 'Copy it now — it will not be shown again.')
+          toast.success(`${preset.label} key minted`, 'Copy it now — it will not be shown again.')
         }
       }
       reload()
@@ -248,22 +308,13 @@ export function ProjectsPage() {
                         Set active
                       </Btn>
                     )}
-                    <Link
-                      to={`/reports?project=${project.id}`}
-                      className="inline-flex items-center px-2 py-1 text-xs font-medium border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg rounded-sm motion-safe:transition-colors"
-                    >
+                    <Link to={`/reports?project=${project.id}`} className={LINK_CHIP_CLASS}>
                       Reports
                     </Link>
-                    <Link
-                      to={`/integrations?project=${project.id}`}
-                      className="inline-flex items-center px-2 py-1 text-xs font-medium border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg rounded-sm motion-safe:transition-colors"
-                    >
+                    <Link to={`/integrations?project=${project.id}`} className={LINK_CHIP_CLASS}>
                       Integrations
                     </Link>
-                    <Link
-                      to={`/settings?project=${project.id}`}
-                      className="inline-flex items-center px-2 py-1 text-xs font-medium border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg rounded-sm motion-safe:transition-colors"
-                    >
+                    <Link to={`/settings?project=${project.id}`} className={LINK_CHIP_CLASS}>
                       Settings
                     </Link>
                     <Btn
@@ -275,38 +326,51 @@ export function ProjectsPage() {
                     >
                       Send test report
                     </Btn>
-                    <Btn
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => generateKey(project.id)}
-                      disabled={isBusy}
-                      loading={isBusy}
-                    >
-                      Generate API key
-                    </Btn>
+                    <div className="flex items-center gap-1" data-testid={`mint-key-${project.id}`}>
+                      <label htmlFor={`key-scope-${project.id}`} className="sr-only">
+                        API key scope for {project.name}
+                      </label>
+                      <select
+                        id={`key-scope-${project.id}`}
+                        data-testid={`key-scope-${project.id}`}
+                        className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-accent"
+                        value={keyScopePreset[project.id] ?? 'sdk'}
+                        onChange={(e) => setKeyScopePreset((prev) => ({
+                          ...prev,
+                          [project.id]: e.target.value as ScopePresetId,
+                        }))}
+                        disabled={isBusy}
+                        title={SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? 'sdk'))?.hint}
+                      >
+                        {SCOPE_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>{preset.label}</option>
+                        ))}
+                      </select>
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => generateKey(project.id)}
+                        disabled={isBusy}
+                        loading={isBusy}
+                        data-testid={`generate-key-${project.id}`}
+                      >
+                        Mint key
+                      </Btn>
+                    </div>
                   </div>
                 </div>
 
                 {revealed && (
-                  <div className="mt-3 pt-2 border-t border-edge-subtle bg-warn-muted/20 -mx-3 px-3 py-2">
-                    <div className="text-2xs text-warn font-medium uppercase tracking-wider mb-1">
-                      ⚠️ One-time key — copy now, will not be shown again
-                    </div>
-                    <code className="font-mono text-xs text-fg break-all select-all bg-surface-raised px-2 py-1 rounded-sm block">
-                      {revealed}
-                    </code>
-                    <Btn
-                      variant="ghost"
-                      size="sm"
-                      className="mt-1"
-                      onClick={() => setRevealedKeys((prev) => {
-                        const { [project.id]: _, ...rest } = prev
-                        return rest
-                      })}
-                    >
-                      I've stored it — hide
-                    </Btn>
-                  </div>
+                  <RevealedKeyCard
+                    projectId={project.id}
+                    projectName={project.name}
+                    apiKey={revealed.key}
+                    scopes={revealed.scopes}
+                    onDismiss={() => setRevealedKeys((prev) => {
+                      const { [project.id]: _, ...rest } = prev
+                      return rest
+                    })}
+                  />
                 )}
 
                 {project.api_keys.length > 0 && (
@@ -316,11 +380,14 @@ export function ProjectsPage() {
                     </summary>
                     <div className="mt-2 space-y-1">
                       {project.api_keys.map((key) => (
-                        <div key={key.id} className="flex items-center justify-between text-2xs">
-                          <div className="flex items-center gap-2 min-w-0">
+                        <div key={key.id} className="flex items-center justify-between text-2xs gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-wrap">
                             <code className={`font-mono ${key.revoked ? 'text-fg-faint line-through' : 'text-fg-secondary'}`}>
                               {key.key_prefix}…
                             </code>
+                            {(key.scopes ?? []).map((s) => (
+                              <Badge key={s} className={scopeBadgeTone(s)}>{s}</Badge>
+                            ))}
                             <span className="text-fg-faint">created {relativeTime(key.created_at)}</span>
                             {key.revoked && <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>}
                           </div>

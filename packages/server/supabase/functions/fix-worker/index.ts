@@ -54,7 +54,27 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
-import { getRelevantCode, formatCodeContext } from '../_shared/rag.ts'
+import { getRelevantCodeWithReason, formatCodeContext, type RagSkipReason } from '../_shared/rag.ts'
+
+function ragSkipReasonMessage(
+  reason: RagSkipReason | 'ok',
+  detail: string | undefined,
+): string {
+  switch (reason) {
+    case 'disabled':
+      return 'Codebase indexing is disabled. Enable it in Settings → Integrations → GitHub and re-run the fix.'
+    case 'empty_query':
+      return 'Report lacks a summary/intent/component — cannot build a RAG query. Re-classify the report and retry.'
+    case 'embedding_failed':
+      return `RAG embedding call failed (${detail ?? 'unknown'}). Check BYOK OpenAI key / base URL or set OPENAI_API_KEY as an env fallback, then retry.`
+    case 'rpc_failed':
+      return `match_codebase_files RPC failed (${detail ?? 'unknown'}). Re-run the latest migrations, then retry.`
+    case 'no_matches':
+      return 'Codebase is indexed but no file matched this report. Re-index the repo or broaden the report summary, then retry.'
+    default:
+      return 'Codebase not indexed. Enable in Settings → Integrations → GitHub, or increase MUSHI_FIX_MIN_RAG_CHUNKS if you want to proceed with less context.'
+  }
+}
 import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { log as rootLog } from '../_shared/logger.ts'
@@ -128,12 +148,13 @@ Deno.serve(withSentry('fix-worker', async (req) => {
   const log = rootLog.child('fix-worker')
   let body: FixRequestBody
   try {
-    body = await req.json() as FixRequestBody
+    const raw: unknown = await req.json()
+    if (!raw || typeof raw !== 'object' || typeof (raw as { dispatchId?: unknown }).dispatchId !== 'string') {
+      return new Response(JSON.stringify({ ok: false, error: 'dispatchId required' }), { status: 400 })
+    }
+    body = { dispatchId: (raw as { dispatchId: string }).dispatchId }
   } catch {
     return new Response(JSON.stringify({ ok: false, error: 'Body must be JSON' }), { status: 400 })
-  }
-  if (!body.dispatchId) {
-    return new Response(JSON.stringify({ ok: false, error: 'dispatchId required' }), { status: 400 })
   }
 
   const db = getServiceClient()
@@ -158,13 +179,34 @@ Deno.serve(withSentry('fix-worker', async (req) => {
     reportId: dispatch.report_id,
   })
 
-  // ---- 2. Insert fix_attempts row ------------------------------------------
+  // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
+  // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the
+  // three agent shapes the orchestrator knows about). Historically this
+  // row was hardcoded `agent:'llm'`, which meant the Fixes page and the
+  // judge both lost track of what the user *asked* for vs. what ran.
+  // Thread settings.autofix_agent through so the receipt is honest.
+  const { data: requestedSettings } = await db
+    .from('project_settings')
+    .select('autofix_agent')
+    .eq('project_id', dispatch.project_id)
+    .single()
+  const requestedAgent = (requestedSettings?.autofix_agent as string | null) ?? 'claude_code'
+
+  // Agents the fix-worker can actually execute today. 'claude_code' is the
+  // migration default and maps to the LLM path (Anthropic primary, OpenAI
+  // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
+  // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
+  // explicit opt-in for this same path. Anything else is the Node-only
+  // orchestrator territory and must be rejected rather than silently
+  // falling through.
+  const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm'])
+
   const { data: attempt, error: attemptErr } = await db
     .from('fix_attempts')
     .insert({
       report_id: dispatch.report_id,
       project_id: dispatch.project_id,
-      agent: 'llm',
+      agent: requestedAgent,
       status: 'running',
       langfuse_trace_id: trace.id,
     })
@@ -191,23 +233,103 @@ Deno.serve(withSentry('fix-worker', async (req) => {
     if (!report) throw new Error(`Report ${dispatch.report_id} not found`)
     if (!project) throw new Error(`Project ${dispatch.project_id} not found`)
 
+    // Agent pre-flight: fix-worker can only run the LLM path today. Any
+    // other autofix_agent (mcp, generic_mcp, codex) needs the Node-side
+    // orchestrator — fail fast with an actionable error instead of
+    // silently running the LLM and mislabeling the receipt.
+    if (!SUPPORTED_AGENTS.has(requestedAgent)) {
+      const reason =
+        `autofix_agent='${requestedAgent}' isn't supported by the edge fix-worker yet. ` +
+        `Change Settings → Integrations → Auto-fix agent to 'claude_code' (default), ` +
+        `or run the Node-side orchestrator in @mushi-mushi/agents.`
+      log.warn('Fix skipped: unsupported agent', {
+        reportId: dispatch.report_id,
+        requestedAgent,
+      })
+      await completeAttempt(db, fixAttemptId, {
+        status: 'skipped_unsupported_agent',
+        error: reason,
+        files_changed: [],
+      })
+      await db.from('fix_dispatch_jobs').update({
+        status: 'skipped',
+        error: reason,
+        finished_at: new Date().toISOString(),
+      }).eq('id', dispatch.id)
+      await trace.end()
+      return new Response(
+        JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Sandbox pre-flight (V5.3 §2.10): the orchestrator gate lives in
+    // packages/agents but the fix-worker is a parallel code path that
+    // ships today. Mirror the policy here so production dispatches never
+    // land on a no-op sandbox by accident. Non-production and explicit
+    // opt-in (MUSHI_ALLOW_LOCAL_SANDBOX=1) both bypass the gate.
+    const sandboxProvider = (settings?.sandbox_provider as string | null) ?? 'local-noop'
+    const denoEnv =
+      Deno.env.get('SUPABASE_ENV') ??
+      Deno.env.get('DENO_ENV') ??
+      'production'
+    const allowLocalSandbox = Deno.env.get('MUSHI_ALLOW_LOCAL_SANDBOX') === '1'
+    if (
+      sandboxProvider === 'local-noop' &&
+      denoEnv === 'production' &&
+      !allowLocalSandbox
+    ) {
+      const reason =
+        'Sandbox provider is set to local-noop which is not allowed in ' +
+        'production. Switch Settings → Integrations → Sandbox to e2b/modal/' +
+        'cloudflare, or set MUSHI_ALLOW_LOCAL_SANDBOX=1 for CI/dry-run.'
+      log.warn('Fix skipped: sandbox policy violation', {
+        reportId: dispatch.report_id,
+        sandboxProvider,
+        env: denoEnv,
+      })
+      await completeAttempt(db, fixAttemptId, {
+        status: 'skipped_no_sandbox',
+        error: reason,
+        files_changed: [],
+      })
+      await db.from('fix_dispatch_jobs').update({
+        status: 'skipped',
+        error: reason,
+        finished_at: new Date().toISOString(),
+      }).eq('id', dispatch.id)
+      await trace.end()
+      return new Response(
+        JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }
+
     const repo = await resolveRepo(db, dispatch.project_id, settings)
     if (!repo) {
       throw new Error('No GitHub repo configured for this project. Set Settings → Integrations → GitHub repo.')
     }
 
-    // RAG: find files the LLM will need to read.
     const ragSpan = trace.span('context.rag')
-    const codeFiles = await getRelevantCode(db, dispatch.project_id, {
+    const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
       symptom: report.summary ?? report.description?.slice(0, 200) ?? '',
       action: report.user_intent ?? '',
       component: report.component ?? '',
     })
-    ragSpan.end({ fileCount: codeFiles.length })
+    const codeFiles = ragResult.files
+    ragSpan.end({
+      fileCount: codeFiles.length,
+      reason: ragResult.reason,
+      detail: ragResult.detail ?? null,
+    })
 
-    if (codeFiles.length === 0) {
-      // We can still try, but the model has no codebase context. Note it for review.
-      log.warn('No RAG context available for fix', { reportId: dispatch.report_id })
+    const MIN_RAG_CHUNKS = Math.max(0, Number(Deno.env.get('MUSHI_FIX_MIN_RAG_CHUNKS') ?? '1') | 0)
+    if (codeFiles.length < MIN_RAG_CHUNKS) {
+      log.warn('RAG context below minimum threshold', {
+        reportId: dispatch.report_id,
+        codeFiles: codeFiles.length,
+        threshold: MIN_RAG_CHUNKS,
+      })
     }
 
     const codeContext = formatCodeContext(codeFiles)
@@ -253,6 +375,39 @@ Deno.serve(withSentry('fix-worker', async (req) => {
           log.warn('Firecrawl augment failed (non-fatal)', { reportId: dispatch.report_id, reason: augmentReason, error: msg })
         }
       }
+    }
+
+    // ---- 3c. Context floor gate -------------------------------------------
+    // If BOTH the codebase RAG and the Firecrawl augment produced nothing,
+    // we have no grounding for the LLM — calling it anyway produces a
+    // "INVESTIGATION_NEEDED.md" stub PR (exactly what landed on glot.it
+    // PRs #3/#4/#5). Short-circuit instead of burning a model call, and
+    // surface the reason on the PDCA receipt so the user can act.
+    if (codeFiles.length < MIN_RAG_CHUNKS && webSnippets.length === 0) {
+      const reason = ragSkipReasonMessage(ragResult.reason, ragResult.detail)
+      log.warn('Fix skipped: no grounding context available', {
+        reportId: dispatch.report_id,
+        codeFiles: codeFiles.length,
+        webSnippets: webSnippets.length,
+        minRagChunks: MIN_RAG_CHUNKS,
+        ragReason: ragResult.reason,
+        ragDetail: ragResult.detail ?? null,
+      })
+      await completeAttempt(db, fixAttemptId, {
+        status: 'skipped_no_context',
+        error: reason,
+        files_changed: [],
+      })
+      await db.from('fix_dispatch_jobs').update({
+        status: 'skipped',
+        error: reason,
+        finished_at: new Date().toISOString(),
+      }).eq('id', dispatch.id)
+      await trace.end()
+      return new Response(
+        JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
     }
 
     // ---- 4. Resolve LLM key (BYOK first, env fallback) --------------------
