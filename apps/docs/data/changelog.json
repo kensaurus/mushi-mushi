@@ -1,5 +1,46 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Hero image up top.",
+        "description": "`docs/screenshots/report-detail-dark.png` is now embedded (via absolute `raw.githubusercontent.com` URL so npmjs.com renders it), linking to the live admin demo."
+      },
+      {
+        "title": "15-word tagline.",
+        "description": "\"Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports.\" Frameworks listed directly under."
+      },
+      {
+        "title": "\"What you get\"",
+        "description": "— 6 benefit bullets with emoji, each tied to a capability, not a wizard step."
+      },
+      {
+        "title": "\"Who it's for\"",
+        "description": "— 4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds."
+      },
+      {
+        "title": "\"Mushi vs your existing stack\"",
+        "description": "— 9-row comparison table showing what Sentry/Datadog miss. Makes the companion-not-replacement positioning concrete."
+      },
+      {
+        "title": "\"Integrates with\"",
+        "description": "— 10-cell grid covering GitHub, Sentry, Slack, Jira, Linear, PagerDuty, Langfuse, Cursor, Claude Code, Zapier. Plus a line for Datadog/New Relic/Honeycomb/Grafana via `@mushi-mushi/adapters`."
+      },
+      {
+        "title": "Pipeline diagram",
+        "description": "— ASCII flow showing widget → fast-filter → deep classify → dedup → judge → dispatch-fix. Points at the root README for the full architecture."
+      },
+      {
+        "title": "Flags, troubleshooting, security",
+        "description": "— collapsed into `<details>` so they stop occupying the hero viewport but stay searchable."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "0.5",
     "headline": null,
     "pending": false,
