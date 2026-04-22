@@ -160,7 +160,7 @@ export function ConnectionStatus({ compact, className = '' }: ConnectionStatusPr
               </div>
               <p className="text-2xs text-fg-faint">{check.description}</p>
               {check.detail && check.status === 'fail' && (
-                <p className="text-2xs text-danger mt-1 break-all">{check.detail}</p>
+                <p className="text-2xs text-danger mt-1 wrap-break-word">{check.detail}</p>
               )}
             </div>
           </div>

@@ -84,7 +84,7 @@ export function GraphSidePanel({ node, blastRadius, blastLoading, onClear }: Pro
         )}
         <div className="col-span-2">
           <div className="text-fg-faint">Node id</div>
-          <div className="font-mono text-fg-secondary break-all">{node.id}</div>
+          <div className="font-mono text-fg-secondary wrap-break-word">{node.id}</div>
         </div>
       </div>
 
