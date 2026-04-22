@@ -1,6 +1,6 @@
 {
   "name": "mushi-mushi",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "license": "MIT",
   "description": "Mushi Mushi launcher — `npx mushi-mushi` (or `npx mushi-mushi init`) auto-detects your framework and installs the right SDK. Bug-reporting + AI triage SDK for React, Vue, Svelte, Angular, React Native, Expo, Capacitor, and vanilla JS.",
   "bin": {

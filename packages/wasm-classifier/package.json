@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/wasm-classifier",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "On-device pre-classification for Mushi Mushi reports using a quantized small language model running in onnxruntime-web (WASM/WebGPU). Filters obvious junk before reports leave the browser, cutting LLM cost and protecting user privacy.",
   "license": "MIT",
   "type": "module",

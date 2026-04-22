@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-slack-app",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "license": "MIT",
   "description": "First-party Slack App plugin (not an Incoming Webhook) for Mushi Mushi — OAuth install, Slash commands (/mushi), interactive buttons, and real-time event subscriptions.",
   "type": "module",

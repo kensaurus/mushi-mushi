@@ -1,6 +1,6 @@
 {
   "name": "create-mushi-mushi",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "license": "MIT",
   "description": "Run `npm create mushi-mushi` to add the Mushi Mushi bug-reporting SDK to your existing project — the wizard auto-detects your framework (React, Vue, Svelte, Angular, React Native, Expo, Capacitor) and installs the right package.",
   "bin": {
