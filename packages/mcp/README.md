@@ -52,11 +52,28 @@ The server speaks stdio MCP transport by default — your client launches it as 
 
 ## Tools
 
+### Read
+
 | Tool | What it does |
 |---|---|
 | `get_recent_reports` | Fetch the N most recent reports, with optional `status` / `category` / `severity` filters |
 | `get_report_detail` | Full payload for a single report — description, console logs, network requests, screenshot URL, classification result, fix history |
-| `search_reports` | Keyword + semantic search across reports for the configured project |
+| `search_reports` | Semantic + keyword search (server-side pgvector; falls back to keyword match when embeddings aren't available) |
+| `get_similar_bugs` | Embedding-nearest neighbours for a component, page, or description |
+| `get_fix_context` | One-shot brief for a coding agent: report + repro + root-cause + ontology tags |
+| `get_fix_timeline` | Ordered timeline of a fix attempt (dispatched → started → branch → commit → PR → CI → completed/failed) |
+| `get_blast_radius` | Graph traversal showing other components a bug group touches |
+| `get_knowledge_graph` | Traverse the knowledge graph from a seed component or page |
+
+### Write / agentic
+
+| Tool | What it does |
+|---|---|
+| `submit_fix_result` | Record a fix outcome (branch, PR, files, lines) from an external agent |
+| `dispatch_fix` | Kick off the agentic fix orchestrator for a report — returns a `fix_attempt` id |
+| `trigger_judge` | Run the Sonnet-as-Judge over a batch of classified reports |
+| `transition_status` | Move a report between workflow states (enforces the same rules as the UI) |
+| `run_nl_query` | Natural-language → read-only SQL against your project data (60/hour rate-limited) |
 
 > Need a tool that isn't here? Open an issue at [github.com/kensaurus/mushi-mushi/issues](https://github.com/kensaurus/mushi-mushi/issues) and tag it `mcp`.
 
@@ -64,8 +81,19 @@ The server speaks stdio MCP transport by default — your client launches it as 
 
 | URI | Returns |
 |---|---|
-| `project://settings` | Project config (name, autofix settings, plugins enabled, ontology) |
 | `project://stats` | Counts of new / classified / fixed reports + last 7-day trend |
+| `project://settings` | Project config — autofix agent, plugins enabled, ontology, LLM budgets |
+| `project://dashboard` | PDCA health snapshot — stage counts, bottleneck, recent activity (the same payload the admin console polls every 15 s) |
+
+## Prompts
+
+Named templates the MCP client surfaces in its slash-menu. Each one bakes in the house voice ("lead with the fix, skip the preamble") so agents produce consistent outputs across editors.
+
+| Prompt | When to use |
+|---|---|
+| `summarize_report_for_fix` | Before asking the agent to write the patch — produces a one-line root cause, smallest file set, repro steps, and blast-radius warnings |
+| `explain_judge_result` | After the judge scores a fix — turns the raw scores into ship / iterate / dismiss guidance |
+| `triage_next_steps` | "What should I focus on right now?" — five-item markdown list drawn from the dashboard + recent classified queue |
 
 ## Environment variables
 

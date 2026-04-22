@@ -193,7 +193,7 @@ importers:
   packages/adapters:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -469,7 +469,7 @@ importers:
   packages/node:
     dependencies:
       '@mushi-mushi/core':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../core
       express:
         specifier: '>=4.18.0'
@@ -509,7 +509,7 @@ importers:
   packages/plugin-jira:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@mushi-mushi/eslint-config':
@@ -643,7 +643,7 @@ importers:
   packages/plugin-slack-app:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@mushi-mushi/eslint-config':

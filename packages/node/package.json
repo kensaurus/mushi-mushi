@@ -91,7 +91,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:*"
+    "@mushi-mushi/core": "workspace:^"
   },
   "peerDependencies": {
     "express": ">=4.18.0",
