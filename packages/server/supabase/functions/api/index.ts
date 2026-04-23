@@ -103,6 +103,14 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
   const defaults = [
     'https://admin.mushimushi.dev',
     'https://app.mushimushi.dev',
+    // Public live demo, pointed at by the README + npm "Live admin demo"
+    // links. Hosted from a CloudFront distribution that fronts the GitHub
+    // Pages build of `apps/admin`. Both apex and `www.` are kept here so
+    // the demo keeps working if a marketing redirect ever flips. Without
+    // this entry every /v1/admin/* call from the demo fails CORS preflight
+    // even though the JWT + RLS gates would otherwise admit the request.
+    'https://kensaur.us',
+    'https://www.kensaur.us',
     // Local dev for the admin Vite server. `apps/admin/README.md` pins the
     // canonical dev port to 6464; the legacy 5173 entries are kept for
     // operators who overrode Vite's port. Extend via

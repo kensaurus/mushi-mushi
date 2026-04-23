@@ -58,11 +58,17 @@ alter table report_bulk_mutations enable row level security;
 -- Owner can read their own mutations (drives the undo toast surface and
 -- audit trail). Service role bypasses RLS so the API path that records and
 -- undoes mutations is unaffected.
+-- IMPORTANT: wrap auth.uid() in a subquery so PostgreSQL caches the result for
+-- the entire query plan instead of re-evaluating per row. Supabase's
+-- performance linter (auth_rls_initplan) flags raw `auth.uid()` calls inside
+-- USING / WITH CHECK clauses — see docs/audit-2026-04-23/SUMMARY.md (T10) and
+-- migrations 20260418005100, 20260420000200, 20260423040000 for the same
+-- pattern applied across the rest of the schema.
 drop policy if exists "Owner can read own bulk mutations" on report_bulk_mutations;
 create policy "Owner can read own bulk mutations"
   on report_bulk_mutations
   for select
-  using (admin_id = auth.uid());
+  using (admin_id = (select auth.uid()));
 
 -- No insert/update/delete policies for non-service callers — bulk apply +
 -- undo go through the API which uses the service-role client. This keeps
