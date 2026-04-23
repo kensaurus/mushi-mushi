@@ -134,7 +134,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
           </span>
           <abbr
             title="PDCA — Plan · Do · Check · Act. The four-stage loop each autofix follows from planning through review."
-            className="text-2xs text-fg-faint uppercase tracking-wide no-underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help"
+            className="text-2xs text-fg-faint uppercase tracking-wide underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help"
           >
             PDCA loop
           </abbr>

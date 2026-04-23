@@ -69,10 +69,18 @@ export function usePageData<T>(
   // We keep the abort flag in a ref so that a second StrictMode invocation
   // of the effect can flip the previous run's flag before it commits state.
   const aborted = useRef(false)
-  // Tracks whether we've ever returned data for this hook instance. Flips
-  // `loading` off for all subsequent refetches so consumers' skeleton
-  // guards only trigger on true first-paint.
+  // Tracks whether we've ever returned data *for the current `path`*. Flips
+  // `loading` off for subsequent refetches of the same resource so skeleton
+  // guards only trigger on true first-paint. IMPORTANT: must reset when
+  // `path` changes — otherwise switching the endpoint (window filter on
+  // Health, page/filter change on Reports) keeps `loading=false` and leaves
+  // the previous resource's `data` visible, briefly rendering stale rows
+  // that belong to a different query.
   const hasLoadedOnce = useRef(false)
+  // Tracks the `path` we last fetched from so we can detect a resource swap
+  // and reset skeleton + data state. A distinct ref (not state) avoids an
+  // extra render and keeps the comparison synchronous with the effect.
+  const lastPath = useRef<string | null>(null)
   // Bumping `tick` forces a refetch from `reload()` without changing path.
   const [tick, setTick] = useState(0)
 
@@ -85,9 +93,19 @@ export function usePageData<T>(
   useEffect(() => {
     if (!path || !autoLoad) return
     aborted.current = false
+    // Path swap → treat as a true first-paint. Drop the stale resource so
+    // the consumer's `if (loading) return <Skeleton />` guard fires
+    // instead of rendering the prior path's rows against the new URL.
+    const pathChanged = lastPath.current !== path
+    if (pathChanged) {
+      hasLoadedOnce.current = false
+      setData(null)
+    }
+    lastPath.current = path
     // SWR semantics: only show the skeleton while we've never resolved
-    // data. Refetches after the first success leave `data` stable and
-    // only flip `isValidating` so panels don't unmount mid-receipt.
+    // data *for this path*. Refetches after the first success leave `data`
+    // stable and only flip `isValidating` so panels don't unmount
+    // mid-receipt.
     if (!hasLoadedOnce.current) setLoading(true)
     setIsValidating(true)
     setError(null)

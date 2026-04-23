@@ -1775,7 +1775,7 @@ export function Abbr({ children, title, className = '' }: AbbrProps) {
   return (
     <abbr
       title={title}
-      className={`no-underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help ${className}`}
+      className={`underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help ${className}`}
     >
       {children}
     </abbr>

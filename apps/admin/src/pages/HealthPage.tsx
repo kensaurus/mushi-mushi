@@ -218,14 +218,20 @@ export function HealthPage() {
   // Publish page context so the browser tab reads e.g.
   // "Health · All systems nominal — Mushi Mushi" or
   // "Health · 2 errors · 1 cron down — Mushi Mushi" from another tab.
+  //
+  // Parenthesise the ternary *explicitly*: the naked form
+  //   `errorRate > 0.05 ? 1 : 0 + filter(...).length`
+  // binds as `errorRate > 0.05 ? 1 : (0 + filter(...).length)` — so a bad
+  // LLM error rate would return a constant 1 and silently drop the
+  // cron-job error count, under-reporting the favicon badge whenever both
+  // signals are red. See redCount/amberCount below for the same pattern
+  // post loading-guard.
   const healthRed =
-    (llm?.errorRate ?? 0) > 0.05
-      ? 1
-      : 0 + KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length
+    ((llm?.errorRate ?? 0) > 0.05 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length
   const healthAmber =
-    (llm?.fallbackRate ?? 0) > 0.1
-      ? 1
-      : 0 + KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length
+    ((llm?.fallbackRate ?? 0) > 0.1 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length
   usePublishPageContext({
     route: '/health',
     title: projectName ? `Health · ${projectName}` : 'Health',
