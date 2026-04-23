@@ -11,6 +11,49 @@ import { estimateCallCostUsd } from './pricing.ts'
 const log = rootLog.child('telemetry')
 
 // -----------------------------------------------------------------------------
+// Anthropic cache usage extraction (AI SDK v4 + @ai-sdk/anthropic v1)
+//
+// LLM-5 (audit 2026-04-23): the cache-hit query returned 0/17 last 24 h. Root
+// cause: callers logged `usage.promptTokens/completionTokens` but never
+// reached into `providerMetadata` for the Anthropic-specific counters. The
+// `classify-report` Stage 2 path does read them (via `stream.providerMetadata`)
+// but `fast-filter`, `judge-batch`, `intelligence-report`, and `fix-worker`
+// all dropped them, so the cache-hit ratio silently read as zero and Billing
+// still assumed the cold-price per token. This helper centralises the
+// extraction so every stage can log cache metrics with one line.
+//
+// AI SDK v4 exposes the data as `result.experimental_providerMetadata` on
+// `generateObject` / `generateText` results, and `await stream.providerMetadata`
+// on streamed results. v5 renamed it to `providerMetadata` (no prefix). We
+// read both so the helper keeps working through the v4 → v5 migration.
+// -----------------------------------------------------------------------------
+
+export interface AnthropicCacheUsage {
+  cacheCreationInputTokens: number | null
+  cacheReadInputTokens: number | null
+}
+
+export function extractAnthropicCacheUsage(
+  meta: unknown,
+): AnthropicCacheUsage {
+  const fallback: AnthropicCacheUsage = {
+    cacheCreationInputTokens: null,
+    cacheReadInputTokens: null,
+  }
+  if (!meta || typeof meta !== 'object') return fallback
+  const anthropic = (meta as { anthropic?: unknown }).anthropic
+  if (!anthropic || typeof anthropic !== 'object') return fallback
+  const { cacheCreationInputTokens, cacheReadInputTokens } = anthropic as {
+    cacheCreationInputTokens?: number
+    cacheReadInputTokens?: number
+  }
+  return {
+    cacheCreationInputTokens: typeof cacheCreationInputTokens === 'number' ? cacheCreationInputTokens : null,
+    cacheReadInputTokens: typeof cacheReadInputTokens === 'number' ? cacheReadInputTokens : null,
+  }
+}
+
+// -----------------------------------------------------------------------------
 // LLM invocations
 // -----------------------------------------------------------------------------
 

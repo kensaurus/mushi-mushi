@@ -6,11 +6,12 @@
  *          inspection.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
 import {
@@ -27,14 +28,19 @@ import {
   SelectField,
   FilterSelect,
   RelativeTime,
+  Pct,
+  FreshnessPill,
 } from '../components/ui'
+import { statusGlowClass } from '../lib/tokens'
 import { HealthSkeleton } from '../components/skeletons/HealthSkeleton'
 import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
+import { markJudgeBatchSeen } from '../components/PipelineStatusRibbon'
 
 interface LlmRecent {
   function_name: string
@@ -142,6 +148,18 @@ export function HealthPage() {
   useRealtime({ table: 'llm_invocations' }, llmQuery.reload)
   useRealtime({ table: 'cron_runs' }, cronQuery.reload)
 
+  // Feed the PipelineStatusRibbon's Check tile. HealthPage is the only
+  // place today that knows when judge-batch last finished; stamping it
+  // into localStorage lets every other page show a freshness badge
+  // without re-querying the cron summary.
+  useEffect(() => {
+    const lastRun = cron?.byJob['judge-batch']?.lastRun
+    if (!lastRun) return
+    const ts = Date.parse(lastRun)
+    if (!Number.isFinite(ts)) return
+    markJudgeBatchSeen(ts)
+  }, [cron])
+
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
     if (value) next.set(key, value)
@@ -198,6 +216,38 @@ export function HealthPage() {
     }
   }
 
+  // Publish page context so the browser tab reads e.g.
+  // "Health · All systems nominal — Mushi Mushi" or
+  // "Health · 2 errors · 1 cron down — Mushi Mushi" from another tab.
+  //
+  // Parenthesise the ternary *explicitly*: the naked form
+  //   `errorRate > 0.05 ? 1 : 0 + filter(...).length`
+  // binds as `errorRate > 0.05 ? 1 : (0 + filter(...).length)` — so a bad
+  // LLM error rate would return a constant 1 and silently drop the
+  // cron-job error count, under-reporting the favicon badge whenever both
+  // signals are red. See redCount/amberCount below for the same pattern
+  // post loading-guard.
+  const healthRed =
+    ((llm?.errorRate ?? 0) > 0.05 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length
+  const healthAmber =
+    ((llm?.fallbackRate ?? 0) > 0.1 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length
+  usePublishPageContext({
+    route: '/health',
+    title: projectName ? `Health · ${projectName}` : 'Health',
+    summary: llmQuery.loading
+      ? 'Loading health metrics…'
+      : !llm
+        ? undefined
+        : healthRed > 0
+          ? `${healthRed} red · ${llm.totalCalls} calls · ${((llm.errorRate ?? 0) * 100).toFixed(1)}% errors`
+          : healthAmber > 0
+            ? `${healthAmber} warning · ${llm.totalCalls} calls`
+            : `All systems nominal · ${llm.totalCalls} calls`,
+    criticalCount: healthRed,
+  })
+
   if (llmQuery.loading || cronQuery.loading) return <HealthSkeleton />
   if (llmQuery.error || !llm) return <ErrorAlert message={`Failed to load health metrics: ${llmQuery.error ?? 'no data'}`} onRetry={reloadAll} />
 
@@ -207,6 +257,18 @@ export function HealthPage() {
   const byModel = llm.byModel ?? {}
   const fnNames = Object.keys(byFunction).sort()
 
+  // Shared NBA inputs for the hero + action bar (one hook call per render).
+  const redCount =
+    (llm.errorRate > 0.05 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length
+  const amberCount =
+    (llm.fallbackRate > 0.1 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length
+  const healthAction = useNextBestAction({ scope: 'health', redCount, amberCount })
+  const healthSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    redCount > 0 ? 'crit' : amberCount > 0 ? 'warn' : 'ok'
+  const lastLlmCall = llm.recent?.[0]
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -214,6 +276,10 @@ export function HealthPage() {
         projectScope={projectName}
         description={copy?.description ?? 'Real-time LLM and scheduled-job telemetry. Updates as events arrive.'}
       >
+        <FreshnessPill
+          at={llmQuery.lastFetchedAt ?? cronQuery.lastFetchedAt}
+          isValidating={llmQuery.isValidating || cronQuery.isValidating}
+        />
         <SelectField
           label="Window"
           value={window}
@@ -227,18 +293,37 @@ export function HealthPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="health"
-        action={useNextBestAction({
-          scope: 'health',
-          redCount:
-            (llm.errorRate > 0.05 ? 1 : 0) +
-            KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length,
-          amberCount:
-            (llm.fallbackRate > 0.1 ? 1 : 0) +
-            KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length,
-        })}
+        title={copy?.title ?? 'System Health'}
+        kicker="Pipeline pulse"
+        decide={{
+          label: redCount > 0
+            ? 'Critical probes failing'
+            : amberCount > 0
+              ? 'Degraded probes'
+              : 'All systems nominal',
+          metric: `${llm.totalCalls} calls · ${errorPct}% err`,
+          summary: redCount > 0
+            ? `${redCount} red probe${redCount === 1 ? '' : 's'} — blocking the pipeline. Act now.`
+            : amberCount > 0
+              ? `${amberCount} amber probe${amberCount === 1 ? '' : 's'} — fallbacks or slow jobs, not yet blocking.`
+              : `Fallback rate ${fallbackPct}% · avg ${Math.round(llm.avgLatencyMs)}ms (${window}).`,
+          severity: healthSeverity,
+        }}
+        act={healthAction}
+        verify={{
+          label: lastLlmCall ? `Last LLM call · ${lastLlmCall.used_model}` : 'Awaiting first call',
+          detail: lastLlmCall
+            ? `${lastLlmCall.function_name} · ${new Date(lastLlmCall.created_at).toISOString().slice(11, 19)}Z`
+            : '—',
+          to: lastLlmCall?.report_id ? `/reports/${lastLlmCall.report_id}` : '/reports',
+          secondaryTo: '/audit',
+          secondaryLabel: 'Open audit log',
+        }}
       />
+
+      <PageActionBar scope="health" action={healthAction} />
 
       <PageHelp
         title={copy?.help?.title ?? 'About System Health'}
@@ -301,20 +386,33 @@ export function HealthPage() {
         )
       })()}
 
-      <Section title={`LLM Health (${window})`}>
+      <Section
+        title={`LLM Health (${window})`}
+        freshness={{ at: llmQuery.lastFetchedAt, isValidating: llmQuery.isValidating }}
+      >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <StatCard label="Total calls" value={llm.totalCalls.toString()} />
+          <StatCard
+            label="Total calls"
+            value={llm.totalCalls.toString()}
+            hint={`Number of LLM calls made in the last ${window}. Includes every provider and every function.`}
+          />
           <StatCard
             label="Fallback rate"
             value={`${fallbackPct}%`}
             accent={llm.fallbackRate > 0.1 ? 'text-danger' : llm.fallbackRate > 0 ? 'text-warn' : 'text-ok'}
+            hint="Share of calls that hit the secondary provider because the primary failed. Above 10 % suggests the primary is flaky or rate-limiting."
           />
           <StatCard
             label="Error rate"
             value={`${errorPct}%`}
             accent={llm.errorRate > 0.05 ? 'text-danger' : llm.errorRate > 0 ? 'text-warn' : 'text-ok'}
+            hint="Share of calls that ended in a non-recoverable error. Above 5 % usually means an outage or bad API key."
           />
-          <StatCard label="Latency p50 / p95" value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`} />
+          <StatCard
+            label="Latency p50 / p95"
+            value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
+            hint="Median / 95th-percentile round-trip latency across all LLM calls. p95 is the worst typical case a user will feel."
+          />
         </div>
       </Section>
 
@@ -431,13 +529,16 @@ export function HealthPage() {
         </div>
       </Section>
 
-      <Section title="Cron Jobs">
+      <Section
+        title="Cron Jobs"
+        freshness={{ at: cronQuery.lastFetchedAt, isValidating: cronQuery.isValidating }}
+      >
         <div className="space-y-1">
           {KNOWN_JOBS.map(job => {
             const j = cron?.byJob[job]
             const isManual = job !== 'data-retention'
             return (
-              <Card key={job} className="p-2.5">
+              <Card key={job} className={`p-2.5 ${statusGlowClass(j?.lastStatus)}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -452,7 +553,14 @@ export function HealthPage() {
                     </div>
                     {j ? (
                       <p className="mt-1 text-2xs text-fg-faint">
-                        Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs · {(j.successRate * 100).toFixed(0)}% success · avg {j.avgDurationMs}ms
+                        Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs ·{' '}
+                        <Pct
+                          value={j.successRate * 100}
+                          precision={0}
+                          direction="higher-better"
+                          hint="Share of runs that finished without errors across the full history of this job."
+                        />{' '}
+                        success · avg {j.avgDurationMs}ms
                         {j.staleness && j.staleness !== 'ok' && j.stalenessMinutes != null && (
                           <span className={j.staleness === 'stale' ? ' text-danger' : ' text-warn'}>
                             {' '}· {j.staleness} ({j.stalenessMinutes}m since last run)

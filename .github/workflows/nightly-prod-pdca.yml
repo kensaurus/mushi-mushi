@@ -1,0 +1,146 @@
+# FILE: .github/workflows/nightly-prod-pdca.yml
+# PURPOSE: Run the full PDCA dogfood suite against the *production* Supabase
+#          stack every night so we catch regressions that the PR-time e2e
+#          (which uses a local ephemeral stack) can't see — stale env keys,
+#          expired API tokens, cron jobs silently disabled, schema drift,
+#          and LLM provider outages. The PR-time e2e in ci.yml still
+#          exists and tests the local stack before merge; this runs the
+#          same spec against the live pipeline after deploy has settled.
+#
+# On failure the workflow also opens / updates a GitHub issue so we see
+# the regression without having to open the Actions tab. Secrets required:
+#   - PROD_SUPABASE_URL            (full https://<ref>.supabase.co URL)
+#   - PROD_SUPABASE_ANON_KEY       (for auth.signInWithPassword)
+#   - PROD_SUPABASE_SERVICE_ROLE_KEY (service-role for DB reads)
+#   - PROD_E2E_TEST_EMAIL          (test@mushimushi.dev or equivalent)
+#   - PROD_E2E_TEST_PASSWORD       (matching password from .env.local)
+#   - PROD_MUSHI_PROJECT_ID        (seeded glot.it project UUID)
+#   - PROD_MUSHI_API_KEY           (mushi_... ingest key)
+#
+# Flip `ENABLE_NIGHTLY_PROD_PDCA` repo variable to 'true' to activate.
+
+name: Nightly Prod PDCA
+
+on:
+  schedule:
+    # 07:00 UTC nightly — after London dev hours, before SF wake up. Gives
+    # the ops-on-call a clear signal with their morning coffee.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: nightly-prod-pdca
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  pdca:
+    name: Full PDCA against prod
+    if: ${{ vars.ENABLE_NIGHTLY_PROD_PDCA == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @mushi-mushi/e2e-dogfood install-browsers
+
+      - name: Mint admin JWT
+        id: jwt
+        env:
+          SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          ANON_KEY: ${{ secrets.PROD_SUPABASE_ANON_KEY }}
+          EMAIL: ${{ secrets.PROD_E2E_TEST_EMAIL }}
+          PASSWORD: ${{ secrets.PROD_E2E_TEST_PASSWORD }}
+        run: |
+          JWT=$(node -e "
+            const url = process.env.SUPABASE_URL + '/auth/v1/token?grant_type=password';
+            fetch(url, {
+              method: 'POST',
+              headers: { apikey: process.env.ANON_KEY, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: process.env.EMAIL, password: process.env.PASSWORD }),
+            })
+              .then(r => r.json())
+              .then(j => { if (!j.access_token) { console.error(j); process.exit(1); } process.stdout.write(j.access_token); })
+          ")
+          echo "::add-mask::$JWT"
+          echo "jwt=$JWT" >> "$GITHUB_OUTPUT"
+
+      - name: Run full-PDCA against prod
+        env:
+          SUPABASE_URL: ${{ secrets.PROD_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}
+          MUSHI_API_URL: ${{ secrets.PROD_SUPABASE_URL }}/functions/v1/api
+          MUSHI_ADMIN_URL: ${{ secrets.PROD_SUPABASE_URL }}/functions/v1/api
+          MUSHI_ADMIN_JWT: ${{ steps.jwt.outputs.jwt }}
+          MUSHI_PROJECT_ID: ${{ secrets.PROD_MUSHI_PROJECT_ID }}
+          MUSHI_API_KEY: ${{ secrets.PROD_MUSHI_API_KEY }}
+          # Prod nightly uses mocks for Act to avoid opening a real PR
+          # every night. The PDCA dispatch + check + health stages still
+          # exercise live LLM + DB paths, so any regression there surfaces.
+          E2E_LIVE_GITHUB: ''
+        run: pnpm --filter @mushi-mushi/e2e-dogfood exec playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-prod-pdca-report
+          path: examples/e2e-dogfood/playwright-report/
+          retention-days: 14
+
+      - name: Open / update regression issue on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = '[nightly-pdca] production regression detected'
+            const body = [
+              `The nightly prod PDCA suite failed at ${new Date().toISOString()}.`,
+              '',
+              `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              '',
+              'Stages (Plan / Plan-dedup / Do / Check / Act / Health) exercise the',
+              'live Supabase + Edge Functions + LLM pipeline against the seeded',
+              'dogfood project. See the playwright-report artifact for per-stage',
+              'failure details; rotate credentials or trigger an ops incident as',
+              'appropriate.',
+              '',
+              'This issue is deduped on title — each failure appends a comment',
+              'so the timeline is obvious without issue noise.',
+            ].join('\n')
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'nightly-pdca',
+            })
+            const hit = existing.find((i) => i.title === title)
+            if (hit) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: hit.number,
+                body,
+              })
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['nightly-pdca', 'production', 'pdca-regression'],
+              })
+            }

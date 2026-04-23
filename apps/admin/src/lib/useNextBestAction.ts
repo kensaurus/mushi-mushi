@@ -25,6 +25,16 @@ type Scope =
   | 'anti-gaming'
   | 'storage'
   | 'query'
+  // Wave S (2026-04-23) — extended scopes so PageHero/PageActionBar drive
+  // the same rule engine on every Advanced page, not just the first ten.
+  | 'dlq'
+  | 'prompt-lab'
+  | 'repo'
+  | 'mcp'
+  | 'billing'
+  | 'notifications'
+  | 'marketplace'
+  | 'integrations'
 
 type Input =
   | { scope: 'audit'; warnCount: number; failCount: number }
@@ -37,6 +47,14 @@ type Input =
   | { scope: 'anti-gaming'; flaggedLastHour: number; blockedIps: number }
   | { scope: 'storage'; approachingQuotaPct: number | null; failedUploadsLastHour: number }
   | { scope: 'query'; savedQueries: number; lastRunHoursAgo: number | null }
+  | { scope: 'dlq'; pendingCount: number; poisonedCount: number; oldestPendingMinutes: number | null }
+  | { scope: 'prompt-lab'; draftCount: number; untestedDrafts: number; lastRunHoursAgo: number | null }
+  | { scope: 'repo'; reposWithoutIndex: number; staleIndexHoursAgo: number | null }
+  | { scope: 'mcp'; unconfiguredClients: number; expiringKeysIn7Days: number }
+  | { scope: 'billing'; pastDueInvoices: number; projectedOverrunPct: number | null }
+  | { scope: 'notifications'; unreadCritical: number; totalUnread: number }
+  | { scope: 'marketplace'; installableUpdates: number; disabledPlugins: number }
+  | { scope: 'integrations'; disconnectedCount: number; expiringCount: number }
 
 /**
  * Pure function — returns the action for a page scope given live input.
@@ -203,6 +221,177 @@ export function computeNextBestAction(input: Input): PageAction | null {
           title: 'Save your first natural-language query',
           reason: 'Saved queries power the dashboard tiles and the NBA rules on other pages.',
           primary: { kind: 'link', to: '/query?action=new', label: 'New query' },
+        }
+      }
+      return null
+
+    case 'dlq':
+      // Poisoned rows never retry — triage them first because they indicate
+      // a classifier or schema bug, not a transient failure.
+      if (input.poisonedCount > 0) {
+        return {
+          tone: 'do',
+          title: `${input.poisonedCount} poisoned ${input.poisonedCount === 1 ? 'message' : 'messages'} in DLQ`,
+          reason: 'Poisoned rows exceeded retry budget — inspect the payload and republish after fix.',
+          primary: { kind: 'link', to: '/dlq?filter=poisoned', label: 'Open poisoned queue' },
+          secondary: [{ kind: 'link', to: '/dlq?export=csv', label: 'Export for post-mortem' }],
+        }
+      }
+      if (input.oldestPendingMinutes != null && input.oldestPendingMinutes > 30) {
+        return {
+          tone: 'check',
+          title: `Oldest DLQ row has been pending ${Math.round(input.oldestPendingMinutes)}m`,
+          reason: 'Pending > 30m usually means the retry worker is stalled or back-pressured.',
+          primary: { kind: 'link', to: '/dlq?filter=pending', label: 'Open pending' },
+        }
+      }
+      if (input.pendingCount > 0) {
+        return {
+          tone: 'check',
+          title: `${input.pendingCount} pending DLQ ${input.pendingCount === 1 ? 'row' : 'rows'}`,
+          reason: 'These will retry automatically — skim to confirm nothing is stuck on the same message.',
+          primary: { kind: 'link', to: '/dlq', label: 'Open DLQ' },
+        }
+      }
+      return null
+
+    case 'prompt-lab':
+      if (input.untestedDrafts > 0) {
+        return {
+          tone: 'do',
+          title: `${input.untestedDrafts} untested prompt ${input.untestedDrafts === 1 ? 'draft' : 'drafts'}`,
+          reason: 'Run evals against the golden set before promoting a draft to production.',
+          primary: { kind: 'link', to: '/prompt-lab?filter=untested', label: 'Open drafts' },
+        }
+      }
+      if (input.lastRunHoursAgo == null || input.lastRunHoursAgo > 7 * 24) {
+        return {
+          tone: 'check',
+          title: 'Eval set has not run this week',
+          reason: 'Regression tests on prompts drift fast — kick a run so the judge has fresh baselines.',
+          primary: { kind: 'link', to: '/prompt-lab?action=eval', label: 'Run eval set' },
+        }
+      }
+      if (input.draftCount === 0) {
+        return {
+          tone: 'plan',
+          title: 'Draft your first prompt variant',
+          reason: 'Iterating prompts in the Lab is how you raise judge scores without touching code.',
+          primary: { kind: 'link', to: '/prompt-lab?action=new', label: 'New draft' },
+        }
+      }
+      return null
+
+    case 'repo':
+      if (input.reposWithoutIndex > 0) {
+        return {
+          tone: 'do',
+          title: `${input.reposWithoutIndex} ${input.reposWithoutIndex === 1 ? 'repo is' : 'repos are'} not indexed`,
+          reason: 'Without an index the graph + auto-fixer cannot reason about blast radius.',
+          primary: { kind: 'link', to: '/repo?filter=unindexed', label: 'Trigger indexer' },
+        }
+      }
+      if (input.staleIndexHoursAgo != null && input.staleIndexHoursAgo > 24 * 7) {
+        return {
+          tone: 'check',
+          title: `Repo index is ${Math.floor(input.staleIndexHoursAgo / 24)}d old`,
+          reason: 'A stale index hides new components and masks regressions in the graph view.',
+          primary: { kind: 'link', to: '/repo?action=reindex', label: 'Re-index' },
+        }
+      }
+      return null
+
+    case 'mcp':
+      if (input.expiringKeysIn7Days > 0) {
+        return {
+          tone: 'do',
+          title: `${input.expiringKeysIn7Days} MCP ${input.expiringKeysIn7Days === 1 ? 'key expires' : 'keys expire'} this week`,
+          reason: 'When a key expires, that MCP client silently stops sending reports — rotate now.',
+          primary: { kind: 'link', to: '/mcp?filter=expiring', label: 'Rotate keys' },
+        }
+      }
+      if (input.unconfiguredClients > 0) {
+        return {
+          tone: 'plan',
+          title: `${input.unconfiguredClients} MCP ${input.unconfiguredClients === 1 ? 'client is' : 'clients are'} unconfigured`,
+          reason: 'Finish the MCP install so the IDE agent can file bugs directly from chats.',
+          primary: { kind: 'link', to: '/mcp', label: 'Open MCP setup' },
+        }
+      }
+      return null
+
+    case 'billing':
+      if (input.pastDueInvoices > 0) {
+        return {
+          tone: 'do',
+          title: `${input.pastDueInvoices} past-due ${input.pastDueInvoices === 1 ? 'invoice' : 'invoices'}`,
+          reason: 'Past-due invoices block paid-plan features — resolve before the next billing cycle.',
+          primary: { kind: 'link', to: '/billing?status=past_due', label: 'Open invoices' },
+        }
+      }
+      if (input.projectedOverrunPct != null && input.projectedOverrunPct > 20) {
+        return {
+          tone: 'check',
+          title: `Projected to overshoot monthly cap by ${input.projectedOverrunPct.toFixed(0)}%`,
+          reason: 'Increase the cap or throttle the pipeline before Stripe invoices the overage.',
+          primary: { kind: 'link', to: '/billing?action=raise-cap', label: 'Review cap' },
+        }
+      }
+      return null
+
+    case 'notifications':
+      if (input.unreadCritical > 0) {
+        return {
+          tone: 'do',
+          title: `${input.unreadCritical} unread critical ${input.unreadCritical === 1 ? 'alert' : 'alerts'}`,
+          reason: 'Critical alerts page on-call channels — triage so the next page has context.',
+          primary: { kind: 'link', to: '/notifications?severity=critical', label: 'Open critical inbox' },
+        }
+      }
+      if (input.totalUnread > 10) {
+        return {
+          tone: 'check',
+          title: `${input.totalUnread} unread notifications`,
+          reason: 'Skim to confirm nothing that matters is buried behind low-priority spam.',
+          primary: { kind: 'link', to: '/notifications', label: 'Open inbox' },
+        }
+      }
+      return null
+
+    case 'marketplace':
+      if (input.installableUpdates > 0) {
+        return {
+          tone: 'check',
+          title: `${input.installableUpdates} plugin ${input.installableUpdates === 1 ? 'update' : 'updates'} available`,
+          reason: 'Plugin updates ship schema fixes and security patches — apply inside the quiet window.',
+          primary: { kind: 'link', to: '/marketplace?filter=updates', label: 'Review updates' },
+        }
+      }
+      if (input.disabledPlugins > 0) {
+        return {
+          tone: 'check',
+          title: `${input.disabledPlugins} installed ${input.disabledPlugins === 1 ? 'plugin is' : 'plugins are'} disabled`,
+          reason: 'Disabled plugins can be re-enabled or uninstalled to reduce attack surface.',
+          primary: { kind: 'link', to: '/marketplace?filter=disabled', label: 'Review disabled' },
+        }
+      }
+      return null
+
+    case 'integrations':
+      if (input.disconnectedCount > 0) {
+        return {
+          tone: 'do',
+          title: `${input.disconnectedCount} ${input.disconnectedCount === 1 ? 'integration is' : 'integrations are'} disconnected`,
+          reason: 'Reconnect the OAuth link so notifications and fix dispatch keep flowing.',
+          primary: { kind: 'link', to: '/integrations?status=disconnected', label: 'Reconnect' },
+        }
+      }
+      if (input.expiringCount > 0) {
+        return {
+          tone: 'check',
+          title: `${input.expiringCount} integration ${input.expiringCount === 1 ? 'token expires' : 'tokens expire'} soon`,
+          reason: 'Rotate before expiry or the integration will silently stop delivering.',
+          primary: { kind: 'link', to: '/integrations?status=expiring', label: 'Rotate tokens' },
         }
       }
       return null

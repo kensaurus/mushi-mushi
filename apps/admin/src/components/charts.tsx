@@ -8,6 +8,7 @@
 import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Card, Badge, Tooltip } from './ui'
+import { useBrushSelection } from '../lib/useBrushSelection'
 
 /* ── KpiTile ────────────────────────────────────────────────────────────── */
 
@@ -155,17 +156,42 @@ export function LegendDot({ color, label }: { color: string; label: string }) {
 
 /* ── LineSparkline ──────────────────────────────────────────────────────── */
 
+/**
+ * Wave T.4.7 range-select bridge. When the caller provides `timestamps`
+ * alongside `values`, `LineSparkline` registers a headless brush via
+ * `useBrushSelection` and emits the selected ISO range through
+ * `onRangeSelect`. Without `timestamps` the brush is disabled — the
+ * component gracefully degrades to a pure decoration.
+ */
 export function LineSparkline({
   values,
   accent = 'text-brand',
   ariaLabel = 'Trend',
   height = 28,
+  timestamps,
+  onRangeSelect,
 }: {
   values: number[]
   accent?: string
   ariaLabel?: string
   height?: number
+  /** ISO strings aligned 1:1 with `values`. Required to enable brushing. */
+  timestamps?: string[]
+  /** Fired with `{ fromIso, toIso }` when the user brushes a range. */
+  onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
 }) {
+  const brush = useBrushSelection({
+    dataLength: values.length,
+    disabled: !onRangeSelect || !timestamps || timestamps.length !== values.length,
+    onCommit: ({ start, end }) => {
+      if (!timestamps || !onRangeSelect) return
+      const fromIso = timestamps[start]
+      const toIso = timestamps[end]
+      if (!fromIso || !toIso) return
+      onRangeSelect({ fromIso, toIso })
+    },
+  })
+
   if (values.length === 0) return null
   const max = Math.max(1, ...values)
   const min = Math.min(0, ...values)
@@ -179,14 +205,28 @@ export function LineSparkline({
         `${(i * step).toFixed(2)},${(h - ((v - min) / range) * h).toFixed(2)}`,
     )
     .join(' ')
+
+  // Preview rect is drawn in chart-coord space (0..w). Convert indexes to
+  // x-offsets so the overlay tracks the cursor smoothly during drag.
+  const preview = brush.isDragging && brush.previewStart != null && brush.previewEnd != null
+    ? {
+        x: Math.min(brush.previewStart, brush.previewEnd) * step,
+        width: Math.abs(brush.previewEnd - brush.previewStart) * step,
+      }
+    : null
+
   return (
     <svg
       viewBox={`0 0 ${w} ${h}`}
       preserveAspectRatio="none"
-      className={`w-full ${accent}`}
+      className={`w-full ${accent} ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
       style={{ height: `${height}px` }}
       role="img"
       aria-label={ariaLabel}
+      onPointerDown={brush.onPointerDown}
+      onPointerMove={brush.onPointerMove}
+      onPointerUp={brush.onPointerUp}
+      onPointerCancel={() => brush.cancel()}
     >
       <polyline
         points={points}
@@ -196,6 +236,17 @@ export function LineSparkline({
         strokeLinejoin="round"
         strokeLinecap="round"
       />
+      {preview && (
+        <rect
+          x={preview.x}
+          y={0}
+          width={preview.width}
+          height={h}
+          fill="currentColor"
+          opacity={0.15}
+          pointerEvents="none"
+        />
+      )}
     </svg>
   )
 }
@@ -207,20 +258,40 @@ export function BarSparkline({
   accent = 'bg-brand',
   height = 28,
   ariaLabel = 'Bar trend',
+  timestamps,
+  onRangeSelect,
 }: {
   values: number[]
   accent?: string
   height?: number
   ariaLabel?: string
+  timestamps?: string[]
+  onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
 }) {
+  const brush = useBrushSelection({
+    dataLength: values.length,
+    disabled: !onRangeSelect || !timestamps || timestamps.length !== values.length,
+    onCommit: ({ start, end }) => {
+      if (!timestamps || !onRangeSelect) return
+      const fromIso = timestamps[start]
+      const toIso = timestamps[end]
+      if (!fromIso || !toIso) return
+      onRangeSelect({ fromIso, toIso })
+    },
+  })
+
   if (values.length === 0) return null
   const max = Math.max(1, ...values)
   return (
     <div
-      className="flex items-end gap-px w-full"
+      className={`relative flex items-end gap-px w-full ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
       style={{ height: `${height}px` }}
       role="img"
       aria-label={ariaLabel}
+      onPointerDown={brush.onPointerDown}
+      onPointerMove={brush.onPointerMove}
+      onPointerUp={brush.onPointerUp}
+      onPointerCancel={() => brush.cancel()}
     >
       {values.map((v, i) => (
         <div
@@ -230,6 +301,16 @@ export function BarSparkline({
           title={`${v}`}
         />
       ))}
+      {brush.isDragging && brush.previewStart != null && brush.previewEnd != null && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-y-0 bg-brand/20 pointer-events-none"
+          style={{
+            left: `${(Math.min(brush.previewStart, brush.previewEnd) / Math.max(1, values.length - 1)) * 100}%`,
+            width: `${(Math.abs(brush.previewEnd - brush.previewStart) / Math.max(1, values.length - 1)) * 100}%`,
+          }}
+        />
+      )}
     </div>
   )
 }

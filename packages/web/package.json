@@ -50,6 +50,8 @@
     "mushi-mushi",
     "bug-reporting",
     "user-feedback",
+    "user-report",
+    "feedback-widget",
     "browser-sdk",
     "widget",
     "shadow-dom",
@@ -62,7 +64,12 @@
     "angular",
     "rage-click",
     "sentry-companion",
+    "sentry-alternative",
     "error-tracking",
+    "ai-triage",
+    "auto-fix",
+    "llm-ops",
+    "ai-agent",
     "sdk"
   ],
   "publishConfig": {

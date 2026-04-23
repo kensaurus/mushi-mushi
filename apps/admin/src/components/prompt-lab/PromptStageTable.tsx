@@ -1,7 +1,20 @@
 import { Card, Badge, Btn, RelativeTime } from '../ui'
-import { formatPct } from '../charts'
 import type { PromptVersion } from './types'
 import { STAGE_LABELS } from './types'
+
+/**
+ * Domain-local tone ramp for judge scores (0.80 ok / 0.60 warn / <0.60 danger).
+ * Mirrors JudgePage's ScorePill so an 0.80 eval is green in both views. We
+ * intentionally don't delegate to ui.tsx#Pct / tokens.ts#pctToneClass here —
+ * those use a 90/70 ramp tuned for health success rates / uptime, which
+ * recolours legitimate 0.80–0.89 judge scores from green to amber. See the
+ * comment in JudgePage#ScorePill for the full rationale.
+ */
+function judgeScoreTone(score: number): string {
+  if (score >= 0.8) return 'text-ok'
+  if (score >= 0.6) return 'text-warn'
+  return 'text-danger'
+}
 
 interface PromptStageTableProps {
   stage: 'stage1' | 'stage2'
@@ -81,9 +94,31 @@ export function PromptStageTable({
                         </Badge>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{p.traffic_percentage}%</td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                      {score != null ? formatPct(score) : '—'}
+                    <td
+                      className="px-2 py-1.5 text-right font-mono tabular-nums text-fg-faint"
+                      title={p.traffic_percentage === 100
+                        ? 'This version receives 100 % of live traffic for its stage.'
+                        : `Receives ${p.traffic_percentage} % of live traffic; the remainder routes to other candidates in the same stage.`}
+                    >
+                      {/* Traffic is a deliberate A/B split, not a quality
+                          signal. Rendering it through the higher-better tone
+                          ramp would paint 50/50 experiments and 0 % idle
+                          candidates red ("something's broken!") when they're
+                          working exactly as configured. Keep this neutral
+                          and match the JudgePage leaderboard treatment. */}
+                      {p.traffic_percentage}%
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      {score == null ? (
+                        <span className="text-fg-faint text-2xs font-mono">—</span>
+                      ) : (
+                        <span
+                          className={`font-mono tabular-nums ${judgeScoreTone(score)}`}
+                          title="Judge score — higher is better. Uses the rolling 7-day eval window."
+                        >
+                          {(score * 100).toFixed(1)}%
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-fg-muted tabular-nums">
                       {p.total_evaluations}

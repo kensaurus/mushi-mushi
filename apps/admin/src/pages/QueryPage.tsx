@@ -15,6 +15,7 @@ import {
 } from '../components/ui'
 import { useToast } from '../lib/toast'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface QueryResult {
@@ -260,6 +261,14 @@ export function QueryPage() {
 
   const saved = history.filter((h) => h.is_saved)
   const recent = history.filter((h) => !h.is_saved)
+  const lastRunHoursAgo = history[0]?.created_at
+    ? Math.floor((Date.now() - new Date(history[0].created_at).getTime()) / 3_600_000)
+    : null
+  const queryAction = useNextBestAction({
+    scope: 'query',
+    savedQueries: saved.length,
+    lastRunHoursAgo,
+  })
 
   return (
     <div className="space-y-4">
@@ -268,16 +277,47 @@ export function QueryPage() {
         description="Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited."
       />
 
-      <PageActionBar
+      <PageHero
         scope="query"
-        action={useNextBestAction({
-          scope: 'query',
-          savedQueries: saved.length,
-          lastRunHoursAgo: history[0]?.created_at
-            ? Math.floor((Date.now() - new Date(history[0].created_at).getTime()) / 3_600_000)
-            : null,
-        })}
+        title="Ask Your Data"
+        kicker="Natural-language analytics"
+        decide={{
+          label:
+            saved.length === 0 && history.length === 0
+              ? 'No queries yet'
+              : saved.length === 0
+                ? 'No saved queries'
+                : 'Saved queries ready',
+          metric: `${saved.length} saved · ${recent.length} recent`,
+          summary:
+            saved.length === 0 && history.length === 0
+              ? 'Ask your first question — the LLM writes the SQL, you see the rows. No setup required.'
+              : saved.length === 0
+                ? 'Save a useful query so it becomes a one-click tile on other pages.'
+                : `Rerun any saved query from the sidebar or edit the SQL before running.`,
+          severity:
+            saved.length === 0 && history.length === 0
+              ? 'neutral'
+              : saved.length === 0
+                ? 'info'
+                : 'ok',
+        }}
+        act={queryAction}
+        verify={{
+          label: 'Latest activity',
+          detail:
+            lastRunHoursAgo == null
+              ? 'No queries run yet'
+              : lastRunHoursAgo < 1
+                ? 'Last run less than an hour ago'
+                : `Last run ${lastRunHoursAgo}h ago`,
+          to: '/query?tab=history',
+          secondaryTo: '/query?action=new',
+          secondaryLabel: 'New query',
+        }}
       />
+
+      <PageActionBar scope="query" action={queryAction} />
 
       <PageHelp
         title="About Ask Your Data"

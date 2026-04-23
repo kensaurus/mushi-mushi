@@ -24,6 +24,7 @@ import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
 import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import {
   STATUS_OPTIONS,
@@ -181,6 +182,34 @@ export function DLQPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
+  // Hero data derivations. We keep them at the top of render so the
+  // DLQ hero reflects exactly what the KPI row sees — there is one
+  // source of truth for each metric, which matters because operators
+  // use the hero to decide whether to open the page in the first place.
+  const deadLetter = summary?.byStatus?.dead_letter ?? 0
+  const failedCount = summary?.byStatus?.failed ?? 0
+  const pendingCount = summary?.byStatus?.pending ?? 0
+  const runningCount = summary?.byStatus?.running ?? 0
+  const completedCount = summary?.byStatus?.completed ?? 0
+  const dlqSeverity: 'crit' | 'warn' | 'ok' =
+    deadLetter > 0 ? 'crit' : failedCount > 0 ? 'warn' : 'ok'
+  const dlqAction = useNextBestAction({
+    scope: 'dlq',
+    poisonedCount: deadLetter,
+    pendingCount,
+    oldestPendingMinutes: null,
+  })
+  // Queue-scoped action is kept around so the PageActionBar continues to
+  // mirror the older "stalled vs running" phrasing operators have muscle
+  // memory for. PageHero.Act is strictly better — it handles poisoned
+  // rows separately — but we don't want to rip the ActionBar today.
+  const queueAction = useNextBestAction({
+    scope: 'queue',
+    stalledCount: deadLetter + failedCount,
+    runningCount,
+  })
+  const latestThroughput = throughput.at(-1)
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -229,14 +258,45 @@ export function DLQPage() {
         </Btn>
       </PageHeader>
 
-      <PageActionBar
-        scope="queue"
-        action={useNextBestAction({
-          scope: 'queue',
-          stalledCount: (summary?.byStatus?.dead_letter ?? 0) + (summary?.byStatus?.failed ?? 0),
-          runningCount: summary?.byStatus?.running ?? 0,
-        })}
+      <PageHero
+        scope="dlq"
+        title="Processing Queue"
+        kicker="Pipeline pulse"
+        decide={{
+          label:
+            dlqSeverity === 'crit'
+              ? 'Dead-letter lane non-empty'
+              : dlqSeverity === 'warn'
+                ? 'Failures need retry'
+                : 'Queue is healthy',
+          metric:
+            deadLetter > 0
+              ? `${deadLetter} dead-letter`
+              : failedCount > 0
+                ? `${failedCount} failed`
+                : `${runningCount} running · ${pendingCount} pending`,
+          summary:
+            dlqSeverity === 'crit'
+              ? 'Dead-letter rows never retry automatically — inspect the payload and republish.'
+              : dlqSeverity === 'warn'
+                ? 'Transient failures will retry; confirm nothing is stuck on the same message.'
+                : 'No stuck work, no dead letters. Backlog is draining normally.',
+          severity: dlqSeverity,
+        }}
+        act={dlqAction}
+        verify={{
+          label: 'Latest throughput snapshot',
+          detail:
+            latestThroughput
+              ? `${latestThroughput.day} · ${latestThroughput.completed} completed · ${latestThroughput.failed} failed`
+              : `${completedCount} lifetime completions`,
+          to: '/health?fn=queue-worker',
+          secondaryTo: '/audit?source=queue',
+          secondaryLabel: 'Audit log',
+        }}
       />
+
+      <PageActionBar scope="queue" action={queueAction} />
 
       <PageHelp
         title="About the Processing Queue"

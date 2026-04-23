@@ -12,10 +12,11 @@
  *          would discover.
  */
 
-import { memo } from 'react'
+import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Tooltip } from '../ui'
 import { SEVERITY } from '../../lib/tokens'
+import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
@@ -91,17 +92,46 @@ function ReportRowViewInner({
   // share the final delay slot which still reads as "the table painted in".
   const staggerDelayMs = Math.min(index, 12) * 18
 
+  // Wave T.2.5 single-shot background wash when a realtime update flips
+  // the status — e.g. triager sees the row go `new → classified` in place.
+  // We key the flash on `status|severity` so either transition fires the
+  // animation; tone tracks whichever value changed most recently.
+  const flashStatusTone = useCallback((s: ReportRow['status']) => {
+    switch (s) {
+      case 'fixed':
+        return 'var(--color-ok)'
+      case 'fixing':
+      case 'classified':
+      case 'queued':
+      case 'grouped':
+        return 'var(--color-info)'
+      case 'dismissed':
+        return 'var(--color-fg-muted)'
+      default:
+        return 'var(--color-brand)'
+    }
+  }, [])
+  const statusFlash = useRowFlash({
+    rowKey: row.id,
+    value: row.status,
+    toneFor: flashStatusTone,
+  })
+
   return (
     <tr
       data-row-index={index}
       data-tour-id={index === 0 ? 'reports-row' : undefined}
-      style={staggerDelayMs > 0 ? { animationDelay: `${staggerDelayMs}ms` } : undefined}
+      style={{
+        ...(staggerDelayMs > 0 ? { animationDelay: `${staggerDelayMs}ms` } : undefined),
+        ...statusFlash.style,
+      }}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button, input, a')) return
         onOpen()
       }}
       onMouseEnter={onFocus}
-      className={`${baseRowCls} ${cursorCls} ${selectedCls}`}
+      onAnimationEnd={statusFlash.onAnimationEnd}
+      className={`${baseRowCls} ${cursorCls} ${selectedCls} ${statusFlash.className}`}
     >
       <td className="w-1 p-0 align-stretch">
         {/* Severity stripe — uses a ::before-style absolute fill so it spans
@@ -144,7 +174,10 @@ function ReportRowViewInner({
           {isVariant && (
             <span className="shrink-0 mt-0.5 text-2xs text-fg-faint" aria-hidden="true">↳</span>
           )}
-          <div className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1">
+          <div
+            className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1"
+            title={typeof summary === 'string' ? summary : undefined}
+          >
             {summary}
           </div>
           {blastRadius > 1 && (
@@ -189,7 +222,12 @@ function ReportRowViewInner({
       </td>
       <td className="px-2 py-2 align-top">
         {row.severity ? (
-          <Badge className={SEVERITY[row.severity] ?? ''}>{severityLabelShort(row.severity)}</Badge>
+          <Badge
+            className={SEVERITY[row.severity] ?? ''}
+            title={`Severity: ${row.severity ?? 'unset'}`}
+          >
+            {severityLabelShort(row.severity)}
+          </Badge>
         ) : (
           <span className="text-2xs text-fg-faint">—</span>
         )}

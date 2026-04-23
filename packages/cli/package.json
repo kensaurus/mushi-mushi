@@ -55,6 +55,8 @@
     "mushi-mushi",
     "bug-reporting",
     "user-feedback",
+    "user-report",
+    "feedback-widget",
     "session-replay",
     "screenshot",
     "shake-to-report",
@@ -75,7 +77,11 @@
     "expo",
     "capacitor",
     "sentry-companion",
-    "error-tracking"
+    "sentry-alternative",
+    "error-tracking",
+    "ai-triage",
+    "auto-fix",
+    "llm-ops"
   ],
   "exports": {
     ".": {

@@ -8,6 +8,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
+import { pctToneClass } from '../lib/tokens'
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
@@ -84,26 +85,116 @@ export function Card({ children, className = '', interactive, elevated, onClick,
 
 /* ── Section (labeled card for detail views) ────────────────────────────── */
 
+/**
+ * Freshness metadata accepted by `<Section>` and rendered through
+ * `<FreshnessPill>`. Pages typically forward `usePageData`'s
+ * `lastFetchedAt`, `isValidating`, and `useRealtimeReload`'s `channelState`.
+ *
+ * Wave T.1 (2026-04-23): Sections that show live data win a tiny "Updated
+ * 4 s ago" pill in the top-right that pulses while a background refetch is
+ * in flight and turns red when realtime drops — gives users a constant
+ * trust signal that the page isn't lying about its data.
+ */
+export interface SectionFreshness {
+  /** ISO timestamp of the last successful data fetch, or null until first
+   *  load resolves. */
+  at: string | null
+  /** True while a background refetch is in flight (post-first-load). */
+  isValidating?: boolean
+  /** Realtime channel state — `dropped` adds a red ring + screen-reader
+   *  warning so users know stale data is possible. */
+  channel?: 'idle' | 'live' | 'dropped'
+}
+
 interface SectionProps {
   title: string
   children: ReactNode
   className?: string
   action?: ReactNode
   icon?: ReactNode
+  /** Optional freshness pill rendered top-right. Pages opt in by passing
+   *  `lastFetchedAt`/`isValidating` from `usePageData` plus the realtime
+   *  channel state. */
+  freshness?: SectionFreshness
 }
 
-export function Section({ title, children, className = '', action, icon }: SectionProps) {
+export function Section({ title, children, className = '', action, icon, freshness }: SectionProps) {
   return (
     <Card className={`p-3 ${className}`}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider min-w-0">
           {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
-          <span>{title}</span>
+          <span className="truncate">{title}</span>
         </h3>
-        {action}
+        <div className="flex items-center gap-2 shrink-0">
+          {freshness && <FreshnessPill {...freshness} />}
+          {action}
+        </div>
       </div>
       {children}
     </Card>
+  )
+}
+
+/* ── FreshnessPill — "Updated 4 s ago" trust signal ─────────────────────── */
+
+interface FreshnessPillProps extends SectionFreshness {
+  className?: string
+}
+
+/**
+ * Top-right chip that gives every section an "I'm not lying" receipt:
+ *
+ *   - Renders `Updated <relative-time>` so users always know the age of
+ *     the data on screen. No timestamp = neutral "Loading…".
+ *   - `motion-safe:animate-pulse` on the dot while `isValidating` so a
+ *     background refetch is visible without flashing the panel.
+ *   - Red ring + assertive aria-live when the realtime channel has
+ *     dropped, so users know the live affordance has gone silent and
+ *     the data may already be stale.
+ *
+ * Cheap to render; safe to mount on every Section. Use directly via the
+ * `<Section freshness={...}>` prop, or render inline next to bespoke
+ * headers (e.g. KpiRow on Dashboard which is a grid, not a Section).
+ */
+export function FreshnessPill({ at, isValidating, channel, className = '' }: FreshnessPillProps) {
+  const dropped = channel === 'dropped'
+  const dotClass = dropped
+    ? 'bg-danger'
+    : isValidating
+    ? 'bg-info motion-safe:animate-pulse'
+    : channel === 'live'
+    ? 'bg-ok'
+    : 'bg-fg-faint'
+  const ringClass = dropped
+    ? 'ring-1 ring-danger/40 border-danger/40'
+    : isValidating
+    ? 'border-info/30'
+    : 'border-edge-subtle'
+  const label = dropped
+    ? 'Realtime channel dropped — data may be stale'
+    : isValidating
+    ? 'Refreshing data…'
+    : at
+    ? `Updated ${formatRelative(at)}`
+    : 'Awaiting first data'
+  return (
+    <span
+      role="status"
+      aria-live={dropped ? 'assertive' : 'polite'}
+      aria-label={label}
+      title={label}
+      className={`inline-flex items-center gap-1.5 rounded-full border bg-surface-overlay/40 px-1.5 py-0.5 text-3xs leading-tight text-fg-faint ${ringClass} ${className}`}
+    >
+      <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} />
+      {at ? (
+        <span className="tabular-nums">
+          <RelativeTime value={at} className="cursor-default" />
+        </span>
+      ) : (
+        <span>{isValidating ? 'Loading…' : '—'}</span>
+      )}
+    </span>
   )
 }
 
@@ -1694,6 +1785,90 @@ export function ResultChip({ tone, children, at, className = '' }: ResultChipPro
         </span>
       )}
     </span>
+  )
+}
+
+/* ── Pct — color-graded percentage number ───────────────────────────────
+ *
+ * Replaces the `{value.toFixed(1)}%` sprawl across Health / Judge / Billing
+ * with a single primitive that picks a semantic text colour from the value
+ * itself. Two flavours:
+ *
+ *   <Pct value={errorPct} direction="lower-better" />  // 0.9 % → green
+ *   <Pct value={successPct} direction="higher-better" /> // 99 % → green
+ *
+ * By convention `value` is already in 0–100 space so the component doesn't
+ * have to guess at fractions vs percentages. Pass `fraction` when your input
+ * is a 0–1 ratio so we save callers the `* 100` dance.
+ *
+ * Accepts an optional `hint` that becomes a native tooltip — critical for
+ * progressive disclosure where the number itself is terse but the full
+ * semantic ("Rolling 7 d error rate across all LLM calls") lives in the
+ * hover card.
+ */
+
+interface PctProps {
+  value: number | null | undefined
+  /** `higher-better` (default) for success/quality. `lower-better` for error rate. */
+  direction?: 'higher-better' | 'lower-better'
+  /** Digits after the decimal point. Default 1 for sub-percent precision. */
+  precision?: number
+  /** Pre-scale the input from 0–1 to 0–100 (e.g. Judge avg_score). */
+  fraction?: boolean
+  /** Native tooltip — tooltip content visible on hover/focus. */
+  hint?: string
+  className?: string
+}
+
+export function Pct({
+  value,
+  direction = 'higher-better',
+  precision = 1,
+  fraction = false,
+  hint,
+  className = '',
+}: PctProps) {
+  const pct = value == null || Number.isNaN(value) ? null : fraction ? value * 100 : value
+  const toneClass = pctToneClass(pct, direction)
+  const display = pct == null ? '—' : `${pct.toFixed(precision)}%`
+  return (
+    <span
+      className={`font-mono tabular-nums ${toneClass} ${className}`}
+      title={hint}
+      aria-label={hint ? `${display}, ${hint}` : undefined}
+    >
+      {display}
+    </span>
+  )
+}
+
+/* ── Abbr ─────────────────────────────────────────────────────────────── */
+
+interface AbbrProps {
+  /** Short form shown inline (e.g. "Crit", "BYOK", "p95"). */
+  children: ReactNode
+  /** Full form shown on hover/focus. Keep concise — this is a title, not a
+   *  doc page. Rendered by the browser so it also works on iOS long-press. */
+  title: string
+  className?: string
+}
+
+/**
+ * Progressive-disclosure helper: render a short abbreviation and let the
+ * browser's native `title` attribute reveal the full form on hover/long-
+ * press. Uses the semantic `<abbr>` element so screen readers announce
+ * the expansion, and adds a subtle dotted underline as the only reliable
+ * "hint that hover does something" across browsers. Keep titles under
+ * ~80 chars — longer strings get truncated on mobile.
+ */
+export function Abbr({ children, title, className = '' }: AbbrProps) {
+  return (
+    <abbr
+      title={title}
+      className={`underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help ${className}`}
+    >
+      {children}
+    </abbr>
   )
 }
 

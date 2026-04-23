@@ -8,8 +8,10 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
+import { useHotkeys } from '../../lib/useHotkeys'
 import { Section, Input, Btn, ErrorAlert, ResultChip, type ResultChipTone } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
@@ -104,6 +106,18 @@ export function ByokPanel() {
   // `testedAt` inside render via `new Date()` would reset the chip's
   // RelativeTime to "just now" on every parent re-render.
   const [testResults, setTestResults] = useState<Partial<Record<ByokKey['provider'], TestResultEntry>>>({})
+  // Confirm dialog swaps in for the native `confirm()` the rest of the
+  // admin retired. Tracking the target provider here is simpler than a
+  // single boolean because the dialog can target either provider and
+  // needs to remember which one on confirm.
+  const [clearTarget, setClearTarget] = useState<ByokKey['provider'] | null>(null)
+  const [clearing, setClearing] = useState(false)
+  // Restore focus to the Test button after its click so keyboard users
+  // can re-run the probe with Space/Enter without re-tabbing. `Btn`
+  // isn't a forwardRef component — we stamp each provider button with a
+  // stable `id` and focus through the DOM, which survives even across
+  // a remount if Phase 1's SWR hook somehow regresses.
+  const testButtonId = (provider: ByokKey['provider']) => `byok-test-${provider}`
 
   // Hydrate baseUrl from server data once. Avoid clobbering user typing on
   // re-renders by only syncing when the openai key changes.
@@ -140,13 +154,16 @@ export function ByokPanel() {
     }
   }
 
-  async function clearKey(provider: ByokKey['provider']) {
-    if (!confirm(`Remove the ${BYOK_PROVIDER_LABELS[provider].name} BYOK key? The pipeline will fall back to the platform default.`)) return
-    setPending(provider)
+  async function confirmClearKey() {
+    const provider = clearTarget
+    if (!provider) return
+    setClearing(true)
     setFeedback(null)
     const res = await apiFetch(`/v1/admin/byok/${provider}`, { method: 'DELETE' })
-    setPending(null)
+    setClearing(false)
+    setClearTarget(null)
     if (res.ok) {
+      setPending(null)
       setFeedback({ provider, ok: true, message: 'Key cleared.' })
       if (provider === 'openai') setBaseUrlDraft('')
       setTestResults((r) => ({ ...r, [provider]: undefined }))
@@ -158,6 +175,9 @@ export function ByokPanel() {
 
   async function testKey(provider: ByokKey['provider']) {
     setTesting(provider)
+    // Clear stale "Saved (…)" feedback so the running/result chip is the
+    // single visible status for this provider. Without this, after
+    // saving then testing, two chips briefly fight over the slot.
     setFeedback(null)
     const res = await apiFetch<TestResult>(`/v1/admin/byok/${provider}/test`, { method: 'POST' })
     setTesting(null)
@@ -170,7 +190,41 @@ export function ByokPanel() {
     } else {
       setFeedback({ provider, ok: false, message: res.error?.message ?? 'Test failed.' })
     }
+    // Return focus to the Test button so pressing Enter again re-runs
+    // without a tab detour. Wrap in requestAnimationFrame because
+    // setTesting(null) above doesn't re-enable the button synchronously;
+    // `Btn disabled={loading}` only clears on the next render, and a
+    // disabled button silently refuses `.focus()`. Belt-and-braces for
+    // keyboard flow since Phase 1's SWR upgrade means the button no
+    // longer unmounts.
+    if (typeof document !== 'undefined') {
+      requestAnimationFrame(() => {
+        const btn = document.getElementById(testButtonId(provider)) as HTMLButtonElement | null
+        btn?.focus()
+      })
+    }
   }
+
+  // Keyboard shortcut: `t` tests the first configured provider. Matches
+  // the command-palette convention ("Press a letter, do the thing on
+  // the current page"). Skips when no key is configured — there's
+  // nothing to test against. `allowInInputs: false` so the shortcut
+  // doesn't hijack the user while they're mid-paste into a key field.
+  const firstConfigured = keys?.find((k) => k.configured)?.provider ?? null
+  useHotkeys(
+    [
+      {
+        key: 't',
+        description: 'Test connection for the first configured provider',
+        handler: (e) => {
+          if (!firstConfigured || testing) return
+          e.preventDefault()
+          void testKey(firstConfigured)
+        },
+      },
+    ],
+    !loading && !!firstConfigured,
+  )
 
   if (loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
   if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
@@ -289,10 +343,21 @@ export function ByokPanel() {
               </Btn>
               {k.configured && (
                 <>
-                  <Btn size="sm" variant="ghost" onClick={() => testKey(k.provider)} loading={testing === k.provider}>
+                  <Btn
+                    id={testButtonId(k.provider)}
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => testKey(k.provider)}
+                    loading={testing === k.provider}
+                  >
                     Test connection
                   </Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => clearKey(k.provider)} disabled={pending === k.provider}>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setClearTarget(k.provider)}
+                    disabled={pending === k.provider}
+                  >
                     Clear
                   </Btn>
                 </>
@@ -336,6 +401,21 @@ export function ByokPanel() {
           </div>
         )
       })}
+
+      {clearTarget && (
+        <ConfirmDialog
+          title={`Remove ${BYOK_PROVIDER_LABELS[clearTarget].name} key?`}
+          body="The pipeline will fall back to the platform default (if your plan includes one). This cannot be undone — you'll need to paste the key again to restore BYOK."
+          confirmLabel="Remove key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={clearing}
+          onConfirm={() => void confirmClearKey()}
+          onCancel={() => {
+            if (!clearing) setClearTarget(null)
+          }}
+        />
+      )}
     </Section>
   )
 }

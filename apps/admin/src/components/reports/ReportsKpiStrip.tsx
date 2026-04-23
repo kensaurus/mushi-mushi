@@ -93,7 +93,7 @@ export function ReportsKpiStrip({ activeSeverity, onFilter, windowDays = 14 }: P
     return (
       <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-danger">Couldn\u2019t load severity stats</p>
+          <p className="text-xs font-medium text-danger">Couldn’t load severity stats</p>
           <p className="mt-0.5 truncate text-3xs text-fg-muted">{error}</p>
         </div>
         <button

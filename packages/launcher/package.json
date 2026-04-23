@@ -54,6 +54,8 @@
     "mushi-mushi",
     "bug-reporting",
     "user-feedback",
+    "user-report",
+    "feedback-widget",
     "session-replay",
     "screenshot",
     "shake-to-report",
@@ -74,9 +76,13 @@
     "capacitor",
     "ionic",
     "sentry-companion",
+    "sentry-alternative",
     "error-tracking",
     "ai-triage",
-    "llm"
+    "ai-agent",
+    "auto-fix",
+    "llm",
+    "llm-ops"
   ],
   "type": "module",
   "engines": {

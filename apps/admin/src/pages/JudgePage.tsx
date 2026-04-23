@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
+import { usePublishPageContext } from '../lib/pageContext'
 import {
   PageHeader,
   PageHelp,
@@ -16,6 +17,7 @@ import {
   Tooltip,
   ResultChip,
   type ResultChipTone,
+  FreshnessPill,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { ResponsiveTable } from '../components/ResponsiveTable'
@@ -33,8 +35,11 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
+import { ChartAnnotations } from '../components/charts/ChartAnnotations'
+import type { ChartEvent } from '../lib/apiSchemas'
 
 interface WeekData {
   week_start: string
@@ -199,8 +204,19 @@ function HeaderTip({ short, full }: { short: string; full?: string }) {
 
 function ScorePill({ value }: { value: number | null }) {
   if (value == null) return <span className="text-fg-faint text-2xs font-mono">—</span>
+  // Judge scores calibrate differently to operational rates. The PM
+  // baseline is "≥0.80 agrees with humans (green), ≥0.60 borderline
+  // (amber), <0.60 regression (red)". Delegating to <Pct>/pctToneClass
+  // (90/70 thresholds, tuned for success/uptime) recoloured every
+  // 0.80–0.89 row from green → amber and every 0.60–0.69 row from
+  // amber → red across the leaderboard + weekly trend + per-eval tables,
+  // silently shifting the visual definition of "good". Keep the
+  // judge-specific ramp local to the domain rather than polluting the
+  // shared higher-better tone ramp with a "sometimes-80-is-fine" knob.
   const tone = value >= 0.8 ? 'text-ok' : value >= 0.6 ? 'text-warn' : 'text-danger'
-  return <span className={`font-mono tabular-nums ${tone}`}>{(value * 100).toFixed(0)}%</span>
+  return (
+    <span className={`font-mono tabular-nums ${tone}`}>{(value * 100).toFixed(0)}%</span>
+  )
 }
 
 export function JudgePage() {
@@ -224,6 +240,14 @@ export function JudgePage() {
   const [promptFilter, setPromptFilter] = useState<{ version: string; stage: string } | null>(null)
 
   const weeksQuery = usePageData<{ weeks: WeekData[] }>('/v1/admin/judge-scores')
+  // Wave T.5.8b: fetch chart events (deploys, cron anomalies, BYOK
+  // rotations) to overlay on the weekly score trend. Failures are silent
+  // — annotations are a garnish, not a load-blocking dependency. We scope
+  // to ~12 weeks so the pill overlay stays readable on 12 weeks of data.
+  const chartEventsQuery = usePageData<{ events: ChartEvent[] }>(
+    '/v1/admin/chart-events?kinds=deploy,cron,byok',
+  )
+  const chartEvents = chartEventsQuery.data?.events ?? []
   const evalsQuery = usePageData<{ evaluations: EvalRow[] }>(
     `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}${promptFilter ? `&prompt_version=${encodeURIComponent(promptFilter.version)}` : ''}`,
   )
@@ -273,6 +297,21 @@ export function JudgePage() {
     }
   }
 
+  // Publish page context so the browser tab reflects the latest judge
+  // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
+  // AI sidebar / palette pick up the same summary. Called before the
+  // loading / error early-returns so hook order stays stable.
+  const latestWeek = weeksQuery.data?.weeks?.[0]
+  usePublishPageContext({
+    route: '/judge',
+    title: projectName ? `Judge · ${projectName}` : 'Judge',
+    summary: loading
+      ? 'Loading judge scores…'
+      : latestWeek
+        ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% this week · ${latestWeek.eval_count} evals`
+        : 'No evaluations yet',
+  })
+
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />
   if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'judge data'}: ${error}`} onRetry={merged.retry} />
 
@@ -285,6 +324,36 @@ export function JudgePage() {
 
   const totalEvals = weeks.reduce((s, w) => s + w.eval_count, 0)
   const trendValues = [...weeks].reverse().map((w) => w.avg_score)
+  // Wave T.4.7b: Each weekly bucket exposes a `week` ISO. We pass them
+  // aligned with `trendValues` so brushing the sparkline emits concrete
+  // fromIso/toIso bounds the filter logic can consume.
+  const trendTimestamps = [...weeks].reverse().map((w) => (w as { week?: string }).week ?? '')
+
+  // Shared inputs for the hero + action bar — kept as plain consts so the
+  // NBA hook is only called once per render (react-hooks/exhaustive-deps
+  // stays happy and downstream widgets read a single source of truth).
+  const disagreementRate = evals.length > 0
+    ? evals.filter((e) => e.classification_agreed === false).length / evals.length
+    : null
+  const staleHoursAgo = evals[0]?.created_at
+    ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
+    : null
+  const heroAction = useNextBestAction({
+    scope: 'judge',
+    disagreementRate,
+    sampledCount: evals.length,
+    staleHoursAgo,
+  })
+  const overallScore = latest?.avg_score
+  const heroSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    overallScore == null
+      ? 'neutral'
+      : overallScore >= 4.2
+        ? 'ok'
+        : overallScore >= 3.5
+          ? 'warn'
+          : 'crit'
+  const lastEval = evals[0]
 
   return (
     <div className="space-y-4">
@@ -293,6 +362,10 @@ export function JudgePage() {
         projectScope={projectName}
         description={copy?.description ?? 'Independent grading of every classified report — calibrate confidence and catch silent regressions.'}
       >
+        <FreshnessPill
+          at={evalsQuery.lastFetchedAt ?? weeksQuery.lastFetchedAt}
+          isValidating={evalsQuery.isValidating || weeksQuery.isValidating || promptsQuery.isValidating || distQuery.isValidating}
+        />
         <Btn
           size="sm"
           variant="primary"
@@ -310,19 +383,44 @@ export function JudgePage() {
         )}
       </PageHeader>
 
-      <PageActionBar
+      {/*
+        Decide / Act / Verify hero — replaces the chart-first layout so
+        operators see state + next step + proof-of-life before any
+        visualisations. Charts still live below so drill-down remains
+        one scroll away.
+      */}
+      <PageHero
         scope="judge"
-        action={useNextBestAction({
-          scope: 'judge',
-          disagreementRate: evals.length > 0
-            ? evals.filter((e) => e.classification_agreed === false).length / evals.length
-            : null,
-          sampledCount: evals.length,
-          staleHoursAgo: evals[0]?.created_at
-            ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
-            : null,
-        })}
+        title={copy?.title ?? 'Judge'}
+        kicker="Independent grading"
+        decide={{
+          label: overallScore == null ? 'No evaluations yet' : `Overall score ${overallScore.toFixed(2)}/5`,
+          metric: overallScore == null ? '—' : overallScore.toFixed(2),
+          summary: overallScore == null
+            ? 'Run a judge batch to populate scores. Fresh runs every Mon/Thu are recommended.'
+            : drift >= 0.05
+              ? `Down ${(drift * 100).toFixed(1)}% week-over-week — investigate before shipping prompt changes.`
+              : `Stable across ${totalEvals} evaluations over ${weeks.length} weeks.`,
+          severity: heroSeverity,
+        }}
+        act={heroAction}
+        verify={{
+          label: lastEval ? `Last eval · ${lastEval.judge_model ?? 'model'}` : 'Awaiting first eval',
+          detail: lastEval
+            ? `${lastEval.id.slice(0, 8)} · ${new Date(lastEval.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
+            : '—',
+          to: lastEval ? `/reports/${lastEval.report_id}` : '/reports',
+          secondaryTo: '/prompt-lab',
+          secondaryLabel: 'Open Prompt Lab',
+        }}
       />
+
+      {/*
+        Retain the compact PageActionBar below the hero — it's lighter
+        weight and remains the single source of truth for page-level
+        actions in beginner mode (hero collapses to a pill there).
+      */}
+      <PageActionBar scope="judge" action={heroAction} />
 
       <PageHelp
         title={copy?.help?.title ?? 'About the Judge'}
@@ -410,7 +508,39 @@ export function JudgePage() {
             />
           ) : (
             <>
-              <LineSparkline values={trendValues} accent="text-brand" height={42} ariaLabel="Weekly judge score trend" />
+              <div className="relative">
+                <LineSparkline
+                  values={trendValues}
+                  timestamps={trendTimestamps.every(Boolean) ? trendTimestamps : undefined}
+                  onRangeSelect={
+                    trendTimestamps.every(Boolean)
+                      ? ({ fromIso, toIso }) => {
+                          // Deep-link to the evaluations table scoped to the
+                          // brushed window. Downstream consumers read `from`
+                          // and `to` off the search params (Wave T.4.7b
+                          // contract). We use `navigate` instead of setSearchParams
+                          // so the URL change is a proper history entry users
+                          // can navigate away from with the back button.
+                          const next = new URLSearchParams(window.location.search)
+                          next.set('from', fromIso)
+                          next.set('to', toIso)
+                          window.history.pushState(null, '', `${window.location.pathname}?${next.toString()}`)
+                        }
+                      : undefined
+                  }
+                  accent="text-brand"
+                  height={42}
+                  ariaLabel="Weekly judge score trend"
+                />
+                {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
+                  <ChartAnnotations
+                    events={chartEvents}
+                    fromIso={trendTimestamps[0]}
+                    toIso={trendTimestamps[trendTimestamps.length - 1]}
+                    ariaLabel="Judge score annotations"
+                  />
+                )}
+              </div>
               {latest && (
                 <>
                   <div className="mt-3 space-y-1">

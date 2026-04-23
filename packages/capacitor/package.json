@@ -63,6 +63,8 @@
     "ionic",
     "bug-reporting",
     "user-feedback",
+    "user-report",
+    "feedback-widget",
     "shake-to-report",
     "screenshot",
     "session-replay",
@@ -70,7 +72,12 @@
     "ios",
     "android",
     "sentry-companion",
+    "sentry-alternative",
     "error-tracking",
+    "ai-triage",
+    "auto-fix",
+    "llm-ops",
+    "ai-agent",
     "sdk"
   ],
   "peerDependencies": {

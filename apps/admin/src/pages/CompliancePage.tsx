@@ -10,6 +10,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageActionBar } from '../components/PageActionBar'
 import { useNextBestAction } from '../lib/useNextBestAction'
+import { PageHero } from '../components/PageHero'
 
 interface RetentionPolicy {
   project_id: string
@@ -204,6 +205,28 @@ export function CompliancePage() {
     dsarsQuery.reload()
   }
 
+  // IA-4 (Wave S, 2026-04-23): compute hero inputs up front so we can
+  // feed both the PageHero "Decide / Act / Verify" tiles and the compact
+  // PageActionBar from the same derived state. Keeping the derivations
+  // here (rather than in the JSX) avoids useNextBestAction being invoked
+  // conditionally and keeps Rules of Hooks happy when the hero renders.
+  const openControlCount = dsars.filter(
+    (d) => d.status !== 'completed' && d.status !== 'rejected',
+  ).length
+  const failEvidenceCount = latestEvidenceByControl.filter((e) => e.status === 'fail').length
+  const warnEvidenceCount = latestEvidenceByControl.filter((e) => e.status === 'warn').length
+  const latestEvidenceTs = latestEvidenceByControl.reduce<string | null>(
+    (acc, e) => (!acc || e.generated_at > acc ? e.generated_at : acc),
+    null,
+  )
+  const complianceAction = useNextBestAction({
+    scope: 'compliance',
+    openControls: openControlCount,
+    nextReviewInDays: null,
+  })
+  const complianceSeverity: 'ok' | 'warn' | 'crit' =
+    failEvidenceCount > 0 ? 'crit' : warnEvidenceCount > 0 || openControlCount > 0 ? 'warn' : 'ok'
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -220,14 +243,48 @@ export function CompliancePage() {
         <TableDensityToggle />
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="compliance"
-        action={useNextBestAction({
-          scope: 'compliance',
-          openControls: dsars.filter((d) => d.status !== 'completed' && d.status !== 'rejected').length,
-          nextReviewInDays: null,
-        })}
+        title="Compliance"
+        kicker="SOC 2 · GDPR · residency"
+        decide={{
+          label:
+            failEvidenceCount > 0
+              ? `${failEvidenceCount} control${failEvidenceCount === 1 ? '' : 's'} failing evidence`
+              : warnEvidenceCount > 0
+                ? `${warnEvidenceCount} WARN${warnEvidenceCount === 1 ? '' : 's'} to triage`
+                : openControlCount > 0
+                  ? `${openControlCount} open DSAR${openControlCount === 1 ? '' : 's'}`
+                  : 'Compliant',
+          metric:
+            failEvidenceCount > 0
+              ? `${failEvidenceCount} fail`
+              : warnEvidenceCount > 0
+                ? `${warnEvidenceCount} warn`
+                : openControlCount > 0
+                  ? `${openControlCount} open`
+                  : `${latestEvidenceByControl.length} green`,
+          summary:
+            failEvidenceCount > 0
+              ? 'One or more controls missed their evidence check — remediate before the next audit.'
+              : warnEvidenceCount > 0
+                ? 'Evidence rows flagged with warnings — investigate before they escalate.'
+                : openControlCount > 0
+                  ? 'DSARs must resolve within 30 days under GDPR / CCPA.'
+                  : 'Controls, DSARs, and retention windows are all green.',
+          severity: complianceSeverity,
+        }}
+        act={complianceAction}
+        verify={{
+          label: 'Latest evidence snapshot',
+          detail: latestEvidenceTs ? new Date(latestEvidenceTs).toLocaleString() : 'no snapshot yet',
+          to: '/audit?scope=compliance',
+          secondaryTo: '/compliance?status=fail',
+          secondaryLabel: failEvidenceCount > 0 ? 'Open failing controls' : undefined,
+        }}
       />
+
+      <PageActionBar scope="compliance" action={complianceAction} />
 
       <PageHelp
         title="About Compliance"

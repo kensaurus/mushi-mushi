@@ -68,6 +68,28 @@ jobs:
 
       - run: pnpm test
 
+      # Parity with .github/workflows/ci.yml — the gates that run on PRs
+      # must also run on push-to-master so a release can never ship a
+      # publish-readiness regression that slipped past a force-pushed PR
+      # or an admin-merge bypass.
+      - name: Verify public changelog is in sync
+        run: pnpm changelog:check
+
+      - name: Check publish readiness
+        run: node scripts/check-publish-readiness.mjs
+
+      - name: Check license headers
+        run: node scripts/check-license-headers.mjs
+
+      - name: Check dead buttons
+        run: node scripts/check-dead-buttons.mjs
+
+      - name: Check JSX unicode escapes
+        run: node scripts/check-jsx-unicode-escapes.mjs
+
+      - name: Check bundle sizes
+        run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit
+
   release:
     name: Version & Publish
     needs: ci

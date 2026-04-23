@@ -7,6 +7,17 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { SYNTHETIC_MODEL } from '../_shared/models.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
+
+// Wave T (2026-04-23): fallback template used when `prompt_versions` has no
+// `synthetic` row for this project (migration 20260422110000 seeded a global
+// `v2-experiment` variant; `v1-baseline` is seeded by
+// 20260418002000_phase1_backfill_seed.sql). Keeping this literal lets the
+// function boot even if the prompt registry is unreachable — callers still
+// get a synthetic report, just without the A/B variant telemetry.
+const SYNTHETIC_FALLBACK_PROMPT =
+  'Generate a realistic bug report for a web application. Vary the complexity ' +
+  '\u2014 some obvious, some ambiguous. Include realistic console errors and URLs.'
 
 const synthLog = log.child('synthetic')
 
@@ -42,6 +53,15 @@ Deno.serve(withSentry('generate-synthetic', async (req) => {
   const trace = createTrace('generate-synthetic', { projectId, count })
   const generated: unknown[] = []
 
+  // Wave T (2026-04-23) — pull the generator's system prompt from
+  // `prompt_versions` with the `synthetic` stage so `prompt-auto-tune` /
+  // Prompt Lab iterations flow into synthetic generation too. Falls back
+  // to the literal string above if the registry is empty so we never
+  // fail-open with an unspecified model behaviour.
+  const promptSelection = await getPromptForStage(db, projectId, 'synthetic')
+  const syntheticSystemPrompt = promptSelection.promptTemplate ?? SYNTHETIC_FALLBACK_PROMPT
+  const promptVersion = promptSelection.promptVersion ?? 'fallback-literal'
+
   const BATCH_SIZE = 5
   for (let batch = 0; batch < count; batch += BATCH_SIZE) {
     const batchItems = Array.from(
@@ -54,10 +74,10 @@ Deno.serve(withSentry('generate-synthetic', async (req) => {
         const { object, usage } = await generateObject({
           model: anthropic(SYNTHETIC_MODEL),
           schema: syntheticSchema,
-          system: 'Generate a realistic bug report for a web application. Vary the complexity — some obvious, some ambiguous. Include realistic console errors and URLs.',
+          system: syntheticSystemPrompt,
           prompt: `Generate bug report #${i + 1} of ${count}. Make each unique in category and complexity.`,
         })
-        span.end({ model: SYNTHETIC_MODEL, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+        span.end({ model: SYNTHETIC_MODEL, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens, promptVersion })
         await db.from('synthetic_reports').insert({
           project_id: projectId,
           generated_report: { description: object.description, category: object.category, severity: object.severity, component: object.component, console_errors: object.console_errors, url: object.url },

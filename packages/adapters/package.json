@@ -83,6 +83,12 @@
     "new-relic",
     "grafana-loki",
     "observability",
+    "sentry-companion",
+    "error-tracking",
+    "bug-reporting",
+    "llm-ops",
+    "ai-triage",
+    "auto-fix",
     "glue"
   ],
   "engines": {
