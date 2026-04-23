@@ -6,9 +6,11 @@
 # OVERVIEW:
 # - Triggered on push to master with changes to functions or this workflow.
 # - Also runs on `workflow_dispatch` so an operator can re-deploy on demand.
-# - Uses the Supabase CLI via setup-cli action (no Node-installed binary,
-#   which means it works on machines that block npm-installed .exe files
-#   under Windows Device Guard / Defender).
+# - Uses scripts/deploy-edge-function.mjs which posts directly to the
+#   Supabase Management API multipart deploy endpoint. We deliberately do
+#   NOT pull the supabase CLI here because (a) it pins to a third-party
+#   action that occasionally retags, and (b) the Management API path is
+#   the same code path our local deploys use, so CI mirrors local exactly.
 # - Non-interactive: authenticates with SUPABASE_ACCESS_TOKEN, targets the
 #   project ref from SUPABASE_PROJECT_REF.
 #
@@ -63,13 +65,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Setup Supabase CLI
-        uses: supabase/setup-cli@e58b531dfa2b7ab9bd3dc77c184bca6c2b6cc54a  # v1.3.0
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          version: latest
-
-      - name: Verify Supabase CLI
-        run: supabase --version
+          node-version: '22'
 
       - name: Discover functions
         id: discover
@@ -87,7 +86,6 @@ jobs:
           fi
 
       - name: Deploy each function
-        working-directory: packages/server/supabase
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
@@ -102,7 +100,10 @@ jobs:
           for fn in $FUNCTIONS; do
             echo ""
             echo "::group::Deploy $fn"
-            if supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"; then
+            # verify_jwt is read from supabase/config.toml when deploying via
+            # the Management API. Our script defaults to false; the api function
+            # is the only public endpoint and is configured the same way.
+            if node scripts/deploy-edge-function.mjs "$fn" --no-verify-jwt; then
               echo "::notice::deployed: $fn"
             else
               echo "::error::failed to deploy: $fn"
