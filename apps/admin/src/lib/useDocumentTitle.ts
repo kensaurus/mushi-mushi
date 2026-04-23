@@ -18,7 +18,7 @@
  *
  *          Why centralise instead of using React 19's <title> hoisting?
  *          Every admin page already publishes a rich `PageContext` for
- *          the AI sidebar + command palette that includes a live
+ *          Ask Mushi + command palette that includes a live
  *          `summary`. Reading from that single source of truth means
  *          the tab title stays consistent with the in-app chrome with
  *          zero extra wiring per page.

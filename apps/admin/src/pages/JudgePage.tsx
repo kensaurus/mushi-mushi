@@ -299,7 +299,7 @@ export function JudgePage() {
 
   // Publish page context so the browser tab reflects the latest judge
   // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
-  // AI sidebar / palette pick up the same summary. Called before the
+  // Ask Mushi / palette pick up the same summary. Called before the
   // loading / error early-returns so hook order stays stable.
   const latestWeek = weeksQuery.data?.weeks?.[0]
   usePublishPageContext({
@@ -310,6 +310,16 @@ export function JudgePage() {
       : latestWeek
         ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% this week · ${latestWeek.eval_count} evals`
         : 'No evaluations yet',
+    questions: latestWeek
+      ? [
+          'Why did the judge score change week-over-week?',
+          'Which evaluation criteria are dragging the score down?',
+          'Show me the worst-scoring evaluations from this week.',
+        ]
+      : [
+          'How do I run the first judge evaluation?',
+          'What does the judge actually measure?',
+        ],
   })
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />

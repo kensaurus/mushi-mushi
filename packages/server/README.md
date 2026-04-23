@@ -110,6 +110,13 @@ All routes are served from the `api` function under `/v1/`:
 - `GET | POST | DELETE /v1/admin/integrations[/:type]` — Integration credentials CRUD. `GET` masks secrets; `POST` merges with existing masked values so partial updates don't drop tokens
 - `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD
+- `POST /v1/admin/ask-mushi/messages` — Ask Mushi single-shot (non-streaming) turn. Accepts `{ threadId?, route, intent?, context?, messages[] }`, returns the assistant reply with LLM telemetry (`model`, `latencyMs`, `inputTokens`, `outputTokens`, `costUsd`). Rate-limited to 300 rq/hr per user via `scoped_rate_limit_claim`
+- `POST /v1/admin/ask-mushi/messages/stream` — Ask Mushi SSE streaming variant. Same payload as above, returns `event: start/delta/meta/done/error` over `text/event-stream`. Same 300 rq/hr rate limit
+- `GET /v1/admin/ask-mushi/threads` — List conversation threads for the authenticated user. Supports `?route=` filter and `?limit=`/`?offset=` pagination
+- `GET /v1/admin/ask-mushi/threads/:id` — Retrieve all messages in a thread
+- `DELETE /v1/admin/ask-mushi/threads/:id` — Delete a thread and all its messages (PII purge). Owner-scoped via RLS
+- `GET /v1/admin/ask-mushi/mentions?q=...` — Search reports, fixes, and branches for the `@` mention typeahead in the Ask Mushi composer
+- `POST /v1/admin/assist` — Back-compat shim that internally transforms the legacy payload and forwards to the `/ask-mushi/messages` handler. Will be removed after one release cycle
 - `GET /.well-known/agent-card` — A2A agent card
 - `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
 - `POST /v1/admin/auth/token`— OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
