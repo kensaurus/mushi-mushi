@@ -144,7 +144,10 @@ function ReportRowViewInner({
           {isVariant && (
             <span className="shrink-0 mt-0.5 text-2xs text-fg-faint" aria-hidden="true">↳</span>
           )}
-          <div className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1">
+          <div
+            className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1"
+            title={typeof summary === 'string' ? summary : undefined}
+          >
             {summary}
           </div>
           {blastRadius > 1 && (
@@ -189,7 +192,12 @@ function ReportRowViewInner({
       </td>
       <td className="px-2 py-2 align-top">
         {row.severity ? (
-          <Badge className={SEVERITY[row.severity] ?? ''}>{severityLabelShort(row.severity)}</Badge>
+          <Badge
+            className={SEVERITY[row.severity] ?? ''}
+            title={`Severity: ${row.severity ?? 'unset'}`}
+          >
+            {severityLabelShort(row.severity)}
+          </Badge>
         ) : (
           <span className="text-2xs text-fg-faint">—</span>
         )}

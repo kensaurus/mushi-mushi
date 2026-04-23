@@ -30,6 +30,7 @@ import {
   RelativeTime,
   Pct,
 } from '../components/ui'
+import { statusGlowClass } from '../lib/tokens'
 import { HealthSkeleton } from '../components/skeletons/HealthSkeleton'
 import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -520,7 +521,7 @@ export function HealthPage() {
             const j = cron?.byJob[job]
             const isManual = job !== 'data-retention'
             return (
-              <Card key={job} className="p-2.5">
+              <Card key={job} className={`p-2.5 ${statusGlowClass(j?.lastStatus)}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

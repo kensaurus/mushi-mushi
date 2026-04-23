@@ -1752,6 +1752,36 @@ export function Pct({
   )
 }
 
+/* ── Abbr ─────────────────────────────────────────────────────────────── */
+
+interface AbbrProps {
+  /** Short form shown inline (e.g. "Crit", "BYOK", "p95"). */
+  children: ReactNode
+  /** Full form shown on hover/focus. Keep concise — this is a title, not a
+   *  doc page. Rendered by the browser so it also works on iOS long-press. */
+  title: string
+  className?: string
+}
+
+/**
+ * Progressive-disclosure helper: render a short abbreviation and let the
+ * browser's native `title` attribute reveal the full form on hover/long-
+ * press. Uses the semantic `<abbr>` element so screen readers announce
+ * the expansion, and adds a subtle dotted underline as the only reliable
+ * "hint that hover does something" across browsers. Keep titles under
+ * ~80 chars — longer strings get truncated on mobile.
+ */
+export function Abbr({ children, title, className = '' }: AbbrProps) {
+  return (
+    <abbr
+      title={title}
+      className={`no-underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help ${className}`}
+    >
+      {children}
+    </abbr>
+  )
+}
+
 /* ── Tooltip ───────────────────────────────────────────────────────────── */
 
 interface TooltipProps {

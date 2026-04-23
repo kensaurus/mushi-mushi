@@ -7,9 +7,11 @@ export const SEVERITY: Record<string, string> = {
 
 export const STATUS: Record<string, string> = {
   new:        'bg-warn-muted text-warn border border-warn/20',
+  queued:     'bg-warn-muted/70 text-warn border border-warn/15',
   classified: 'bg-ok-muted text-ok border border-ok/20',
   fixing:     'bg-accent-muted text-accent border border-accent/20',
   fixed:      'bg-info-muted text-info border border-info/20',
+  resolved:   'bg-ok-muted text-ok border border-ok/20',
   dismissed:  'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
 
@@ -130,6 +132,7 @@ export function statusGlowClass(status: string | null | undefined): string {
     case 'promoted':
     case 'validated':
     case 'resolved':
+    case 'success':
       return 'ring-1 ring-ok/25'
     case 'new':
     case 'pending':

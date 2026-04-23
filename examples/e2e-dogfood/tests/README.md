@@ -58,6 +58,8 @@ rotate it.
 | `MUSHI_PROJECT_ID`          | `542b34e0-019e-41fe-b900-7b637717bb86`       | Project to ingest against                                          |
 | `MUSHI_API_KEY`             | `mushi_glotit520f2a00ed694bcbb176b254c9f258c6` | API key for `POST /v1/reports`                                     |
 | `MUSHI_ADMIN_JWT`           | —                                            | JWT for `/v1/admin/*` calls (Do / Check / Health need this)        |
+| `MUSHI_ADMIN_EMAIL`         | falls back to `TEST_USER_EMAIL`              | Login identity for the admin-polish suite (`byok-no-flash`, `dynamic-title`, `favicon-badge`) |
+| `MUSHI_ADMIN_PASSWORD`      | falls back to `TEST_USER_PASSWORD`           | Paired password; both vars are consumed by `admin-polish.helpers.ts` |
 | `E2E_LIVE_GITHUB`           | unset (mock mode)                            | Set `1` to hit real GitHub in the Act stage                        |
 
 ## Run it

@@ -49,9 +49,17 @@ const MUSHI_API_KEY =
 // without racing against other dogfood tests running concurrently.
 const MARKER = `e2e-full-pdca ${Date.now()}`
 
-const db = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-  auth: { persistSession: false },
-})
+// Lazy-construct the admin client. `createClient` throws at module-load
+// time when the key is empty, which would fail the whole file before any
+// `test.skip()` can run. Guarding here lets the suite gracefully report
+// "skipped: SUPABASE_SERVICE_ROLE_KEY not set" instead of crashing when
+// a developer runs the suite against prod without that secret (common:
+// the service key is not in .env.local and should not be).
+const db = SUPABASE_SERVICE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false },
+    })
+  : (null as unknown as ReturnType<typeof createClient>)
 
 let createdReportId: string | null = null
 

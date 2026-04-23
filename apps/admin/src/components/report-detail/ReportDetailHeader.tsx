@@ -1,13 +1,22 @@
 import { Link } from 'react-router-dom'
 import { Badge, Breadcrumbs, CodeValue, RelativeTime } from '../ui'
-import { STATUS, SEVERITY, CATEGORY_BADGE, CATEGORY_LABELS, statusLabel, severityLabel } from '../../lib/tokens'
+import {
+  STATUS,
+  SEVERITY,
+  CATEGORY_BADGE,
+  CATEGORY_LABELS,
+  statusLabel,
+  severityLabel,
+  severityGlowClass,
+} from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import type { ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
   const title = (report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
+  const glow = severityGlowClass(report.severity)
   return (
-    <div className="mb-3">
+    <div className={`mb-3 rounded-sm ${glow} ${glow ? 'p-2.5 motion-safe:transition-all' : ''}`}>
       <Breadcrumbs
         items={[
           { label: 'Reports', to: '/reports' },
