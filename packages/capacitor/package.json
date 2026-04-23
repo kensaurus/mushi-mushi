@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/capacitor",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Capacitor plugin for Mushi Mushi — shake-to-report, screenshot capture, offline queue, and bottom-sheet widget for iOS/Android Capacitor apps.",
   "license": "MIT",
   "author": "Kenji Sakuramoto",

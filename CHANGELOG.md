@@ -31,11 +31,17 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## v0.6.x
 
-Latest tag: `v0.6.0`
+Latest tag: `v0.6.1`
+
+### Highlights
+
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 
 ### Packages bumped
 
-- `mushi-mushi` → 0.6.0
+- `mushi-mushi` → 0.6.1
 
 ## v0.5.x
 
@@ -43,60 +49,63 @@ Latest tag: `v0.5.2`
 
 ### Highlights
 
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 - **Community files in-tarball.** — Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift.
 - **`publishConfig.provenance: true` everywhere.** — The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match.
 - **`.github/FUNDING.yml`** — points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI.
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 - **Community files in-tarball.** — Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift.
 - **`publishConfig.provenance: true` everywhere.** — The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match.
 - **`.github/FUNDING.yml`** — points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI.
-- **Hero image up top.** — `docs/screenshots/report-detail-dark.png` is now embedded (via absolute `raw.githubusercontent.com` URL so npmjs.com renders it), linking to the live admin demo.
-- **15-word tagline.** — "Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports." Frameworks listed directly under.
-- **"What you get"** — — 6 benefit bullets with emoji, each tied to a capability, not a wizard step.
-- **"Who it's for"** — — 4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds.
-- **"Mushi vs your existing stack"** — — 9-row comparison table showing what Sentry/Datadog miss. Makes the companion-not-replacement positioning concrete.
-- **"Integrates with"** — — 10-cell grid covering GitHub, Sentry, Slack, Jira, Linear, PagerDuty, Langfuse, Cursor, Claude Code, Zapier. Plus a line for Datadog/New Relic/Honeycomb/Grafana via `@mushi-mushi/adapters`.
 
 ### Packages bumped
 
-- `@mushi-mushi/cli` → 0.5.1
-- `create-mushi-mushi` → 0.5.1
+- `@mushi-mushi/cli` → 0.5.2
+- `create-mushi-mushi` → 0.5.2
 - `mushi-mushi` → 0.5.2
 
 ## v0.4.x
 
-Latest tag: `v0.4.0`
+Latest tag: `v0.4.1`
 
 ### Highlights
 
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 - **`@mushi-mushi/cli` `0.3.0`** — New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages.
 - **`mushi-mushi` `0.3.0` (NEW, unscoped)** — One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first.
 - **`create-mushi-mushi` `0.3.0` (NEW)** — `npm create mushi-mushi` — same wizard via the standard npm-create convention.
 - **All 16 published packages** — keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking.
 - **All SDK READMEs** — discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa.
 - **Root README** — quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher.
-- **`@mushi-mushi/cli` `0.3.0`** — New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages.
-- **`mushi-mushi` `0.3.0` (NEW, unscoped)** — One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first.
-- **`create-mushi-mushi` `0.3.0` (NEW)** — `npm create mushi-mushi` — same wizard via the standard npm-create convention.
-- **All 16 published packages** — keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking.
-- **All SDK READMEs** — discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa.
-- **Root README** — quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher.
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 
 ### Packages bumped
 
-- `@mushi-mushi/capacitor` → 0.4.0
+- `@mushi-mushi/capacitor` → 0.4.1
 - `@mushi-mushi/cli` → 0.4.0
-- `@mushi-mushi/core` → 0.4.0
-- `@mushi-mushi/react` → 0.4.0
-- `@mushi-mushi/web` → 0.4.0
+- `@mushi-mushi/core` → 0.4.1
+- `@mushi-mushi/react` → 0.4.1
+- `@mushi-mushi/web` → 0.4.1
 - `create-mushi-mushi` → 0.4.0
 - `mushi-mushi` → 0.4.0
 
 ## v0.3.x
 
-Latest tag: `v0.3.3`
+Latest tag: `v0.3.4`
 
 ### Highlights
 
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 - **Community files in-tarball.** — Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift.
 - **`publishConfig.provenance: true` everywhere.** — The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match.
 - **`.github/FUNDING.yml`** — points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI.
@@ -106,22 +115,19 @@ Latest tag: `v0.3.3`
 - **All 16 published packages** — keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking.
 - **All SDK READMEs** — discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa.
 - **Root README** — quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher.
-- **Native iOS SDK** — (`MushiMushi`, SwiftPM + CocoaPods): shake-to-report
-- **Native Android SDK** — (`dev.mushimushi:sdk`, Maven Central + AAR):
-- **Flutter SDK** — (`mushi_mushi` on pub.dev): pure-Dart with platform
 
 ### Packages bumped
 
-- `@mushi-mushi/angular` → 0.3.0
+- `@mushi-mushi/angular` → 0.3.1
 - `@mushi-mushi/capacitor` → 0.3.3
 - `@mushi-mushi/core` → 0.3.1
-- `@mushi-mushi/mcp` → 0.3.3
-- `@mushi-mushi/node` → 0.3.0
+- `@mushi-mushi/mcp` → 0.3.4
+- `@mushi-mushi/node` → 0.3.1
 - `@mushi-mushi/plugin-sdk` → 0.3.1
 - `@mushi-mushi/react` → 0.3.1
-- `@mushi-mushi/react-native` → 0.3.0
-- `@mushi-mushi/svelte` → 0.3.0
-- `@mushi-mushi/vue` → 0.3.0
+- `@mushi-mushi/react-native` → 0.3.1
+- `@mushi-mushi/svelte` → 0.3.1
+- `@mushi-mushi/vue` → 0.3.1
 - `@mushi-mushi/web` → 0.3.1
 
 ## v0.2.x
@@ -130,6 +136,9 @@ Latest tag: `v0.2.3`
 
 ### Highlights
 
+- **npm keyword arrays expanded across all 14 publishable packages.** — Added
+- **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
+- **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
 - **Community files in-tarball.** — Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift.
 - **`publishConfig.provenance: true` everywhere.** — The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match.
 - **`.github/FUNDING.yml`** — points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI.
@@ -139,13 +148,10 @@ Latest tag: `v0.2.3`
 - **`@mushi-mushi/cli` `0.3.0`** — New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages.
 - **`mushi-mushi` `0.3.0` (NEW, unscoped)** — One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first.
 - **`create-mushi-mushi` `0.3.0` (NEW)** — `npm create mushi-mushi` — same wizard via the standard npm-create convention.
-- **All 16 published packages** — keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking.
-- **All SDK READMEs** — discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa.
-- **Root README** — quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher.
 
 ### Packages bumped
 
-- `@mushi-mushi/adapters` → 0.2.2
+- `@mushi-mushi/adapters` → 0.2.3
 - `@mushi-mushi/angular` → 0.2.3
 - `@mushi-mushi/cli` → 0.2.0
 - `@mushi-mushi/core` → 0.2.1
