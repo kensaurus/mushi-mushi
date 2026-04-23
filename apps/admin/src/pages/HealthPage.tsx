@@ -28,6 +28,7 @@ import {
   SelectField,
   FilterSelect,
   RelativeTime,
+  Pct,
 } from '../components/ui'
 import { HealthSkeleton } from '../components/skeletons/HealthSkeleton'
 import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIllustrations'
@@ -375,18 +376,28 @@ export function HealthPage() {
 
       <Section title={`LLM Health (${window})`}>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <StatCard label="Total calls" value={llm.totalCalls.toString()} />
+          <StatCard
+            label="Total calls"
+            value={llm.totalCalls.toString()}
+            hint={`Number of LLM calls made in the last ${window}. Includes every provider and every function.`}
+          />
           <StatCard
             label="Fallback rate"
             value={`${fallbackPct}%`}
             accent={llm.fallbackRate > 0.1 ? 'text-danger' : llm.fallbackRate > 0 ? 'text-warn' : 'text-ok'}
+            hint="Share of calls that hit the secondary provider because the primary failed. Above 10 % suggests the primary is flaky or rate-limiting."
           />
           <StatCard
             label="Error rate"
             value={`${errorPct}%`}
             accent={llm.errorRate > 0.05 ? 'text-danger' : llm.errorRate > 0 ? 'text-warn' : 'text-ok'}
+            hint="Share of calls that ended in a non-recoverable error. Above 5 % usually means an outage or bad API key."
           />
-          <StatCard label="Latency p50 / p95" value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`} />
+          <StatCard
+            label="Latency p50 / p95"
+            value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
+            hint="Median / 95th-percentile round-trip latency across all LLM calls. p95 is the worst typical case a user will feel."
+          />
         </div>
       </Section>
 
@@ -524,7 +535,14 @@ export function HealthPage() {
                     </div>
                     {j ? (
                       <p className="mt-1 text-2xs text-fg-faint">
-                        Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs · {(j.successRate * 100).toFixed(0)}% success · avg {j.avgDurationMs}ms
+                        Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs ·{' '}
+                        <Pct
+                          value={j.successRate * 100}
+                          precision={0}
+                          direction="higher-better"
+                          hint="Share of runs that finished without errors across the full history of this job."
+                        />{' '}
+                        success · avg {j.avgDurationMs}ms
                         {j.staleness && j.staleness !== 'ok' && j.stalenessMinutes != null && (
                           <span className={j.staleness === 'stale' ? ' text-danger' : ' text-warn'}>
                             {' '}· {j.staleness} ({j.stalenessMinutes}m since last run)

@@ -8,6 +8,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
+import { pctToneClass } from '../lib/tokens'
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
@@ -1693,6 +1694,60 @@ export function ResultChip({ tone, children, at, className = '' }: ResultChipPro
           · <RelativeTime value={at} />
         </span>
       )}
+    </span>
+  )
+}
+
+/* ── Pct — color-graded percentage number ───────────────────────────────
+ *
+ * Replaces the `{value.toFixed(1)}%` sprawl across Health / Judge / Billing
+ * with a single primitive that picks a semantic text colour from the value
+ * itself. Two flavours:
+ *
+ *   <Pct value={errorPct} direction="lower-better" />  // 0.9 % → green
+ *   <Pct value={successPct} direction="higher-better" /> // 99 % → green
+ *
+ * By convention `value` is already in 0–100 space so the component doesn't
+ * have to guess at fractions vs percentages. Pass `fraction` when your input
+ * is a 0–1 ratio so we save callers the `* 100` dance.
+ *
+ * Accepts an optional `hint` that becomes a native tooltip — critical for
+ * progressive disclosure where the number itself is terse but the full
+ * semantic ("Rolling 7 d error rate across all LLM calls") lives in the
+ * hover card.
+ */
+
+interface PctProps {
+  value: number | null | undefined
+  /** `higher-better` (default) for success/quality. `lower-better` for error rate. */
+  direction?: 'higher-better' | 'lower-better'
+  /** Digits after the decimal point. Default 1 for sub-percent precision. */
+  precision?: number
+  /** Pre-scale the input from 0–1 to 0–100 (e.g. Judge avg_score). */
+  fraction?: boolean
+  /** Native tooltip — tooltip content visible on hover/focus. */
+  hint?: string
+  className?: string
+}
+
+export function Pct({
+  value,
+  direction = 'higher-better',
+  precision = 1,
+  fraction = false,
+  hint,
+  className = '',
+}: PctProps) {
+  const pct = value == null || Number.isNaN(value) ? null : fraction ? value * 100 : value
+  const toneClass = pctToneClass(pct, direction)
+  const display = pct == null ? '—' : `${pct.toFixed(precision)}%`
+  return (
+    <span
+      className={`font-mono tabular-nums ${toneClass} ${className}`}
+      title={hint}
+      aria-label={hint ? `${display}, ${hint}` : undefined}
+    >
+      {display}
     </span>
   )
 }

@@ -16,6 +16,7 @@ import {
   RelativeTime,
   Tooltip,
   ResultChip,
+  Pct,
   type ResultChipTone,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -201,8 +202,9 @@ function HeaderTip({ short, full }: { short: string; full?: string }) {
 
 function ScorePill({ value }: { value: number | null }) {
   if (value == null) return <span className="text-fg-faint text-2xs font-mono">—</span>
-  const tone = value >= 0.8 ? 'text-ok' : value >= 0.6 ? 'text-warn' : 'text-danger'
-  return <span className={`font-mono tabular-nums ${tone}`}>{(value * 100).toFixed(0)}%</span>
+  // Delegate to <Pct> so judge scores share the same higher-better tone
+  // ramp used by health success rates and prompt-lab traffic weights.
+  return <Pct value={value} fraction precision={0} direction="higher-better" />
 }
 
 export function JudgePage() {

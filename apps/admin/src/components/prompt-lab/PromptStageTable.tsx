@@ -1,5 +1,4 @@
-import { Card, Badge, Btn, RelativeTime } from '../ui'
-import { formatPct } from '../charts'
+import { Card, Badge, Btn, RelativeTime, Pct } from '../ui'
 import type { PromptVersion } from './types'
 import { STAGE_LABELS } from './types'
 
@@ -81,9 +80,22 @@ export function PromptStageTable({
                         </Badge>
                       )}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">{p.traffic_percentage}%</td>
-                    <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                      {score != null ? formatPct(score) : '—'}
+                    <td
+                      className="px-2 py-1.5 text-right"
+                      title={p.traffic_percentage === 100
+                        ? 'This version receives 100 % of live traffic for its stage.'
+                        : `Receives ${p.traffic_percentage} % of live traffic; the remainder routes to other candidates in the same stage.`}
+                    >
+                      <Pct value={p.traffic_percentage} precision={0} direction="higher-better" />
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <Pct
+                        value={score == null ? null : score}
+                        fraction
+                        precision={1}
+                        direction="higher-better"
+                        hint={score == null ? undefined : 'Judge score — higher is better. Uses the rolling 7-day eval window.'}
+                      />
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-fg-muted tabular-nums">
                       {p.total_evaluations}
