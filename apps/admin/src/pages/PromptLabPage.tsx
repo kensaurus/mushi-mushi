@@ -21,6 +21,7 @@ import { KpiRow, KpiTile, formatPct } from '../components/charts'
 import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
 import type { PromptLabData, PromptVersion } from '../components/prompt-lab/types'
 import { PromptStageTable } from '../components/prompt-lab/PromptStageTable'
 import { PromptEditorModal } from '../components/prompt-lab/PromptEditorModal'
@@ -186,6 +187,20 @@ export function PromptLabPage() {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Save failed' })
     }
   }
+
+  // Publish context: "Prompt Lab · 4 active · 2 candidates — Mushi Mushi"
+  const promptList = data?.prompts ?? []
+  const activePrompts = promptList.filter((p) => p.is_active).length
+  const candidatePrompts = promptList.length - activePrompts
+  usePublishPageContext({
+    route: '/prompt-lab',
+    title: 'Prompt Lab',
+    summary: loading
+      ? 'Loading prompts…'
+      : promptList.length === 0
+        ? 'No prompt versions yet'
+        : `${activePrompts} active · ${candidatePrompts} candidate${candidatePrompts === 1 ? '' : 's'}`,
+  })
 
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading prompt lab" />
   if (error) return <ErrorAlert message={error} onRetry={reload} />

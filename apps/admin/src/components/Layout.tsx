@@ -24,6 +24,7 @@ import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { Tooltip } from './ui'
 import { NextBestAction } from './NextBestAction'
+import { PipelineStatusRibbon } from './PipelineStatusRibbon'
 import { QuickstartMegaCta } from './QuickstartMegaCta'
 import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
@@ -36,6 +37,8 @@ import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { AIAssistSidebar } from './AIAssistSidebar'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
+import { useDocumentTitle } from '../lib/useDocumentTitle'
+import { useFaviconBadge } from '../lib/favicon'
 
 interface NavItem {
   label: string
@@ -248,6 +251,13 @@ export function Layout({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false)
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
+
+  // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
+  // with the page the user is on. Both hooks read from `pageContext` so
+  // pages that publish live counts (e.g. "Reports · 12 new · 3 critical")
+  // get a matching tab title and a red favicon dot when criticals > 0.
+  useDocumentTitle()
+  useFaviconBadge()
 
   // Global Cmd/Ctrl+K opens the command palette. `allowInInputs: true`
   // because the shortcut's whole point is to be reachable while the user
@@ -615,6 +625,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
           <div className="max-w-6xl mx-auto px-5 py-4">
             <QuickstartMegaCta />
+            <PipelineStatusRibbon />
             <NextBestAction />
             <ScrollToHashAnchor />
             {children}

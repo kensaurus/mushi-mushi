@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -28,6 +29,7 @@ import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface AuditEntry {
@@ -274,6 +276,33 @@ export function AuditPage() {
 
   const expandedIds = useMemo(() => new Set(expanded ? [expanded] : []), [expanded])
 
+  // Shared NBA inputs: one hook call per render feeds both hero + action bar.
+  const failCount = logs.filter((l) => l.action === 'fix.failed' || l.action === 'integration.disconnected').length
+  const warnCount = logs.filter((l) => l.action === 'api_key.revoked' || l.action === 'plugin.uninstalled').length
+  const auditAction = useNextBestAction({ scope: 'audit', failCount, warnCount })
+  const auditSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    failCount > 0 ? 'crit' : warnCount > 0 ? 'warn' : logs.length === 0 ? 'neutral' : 'ok'
+  const lastLog = logs[0]
+
+  usePublishPageContext({
+    route: '/audit',
+    title: 'Audit log',
+    summary: loading
+      ? 'Loading audit log…'
+      : total === 0
+        ? 'No events match these filters'
+        : `${total} event${total === 1 ? '' : 's'}${failCount > 0 ? ` · ${failCount} failure${failCount === 1 ? '' : 's'}` : ''}`,
+    filters: {
+      action: action || 'all',
+      resource_type: resourceType || 'all',
+      actor: actor || undefined,
+      actor_type: actorType || undefined,
+      since: since || 'all-time',
+      search: q || undefined,
+    },
+    criticalCount: failCount,
+  })
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -283,17 +312,41 @@ export function AuditPage() {
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="audit"
-        action={useNextBestAction({
-          scope: 'audit',
-          // Treat any `fix.failed` or `integration.disconnected` in the
-          // visible window as a FAIL; `api_key.revoked` / `plugin.uninstalled`
-          // as a WARN. Keeps the strip driven by the page's own data.
-          failCount: logs.filter((l) => l.action === 'fix.failed' || l.action === 'integration.disconnected').length,
-          warnCount: logs.filter((l) => l.action === 'api_key.revoked' || l.action === 'plugin.uninstalled').length,
-        })}
+        title="Audit Log"
+        kicker="Append-only evidence"
+        decide={{
+          label: failCount > 0
+            ? 'FAIL events present'
+            : warnCount > 0
+              ? 'WARN events present'
+              : logs.length === 0
+                ? 'No audit activity'
+                : 'Audit trail clean',
+          metric: `${logs.length} events`,
+          summary: failCount > 0
+            ? `${failCount} FAIL event${failCount === 1 ? '' : 's'} in the current window — block next SOC 2 cycle without remediation.`
+            : warnCount > 0
+              ? `${warnCount} WARN event${warnCount === 1 ? '' : 's'} — technical debt on evidence, not blocking.`
+              : logs.length === 0
+                ? 'Audit stream empty — broaden the filters or wait for the next mutation.'
+                : 'Every mutation in scope is accounted for. Export evidence for your next review.',
+          severity: auditSeverity,
+        }}
+        act={auditAction}
+        verify={{
+          label: lastLog ? `Last event · ${lastLog.action}` : 'Awaiting activity',
+          detail: lastLog
+            ? `${lastLog.actor_email ?? lastLog.actor_id ?? 'system'} · ${new Date(lastLog.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
+            : '—',
+          to: '/audit?export=csv',
+          secondaryTo: '/compliance',
+          secondaryLabel: 'Open compliance',
+        }}
       />
+
+      <PageActionBar scope="audit" action={auditAction} />
 
       <PageHelp
         title="About the Audit Log"

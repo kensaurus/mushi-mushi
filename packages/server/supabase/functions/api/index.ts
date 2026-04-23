@@ -1247,6 +1247,7 @@ app.post('/v1/notifications/:id/read', apiKeyAuth, async (c) => {
 // ============================================================
 
 app.post('/v1/admin/fixes/dispatch', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+  try {
   const userId = c.get('userId') as string
   const body = await c.req.json().catch(() => ({})) as { reportId?: string; projectId?: string }
   if (!body.reportId || !body.projectId) {
@@ -1254,21 +1255,43 @@ app.post('/v1/admin/fixes/dispatch', adminOrApiKey({ scope: 'mcp:write' }), asyn
   }
 
   const db = getServiceClient()
-  const { data: membership } = await db
+
+  // Authorisation chain:
+  //   1. Explicit `project_members` row (multi-collaborator projects).
+  //   2. Fall back to `projects.owner_id` when no member row exists
+  //      (seeded dogfood project + single-owner accounts created before
+  //      the members table was introduced).
+  // `.maybeSingle()` returns {data:null} on zero rows rather than logging
+  // a PGRST116 error — important because the previous `.single()` was
+  // setting `sentryHonoErrorHandler` off on projects without a matching
+  // member row, which 500'd the endpoint instead of 403'ing.
+  const { data: membership, error: membershipErr } = await db
     .from('project_members')
     .select('role')
     .eq('user_id', userId)
     .eq('project_id', body.projectId)
-    .single()
+    .maybeSingle()
+  if (membershipErr) {
+    return dbError(c, membershipErr)
+  }
   if (!membership) {
-    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+    const { data: ownerRow, error: ownerErr } = await db
+      .from('projects')
+      .select('owner_id')
+      .eq('id', body.projectId)
+      .maybeSingle()
+    if (ownerErr) return dbError(c, ownerErr)
+    if (!ownerRow || ownerRow.owner_id !== userId) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+    }
   }
 
-  const { data: settings } = await db
+  const { data: settings, error: settingsErr } = await db
     .from('project_settings')
     .select('autofix_enabled')
     .eq('project_id', body.projectId)
-    .single()
+    .maybeSingle()
+  if (settingsErr) return dbError(c, settingsErr)
   if (!settings?.autofix_enabled) {
     return c.json({ ok: false, error: { code: 'AUTOFIX_DISABLED', message: 'Enable Autofix in project settings first' } }, 400)
   }
@@ -1311,6 +1334,18 @@ app.post('/v1/admin/fixes/dispatch', adminOrApiKey({ scope: 'mcp:write' }), asyn
   })
 
   return c.json({ ok: true, data: { dispatchId: job.id, status: job.status, createdAt: job.created_at } })
+  } catch (err) {
+    // Temporary: the dispatch endpoint was returning 500 via the Hono
+    // onError path with no captured Sentry event (likely because the
+    // error was a deep Deno primitive that didn't serialise). Log the
+    // full message+stack here so we can see it in Supabase function
+    // logs while we nail down the root cause, then bubble so the
+    // standard Sentry handler still fires.
+    const msg = err instanceof Error ? err.message : String(err)
+    const stack = err instanceof Error ? err.stack : null
+    log.error('[fix-dispatch] unhandled error', { message: msg, stack })
+    throw err
+  }
 })
 
 async function invokeFixWorker(dispatchId: string): Promise<void> {

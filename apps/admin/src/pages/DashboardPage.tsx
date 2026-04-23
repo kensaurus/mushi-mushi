@@ -11,6 +11,7 @@ import { useCallback, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
+import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -86,6 +87,29 @@ export function DashboardPage() {
     setup.activeProject?.merged_fix_count ?? null,
     { onFire: onFirstMergedFix },
   )
+
+  // Publish context so the browser tab title + favicon badge track the
+  // dashboard's live state (backlog / in-flight fixes / LLM failures).
+  // Called unconditionally — hooks rules — so we compute defensively.
+  const dashProjectName = setup.activeProject?.project_name ?? null
+  const dashCounts = data?.counts
+  const dashFix = data?.fixSummary
+  const dashSummary = loading
+    ? 'Loading dashboard…'
+    : !data || data.empty
+      ? 'Waiting for first report'
+      : dashCounts
+        ? `${dashCounts.openBacklog} to triage · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
+        : undefined
+  usePublishPageContext({
+    route: '/',
+    title: dashProjectName ? `Dashboard · ${dashProjectName}` : 'Dashboard',
+    summary: dashSummary,
+    // `openBacklog` is the queue of reports the user still needs to
+    // action — treat every untriaged report as deserving the favicon
+    // red dot so the operator sees the nudge even from another tab.
+    criticalCount: dashCounts?.openBacklog ?? 0,
+  })
 
   if (loading) return <DashboardSkeleton />
   if (error) return <ErrorAlert message={error} onRetry={reload} />

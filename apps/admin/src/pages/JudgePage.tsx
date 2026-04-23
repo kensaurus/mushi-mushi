@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
+import { usePublishPageContext } from '../lib/pageContext'
 import {
   PageHeader,
   PageHelp,
@@ -33,6 +34,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
 
@@ -273,6 +275,21 @@ export function JudgePage() {
     }
   }
 
+  // Publish page context so the browser tab reflects the latest judge
+  // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
+  // AI sidebar / palette pick up the same summary. Called before the
+  // loading / error early-returns so hook order stays stable.
+  const latestWeek = weeksQuery.data?.weeks?.[0]
+  usePublishPageContext({
+    route: '/judge',
+    title: projectName ? `Judge · ${projectName}` : 'Judge',
+    summary: loading
+      ? 'Loading judge scores…'
+      : latestWeek
+        ? `${Math.round((latestWeek.avg_score ?? 0) * 100)}% this week · ${latestWeek.eval_count} evals`
+        : 'No evaluations yet',
+  })
+
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />
   if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'judge data'}: ${error}`} onRetry={merged.retry} />
 
@@ -285,6 +302,32 @@ export function JudgePage() {
 
   const totalEvals = weeks.reduce((s, w) => s + w.eval_count, 0)
   const trendValues = [...weeks].reverse().map((w) => w.avg_score)
+
+  // Shared inputs for the hero + action bar — kept as plain consts so the
+  // NBA hook is only called once per render (react-hooks/exhaustive-deps
+  // stays happy and downstream widgets read a single source of truth).
+  const disagreementRate = evals.length > 0
+    ? evals.filter((e) => e.classification_agreed === false).length / evals.length
+    : null
+  const staleHoursAgo = evals[0]?.created_at
+    ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
+    : null
+  const heroAction = useNextBestAction({
+    scope: 'judge',
+    disagreementRate,
+    sampledCount: evals.length,
+    staleHoursAgo,
+  })
+  const overallScore = latest?.avg_score
+  const heroSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    overallScore == null
+      ? 'neutral'
+      : overallScore >= 4.2
+        ? 'ok'
+        : overallScore >= 3.5
+          ? 'warn'
+          : 'crit'
+  const lastEval = evals[0]
 
   return (
     <div className="space-y-4">
@@ -310,19 +353,44 @@ export function JudgePage() {
         )}
       </PageHeader>
 
-      <PageActionBar
+      {/*
+        Decide / Act / Verify hero — replaces the chart-first layout so
+        operators see state + next step + proof-of-life before any
+        visualisations. Charts still live below so drill-down remains
+        one scroll away.
+      */}
+      <PageHero
         scope="judge"
-        action={useNextBestAction({
-          scope: 'judge',
-          disagreementRate: evals.length > 0
-            ? evals.filter((e) => e.classification_agreed === false).length / evals.length
-            : null,
-          sampledCount: evals.length,
-          staleHoursAgo: evals[0]?.created_at
-            ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
-            : null,
-        })}
+        title={copy?.title ?? 'Judge'}
+        kicker="Independent grading"
+        decide={{
+          label: overallScore == null ? 'No evaluations yet' : `Overall score ${overallScore.toFixed(2)}/5`,
+          metric: overallScore == null ? '—' : overallScore.toFixed(2),
+          summary: overallScore == null
+            ? 'Run a judge batch to populate scores. Fresh runs every Mon/Thu are recommended.'
+            : drift >= 0.05
+              ? `Down ${(drift * 100).toFixed(1)}% week-over-week — investigate before shipping prompt changes.`
+              : `Stable across ${totalEvals} evaluations over ${weeks.length} weeks.`,
+          severity: heroSeverity,
+        }}
+        act={heroAction}
+        verify={{
+          label: lastEval ? `Last eval · ${lastEval.judge_model ?? 'model'}` : 'Awaiting first eval',
+          detail: lastEval
+            ? `${lastEval.id.slice(0, 8)} · ${new Date(lastEval.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
+            : '—',
+          to: lastEval ? `/reports/${lastEval.report_id}` : '/reports',
+          secondaryTo: '/prompt-lab',
+          secondaryLabel: 'Open Prompt Lab',
+        }}
       />
+
+      {/*
+        Retain the compact PageActionBar below the hero — it's lighter
+        weight and remains the single source of truth for page-level
+        actions in beginner mode (hero collapses to a pill there).
+      */}
+      <PageActionBar scope="judge" action={heroAction} />
 
       <PageHelp
         title={copy?.help?.title ?? 'About the Judge'}

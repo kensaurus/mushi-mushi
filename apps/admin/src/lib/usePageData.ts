@@ -1,11 +1,21 @@
 /**
  * FILE: apps/admin/src/lib/usePageData.ts
- * PURPOSE: StrictMode-safe data loading hook. React 18 StrictMode invokes
- *          effects twice in development which causes pages that fetch in
- *          a bare useEffect to flash the loading spinner twice and to fire
- *          duplicate network requests. This hook tracks an `aborted` flag
- *          per mount and exposes a stable `reload` callback so consumers
- *          don't have to re-implement the bookkeeping.
+ * PURPOSE: StrictMode-safe data loading hook with stale-while-revalidate
+ *          semantics. React 18 StrictMode invokes effects twice in
+ *          development which causes pages that fetch in a bare useEffect
+ *          to flash the loading spinner twice and to fire duplicate
+ *          network requests. This hook tracks an `aborted` flag per mount
+ *          and exposes a stable `reload` callback so consumers don't
+ *          have to re-implement the bookkeeping.
+ *
+ *          Stale-while-revalidate (UIUX-1, 2026-04-23): once data has
+ *          loaded at least once, subsequent `reload()` calls (triggered
+ *          after Test / Save / Run buttons, or by `deps` changes) keep
+ *          the previous `data` visible and set `isValidating = true`
+ *          instead of flipping `loading` back to true. This kills the
+ *          "container refresh flash" where the entire panel briefly
+ *          unmounts to a skeleton and sticky ResultChip receipts vanish
+ *          mid-celebration. Matches SWR / TanStack Query defaults.
  *
  *          Use this for any GET-style page load that fits the pattern
  *          "render loading → render data → render error" with optional
@@ -19,8 +29,16 @@ import { apiFetch } from './supabase'
 
 export interface PageDataState<T> {
   data: T | null
+  /** True only during the *first* fetch for this hook instance (or
+   *  after an explicit reset). Subsequent background refetches leave
+   *  `loading` as false so consumers keep rendering their data view. */
   loading: boolean
   error: string | null
+  /** True whenever a fetch is in flight, including background refetches
+   *  triggered by `reload()` after the first successful load. Useful for
+   *  subtle "refreshing…" indicators (e.g. a 2 px progress bar) that
+   *  don't replace the page content with a skeleton. */
+  isValidating: boolean
   reload: () => void
 }
 
@@ -45,11 +63,16 @@ export function usePageData<T>(
   const { autoLoad = true, deps = [], schema } = opts
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState<boolean>(autoLoad && path != null)
+  const [isValidating, setIsValidating] = useState<boolean>(autoLoad && path != null)
   const [error, setError] = useState<string | null>(null)
 
   // We keep the abort flag in a ref so that a second StrictMode invocation
   // of the effect can flip the previous run's flag before it commits state.
   const aborted = useRef(false)
+  // Tracks whether we've ever returned data for this hook instance. Flips
+  // `loading` off for all subsequent refetches so consumers' skeleton
+  // guards only trigger on true first-paint.
+  const hasLoadedOnce = useRef(false)
   // Bumping `tick` forces a refetch from `reload()` without changing path.
   const [tick, setTick] = useState(0)
 
@@ -62,7 +85,11 @@ export function usePageData<T>(
   useEffect(() => {
     if (!path || !autoLoad) return
     aborted.current = false
-    setLoading(true)
+    // SWR semantics: only show the skeleton while we've never resolved
+    // data. Refetches after the first success leave `data` stable and
+    // only flip `isValidating` so panels don't unmount mid-receipt.
+    if (!hasLoadedOnce.current) setLoading(true)
+    setIsValidating(true)
     setError(null)
     void (async () => {
       try {
@@ -77,6 +104,7 @@ export function usePageData<T>(
         if (aborted.current) return
         if (res.ok && res.data !== undefined) {
           setData(res.data as T)
+          hasLoadedOnce.current = true
         } else {
           setError(res.error?.message ?? 'Request failed')
         }
@@ -84,7 +112,10 @@ export function usePageData<T>(
         if (aborted.current) return
         setError(err instanceof Error ? err.message : 'Request failed')
       } finally {
-        if (!aborted.current) setLoading(false)
+        if (!aborted.current) {
+          setLoading(false)
+          setIsValidating(false)
+        }
       }
     })()
     return () => {
@@ -94,5 +125,5 @@ export function usePageData<T>(
     // depend on it instead of `deps` itself to avoid array-identity churn.
   }, [path, autoLoad, tick, depKey, schema])
 
-  return { data, loading, error, reload }
+  return { data, loading, error, isValidating, reload }
 }

@@ -56,6 +56,13 @@ jobs:
       - name: Check license headers
         run: node scripts/check-license-headers.mjs
 
+      - name: Check dead buttons
+        # Regression guard for the 2026-04-22 audit: every CTA in the
+        # admin console must resolve to a real navigate() / onClick /
+        # <Link to>. Static-checks the Btn/Link usage in apps/admin
+        # so dead-click regressions fail PR CI before they ship.
+        run: node scripts/check-dead-buttons.mjs
+
       - name: Check bundle sizes
         run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit
 

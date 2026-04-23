@@ -6,11 +6,12 @@
  *          inspection.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtime } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import { langfuseTraceUrl } from '../lib/env'
 import {
@@ -34,7 +35,9 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
+import { markJudgeBatchSeen } from '../components/PipelineStatusRibbon'
 
 interface LlmRecent {
   function_name: string
@@ -142,6 +145,18 @@ export function HealthPage() {
   useRealtime({ table: 'llm_invocations' }, llmQuery.reload)
   useRealtime({ table: 'cron_runs' }, cronQuery.reload)
 
+  // Feed the PipelineStatusRibbon's Check tile. HealthPage is the only
+  // place today that knows when judge-batch last finished; stamping it
+  // into localStorage lets every other page show a freshness badge
+  // without re-querying the cron summary.
+  useEffect(() => {
+    const lastRun = cron?.byJob['judge-batch']?.lastRun
+    if (!lastRun) return
+    const ts = Date.parse(lastRun)
+    if (!Number.isFinite(ts)) return
+    markJudgeBatchSeen(ts)
+  }, [cron])
+
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
     if (value) next.set(key, value)
@@ -198,6 +213,32 @@ export function HealthPage() {
     }
   }
 
+  // Publish page context so the browser tab reads e.g.
+  // "Health · All systems nominal — Mushi Mushi" or
+  // "Health · 2 errors · 1 cron down — Mushi Mushi" from another tab.
+  const healthRed =
+    (llm?.errorRate ?? 0) > 0.05
+      ? 1
+      : 0 + KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length
+  const healthAmber =
+    (llm?.fallbackRate ?? 0) > 0.1
+      ? 1
+      : 0 + KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length
+  usePublishPageContext({
+    route: '/health',
+    title: projectName ? `Health · ${projectName}` : 'Health',
+    summary: llmQuery.loading
+      ? 'Loading health metrics…'
+      : !llm
+        ? undefined
+        : healthRed > 0
+          ? `${healthRed} red · ${llm.totalCalls} calls · ${((llm.errorRate ?? 0) * 100).toFixed(1)}% errors`
+          : healthAmber > 0
+            ? `${healthAmber} warning · ${llm.totalCalls} calls`
+            : `All systems nominal · ${llm.totalCalls} calls`,
+    criticalCount: healthRed,
+  })
+
   if (llmQuery.loading || cronQuery.loading) return <HealthSkeleton />
   if (llmQuery.error || !llm) return <ErrorAlert message={`Failed to load health metrics: ${llmQuery.error ?? 'no data'}`} onRetry={reloadAll} />
 
@@ -206,6 +247,18 @@ export function HealthPage() {
   const byFunction = llm.byFunction ?? {}
   const byModel = llm.byModel ?? {}
   const fnNames = Object.keys(byFunction).sort()
+
+  // Shared NBA inputs for the hero + action bar (one hook call per render).
+  const redCount =
+    (llm.errorRate > 0.05 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length
+  const amberCount =
+    (llm.fallbackRate > 0.1 ? 1 : 0) +
+    KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length
+  const healthAction = useNextBestAction({ scope: 'health', redCount, amberCount })
+  const healthSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    redCount > 0 ? 'crit' : amberCount > 0 ? 'warn' : 'ok'
+  const lastLlmCall = llm.recent?.[0]
 
   return (
     <div className="space-y-4">
@@ -227,18 +280,37 @@ export function HealthPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="health"
-        action={useNextBestAction({
-          scope: 'health',
-          redCount:
-            (llm.errorRate > 0.05 ? 1 : 0) +
-            KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length,
-          amberCount:
-            (llm.fallbackRate > 0.1 ? 1 : 0) +
-            KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length,
-        })}
+        title={copy?.title ?? 'System Health'}
+        kicker="Pipeline pulse"
+        decide={{
+          label: redCount > 0
+            ? 'Critical probes failing'
+            : amberCount > 0
+              ? 'Degraded probes'
+              : 'All systems nominal',
+          metric: `${llm.totalCalls} calls · ${errorPct}% err`,
+          summary: redCount > 0
+            ? `${redCount} red probe${redCount === 1 ? '' : 's'} — blocking the pipeline. Act now.`
+            : amberCount > 0
+              ? `${amberCount} amber probe${amberCount === 1 ? '' : 's'} — fallbacks or slow jobs, not yet blocking.`
+              : `Fallback rate ${fallbackPct}% · avg ${Math.round(llm.avgLatencyMs)}ms (${window}).`,
+          severity: healthSeverity,
+        }}
+        act={healthAction}
+        verify={{
+          label: lastLlmCall ? `Last LLM call · ${lastLlmCall.used_model}` : 'Awaiting first call',
+          detail: lastLlmCall
+            ? `${lastLlmCall.function_name} · ${new Date(lastLlmCall.created_at).toISOString().slice(11, 19)}Z`
+            : '—',
+          to: lastLlmCall?.report_id ? `/reports/${lastLlmCall.report_id}` : '/reports',
+          secondaryTo: '/audit',
+          secondaryLabel: 'Open audit log',
+        }}
       />
+
+      <PageActionBar scope="health" action={healthAction} />
 
       <PageHelp
         title={copy?.help?.title ?? 'About System Health'}

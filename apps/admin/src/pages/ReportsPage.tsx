@@ -249,6 +249,11 @@ export function ReportsPage() {
         }
       : undefined
 
+  // Count critical reports on screen so `useFaviconBadge` can paint a
+  // red dot when there's unresolved severity=critical work. Inline here
+  // because `criticalQueuedCount` further down is filtered by status.
+  const criticalOnPage = reports.filter((r) => r.severity === 'critical').length
+
   usePublishPageContext({
     route: '/reports',
     title: projectName ? `Reports · ${projectName}` : 'Reports',
@@ -256,7 +261,8 @@ export function ReportsPage() {
       ? 'Loading reports…'
       : total === 0
         ? 'No reports match the current filters'
-        : `${pluralizeWithCount(total, 'report')} · page ${page + 1} of ${totalPages}${selected.size > 0 ? ` · ${selected.size} selected` : ''}`,
+        : `${pluralizeWithCount(total, 'report')}${criticalOnPage > 0 ? ` · ${criticalOnPage} critical` : ''}${selected.size > 0 ? ` · ${selected.size} selected` : ''}`,
+    criticalCount: criticalOnPage,
     filters: {
       status: status || 'all',
       severity: severity || 'all',

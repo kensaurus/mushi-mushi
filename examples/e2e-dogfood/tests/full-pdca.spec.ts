@@ -102,8 +102,11 @@ test.describe('Full PDCA dogfood', () => {
 
     // Dedup runs in stage2 and requires the classifier (Anthropic) to
     // have fired. If fast-filter never ran (common on a cold dev stack
-    // without ANTHROPIC_API_KEY), cluster_id/dedup_parent_id stay null
-    // forever — we skip the assertion rather than hang the suite.
+    // without ANTHROPIC_API_KEY), report_group_id stays null forever —
+    // we skip the assertion rather than hang the suite. The canonical
+    // column is `report_group_id` (2026-04 schema); earlier drafts of
+    // this suite referenced `cluster_id` / `dedup_parent_id` which do
+    // not exist on `reports` and silently failed the poll.
     const { data: origin } = await db
       .from('reports')
       .select('status')
@@ -118,10 +121,10 @@ test.describe('Full PDCA dogfood', () => {
       async () => {
         const { data } = await db
           .from('reports')
-          .select('id, cluster_id, dedup_parent_id')
+          .select('id, report_group_id')
           .eq('id', dupId!)
           .single()
-        return data?.cluster_id ?? data?.dedup_parent_id ?? null
+        return data?.report_group_id ?? null
       },
       { timeout: 30_000 },
     ).not.toBeNull()
@@ -131,9 +134,15 @@ test.describe('Full PDCA dogfood', () => {
     test.skip(!createdReportId, 'Plan must succeed first')
     test.skip(!ADMIN_TOKEN, 'MUSHI_ADMIN_JWT required to dispatch via admin API')
 
-    const res = await request.post(`${ADMIN_URL.replace(/\/$/, '')}/v1/admin/fix-dispatch`, {
+    // The API mounts the route at `/v1/admin/fixes/dispatch` (plural `fixes`).
+    // Earlier drafts of this suite used the singular `/fix-dispatch` which
+    // silently 404s against prod — the hyphen path does not exist.
+    //
+    // Both `reportId` AND `projectId` are required — the server scopes the
+    // in-flight-check and FK inserts to the tuple, so omitting either 400s.
+    const res = await request.post(`${ADMIN_URL.replace(/\/$/, '')}/v1/admin/fixes/dispatch`, {
       headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
-      data: { reportId: createdReportId },
+      data: { reportId: createdReportId, projectId: MUSHI_PROJECT_ID },
     })
     // 200 = dispatched synchronously, 202 = queued — either counts.
     expect([200, 202, 409]).toContain(res.status())
