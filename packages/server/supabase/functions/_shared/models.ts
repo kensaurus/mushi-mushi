@@ -84,7 +84,7 @@ export const MODERNIZER_FALLBACK = OPENAI_PRIMARY
 export const PROMPT_TUNE_MODEL = ANTHROPIC_OPUS
 export const PROMPT_TUNE_FALLBACK = OPENAI_PRIMARY
 
-/** AI sidebar / `/v1/admin/assist` — scoped chat assistant that answers
+/** Ask Mushi / `/v1/admin/ask-mushi/messages` — scoped chat assistant that answers
  *  questions about the current page. Sonnet balances reasoning with
  *  cost; the usage pattern is short sessions, not bulk traffic. */
 export const ASSIST_MODEL = ANTHROPIC_SONNET

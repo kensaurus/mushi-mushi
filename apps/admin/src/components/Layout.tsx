@@ -35,7 +35,7 @@ import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
-import { AIAssistSidebar } from './AIAssistSidebar'
+import { AskMushiSidebar } from './AskMushiSidebar'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
@@ -304,7 +304,7 @@ export function Layout({ children }: { children: ReactNode }) {
       },
       {
         key: 'j',
-        description: 'Toggle AI sidebar (scoped to current page)',
+        description: 'Toggle Ask Mushi (scoped to current page)',
         handler: (e) => {
           e.preventDefault()
           setAiOpen((v) => !v)
@@ -313,7 +313,7 @@ export function Layout({ children }: { children: ReactNode }) {
       },
       {
         key: 'j',
-        description: 'Toggle AI sidebar (scoped to current page)',
+        description: 'Toggle Ask Mushi (scoped to current page)',
         handler: (e) => {
           e.preventDefault()
           setAiOpen((v) => !v)
@@ -643,11 +643,11 @@ export function Layout({ children }: { children: ReactNode }) {
               )}
             </button>
           </Tooltip>
-          <Tooltip content="AI sidebar (Cmd/Ctrl+J)">
+          <Tooltip content="Ask Mushi (Cmd/Ctrl+J)">
             <button
               type="button"
               onClick={() => setAiOpen(true)}
-              aria-label="Open AI sidebar"
+              aria-label="Open Ask Mushi"
               className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
             >
               <span aria-hidden className="font-mono text-xs leading-none">✨</span>
@@ -680,7 +680,7 @@ export function Layout({ children }: { children: ReactNode }) {
         onClose={whatsNew.closePanel}
         entries={whatsNew.entries}
       />
-      <AIAssistSidebar
+      <AskMushiSidebar
         open={aiOpen}
         onClose={() => setAiOpen(false)}
         route={pathname}

@@ -192,31 +192,8 @@ export function FixesPage() {
     return fixes.filter((f) => bucketize(f) === statusBucket)
   }, [fixes, statusBucket])
 
-  // Publish page context so the AI sidebar and command palette can react
-  // to the current bucket + counts (e.g. "Retry all failed fixes" only
-  // makes sense when `failedFixes.length > 0`).
-  usePublishPageContext({
-    route: '/fixes',
-    title: projectName ? `Fixes · ${projectName}` : 'Fixes',
-    summary: loading
-      ? 'Loading fix pipeline…'
-      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${bucketCounts.failed} failed`,
-    filters: {
-      bucket: statusBucket,
-    },
-    selection: expanded
-      ? { kind: 'fix', id: expanded, label: fixes.find((f) => f.id === expanded)?.report_id ?? expanded.slice(0, 8) }
-      : undefined,
-    questions: [
-      bucketCounts.failed > 0
-        ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
-        : 'Is the auto-fix pipeline healthy right now?',
-      bucketCounts.inflight > 0
-        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
-        : 'Which report should I dispatch next?',
-      'Which fixes are waiting on a human review?',
-    ],
-  })
+  // (Page context publish moved below retryAllFailed so the action
+  // closures bind to the live function reference without TDZ issues.)
 
   // Capped at 12 entries so a freshly-loaded list of 100+ fixes still finishes
   // its entrance animation in well under half a second
@@ -311,6 +288,62 @@ export function FixesPage() {
     }
     void loadFixes()
   }, [failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast])
+
+  // Publish page context so Ask Mushi and command palette can react
+  // to the current bucket + counts (e.g. "Retry all failed fixes" only
+  // makes sense when `failedFixes.length > 0`).
+  usePublishPageContext({
+    route: '/fixes',
+    title: projectName ? `Fixes · ${projectName}` : 'Fixes',
+    summary: loading
+      ? 'Loading fix pipeline…'
+      : `${pluralizeWithCount(fixes.length, 'fix', 'fixes')} · ${bucketCounts.inflight} in flight · ${bucketCounts.failed} failed`,
+    filters: {
+      bucket: statusBucket,
+    },
+    selection: expanded
+      ? { kind: 'fix', id: expanded, label: fixes.find((f) => f.id === expanded)?.report_id ?? expanded.slice(0, 8) }
+      : undefined,
+    questions: [
+      bucketCounts.failed > 0
+        ? `Why did the ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')} fail?`
+        : 'Is the auto-fix pipeline healthy right now?',
+      bucketCounts.inflight > 0
+        ? `What is taking the longest among the ${bucketCounts.inflight} in-flight fixes?`
+        : 'Which report should I dispatch next?',
+      'Which fixes are waiting on a human review?',
+    ],
+    actions: [
+      ...(bucketCounts.failed > 0
+        ? [{
+            id: 'retry-all-failed',
+            label: `Retry all ${pluralizeWithCount(bucketCounts.failed, 'failed fix', 'failed fixes')}`,
+            hint: 'Re-dispatches every failed fix in the current view',
+            run: () => { void retryAllFailed() },
+          }]
+        : []),
+      ...(statusBucket !== 'all'
+        ? [{
+            id: 'show-all-fixes',
+            label: 'Show all fixes',
+            hint: 'Clear the current bucket filter',
+            run: () => setStatusBucket('all'),
+          }]
+        : []),
+      {
+        id: 'focus-failed',
+        label: 'Focus failed bucket',
+        hint: 'Filter the table to fixes that need attention',
+        run: () => setStatusBucket('failed'),
+      },
+    ],
+    mentionables: fixes.slice(0, 10).map((f) => ({
+      kind: 'fix' as const,
+      id: f.id,
+      label: f.report_id ? `Fix on report ${f.report_id.slice(0, 8)}` : `Fix ${f.id.slice(0, 8)}`,
+      sublabel: `status: ${f.status ?? 'unknown'}`,
+    })),
+  })
 
   // Merge optimistic rows with server rows — server wins if the same
   // report_id + status appears in both, keeping the list non-duplicative

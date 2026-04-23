@@ -66,7 +66,7 @@ export function ReportDetailPage() {
 
   // Make the browser tab read "MSHREP-abcd1234 · <category> — Mushi Mushi"
   // so stacked tabs for multiple reports are distinguishable without
-  // hovering. Summary carries status + severity so the AI sidebar shows
+  // hovering. Summary carries status + severity so Ask Mushi shows
   // triage state at a glance.
   const shortId = id ? id.slice(0, 8) : ''
   const reportTitle = report?.description
@@ -87,6 +87,23 @@ export function ReportDetailPage() {
     // operator walking away from this tab for a meeting should see the
     // red dot when they glance back.
     criticalCount: report && report.severity === 'critical' && report.status !== 'resolved' ? 1 : 0,
+    questions: report
+      ? [
+          'Why did this report happen — root cause in 1 paragraph?',
+          'Show me similar reports in this project.',
+          'Draft a fix dispatch summary I can paste into a PR.',
+        ]
+      : undefined,
+    mentionables: report
+      ? [
+          {
+            kind: 'report' as const,
+            id: report.id,
+            label: report.description?.slice(0, 60) ?? report.id,
+            sublabel: `severity: ${report.severity ?? 'unscored'}`,
+          },
+        ]
+      : undefined,
   })
 
   const handleTriage = async (updates: Record<string, string>) => {

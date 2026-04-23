@@ -1,7 +1,7 @@
 /**
  * FILE: apps/admin/src/lib/pageContext.ts
  * PURPOSE: Shared publish/subscribe registry for "what is the user looking
- *          at *right now* on this page?" context. The AI sidebar, hotkeys
+ *          at *right now* on this page?" context. Ask Mushi, the hotkeys
  *          cheatsheet, and command palette all consume this single source
  *          of truth so their behaviour tracks the active page instead of
  *          being statically keyed off the URL pathname.
@@ -39,7 +39,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 
 /** Declarative action the page contributes. Consumers render these inline
- *  (e.g. command palette at the top, or the AI sidebar as a quick button). */
+ *  (e.g. command palette at the top, or Ask Mushi as a quick button). */
 export interface PageAction {
   id: string
   label: string
@@ -51,7 +51,7 @@ export interface PageAction {
 }
 
 /** What the page knows about the currently-focused entity (a report, a
- *  fix, a prompt version, ...). Used by the AI sidebar so it can answer
+ *  fix, a prompt version, ...). Used by Ask Mushi so it can answer
  *  "why did *this one* fail?" without guessing. */
 export interface PageSelection {
   kind: string
@@ -66,7 +66,7 @@ export interface PageContext {
   /** Human-readable page title for display in consumer headers. */
   title: string
   /** One-line summary of the page's current state ("12 new · 3 critical").
-   *  Renders as a chip in the AI sidebar header so the user can confirm
+   *  Renders as a chip in the Ask Mushi header so the user can confirm
    *  the assistant sees what they see. Also concatenated into the
    *  browser tab title by `useDocumentTitle`, so keep it short. */
   summary?: string
@@ -80,11 +80,30 @@ export interface PageContext {
   filters?: Record<string, string | number | boolean | null | undefined>
   /** The currently-focused entity (if any). */
   selection?: PageSelection
-  /** Page-contributed quick actions (palette + AI sidebar). */
+  /** Page-contributed quick actions (palette + Ask Mushi). */
   actions?: PageAction[]
-  /** Page-contributed empty-state suggestions for the AI sidebar. If
+  /** Page-contributed empty-state suggestions for Ask Mushi. If
    *  omitted, the sidebar falls back to the static route-based list. */
   questions?: string[]
+  /** Page-contributed @-mention sources. Surfaced in the Ask Mushi
+   *  composer's `@` popover so the user can pull entities the page
+   *  already knows about (current report, currently-rendered fixes, etc.)
+   *  without typing an id. The composer also queries
+   *  `/v1/admin/ask-mushi/mentions` for fuzzy server-side matches; pages
+   *  that publish a list here just give the user a head start. */
+  mentionables?: PageMentionable[]
+}
+
+export interface PageMentionable {
+  /** Logical entity kind. Mirrors the `@kind:id` token format. */
+  kind: 'report' | 'fix' | 'branch' | 'page' | string
+  /** Stable id used in the `@kind:id` token (and in the resolved
+   *  context-block on the backend). */
+  id: string
+  /** Display label used in the popover ("@report:abc12345 — Crash on save"). */
+  label: string
+  /** Optional second line for context. */
+  sublabel?: string
 }
 
 type Listener = () => void
