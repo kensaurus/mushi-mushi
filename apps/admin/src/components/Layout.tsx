@@ -4,7 +4,7 @@
  *          responsive mobile drawer, skip-nav a11y link.
  */
 
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useEffect, useState } from 'react'
 import type { ReactNode, ComponentType } from 'react'
@@ -23,6 +23,7 @@ import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { Tooltip } from './ui'
+import { RouteProgress } from './RouteProgress'
 import { NextBestAction } from './NextBestAction'
 import { PipelineStatusRibbon } from './PipelineStatusRibbon'
 import { QuickstartMegaCta } from './QuickstartMegaCta'
@@ -99,6 +100,11 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Dashboard',   path: '/',           icon: IconDashboard, beginner: true },
+      // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
+      // "what should I do next?" across the whole PDCA surface. Pinned above
+      // the PDCA sections so Advanced users land on it the same way beginner
+      // users land on the Dashboard.
+      { label: 'Inbox',       path: '/inbox',      icon: IconBell,      beginner: true, quickstartLabel: 'Inbox' },
       { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
     ],
   },
@@ -241,6 +247,7 @@ function ScrollToHashAnchor() {
 export function Layout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth()
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
   const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
@@ -312,6 +319,33 @@ export function Layout({ children }: { children: ReactNode }) {
           setAiOpen((v) => !v)
         },
         ctrl: true,
+      },
+      // Wave T (2026-04-23) — ⌘⇧I / Ctrl⇧I jumps to the global /inbox page.
+      // `allowInInputs: true` because an operator deep in a search field
+      // should still be able to hop to the inbox without clicking away.
+      // SPA-nav via `useNavigate` rather than `window.location.assign` so
+      // in-memory state (toast queue, scroll, focus) survives the jump.
+      {
+        key: 'i',
+        description: 'Open the Action Inbox',
+        handler: (e) => {
+          e.preventDefault()
+          navigate('/inbox')
+        },
+        meta: true,
+        shift: true,
+        allowInInputs: true,
+      },
+      {
+        key: 'i',
+        description: 'Open the Action Inbox',
+        handler: (e) => {
+          e.preventDefault()
+          navigate('/inbox')
+        },
+        ctrl: true,
+        shift: true,
+        allowInInputs: true,
       },
     ],
   )
@@ -504,6 +538,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden">
+      <RouteProgress />
       {/* Skip nav — a11y */}
       <a
         href="#main-content"

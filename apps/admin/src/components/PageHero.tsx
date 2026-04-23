@@ -233,6 +233,7 @@ function VerifyTile({ verify }: { verify: PageHeroVerify }) {
       <div className="mt-3 flex items-center gap-2 flex-wrap">
         {verify.to && (
           <Link
+            data-hero-verify
             to={verify.to}
             className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors border border-edge"
           >
@@ -267,10 +268,16 @@ function HeroCta({
   cta: NonNullable<PageAction['primary']>
   variant: 'primary' | 'ghost'
 }) {
+  // Wave T (2026-04-23): `data-hero-primary` / `data-hero-secondary` hooks
+  // are the single source of truth the Playwright dead-button sweep uses
+  // to assert every Advanced page has exactly one primary CTA. Do not
+  // rename without updating examples/e2e-dogfood/tests/hero-ctas.spec.ts.
+  const testHook = variant === 'primary' ? { 'data-hero-primary': true } : { 'data-hero-secondary': true }
   if (cta.kind === 'link') {
     if (variant === 'primary') {
       return (
         <Link
+          {...testHook}
           to={cta.to}
           className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
         >
@@ -280,6 +287,7 @@ function HeroCta({
     }
     return (
       <Link
+        {...testHook}
         to={cta.to}
         className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
       >
@@ -288,7 +296,7 @@ function HeroCta({
     )
   }
   return (
-    <Btn size="sm" variant={variant} onClick={cta.onClick} disabled={cta.disabled}>
+    <Btn size="sm" variant={variant} onClick={cta.onClick} disabled={cta.disabled} {...testHook}>
       {cta.label}
     </Btn>
   )

@@ -50,6 +50,9 @@ const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default:
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
+// Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
+// the first-paint bundle isn't inflated for users who don't open it.
+const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m.InboxPage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -132,6 +135,7 @@ export function App() {
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/inbox" element={<InboxPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </SentryRoutes>
                 </Suspense>

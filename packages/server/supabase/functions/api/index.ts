@@ -2085,10 +2085,12 @@ app.post('/v1/admin/reports/bulk', jwtAuth, async (c) => {
   }
 
   // Snapshot pre-update rows so we can fan out reputation events for status
-  // transitions, identical to the per-row PATCH path.
+  // transitions, identical to the per-row PATCH path. We also capture
+  // severity + category here so the Wave T.2.4a undo path can revert every
+  // field this endpoint is capable of changing with a single replay.
   const { data: before } = await db
     .from('reports')
-    .select('id, project_id, reporter_token_hash, status')
+    .select('id, project_id, reporter_token_hash, status, severity, category')
     .in('id', ids)
     .in('project_id', projectIds)
   const beforeMap = new Map((before ?? []).map((r) => [r.id, r]))
@@ -2104,6 +2106,39 @@ app.post('/v1/admin/reports/bulk', jwtAuth, async (c) => {
     .in('project_id', projectIds)
   if (updErr) {
     return dbError(c, updErr)
+  }
+
+  // Record the mutation for undo. We only surface `mutation_id` to the
+  // client when the insert succeeded — a failure here silently disables
+  // undo but leaves the data change intact, which is the safer failure
+  // mode than rolling back successful triage work.
+  const priorState = allowedIds.map((id) => {
+    const prev = beforeMap.get(id)
+    return {
+      id,
+      status: prev?.status ?? null,
+      severity: (prev as { severity?: string | null } | undefined)?.severity ?? null,
+      category: (prev as { category?: string | null } | undefined)?.category ?? null,
+    }
+  })
+  const firstProjectIdForLog = beforeMap.values().next().value?.project_id ?? projectIds[0]
+  let mutationId: string | null = null
+  const { data: mutationRow, error: mutationErr } = await db
+    .from('report_bulk_mutations')
+    .insert({
+      admin_id: userId,
+      project_id: firstProjectIdForLog,
+      action,
+      payload: { action, value: body.value ?? null, ids: allowedIds },
+      prior_state: priorState,
+      affected_count: allowedIds.length,
+    })
+    .select('id')
+    .single()
+  if (mutationErr) {
+    log.warn('Bulk mutation log insert failed', { err: String(mutationErr) })
+  } else if (mutationRow) {
+    mutationId = mutationRow.id as string
   }
 
   // Side effects mirror PATCH: reputation, notifications, plugin dispatch on
@@ -2145,10 +2180,114 @@ app.post('/v1/admin/reports/bulk', jwtAuth, async (c) => {
     'report.triaged',
     'report',
     undefined,
-    { action, value: body.value ?? null, count: allowedIds.length, ids: allowedIds },
+    { action, value: body.value ?? null, count: allowedIds.length, ids: allowedIds, mutation_id: mutationId },
   )
 
-  return c.json({ ok: true, data: { updated: allowedIds.length, ids: allowedIds } })
+  return c.json({
+    ok: true,
+    data: { updated: allowedIds.length, ids: allowedIds, mutation_id: mutationId },
+  })
+})
+
+// Wave T.2.4a: undo a bulk mutation within its 10-minute expiry window.
+// The logic is strictly "replay prior_state" — we don't try to compute a
+// diff against the current row because the user may have mutated some of
+// those reports individually in the meantime and those edits should be
+// respected (the undo just reverts the specific fields this bulk action
+// touched on the specific ids it touched).
+app.post('/v1/admin/reports/bulk/:mutationId/undo', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const mutationId = c.req.param('mutationId')
+  if (!mutationId || !/^[0-9a-f-]{36}$/i.test(mutationId)) {
+    return c.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'mutationId must be a UUID' } }, 400)
+  }
+
+  const db = getServiceClient()
+  const { data: mutation, error: fetchErr } = await db
+    .from('report_bulk_mutations')
+    .select('id, admin_id, project_id, action, payload, prior_state, expires_at, undone_at')
+    .eq('id', mutationId)
+    .maybeSingle()
+  if (fetchErr) return dbError(c, fetchErr)
+  if (!mutation) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Mutation not found' } }, 404)
+  }
+  if (mutation.admin_id !== userId) {
+    return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your mutation' } }, 403)
+  }
+  if (mutation.undone_at) {
+    return c.json({ ok: false, error: { code: 'ALREADY_UNDONE', message: 'Mutation already undone' } }, 409)
+  }
+  if (new Date(mutation.expires_at).getTime() < Date.now()) {
+    return c.json({ ok: false, error: { code: 'EXPIRED', message: 'Undo window has passed' } }, 410)
+  }
+
+  const priorState = Array.isArray(mutation.prior_state) ? mutation.prior_state : []
+  if (priorState.length === 0) {
+    return c.json({ ok: false, error: { code: 'EMPTY', message: 'No prior state to restore' } }, 422)
+  }
+
+  // Only restore the field(s) this bulk action actually mutated. A
+  // `set_status` undo must not clobber a severity that the admin tuned
+  // between apply and undo, etc. The `action` column tells us which
+  // field(s) to touch.
+  type PriorRow = { id: string; status: string | null; severity: string | null; category: string | null }
+  const action = mutation.action as string
+  const restrictFields = (prev: PriorRow): Record<string, unknown> => {
+    const patch: Record<string, unknown> = {}
+    if (action === 'dismiss' || action === 'set_status') {
+      if (prev.status !== null) patch.status = prev.status
+    } else if (action === 'set_severity') {
+      patch.severity = prev.severity
+    } else if (action === 'set_category') {
+      if (prev.category !== null) patch.category = prev.category
+    }
+    return patch
+  }
+
+  // Scope every write to projects this admin still owns so a stolen undo
+  // call can't rewrite history across account boundaries.
+  const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId)
+  const projectIds = (projects ?? []).map((p) => p.id)
+  if (projectIds.length === 0) {
+    return c.json({ ok: false, error: { code: 'NO_PROJECTS', message: 'No projects owned by user' } }, 403)
+  }
+
+  let restored = 0
+  for (const raw of priorState as unknown[]) {
+    const prev = raw as PriorRow
+    if (!prev || typeof prev.id !== 'string') continue
+    const patch = restrictFields(prev)
+    if (Object.keys(patch).length === 0) continue
+    const { error: restoreErr, data: restoredRows } = await db
+      .from('reports')
+      .update(patch)
+      .eq('id', prev.id)
+      .in('project_id', projectIds)
+      .select('id')
+    if (restoreErr) {
+      log.warn('Bulk undo restore failed for row', { id: prev.id, err: String(restoreErr) })
+      continue
+    }
+    if ((restoredRows?.length ?? 0) > 0) restored += 1
+  }
+
+  await db
+    .from('report_bulk_mutations')
+    .update({ undone_at: new Date().toISOString() })
+    .eq('id', mutationId)
+
+  await logAudit(
+    db,
+    mutation.project_id as string,
+    userId,
+    'report.bulk_undone',
+    'report',
+    undefined,
+    { mutation_id: mutationId, action, restored },
+  )
+
+  return c.json({ ok: true, data: { mutation_id: mutationId, restored } })
 })
 
 app.get('/v1/admin/stats', adminOrApiKey(), async (c) => {
@@ -7933,6 +8072,91 @@ app.get('/v1/admin/health/cron', jwtAuth, async (c) => {
   }
 
   return c.json({ ok: true, data: { byJob, recent: rowsOrEmpty.slice(0, 30) } })
+})
+
+// Wave T.5.8a: unified chart-annotation feed. Reads the admin_chart_events
+// view (deploys, non-success cron ticks, BYOK rotations) within the
+// requested window and kind filter. Output is capped at 200 events to
+// keep the overlay snappy on long time ranges; UIs can narrow the
+// window or `kinds` filter to see more.
+app.get('/v1/admin/chart-events', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const url = new URL(c.req.url)
+  const projectIdRaw = url.searchParams.get('project_id')
+  const from = url.searchParams.get('from')
+  const to = url.searchParams.get('to')
+  const kindsParam = url.searchParams.get('kinds')
+  const allowedKinds = new Set(['deploy', 'cron', 'byok'])
+  const kinds = (kindsParam ?? 'deploy,cron,byok')
+    .split(',')
+    .map((k) => k.trim())
+    .filter((k) => allowedKinds.has(k))
+  if (kinds.length === 0) {
+    return c.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'kinds[] must include one of deploy/cron/byok' } }, 400)
+  }
+
+  // Authorization: scope strictly to projects this user owns. The service
+  // client bypasses RLS, and `admin_chart_events` is `SECURITY INVOKER` so
+  // RLS only protects callers who use the user JWT — which we do not. We
+  // therefore enforce ownership ourselves by computing the owned project
+  // ids and filtering with `.in('project_id', ...)`. Global rows (cron
+  // ticks with NULL project_id) are still surfaced because they don't
+  // belong to any specific tenant.
+  const db = getServiceClient()
+  const { data: ownedProjects } = await db.from('projects').select('id').eq('owner_id', userId)
+  const ownedIds = (ownedProjects ?? []).map((p) => p.id as string)
+
+  // Validate the optional caller-supplied `project_id` filter as a UUID
+  // before threading it into the query — both to reject obvious garbage
+  // and to defuse PostgREST `.or()` filter-string injection (commas /
+  // dots in a raw value can broaden the filter beyond ownership).
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  let projectFilter: string[] | null = null
+  if (projectIdRaw) {
+    if (!UUID_RE.test(projectIdRaw)) {
+      return c.json({ ok: false, error: { code: 'INVALID_INPUT', message: 'project_id must be a UUID' } }, 400)
+    }
+    if (!ownedIds.includes(projectIdRaw)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not your project' } }, 403)
+    }
+    projectFilter = [projectIdRaw]
+  } else {
+    projectFilter = ownedIds
+  }
+
+  let query = db
+    .from('admin_chart_events')
+    .select('occurred_at, kind, label, href, project_id')
+    .in('kind', kinds)
+    .order('occurred_at', { ascending: false })
+    .limit(200)
+  if (from) query = query.gte('occurred_at', from)
+  if (to) query = query.lte('occurred_at', to)
+  // Owned rows OR globally-scoped rows (project_id IS NULL — deploy /
+  // cron events that aren't tenant-specific). When the user owns no
+  // projects, only the global rows are visible.
+  if (projectFilter.length > 0) {
+    const idList = projectFilter.map((id) => `"${id}"`).join(',')
+    query = query.or(`project_id.in.(${idList}),project_id.is.null`)
+  } else {
+    query = query.is('project_id', null)
+  }
+
+  const { data, error } = await query
+  if (error) return dbError(c, error)
+
+  return c.json({
+    ok: true,
+    data: {
+      events: (data ?? []).map((e) => ({
+        occurred_at: e.occurred_at,
+        kind: e.kind,
+        label: e.label,
+        href: e.href ?? null,
+        project_id: e.project_id ?? null,
+      })),
+    },
+  })
 })
 
 app.post('/v1/admin/health/cron/:job/trigger', jwtAuth, async (c) => {
