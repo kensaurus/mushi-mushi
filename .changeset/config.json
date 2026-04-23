@@ -12,6 +12,7 @@
     "@mushi-mushi/agents",
     "@mushi-mushi/verify",
     "@mushi-mushi/admin",
-    "@mushi-mushi/docs"
+    "@mushi-mushi/docs",
+    "@mushi-mushi/e2e-dogfood"
   ]
 }
