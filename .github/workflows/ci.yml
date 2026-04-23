@@ -12,6 +12,13 @@ name: CI
 on:
   pull_request:
     branches: [master]
+  # Manual fallback: when GitHub silently drops the `pull_request` event for
+  # a branch (rare, but it happens — observed on PR #45 where only the
+  # Copilot review fired), an operator with write access can run this
+  # workflow against the PR branch directly so the Build & Test check
+  # required by the master ruleset reports a status. Strictly belt-and-
+  # suspenders — the normal flow is the `pull_request` trigger above.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
