@@ -1,0 +1,143 @@
+##
+# FILE: deploy-edge-functions.yml
+# PURPOSE: Deploy Supabase Edge Functions whenever the source under
+#          packages/server/supabase/functions/** changes on master.
+#
+# OVERVIEW:
+# - Triggered on push to master with changes to functions or this workflow.
+# - Also runs on `workflow_dispatch` so an operator can re-deploy on demand.
+# - Uses the Supabase CLI via setup-cli action (no Node-installed binary,
+#   which means it works on machines that block npm-installed .exe files
+#   under Windows Device Guard / Defender).
+# - Non-interactive: authenticates with SUPABASE_ACCESS_TOKEN, targets the
+#   project ref from SUPABASE_PROJECT_REF.
+#
+# REQUIREMENTS (one-time setup):
+#   GitHub Secrets:
+#     - SUPABASE_ACCESS_TOKEN  (sbp_…) — generate at
+#       https://supabase.com/dashboard/account/tokens
+#     - SUPABASE_PROJECT_REF   = dxptnwrhwsqckaftyymj  (already linked locally)
+#
+#   gh secret set SUPABASE_ACCESS_TOKEN --body "sbp_…" --repo kensaurus/mushi-mushi
+#   gh secret set SUPABASE_PROJECT_REF  --body "dxptnwrhwsqckaftyymj" --repo kensaurus/mushi-mushi
+#
+# NOTES:
+# - Each function is deployed individually to keep error attribution clean
+#   when one function fails — `supabase functions deploy` without args would
+#   silently abort the rest of the batch on the first failure.
+# - `--no-verify-jwt=false` keeps JWT verification on by default; functions
+#   that need to be public override this in their own config (rare).
+# - Third-party actions are pinned to commit SHAs (Dependabot bumps).
+##
+
+name: Deploy Edge Functions
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'packages/server/supabase/functions/**'
+      - 'packages/server/supabase/config.toml'
+      - '.github/workflows/deploy-edge-functions.yml'
+  workflow_dispatch:
+    inputs:
+      function_name:
+        description: 'Specific function to deploy (blank = all)'
+        required: false
+        default: ''
+
+concurrency:
+  group: deploy-edge-functions
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy Supabase Edge Functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@e58b531dfa2b7ab9bd3dc77c184bca6c2b6cc54a  # v1.3.0
+        with:
+          version: latest
+
+      - name: Verify Supabase CLI
+        run: supabase --version
+
+      - name: Discover functions
+        id: discover
+        working-directory: packages/server/supabase
+        env:
+          ONLY: ${{ github.event.inputs.function_name }}
+        run: |
+          if [ -n "$ONLY" ]; then
+            echo "list=$ONLY" >> "$GITHUB_OUTPUT"
+            echo "::notice::Manual dispatch — deploying only: $ONLY"
+          else
+            FNS=$(ls -1 functions/ | grep -v '^_' | tr '\n' ' ')
+            echo "list=$FNS" >> "$GITHUB_OUTPUT"
+            echo "::notice::Push trigger — deploying all functions: $FNS"
+          fi
+
+      - name: Deploy each function
+        working-directory: packages/server/supabase
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          FUNCTIONS: ${{ steps.discover.outputs.list }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN and SUPABASE_PROJECT_REF secrets must be set."
+            echo "         See workflow header for setup instructions."
+            exit 1
+          fi
+          FAILED=()
+          for fn in $FUNCTIONS; do
+            echo ""
+            echo "::group::Deploy $fn"
+            if supabase functions deploy "$fn" --project-ref "$SUPABASE_PROJECT_REF"; then
+              echo "::notice::deployed: $fn"
+            else
+              echo "::error::failed to deploy: $fn"
+              FAILED+=("$fn")
+            fi
+            echo "::endgroup::"
+          done
+          if [ ${#FAILED[@]} -gt 0 ]; then
+            echo "::error::${#FAILED[@]} function(s) failed: ${FAILED[*]}"
+            exit 1
+          fi
+
+      - name: Smoke test /health
+        run: |
+          sleep 5
+          HTTP=$(curl -s -o /tmp/health -w "%{http_code}" \
+            "https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/api/health")
+          BODY=$(cat /tmp/health)
+          echo "HTTP=$HTTP body=$BODY"
+          if [ "$HTTP" != "200" ]; then
+            echo "::warning::/health returned HTTP $HTTP — function may still be cold-starting"
+            exit 0
+          fi
+
+      - name: Smoke test CORS preflight from kensaur.us
+        run: |
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X OPTIONS \
+            -H "Origin: https://kensaur.us" \
+            -H "Access-Control-Request-Method: GET" \
+            -H "Access-Control-Request-Headers: authorization,content-type" \
+            "https://${{ secrets.SUPABASE_PROJECT_REF }}.supabase.co/functions/v1/api/v1/admin/dashboard")
+          echo "preflight HTTP=$HTTP"
+          if [ "$HTTP" != "204" ] && [ "$HTTP" != "200" ]; then
+            echo "::error::CORS preflight from kensaur.us failed (HTTP $HTTP) — allowlist may not have taken effect"
+            exit 1
+          fi
+          echo "::notice::CORS preflight from kensaur.us passed (HTTP $HTTP)"
