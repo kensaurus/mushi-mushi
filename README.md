@@ -22,7 +22,7 @@ Sentry sees what your code throws. Mushi sees what your users *feel*.
 [Quick start](#quick-start) · [Live admin demo](https://kensaur.us/mushi-mushi/) · [Docs](./apps/docs) · [Self-hosting](./SELF_HOSTED.md) · [Architecture](#architecture)
 
 <a href="https://kensaur.us/mushi-mushi/" title="Open the live admin demo">
-  <img src="./docs/screenshots/report-detail-dark.png" alt="A real classified user-felt bug inside Mushi Mushi — Plan / Do / Check / Act receipt strip across the top showing CLOSED on Plan and Check (judge agreed, score 0.98), the user's own report, the LLM classification (Confusing UX, Medium, 78% confidence, Sing Along Completion/Celebration Screen), environment, performance metrics, and a single one-click Dispatch fix CTA" width="100%" />
+  <img src="./docs/screenshots/report-detail-dark.png" alt="A real classified user-felt bug inside Mushi Mushi — 4-stamp PDCA receipt strip (Plan CLOSED 'Received &amp; classified (high)', Do CLOSED 'Fix dispatched — 1 file changed · PR #11', Check CLOSED 'judge evaluated — judge agreed (score 97%)', Act IN FLIGHT 'Awaiting merge / mark-as-fixed · Review &amp; merge'), live Branch &amp; PR timeline with Dispatch requested → Worker started → Agent started → Branch created mushi/fix-75dda4af-moaw66j7 → Commit 92c76aa → PR opened #11 → Fix completed → CI in progress, Langfuse trace deeplink, Status + Severity dropdowns, Sync destinations + Dispatch fix actions" width="100%" />
 </a>
 
 <sub>↑ click to open the live admin demo · the admin is dark-only by design</sub>
@@ -66,8 +66,8 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 <table width="100%">
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/quickstart-dark.png" alt="Quickstart mode — three-page sidebar (Setup, Bugs to fix, Fixes ready), verb-led labels, zero PDCA jargon, 'You're caught up' caught-up banner, 'Open inbox →' single primary action above page content. The user's plug-and-play answer to a full-featured admin." /></a>
-    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors. Pill-toggle up to Beginner (9 pages) or Advanced (all pages) anytime.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/quickstart-dark.png" alt="Quickstart mode dashboard — three-page sidebar (Setup, Bugs to fix, Fixes ready) with verb-led labels and zero PDCA jargon, 'You're caught up · No new bugs waiting' top banner with 'Open inbox →' primary action, 'Bugs to fix' page heading, Next-Best-Action strip '2 failed fixes need retry · Open Fixes →' (only the two items the user actually needs to act on), and the same live PDCA canvas below (Do node marked CURRENT FOCUS, '2 fixes in flight', '2 failed fixes need retry')" /></a>
+    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors — pill-toggle up to Beginner (9 pages) or Advanced (all pages) anytime.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/first-run-tour-dark.png" alt="First-run interactive tour — spotlight cutout around the Plan tile, dark backdrop dimming everything else, coach-mark panel reading 'TOUR - 1 OF 5 · Plan — bugs your users felt · Each tile is a stage of the loop. Plan is where real user complaints land, get classified, and get scored by severity. Click any tile to drill in.' with a Next button and a Don't show again link." /></a>
@@ -86,28 +86,38 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/dashboard-dark.png" alt="Advanced-mode dashboard with PDCA cockpit — full 23-page sidebar grouped by Plan / Do / Check / Act, Plan / Do / Check / Act tiles with one living number per stage, a coloured ring on the Do bottleneck, 14d severity-stacked histogram, LLM tokens & calls sparklines, and a Next-Best-Action strip pointing at the failed fix" /></a>
-    <p align="center"><b>Dashboard (Advanced)</b> · <sub>one living number per stage, bottleneck ring, Next-Best-Action strip, 14d severity-stacked histogram, LLM tokens & calls sparklines.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/dashboard-dark.png" alt="Advanced-mode dashboard with PDCA cockpit — full 24-page sidebar grouped by Plan / Capture / Classify — Do / Dispatch fixes — Check / Verify quality — Act / Integrate &amp; scale, Next-Best-Action strip '2 failed fixes need retry · Open Fixes →', 4 Plan / Do / Check / Act tiles on a React Flow canvas with the Do node marked CURRENT FOCUS and a marching-ants failure ring on the Do bottleneck, Live Activity feed (Auto-fix completed, Login button click has no effect), and KPI strip (Reports 60 14d, Triage backlog 0, Auto-fix PRs 9, LLM tokens 149.8k)" /></a>
+    <p align="center"><b>Dashboard (Advanced)</b> · <sub>one living number per stage, bottleneck ring, Next-Best-Action strip, 14d severity-stacked histogram, LLM tokens & calls sparklines, Repo link right under Fixes.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/reports"><img src="./docs/screenshots/reports-dark.png" alt="Reports triage queue — 4 px severity stripe per row, 14d Critical/High/Medium/Low KPI strip, dedup-aware blast-radius column, status / category / severity filters, single 'Dispatch fix →' primary action per row, and a real Sing Along bug at the top showing 'Hero CTA Start lesson button overlaps the bottom navigation by approximately 14 px'" /></a>
-    <p align="center"><b>Reports</b> · <sub>queue + Btn parity — 4 px severity stripe, 14d severity KPIs, blast-radius dedup, single primary action per row, every action button on a stable verb with a spinner instead of a label swap.</sub></p>
-  </td>
-</tr>
-<tr>
-  <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/fixes"><img src="./docs/screenshots/fixes-dark.png" alt="Auto-fix pipeline — per-attempt PDCA stage cards (Plan / Do / Check / Act each with status pill), live KPI strip with 30d sparklines (Attempts 4, Completed 3, Failed 1, In flight 0, PRs open 3), real GitHub PR #5 link, Langfuse trace deeplink, error tail 'AI_NoObjectGeneratedError: No object generated' on the failed attempt, 'Retry 1 failed' bulk action top-right" /></a>
-    <p align="center"><b>Fixes</b> · <sub>pipeline + stagger — per-attempt PDCA cards, 30d KPI sparklines, Langfuse trace per run, real PR links, retry-failed CTA. Cards now cascade-fade in via <code>useStaggeredAppear</code>.</sub></p>
-  </td>
-  <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/judge"><img src="./docs/screenshots/judge-dark.png" alt="Judge scores at rest — latest week 65% / total evals 24 / prompt versions 4 (2 active, 2 candidate) / mean score 66% KPIs, 12-week multi-line score trend (Overall 65, Accuracy 100, Severity 72, Component 34, Repro 29), score distribution histogram, prompt leaderboard with stage1 / stage2 baselines and v2-experiment candidates, recent evaluations table surfacing report summaries instead of hashes" /></a>
-    <p align="center"><b>Judge (at rest)</b> · <sub>baseline — live KPIs, 12w trend, distribution histogram, prompt leaderboard, recent evals show summaries (not hashes) with column tooltips per dimension.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/reports"><img src="./docs/screenshots/reports-dark.png" alt="Triage queue — 4 px severity stripe per row, 14d KPI strip (Critical 2, High 41, Medium 8, Low 7) with per-severity sparklines, Save view button, filter row (All 60, New 0, Queued 0, Triaged 0, Resolved 0, Dismissed 0, Critical 2, Major 0), search + Status / Category / Severity dropdowns, 60 real reports showing 'Login button click has no effect — no form submission, navigation, or console errors triggered' with status pills (Fixing 3/4, Classified 2/4), severity pills (High 78%, Critical 95%), and 'Dispatch fix →' primary action per row" /></a>
+    <p align="center"><b>Reports</b> · <sub>triage queue + Btn parity — 4 px severity stripe, 14d severity KPIs with sparklines, blast-radius dedup, Save view preset, single primary action per row.</sub></p>
   </td>
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/health"><img src="./docs/screenshots/health-dark.png" alt="LLM health — 'All systems nominal' green banner, 24h KPIs (10 calls / 0% fallback / 0% errors / p50 6733 ms · p95 14867 ms), per-function breakdown (classify-report, fast-filter with $/call), per-model breakdown (claude-sonnet-4-6 9.4k tokens, claude-haiku-4-5-20251001 6.1k tokens), cron job runner with Trigger now buttons (judge-batch success, intelligence-report never run, data-retention success), recent LLM calls feed with report + trace deeplinks" /></a>
-    <p align="center"><b>Health</b> · <sub>real <code>cost_usd</code> per call, per-function / per-model breakdown, p50/p95 latency, fallback rate, cron triggers, Langfuse deeplinks.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/fixes"><img src="./docs/screenshots/fixes-dark.png" alt="Auto-fix pipeline — 5 KPI cards with 30d sparklines (Attempts 14, Completed 9 / 82% success, Failed 2, In flight 0, PRs open 9), '9 PRs are ready for review' banner with 'Open latest PR' CTA, per-attempt cards with stage-by-stage status (Report → Dispatch → Draft PR → Judge → Ship) and PDCA lifecycle rows (Plan CLOSED, Do CLOSED with real PR #11, Check IN FLIGHT 'CI running on the PR', Act IN FLIGHT 'Awaiting merge'), Langfuse trace deeplink per run" /></a>
+    <p align="center"><b>Fixes</b> · <sub>pipeline + stagger — per-attempt PDCA cards, 30d KPI sparklines, Langfuse trace per run, real PR links, retry-failed CTA. Cards cascade-fade in via <code>useStaggeredAppear</code>.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/judge"><img src="./docs/screenshots/judge-dark.png" alt="Judge scores with Decide/Act/Verify hero — Decide tile 'Overall score 0.80/5 stable across 52 evaluations over 2 weeks', Act tile 'Investigate 58% judge disagreement — Open Prompt Lab', Verify tile 'Last eval openai/gpt-4.1 2026-04-23 02:58', then 4 KPI cards (Latest week 80% +22.6%, Total evaluations 52, Prompt versions 12, Mean score 74%), 12-week score trend with per-dimension lines (Overall 80, Accuracy 100, Severity 86, Component 60, Repro 58), score distribution histogram, prompt leaderboard, 'Run judge now' CTA top-right" /></a>
+    <p align="center"><b>Judge</b> · <sub>Decide/Act/Verify hero over the charts. Live KPIs, 12w score trend, distribution histogram, prompt leaderboard, one-click re-run with a sticky <code>ResultChip</code>.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/repo"><img src="./docs/screenshots/repo-dark.png" alt="Repo graph page — Repository card with GitHub remote, KPI row (14 branches, 9 PR open, 4 CI passing, 2 CI failing, 4 merged, 2 stuck), filter tabs (All 14 / PR open / CI passing / CI failing / Failed), per-branch cards showing 'CI in progress' pill, branch name mushi/fix-75dda4af-moaw66j7, one-sentence summary from the originating report, and an inline mini PDCA graph (Dispatched → Branch → PR #11 → Completed), plus a live REPO ACTIVITY stream on the right with auto-refreshing 'CI success', 'CI failure', 'Commit', 'PR #11 opened', 'Fix dispatched' events timestamped to the minute" /></a>
+    <p align="center"><b>Repo</b> · <sub>one branch per auto-fix attempt, grouped by CI status. Live event stream via Supabase Realtime on <code>fix_events</code>, inline mini-graph per card, refreshes itself so you can leave it open on a second monitor.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/intelligence"><img src="./docs/screenshots/intelligence-dark.png" alt="Bug intelligence page with Decide/Act/Verify hero — Decide tile '1 digest on file · This week's digest is fresh. Check hotspots and category drift', Act tile 'All clear — nothing actionable here right now', Verify tile 'Latest report 4/17/2026 — 2026-04-06, Open evidence →', then an 'ALL CLEAR' banner, week-of 2026-04-06 digest card with prompt (claude-sonnet-4-6), Cross-customer benchmarking opt-in toggle (Sharing off), recent generation jobs table, and a weekly digest row with 'Download PDF' CTA" /></a>
+    <p align="center"><b>Intelligence</b> · <sub>the new 3-tile hero pattern in action — Decide surfaces the one-liner that matters, Act collapses to "All clear" when there's nothing to do, Verify deeplinks to the evidence. Every advanced page follows this shape.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/health"><img src="./docs/screenshots/health-dark.png" alt="LLM health with Decide/Act/Verify hero — Decide tile 'All systems nominal · 13 calls · 0.0% err · Fallback rate 0.0% · avg 8220ms (24h)', Act tile 'All clear', Verify tile 'Last LLM call claude-sonnet-4-6 classify-report 02:57:31Z · Open evidence → · Open audit log', 'All systems nominal' banner, 24h KPI row (Total calls 13, Fallback rate 0.0%, Error rate 0.0%, Latency p50 8220ms / p95 17877ms), per-function breakdown (classify-report 5 calls $0.0766, fast-filter 8 calls $0.0440), per-model breakdown (claude-sonnet-4-6 5 calls 10,729 tokens, claude-haiku-4-5 8 calls 9,752 tokens), provider probes row" /></a>
+    <p align="center"><b>Health</b> · <sub>real <code>cost_usd</code> per call, per-function / per-model breakdown, p50/p95 latency, fallback rate, cron triggers, Langfuse deeplinks, Decide/Act/Verify hero over the raw numbers.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/prompt-lab"><img src="./docs/screenshots/prompt-lab-dark.png" alt="Prompt Lab — KPIs (2 active prompts / 2 candidates / no scored prompts yet / 49 of 52 reports labelled in eval dataset), Stage 1 fast-filter and Stage 2 classify version tables each with v1-baseline (Active, 100% traffic) and v2-experiment (Candidate, 0% traffic) rows, two pending fine-tuning jobs on claude-sonnet-4-6, and an empty Synthetic reports section with a Generate CTA" /></a>
@@ -130,8 +140,8 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
     <p align="center"><b>Marketplace</b> · <sub>D1 — toggleable extension layer for the loop. Each plugin declares the events it subscribes to and ships with HMAC-signed webhooks; deliveries are logged with HTTP status + first 512 chars of the response.</sub></p>
   </td>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/report-detail-dark.png" alt="Report detail page for a Medium-severity Confusing UX bug — top strip with Classified / Medium / Confusing UX pills, then a 4-stamp PDCA receipt (Plan CLOSED, Do NOT YET, Check CLOSED 'judge agreed score 0.98', Act NOT YET 'needs fix + check first'), a Triage this report info card with a Dispatch fix CTA, status / severity dropdowns, Sync to 0 destinations + Dispatch fix actions, then User report (description + user category + user intent), LLM classification (Confusing UX, Medium, summary, component path, 78% confidence, claude-haiku-4-5 in 3876 ms), Environment (URL, browser, viewport), Performance metrics" /></a>
-    <p align="center"><b>Report detail</b> · <sub>The PDCA receipt strip compresses one user-felt bug's full lifecycle into 4 stamps — fed by <code>llm_invocations</code>, <code>fix_attempts</code>, and <code>classification_evaluations</code> in a single round-trip so it never N+1s.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/report-detail-dark.png" alt="Report detail page for a High-severity login-button bug — 4-stamp PDCA receipt (Plan CLOSED, Do CLOSED 'Fix dispatched — 1 file changed · PR #11', Check CLOSED 'judge agreed score 97%', Act IN FLIGHT 'Awaiting merge'), live Branch &amp; PR timeline with every step from Dispatch requested through CI in progress, branch name + CI status + PR link + commit SHA + changed files summary cards, Langfuse trace deeplink, Status / Severity dropdowns, Sync destinations + Dispatch fix actions" /></a>
+    <p align="center"><b>Report detail</b> · <sub>4-stamp PDCA receipt + live Branch &amp; PR timeline — every step of the dispatch lifecycle from <code>llm_invocations</code>, <code>fix_attempts</code>, <code>fix_events</code>, and <code>classification_evaluations</code> in a single round-trip so it never N+1s.</sub></p>
   </td>
 </tr>
 </table>
@@ -251,21 +261,27 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 ## Where the project is today
 
-**Published:** SDKs at `0.2.x` (all seven frameworks), CLI + launcher at `0.4.x`, admin at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) (auto-deployed to S3 + CloudFront on every push to `master`).
+**Published:** SDKs at `0.2.x` (all seven frameworks + node + adapters + capacitor), CLI + launcher at `0.4.x`, MCP + MCP-CI at `0.1.x`, admin at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) (auto-deployed to S3 + CloudFront on every push to `master`).
 
-**Dogfood:** end-to-end loop validated on a real production webapp. Report → LLM triage → "Dispatch fix" → draft GitHub PR → live in `/fixes`. Sentry, Langfuse and GitHub all probe **Healthy** from the Integrations page.
+**Dogfood:** end-to-end loop validated on a real production webapp. Report → LLM triage → "Dispatch fix" → draft GitHub PR → live in `/fixes` → live branch graph in `/repo` with per-event Supabase Realtime stream. Sentry, Langfuse, and GitHub all probe **Healthy** from the Integrations page, with a nightly Playwright dogfood against the production stack catching regressions before they reach users.
 
 **This month's highlights** 🐛
-- **Global command palette** — press `⌘K` (macOS) or `Ctrl+K` (Linux/Windows) anywhere in the admin to jump to any page, filtered view, or real report / fix by name. `cmdk`-backed, keyword aliases (`bugs` → Reports, `pr` → Fixes, `spam` → Anti-Gaming), debounced live API search, recents persist per browser.
-- **PDCA as a live React Flow canvas** — the dashboard loop is now a diamond of Plan / Do / Check / Act nodes with gradient bezier edges and a marching-ants animation on the current bottleneck. Narrow viewports keep the stacked cockpit fallback; onboarding ships the same flow as an explainer.
-- **Responsive tables** — new `ResponsiveTable` primitive with edge-fade scroll shadows, opt-in sticky first column, and a global comfy / compact density toggle that persists per browser. Reports, Judge leaderboards, and Compliance evidence / DSAR tables already use it.
-- **Quickstart mode** — the default 3-page admin (`Setup → Bugs to fix → Fixes ready`) for humans who'd rather not know what PDCA stands for. Pill-toggle up to Beginner (9 pages) or Advanced (full console) when you're ready. Advanced mode now groups its pages under the four PDCA stages with staleness badges and per-page "next best action" strips so the density doesn't hide what to do next.
+
+- **Decide / Act / Verify page hero** — every Advanced PDCA page now opens with a 3-tile hero strip (Decide = one headline metric, Act = the current next-best-action with a single CTA, Verify = deeplink to the evidence). Charts moved below the fold. Beginner mode collapses it to a one-line summary. Source: `apps/admin/src/components/PageHero.tsx`.
+- **Live `/repo` page** — one node per branch the auto-fix agent has opened, grouped by CI status (open / passing / failing / merged / stuck), with a live event stream on the right via Supabase Realtime on the new `fix_events` table. Each branch shows its own mini PDCA graph (Plan → Dispatch → Branch → Commit → PR → CI → Merge) so you can see the loop progress without leaving the page.
+- **Dynamic tab titles + favicon badges** — `useDocumentTitle` keeps `document.title` in sync with the active page via the shared `pageContext` registry (`Reports · 60 reports · 2 critical — Mushi Mushi`) and `useFaviconBadge` paints a red dot on the favicon whenever `criticalCount > 0`, so operators see urgency from any other browser tab. Both are data-layer driven — zero per-page wiring.
+- **Nightly prod PDCA** — `.github/workflows/nightly-prod-pdca.yml` runs the full Playwright dogfood suite against the **production** Supabase stack every night (07:00 UTC) and auto-opens a GitHub issue if the pipeline regresses. Catches stale env keys, expired tokens, cron disables, and LLM provider outages that the local-stack PR e2e can't see. Flip `ENABLE_NIGHTLY_PROD_PDCA` to `true` to enable.
+- **Global command palette** — press `⌘K` (macOS) or `Ctrl+K` (Linux/Windows) anywhere to jump to any page, filtered view, or real report / fix by name. `cmdk`-backed, keyword aliases (`bugs` → Reports, `pr` → Fixes, `spam` → Anti-Gaming), debounced live API search, recents persist per browser (page actions excluded from the recents list so navigation recents don't get evicted).
+- **PDCA as a live React Flow canvas** — the dashboard loop is a diamond of Plan / Do / Check / Act nodes with gradient bezier edges and a marching-ants animation on the current bottleneck. Narrow viewports keep the stacked cockpit fallback; onboarding ships the same flow as an explainer.
+- **Quickstart mode** — the default 3-page admin (`Setup → Bugs to fix → Fixes ready`) for humans who'd rather not know what PDCA stands for. Pill-toggle up to Beginner (9 pages) or Advanced (full console) anytime. Advanced mode groups pages under the four PDCA stages with staleness badges and per-page "next best action" strips.
 - **First-run tour** — a 5-stop spotlight that auto-launches once, skips stops that need real data, and resumes when the first report lands. No `react-joyride` dep, inherits dark theme tokens.
+- **Responsive tables** — `ResponsiveTable` primitive with edge-fade scroll shadows, opt-in sticky first column, and a global comfy / compact density toggle that persists per browser. Reports, Judge leaderboards, and Compliance evidence / DSAR tables already use it.
 - **Themed dialogs** — native `window.confirm/prompt` retired in favour of focus-trapped `<ConfirmDialog>` / `<PromptDialog>` with proper `tone="danger"` for destructive actions.
-- **N+1 slayed** — `apiFetch` now dedups in-flight requests + keeps a 200 ms micro-cache. The old 24× storm on `/v1/admin/setup` is now 1 request.
-- **Sentry telemetry** — every non-2xx API response leaves a breadcrumb; 5xx captures a message; rotated DSNs self-disable after 3 consecutive 401/403 so your devtools stay clean.
+- **Resilient embeddings sweep** — the RAG repo indexer no longer aborts the whole sweep on a single embedding failure. Per-chunk try/catch keeps the loop going, counts failed chunks, and only surfaces to Sentry when *zero* chunks succeed. Empty-response errors now include upstream host, model, and the raw 200-OK body so BYOK + OpenRouter mis-configurations are diagnosed in one pass.
+- **N+1 slayed** — `apiFetch` dedups in-flight requests + keeps a 200 ms micro-cache. The old 24× storm on `/v1/admin/setup` is now 1 request.
+- **Sentry telemetry** — every non-2xx API response leaves a breadcrumb; 5xx captures a message; rotated DSNs self-disable after 3 consecutive 401/403 so your devtools stay clean. `logLlmInvocation` now swallows its own promise-rejection so `void` callers on the hot request path can't crash the isolate.
 - **Slack quick-fix** — Block Kit messages with `Triage` + `Dispatch fix` buttons wired to a signed `slack-interactions` Edge Function. The loop starts and ends in Slack.
-- **Pre-commit lint guards** — `pnpm install` auto-installs a `.git/hooks/pre-commit` that chains three zero-dependency guards: `check-no-secrets.mjs` (AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / JWT leak scanner), `check-design-tokens.mjs` (flags retired Tailwind aliases that would render transparently in the admin console), and `check-mcp-catalog-sync.mjs` (keeps the MCP catalog and its admin mirror in lockstep). Bypass once with `git commit --no-verify`, skip install with `MUSHI_SKIP_GIT_HOOKS=1`.
+- **Pre-commit lint guards** — `pnpm install` auto-installs a `.git/hooks/pre-commit` that chains zero-dependency guards: `check-no-secrets.mjs` (AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / JWT leak scanner), `check-design-tokens.mjs` (retired-Tailwind-aliases that render transparently), `check-mcp-catalog-sync.mjs` (MCP catalog ↔ admin mirror parity), `check-dead-buttons.mjs` (`<button disabled>` without `aria-label` / tooltip), `check-publish-readiness.mjs`, and `check-license-headers.mjs`. Bypass once with `git commit --no-verify`, skip install with `MUSHI_SKIP_GIT_HOOKS=1`.
 
 <details>
 <summary><b>Full phase history</b></summary>
@@ -283,6 +299,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 |  L   | Beginner/Advanced mode toggle, Next-Best-Action strip, unified 4-stage PDCA, post-QA fixes         |   ✅    |
 | M–Q  | 23-page audit + fix-spec sweep — Quickstart mode, first-run tour, themed dialogs, N+1 dedup        |   ✅    |
 |  R   | 7-axis security + perf audit (2026-04-21) — internal-only middleware, expanded PII scrubber, 20 FK indexes, Zod runtime validation, vendor chunks, secrets scanner · [`docs/audit-summary-2026-04-21.md`](./docs/audit-summary-2026-04-21.md) | ✅ |
+|  S   | IA rewrite (2026-04-22/23) — Decide/Act/Verify hero on every advanced page, `/repo` live branch graph + `fix_events` stream, dynamic tab titles, favicon critical-badge, nightly-prod-PDCA workflow, resilient embeddings sweep | ✅ |
 
 Handover docs (most recent first) live under [`docs/`](./docs/) — they're the long-form companion to each row above.
 
@@ -539,19 +556,23 @@ npx supabase functions deploy api --no-verify-jwt
 
 ```
 packages/
-  core, web, react, vue, svelte, angular, react-native   # SDKs (MIT)
-  ios, android                                            # Native SDKs (early dev)
-  cli, mcp                                                # Tooling
+  core, web, react, vue, svelte, angular,                 # Web / framework SDKs (MIT)
+  react-native, capacitor, node, adapters
+  ios, android, flutter                                   # Native SDKs (early dev)
+  cli, mcp, mcp-ci, launcher, create-mushi-mushi          # Tooling + CI gate
   server, agents, verify                                  # Backend (BSL 1.1)
-  plugin-{sdk,zapier,linear,pagerduty}                    # Plugin marketplace
+  plugin-sdk, plugin-jira, plugin-slack-app,              # Plugin marketplace
+  plugin-linear, plugin-pagerduty, plugin-zapier, plugin-sentry
+  wasm-classifier                                         # On-device pre-classifier (ONNX)
 apps/
-  admin    # React 19 + Tailwind 4 + Vite 8 (dark-only by design)
+  admin    # React 19 + Tailwind 4 + Vite 8 (dark-only by design, 24 pages)
   docs     # Nextra v4 documentation site
   cloud    # Next.js 15 marketing landing + Stripe billing
 examples/
-  react-demo
+  react-demo, e2e-dogfood
 deploy/    # Docker Compose + Helm chart
 tooling/   # Shared ESLint + TypeScript configs
+scripts/   # Zero-dependency pre-commit + CI guards (secrets / tokens / dead-buttons / changelog aggregate / …)
 ```
 
 </details>
@@ -560,7 +581,7 @@ tooling/   # Shared ESLint + TypeScript configs
 
 ## Contributing
 
-Issues and PRs welcome. To get started: `pnpm install && pnpm dev`. See individual package READMEs for package-specific setup, and the latest ([`docs/HANDOVER-2026-04-21-console-elevate.md`](./docs/HANDOVER-2026-04-21-console-elevate.md)) for the current state of play.
+Issues and PRs welcome. To get started: `pnpm install && pnpm dev`. See individual package READMEs for package-specific setup, and the latest handovers (newest first) under [`docs/`](./docs/) — [`HANDOVER-2026-04-21-console-elevate.md`](./docs/HANDOVER-2026-04-21-console-elevate.md) is the current state of play; Wave S (Decide/Act/Verify hero, `/repo` page, dynamic titles, favicon badge, nightly prod PDCA) lands on top of it via subsequent PRs.
 
 ## License
 
