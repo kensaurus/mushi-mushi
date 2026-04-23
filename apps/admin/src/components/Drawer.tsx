@@ -52,6 +52,22 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const prevFocusRef = useRef<HTMLElement | null>(null)
 
+  // Ref-latch `onClose` so the main effect can read the latest callback
+  // without listing it as a dependency. Parents almost always pass an
+  // inline arrow (`() => setActivityOpen(false)`), which means its
+  // identity changes on every parent re-render — and `Layout`
+  // re-renders on every realtime `postgres_changes` event via
+  // `useNavCounts`. If we depended on `onClose`, the effect would tear
+  // down and rebuild on every realtime tick; the cleanup calls
+  // `prevFocusRef.current?.focus?.()`, which yanks focus out of
+  // whatever the user is typing in (e.g., the AI sidebar's textarea)
+  // and the re-run then re-focuses the drawer's first focusable, so
+  // the user loses their caret every ~1–2s while a PR is being
+  // created. Same direct-assignment pattern as `useRealtimeReload` in
+  // `src/lib/realtime.ts`.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
     prevFocusRef.current = document.activeElement as HTMLElement | null
@@ -71,7 +87,7 @@ export function Drawer({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && dismissible) {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab' || !panel) return
@@ -97,7 +113,7 @@ export function Drawer({
       document.body.style.overflow = prevOverflow
       prevFocusRef.current?.focus?.()
     }
-  }, [open, dismissible, onClose, dimmed])
+  }, [open, dismissible, dimmed])
 
   if (!open) return null
 
