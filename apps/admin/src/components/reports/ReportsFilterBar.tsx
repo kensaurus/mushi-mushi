@@ -3,11 +3,19 @@
  * PURPOSE: Top-of-table filter row: free-text search, status/category/severity
  *          dropdowns, dismissible context chips for filters that arrived from
  *          another page (component, reporter), and a clear-all link.
+ *
+ *          Wave T.1.2 (2026-04-23): the inline chip + clear-all row was
+ *          extracted into a generic `<ActiveFiltersRail>` so Fixes / Audit
+ *          can share it. The bar now renders the rail directly under the
+ *          controls so users always see the *applied* filters separated
+ *          from the *control* surface, rather than blending them into one
+ *          row that becomes hard to scan once 5+ items are active.
  */
 
 import type { RefObject } from 'react'
 import { FilterSelect } from '../ui'
-import { FILTER_OPTIONS } from '../../lib/tokens'
+import { ActiveFiltersRail, type ActiveFilter } from '../ActiveFiltersRail'
+import { FILTER_OPTIONS, severityLabel } from '../../lib/tokens'
 
 export interface ContextChip {
   key: string
@@ -40,59 +48,86 @@ export function ReportsFilterBar({
   onSetFilter,
   onClearAll,
 }: Props) {
+  // Compose the rail data: select-driven filters + bridged context chips.
+  // Tone'd by semantic — severity uses warn/danger so a glance shows the
+  // urgency band already applied; status uses neutral so the eye reads
+  // the value first.
+  const railFilters: ActiveFilter[] = [
+    status && {
+      key: 'status',
+      label: 'Status',
+      value: status,
+      onClear: () => onSetFilter('status', ''),
+      tone: 'info' as const,
+    },
+    category && {
+      key: 'category',
+      label: 'Category',
+      value: category,
+      onClear: () => onSetFilter('category', ''),
+      tone: 'neutral' as const,
+    },
+    severity && {
+      key: 'severity',
+      label: 'Severity',
+      value: severityLabel(severity),
+      onClear: () => onSetFilter('severity', ''),
+      tone: severity === 'critical' || severity === 'high' ? ('danger' as const) : ('warn' as const),
+    },
+    ...contextChips.map((chip) => ({
+      key: chip.key,
+      label: chip.label,
+      value: chip.value,
+      onClear: () => onSetFilter(chip.key, ''),
+      tone: 'brand' as const,
+    })),
+  ].filter(Boolean) as ActiveFilter[]
+
   return (
-    <div className="flex flex-wrap gap-2 mb-3 items-center">
-      <input
-        ref={searchInputRef}
-        type="text"
-        placeholder="Search summary or description… (/)"
-        value={searchInput}
-        onChange={(e) => onSearchInputChange(e.target.value)}
-        aria-label="Search reports"
-        className="w-64 bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
+    <div className="mb-3 space-y-2">
+      <div className="flex flex-wrap gap-2 items-center">
+        <input
+          ref={searchInputRef}
+          type="text"
+          placeholder="Search summary or description… (/)"
+          value={searchInput}
+          onChange={(e) => onSearchInputChange(e.target.value)}
+          aria-label="Search reports"
+          className="w-64 bg-surface-raised border border-edge-subtle rounded-sm px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
+        />
+        <FilterSelect
+          label="Status"
+          value={status}
+          options={FILTER_OPTIONS.statuses}
+          onChange={(e) => onSetFilter('status', e.currentTarget.value)}
+        />
+        <FilterSelect
+          label="Category"
+          value={category}
+          options={FILTER_OPTIONS.categories}
+          onChange={(e) => onSetFilter('category', e.currentTarget.value)}
+        />
+        <FilterSelect
+          label="Severity"
+          value={severity}
+          options={FILTER_OPTIONS.severities}
+          onChange={(e) => onSetFilter('severity', e.currentTarget.value)}
+        />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="ml-auto text-2xs text-fg-faint hover:text-fg-muted underline"
+          >
+            Clear all
+          </button>
+        )}
+      </div>
+      <ActiveFiltersRail
+        filters={railFilters}
+        onClearAll={onClearAll}
+        ariaLabel="Active report filters"
       />
-      <FilterSelect
-        label="Status"
-        value={status}
-        options={FILTER_OPTIONS.statuses}
-        onChange={(e) => onSetFilter('status', e.currentTarget.value)}
-      />
-      <FilterSelect
-        label="Category"
-        value={category}
-        options={FILTER_OPTIONS.categories}
-        onChange={(e) => onSetFilter('category', e.currentTarget.value)}
-      />
-      <FilterSelect
-        label="Severity"
-        value={severity}
-        options={FILTER_OPTIONS.severities}
-        onChange={(e) => onSetFilter('severity', e.currentTarget.value)}
-      />
-      {contextChips.map((chip) => (
-        <button
-          key={chip.key}
-          type="button"
-          onClick={() => onSetFilter(chip.key, '')}
-          className="inline-flex items-center gap-1.5 rounded-sm border border-accent/30 bg-accent-muted/30 px-2 py-1 text-2xs text-accent hover:bg-accent-muted/50 motion-safe:transition-colors"
-          title={`Clear ${chip.label} filter`}
-        >
-          <span className="font-medium">{chip.label}:</span>
-          <span className="font-mono">{chip.value}</span>
-          <span aria-hidden="true" className="text-fg-faint">
-            ×
-          </span>
-        </button>
-      ))}
-      {hasFilters && (
-        <button
-          type="button"
-          onClick={onClearAll}
-          className="text-2xs text-fg-faint hover:text-fg-muted underline"
-        >
-          Clear all
-        </button>
-      )}
     </div>
   )
 }

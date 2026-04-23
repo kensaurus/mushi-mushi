@@ -12,8 +12,17 @@
  *              a single refresh instead of three.
  */
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from './supabase'
+
+/**
+ * Realtime channel state surfaced to the UI via `useRealtimeReload` so the
+ * `<FreshnessPill>` can render a red ring when the websocket has dropped
+ * (and the page is therefore showing potentially stale data despite the
+ * "live" affordance). Mirrors the strings supabase-js gives the
+ * `.subscribe()` status callback.
+ */
+export type RealtimeChannelState = 'idle' | 'live' | 'dropped'
 
 type Event = 'INSERT' | 'UPDATE' | 'DELETE' | '*'
 
@@ -75,8 +84,9 @@ export function useRealtimeReload(
   tables: TableSpec[],
   onChange: () => void,
   opts: UseRealtimeReloadOptions = {},
-): void {
+): { channelState: RealtimeChannelState } {
   const { debounceMs = 500, enabled = true } = opts
+  const [channelState, setChannelState] = useState<RealtimeChannelState>('idle')
 
   // Keep the callback fresh across renders without re-subscribing every
   // time the parent re-renders with a new closure.
@@ -102,8 +112,24 @@ export function useRealtimeReload(
   const tablesKey = JSON.stringify(tables)
 
   useEffect(() => {
-    if (!enabled) return
+    if (!enabled) {
+      setChannelState('idle')
+      return
+    }
     const specs: TableSpec[] = JSON.parse(tablesKey)
+    // Track per-channel status. We surface the *worst* status across all
+    // subscribed channels so a single dropped channel turns the pill red
+    // (data on the page may now be stale).
+    const statuses = new Map<string, string>()
+    const recompute = () => {
+      const arr = Array.from(statuses.values())
+      if (arr.length === 0) return setChannelState('idle')
+      if (arr.some((s) => s === 'CHANNEL_ERROR' || s === 'TIMED_OUT' || s === 'CLOSED')) {
+        return setChannelState('dropped')
+      }
+      if (arr.every((s) => s === 'SUBSCRIBED')) return setChannelState('live')
+      setChannelState('idle')
+    }
     const channels = specs.map((t) => {
       const cfg = typeof t === 'string' ? { table: t } : t
       const schema = cfg.schema ?? 'public'
@@ -112,15 +138,21 @@ export function useRealtimeReload(
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`
       const channelName = `mushi-rr:${schema}:${cfg.table}:${cfg.filter ?? 'all'}:${uid}`
-      return supabase
+      const ch = supabase
         .channel(channelName)
         .on(
           'postgres_changes' as never,
           { event, schema, table: cfg.table, ...(cfg.filter ? { filter: cfg.filter } : {}) } as never,
           () => fire(),
         )
-        .subscribe()
+        .subscribe((status) => {
+          statuses.set(channelName, String(status))
+          recompute()
+        })
+      statuses.set(channelName, 'PENDING')
+      return ch
     })
+    recompute()
 
     // When the tab becomes visible again after being hidden, fire a
     // single reload so the user sees the most recent snapshot without
@@ -136,6 +168,9 @@ export function useRealtimeReload(
       document.removeEventListener('visibilitychange', onVisible)
       if (timerRef.current) clearTimeout(timerRef.current)
       for (const ch of channels) supabase.removeChannel(ch)
+      setChannelState('idle')
     }
   }, [enabled, fire, tablesKey])
+
+  return { channelState }
 }

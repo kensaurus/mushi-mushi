@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -23,11 +24,14 @@ import {
   EmptyState,
   LogBlock,
   CodeValue,
+  FreshnessPill,
 } from '../components/ui'
+import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface AuditEntry {
@@ -154,7 +158,7 @@ export function AuditPage() {
     return params.toString()
   }, [action, resourceType, actor, actorType, since, q, offset])
 
-  const { data, loading, error, reload } = usePageData<AuditResponse>(
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<AuditResponse>(
     `/v1/admin/audit?${queryString}`,
     { deps: [queryString] },
   )
@@ -274,26 +278,78 @@ export function AuditPage() {
 
   const expandedIds = useMemo(() => new Set(expanded ? [expanded] : []), [expanded])
 
+  // Shared NBA inputs: one hook call per render feeds both hero + action bar.
+  const failCount = logs.filter((l) => l.action === 'fix.failed' || l.action === 'integration.disconnected').length
+  const warnCount = logs.filter((l) => l.action === 'api_key.revoked' || l.action === 'plugin.uninstalled').length
+  const auditAction = useNextBestAction({ scope: 'audit', failCount, warnCount })
+  const auditSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    failCount > 0 ? 'crit' : warnCount > 0 ? 'warn' : logs.length === 0 ? 'neutral' : 'ok'
+  const lastLog = logs[0]
+
+  usePublishPageContext({
+    route: '/audit',
+    title: 'Audit log',
+    summary: loading
+      ? 'Loading audit log…'
+      : total === 0
+        ? 'No events match these filters'
+        : `${total} event${total === 1 ? '' : 's'}${failCount > 0 ? ` · ${failCount} failure${failCount === 1 ? '' : 's'}` : ''}`,
+    filters: {
+      action: action || 'all',
+      resource_type: resourceType || 'all',
+      actor: actor || undefined,
+      actor_type: actorType || undefined,
+      since: since || 'all-time',
+      search: q || undefined,
+    },
+    criticalCount: failCount,
+  })
+
   return (
     <div className="space-y-3">
       <PageHeader
         title="Audit Log"
         description="Append-only history of every mutation made by the platform. Filter by actor, action, or resource."
       >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="audit"
-        action={useNextBestAction({
-          scope: 'audit',
-          // Treat any `fix.failed` or `integration.disconnected` in the
-          // visible window as a FAIL; `api_key.revoked` / `plugin.uninstalled`
-          // as a WARN. Keeps the strip driven by the page's own data.
-          failCount: logs.filter((l) => l.action === 'fix.failed' || l.action === 'integration.disconnected').length,
-          warnCount: logs.filter((l) => l.action === 'api_key.revoked' || l.action === 'plugin.uninstalled').length,
-        })}
+        title="Audit Log"
+        kicker="Append-only evidence"
+        decide={{
+          label: failCount > 0
+            ? 'FAIL events present'
+            : warnCount > 0
+              ? 'WARN events present'
+              : logs.length === 0
+                ? 'No audit activity'
+                : 'Audit trail clean',
+          metric: `${logs.length} events`,
+          summary: failCount > 0
+            ? `${failCount} FAIL event${failCount === 1 ? '' : 's'} in the current window — block next SOC 2 cycle without remediation.`
+            : warnCount > 0
+              ? `${warnCount} WARN event${warnCount === 1 ? '' : 's'} — technical debt on evidence, not blocking.`
+              : logs.length === 0
+                ? 'Audit stream empty — broaden the filters or wait for the next mutation.'
+                : 'Every mutation in scope is accounted for. Export evidence for your next review.',
+          severity: auditSeverity,
+        }}
+        act={auditAction}
+        verify={{
+          label: lastLog ? `Last event · ${lastLog.action}` : 'Awaiting activity',
+          detail: lastLog
+            ? `${lastLog.actor_email ?? lastLog.actor_id ?? 'system'} · ${new Date(lastLog.created_at).toISOString().slice(0, 16).replace('T', ' ')}`
+            : '—',
+          to: '/audit?export=csv',
+          secondaryTo: '/compliance',
+          secondaryLabel: 'Open compliance',
+        }}
       />
+
+      <PageActionBar scope="audit" action={auditAction} />
 
       <PageHelp
         title="About the Audit Log"
@@ -360,11 +416,25 @@ export function AuditPage() {
           />
         </div>
         {activeFilterCount > 0 && (
-          <div className="flex items-center justify-between pt-1 border-t border-edge-subtle">
-            <span className="text-2xs text-fg-muted">
-              {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'} · {total.toLocaleString()} matching entries
+          <div className="flex items-start justify-between gap-3 pt-1 border-t border-edge-subtle">
+            <ActiveFiltersRail
+              filters={(() => {
+                const arr: ActiveFilter[] = []
+                if (action) arr.push({ key: 'action', label: 'Action', value: action, onClear: () => updateParam('action', ''), tone: 'info' })
+                if (resourceType) arr.push({ key: 'resource_type', label: 'Resource', value: resourceType, onClear: () => updateParam('resource_type', '') })
+                if (actorType) arr.push({ key: 'actor_type', label: 'Actor type', value: actorType, onClear: () => updateParam('actor_type', '') })
+                if (since) arr.push({ key: 'since', label: 'Window', value: SINCE_OPTIONS.find((o) => o.value === since)?.label ?? since, onClear: () => updateParam('since', '') })
+                if (actor) arr.push({ key: 'actor', label: 'Actor', value: actor, onClear: () => { setActorDraft(''); updateParam('actor', '') } })
+                if (q) arr.push({ key: 'q', label: 'Search', value: q, onClear: () => { setSearchDraft(''); updateParam('q', '') } })
+                return arr
+              })()}
+              onClearAll={clearFilters}
+              ariaLabel="Active audit filters"
+              className="flex-1"
+            />
+            <span className="text-2xs text-fg-muted whitespace-nowrap pt-0.5">
+              {total.toLocaleString()} matching
             </span>
-            <Btn variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Btn>
           </div>
         )}
       </Card>

@@ -17,6 +17,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
@@ -166,6 +167,23 @@ export function StoragePage() {
     reloadAll()
   }
 
+  const failingBuckets = settings.filter((s) => s.health_status === 'failing').length
+  const degradedBuckets = settings.filter((s) => s.health_status === 'degraded').length
+  const healthyBuckets = settings.filter((s) => s.health_status === 'healthy').length
+  const storageAction = useNextBestAction({
+    scope: 'storage',
+    approachingQuotaPct: null,
+    failedUploadsLastHour: failingBuckets,
+  })
+  const storageSeverity: 'crit' | 'warn' | 'ok' | 'neutral' =
+    settings.length === 0
+      ? 'neutral'
+      : failingBuckets > 0
+        ? 'crit'
+        : degradedBuckets > 0
+          ? 'warn'
+          : 'ok'
+
   if (loading) return <TableSkeleton rows={5} columns={4} showFilters label="Loading storage" />
   if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
@@ -176,14 +194,47 @@ export function StoragePage() {
         description="Per-project bucket usage and retention policy for screenshots, logs, and uploaded artefacts."
       />
 
-      <PageActionBar
+      <PageHero
         scope="storage"
-        action={useNextBestAction({
-          scope: 'storage',
-          approachingQuotaPct: null,
-          failedUploadsLastHour: settings.filter((s) => s.health_status === 'failing').length,
-        })}
+        title="Storage"
+        kicker="Bucket health"
+        decide={{
+          label:
+            storageSeverity === 'crit'
+              ? 'Buckets are failing uploads'
+              : storageSeverity === 'warn'
+                ? 'Bucket health is degraded'
+                : storageSeverity === 'ok'
+                  ? 'Buckets are healthy'
+                  : 'No buckets configured',
+          metric:
+            settings.length === 0
+              ? '—'
+              : `${healthyBuckets}/${settings.length} healthy`,
+          summary:
+            storageSeverity === 'crit'
+              ? 'Failing buckets drop screenshot + log uploads silently — rotate credentials or retry.'
+              : storageSeverity === 'warn'
+                ? 'Degraded buckets still accept uploads but have recent errors — probe before users hit them.'
+                : storageSeverity === 'ok'
+                  ? `${settings.length} bucket${settings.length === 1 ? '' : 's'} configured and passing probes.`
+                  : 'Connect a bucket to retain screenshots + logs beyond the default rolling window.',
+          severity: storageSeverity,
+        }}
+        act={storageAction}
+        verify={{
+          label: 'Latest probe snapshot',
+          detail:
+            settings.length === 0
+              ? 'No probes run yet'
+              : `${healthyBuckets} healthy · ${degradedBuckets} degraded · ${failingBuckets} failing`,
+          to: '/health?fn=storage-probe',
+          secondaryTo: '/audit?source=storage',
+          secondaryLabel: 'Audit log',
+        }}
       />
+
+      <PageActionBar scope="storage" action={storageAction} />
 
       <PageHelp
         title="About BYO Storage"
@@ -200,7 +251,7 @@ export function StoragePage() {
         <SetupNudge
           requires={['project_created']}
           emptyTitle="No projects yet"
-          emptyDescription="Create a project first \u2014 every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
+          emptyDescription="Create a project first — every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
         />
       ) : null}
 

@@ -6,6 +6,7 @@
 
 import { Link } from 'react-router-dom'
 import { Card, Badge, RelativeTime } from '../ui'
+import { statusGlowClass } from '../../lib/tokens'
 import { DISPATCH_STATUS, DISPATCH_STATUS_LABEL, type DispatchJob } from './types'
 
 interface Props {
@@ -20,7 +21,7 @@ export function InflightDispatches({ dispatches }: Props) {
     <div className="space-y-1.5">
       <h3 className="text-xs font-semibold text-fg-secondary uppercase tracking-wide">In-flight dispatches</h3>
       {active.map((d) => (
-        <Card key={d.id} className="p-3 space-y-1">
+        <Card key={d.id} className={`p-3 space-y-1 ${statusGlowClass(d.status)}`}>
           <div className="flex justify-between items-center">
             <Badge className={DISPATCH_STATUS[d.status]}>{DISPATCH_STATUS_LABEL[d.status]}</Badge>
             <Link

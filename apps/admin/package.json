@@ -11,6 +11,8 @@
     "lint": "eslint src/",
     "lint:tokens": "node ../../scripts/check-design-tokens.mjs",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview",
     "clean": "rm -rf dist .turbo"
   },
@@ -34,9 +36,11 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^10.2.0",
+    "jsdom": "^26.0.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
-    "vite": "^8.0.8"
+    "vite": "^8.0.8",
+    "vitest": "^4.1.4"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

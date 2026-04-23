@@ -73,12 +73,18 @@
     "fastify",
     "hono",
     "middleware",
+    "bug-reporting",
+    "user-report",
     "error-tracking",
     "unhandled-rejection",
     "opentelemetry",
     "otel",
     "sentry",
+    "sentry-companion",
     "distributed-tracing",
+    "auto-fix",
+    "llm-ops",
+    "ai-agent",
     "glue"
   ],
   "publishConfig": {

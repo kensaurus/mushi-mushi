@@ -29,6 +29,7 @@ import { PromptDialog } from '../components/ConfirmDialog'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface ReporterDevice {
@@ -178,6 +179,12 @@ export function AntiGamingPage() {
     return { total: allDevices.length, flagged, crossAccount, totalReports }
   }, [allDevices])
 
+  const antiGamingAction = useNextBestAction({
+    scope: 'anti-gaming',
+    flaggedLastHour: stats.flagged,
+    blockedIps: stats.crossAccount,
+  })
+
   // Today-vs-7d-avg delta on each KPI: derived from device.created_at (tracked,
   // flagged, cross-account) and device.report_count_today is not stored, so the
   // reports KPI gets a static delta. surface direction of
@@ -226,7 +233,7 @@ export function AntiGamingPage() {
     <div className="space-y-3">
       <PageHeader
         title="Anti-Gaming"
-        description="Protect intake quality \u2014 throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
+        description="Protect intake quality — throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
       >
         <FilterSelect
           label="Show"
@@ -237,14 +244,48 @@ export function AntiGamingPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
 
-      <PageActionBar
-        scope="anti-gaming"
-        action={useNextBestAction({
-          scope: 'anti-gaming',
-          flaggedLastHour: stats.flagged,
-          blockedIps: stats.crossAccount,
-        })}
-      />
+      {(() => {
+        // Anti-gaming severity is largely driven by cross-account fingerprints
+        // (a flagged account is ambiguous — could be a false positive; a
+        // cross-account IP is almost certainly abuse).
+        const antiGamingSeverity: 'crit' | 'warn' | 'ok' =
+          stats.crossAccount > 0 ? 'crit' : stats.flagged > 0 ? 'warn' : 'ok'
+        return (
+          <>
+            <PageHero
+              scope="anti-gaming"
+              title="Anti-Gaming"
+              kicker="Intake integrity"
+              decide={{
+                label:
+                  stats.crossAccount > 0
+                    ? 'Cross-account abuse detected'
+                    : stats.flagged > 0
+                      ? 'Flagged devices need review'
+                      : 'Intake is clean',
+                metric: `${stats.flagged} flagged · ${stats.crossAccount} cross-account`,
+                summary:
+                  antiGamingSeverity === 'crit'
+                    ? 'Cross-account fingerprints almost always mean reward farming — quarantine now.'
+                    : antiGamingSeverity === 'warn'
+                      ? 'Review flagged devices to confirm abuse or unflag false positives.'
+                      : `${stats.total} device${stats.total === 1 ? '' : 's'} tracked · ${stats.totalReports} reports.`,
+                severity: antiGamingSeverity,
+              }}
+              act={antiGamingAction}
+              verify={{
+                label: 'Latest enforcement activity',
+                detail:
+                  events.length > 0
+                    ? `${events.length} recent event${events.length === 1 ? '' : 's'} · ${collapsedCount} collapsed`
+                    : 'No enforcement actions yet',
+                to: '/audit?source=anti-gaming',
+              }}
+            />
+            <PageActionBar scope="anti-gaming" action={antiGamingAction} />
+          </>
+        )
+      })()}
 
       <PageHelp
         title="About Anti-Gaming"

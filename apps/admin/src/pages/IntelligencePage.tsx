@@ -22,6 +22,8 @@ import { ModernizationFindings } from '../components/intelligence/ModernizationF
 import { IntelligenceReportCard } from '../components/intelligence/IntelligenceReportCard'
 import { PageActionBar } from '../components/PageActionBar'
 import { useNextBestAction } from '../lib/useNextBestAction'
+import { PageHero } from '../components/PageHero'
+import { usePublishPageContext } from '../lib/pageContext'
 import type {
   BenchmarkSettings,
   IntelligenceJob,
@@ -195,28 +197,87 @@ export function IntelligencePage() {
   const activeJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
   const recentJobs = jobs.slice(0, 5)
 
+  usePublishPageContext({
+    route: '/intelligence',
+    title: 'Intelligence',
+    summary: loading
+      ? 'Loading digests…'
+      : activeJob
+        ? `Generating this week · ${activeJob.status}`
+        : reports.length === 0
+          ? 'No digests yet'
+          : `${reports.length} digest${reports.length === 1 ? '' : 's'}${findings.length > 0 ? ` · ${findings.length} modernization finding${findings.length === 1 ? '' : 's'}` : ''}`,
+    criticalCount: findings.length,
+  })
+
+  // IA-4 (Wave S): derive hero inputs once so the Decide / Act / Verify
+  // tiles and the PageActionBar share the same rule engine state. Done
+  // at the top of the render body to keep `useNextBestAction` unconditional.
+  const lastDigestHoursAgo = reports[0]?.created_at
+    ? Math.floor((Date.now() - new Date(reports[0].created_at).getTime()) / 3_600_000)
+    : null
+  const intelligenceAction = useNextBestAction({
+    scope: 'intelligence',
+    lastDigestHoursAgo,
+    topCategory: null,
+    weekReports: reports.length,
+  })
+  const intelligenceSeverity: 'ok' | 'info' | 'warn' =
+    lastDigestHoursAgo == null || lastDigestHoursAgo > 7 * 24
+      ? 'warn'
+      : findings.length > 0
+        ? 'info'
+        : 'ok'
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="Bug Intelligence"
-        description="Aggregate signals across reports \u2014 hotspot components, regression patterns, and shifting severity trends."
+        description="Aggregate signals across reports — hotspot components, regression patterns, and shifting severity trends."
       >
         <Btn onClick={generateNow} disabled={generating || !!activeJob} loading={generating || !!activeJob}>
           {activeJob ? 'Generating' : 'Generate this week'}
         </Btn>
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="intelligence"
-        action={useNextBestAction({
-          scope: 'intelligence',
-          lastDigestHoursAgo: reports[0]?.created_at
-            ? Math.floor((Date.now() - new Date(reports[0].created_at).getTime()) / 3_600_000)
-            : null,
-          topCategory: null,
-          weekReports: reports.length,
-        })}
+        title="Bug Intelligence"
+        kicker="Weekly LLM digest"
+        decide={{
+          label:
+            lastDigestHoursAgo == null
+              ? 'No digest yet'
+              : lastDigestHoursAgo > 7 * 24
+                ? `Last digest ${Math.floor(lastDigestHoursAgo / 24)}d ago`
+                : `${reports.length} digest${reports.length === 1 ? '' : 's'} on file`,
+          metric:
+            findings.length > 0
+              ? `${findings.length} finding${findings.length === 1 ? '' : 's'}`
+              : `${reports.length}`,
+          summary:
+            lastDigestHoursAgo == null
+              ? 'Generate the first digest to seed trend analysis.'
+              : lastDigestHoursAgo > 7 * 24
+                ? 'Weekly digests drift without a fresh run — Monday cron may be paused.'
+                : findings.length > 0
+                  ? 'Modernization findings are waiting for triage below.'
+                  : 'This week\u2019s digest is fresh. Check hotspots and category drift.',
+          severity: intelligenceSeverity,
+        }}
+        act={intelligenceAction}
+        verify={{
+          label: 'Latest report',
+          detail: reports[0]
+            ? `${new Date(reports[0].created_at).toLocaleDateString()} · ${reports[0].week_start ?? 'week unknown'}`
+            : 'no reports yet',
+          to: '/intelligence#reports',
+          secondaryTo: activeJob ? '/intelligence#job' : undefined,
+          secondaryLabel: activeJob ? 'View active job' : undefined,
+        }}
       />
+
+      <PageActionBar scope="intelligence" action={intelligenceAction} />
 
       <PageHelp
         title="About Bug Intelligence"

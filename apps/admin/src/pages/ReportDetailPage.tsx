@@ -18,6 +18,7 @@ import {
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
 import { statusLabel, severityLabel, CATEGORY_LABELS, CATEGORY_BADGE } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
+import { usePublishPageContext } from '../lib/pageContext'
 import { FixProgressStream } from '../components/FixProgressStream'
 import { useReportComments } from '../lib/reportComments'
 import {
@@ -62,6 +63,31 @@ export function ReportDetailPage() {
   useEffect(() => {
     if (serverReport) setReport(serverReport)
   }, [serverReport])
+
+  // Make the browser tab read "MSHREP-abcd1234 · <category> — Mushi Mushi"
+  // so stacked tabs for multiple reports are distinguishable without
+  // hovering. Summary carries status + severity so the AI sidebar shows
+  // triage state at a glance.
+  const shortId = id ? id.slice(0, 8) : ''
+  const reportTitle = report?.description
+    ? `${shortId} · ${report.description.slice(0, 50)}${report.description.length > 50 ? '…' : ''}`
+    : shortId
+      ? `Report ${shortId}`
+      : 'Report'
+  usePublishPageContext({
+    route: `/reports/${id ?? ''}`,
+    title: reportTitle,
+    summary: loading
+      ? 'Loading report…'
+      : report
+        ? `${statusLabel(report.status)} · ${severityLabel(report.severity ?? null) || 'unscored'}`
+        : undefined,
+    selection: report ? { kind: 'report', id: report.id, label: report.description ?? report.id } : undefined,
+    // A still-open critical report deserves the favicon nudge — the
+    // operator walking away from this tab for a meeting should see the
+    // red dot when they glance back.
+    criticalCount: report && report.severity === 'critical' && report.status !== 'resolved' ? 1 : 0,
+  })
 
   const handleTriage = async (updates: Record<string, string>) => {
     if (!id || !report) return

@@ -5,10 +5,12 @@
  *          file list. The page composes these in a list.
  */
 
+import { useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, Badge, RelativeTime } from '../ui'
 import { formatTokens } from '../charts'
 import { PIPELINE_STATUS, pipelineStatusLabel } from '../../lib/tokens'
+import { useRowFlash } from '../../lib/useRowFlash'
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
 import { PdcaReceipt } from './PdcaReceipt'
 import { pluralizeWithCount } from '../../lib/format'
@@ -28,7 +30,37 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
   const ci = ciBadge(fix)
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0)
 
+  // Wave T.2.5: one-shot background wash on realtime status transitions so
+  // a live dispatch `queued → running → completed` flashes in-card. Tone
+  // follows the status's semantic colour so green = good, red = failed.
+  const flashToneFor = useCallback((s: FixAttempt['status']) => {
+    switch (s) {
+      case 'completed':
+      case 'merged':
+        return 'var(--color-ok)'
+      case 'failed':
+      case 'cancelled':
+        return 'var(--color-danger)'
+      case 'running':
+      case 'dispatched':
+      case 'queued':
+        return 'var(--color-info)'
+      default:
+        return 'var(--color-brand)'
+    }
+  }, [])
+  const flash = useRowFlash({
+    rowKey: fix.id,
+    value: fix.status,
+    toneFor: flashToneFor,
+  })
+
   return (
+    <div
+      className={`rounded-md ${flash.className}`}
+      style={flash.style}
+      onAnimationEnd={flash.onAnimationEnd}
+    >
     <Card className="p-3 space-y-1.5">
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-2 flex-wrap">
@@ -159,5 +191,6 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
         </div>
       )}
     </Card>
+    </div>
   )
 }

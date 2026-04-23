@@ -13,7 +13,7 @@ import { createNotification, buildNotificationMessage } from '../_shared/notific
 import { buildReportGraph, detectRegression } from '../_shared/knowledge-graph.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
-import { logLlmInvocation } from '../_shared/telemetry.ts'
+import { extractAnthropicCacheUsage, logLlmInvocation } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
@@ -192,12 +192,16 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     let fallbackReason: string | null = null
 
     let tokenUsage: { promptTokens?: number; completionTokens?: number } = {}
-    // C9: resolve BYOK first; falls back to env automatically.
+    // LLM-5 (audit 2026-04-23): pass Anthropic cache counters through to
+    // llm_invocations. Pre-fix, fast-filter logged 0/N cache hits because it
+    // discarded `experimental_providerMetadata` from the result.
+    let cacheCreationInputTokens: number | null = null
+    let cacheReadInputTokens: number | null = null
     const anthropicResolved = await resolveLlmKey(db, projectId, 'anthropic')
     let keySource: 'byok' | 'env' | null = anthropicResolved?.source ?? null
     try {
       const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
-      const { object, usage } = await generateObject({
+      const result = await generateObject({
         model: anthropic(PRIMARY_MODEL),
         schema: stage1Schema,
         messages: [
@@ -211,8 +215,15 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
           { role: 'user', content: userPrompt },
         ],
       })
-      classification = object
-      tokenUsage = usage ?? {}
+      classification = result.object
+      tokenUsage = result.usage ?? {}
+      // AI SDK v4 exposes this as `experimental_providerMetadata`; v5 renamed
+      // to `providerMetadata`. Reading both keeps the extraction stable
+      // through the minor-version upgrade path.
+      const pm = (result as { experimental_providerMetadata?: unknown; providerMetadata?: unknown })
+      const cache = extractAnthropicCacheUsage(pm.experimental_providerMetadata ?? pm.providerMetadata)
+      cacheCreationInputTokens = cache.cacheCreationInputTokens
+      cacheReadInputTokens = cache.cacheReadInputTokens
     } catch (primaryErr) {
       log.warn('Anthropic Haiku failed, falling back to OpenAI', { err: String(primaryErr) })
       const openaiResolved = await resolveLlmKey(db, projectId, 'openai')
@@ -265,6 +276,8 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
       promptVersion: promptSelection.promptVersion,
       keySource: keySource ?? 'env',
       langfuseTraceId: trace.id,
+      cacheCreationInputTokens,
+      cacheReadInputTokens,
     })
 
     const { error: stage1WriteError } = await db.from('reports').update({

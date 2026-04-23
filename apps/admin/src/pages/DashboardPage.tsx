@@ -10,13 +10,15 @@
 import { useCallback, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
+import type { ChartEvent } from '../lib/apiSchemas'
 import { useRealtimeReload } from '../lib/realtime'
+import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useMilestoneCelebration } from '../lib/useMilestoneCelebration'
 import { Confetti } from '../components/Confetti'
-import { PageHeader, PageHelp, Btn, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Btn, ErrorAlert, FreshnessPill } from '../components/ui'
 import { DashboardSkeleton } from '../components/skeletons/DashboardSkeleton'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { GettingStartedEmpty } from '../components/dashboard/GettingStartedEmpty'
@@ -46,7 +48,14 @@ function inferRunningStage(data: DashboardData): PdcaStageId | null {
 }
 
 export function DashboardPage() {
-  const { data, loading, error, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
+  // Wave T.5.8b: chart annotations. Fetched lazily alongside the main
+  // dashboard payload — we swallow errors because annotations are a
+  // garnish, not critical data.
+  const chartEventsQuery = usePageData<{ events: ChartEvent[] }>(
+    '/v1/admin/chart-events?kinds=deploy,cron,byok',
+  )
+  const chartEvents = chartEventsQuery.data?.events ?? []
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
@@ -68,7 +77,7 @@ export function DashboardPage() {
   // same fix land in the same second. Dashboard reloads are cheap because
   // the backend caches the aggregate for 10s server-side.
   const realtimeEnabled = !loading && !error && !!data && !data.empty
-  useRealtimeReload(
+  const { channelState } = useRealtimeReload(
     ['reports', 'fix_attempts', 'fix_events', 'fix_dispatch_jobs'],
     reload,
     { debounceMs: 1000, enabled: realtimeEnabled },
@@ -86,6 +95,29 @@ export function DashboardPage() {
     setup.activeProject?.merged_fix_count ?? null,
     { onFire: onFirstMergedFix },
   )
+
+  // Publish context so the browser tab title + favicon badge track the
+  // dashboard's live state (backlog / in-flight fixes / LLM failures).
+  // Called unconditionally — hooks rules — so we compute defensively.
+  const dashProjectName = setup.activeProject?.project_name ?? null
+  const dashCounts = data?.counts
+  const dashFix = data?.fixSummary
+  const dashSummary = loading
+    ? 'Loading dashboard…'
+    : !data || data.empty
+      ? 'Waiting for first report'
+      : dashCounts
+        ? `${dashCounts.openBacklog} to triage · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
+        : undefined
+  usePublishPageContext({
+    route: '/',
+    title: dashProjectName ? `Dashboard · ${dashProjectName}` : 'Dashboard',
+    summary: dashSummary,
+    // `openBacklog` is the queue of reports the user still needs to
+    // action — treat every untriaged report as deserving the favicon
+    // red dot so the operator sees the nudge even from another tab.
+    criticalCount: dashCounts?.openBacklog ?? 0,
+  })
 
   if (loading) return <DashboardSkeleton />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
@@ -116,6 +148,7 @@ export function DashboardPage() {
         title={copy?.title ?? 'Dashboard'}
         description={copy?.description ?? (projectName ? `Your loop on ${projectName}` : undefined)}
       >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
         <Btn size="sm" variant="ghost" onClick={reload}>
           Refresh
         </Btn>
@@ -226,6 +259,7 @@ export function DashboardPage() {
             reportsByDay={reportsByDay}
             llmByDay={llmByDay}
             totalLlmCalls={counts.llmCalls14d}
+            chartEvents={chartEvents}
           />
 
           <TriageAndFixRow triageQueue={data.triageQueue ?? []} fixSummary={fixSummary} />
