@@ -1,11 +1,18 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "0.6",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.6.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "mushi-mushi",
+        "version": "0.6.0"
+      }
+    ]
   },
   {
     "majorMinor": "0.5",
@@ -140,7 +147,23 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/capacitor",
+        "version": "0.4.0"
+      },
+      {
         "name": "@mushi-mushi/cli",
+        "version": "0.4.0"
+      },
+      {
+        "name": "@mushi-mushi/core",
+        "version": "0.4.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.4.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
         "version": "0.4.0"
       },
       {
@@ -215,6 +238,10 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/angular",
+        "version": "0.3.0"
+      },
+      {
         "name": "@mushi-mushi/capacitor",
         "version": "0.3.3"
       },
@@ -224,7 +251,11 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.3.2"
+        "version": "0.3.3"
+      },
+      {
+        "name": "@mushi-mushi/node",
+        "version": "0.3.0"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -233,6 +264,18 @@
       {
         "name": "@mushi-mushi/react",
         "version": "0.3.1"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/svelte",
+        "version": "0.3.0"
+      },
+      {
+        "name": "@mushi-mushi/vue",
+        "version": "0.3.0"
       },
       {
         "name": "@mushi-mushi/web",
@@ -303,7 +346,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/angular",
@@ -323,7 +366,7 @@
       },
       {
         "name": "@mushi-mushi/mcp-ci",
-        "version": "0.2.1"
+        "version": "0.2.2"
       },
       {
         "name": "@mushi-mushi/node",
