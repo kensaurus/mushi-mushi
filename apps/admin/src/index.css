@@ -485,6 +485,20 @@ select, input, textarea {
   100% { opacity: 0; transform: translate(var(--mushi-tx, 40px), var(--mushi-ty, 120px)) rotate(var(--mushi-rot, 360deg)); }
 }
 
+/* Wave T.2.5 row-state-flash.
+   Single-shot background wash fired on `ReportRowView` / `FixCard` when the
+   row's `status` or `severity` changes (not on mount). Tone is provided by
+   the caller via `--flash-tone` CSS var so the keyframe stays tone-agnostic
+   and every page can feed in its own status colour. The 4-stop curve is:
+   0 → 25 % → 15 % → 0 which reads as "notice → hold → settle" in ~650 ms. */
+@keyframes mushi-row-flash {
+  0%   { background-color: transparent; }
+  20%  { background-color: color-mix(in oklch, var(--flash-tone, var(--color-brand)) 25%, transparent); }
+  60%  { background-color: color-mix(in oklch, var(--flash-tone, var(--color-brand)) 15%, transparent); }
+  100% { background-color: transparent; }
+}
+.animate-mushi-row-flash { animation: mushi-row-flash 650ms var(--ease-out-expo) 1; }
+
 .animate-mushi-fade-in   { animation: mushi-fade-in 160ms var(--ease-out-expo) both; }
 .animate-mushi-modal-in  { animation: mushi-modal-in 220ms var(--ease-out-expo) both; }
 .animate-mushi-toast-in  { animation: mushi-toast-in 180ms var(--ease-out-expo) both; }

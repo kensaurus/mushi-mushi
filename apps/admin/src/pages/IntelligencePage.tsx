@@ -233,7 +233,7 @@ export function IntelligencePage() {
     <div className="space-y-5">
       <PageHeader
         title="Bug Intelligence"
-        description="Aggregate signals across reports \u2014 hotspot components, regression patterns, and shifting severity trends."
+        description="Aggregate signals across reports — hotspot components, regression patterns, and shifting severity trends."
       >
         <Btn onClick={generateNow} disabled={generating || !!activeJob} loading={generating || !!activeJob}>
           {activeJob ? 'Generating' : 'Generate this week'}

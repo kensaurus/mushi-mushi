@@ -29,6 +29,7 @@ import {
   FilterSelect,
   RelativeTime,
   Pct,
+  FreshnessPill,
 } from '../components/ui'
 import { statusGlowClass } from '../lib/tokens'
 import { HealthSkeleton } from '../components/skeletons/HealthSkeleton'
@@ -275,6 +276,10 @@ export function HealthPage() {
         projectScope={projectName}
         description={copy?.description ?? 'Real-time LLM and scheduled-job telemetry. Updates as events arrive.'}
       >
+        <FreshnessPill
+          at={llmQuery.lastFetchedAt ?? cronQuery.lastFetchedAt}
+          isValidating={llmQuery.isValidating || cronQuery.isValidating}
+        />
         <SelectField
           label="Window"
           value={window}
@@ -381,7 +386,10 @@ export function HealthPage() {
         )
       })()}
 
-      <Section title={`LLM Health (${window})`}>
+      <Section
+        title={`LLM Health (${window})`}
+        freshness={{ at: llmQuery.lastFetchedAt, isValidating: llmQuery.isValidating }}
+      >
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <StatCard
             label="Total calls"
@@ -521,7 +529,10 @@ export function HealthPage() {
         </div>
       </Section>
 
-      <Section title="Cron Jobs">
+      <Section
+        title="Cron Jobs"
+        freshness={{ at: cronQuery.lastFetchedAt, isValidating: cronQuery.isValidating }}
+      >
         <div className="space-y-1">
           {KNOWN_JOBS.map(job => {
             const j = cron?.byJob[job]

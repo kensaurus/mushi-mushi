@@ -39,6 +39,14 @@ export interface PageDataState<T> {
    *  subtle "refreshing…" indicators (e.g. a 2 px progress bar) that
    *  don't replace the page content with a skeleton. */
   isValidating: boolean
+  /**
+   * ISO timestamp of the most recent successful fetch, or `null` until
+   * the first one resolves. Pages feed this into `<FreshnessPill>` so the
+   * top-right of every Section can render "Updated 4 s ago" + a pulse
+   * while `isValidating` is true. Stamped on the same tick that `data`
+   * is committed so the pill never lies about the data it labels.
+   */
+  lastFetchedAt: string | null
   reload: () => void
 }
 
@@ -65,6 +73,7 @@ export function usePageData<T>(
   const [loading, setLoading] = useState<boolean>(autoLoad && path != null)
   const [isValidating, setIsValidating] = useState<boolean>(autoLoad && path != null)
   const [error, setError] = useState<string | null>(null)
+  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
 
   // We keep the abort flag in a ref so that a second StrictMode invocation
   // of the effect can flip the previous run's flag before it commits state.
@@ -122,6 +131,7 @@ export function usePageData<T>(
         if (aborted.current) return
         if (res.ok && res.data !== undefined) {
           setData(res.data as T)
+          setLastFetchedAt(new Date().toISOString())
           hasLoadedOnce.current = true
         } else {
           setError(res.error?.message ?? 'Request failed')
@@ -143,5 +153,5 @@ export function usePageData<T>(
     // depend on it instead of `deps` itself to avoid array-identity churn.
   }, [path, autoLoad, tick, depKey, schema])
 
-  return { data, loading, error, isValidating, reload }
+  return { data, loading, error, isValidating, lastFetchedAt, reload }
 }

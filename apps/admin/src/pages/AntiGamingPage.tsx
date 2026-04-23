@@ -233,7 +233,7 @@ export function AntiGamingPage() {
     <div className="space-y-3">
       <PageHeader
         title="Anti-Gaming"
-        description="Protect intake quality \u2014 throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
+        description="Protect intake quality — throttle bad-faith reporters, quarantine spam, and audit reward eligibility."
       >
         <FilterSelect
           label="Show"

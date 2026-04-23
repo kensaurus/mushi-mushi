@@ -24,7 +24,9 @@ import {
   EmptyState,
   LogBlock,
   CodeValue,
+  FreshnessPill,
 } from '../components/ui'
+import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
@@ -156,7 +158,7 @@ export function AuditPage() {
     return params.toString()
   }, [action, resourceType, actor, actorType, since, q, offset])
 
-  const { data, loading, error, reload } = usePageData<AuditResponse>(
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<AuditResponse>(
     `/v1/admin/audit?${queryString}`,
     { deps: [queryString] },
   )
@@ -309,6 +311,7 @@ export function AuditPage() {
         title="Audit Log"
         description="Append-only history of every mutation made by the platform. Filter by actor, action, or resource."
       >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
       </PageHeader>
 
@@ -413,11 +416,25 @@ export function AuditPage() {
           />
         </div>
         {activeFilterCount > 0 && (
-          <div className="flex items-center justify-between pt-1 border-t border-edge-subtle">
-            <span className="text-2xs text-fg-muted">
-              {activeFilterCount} active filter{activeFilterCount === 1 ? '' : 's'} · {total.toLocaleString()} matching entries
+          <div className="flex items-start justify-between gap-3 pt-1 border-t border-edge-subtle">
+            <ActiveFiltersRail
+              filters={(() => {
+                const arr: ActiveFilter[] = []
+                if (action) arr.push({ key: 'action', label: 'Action', value: action, onClear: () => updateParam('action', ''), tone: 'info' })
+                if (resourceType) arr.push({ key: 'resource_type', label: 'Resource', value: resourceType, onClear: () => updateParam('resource_type', '') })
+                if (actorType) arr.push({ key: 'actor_type', label: 'Actor type', value: actorType, onClear: () => updateParam('actor_type', '') })
+                if (since) arr.push({ key: 'since', label: 'Window', value: SINCE_OPTIONS.find((o) => o.value === since)?.label ?? since, onClear: () => updateParam('since', '') })
+                if (actor) arr.push({ key: 'actor', label: 'Actor', value: actor, onClear: () => { setActorDraft(''); updateParam('actor', '') } })
+                if (q) arr.push({ key: 'q', label: 'Search', value: q, onClear: () => { setSearchDraft(''); updateParam('q', '') } })
+                return arr
+              })()}
+              onClearAll={clearFilters}
+              ariaLabel="Active audit filters"
+              className="flex-1"
+            />
+            <span className="text-2xs text-fg-muted whitespace-nowrap pt-0.5">
+              {total.toLocaleString()} matching
             </span>
-            <Btn variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Btn>
           </div>
         )}
       </Card>

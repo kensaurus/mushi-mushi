@@ -85,26 +85,116 @@ export function Card({ children, className = '', interactive, elevated, onClick,
 
 /* ── Section (labeled card for detail views) ────────────────────────────── */
 
+/**
+ * Freshness metadata accepted by `<Section>` and rendered through
+ * `<FreshnessPill>`. Pages typically forward `usePageData`'s
+ * `lastFetchedAt`, `isValidating`, and `useRealtimeReload`'s `channelState`.
+ *
+ * Wave T.1 (2026-04-23): Sections that show live data win a tiny "Updated
+ * 4 s ago" pill in the top-right that pulses while a background refetch is
+ * in flight and turns red when realtime drops — gives users a constant
+ * trust signal that the page isn't lying about its data.
+ */
+export interface SectionFreshness {
+  /** ISO timestamp of the last successful data fetch, or null until first
+   *  load resolves. */
+  at: string | null
+  /** True while a background refetch is in flight (post-first-load). */
+  isValidating?: boolean
+  /** Realtime channel state — `dropped` adds a red ring + screen-reader
+   *  warning so users know stale data is possible. */
+  channel?: 'idle' | 'live' | 'dropped'
+}
+
 interface SectionProps {
   title: string
   children: ReactNode
   className?: string
   action?: ReactNode
   icon?: ReactNode
+  /** Optional freshness pill rendered top-right. Pages opt in by passing
+   *  `lastFetchedAt`/`isValidating` from `usePageData` plus the realtime
+   *  channel state. */
+  freshness?: SectionFreshness
 }
 
-export function Section({ title, children, className = '', action, icon }: SectionProps) {
+export function Section({ title, children, className = '', action, icon, freshness }: SectionProps) {
   return (
     <Card className={`p-3 ${className}`}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider">
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-fg-secondary uppercase tracking-wider min-w-0">
           {icon && <span className="text-fg-muted shrink-0 [&>svg]:h-3.5 [&>svg]:w-3.5">{icon}</span>}
-          <span>{title}</span>
+          <span className="truncate">{title}</span>
         </h3>
-        {action}
+        <div className="flex items-center gap-2 shrink-0">
+          {freshness && <FreshnessPill {...freshness} />}
+          {action}
+        </div>
       </div>
       {children}
     </Card>
+  )
+}
+
+/* ── FreshnessPill — "Updated 4 s ago" trust signal ─────────────────────── */
+
+interface FreshnessPillProps extends SectionFreshness {
+  className?: string
+}
+
+/**
+ * Top-right chip that gives every section an "I'm not lying" receipt:
+ *
+ *   - Renders `Updated <relative-time>` so users always know the age of
+ *     the data on screen. No timestamp = neutral "Loading…".
+ *   - `motion-safe:animate-pulse` on the dot while `isValidating` so a
+ *     background refetch is visible without flashing the panel.
+ *   - Red ring + assertive aria-live when the realtime channel has
+ *     dropped, so users know the live affordance has gone silent and
+ *     the data may already be stale.
+ *
+ * Cheap to render; safe to mount on every Section. Use directly via the
+ * `<Section freshness={...}>` prop, or render inline next to bespoke
+ * headers (e.g. KpiRow on Dashboard which is a grid, not a Section).
+ */
+export function FreshnessPill({ at, isValidating, channel, className = '' }: FreshnessPillProps) {
+  const dropped = channel === 'dropped'
+  const dotClass = dropped
+    ? 'bg-danger'
+    : isValidating
+    ? 'bg-info motion-safe:animate-pulse'
+    : channel === 'live'
+    ? 'bg-ok'
+    : 'bg-fg-faint'
+  const ringClass = dropped
+    ? 'ring-1 ring-danger/40 border-danger/40'
+    : isValidating
+    ? 'border-info/30'
+    : 'border-edge-subtle'
+  const label = dropped
+    ? 'Realtime channel dropped — data may be stale'
+    : isValidating
+    ? 'Refreshing data…'
+    : at
+    ? `Updated ${formatRelative(at)}`
+    : 'Awaiting first data'
+  return (
+    <span
+      role="status"
+      aria-live={dropped ? 'assertive' : 'polite'}
+      aria-label={label}
+      title={label}
+      className={`inline-flex items-center gap-1.5 rounded-full border bg-surface-overlay/40 px-1.5 py-0.5 text-3xs leading-tight text-fg-faint ${ringClass} ${className}`}
+    >
+      <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`} />
+      {at ? (
+        <span className="tabular-nums">
+          <RelativeTime value={at} className="cursor-default" />
+        </span>
+      ) : (
+        <span>{isValidating ? 'Loading…' : '—'}</span>
+      )}
+    </span>
   )
 }
 

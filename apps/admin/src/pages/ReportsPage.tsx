@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
+import { useStagedRealtime } from '../lib/useStagedRealtime'
+import { StagedChangesBanner } from '../components/StagedChangesBanner'
 import { usePublishPageContext } from '../lib/pageContext'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
+import { useUndoableBulk } from '../lib/useUndoableBulk'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -17,6 +20,7 @@ import {
   Tooltip,
   Kbd,
   Btn,
+  FreshnessPill,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
@@ -37,6 +41,7 @@ export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const toast = useToast()
+  const undoable = useUndoableBulk()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -89,16 +94,10 @@ export function ReportsPage() {
     return p.toString()
   }, [status, category, severity, component, reporter, q, sort, dir, page])
 
-  const { data, loading, error, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
     `/v1/admin/reports?${queryString}`,
     { deps: [queryString] },
   )
-
-  // Realtime: reports can be inserted by the public /v1/reports capture
-  // endpoint, updated by triage, and touched when a fix attempt lands.
-  // Debounced so a burst of reports (Sentry playback, e2e runs) doesn't
-  // refetch per insert. Reload is idempotent on the server side.
-  useRealtimeReload(['reports', 'fix_attempts'], reload)
 
   const reports = data?.reports ?? []
   const total = data?.total ?? 0
@@ -106,6 +105,30 @@ export function ReportsPage() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [cursor, setCursor] = useState(0)
+
+  // Wave T.3.6: stage realtime INSERTs on `reports` when the triager is
+  // mid-review (has selection / cursor below top / scrolled down). Auto-
+  // apply when the triager is clearly idle at the top. `fix_attempts` is
+  // a separate, eager reload because those updates touch rows the user
+  // is already looking at — there's no scroll-position cost to applying
+  // them.
+  const reportsStaged = useStagedRealtime({
+    tables: ['reports'],
+    onApply: reload,
+    shouldAutoApply: () =>
+      selected.size === 0 &&
+      cursor === 0 &&
+      (typeof window === 'undefined' || window.scrollY < 10),
+  })
+  const { channelState: fixChannelState } = useRealtimeReload(['fix_attempts'], reload)
+  // Prefer the reports channel state for the freshness pill — if that drops
+  // the UI is stale even if fix_attempts is still live.
+  const channelState =
+    reportsStaged.channelState === 'dropped' || fixChannelState === 'dropped'
+      ? 'dropped'
+      : reportsStaged.channelState === 'live' || fixChannelState === 'live'
+        ? 'live'
+        : 'idle'
   const [bulkBusy, setBulkBusy] = useState(false)
   const [showHelp, setShowHelp] = useState(false)
   const [dispatching, setDispatching] = useState<Set<string>>(new Set())
@@ -198,10 +221,13 @@ export function ReportsPage() {
       if (selected.size === 0) return
       setBulkBusy(true)
       const ids = [...selected]
-      const res = await apiFetch<{ updated: number }>(`/v1/admin/reports/bulk`, {
-        method: 'POST',
-        body: JSON.stringify({ ids, action, value }),
-      })
+      const res = await apiFetch<{ updated: number; mutation_id: string | null }>(
+        `/v1/admin/reports/bulk`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ ids, action, value }),
+        },
+      )
       setBulkBusy(false)
       if (!res.ok) {
         toast.error('Bulk action failed', res.error?.message ?? 'Unknown error')
@@ -213,14 +239,22 @@ export function ReportsPage() {
           : action === 'set_status'
             ? `Status → ${value}`
             : `Severity → ${value}`
-      toast.success(
-        `${verb}`,
-        `${pluralizeWithCount(res.data?.updated ?? ids.length, 'report')} updated`,
+      const updated = res.data?.updated ?? ids.length
+      undoable.announce(
+        {
+          mutationId: res.data?.mutation_id ?? null,
+          affected: updated,
+        },
+        {
+          successTitle: verb,
+          successDescription: `${pluralizeWithCount(updated, 'report')} updated`,
+          onReload: reload,
+        },
       )
       clearSelection()
       reload()
     },
-    [selected, toast, clearSelection, reload],
+    [selected, toast, clearSelection, reload, undoable],
   )
 
   const openCursor = useCallback(() => {
@@ -510,6 +544,7 @@ export function ReportsPage() {
         projectScope={projectName}
         description={copy?.description ?? 'User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise.'}
       >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
         <span className="text-xs text-fg-muted font-mono tabular-nums">
           {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
         </span>
@@ -587,6 +622,13 @@ export function ReportsPage() {
         onSetStatus={(v) => runBulk('set_status', v)}
         onSetSeverity={(v) => runBulk('set_severity', v)}
         onDismiss={() => runBulk('dismiss')}
+      />
+
+      <StagedChangesBanner
+        count={reportsStaged.stagedCount}
+        onApply={reportsStaged.apply}
+        onDiscard={reportsStaged.discard}
+        noun="new report"
       />
 
       {loading ? (

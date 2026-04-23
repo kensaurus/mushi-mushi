@@ -228,3 +228,29 @@ export const NotificationListSchema = z
     unread_count: z.number().int().nonnegative().optional(),
   })
   .passthrough()
+
+// ─── /v1/admin/chart-events ──────────────────────────────────────────────────
+// Wave T.5.8a chart-annotation feed. Three event kinds unioned into one
+// shape so the overlay can render dots regardless of source. The UI
+// treats any unknown kind as a no-op decoration; schema passthrough keeps
+// the server free to extend later (e.g. `incident`, `runbook`).
+export const ChartEventKindSchema = z.enum(['deploy', 'cron', 'byok'])
+
+export const ChartEventSchema = z
+  .object({
+    occurred_at: z.string(),
+    kind: ChartEventKindSchema,
+    label: z.string(),
+    href: z.string().nullable().optional(),
+    project_id: z.string().nullable().optional(),
+  })
+  .passthrough()
+
+export const ChartEventsResponseSchema = z
+  .object({
+    events: z.array(ChartEventSchema),
+  })
+  .passthrough()
+
+export type ChartEvent = z.infer<typeof ChartEventSchema>
+export type ChartEventKind = z.infer<typeof ChartEventKindSchema>

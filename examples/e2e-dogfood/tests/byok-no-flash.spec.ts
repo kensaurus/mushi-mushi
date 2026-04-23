@@ -135,8 +135,16 @@ test.describe('BYOK no-flash revalidation', () => {
     expect(skelCount, 'no loading skeleton should appear after Test click').toBe(0)
 
     // Focus retention: after the async Test completes, the Test button
-    // should still be the focused element for keyboard re-run.
-    const focusedId = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.id ?? '')
-    expect(focusedId).toMatch(/^byok-test-/)
+    // should still be the focused element for keyboard re-run. Focus
+    // restoration happens on the next rAF after `setTesting(null)`
+    // re-enables the disabled button, so poll briefly rather than
+    // sampling once — intermittent flake otherwise.
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(() => (document.activeElement as HTMLElement | null)?.id ?? ''),
+        { timeout: 3_000, intervals: [50, 100, 200] },
+      )
+      .toMatch(/^byok-test-/)
   })
 })

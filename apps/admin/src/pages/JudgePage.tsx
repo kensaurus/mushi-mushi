@@ -17,6 +17,7 @@ import {
   Tooltip,
   ResultChip,
   type ResultChipTone,
+  FreshnessPill,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { ResponsiveTable } from '../components/ResponsiveTable'
@@ -37,6 +38,8 @@ import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { ChartActionsMenu } from '../components/ChartActionsMenu'
+import { ChartAnnotations } from '../components/charts/ChartAnnotations'
+import type { ChartEvent } from '../lib/apiSchemas'
 
 interface WeekData {
   week_start: string
@@ -237,6 +240,14 @@ export function JudgePage() {
   const [promptFilter, setPromptFilter] = useState<{ version: string; stage: string } | null>(null)
 
   const weeksQuery = usePageData<{ weeks: WeekData[] }>('/v1/admin/judge-scores')
+  // Wave T.5.8b: fetch chart events (deploys, cron anomalies, BYOK
+  // rotations) to overlay on the weekly score trend. Failures are silent
+  // — annotations are a garnish, not a load-blocking dependency. We scope
+  // to ~12 weeks so the pill overlay stays readable on 12 weeks of data.
+  const chartEventsQuery = usePageData<{ events: ChartEvent[] }>(
+    '/v1/admin/chart-events?kinds=deploy,cron,byok',
+  )
+  const chartEvents = chartEventsQuery.data?.events ?? []
   const evalsQuery = usePageData<{ evaluations: EvalRow[] }>(
     `/v1/admin/judge/evaluations?limit=50&sort=${sort === 'score_asc' ? 'score_asc' : 'recent'}${promptFilter ? `&prompt_version=${encodeURIComponent(promptFilter.version)}` : ''}`,
   )
@@ -313,6 +324,10 @@ export function JudgePage() {
 
   const totalEvals = weeks.reduce((s, w) => s + w.eval_count, 0)
   const trendValues = [...weeks].reverse().map((w) => w.avg_score)
+  // Wave T.4.7b: Each weekly bucket exposes a `week` ISO. We pass them
+  // aligned with `trendValues` so brushing the sparkline emits concrete
+  // fromIso/toIso bounds the filter logic can consume.
+  const trendTimestamps = [...weeks].reverse().map((w) => (w as { week?: string }).week ?? '')
 
   // Shared inputs for the hero + action bar — kept as plain consts so the
   // NBA hook is only called once per render (react-hooks/exhaustive-deps
@@ -347,6 +362,10 @@ export function JudgePage() {
         projectScope={projectName}
         description={copy?.description ?? 'Independent grading of every classified report — calibrate confidence and catch silent regressions.'}
       >
+        <FreshnessPill
+          at={evalsQuery.lastFetchedAt ?? weeksQuery.lastFetchedAt}
+          isValidating={evalsQuery.isValidating || weeksQuery.isValidating || promptsQuery.isValidating || distQuery.isValidating}
+        />
         <Btn
           size="sm"
           variant="primary"
@@ -489,7 +508,39 @@ export function JudgePage() {
             />
           ) : (
             <>
-              <LineSparkline values={trendValues} accent="text-brand" height={42} ariaLabel="Weekly judge score trend" />
+              <div className="relative">
+                <LineSparkline
+                  values={trendValues}
+                  timestamps={trendTimestamps.every(Boolean) ? trendTimestamps : undefined}
+                  onRangeSelect={
+                    trendTimestamps.every(Boolean)
+                      ? ({ fromIso, toIso }) => {
+                          // Deep-link to the evaluations table scoped to the
+                          // brushed window. Downstream consumers read `from`
+                          // and `to` off the search params (Wave T.4.7b
+                          // contract). We use `navigate` instead of setSearchParams
+                          // so the URL change is a proper history entry users
+                          // can navigate away from with the back button.
+                          const next = new URLSearchParams(window.location.search)
+                          next.set('from', fromIso)
+                          next.set('to', toIso)
+                          window.history.pushState(null, '', `${window.location.pathname}?${next.toString()}`)
+                        }
+                      : undefined
+                  }
+                  accent="text-brand"
+                  height={42}
+                  ariaLabel="Weekly judge score trend"
+                />
+                {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
+                  <ChartAnnotations
+                    events={chartEvents}
+                    fromIso={trendTimestamps[0]}
+                    toIso={trendTimestamps[trendTimestamps.length - 1]}
+                    ariaLabel="Judge score annotations"
+                  />
+                )}
+              </div>
               {latest && (
                 <>
                   <div className="mt-3 space-y-1">

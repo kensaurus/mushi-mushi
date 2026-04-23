@@ -251,7 +251,7 @@ export function StoragePage() {
         <SetupNudge
           requires={['project_created']}
           emptyTitle="No projects yet"
-          emptyDescription="Create a project first \u2014 every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
+          emptyDescription="Create a project first — every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
         />
       ) : null}
 
