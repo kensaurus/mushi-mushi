@@ -63,7 +63,6 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [pending, setPending] = useState(false)
-  const [unavailable, setUnavailable] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   // Tracks the in-flight assist request so navigation / drawer-close
@@ -97,7 +96,7 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
 
   const send = useCallback(async () => {
     const trimmed = input.trim()
-    if (!trimmed || pending || unavailable) return
+    if (!trimmed || pending) return
     const next: Message[] = [...messages, { role: 'user', content: trimmed }]
     setMessages(next)
     setInput('')
@@ -132,10 +131,6 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
       // awaiting, drop this response to avoid out-of-order updates.
       if (controller.signal.aborted) return
       if (!res.ok) {
-        if (res.error?.code === 'not_found' || res.error?.code === '404') {
-          setUnavailable(true)
-          return
-        }
         setMessages((prev) => [
           ...prev,
           {
@@ -168,7 +163,7 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
       // a later reopen should not leave the composer stuck in "Sending…".
       setPending(false)
     }
-  }, [input, messages, pending, unavailable, route, activeCtx])
+  }, [input, messages, pending, route, activeCtx])
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -208,38 +203,32 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
         ) : null
       }
       footer={
-        unavailable ? (
-          <p className="px-4 py-2 text-2xs text-fg-muted">
-            Assistant endpoint not available on this workspace.
-          </p>
-        ) : (
-          <form
-            className="flex gap-2 px-3 py-2 border-t border-edge/60"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void send()
-            }}
+        <form
+          className="flex gap-2 px-3 py-2 border-t border-edge/60"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void send()
+          }}
+        >
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            rows={2}
+            placeholder={`Ask about ${title}…  (Enter to send, Shift+Enter for newline)`}
+            className="flex-1 resize-none bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
+            disabled={pending}
+          />
+          <Btn
+            type="submit"
+            size="sm"
+            variant="primary"
+            disabled={pending || input.trim().length === 0}
           >
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={2}
-              placeholder={`Ask about ${title}…  (Enter to send, Shift+Enter for newline)`}
-              className="flex-1 resize-none bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40"
-              disabled={pending}
-            />
-            <Btn
-              type="submit"
-              size="sm"
-              variant="primary"
-              disabled={pending || input.trim().length === 0}
-            >
-              {pending ? '…' : 'Send'}
-            </Btn>
-          </form>
-        )
+            {pending ? '…' : 'Send'}
+          </Btn>
+        </form>
       }
     >
       <div ref={scrollRef} className="h-full overflow-y-auto px-4 py-3 space-y-3">
@@ -250,7 +239,7 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
           <ContextStrip ctx={activeCtx} />
         )}
 
-        {messages.length === 0 && !unavailable && (
+        {messages.length === 0 && (
           <EmptyPrompt
             route={route}
             ctx={activeCtx}
@@ -259,14 +248,6 @@ export function AIAssistSidebar({ open, onClose, route }: Props) {
               inputRef.current?.focus()
             }}
           />
-        )}
-        {unavailable && (
-          <div className="text-xs text-fg-muted leading-relaxed">
-            <p className="mb-2">The AI sidebar calls <code className="font-mono">POST /v1/admin/assist</code> with
-            the current route, page context, and conversation history. That endpoint isn't wired up in this deployment yet —
-            once it is, this panel becomes a scoped chat that knows which page you're on and what you're filtering by.</p>
-            <p>Press <kbd className="rounded border border-edge px-1 font-mono text-2xs">Esc</kbd> to close.</p>
-          </div>
         )}
         {messages.map((m, idx) => (
           <MessageBubble key={idx} message={m} />

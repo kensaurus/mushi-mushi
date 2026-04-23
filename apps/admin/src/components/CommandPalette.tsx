@@ -140,6 +140,15 @@ export function CommandPalette() {
 
   const routesByGroup = useMemo(() => groupRoutes(STATIC_ROUTES), [])
 
+  // Stable lookup used both by the Recent-group renderer and by
+  // `handleSelect` to decide whether a selection is worth recording.
+  // The "Recent" group has always been *recent navigation* — any other
+  // selection (filter shortcut, mode switch, page-contributed action,
+  // live report / fix hit) can't be resolved back to a StaticRoute and
+  // would silently evict a real route from the 5-slot cap if we wrote
+  // it anyway. See `handleSelect` below.
+  const routeIds = useMemo(() => new Set(STATIC_ROUTES.map((r) => r.id)), [])
+
   const recentRoutes = useMemo(() => {
     if (query.trim()) return []
     const byId = new Map(STATIC_ROUTES.map((r) => [r.id, r]))
@@ -147,9 +156,18 @@ export function CommandPalette() {
   }, [recents, query])
 
   function handleSelect(id: string, action: () => void) {
-    const next = [id, ...recents.filter((x) => x !== id)].slice(0, MAX_RECENTS)
-    setRecents(next)
-    writeRecents(next)
+    // Only route ids feed the "Recent" group. Quick actions, mode
+    // toggles, page-contributed actions (`page:*`), and live API hits
+    // (`report:*`, `fix:*`) used to be recorded here too — but
+    // `recentRoutes` drops anything it can't resolve in STATIC_ROUTES,
+    // so those writes just wasted slots and pushed real navigation
+    // recents out of the 5-slot cap. After a few filter-shortcut /
+    // page-action uses the Recent group would silently empty out.
+    if (routeIds.has(id)) {
+      const next = [id, ...recents.filter((x) => x !== id)].slice(0, MAX_RECENTS)
+      setRecents(next)
+      writeRecents(next)
+    }
     close()
     // Defer navigation to the next tick so the dialog can unmount first —
     // otherwise the focus-restoration fights with React Router's own

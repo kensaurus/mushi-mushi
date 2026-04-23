@@ -93,9 +93,19 @@ export function GeneralPanel() {
           value={settings.stage2_model ?? 'claude-sonnet-4-6'}
           onChange={(e) => update({ stage2_model: e.target.value })}
         >
-          <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-          <option value="claude-opus-4-6">Claude Opus 4.6</option>
-          <option value="gpt-4.1">GPT-4.1</option>
+          <optgroup label="Anthropic (current generation)">
+            <option value="claude-opus-4-7">Claude Opus 4.7 — frontier reasoning (2026-Q2)</option>
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — recommended default</option>
+            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast / cheap</option>
+          </optgroup>
+          <optgroup label="OpenAI fallback">
+            <option value="gpt-5.4">GPT-5.4</option>
+            <option value="gpt-5.4-mini">GPT-5.4 mini</option>
+          </optgroup>
+          <optgroup label="Legacy (cost review only)">
+            <option value="claude-opus-4-6">Claude Opus 4.6</option>
+            <option value="gpt-4.1">GPT-4.1</option>
+          </optgroup>
         </SelectField>
         <Slider
           label="Stage 1 Confidence Threshold"

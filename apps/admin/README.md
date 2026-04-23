@@ -171,7 +171,7 @@ The console ships in **Quickstart mode**by default. A 3-state pill at the top of
 |------|---------|-----------|--------|
 | **Quickstart** (default) | **3 verb-led pages** — Setup, Bugs to fix, Fixes ready | Verb-first, jargon-free from `lib/copy.ts` ("Bugs to fix", "Fixes ready") — **no PDCA terminology surfaces at all** | "Resolve next bug →" mega-CTA above page content; `<LivePdcaPipeline>` storyboard on Dashboard; `<FirstRunTour>` auto-launches once |
 | **Beginner** | 9 loop-essential pages (Dashboard, Get started, Reports, Graph, Fixes, Judge, Health, Integrations, Settings) | Outcome-first ("Your bug-fix loop", "Bugs your users felt") | `<NextBestAction>` strip on every page; `<LivePdcaPipeline>` storyboard; `<Jargon>` underlines tooltips for jargon nouns |
-| **Advanced** | All 24 pages | Dense, jargon-rich ("PDCA cockpit", "Triage queue") | Power-user density; no NBA strip; `<Jargon>` is a no-op |
+| **Advanced** | All 24 pages | Dense, jargon-rich ("PDCA cockpit", "Triage queue") | Power-user density; `<Jargon>` is a no-op; data-heavy pages get a **`<PageActionBar>`** (one or two contextual CTAs from `useNextBestAction`) and charts get a **`<ChartActionsMenu>`** (export CSV / copy filter / open in Query) instead of the beginner-mode NBA strip |
 
 Routes resolve in **every mode** — only the sidebar is filtered, so deep links + bookmarks survive. If a quickstart/beginner user lands on a route hidden from their sidebar (autocomplete, link-share), the sidebar surfaces a "this page lives in Advanced mode — switch to keep it in your sidebar" hint.
 
@@ -281,6 +281,8 @@ Every analytical page reuses the same visual vocabulary from `src/components/cha
 - `LineSparkline`, `BarSparkline`, `Histogram`, `SeverityStackedBars` — minimal SVG/HTML charts that respect the design tokens
 - `StatusPill`, `HealthPill`, `LegendDot` — semantic status rendering shared between Dashboard, Judge, Queue, Fixes, and Prompt Lab
 - `FixGitGraph` (`src/components/FixGitGraph.tsx`) — inline SVG branch graph for a single fix attempt's PDCA timeline (dispatch → branch → commit → PR → CI → merge). Reused verbatim on `/fixes` (inside expanded `FixCard`), on `/reports/:id` (inside `ReportBranchGraph` below `PdcaReceiptStrip`), and on `/repo` (narrow variant inside each `BranchRow`)
+- **`PageActionBar`** (`src/components/PageActionBar.tsx`) — slim contextual action strip mounted at the top of data-heavy Advanced-mode pages (Audit, Compliance, DLQ, Graph, Health, Intelligence, Judge, Prompt Lab, Query, Storage, Anti-Gaming). Feeds off **`useNextBestAction`** (`src/lib/useNextBestAction.ts`), which reads page state + counters and returns the one or two CTAs that actually move the needle (e.g. "Dispatch next fix", "Clear DLQ", "Export filter to Query"). Renders nothing on pages with no actionable next step, so it never adds noise
+- **`ChartActionsMenu`** (`src/components/ChartActionsMenu.tsx`) — overflow menu attached to the top-right of charts / data grids. Stock actions: **Export CSV**, **Copy filter**, **Open in Query**, **Copy deep-link**. Each chart passes the data slice + filter state it currently shows, so downloads and deep-links are WYSIWYG. Keyboard-accessible (Escape closes, arrow keys navigate)
 
 ### Dashboard composition
 

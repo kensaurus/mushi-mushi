@@ -94,6 +94,15 @@ export function logLlmInvocation(
     cache_read_input_tokens: rec.cacheReadInputTokens ?? null,
   }).then(({ error }) => {
     if (error) log.warn('llm_invocations insert failed', { error: error.message })
+  }).catch((err) => {
+    // Network / JSON-parse / abort failures rejecting the insert promise
+    // itself (distinct from a PostgREST `{ error }` payload). Callers commonly
+    // invoke this as `void logLlmInvocation(...)` on the hot request path, so
+    // an unhandled rejection here would crash the isolate on Deploy. Swallow
+    // + log so telemetry is strictly best-effort.
+    log.warn('llm_invocations insert threw', {
+      error: err instanceof Error ? err.message : String(err),
+    })
   })
 }
 

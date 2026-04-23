@@ -90,6 +90,10 @@ const NAV: NavSection[] = [
   {
     id: 'start',
     title: 'Start here',
+    // Advanced-mode users already know the basics; collapse so the 4 PDCA
+    // groups dominate the sidebar. Beginner/Quickstart still show it first
+    // because the mode-specific NAV projection (see below) overrides this.
+    defaultCollapsed: true,
     items: [
       { label: 'Dashboard',   path: '/',           icon: IconDashboard, beginner: true },
       { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
@@ -328,8 +332,15 @@ export function Layout({ children }: { children: ReactNode }) {
       },
     ]
   } else if (isBeginner) {
+    // Beginner mode keeps Start expanded by default — first-run users
+    // need the Dashboard / Get started pair in view, not hidden behind
+    // a chevron like in advanced mode.
     visibleNav = NAV
-      .map(s => ({ ...s, items: s.items.filter(i => i.beginner) }))
+      .map(s => ({
+        ...s,
+        defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
+        items: s.items.filter(i => i.beginner),
+      }))
       .filter(s => s.items.length > 0)
   } else {
     visibleNav = NAV
@@ -397,6 +408,10 @@ export function Layout({ children }: { children: ReactNode }) {
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
           const collapsible = section.defaultCollapsed !== undefined || section.id === 'workspace'
+          // Per-stage staleness — surfaced on the collapsed section header
+          // so advanced users can still see at a glance which PDCA stage
+          // needs their attention without expanding.
+          const staleness = computeStaleness(section.id, navCounts)
           return (
             <div key={section.id}>
               <SectionHeader
@@ -404,6 +419,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 collapsed={collapsed}
                 collapsible={collapsible}
                 isActiveStage={isActiveStage}
+                staleness={staleness}
                 onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
               />
               {!collapsed && (
@@ -677,15 +693,70 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
   )
 }
 
+interface SectionStaleness {
+  count: number
+  tone: 'ok' | 'warn' | 'danger'
+  label: string
+}
+
 interface SectionHeaderProps {
   section: NavSection
   collapsed: boolean
   collapsible: boolean
   isActiveStage: boolean
+  staleness: SectionStaleness | null
   onToggle: () => void
 }
 
-function SectionHeader({ section, collapsed, collapsible, isActiveStage, onToggle }: SectionHeaderProps) {
+/**
+ * Compute a single "how stale is this stage" badge for the PDCA sections.
+ * Only Plan + Do have cheap aggregate counts today (reused from
+ * `useNavCounts`). Check + Act return null — the section header simply
+ * has no badge, which is indistinguishable from "no work pending".
+ */
+function computeStaleness(
+  sectionId: string,
+  navCounts: ReturnType<typeof useNavCounts>,
+): SectionStaleness | null {
+  if (!navCounts.ready) return null
+  switch (sectionId) {
+    case 'plan': {
+      const backlog = navCounts.untriagedBacklog
+      if (backlog === 0) return null
+      // `toneForBacklog` returns 'ok' only when n === 0; we've already
+      // returned above in that case, so the remaining tones are a subset
+      // of SectionStaleness['tone'].
+      const tone = toneForBacklog(backlog) as SectionStaleness['tone']
+      return {
+        count: backlog,
+        tone,
+        label: `${backlog} untriaged report${backlog === 1 ? '' : 's'} waiting`,
+      }
+    }
+    case 'do': {
+      const active = navCounts.fixesFailed + navCounts.fixesInFlight
+      if (active === 0) return null
+      const tone = navCounts.fixesFailed > 0 ? 'danger' : 'warn'
+      return {
+        count: active,
+        tone,
+        label: navCounts.fixesFailed > 0
+          ? `${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'} · ${navCounts.fixesInFlight} in flight`
+          : `${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`,
+      }
+    }
+    default:
+      return null
+  }
+}
+
+const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
+  ok: 'bg-ok-muted text-ok',
+  warn: 'bg-warn-muted text-warn',
+  danger: 'bg-danger-muted text-danger',
+}
+
+function SectionHeader({ section, collapsed, collapsible, isActiveStage, staleness, onToggle }: SectionHeaderProps) {
   const inner = (
     <span className="flex items-center gap-1.5 min-w-0 w-full">
       {section.stage && (
@@ -697,6 +768,15 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, onToggl
         </span>
       )}
       <span className="truncate flex-1 text-left">{section.title}</span>
+      {staleness && (
+        <span
+          className={`inline-flex items-center justify-center min-w-[1rem] px-1 h-3.5 rounded-sm text-[0.55rem] font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
+          aria-label={staleness.label}
+          title={staleness.label}
+        >
+          {staleness.count > 99 ? '99+' : staleness.count}
+        </span>
+      )}
       {isActiveStage && (
         <span
           className="text-3xs font-medium normal-case tracking-normal text-brand shrink-0"

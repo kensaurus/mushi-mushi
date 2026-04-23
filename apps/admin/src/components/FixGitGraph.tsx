@@ -64,7 +64,7 @@ interface FixGitGraphProps {
   baseBranch?: string
   /** When provided, the commit node links out to GitHub and opens the diff dialog. */
   commitSha?: string | null
-  /** Agent model (e.g. "claude-3-5-sonnet") — surfaces in node tooltips. */
+  /** Agent model (e.g. "claude-sonnet-4-6") — surfaces in node tooltips. */
   agentModel?: string | null
   /** File list — rendered in the commit diff modal. */
   filesChanged?: string[] | null

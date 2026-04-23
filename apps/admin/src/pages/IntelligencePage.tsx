@@ -20,6 +20,8 @@ import {
 import { BenchmarkOptInCard } from '../components/intelligence/BenchmarkOptInCard'
 import { ModernizationFindings } from '../components/intelligence/ModernizationFindings'
 import { IntelligenceReportCard } from '../components/intelligence/IntelligenceReportCard'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 import type {
   BenchmarkSettings,
   IntelligenceJob,
@@ -203,6 +205,18 @@ export function IntelligencePage() {
           {activeJob ? 'Generating' : 'Generate this week'}
         </Btn>
       </PageHeader>
+
+      <PageActionBar
+        scope="intelligence"
+        action={useNextBestAction({
+          scope: 'intelligence',
+          lastDigestHoursAgo: reports[0]?.created_at
+            ? Math.floor((Date.now() - new Date(reports[0].created_at).getTime()) / 3_600_000)
+            : null,
+          topCategory: null,
+          weekReports: reports.length,
+        })}
+      />
 
       <PageHelp
         title="About Bug Intelligence"

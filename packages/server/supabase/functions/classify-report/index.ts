@@ -18,6 +18,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
 import { buildReportGraph } from '../_shared/knowledge-graph.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
 
 const stage2Schema = z.object({
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Refined bug category'),
@@ -232,8 +233,8 @@ ${codeContext ? `\n## Relevant Code Files\n${codeContext}` : ''}
 ${ontologyContext}`
 
     const startTime = Date.now()
-    const modelId = settings?.stage2_model ?? 'claude-sonnet-4-6'
-    const FALLBACK_MODEL = 'gpt-4.1'
+    const modelId = settings?.stage2_model ?? STAGE2_MODEL
+    const FALLBACK_MODEL = STAGE2_FALLBACK
     let classification: z.infer<typeof stage2Schema>
     const llmSpan = trace.span('stage2.analyze')
     let usedModel = modelId

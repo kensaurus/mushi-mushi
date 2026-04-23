@@ -27,6 +27,8 @@ import {
 import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface AuditEntry {
   id: string
@@ -280,6 +282,18 @@ export function AuditPage() {
       >
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
       </PageHeader>
+
+      <PageActionBar
+        scope="audit"
+        action={useNextBestAction({
+          scope: 'audit',
+          // Treat any `fix.failed` or `integration.disconnected` in the
+          // visible window as a FAIL; `api_key.revoked` / `plugin.uninstalled`
+          // as a WARN. Keeps the strip driven by the page's own data.
+          failCount: logs.filter((l) => l.action === 'fix.failed' || l.action === 'integration.disconnected').length,
+          warnCount: logs.filter((l) => l.action === 'api_key.revoked' || l.action === 'plugin.uninstalled').length,
+        })}
+      />
 
       <PageHelp
         title="About the Audit Log"

@@ -19,7 +19,7 @@ Agentic fix pipeline for Mushi Mushi — orchestrates coding agents to auto-gene
 | `McpFixAgent` | True MCP adapter using `tools/call` + SEP-1686 Tasks |
 | `RestFixWorkerAgent` | Plain REST adapter for self-hosted fix workers |
 | `GenericMCPAgent` | Legacy MCP adapter (kept for back-compat; new integrations should use `McpFixAgent`) |
-| `ClaudeCodeAgent` | Claude Code adapter (experimental) |
+| `ClaudeCodeAgent` | Claude Code CLI adapter — opt-in via `MUSHI_ENABLE_CLAUDE_CODE_AGENT=1` |
 | `CodexAgent` | OpenAI Codex adapter (experimental) |
 | `checkFileScope` | Validates that fixes only touch allowed files |
 | `checkCircuitBreaker` | Prevents runaway fix attempts |
@@ -112,7 +112,7 @@ before audit persistence.
 - **McpFixAgent** — production adapter; speaks MCP `tools/call` + SEP-1686 Tasks
 - **RestFixWorkerAgent** — production adapter for self-hosted REST workers
 - **GenericMCPAgent** — legacy adapter; new integrations should pick `McpFixAgent`
-- **ClaudeCodeAgent** — stub (returns `success: false`); pending Channels API access
+- **ClaudeCodeAgent** — working; shells out to the local `claude` CLI behind `MUSHI_ENABLE_CLAUDE_CODE_AGENT=1`. Override the binary path with `MUSHI_CLAUDE_CODE_BIN`. Disabled by default — if the flag is off, `generateFix` returns a deterministic "not configured" result.
 - **CodexAgent** — stub (returns `success: false`); pending direct API integration
 - **MultiRepoFixOrchestrator** — production; backed by `project_repos` + `fix_coordinations` migrations
 

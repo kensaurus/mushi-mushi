@@ -608,12 +608,35 @@ async function handleSweep(req: Request, parsedBody: { project_id?: string } | n
 
     try {
       const stats = await sweepIndexRepo(db, repo.project_id, token, owner, name, repo.default_branch ?? 'main')
-      await db.from('project_repos').update({
-        last_indexed_at: new Date().toISOString(),
-        last_index_attempt_at: new Date().toISOString(),
-        last_index_error: null,
-      }).eq('id', repo.id)
-      summary.push({ repo: repo.repo_url, ok: true, ...stats })
+      // A sweep where every chunk failed gets treated as a full failure
+      // (nothing indexed ≈ nothing useful happened) so `last_index_error`
+      // surfaces in the admin UI and a Sentry event fires. Partial failures
+      // — e.g. one content-filter hit, or a single transient 5xx — mark
+      // success but still record the last error for operator visibility.
+      if (stats.inserted === 0 && stats.failed > 0) {
+        const msg = stats.lastError ?? 'all chunk embeddings failed'
+        log.error('sweep: repo index failed', {
+          repo: repo.repo_url,
+          error: msg,
+          failed: stats.failed,
+          skipped: stats.skipped,
+        })
+        await db.from('project_repos').update({
+          last_index_attempt_at: new Date().toISOString(),
+          last_index_error: msg.slice(0, 500),
+        }).eq('id', repo.id)
+        summary.push({ repo: repo.repo_url, ok: false, error: msg, ...stats })
+      } else {
+        await db.from('project_repos').update({
+          last_indexed_at: new Date().toISOString(),
+          last_index_attempt_at: new Date().toISOString(),
+          // Preserve the last partial-failure signal so the admin UI can
+          // show "12 chunks embedded, 3 failed: <reason>" without paging
+          // Sentry. Cleared only on a clean (failed === 0) sweep.
+          last_index_error: stats.failed > 0 ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500) : null,
+        }).eq('id', repo.id)
+        summary.push({ repo: repo.repo_url, ok: true, ...stats })
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg })
@@ -646,7 +669,7 @@ async function sweepIndexRepo(
   owner: string,
   repo: string,
   branch: string,
-): Promise<{ inserted: number; skipped: number }> {
+): Promise<{ inserted: number; skipped: number; failed: number; lastError?: string }> {
   const treeRes = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
     {
@@ -665,6 +688,8 @@ async function sweepIndexRepo(
   const files = (tree.tree ?? []).filter(t => t.type === 'blob' && shouldIndex(t.path))
   let inserted = 0
   let skipped = 0
+  let failed = 0
+  let lastError: string | undefined
   const cap = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300')
   for (const f of files.slice(0, cap)) {
     const source = await fetchFileContents(token, owner, repo, f.path, branch)
@@ -672,7 +697,26 @@ async function sweepIndexRepo(
     const chunks = chunk(f.path, source)
     for (const ch of chunks) {
       const text = `${f.path}::${ch.symbolName ?? 'whole'}\n${ch.body}`
-      const embedding = await createEmbedding(text, { projectId })
+      // Per-chunk resilience: one bad chunk (e.g. a BYOK gateway soft-failure
+      // on a single embedding call, a content filter rejection, or a
+      // transient 5xx) should not abort an entire hourly repo sweep. Count
+      // the failure, remember the last error for `last_index_error`, and
+      // keep going. If *every* chunk fails, the outer handler still marks
+      // the sweep as failed because `inserted === 0` — see handleSweep.
+      let embedding: number[]
+      try {
+        embedding = await createEmbedding(text, { projectId })
+      } catch (err) {
+        failed++
+        lastError = err instanceof Error ? err.message : String(err)
+        log.warn('sweep: chunk embed failed (non-fatal)', {
+          repo: `${owner}/${repo}`,
+          path: f.path,
+          symbol: ch.symbolName ?? null,
+          error: lastError.slice(0, 240),
+        })
+        continue
+      }
       const contentHash = await sha256Hex(ch.body)
       const { error } = await db.from('project_codebase_files').upsert({
         project_id: projectId,
@@ -693,7 +737,7 @@ async function sweepIndexRepo(
       inserted++
     }
   }
-  return { inserted, skipped }
+  return { inserted, skipped, failed, lastError }
 }
 
 app.post('/webhooks-github-indexer', async (c) => {

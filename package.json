@@ -50,7 +50,12 @@
     "changelog:check": "node scripts/aggregate-changelogs.mjs --check",
     "roadmap:bootstrap": "node scripts/bootstrap-roadmap.mjs",
     "pdca:loop": "node scripts/pdca-bounded-loop.mjs",
-    "stripe:bootstrap": "node scripts/stripe-bootstrap.mjs"
+    "stripe:bootstrap": "node scripts/stripe-bootstrap.mjs",
+    "prompts:bench": "node scripts/prompts-bench.mjs",
+    "check:dead-buttons": "node scripts/check-dead-buttons.mjs",
+    "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
+    "check:license-headers": "node scripts/check-license-headers.mjs",
+    "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

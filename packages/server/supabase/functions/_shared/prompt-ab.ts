@@ -33,6 +33,18 @@
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
+import {
+  DEFAULT_JUDGE_RUBRIC as PURE_DEFAULT_JUDGE_RUBRIC,
+  resolveJudgeWeights as pureResolveJudgeWeights,
+  type JudgeRubric as PureJudgeRubric,
+} from './judge-rubric.ts'
+
+// Re-export the pure helpers so existing call-sites keep importing from
+// prompt-ab.ts while the vitest (Node) test suite can pull them from the
+// dedicated file that has zero Deno-only imports.
+export const DEFAULT_JUDGE_RUBRIC = PURE_DEFAULT_JUDGE_RUBRIC
+export const resolveJudgeWeights = pureResolveJudgeWeights
+export type JudgeRubric = PureJudgeRubric
 
 const log = rootLog.child('prompt-ab')
 
@@ -42,6 +54,7 @@ export interface PromptSelection {
   promptTemplate: string | null
   promptVersion: string | null
   isCandidate: boolean
+  judgeRubric: PureJudgeRubric | null
 }
 
 export interface PromotionEligibility {
@@ -60,6 +73,7 @@ interface PromptVersionRow {
   traffic_percentage: number
   avg_judge_score: number | null
   total_evaluations: number
+  judge_rubric?: PureJudgeRubric | null
 }
 
 const MIN_EVALUATIONS_FOR_PROMOTION = 30
@@ -77,9 +91,13 @@ export async function getPromptForStage(
   projectId: string,
   stage: string,
 ): Promise<PromptSelection> {
+  // Wave S (2026-04-23): include judge_rubric so callers (judge-batch) can
+  // honour per-prompt weight overrides without a second query. The column
+  // was added in migration 20260422110000 and is always selectable (nullable
+  // jsonb) — no conditional needed.
   let { data: rows } = await db
     .from('prompt_versions')
-    .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage')
+    .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, judge_rubric')
     .eq('project_id', projectId)
     .eq('stage', stage)
     .or('is_active.eq.true,is_candidate.eq.true')
@@ -88,7 +106,7 @@ export async function getPromptForStage(
   if (!rows?.length) {
     const { data: globalRows } = await db
       .from('prompt_versions')
-      .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage')
+      .select('id, version, prompt_template, is_active, is_candidate, traffic_percentage, judge_rubric')
       .is('project_id', null)
       .eq('stage', stage)
       .or('is_active.eq.true,is_candidate.eq.true')
@@ -96,7 +114,7 @@ export async function getPromptForStage(
   }
 
   if (!rows?.length) {
-    return { promptTemplate: null, promptVersion: null, isCandidate: false }
+    return { promptTemplate: null, promptVersion: null, isCandidate: false, judgeRubric: null }
   }
 
   const active = rows.find((r: PromptVersionRow) => r.is_active && !r.is_candidate)
@@ -104,22 +122,43 @@ export async function getPromptForStage(
 
   if (!active) {
     const first = rows[0] as PromptVersionRow
-    return { promptTemplate: first.prompt_template, promptVersion: first.version, isCandidate: first.is_candidate }
+    return {
+      promptTemplate: first.prompt_template,
+      promptVersion: first.version,
+      isCandidate: first.is_candidate,
+      judgeRubric: first.judge_rubric ?? null,
+    }
   }
 
   if (!candidate) {
-    return { promptTemplate: active.prompt_template, promptVersion: active.version, isCandidate: false }
+    return {
+      promptTemplate: active.prompt_template,
+      promptVersion: active.version,
+      isCandidate: false,
+      judgeRubric: active.judge_rubric ?? null,
+    }
   }
 
   // Route traffic probabilistically based on candidate's traffic_percentage
   const roll = Math.random() * 100
   if (roll < (candidate.traffic_percentage ?? 0)) {
     log.info('Routing to candidate prompt', { stage, version: candidate.version, roll: roll.toFixed(1) })
-    return { promptTemplate: candidate.prompt_template, promptVersion: candidate.version, isCandidate: true }
+    return {
+      promptTemplate: candidate.prompt_template,
+      promptVersion: candidate.version,
+      isCandidate: true,
+      judgeRubric: candidate.judge_rubric ?? null,
+    }
   }
 
-  return { promptTemplate: active.prompt_template, promptVersion: active.version, isCandidate: false }
+  return {
+    promptTemplate: active.prompt_template,
+    promptVersion: active.version,
+    isCandidate: false,
+    judgeRubric: active.judge_rubric ?? null,
+  }
 }
+
 
 /**
  * Record a judge score against a prompt version using an incremental running average.

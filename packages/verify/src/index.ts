@@ -8,6 +8,40 @@ export interface VerifyOptions {
   deploymentUrl: string
   supabaseUrl: string
   supabaseServiceKey: string
+  /**
+   * Optional fix_attempts row to correlate this verification run against.
+   *
+   * When provided, the verification result is also persisted to
+   * `fix_attempts.verify_steps` (JSONB), giving the judge and the admin
+   * console a single, structured "did this fix actually work?" signal next
+   * to the attempt. Without this, verification still writes to
+   * `fix_verifications` but never links back to the attempt that produced
+   * the PR — which was the 2026-04-21 audit finding that motivated the
+   * `verify_steps` migration.
+   */
+  fixAttemptId?: string
+  /**
+   * Optional attach-time step list. Overrides the reproduction steps stored
+   * on the report so callers can verify a fix against steps they know were
+   * generated at the moment the agent attached its PR. This is how
+   * multi-step verify workflows (e.g. "after applying the fix, also confirm
+   * the regression case from ticket X is still green") express intent
+   * without mutating the original report.
+   *
+   * Items may be raw strings (parsed the same way as `reports.reproduction_steps`)
+   * or pre-parsed `{ action, target?, value? }` descriptors — useful for
+   * deterministic tests that don't want to lean on the natural-language
+   * parser.
+   */
+  steps?: Array<string | VerifyStep>
+}
+
+/** Pre-parsed verification step — matches ParsedStep exactly so callers can
+ *  skip the natural-language parser when they already know what to do. */
+export interface VerifyStep {
+  action: 'click' | 'navigate' | 'type' | 'press' | 'select' | 'assertText' | 'waitFor' | 'observe'
+  target?: string
+  value?: string
 }
 
 export interface VerifyResult {
@@ -15,6 +49,9 @@ export interface VerifyResult {
   visualDiffScore: number
   interactionResults: Record<string, unknown>[]
   errorMessage?: string
+  /** Echoed from VerifyOptions.fixAttemptId when supplied so callers can
+   *  round-trip the correlation without re-threading it themselves. */
+  fixAttemptId?: string
 }
 
 export async function verifyFix(options: VerifyOptions): Promise<VerifyResult> {
@@ -32,7 +69,11 @@ export async function verifyFix(options: VerifyOptions): Promise<VerifyResult> {
   if (!pageUrl) throw new Error('Report has no page URL')
 
   const targetUrl = new URL(new URL(pageUrl).pathname, options.deploymentUrl).href
-  const reproSteps: string[] = report.reproduction_steps ?? []
+  // Caller-supplied steps win over the reproduction steps stored on the
+  // report — the plan's "attach-time steps" pattern. If neither side
+  // provides anything, we settle for a smoke-check on the page (one
+  // observe step) so the visual diff still runs.
+  const attachedSteps = options.steps ?? report.reproduction_steps ?? []
 
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } })
@@ -42,8 +83,10 @@ export async function verifyFix(options: VerifyOptions): Promise<VerifyResult> {
 
     const interactionResults: Record<string, unknown>[] = []
 
-    for (const step of reproSteps) {
-      const result = await executeStep(page, step)
+    for (const step of attachedSteps) {
+      const result = typeof step === 'string'
+        ? await executeStep(page, step)
+        : await executeParsedStep(page, step)
       interactionResults.push(result)
     }
 
@@ -68,17 +111,61 @@ export async function verifyFix(options: VerifyOptions): Promise<VerifyResult> {
       verification_status: status,
       visual_diff_score: visualDiffScore,
       interaction_results: interactionResults,
+      fix_attempt_id: options.fixAttemptId ?? null,
     })
 
-    return { status, visualDiffScore, interactionResults }
+    // Best-effort cross-link: mirror the structured interaction trace into
+    // fix_attempts.verify_steps so the judge and admin UI see a single
+    // "this is how we verified attempt X" blob without a join. We swallow
+    // write failures here — the fix_verifications insert above is the
+    // source of truth; verify_steps is an ergonomic cache.
+    if (options.fixAttemptId) {
+      await db
+        .from('fix_attempts')
+        .update({
+          verify_steps: {
+            status,
+            visualDiffScore,
+            attachedSteps: (attachedSteps as Array<string | VerifyStep>).map((s) =>
+              typeof s === 'string' ? { raw: s } : s,
+            ),
+            interactionResults,
+            verifiedAt: new Date().toISOString(),
+          },
+        })
+        .eq('id', options.fixAttemptId)
+        .then(() => undefined, () => undefined)
+    }
+
+    return { status, visualDiffScore, interactionResults, fixAttemptId: options.fixAttemptId }
   } catch (err) {
     const errorMessage = String(err)
     await db.from('fix_verifications').insert({
       report_id: options.reportId,
       verification_status: 'error',
       error_message: errorMessage,
+      fix_attempt_id: options.fixAttemptId ?? null,
     })
-    return { status: 'error', visualDiffScore: 0, interactionResults: [], errorMessage }
+    if (options.fixAttemptId) {
+      await db
+        .from('fix_attempts')
+        .update({
+          verify_steps: {
+            status: 'error',
+            errorMessage,
+            verifiedAt: new Date().toISOString(),
+          },
+        })
+        .eq('id', options.fixAttemptId)
+        .then(() => undefined, () => undefined)
+    }
+    return {
+      status: 'error',
+      visualDiffScore: 0,
+      interactionResults: [],
+      errorMessage,
+      fixAttemptId: options.fixAttemptId,
+    }
   } finally {
     await browser.close()
   }
@@ -157,8 +244,25 @@ export function parseStep(step: string): ParsedStep {
   return { action: 'observe' }
 }
 
+/**
+ * Public sibling of executeStep for callers that already have a structured
+ * step (e.g. the attach-time steps supplied via VerifyOptions.steps) and
+ * want to skip the natural-language parser. Kept internal to the package
+ * until a downstream consumer asks for it.
+ */
+async function executeParsedStep(page: Page, parsed: VerifyStep): Promise<Record<string, unknown>> {
+  // Reuse executeStep's dispatcher by rehydrating a synthetic raw string
+  // for logging, then forwarding directly — this keeps a single source of
+  // truth for the Playwright interactions.
+  const raw = JSON.stringify(parsed)
+  return runAction(page, raw, parsed)
+}
+
 async function executeStep(page: Page, step: string): Promise<Record<string, unknown>> {
-  const parsed = parseStep(step)
+  return runAction(page, step, parseStep(step))
+}
+
+async function runAction(page: Page, step: string, parsed: VerifyStep): Promise<Record<string, unknown>> {
   try {
     switch (parsed.action) {
       case 'click': {

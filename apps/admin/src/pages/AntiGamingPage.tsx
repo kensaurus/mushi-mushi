@@ -28,6 +28,8 @@ import { SetupNudge } from '../components/SetupNudge'
 import { PromptDialog } from '../components/ConfirmDialog'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface ReporterDevice {
   id: string
@@ -234,6 +236,15 @@ export function AntiGamingPage() {
         />
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
+
+      <PageActionBar
+        scope="anti-gaming"
+        action={useNextBestAction({
+          scope: 'anti-gaming',
+          flaggedLastHour: stats.flagged,
+          blockedIps: stats.crossAccount,
+        })}
+      />
 
       <PageHelp
         title="About Anti-Gaming"
