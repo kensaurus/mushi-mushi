@@ -246,6 +246,25 @@ export function HealthPage() {
             ? `${healthAmber} warning · ${llm.totalCalls} calls`
             : `All systems nominal · ${llm.totalCalls} calls`,
     criticalCount: healthRed,
+    questions: llm
+      ? [
+          healthRed > 0
+            ? 'Which red signal should I investigate first and why?'
+            : 'Are there any worrying trends I might be missing?',
+          'Show me the most expensive LLM functions over the last 24h.',
+          (llm.fallbackRate ?? 0) > 0.05
+            ? 'Why are we falling back to OpenAI so often?'
+            : 'Which models are doing the heavy lifting right now?',
+        ]
+      : undefined,
+    actions: [
+      {
+        id: 'reload-health',
+        label: 'Refresh metrics',
+        hint: 'Re-pull LLM + cron health data',
+        run: () => { void reloadAll() },
+      },
+    ],
   })
 
   if (llmQuery.loading || cronQuery.loading) return <HealthSkeleton />

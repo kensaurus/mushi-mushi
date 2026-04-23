@@ -60,7 +60,7 @@ export function Drawer({
   // `useNavCounts`. If we depended on `onClose`, the effect would tear
   // down and rebuild on every realtime tick; the cleanup calls
   // `prevFocusRef.current?.focus?.()`, which yanks focus out of
-  // whatever the user is typing in (e.g., the AI sidebar's textarea)
+  // whatever the user is typing in (e.g., Ask Mushi's textarea)
   // and the re-run then re-focuses the drawer's first focusable, so
   // the user loses their caret every ~1–2s while a PR is being
   // created. Same direct-assignment pattern as `useRealtimeReload` in

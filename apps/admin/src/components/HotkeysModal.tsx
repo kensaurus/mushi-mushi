@@ -54,7 +54,7 @@ const GROUPS: ShortcutGroup[] = [
     hint: 'Works from anywhere in the admin.',
     items: [
       { keys: [MOD, 'K'], desc: 'Open command palette', hint: 'Jump to any page or action by name.' },
-      { keys: [MOD, 'J'], desc: 'Open AI sidebar', hint: 'Scoped to the current page — filters + focus are sent with each question.' },
+      { keys: [MOD, 'J'], desc: 'Open Ask Mushi', hint: 'Scoped to the current page — filters + focus are sent with each question. Use /commands or @mentions in the composer.' },
       { keys: ['?'], desc: 'Toggle this cheatsheet' },
       { keys: ['Esc'], desc: 'Close modal, drawer, or clear selection' },
     ],

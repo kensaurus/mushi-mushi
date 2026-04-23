@@ -262,7 +262,7 @@ export function ReportsPage() {
     if (r) navigate(`/reports/${r.id}`)
   }, [cursor, reports, navigate])
 
-  // Publish page context so the AI sidebar, hotkeys modal, and command
+  // Publish page context so Ask Mushi, the hotkeys modal, and command
   // palette all see the user's current filters, the number of matches,
   // and the focused/previewed report. Recomputed on every render so
   // closures over `reports` / `cursor` stay fresh; the registry dedupes
@@ -343,6 +343,12 @@ export function ReportsPage() {
         ? `Explain the focused report (${selection.id.slice(0, 8)}) and why it matters`
         : 'How should I prioritise what is on screen?',
     ],
+    mentionables: reports.slice(0, 12).map((r) => ({
+      kind: 'report' as const,
+      id: r.id,
+      label: r.description?.slice(0, 60) ?? r.id.slice(0, 8),
+      sublabel: `${r.status ?? 'unknown'} · ${r.severity ?? 'unscored'}`,
+    })),
   })
 
   const moveCursor = useCallback(

@@ -117,6 +117,21 @@ export function DashboardPage() {
     // action — treat every untriaged report as deserving the favicon
     // red dot so the operator sees the nudge even from another tab.
     criticalCount: dashCounts?.openBacklog ?? 0,
+    questions: [
+      (dashCounts?.openBacklog ?? 0) > 0
+        ? `What\u2019s in my backlog of ${dashCounts!.openBacklog} reports right now?`
+        : 'Is the PDCA loop healthy this week?',
+      'Where is the bottleneck in the PDCA loop?',
+      'What changed in the last 24 hours I should know about?',
+    ],
+    actions: [
+      {
+        id: 'reload-dashboard',
+        label: 'Refresh dashboard',
+        hint: 'Re-fetch the dashboard payload',
+        run: () => { void reload() },
+      },
+    ],
   })
 
   if (loading) return <DashboardSkeleton />
