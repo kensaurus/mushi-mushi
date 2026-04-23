@@ -4,7 +4,7 @@
  *          summary + PDF download. Pure presentation.
  */
 
-import { Card, Btn } from '../ui'
+import { Card, Btn, Pct } from '../ui'
 import type { IntelligenceReport } from './types'
 
 interface Props {
@@ -13,6 +13,8 @@ interface Props {
 }
 
 export function IntelligenceReportCard({ report, onDownload }: Props) {
+  const completionRate = report.stats?.fixes?.completionRate
+  const completionPct = completionRate != null ? completionRate * 100 : null
   return (
     <Card className="p-3">
       <div className="flex items-baseline justify-between gap-3 mb-2">
@@ -33,14 +35,12 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-2xs">
         <Stat label="Reports" value={report.stats?.reports?.total?.toString() ?? '—'} />
         <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toString() ?? '—'} />
-        <Stat
-          label="Completion"
-          value={
-            report.stats?.fixes?.completionRate != null
-              ? `${Math.round(report.stats.fixes.completionRate * 100)}%`
-              : '—'
-          }
-        />
+        <div title="Share of fix attempts that finished without errors this week. Higher is healthier.">
+          <div className="text-fg-faint">Completion</div>
+          <div>
+            <Pct value={completionPct} precision={0} direction="higher-better" />
+          </div>
+        </div>
         <Stat
           label="Avg fix"
           value={

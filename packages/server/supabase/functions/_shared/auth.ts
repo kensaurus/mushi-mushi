@@ -169,9 +169,21 @@ export async function jwtAuth(c: Context, next: Next) {
   const db = getServiceClient()
   const token = authHeader.replace('Bearer ', '')
 
-  const { data: { user }, error } = await db.auth.getUser(token)
-
-  if (error || !user) {
+  // Wave T audit (2026-04-23): `db.auth.getUser(token)` throws — not just
+  // returns an error — on malformed JWTs, anon-role tokens with no sub
+  // claim, and GoTrue timeouts. Pre-fix, every scanner probe and expired
+  // admin session turned into a 500 `{"error":"internal"}` via
+  // `sentryHonoErrorHandler`, masking real failures and wasting auth
+  // bandwidth. Wrap so unauthenticated / malformed callers get a clean
+  // 401 and the sentry handler only fires for genuine server bugs.
+  let user: Awaited<ReturnType<typeof db.auth.getUser>>['data']['user'] | null = null
+  try {
+    const { data, error } = await db.auth.getUser(token)
+    if (error || !data?.user) {
+      return c.json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired auth token' } }, 401)
+    }
+    user = data.user
+  } catch {
     return c.json({ error: { code: 'INVALID_TOKEN', message: 'Invalid or expired auth token' } }, 401)
   }
 

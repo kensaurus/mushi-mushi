@@ -108,7 +108,7 @@ export function SsoPage() {
           'Automatically provision new admins when they join your IdP group',
           'Pass an enterprise security review (SAML 2.0)',
         ]}
-        howToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered \u2014 it requires Supabase enterprise tier; contact support if you need it."
+        howToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
 
       <Card className="p-3 space-y-3">

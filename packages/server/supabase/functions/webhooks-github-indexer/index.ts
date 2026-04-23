@@ -578,76 +578,100 @@ async function handleSweep(req: Request, parsedBody: { project_id?: string } | n
     })
   }
 
-  const summary: Array<{ repo: string; ok: boolean; error?: string }> = []
-  for (const repo of repos ?? []) {
-    const [owner, name] = String(repo.repo_url).split('/').slice(-2)
-    if (!owner || !name) {
-      summary.push({ repo: repo.repo_url, ok: false, error: 'bad_repo_url' })
-      continue
-    }
+  // The per-repo sweep is CPU+IO bound (tree walk + per-file contents +
+  // OpenAI embeddings) and with batch > 1 easily exceeds the 150s Edge
+  // Function idle timeout — which is why the hourly cron was logging
+  // `504 IDLE_TIMEOUT` instead of completing. The hourly cron fires-and-
+  // forgets (it never reads the response body), so for the unscoped
+  // (no `project_id`) path we detach via `EdgeRuntime.waitUntil` and
+  // return 202 immediately. The runtime keeps the worker alive until the
+  // background promise resolves, independent of the request's idle timer.
+  //
+  // Scoped-per-project calls (admin UI "Index now" button) still run
+  // inline because the UI waits for the response to refresh the repo's
+  // last_indexed_at chip, and single-repo sweeps almost always fit inside
+  // 150s.
+  const runSweep = async (): Promise<Array<{ repo: string; ok: boolean; error?: string }>> => {
+    const summary: Array<{ repo: string; ok: boolean; error?: string }> = []
+    for (const repo of repos ?? []) {
+      const [owner, name] = String(repo.repo_url).split('/').slice(-2)
+      if (!owner || !name) {
+        summary.push({ repo: repo.repo_url, ok: false, error: 'bad_repo_url' })
+        continue
+      }
 
-    let token: string | null = null
-    try {
-      token = repo.github_app_installation_id
-        ? await mintInstallationToken(Number(repo.github_app_installation_id))
-        : await resolveProjectGithubToken(db, repo.project_id)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      log.warn('sweep: App install token mint failed; falling back to PAT', { repo: repo.repo_url, error: msg })
-      token = await resolveProjectGithubToken(db, repo.project_id)
-    }
+      let token: string | null = null
+      try {
+        token = repo.github_app_installation_id
+          ? await mintInstallationToken(Number(repo.github_app_installation_id))
+          : await resolveProjectGithubToken(db, repo.project_id)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        log.warn('sweep: App install token mint failed; falling back to PAT', { repo: repo.repo_url, error: msg })
+        token = await resolveProjectGithubToken(db, repo.project_id)
+      }
 
-    if (!token) {
-      summary.push({ repo: repo.repo_url, ok: false, error: 'no_token' })
-      await db.from('project_repos').update({
-        last_index_attempt_at: new Date().toISOString(),
-        last_index_error: 'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved',
-      }).eq('id', repo.id)
-      continue
-    }
+      if (!token) {
+        summary.push({ repo: repo.repo_url, ok: false, error: 'no_token' })
+        await db.from('project_repos').update({
+          last_index_attempt_at: new Date().toISOString(),
+          last_index_error: 'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved',
+        }).eq('id', repo.id)
+        continue
+      }
 
-    try {
-      const stats = await sweepIndexRepo(db, repo.project_id, token, owner, name, repo.default_branch ?? 'main')
-      // A sweep where every chunk failed gets treated as a full failure
-      // (nothing indexed ≈ nothing useful happened) so `last_index_error`
-      // surfaces in the admin UI and a Sentry event fires. Partial failures
-      // — e.g. one content-filter hit, or a single transient 5xx — mark
-      // success but still record the last error for operator visibility.
-      if (stats.inserted === 0 && stats.failed > 0) {
-        const msg = stats.lastError ?? 'all chunk embeddings failed'
-        log.error('sweep: repo index failed', {
-          repo: repo.repo_url,
-          error: msg,
-          failed: stats.failed,
-          skipped: stats.skipped,
-        })
+      try {
+        const stats = await sweepIndexRepo(db, repo.project_id, token, owner, name, repo.default_branch ?? 'main')
+        if (stats.inserted === 0 && stats.failed > 0) {
+          const msg = stats.lastError ?? 'all chunk embeddings failed'
+          log.error('sweep: repo index failed', {
+            repo: repo.repo_url,
+            error: msg,
+            failed: stats.failed,
+            skipped: stats.skipped,
+          })
+          await db.from('project_repos').update({
+            last_index_attempt_at: new Date().toISOString(),
+            last_index_error: msg.slice(0, 500),
+          }).eq('id', repo.id)
+          summary.push({ repo: repo.repo_url, ok: false, error: msg, ...stats })
+        } else {
+          await db.from('project_repos').update({
+            last_indexed_at: new Date().toISOString(),
+            last_index_attempt_at: new Date().toISOString(),
+            last_index_error: stats.failed > 0 ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500) : null,
+          }).eq('id', repo.id)
+          summary.push({ repo: repo.repo_url, ok: true, ...stats })
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg })
         await db.from('project_repos').update({
           last_index_attempt_at: new Date().toISOString(),
           last_index_error: msg.slice(0, 500),
         }).eq('id', repo.id)
-        summary.push({ repo: repo.repo_url, ok: false, error: msg, ...stats })
-      } else {
-        await db.from('project_repos').update({
-          last_indexed_at: new Date().toISOString(),
-          last_index_attempt_at: new Date().toISOString(),
-          // Preserve the last partial-failure signal so the admin UI can
-          // show "12 chunks embedded, 3 failed: <reason>" without paging
-          // Sentry. Cleared only on a clean (failed === 0) sweep.
-          last_index_error: stats.failed > 0 ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500) : null,
-        }).eq('id', repo.id)
-        summary.push({ repo: repo.repo_url, ok: true, ...stats })
+        summary.push({ repo: repo.repo_url, ok: false, error: msg })
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg })
-      await db.from('project_repos').update({
-        last_index_attempt_at: new Date().toISOString(),
-        last_index_error: msg.slice(0, 500),
-      }).eq('id', repo.id)
-      summary.push({ repo: repo.repo_url, ok: false, error: msg })
     }
+    return summary
   }
 
+  const ranOutOfBand = !scopedProjectId
+  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+  if (ranOutOfBand && edgeRuntime && typeof edgeRuntime.waitUntil === 'function') {
+    edgeRuntime.waitUntil(
+      runSweep().catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        log.error('sweep: background task crashed', { error: msg })
+      }),
+    )
+    return new Response(
+      JSON.stringify({ ok: true, queued: repos?.length ?? 0, mode: 'background' }),
+      { status: 202, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  const summary = await runSweep()
   return new Response(JSON.stringify({ ok: true, swept: summary.length, results: summary }), {
     headers: { 'Content-Type': 'application/json' },
   })

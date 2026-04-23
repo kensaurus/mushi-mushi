@@ -217,7 +217,7 @@ export function BillingPage() {
     <div className="space-y-4">
       <PageHeader
         title="Billing"
-        description="Plan, usage, invoices, and quota \u2014 everything you need to keep the loop running on your terms."
+        description="Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms."
       >
         <span className="text-2xs text-fg-faint font-mono">
           Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? '—'} reports / mo

@@ -67,8 +67,14 @@ export interface PageContext {
   title: string
   /** One-line summary of the page's current state ("12 new · 3 critical").
    *  Renders as a chip in the AI sidebar header so the user can confirm
-   *  the assistant sees what they see. */
+   *  the assistant sees what they see. Also concatenated into the
+   *  browser tab title by `useDocumentTitle`, so keep it short. */
   summary?: string
+  /** Optional count of critical-severity items on this page. When > 0,
+   *  `useFaviconBadge` draws a red dot on the favicon so the operator
+   *  sees something needs attention even from another browser tab.
+   *  Pages that don't surface criticals can omit this field. */
+  criticalCount?: number
   /** Active filters as a small key-value map. Values are coerced to
    *  string when rendered as chips; consumers should drop empty strings. */
   filters?: Record<string, string | number | boolean | null | undefined>

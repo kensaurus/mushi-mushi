@@ -13,7 +13,8 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import { PageHeader, PageHelp, SegmentedControl, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
+import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroFixWrench } from '../components/illustrations/HeroIllustrations'
@@ -65,6 +66,8 @@ export function FixesPage() {
   const [summary, setSummary] = useState<FixSummary | null>(null)
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
   const [loading, setLoading] = useState(true)
+  const [isValidating, setIsValidating] = useState(true)
+  const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
@@ -79,6 +82,7 @@ export function FixesPage() {
     if (inFlightRef.current) return
     inFlightRef.current = true
     setError(false)
+    setIsValidating(true)
     try {
       const [fixRes, dispRes, sumRes] = await Promise.all([
         apiFetch<{ fixes: FixAttempt[] }>('/v1/admin/fixes'),
@@ -90,11 +94,15 @@ export function FixesPage() {
       else setError(true)
       if (dispRes.ok && dispRes.data) setDispatches(dispRes.data.dispatches)
       if (sumRes.ok && sumRes.data) setSummary(sumRes.data)
+      if (!cancelledRef.current) setLastFetchedAt(new Date().toISOString())
     } catch {
       if (!cancelledRef.current) setError(true)
     } finally {
       inFlightRef.current = false
-      if (!cancelledRef.current) setLoading(false)
+      if (!cancelledRef.current) {
+        setLoading(false)
+        setIsValidating(false)
+      }
     }
   }, [])
 
@@ -129,7 +137,7 @@ export function FixesPage() {
   // We debounce because a single PR merge commonly emits 3–4 events within
   // the same second — collapsing them into one refresh keeps the list
   // stable for users who are reading while things land.
-  useRealtimeReload(['fix_attempts', 'fix_events', 'fix_dispatch_jobs'], () => {
+  const { channelState } = useRealtimeReload(['fix_attempts', 'fix_events', 'fix_dispatch_jobs'], () => {
     if (cancelledRef.current) return
     void loadFixes()
   })
@@ -324,6 +332,7 @@ export function FixesPage() {
         projectScope={projectName}
         description={copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
       >
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
         <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>
         {failedFixes.length > 0 && (
           <button
@@ -377,7 +386,7 @@ export function FixesPage() {
         <SetupNudge
           requires={['github_connected', 'first_report_received', 'byok_anthropic']}
           emptyTitle="No fix attempts yet"
-          emptyDescription="Open a classified report and click \u201cDispatch fix\u201d to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."
+          emptyDescription="Open a classified report and click “Dispatch fix” to start the auto-fix loop. Mushi opens a draft PR you review and merge — nothing ships without you."
           emptyIcon={<HeroFixWrench />}
           blockedIcon={<HeroFixWrench accent="text-fg-faint" />}
           emptyHints={[
@@ -393,6 +402,24 @@ export function FixesPage() {
             options={STATUS_BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
             onChange={setStatusBucket}
           />
+          {(() => {
+            const activeFilters: ActiveFilter[] = statusBucket !== 'all'
+              ? [{
+                  key: 'status',
+                  label: 'Status',
+                  value: STATUS_BUCKETS.find((b) => b.id === statusBucket)?.label ?? statusBucket,
+                  onClear: () => setStatusBucket('all'),
+                  tone: 'info' as const,
+                }]
+              : []
+            return (
+              <ActiveFiltersRail
+                filters={activeFilters}
+                onClearAll={() => setStatusBucket('all')}
+                ariaLabel="Active fix filters"
+              />
+            )
+          })()}
           {visibleFixes.length === 0 ? (
             <p className="text-2xs text-fg-muted px-2 py-3">
               No fixes in this state right now.{' '}

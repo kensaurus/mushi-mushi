@@ -14,6 +14,7 @@ import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
 import { HealthPanel } from '../components/settings/HealthPanel'
 import { DevToolsPanel } from '../components/settings/DevToolsPanel'
 import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
 
 type TabId = 'general' | 'byok' | 'firecrawl' | 'health' | 'dev'
 
@@ -24,6 +25,15 @@ const TABS: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'health', label: 'Health & test', description: 'Connection status, SDK reference, pipeline smoke test.' },
   { id: 'dev', label: 'Dev tools', description: 'Debug logging and local-only flags.' },
 ]
+
+/** Mapping of tab id → concise tab name for the browser tab title. */
+const TAB_TITLES: Record<TabId, string> = {
+  general: 'General',
+  byok: 'BYOK',
+  firecrawl: 'Firecrawl',
+  health: 'Health & test',
+  dev: 'Dev tools',
+}
 
 function isTabId(value: string | null): value is TabId {
   return value === 'general' || value === 'byok' || value === 'firecrawl' || value === 'health' || value === 'dev'
@@ -40,8 +50,24 @@ export function SettingsPage() {
     const next = new URLSearchParams(searchParams)
     if (id === 'general') next.delete('tab')
     else next.set('tab', id)
-    setSearchParams(next, { replace: true })
+    // `preventScrollReset` keeps the viewport anchored on the tablist
+    // instead of jumping to the top of the document on every tab click.
+    // The tab panels are mostly form rows — scrolling is a real friction
+    // when a user has scrolled down to inspect one tab then clicks
+    // another to compare values.
+    setSearchParams(next, { replace: true, preventScrollReset: true })
   }
+
+  // Publish tab-aware page context so the browser tab title reflects
+  // the active pane ("BYOK · Settings — Mushi Mushi"). Without this,
+  // every settings tab would share a single "Settings" title and stacked
+  // tabs become indistinguishable.
+  usePublishPageContext({
+    route: '/settings',
+    title: `${TAB_TITLES[active]} · Settings`,
+    summary: TABS.find((t) => t.id === active)?.description,
+    filters: { tab: active },
+  })
 
   // Sliding tab indicator. Measure the active tab's box and translate a
   // single underline span into place; the per-tab `border-b-2` was visually

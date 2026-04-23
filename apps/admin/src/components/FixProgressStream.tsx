@@ -132,7 +132,12 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-2xs font-medium ${STAGE_TONE[stage] ?? STAGE_TONE.idle}`}>
             {STAGE_LABEL[stage] ?? stage}
           </span>
-          <span className="text-2xs text-fg-faint uppercase tracking-wide">PDCA loop</span>
+          <abbr
+            title="PDCA — Plan · Do · Check · Act. The four-stage loop each autofix follows from planning through review."
+            className="text-2xs text-fg-faint uppercase tracking-wide underline decoration-dotted decoration-fg-faint/50 underline-offset-2 cursor-help"
+          >
+            PDCA loop
+          </abbr>
         </div>
         <div className="flex items-center gap-3 text-2xs">
           {latest?.llm_model && <span className="font-mono text-fg-faint">{latest.llm_model}</span>}

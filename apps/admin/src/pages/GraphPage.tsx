@@ -21,6 +21,7 @@ import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageActionBar } from '../components/PageActionBar'
+import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { usePageCopy } from '../lib/copy'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
@@ -284,6 +285,35 @@ export function GraphPage() {
   const useStoryboard =
     view === 'graph' && !forceCanvas && filteredNodes.length > 0 && filteredNodes.length < STORYBOARD_THRESHOLD
 
+  // Hero + NBA derivations. Kept here (above the early returns) so the
+  // hook order stays stable across loading/error/success renders. Also
+  // shared between the hero tile and PageActionBar so they can never
+  // disagree on "are we fragile?".
+  const componentIds = useMemo(
+    () => new Set(rawNodes.filter((n) => n.node_type === 'component').map((n) => n.id)),
+    [rawNodes],
+  )
+  const fragileComponents = useMemo(() => {
+    const incoming = new Map<string, number>()
+    for (const e of rawEdges) {
+      if (e.edge_type !== 'affects') continue
+      if (!componentIds.has(e.target_node_id)) continue
+      incoming.set(e.target_node_id, (incoming.get(e.target_node_id) ?? 0) + 1)
+    }
+    let n = 0
+    for (const count of incoming.values()) if (count >= 3) n += 1
+    return n
+  }, [componentIds, rawEdges])
+  const regressionCount = useMemo(
+    () => rawEdges.filter((e) => e.edge_type === 'regression').length,
+    [rawEdges],
+  )
+  const graphAction = useNextBestAction({
+    scope: 'graph',
+    fragileComponents,
+    untestedComponents: 0,
+  })
+
   if (loading) return <GraphSkeleton />
   if (error)
     return (
@@ -312,28 +342,44 @@ export function GraphPage() {
         </div>
       </PageHeader>
 
-      <PageActionBar
+      <PageHero
         scope="graph"
-        action={useNextBestAction({
-          scope: 'graph',
-          // Count `component` nodes linked by >= 3 incoming "affects" edges as fragile.
-          fragileComponents: (() => {
-            const componentIds = new Set(
-              rawNodes.filter((n) => n.node_type === 'component').map((n) => n.id),
-            )
-            const incoming = new Map<string, number>()
-            for (const e of rawEdges) {
-              if (e.edge_type !== 'affects') continue
-              if (!componentIds.has(e.target_node_id)) continue
-              incoming.set(e.target_node_id, (incoming.get(e.target_node_id) ?? 0) + 1)
-            }
-            let n = 0
-            for (const count of incoming.values()) if (count >= 3) n += 1
-            return n
-          })(),
-          untestedComponents: 0,
-        })}
+        title="Knowledge Graph"
+        kicker="Blast radius map"
+        decide={{
+          label:
+            fragileComponents > 0
+              ? 'Fragile components detected'
+              : rawNodes.length === 0
+                ? 'Graph is empty'
+                : 'Graph is healthy',
+          metric:
+            rawNodes.length === 0
+              ? '—'
+              : `${fragileComponents} fragile · ${regressionCount} regressions`,
+          summary:
+            rawNodes.length === 0
+              ? 'Trigger the indexer after you connect a repo to populate the graph.'
+              : fragileComponents > 0
+                ? 'Components with ≥3 incoming affects edges are fragility hotspots — prioritise tests.'
+                : 'No fragility hotspots right now. Use quick views to browse the map.',
+          severity:
+            rawNodes.length === 0
+              ? 'neutral'
+              : fragileComponents > 0
+                ? 'warn'
+                : 'ok',
+        }}
+        act={graphAction}
+        verify={{
+          label: 'Graph snapshot',
+          detail: `${filteredNodes.length}/${rawNodes.length} nodes · ${filteredEdges.length}/${rawEdges.length} edges`,
+          to: '/graph?view=fragile',
+          secondaryTo: '/graph?view=regressions',
+          secondaryLabel: 'Regressions',
+        }}
       />
+      <PageActionBar scope="graph" action={graphAction} />
 
       <PageHelp
         title={copy?.help?.title ?? 'About the Knowledge Graph'}
