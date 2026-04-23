@@ -61,5 +61,8 @@
     "no-code",
     "integration",
     "bug-reporting"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

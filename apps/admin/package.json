@@ -17,6 +17,7 @@
   "dependencies": {
     "@sentry/react": "^10.49.0",
     "@supabase/supabase-js": "^2.103.3",
+    "@tanstack/react-table": "^8.21.3",
     "@xyflow/react": "^12.10.2",
     "cmdk": "^1.1.1",
     "react": "^19.0.0",

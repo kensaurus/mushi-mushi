@@ -24,8 +24,7 @@ ALTER TABLE project_settings
   ADD COLUMN IF NOT EXISTS byok_openai_key_last_used_at TIMESTAMPTZ;
 
 COMMENT ON COLUMN project_settings.byok_anthropic_key_ref IS
-  'V5.3 BYOK: vault reference (vault://<id>) or raw key for Anthropic. ' ||
-  'Prefer vault references in production; raw keys are for local dev only.';
+  'V5.3 BYOK: vault reference (vault://<id>) or raw key for Anthropic. Prefer vault references in production; raw keys are for local dev only.';
 
 COMMENT ON COLUMN project_settings.byok_openai_key_ref IS
   'V5.3 BYOK: vault reference for OpenAI judge fallback (V5.3 §2.7).';

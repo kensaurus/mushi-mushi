@@ -50,5 +50,93 @@ jobs:
       - name: Verify public changelog is in sync
         run: pnpm changelog:check
 
+      - name: Check publish readiness
+        run: node scripts/check-publish-readiness.mjs
+
+      - name: Check license headers
+        run: node scripts/check-license-headers.mjs
+
       - name: Check bundle sizes
         run: pnpm --filter @mushi-mushi/core --filter @mushi-mushi/web --filter @mushi-mushi/react exec size-limit
+
+  e2e:
+    # End-to-end Playwright dogfood suite. Runs against a local Supabase
+    # stack spun up by the Supabase CLI action — no cloud credentials
+    # required. GitHub is mocked by msw so the Act stage is hermetic (set
+    # E2E_LIVE_GITHUB=1 to override on demand).
+    #
+    # Opt-in via repository variable `ENABLE_E2E_CI=true`. When disabled
+    # the job is skipped entirely so it doesn't show as a failure on PRs
+    # while the Anthropic / OpenAI / Supabase CI secrets are still being
+    # provisioned. Flip the variable to 'true' once secrets are seeded:
+    #
+    #   gh variable set ENABLE_E2E_CI --body 'true'
+    #   gh secret set ANTHROPIC_API_KEY_CI --body '<key>'
+    #   gh secret set OPENAI_API_KEY_CI    --body '<key>'
+    #
+    # Kept in a separate job so a flake here doesn't block the fast build
+    # CI feedback loop.
+    name: E2E (full-PDCA dogfood)
+    if: ${{ vars.ENABLE_E2E_CI == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SUPABASE_URL: http://127.0.0.1:54321
+      MUSHI_ADMIN_URL: http://127.0.0.1:6464
+      # These are Supabase CLI's deterministic local keys — safe to
+      # commit because they only authorise the ephemeral local stack.
+      SUPABASE_ANON_KEY: ${{ vars.SUPABASE_LOCAL_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ vars.SUPABASE_LOCAL_SERVICE_ROLE_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY_CI }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_CI }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      - name: Start local Supabase stack
+        working-directory: packages/server
+        run: supabase start --ignore-health-check
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @mushi-mushi/e2e-dogfood install-browsers
+
+      - name: Start admin dev server
+        run: |
+          pnpm --filter @mushi-mushi/admin dev &
+          # Wait until Vite is listening on :6464 so the first nav doesn't
+          # race the cold-start window.
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:6464 >/dev/null; then break; fi
+            sleep 1
+          done
+
+      - name: Run full-PDCA dogfood suite
+        run: pnpm e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: examples/e2e-dogfood/playwright-report/
+          retention-days: 7
+
+      - name: Stop Supabase
+        if: always()
+        working-directory: packages/server
+        run: supabase stop || true

@@ -103,7 +103,11 @@ nul
 .eslintcache
 .cache/
 
-# Temporary edge-function payload bundles produced by scripts/build-edge-payload.mjs
+# Scratch directory for ad-hoc debugging artefacts — edge-function payload
+# bundles (built by scripts/build-edge-payload.mjs), Sentry API response
+# dumps, JSON fixtures pulled from the management API. Contents routinely
+# include org slugs, project IDs, and issue permalinks; never commit.
+.tmp/
 .tmp-deploy/
 
 # Archive holding-pens for ad-hoc audit screenshots. Kept out of git so they

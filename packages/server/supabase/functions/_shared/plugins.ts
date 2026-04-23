@@ -151,15 +151,17 @@ async function deliverOne(
     : null
 
   if (!secret) {
-    await db.from('plugin_dispatch_log').insert({
-      delivery_id: deliveryId,
-      project_id: projectId,
-      plugin_slug: plugin.plugin_slug,
-      event,
-      status: 'skipped',
-      response_excerpt: 'missing_secret',
-      payload_digest: digest,
-    }).catch(() => {})
+    try {
+      await db.from('plugin_dispatch_log').insert({
+        delivery_id: deliveryId,
+        project_id: projectId,
+        plugin_slug: plugin.plugin_slug,
+        event,
+        status: 'skipped',
+        response_excerpt: 'missing_secret',
+        payload_digest: digest,
+      })
+    } catch { /* dispatch log is best-effort */ }
     return
   }
 
@@ -199,23 +201,26 @@ async function deliverOne(
   }
   const durationMs = Date.now() - start
 
-  await db.from('plugin_dispatch_log').insert({
-    delivery_id: deliveryId,
-    project_id: projectId,
-    plugin_slug: plugin.plugin_slug,
-    event,
-    status,
-    http_status: httpStatus,
-    response_excerpt: excerpt || null,
-    duration_ms: durationMs,
-    payload_digest: digest,
-  }).catch(() => {})
+  try {
+    await db.from('plugin_dispatch_log').insert({
+      delivery_id: deliveryId,
+      project_id: projectId,
+      plugin_slug: plugin.plugin_slug,
+      event,
+      status,
+      http_status: httpStatus,
+      response_excerpt: excerpt || null,
+      duration_ms: durationMs,
+      payload_digest: digest,
+    })
+  } catch { /* dispatch log is best-effort */ }
 
-  await db.from('project_plugins')
-    .update({ last_delivery_at: new Date().toISOString(), last_delivery_status: status })
-    .eq('project_id', projectId)
-    .eq('plugin_slug', plugin.plugin_slug)
-    .catch(() => {})
+  try {
+    await db.from('project_plugins')
+      .update({ last_delivery_at: new Date().toISOString(), last_delivery_status: status })
+      .eq('project_id', projectId)
+      .eq('plugin_slug', plugin.plugin_slug)
+  } catch { /* last-delivery stamp is best-effort */ }
 }
 
 async function loadSecret(db: SupabaseClient, ref: string): Promise<string | null> {

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json.schemastore.org/package",
+  "entries": [
+    {
+      "id": "2026-04-22-wave-1-2-3",
+      "date": "2026-04-22",
+      "title": "Live-everywhere overhaul",
+      "summary": "Realtime on every list page, saved views, sparkline KPIs, and a light/dark/system theme.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Reports, Fixes, Repo, and Dashboard now hydrate via Supabase realtime — no more 5–15s polling delay."
+        },
+        {
+          "tone": "feature",
+          "text": "Activity drawer (top bar bell) streams every fix_event as it lands, with an unread badge."
+        },
+        {
+          "tone": "feature",
+          "text": "Quick filter chips on Reports (All · New · Triaged · Resolved · Critical) with live counts."
+        },
+        {
+          "tone": "feature",
+          "text": "Saved views on Reports — name your current filter set and recall it with one click."
+        },
+        {
+          "tone": "feature",
+          "text": "Spacebar preview drawer on Reports: peek a row without losing list scroll."
+        },
+        {
+          "tone": "feature",
+          "text": "Sparklines on every StatCard so trends show up at a glance."
+        },
+        {
+          "tone": "feature",
+          "text": "Sidebar health dots on Reports / Fixes / Repo surface backlog, failures, and open PRs in real time."
+        },
+        {
+          "tone": "feature",
+          "text": "Optimistic dispatch rows on Fixes — retries appear in-flight within a frame."
+        },
+        {
+          "tone": "feature",
+          "text": "Breadcrumbs on detail pages and a DataTable primitive (TanStack) migrated into Audit."
+        },
+        {
+          "tone": "feature",
+          "text": "Density (compact/default/comfortable) and theme (dark/light/auto) toggles in the sidebar footer."
+        },
+        {
+          "tone": "feature",
+          "text": "Keyboard cheatsheet modal (press ?) and Cmd+J AI sidebar scoped to the current page."
+        }
+      ]
+    }
+  ]
+}

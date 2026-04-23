@@ -17,6 +17,7 @@ import { logLlmInvocation } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { STAGE1_MODEL, STAGE1_FALLBACK } from '../_shared/models.ts'
 
 const stage1Schema = z.object({
   symptom: z.string().describe('What the user observed'),
@@ -184,8 +185,8 @@ ${failedRequests ? `\n## Failed Requests\n${failedRequests}` : ''}`
     const startTime = Date.now()
     let classification: Stage1Result
     const llmSpan = trace.span('stage1.classify')
-    const PRIMARY_MODEL = 'claude-haiku-4-5-20251001'
-    const FALLBACK_MODEL = 'gpt-4.1-mini'
+    const PRIMARY_MODEL = STAGE1_MODEL
+    const FALLBACK_MODEL = STAGE1_FALLBACK
     let usedModel = PRIMARY_MODEL
     let fallbackUsed = false
     let fallbackReason: string | null = null

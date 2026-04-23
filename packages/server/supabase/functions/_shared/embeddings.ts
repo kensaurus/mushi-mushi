@@ -43,6 +43,56 @@ function normalizeOpenAiBaseUrl(raw: string | null | undefined): string {
   return trimmed.replace(/\/v1$/i, '')
 }
 
+/**
+ * Return the hostname of a base URL, or the raw string if it isn't parsable.
+ * Used purely for error-message context (e.g. "openrouter.ai" vs "api.openai.com")
+ * so an operator seeing a Sentry event knows which gateway returned the bad
+ * payload without us leaking the full URL (which may contain auth in the
+ * path for self-hosted proxies).
+ */
+function hostOf(baseUrl: string): string {
+  try {
+    return new URL(baseUrl).hostname
+  } catch {
+    return baseUrl
+  }
+}
+
+/**
+ * Extract a human-useful diagnostic string from a 200-OK response body that
+ * *didn't* contain an embedding.
+ *
+ * Why this exists: `createEmbedding` originally threw a bare
+ * `'No embedding returned from API'` whenever `data[0].embedding` was
+ * missing, which is exactly what fired MUSHI-MUSHI-SERVER-B — we only knew
+ * the embedding call failed, never *why*. OpenAI-compatible gateways
+ * (OpenRouter, Together, Groq, etc.) tend to return `200 OK` with an
+ * `{ error: { message, code, type } }` envelope for:
+ *   - model routing failures (unprefixed model name on OpenRouter)
+ *   - quota / credit exhaustion
+ *   - content filter rejections
+ *   - per-model capability gaps ("this model doesn't support embeddings")
+ *
+ * Surfacing `error.message` (when present) or the first 300 chars of the raw
+ * body gives the admin an actionable signal in Sentry `extra.error` without
+ * us guessing what each gateway does.
+ */
+function describeEmptyEmbeddingResponse(result: unknown): string {
+  if (result && typeof result === 'object') {
+    const r = result as { error?: { message?: string; code?: string | number; type?: string } }
+    if (r.error?.message) {
+      const code = r.error.code !== undefined ? ` (code=${r.error.code})` : ''
+      return `${r.error.message}${code}`
+    }
+  }
+  try {
+    const raw = JSON.stringify(result)
+    return raw.length > 300 ? `${raw.slice(0, 300)}…` : raw
+  } catch {
+    return String(result)
+  }
+}
+
 async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null> {
   if (projectId) {
     try {
@@ -95,12 +145,24 @@ export async function createEmbedding(
 
   if (!response.ok) {
     const body = await response.text()
-    throw new Error(`Embedding API error: ${response.status} ${body.slice(0, 200)}`)
+    throw new Error(
+      `Embedding API error: ${response.status} from ${hostOf(resolved.baseUrl)} ` +
+      `for model ${embeddingModel}: ${body.slice(0, 200)}`,
+    )
   }
 
   const result = await response.json()
   const embedding = result.data?.[0]?.embedding
-  if (!embedding) throw new Error('No embedding returned from API')
+  if (!embedding) {
+    // 200 OK with no embedding is the OpenRouter / Together / Groq "soft
+    // failure" shape — include host, model, and upstream diagnostic so the
+    // Sentry event is self-diagnosing instead of an opaque string. See
+    // MUSHI-MUSHI-SERVER-B for the original regression.
+    throw new Error(
+      `No embedding returned from ${hostOf(resolved.baseUrl)} ` +
+      `for model ${embeddingModel}: ${describeEmptyEmbeddingResponse(result)}`,
+    )
+  }
   return embedding
 }
 
@@ -144,7 +206,13 @@ export async function generateAndStoreEmbedding(
     if (!response.ok) {
       const errBody = await response.text()
       span.end({ model: embeddingModel, error: `${response.status}: ${errBody.slice(0, 200)}` })
-      embLog.error('Embedding API error', { status: response.status, body: errBody })
+      embLog.error('Embedding API error', {
+        reportId,
+        status: response.status,
+        host: hostOf(resolved.baseUrl),
+        model: embeddingModel,
+        body: errBody.slice(0, 500),
+      })
       return
     }
 
@@ -152,7 +220,23 @@ export async function generateAndStoreEmbedding(
     const embedding = result.data?.[0]?.embedding
     const tokenUsage = result.usage?.total_tokens
     span.end({ model: embeddingModel, inputTokens: tokenUsage })
-    if (!embedding) return
+    if (!embedding) {
+      // 200 OK without an embedding array. `generateAndStoreEmbedding` is
+      // best-effort — report similarity grouping is a quality-of-life
+      // feature, not a correctness gate — so we warn rather than error to
+      // avoid spraying Sentry with one event per ingested report when a
+      // BYOK gateway is misconfigured. The diagnostic still lands in
+      // Supabase logs for operators; the sweep path in
+      // `webhooks-github-indexer` captures the same failure at error level
+      // through `createEmbedding`, which is where we want the Sentry signal.
+      embLog.warn('No embedding returned from API (report similarity skipped)', {
+        reportId,
+        host: hostOf(resolved.baseUrl),
+        model: embeddingModel,
+        detail: describeEmptyEmbeddingResponse(result),
+      })
+      return
+    }
 
     const db = getServiceClient()
     const { error } = await db.from('report_embeddings').upsert({

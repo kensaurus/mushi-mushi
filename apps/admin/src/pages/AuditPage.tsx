@@ -21,9 +21,14 @@ import {
   SelectField,
   ErrorAlert,
   EmptyState,
+  LogBlock,
+  CodeValue,
 } from '../components/ui'
+import { DataTable, type ColumnDef } from '../components/DataTable'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface AuditEntry {
   id: string
@@ -202,6 +207,73 @@ export function AuditPage() {
 
   const activeFilterCount = [action, resourceType, actor, actorType, since, q].filter(Boolean).length
 
+  // Column schema for the DataTable migration (Wave 3 QOL). Stays inside
+  // the component so `actionTone` and `setExpanded` can be closed over
+  // without threading props through the table primitive.
+  const columns = useMemo<ColumnDef<AuditEntry, unknown>[]>(() => [
+    {
+      id: 'time',
+      header: 'Time',
+      accessorFn: (e) => e.created_at,
+      enableSorting: true,
+      cell: ({ row }) => (
+        <span className="text-2xs text-fg-faint tabular-nums font-mono whitespace-nowrap">
+          {new Date(row.original.created_at).toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      id: 'action',
+      header: 'Action',
+      enableSorting: true,
+      accessorFn: (e) => e.action,
+      cell: ({ row }) => (
+        <Badge className={`${actionTone(row.original.action)} font-mono`}>
+          {row.original.action}
+        </Badge>
+      ),
+    },
+    {
+      id: 'actor',
+      header: 'Actor',
+      enableSorting: true,
+      accessorFn: (e) => e.actor_email ?? e.actor_id ?? 'system',
+      cell: ({ row }) => (
+        <span className="truncate text-xs text-fg-muted block max-w-[14rem]">
+          {row.original.actor_email ?? row.original.actor_id ?? 'system'}
+        </span>
+      ),
+    },
+    {
+      id: 'resource',
+      header: 'Resource',
+      accessorFn: (e) => `${e.resource_type}${e.resource_id ? `:${e.resource_id}` : ''}`,
+      enableSorting: true,
+      cell: ({ row }) => (
+        <span className="text-2xs text-fg-faint font-mono whitespace-nowrap">
+          {row.original.resource_type}
+          {row.original.resource_id ? `:${row.original.resource_id.slice(0, 8)}` : ''}
+        </span>
+      ),
+    },
+    {
+      id: 'expand',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const has = row.original.metadata && Object.keys(row.original.metadata).length > 0
+        if (!has) return null
+        return (
+          <span aria-hidden className="text-2xs text-fg-faint block text-center w-3">
+            {expanded === row.original.id ? '▾' : '▸'}
+          </span>
+        )
+      },
+    },
+  ], [expanded])
+
+  const expandedIds = useMemo(() => new Set(expanded ? [expanded] : []), [expanded])
+
   return (
     <div className="space-y-3">
       <PageHeader
@@ -210,6 +282,18 @@ export function AuditPage() {
       >
         <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
       </PageHeader>
+
+      <PageActionBar
+        scope="audit"
+        action={useNextBestAction({
+          scope: 'audit',
+          // Treat any `fix.failed` or `integration.disconnected` in the
+          // visible window as a FAIL; `api_key.revoked` / `plugin.uninstalled`
+          // as a WARN. Keeps the strip driven by the page's own data.
+          failCount: logs.filter((l) => l.action === 'fix.failed' || l.action === 'integration.disconnected').length,
+          warnCount: logs.filter((l) => l.action === 'api_key.revoked' || l.action === 'plugin.uninstalled').length,
+        })}
+      />
 
       <PageHelp
         title="About the Audit Log"
@@ -301,52 +385,33 @@ export function AuditPage() {
         />
       ) : (
         <>
-          <div className="space-y-0.5">
-            {logs.map((entry) => {
-              const isExpanded = expanded === entry.id
+          <DataTable<AuditEntry>
+            data={logs}
+            columns={columns}
+            getRowId={(e) => e.id}
+            density="compact"
+            ariaLabel="Audit log entries"
+            expandedIds={expandedIds}
+            onRowClick={(entry) => {
               const hasMeta = entry.metadata && Object.keys(entry.metadata).length > 0
-              return (
-                <Card key={entry.id} className="overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(isExpanded ? null : entry.id)}
-                    className="w-full flex items-center gap-3 px-3 py-1.5 text-left hover:bg-surface-overlay/50 motion-safe:transition-colors"
-                    aria-expanded={isExpanded}
-                  >
-                    <span className="text-2xs text-fg-faint tabular-nums font-mono w-40 shrink-0">
-                      {new Date(entry.created_at).toLocaleString()}
-                    </span>
-                    <Badge className={`${actionTone(entry.action)} font-mono shrink-0`}>{entry.action}</Badge>
-                    <span className="text-xs text-fg-muted truncate flex-1 min-w-0">
-                      {entry.actor_email ?? entry.actor_id ?? 'system'}
-                    </span>
-                    <span className="text-2xs text-fg-faint font-mono shrink-0">
-                      {entry.resource_type}
-                      {entry.resource_id ? `:${entry.resource_id.slice(0, 8)}` : ''}
-                    </span>
-                    {hasMeta && (
-                      <span className="text-2xs text-fg-faint shrink-0 w-3 text-center" aria-hidden>
-                        {isExpanded ? '▾' : '▸'}
-                      </span>
-                    )}
-                  </button>
-                  {isExpanded && hasMeta && (
-                    <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2">
-                      <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">Metadata</div>
-                      <pre className="text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap break-all">
-                        {JSON.stringify(entry.metadata, null, 2)}
-                      </pre>
-                      {entry.resource_id && (
-                        <div className="text-2xs text-fg-faint mt-2">
-                          Full resource ID: <span className="font-mono text-fg-secondary">{entry.resource_id}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
-          </div>
+              if (!hasMeta) return
+              setExpanded(expanded === entry.id ? null : entry.id)
+            }}
+            renderExpanded={(entry) => (
+              <div className="space-y-2">
+                <LogBlock
+                  value={JSON.stringify(entry.metadata ?? {}, null, 2)}
+                  label="Metadata"
+                />
+                {entry.resource_id && (
+                  <div className="text-2xs text-fg-faint space-y-1">
+                    <span>Full resource ID</span>
+                    <CodeValue value={entry.resource_id} tone="id" />
+                  </div>
+                )}
+              </div>
+            )}
+          />
 
           <div className="flex items-center justify-between text-2xs text-fg-muted pt-1">
             <span>

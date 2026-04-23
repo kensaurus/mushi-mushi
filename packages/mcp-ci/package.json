@@ -57,5 +57,8 @@
     "tsup": "^8.5.0",
     "typescript": "^6.0.2"
   },
-  "author": "Kenji Sakuramoto"
+  "author": "Kenji Sakuramoto",
+  "engines": {
+    "node": ">=20"
+  }
 }

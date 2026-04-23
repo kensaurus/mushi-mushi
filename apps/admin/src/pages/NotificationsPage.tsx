@@ -21,6 +21,7 @@ import {
   ErrorAlert,
   FilterSelect,
   SelectField,
+  LogBlock,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
@@ -232,9 +233,12 @@ export function NotificationsPage() {
                 </div>
                 {isExpanded && hasPayload && (
                   <div className="mt-2 pt-2 border-t border-edge-subtle">
-                    <pre className="text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap break-all bg-surface-overlay/30 rounded-sm p-2">
-                      {JSON.stringify(n.payload, null, 2)}
-                    </pre>
+                    <LogBlock
+                      value={JSON.stringify(n.payload, null, 2)}
+                      label="Payload"
+                      tone="neutral"
+                      maxHeightClass="max-h-64"
+                    />
                   </div>
                 )}
               </Card>

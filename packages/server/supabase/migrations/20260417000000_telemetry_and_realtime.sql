@@ -17,8 +17,19 @@
 -- supabase_realtime so subscribers receive live changes.
 -- =============================================================================
 
--- Restore index removed during schema hardening — owner_id is queried on every
--- admin route to authorize the JWT user against their projects.
+-- owner_id — the authenticated user who provisioned the project. Every admin
+-- route and every RLS policy below joins on this column to authorize the JWT
+-- user against their own projects.
+--
+-- We add it here (idempotently) because the column was supposed to ship with
+-- phase0 but was dropped from the committed migration set. Every downstream
+-- RLS migration (SOC2, byo-storage, nl_query_history, fix_events, …) already
+-- references `projects.owner_id`, so without this `add column` the whole
+-- migration chain can't apply cold.
+alter table projects
+  add column if not exists owner_id uuid references auth.users(id) on delete set null;
+
+-- Restore the index on every admin route's hot authz query.
 create index if not exists idx_projects_owner on projects(owner_id);
 
 -- -----------------------------------------------------------------------------

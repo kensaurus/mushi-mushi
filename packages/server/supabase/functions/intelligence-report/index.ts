@@ -14,6 +14,8 @@ import {
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
+import { INTELLIGENCE_MODEL } from '../_shared/models.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
 const intelLog = log.child('intelligence-report')
 
@@ -61,15 +63,29 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
     const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
     const span = trace.span(`digest.${project.name}`)
     const digestStart = Date.now()
+    const intelSelection = await getPromptForStage(db, project.id, 'intelligence')
+    const intelSystemPrompt = intelSelection.promptTemplate ??
+      'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and 2-3 actionable recommendations. Be specific and data-driven. Use Markdown with short paragraphs and bullet lists. Do NOT mention other tenants by name; benchmarks are anonymised aggregates.'
+    // Wave S (2026-04-23): cache the stable system prompt. The weekly
+    // digest fans out over every active project; the prompt text is
+    // identical for the full batch, so ephemeral caching halves the
+    // prompt-tokens bill on runs 2..N within a 5-minute window.
     const { text: digest, usage } = await generateText({
-      model: anthropic('claude-sonnet-4-6'),
-      system:
-        'You are a bug intelligence analyst. Write a concise weekly digest summarizing bug trends, fix velocity, areas of concern, and 2-3 actionable recommendations. Be specific and data-driven. Use Markdown with short paragraphs and bullet lists. Do NOT mention other tenants by name; benchmarks are anonymised aggregates.',
-      prompt: statsContext,
+      model: anthropic(INTELLIGENCE_MODEL),
+      messages: [
+        {
+          role: 'system',
+          content: intelSystemPrompt,
+          experimental_providerMetadata: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        },
+        { role: 'user', content: statsContext },
+      ],
     })
     const digestLatency = Date.now() - digestStart
     span.end({
-      model: 'claude-sonnet-4-6',
+      model: INTELLIGENCE_MODEL,
       inputTokens: usage?.promptTokens,
       outputTokens: usage?.completionTokens,
     })
@@ -78,8 +94,8 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
       projectId: project.id,
       functionName: 'intelligence-report',
       stage: 'digest',
-      primaryModel: 'claude-sonnet-4-6',
-      usedModel: 'claude-sonnet-4-6',
+      primaryModel: INTELLIGENCE_MODEL,
+      usedModel: INTELLIGENCE_MODEL,
       fallbackUsed: false,
       status: 'success',
       latencyMs: digestLatency,
@@ -102,7 +118,7 @@ Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project
         summaryMd: digest,
         stats,
         benchmarks: benchmarks.optedIn ? benchmarks : null,
-        llmModel: 'claude-sonnet-4-6',
+        llmModel: INTELLIGENCE_MODEL,
         llmTokensIn: usage?.promptTokens ?? null,
         llmTokensOut: usage?.completionTokens ?? null,
         generatedBy: trigger,

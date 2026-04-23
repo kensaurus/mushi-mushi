@@ -79,6 +79,8 @@ import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecraw
 import { createTrace } from '../_shared/observability.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
 // ----------------------------------------------------------------------------
 // Structured fix output. The LLM gets a strict shape — no shell, no tool calls.
@@ -223,10 +225,33 @@ Deno.serve(withSentry('fix-worker', async (req) => {
 
   try {
     // ---- 3. Load report, settings, RAG context -----------------------------
+    // Wave S (2026-04-23, PERF): narrow `select('*')` to the columns we
+    // actually touch. `reports` carries a fat `stage2_analysis` jsonb,
+    // dozens of attribute columns, embedding vectors, and audit fields —
+    // pulling all of them over the wire cost ~50 KB per dispatch. Same
+    // for `project_settings` (BYOK blobs, Slack tokens, PR template).
+    // The explicit column list doubles as documentation of what the
+    // fix-worker actually depends on — drift between handler code and
+    // schema becomes a type error instead of a silent correctness risk.
     const ctxSpan = trace.span('context.assemble')
     const [{ data: report }, { data: settings }, { data: project }] = await Promise.all([
-      db.from('reports').select('*').eq('id', dispatch.report_id).single(),
-      db.from('project_settings').select('*').eq('project_id', dispatch.project_id).single(),
+      db
+        .from('reports')
+        .select(
+          'id, description, summary, category, severity, component, confidence, user_intent, ' +
+          'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
+          'judge_score',
+        )
+        .eq('id', dispatch.report_id)
+        .single(),
+      db
+        .from('project_settings')
+        .select(
+          'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
+          'github_repo_url, codebase_repo_url',
+        )
+        .eq('project_id', dispatch.project_id)
+        .single(),
       db.from('projects').select('id, name, owner_id').eq('id', dispatch.project_id).single(),
     ])
 
@@ -423,6 +448,15 @@ Deno.serve(withSentry('fix-worker', async (req) => {
 
     const userPrompt = buildUserPrompt(report, settings, codeContext, repo, webSnippets)
 
+    // Resolve the fix-worker system prompt from `prompt_versions` (stage='fix').
+    // Falls back to the hardcoded SYSTEM_PROMPT when no global or project row
+    // exists (first boot before migration 20260422110000 runs, or when the
+    // operator has deleted every fix-stage row). Wired here so operators can
+    // A/B rewrite the senior-engineer rubric without redeploying.
+    const fixPromptSelection = await getPromptForStage(db, dispatch.project_id, 'fix')
+    const activeFixSystemPrompt = fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT
+    const fixPromptVersion = fixPromptSelection.promptVersion
+
     // ---- 5. Call LLM with structured output -------------------------------
     const llmSpan = trace.span('llm.fix')
     const llmStart = Date.now()
@@ -431,11 +465,13 @@ Deno.serve(withSentry('fix-worker', async (req) => {
     let inputTokens = 0
     let outputTokens = 0
 
-    // Model defaults are baked in; project-level overrides land in P6 alongside
-    // the integrations migration. Sonnet for Anthropic, GPT-4.1 for the
-    // OpenAI/OpenRouter path; both are strong at structured-output tool use.
-    const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-5-20250929'
-    const DEFAULT_OPENAI_MODEL = 'openai/gpt-4.1'  // OpenRouter-friendly slug
+    // Model defaults come from _shared/models.ts (Wave R, 2026-04-22):
+    // Sonnet 4-6 for Anthropic (upgrade from 4-5-20250929 which had skewed
+    // against the rest of the stack), GPT-5.4 for the OpenAI/OpenRouter
+    // path. Both are strong at structured-output tool use; Sonnet 4-6 also
+    // gets the Anthropic prompt-cache speedup on the system prompt.
+    const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL
+    const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}` // OpenRouter-friendly slug
 
     try {
       if (anthropicResolved) {
@@ -447,12 +483,24 @@ Deno.serve(withSentry('fix-worker', async (req) => {
         // min/max constraints (e.g. a summary under 10 chars) and throw
         // AI_NoObjectGeneratedError with no retry path. maxTokens was
         // already sufficient; temperature was the missing knob.
+        // Wave S (2026-04-23): mark the system prompt as cacheable. The
+        // fix-worker system prompt is ~4 KB of stable guardrails; every
+        // dispatch re-sends it unchanged. Anthropic's ephemeral cache
+        // halves the prompt-tokens bill on the second request within 5
+        // minutes — the judge, classify, and fast-filter functions already
+        // do this, fix-worker was the outlier.
         const { object, usage } = await generateObject({
           model: anthropic(usedModel),
           schema: fixSchema,
           temperature: 0,
           messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
+            {
+              role: 'system',
+              content: activeFixSystemPrompt,
+              experimental_providerMetadata: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            },
             { role: 'user', content: userPrompt },
           ],
           maxTokens: 8_000,
@@ -468,7 +516,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
         const openaiKey = openaiResolved!.key
         const openaiBaseUrl = openaiResolved!.baseUrl
         const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false
-        usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : 'gpt-4.1'
+        usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK
         const openai = createOpenAI({
           apiKey: openaiKey,
           ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
@@ -477,7 +525,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
           model: openai(usedModel),
           schema: fixSchema,
           temperature: 0,
-          system: SYSTEM_PROMPT,
+          system: activeFixSystemPrompt,
           prompt: userPrompt,
           maxTokens: 8_000,
         })

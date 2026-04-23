@@ -14,6 +14,8 @@ import {
   ErrorAlert,
 } from '../components/ui'
 import { useToast } from '../lib/toast'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface QueryResult {
   sql: string
@@ -264,6 +266,17 @@ export function QueryPage() {
       <PageHeader
         title="Ask Your Data"
         description="Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited."
+      />
+
+      <PageActionBar
+        scope="query"
+        action={useNextBestAction({
+          scope: 'query',
+          savedQueries: saved.length,
+          lastRunHoursAgo: history[0]?.created_at
+            ? Math.floor((Date.now() - new Date(history[0].created_at).getTime()) / 3_600_000)
+            : null,
+        })}
       />
 
       <PageHelp

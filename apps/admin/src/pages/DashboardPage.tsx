@@ -7,9 +7,10 @@
  *          evolve independently and stay below the 30-line-function limit.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
+import { useRealtimeReload } from '../lib/realtime'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
@@ -60,32 +61,18 @@ export function DashboardPage() {
   // SPA-route via `navigate` rather than `window.location.assign` — the
   // latter discards in-memory state (toast queue, scroll, focus) on what
   // should be a celebratory in-app jump.
-  // Lightweight live-pulse poll for the LivePdcaPipeline. We refresh the
-  // dashboard payload every 15s while the tab is visible so stage counts
-  // stay current and the pipeline can pulse the right node when a real
-  // report / fix / judge / merge lands. Pauses on tab hide to avoid
-  // burning Supabase function-invocations in the background.
-  useEffect(() => {
-    if (loading || error || !data || data.empty) return
-    let timer: ReturnType<typeof setInterval> | null = null
-    const start = () => {
-      if (timer) return
-      timer = setInterval(() => {
-        if (document.visibilityState === 'visible') reload()
-      }, 15_000)
-    }
-    const stop = () => {
-      if (timer) clearInterval(timer)
-      timer = null
-    }
-    const onVis = () => (document.visibilityState === 'visible' ? start() : stop())
-    start()
-    document.addEventListener('visibilitychange', onVis)
-    return () => {
-      stop()
-      document.removeEventListener('visibilitychange', onVis)
-    }
-  }, [data, error, loading, reload])
+  // Live-pulse the dashboard via Supabase Realtime. Previously a 15s poll,
+  // now event-driven: when a report lands the queue ticks immediately and
+  // the PDCA pipeline can pulse the right stage. A 1s debounce avoids
+  // thrashing when a burst of webhooks (push + pr + check_run) for the
+  // same fix land in the same second. Dashboard reloads are cheap because
+  // the backend caches the aggregate for 10s server-side.
+  const realtimeEnabled = !loading && !error && !!data && !data.empty
+  useRealtimeReload(
+    ['reports', 'fix_attempts', 'fix_events', 'fix_dispatch_jobs'],
+    reload,
+    { debounceMs: 1000, enabled: realtimeEnabled },
+  )
 
   const onFirstMergedFix = useCallback(() => {
     toast.success(

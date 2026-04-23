@@ -20,6 +20,8 @@ import { SetupNudge } from '../components/SetupNudge'
 import { HeroGraphNodes } from '../components/illustrations/HeroIllustrations'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 import { usePageCopy } from '../lib/copy'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
@@ -310,6 +312,29 @@ export function GraphPage() {
         </div>
       </PageHeader>
 
+      <PageActionBar
+        scope="graph"
+        action={useNextBestAction({
+          scope: 'graph',
+          // Count `component` nodes linked by >= 3 incoming "affects" edges as fragile.
+          fragileComponents: (() => {
+            const componentIds = new Set(
+              rawNodes.filter((n) => n.node_type === 'component').map((n) => n.id),
+            )
+            const incoming = new Map<string, number>()
+            for (const e of rawEdges) {
+              if (e.edge_type !== 'affects') continue
+              if (!componentIds.has(e.target_node_id)) continue
+              incoming.set(e.target_node_id, (incoming.get(e.target_node_id) ?? 0) + 1)
+            }
+            let n = 0
+            for (const count of incoming.values()) if (count >= 3) n += 1
+            return n
+          })(),
+          untestedComponents: 0,
+        })}
+      />
+
       <PageHelp
         title={copy?.help?.title ?? 'About the Knowledge Graph'}
         whatIsIt={copy?.help?.whatIsIt ?? 'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'}
@@ -473,7 +498,7 @@ function StoryboardNarrative({ nodes, onSwitchToCanvas }: StoryboardNarrativePro
 
   return (
     <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-raised/40">
-      <p className="text-xs text-fg-secondary leading-snug">
+      <p className="text-xs text-fg-secondary leading-relaxed max-w-prose wrap-break-word text-pretty">
         <span className="text-2xs uppercase tracking-wider text-fg-faint mr-1">Story</span>
         {sentence}
       </p>

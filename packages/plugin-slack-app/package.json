@@ -65,5 +65,8 @@
     "oauth",
     "slash-commands",
     "interactive"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

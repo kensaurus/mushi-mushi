@@ -1,0 +1,23 @@
+{
+  "name": "@mushi-mushi/e2e-dogfood",
+  "version": "0.0.0",
+  "private": true,
+  "description": "End-to-end Playwright suite that drives the full Mushi Mushi PDCA loop (Plan → Do → Check → Act) against a local Supabase + admin dev stack. Mocks GitHub by default (msw); set E2E_LIVE_GITHUB=1 to hit real GitHub.",
+  "type": "module",
+  "scripts": {
+    "test": "echo 'e2e-dogfood is driven by pnpm e2e, not pnpm test (requires a live Supabase + admin stack)' && exit 0",
+    "e2e": "playwright test",
+    "test:ui": "playwright test --ui",
+    "test:headed": "playwright test --headed",
+    "codegen": "playwright codegen http://localhost:3000",
+    "install-browsers": "playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@mushi-mushi/core": "workspace:*",
+    "@mushi-mushi/web": "workspace:*",
+    "@playwright/test": "^1.54.0",
+    "@supabase/supabase-js": "^2.80.0",
+    "msw": "^2.11.4",
+    "typescript": "^6.0.2"
+  }
+}

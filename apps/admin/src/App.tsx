@@ -35,6 +35,7 @@ const JudgePage = lazy(() => import('./pages/JudgePage').then(m => ({ default: m
 const QueryPage = lazy(() => import('./pages/QueryPage').then(m => ({ default: m.QueryPage })))
 const ResearchPage = lazy(() => import('./pages/ResearchPage').then(m => ({ default: m.ResearchPage })))
 const FixesPage = lazy(() => import('./pages/FixesPage').then(m => ({ default: m.FixesPage })))
+const RepoPage = lazy(() => import('./pages/RepoPage').then(m => ({ default: m.RepoPage })))
 const SsoPage = lazy(() => import('./pages/SsoPage').then(m => ({ default: m.SsoPage })))
 const AuditPage = lazy(() => import('./pages/AuditPage').then(m => ({ default: m.AuditPage })))
 const PromptLabPage = lazy(() => import('./pages/PromptLabPage').then(m => ({ default: m.PromptLabPage })))
@@ -115,6 +116,7 @@ export function App() {
                   <Route path="/query" element={<QueryPage />} />
                   <Route path="/research" element={<ResearchPage />} />
                   <Route path="/fixes" element={<FixesPage />} />
+                  <Route path="/repo" element={<RepoPage />} />
                   <Route path="/sso" element={<SsoPage />} />
                   <Route path="/audit" element={<AuditPage />} />
                   <Route path="/prompt-lab" element={<PromptLabPage />} />

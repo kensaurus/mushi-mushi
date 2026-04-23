@@ -1,12 +1,20 @@
 import { Link } from 'react-router-dom'
-import { Badge, CodeValue, RelativeTime } from '../ui'
+import { Badge, Breadcrumbs, CodeValue, RelativeTime } from '../ui'
 import { STATUS, SEVERITY, CATEGORY_BADGE, CATEGORY_LABELS, statusLabel, severityLabel } from '../../lib/tokens'
 import { useReportPresence } from '../../lib/reportPresence'
 import type { ReportDetail } from './types'
 
 export function ReportDetailHeader({ report, reporterShort }: { report: ReportDetail; reporterShort: string }) {
+  const title = (report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
+    <div className="mb-3">
+      <Breadcrumbs
+        items={[
+          { label: 'Reports', to: '/reports' },
+          { label: title, hint: report.id },
+        ]}
+      />
+      <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <Badge className={STATUS[report.status] ?? 'text-fg-muted border border-edge'}>
@@ -24,7 +32,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
           )}
         </div>
         <h2 className="mt-1.5 text-lg font-semibold text-fg leading-snug text-balance max-w-4xl wrap-break-word">
-          {(report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'}
+          {title}
         </h2>
         <div className="mt-1.5 flex items-center gap-2 text-xs text-fg-muted flex-wrap">
           <span className="text-fg-secondary">
@@ -53,6 +61,7 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
         </div>
       </div>
       <PresenceBadges reportId={report.id} projectId={report.project_id} />
+      </div>
     </div>
   )
 }
