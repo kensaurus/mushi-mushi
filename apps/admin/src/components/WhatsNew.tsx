@@ -73,9 +73,15 @@ export function useWhatsNew() {
 
   useEffect(() => {
     let cancelled = false
+    // Resolve against Vite's BASE_URL so the demo, hosted under a
+    // sub-path (e.g. https://kensaur.us/mushi-mushi/), still finds the
+    // file. A bare leading-slash path would 404 there because it would
+    // resolve to https://kensaur.us/changelog.json instead of
+    // https://kensaur.us/mushi-mushi/changelog.json.
+    const base = (import.meta.env.BASE_URL ?? '/').replace(/\/+$/, '')
     // Cache-bust with a short TTL query so a freshly-deployed bundle is
     // still fetched even if the browser aggressively caches static JSON.
-    fetch(`/changelog.json?ts=${Math.floor(Date.now() / 60000)}`, { cache: 'force-cache' })
+    fetch(`${base}/changelog.json?ts=${Math.floor(Date.now() / 60000)}`, { cache: 'force-cache' })
       .then((r) => (r.ok ? r.json() : null))
       .then((j: ChangelogFile | null) => {
         if (cancelled || !j || !Array.isArray(j.entries)) return
