@@ -141,7 +141,7 @@ export function FixProgressStream({ reportId, dispatchState }: Props) {
       </div>
 
       {dispatchState.error && (
-        <p className="text-2xs text-danger break-words">{dispatchState.error}</p>
+        <p className="text-2xs text-danger wrap-break-word text-pretty">{dispatchState.error}</p>
       )}
 
       {isInFlight && (

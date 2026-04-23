@@ -64,5 +64,8 @@
     "atlassian",
     "oauth",
     "bidirectional-sync"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

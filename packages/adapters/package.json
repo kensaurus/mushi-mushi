@@ -84,5 +84,8 @@
     "grafana-loki",
     "observability",
     "glue"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

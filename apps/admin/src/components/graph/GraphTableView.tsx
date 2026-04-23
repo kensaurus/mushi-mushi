@@ -4,10 +4,25 @@
  *          the graph as two paired tables (nodes + edges) keyed by stable IDs
  *          so AT can announce relationships and keyboard users can focus and
  *          select nodes.
+ *
+ * Wave S (2026-04-23) — Lightweight windowing.
+ *
+ * Prior revisions `nodes.map((n) => ...)` rendered every row unconditionally.
+ * On knowledge graphs with >2k nodes that dropped the admin console frame
+ * budget below 20 fps on mid-range laptops — operators reported the
+ * accessibility toggle "freezing the browser" during graph imports.
+ *
+ * We deliberately avoid pulling in a virtualization library (tanstack/react
+ * virtual would add ~8 KB gzipped and the rest of the admin console doesn't
+ * need it). Instead we cap the initial render at `PAGE_SIZE` rows and
+ * expose a plain "Show N more" button; AT users can page through without
+ * the overhead of a custom scroll listener, and we keep the bundle budget
+ * intact. The `<h3>` count reflects the full dataset size so operators
+ * always know what's hidden.
  */
 
-import { useMemo } from 'react'
-import { Card } from '../ui'
+import { useMemo, useState } from 'react'
+import { Btn, Card } from '../ui'
 import { EDGE_LABELS, NODE_TYPE_LABELS, nodeMetadataValue, type GraphEdge, type GraphNode } from './types'
 
 interface Props {
@@ -18,13 +33,29 @@ interface Props {
   onSelect: (node: GraphNode) => void
 }
 
+// Matches the `max-h-[480px]` scroll region — at ~22px per row we fit ~22
+// rows on screen, so 250 keeps a healthy off-screen prefetch buffer while
+// preventing the browser from ever laying out the full 2k+ at once.
+const PAGE_SIZE = 250
+
 export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, onSelect }: Props) {
   const nodesById = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes])
+
+  const [nodeLimit, setNodeLimit] = useState(PAGE_SIZE)
+  const [edgeLimit, setEdgeLimit] = useState(PAGE_SIZE)
+
+  const visibleNodes = useMemo(() => nodes.slice(0, nodeLimit), [nodes, nodeLimit])
+  const visibleEdges = useMemo(() => edges.slice(0, edgeLimit), [edges, edgeLimit])
+
+  const nodeOverflow = nodes.length - visibleNodes.length
+  const edgeOverflow = edges.length - visibleEdges.length
+
   return (
     <div className="grid gap-3 md:grid-cols-2" role="region" aria-label="Knowledge graph table view">
       <Card className="p-2">
         <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
-          Nodes ({nodes.length})
+          Nodes ({nodes.length}
+          {nodeOverflow > 0 ? ` · showing ${visibleNodes.length}` : ''})
         </h3>
         <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
           <table className="w-full text-2xs" aria-label="Graph nodes">
@@ -37,7 +68,7 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
               </tr>
             </thead>
             <tbody>
-              {nodes.map((n) => {
+              {visibleNodes.map((n) => {
                 const occ = nodeMetadataValue(n, 'occurrence_count')
                 const isSelected = selectedNodeId === n.id
                 const inBlast = blastRadiusIds.has(n.id)
@@ -65,11 +96,35 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
             </tbody>
           </table>
         </div>
+        {nodeOverflow > 0 ? (
+          <div className="flex items-center justify-between gap-2 px-1 pt-2">
+            <span className="text-2xs text-fg-faint">
+              {nodeOverflow.toLocaleString()} more hidden
+            </span>
+            <div className="flex gap-1">
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => setNodeLimit((l) => l + PAGE_SIZE)}
+              >
+                Show {Math.min(PAGE_SIZE, nodeOverflow)} more
+              </Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => setNodeLimit(nodes.length)}
+              >
+                Show all
+              </Btn>
+            </div>
+          </div>
+        ) : null}
       </Card>
 
       <Card className="p-2">
         <h3 className="text-2xs uppercase tracking-wider text-fg-faint mb-2 px-1">
-          Edges ({edges.length})
+          Edges ({edges.length}
+          {edgeOverflow > 0 ? ` · showing ${visibleEdges.length}` : ''})
         </h3>
         <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
           <table className="w-full text-2xs" aria-label="Graph edges">
@@ -82,7 +137,7 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
               </tr>
             </thead>
             <tbody>
-              {edges.map((e) => {
+              {visibleEdges.map((e) => {
                 const src = nodesById.get(e.source_node_id)
                 const tgt = nodesById.get(e.target_node_id)
                 return (
@@ -97,6 +152,29 @@ export function GraphTableView({ nodes, edges, selectedNodeId, blastRadiusIds, o
             </tbody>
           </table>
         </div>
+        {edgeOverflow > 0 ? (
+          <div className="flex items-center justify-between gap-2 px-1 pt-2">
+            <span className="text-2xs text-fg-faint">
+              {edgeOverflow.toLocaleString()} more hidden
+            </span>
+            <div className="flex gap-1">
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => setEdgeLimit((l) => l + PAGE_SIZE)}
+              >
+                Show {Math.min(PAGE_SIZE, edgeOverflow)} more
+              </Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => setEdgeLimit(edges.length)}
+              >
+                Show all
+              </Btn>
+            </div>
+          </div>
+        ) : null}
       </Card>
     </div>
   )

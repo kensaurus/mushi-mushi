@@ -33,6 +33,8 @@ import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIll
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface LlmRecent {
   function_name: string
@@ -82,6 +84,11 @@ interface CronJobHealth {
   successRate: number
   avgDurationMs: number
   runs: number
+  /** Minutes since last run; optional for older Edge Function deployments
+   *  that haven't picked up the staleness fields yet. */
+  stalenessMinutes?: number | null
+  /** Staleness tier. Optional for the same rollout reason. */
+  staleness?: 'ok' | 'warn' | 'stale' | 'never'
 }
 
 interface CronHealth {
@@ -121,6 +128,8 @@ export function HealthPage() {
   const llmQuery = usePageData<LlmHealth>(`/v1/admin/health/llm?window=${window}`, { deps: [window] })
   const cronQuery = usePageData<CronHealth>('/v1/admin/health/cron')
   const [triggering, setTriggering] = useState<string | null>(null)
+  const [probing, setProbing] = useState<string | null>(null)
+  const [probeResults, setProbeResults] = useState<Record<string, { status: string; latencyMs: number; detail?: string; at: string }>>({})
 
   const llm = llmQuery.data
   const cron = cronQuery.data
@@ -148,6 +157,32 @@ export function HealthPage() {
     if (fnFilter) rows = rows.filter((r) => r.function_name === fnFilter)
     return rows
   }, [llm, recentFilter, fnFilter])
+
+  async function probeProvider(kind: 'anthropic' | 'openai') {
+    setProbing(kind)
+    try {
+      const res = await apiFetch<{ status: string; latencyMs: number; detail?: string }>(
+        `/v1/admin/health/integration/${kind}`,
+        { method: 'POST' },
+      )
+      if (!res.ok || !res.data) {
+        toast.error(`Probe failed for ${kind}`, res.error?.message)
+        setProbeResults((prev) => ({
+          ...prev,
+          [kind]: { status: 'down', latencyMs: 0, detail: res.error?.message, at: new Date().toISOString() },
+        }))
+        return
+      }
+      setProbeResults((prev) => ({
+        ...prev,
+        [kind]: { ...res.data!, at: new Date().toISOString() },
+      }))
+      if (res.data.status === 'ok') toast.success(`${kind} healthy`, `${res.data.latencyMs}ms`)
+      else toast.error(`${kind} probe ${res.data.status}`, res.data.detail)
+    } finally {
+      setProbing(null)
+    }
+  }
 
   async function triggerJob(job: 'judge-batch' | 'intelligence-report') {
     setTriggering(job)
@@ -191,6 +226,19 @@ export function HealthPage() {
         </SelectField>
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
+
+      <PageActionBar
+        scope="health"
+        action={useNextBestAction({
+          scope: 'health',
+          redCount:
+            (llm.errorRate > 0.05 ? 1 : 0) +
+            KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'error').length,
+          amberCount:
+            (llm.fallbackRate > 0.1 ? 1 : 0) +
+            KNOWN_JOBS.filter((j) => cron?.byJob[j]?.lastStatus === 'warn').length,
+        })}
+      />
 
       <PageHelp
         title={copy?.help?.title ?? 'About System Health'}
@@ -343,6 +391,46 @@ export function HealthPage() {
         )}
       </Section>
 
+      <Section title="Provider probes">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {(['anthropic', 'openai'] as const).map((kind) => {
+            const r = probeResults[kind]
+            const statusColor = r?.status === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : r?.status === 'degraded'
+                ? 'bg-warn-muted text-warn'
+                : r?.status === 'down'
+                  ? 'bg-danger-muted text-danger'
+                  : 'bg-surface-overlay text-fg-muted'
+            return (
+              <Card key={kind} className="p-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <code className="text-xs font-mono font-medium capitalize">{kind}</code>
+                      <Badge className={statusColor}>{r?.status ?? 'not probed'}</Badge>
+                    </div>
+                    <p className="mt-1 text-2xs text-fg-faint">
+                      {r
+                        ? `${r.latencyMs}ms · last probed ${new Date(r.at).toLocaleTimeString()}${r.detail ? ` · ${r.detail.slice(0, 120)}` : ''}`
+                        : 'Runs a 1-token round-trip against the provider\'s live API. Abort after 5s if upstream is stuck.'}
+                    </p>
+                  </div>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => probeProvider(kind)}
+                    loading={probing === kind}
+                  >
+                    Probe now
+                  </Btn>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      </Section>
+
       <Section title="Cron Jobs">
         <div className="space-y-1">
           {KNOWN_JOBS.map(job => {
@@ -365,6 +453,11 @@ export function HealthPage() {
                     {j ? (
                       <p className="mt-1 text-2xs text-fg-faint">
                         Last: {j.lastRun ? new Date(j.lastRun).toLocaleString() : 'never'} · {j.runs} runs · {(j.successRate * 100).toFixed(0)}% success · avg {j.avgDurationMs}ms
+                        {j.staleness && j.staleness !== 'ok' && j.stalenessMinutes != null && (
+                          <span className={j.staleness === 'stale' ? ' text-danger' : ' text-warn'}>
+                            {' '}· {j.staleness} ({j.stalenessMinutes}m since last run)
+                          </span>
+                        )}
                       </p>
                     ) : (
                       <p className="mt-1 text-2xs text-fg-faint">No telemetry yet — job has not executed since the telemetry table was created.</p>

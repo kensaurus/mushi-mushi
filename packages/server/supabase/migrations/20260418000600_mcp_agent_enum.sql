@@ -28,8 +28,7 @@ ALTER TABLE project_settings
   CHECK (autofix_agent IN ('claude_code', 'codex', 'mcp', 'rest_fix_worker', 'generic_mcp'));
 
 COMMENT ON COLUMN project_settings.autofix_agent IS
-  'Agent identifier. ''mcp'' = JSON-RPC 2.0 MCP client (preferred). ' ||
-  '''rest_fix_worker'' = HTTP+JSON worker. ''generic_mcp'' = deprecated alias for rest_fix_worker.';
+  'Agent identifier. ''mcp'' = JSON-RPC 2.0 MCP client (preferred). ''rest_fix_worker'' = HTTP+JSON worker. ''generic_mcp'' = deprecated alias for rest_fix_worker.';
 
 COMMENT ON COLUMN project_settings.autofix_mcp_bearer IS
   'Optional Bearer token sent on every MCP/REST fix-worker request.';

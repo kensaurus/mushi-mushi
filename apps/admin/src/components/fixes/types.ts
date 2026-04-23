@@ -13,6 +13,7 @@ export interface FixAttempt {
   branch?: string
   pr_url?: string
   pr_number?: number
+  commit_sha?: string | null
   files_changed?: string[]
   lines_changed?: number
   summary?: string
@@ -27,6 +28,7 @@ export interface FixAttempt {
   llm_output_tokens?: number | null
   check_run_status?: string | null
   check_run_conclusion?: string | null
+  pr_state?: 'open' | 'closed' | 'merged' | 'draft' | null
 }
 
 export interface DispatchJob {

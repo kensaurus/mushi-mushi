@@ -107,7 +107,7 @@ BEGIN
         SELECT idx.indexrelid
           FROM pg_index idx
           JOIN pg_class ic ON ic.oid = idx.indexrelid
-         WHERE ic.relname LIKE '%\_fkey\_idx' ESCAPE '\\'
+         WHERE ic.relname LIKE '%\_fkey\_idx' ESCAPE E'\\'
       )
   LOOP
     stmt := format('DROP INDEX IF EXISTS %I.%I', rec.schemaname, rec.index_name);

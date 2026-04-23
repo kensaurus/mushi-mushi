@@ -23,6 +23,8 @@ import { QueueKpiRow } from '../components/dlq/QueueKpiRow'
 import { QueueThroughputChart } from '../components/dlq/QueueThroughputChart'
 import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 import {
   STATUS_OPTIONS,
   type QueueItem,
@@ -226,6 +228,15 @@ export function DLQPage() {
           Recover stranded
         </Btn>
       </PageHeader>
+
+      <PageActionBar
+        scope="queue"
+        action={useNextBestAction({
+          scope: 'queue',
+          stalledCount: (summary?.byStatus?.dead_letter ?? 0) + (summary?.byStatus?.failed ?? 0),
+          runningCount: summary?.byStatus?.running ?? 0,
+        })}
+      />
 
       <PageHelp
         title="About the Processing Queue"

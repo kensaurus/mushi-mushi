@@ -87,6 +87,15 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Check publish readiness
+        # Fails if any publishable package.json is missing required fields
+        # (files, exports/types, engines, repository.directory, license).
+        # Adds a seatbelt on top of npm's own publish validation — npm only
+        # checks syntactic correctness, not whether `files` actually
+        # includes README/LICENSE or whether `repository.directory` points
+        # at the right folder.
+        run: node scripts/check-publish-readiness.mjs
+
       - name: Create Release PR or Publish
         id: changesets
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf  # v1.7.0

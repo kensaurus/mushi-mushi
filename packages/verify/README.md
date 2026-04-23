@@ -24,12 +24,36 @@ Or programmatically:
 import { verifyFix } from '@mushi-mushi/verify'
 
 const result = await verifyFix({
-  fixAttemptId: 'fix_xxx',
-  supabaseUrl: process.env.SUPABASE_URL,
-  supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-  targetUrl: 'https://preview-branch.your-app.com',
+  reportId: 'rep_xxx',
+  fixAttemptId: 'fa_xxx', // optional — correlates the run to a fix_attempts row
+  deploymentUrl: 'https://preview-branch.your-app.com',
+  supabaseUrl: process.env.SUPABASE_URL!,
+  supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  // Optional: override reproduction_steps with attach-time steps.
+  steps: [
+    'navigate /checkout',
+    { action: 'click', target: 'Pay now' },
+    'assert "Order confirmed" is visible',
+  ],
 })
 ```
+
+### Attach-time steps
+
+By default `verifyFix` replays `reports.reproduction_steps`. Pass `steps`
+to override them at call-time — useful when an agent attaches a custom
+regression probe alongside its fix PR. Strings are run through the same
+natural-language parser as repro steps; structured `{ action, target?, value? }`
+descriptors skip parsing and dispatch directly.
+
+### Attempt correlation
+
+Pass `fixAttemptId` to link this verification to the `fix_attempts` row
+that produced the PR. The result is mirrored into
+`fix_attempts.verify_steps` (JSONB) so the judge and admin console can
+answer "did attempt X actually pass verification?" without a fragile
+time-based join. See migration `20260422120000_verify_steps_correlation.sql`
+for the schema.
 
 ## CI Integration
 

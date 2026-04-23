@@ -69,6 +69,15 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement | null>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
 
+  // Ref-latch `onClose` — see `Drawer.tsx` for the full rationale.
+  // Summary: ancestors re-render on every realtime `postgres_changes`
+  // tick, callers pass inline arrows for `onClose`, so depending on
+  // `onClose` identity would rip focus out of the modal every few
+  // seconds. Refs can be written during render; this is the same shape
+  // used by `useRealtimeReload`.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
     if (!open) return
     previouslyFocusedRef.current = document.activeElement as HTMLElement | null
@@ -89,7 +98,7 @@ export function Modal({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && dismissible) {
         e.stopPropagation()
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab' || !panel) return
@@ -115,7 +124,7 @@ export function Modal({
       document.body.style.overflow = prevOverflow
       previouslyFocusedRef.current?.focus?.()
     }
-  }, [open, dismissible, onClose])
+  }, [open, dismissible])
 
   if (!open) return null
 

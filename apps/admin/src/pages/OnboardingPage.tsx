@@ -410,7 +410,7 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
             {copied ? 'Copied!' : 'Copy'}
           </button>
         </div>
-        <code className="text-sm font-mono text-ok break-all select-all">{apiKey.key}</code>
+        <code className="text-sm font-mono text-ok wrap-anywhere select-all">{apiKey.key}</code>
       </div>
       <div className="rounded-sm border border-warn/30 bg-warn/5 px-3 py-2">
         <p className="text-2xs text-warn">

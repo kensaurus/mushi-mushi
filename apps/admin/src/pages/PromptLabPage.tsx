@@ -40,7 +40,12 @@ export function PromptLabPage() {
   const toast = useToast()
 
   const grouped = useMemo(() => {
-    const out: Record<string, PromptVersion[]> = { stage1: [], stage2: [] }
+    // Wave R (2026-04-22): migration 20260422110000 added six new stages
+    // (judge, intelligence, fix, prompt_tune, nl_plan, nl_summary, synthetic,
+    // modernizer) to prompt_versions. The table is keyed by whatever stages
+    // actually have rows — we no longer hardcode ['stage1', 'stage2'] so a
+    // newly-introduced stage shows up without a frontend change.
+    const out: Record<string, PromptVersion[]> = {}
     for (const p of data?.prompts ?? []) {
       ;(out[p.stage] ??= []).push(p)
     }
@@ -55,6 +60,36 @@ export function PromptLabPage() {
     }
     return out
   }, [data])
+
+  // Stable stage ordering: pipeline stages first in PDCA flow order, anything
+  // unknown falls to the end alphabetically. Keeps the tab bar predictable
+  // across deploys.
+  const STAGE_ORDER = [
+    'stage1', 'stage2', 'judge', 'fix', 'intelligence',
+    'nl_plan', 'nl_summary', 'synthetic', 'modernizer', 'prompt_tune',
+  ] as const
+  const STAGE_LABEL: Record<string, string> = {
+    stage1: 'Stage 1 (fast-filter)',
+    stage2: 'Stage 2 (classify)',
+    judge: 'Judge',
+    fix: 'Fix-worker',
+    intelligence: 'Intelligence digest',
+    nl_plan: 'NL → SQL planner',
+    nl_summary: 'NL → summary',
+    synthetic: 'Synthetic generator',
+    modernizer: 'Dep modernizer',
+    prompt_tune: 'Prompt auto-tune',
+  }
+  const orderedStages = Object.keys(grouped).sort((a, b) => {
+    const ia = STAGE_ORDER.indexOf(a as typeof STAGE_ORDER[number])
+    const ib = STAGE_ORDER.indexOf(b as typeof STAGE_ORDER[number])
+    if (ia !== -1 && ib !== -1) return ia - ib
+    if (ia !== -1) return -1
+    if (ib !== -1) return 1
+    return a.localeCompare(b)
+  })
+  const [activeStage, setActiveStage] = useState<string | null>(null)
+  const visibleStage = activeStage ?? orderedStages[0] ?? null
 
   async function clonePrompt(p: PromptVersion) {
     setBusy(p.id)
@@ -217,11 +252,35 @@ export function PromptLabPage() {
         />
       </KpiRow>
 
-      {(['stage1', 'stage2'] as const).map((stage) => (
+      {orderedStages.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-b border-border-subtle">
+          {orderedStages.map((stage) => {
+            const count = grouped[stage]?.length ?? 0
+            const active = visibleStage === stage
+            return (
+              <button
+                key={stage}
+                type="button"
+                onClick={() => setActiveStage(stage)}
+                className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                  active
+                    ? 'border-accent text-fg'
+                    : 'border-transparent text-fg-muted hover:text-fg hover:border-border'
+                }`}
+              >
+                {STAGE_LABEL[stage] ?? stage}
+                <span className="ml-1.5 text-2xs text-fg-faint font-mono">{count}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {visibleStage && (
         <PromptStageTable
-          key={stage}
-          stage={stage}
-          prompts={grouped[stage] ?? []}
+          key={visibleStage}
+          stage={visibleStage as 'stage1' | 'stage2'}
+          prompts={grouped[visibleStage] ?? []}
           busy={busy}
           onClone={clonePrompt}
           onEdit={setEditing}
@@ -230,7 +289,7 @@ export function PromptLabPage() {
           onTraffic={setTraffic}
           onDelete={deletePrompt}
         />
-      ))}
+      )}
 
       <FineTuningJobsCard jobs={data.fineTuningJobs ?? []} onChange={reload} />
 

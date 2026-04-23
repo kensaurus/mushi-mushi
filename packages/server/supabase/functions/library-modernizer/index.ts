@@ -27,6 +27,8 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { firecrawlScrape } from '../_shared/firecrawl.ts'
+import { MODERNIZER_MODEL } from '../_shared/models.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('library-modernizer')
 
@@ -42,11 +44,10 @@ function getDb() {
   )
 }
 
-function authorized(req: Request): boolean {
-  const expected = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
-  const got = req.headers.get('Authorization') ?? ''
-  return Boolean(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) && got === expected
-}
+// Wave S (2026-04-23): mirror prompt-auto-tune — delegate to shared
+// `requireServiceRoleAuth` so pg_cron callers passing
+// `MUSHI_INTERNAL_CALLER_SECRET` are accepted. See auth.ts for the
+// constant-time compare rationale.
 
 async function readVaultSecret(
   db: ReturnType<typeof getDb>,
@@ -253,7 +254,7 @@ async function processRepo(
   const client = createAnthropic({ apiKey: anthropic.key })
   let model: ReturnType<typeof client>
   try {
-    model = client('claude-sonnet-4-6')
+    model = client(MODERNIZER_MODEL)
   } catch (err) {
     log.warn('anthropic client init failed', { error: String(err).slice(0, 200) })
     return { scanned: deps.length, created: 0, skipped: 'llm_init_failed' }
@@ -349,7 +350,8 @@ function guessChangelogUrls(kind: ManifestKind, name: string): string[] {
 app.get('/library-modernizer/health', (c) => c.json({ ok: true }))
 
 app.post('/library-modernizer', async (c) => {
-  if (!authorized(c.req.raw)) return c.json({ error: 'unauthorized' }, 401)
+  const unauthorized = requireServiceRoleAuth(c.req.raw)
+  if (unauthorized) return unauthorized
   const db = getDb()
 
   const { data: rows, error } = await db

@@ -6,6 +6,7 @@ import { createTrace } from '../_shared/observability.ts'
 import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { SYNTHETIC_MODEL } from '../_shared/models.ts'
 
 const synthLog = log.child('synthetic')
 
@@ -51,12 +52,12 @@ Deno.serve(withSentry('generate-synthetic', async (req) => {
       batchItems.map(async (i) => {
         const span = trace.span(`generate.${i}`)
         const { object, usage } = await generateObject({
-          model: anthropic('claude-sonnet-4-6'),
+          model: anthropic(SYNTHETIC_MODEL),
           schema: syntheticSchema,
           system: 'Generate a realistic bug report for a web application. Vary the complexity — some obvious, some ambiguous. Include realistic console errors and URLs.',
           prompt: `Generate bug report #${i + 1} of ${count}. Make each unique in category and complexity.`,
         })
-        span.end({ model: 'claude-sonnet-4-6', inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
+        span.end({ model: SYNTHETIC_MODEL, inputTokens: usage?.promptTokens, outputTokens: usage?.completionTokens })
         await db.from('synthetic_reports').insert({
           project_id: projectId,
           generated_report: { description: object.description, category: object.category, severity: object.severity, component: object.component, console_errors: object.console_errors, url: object.url },

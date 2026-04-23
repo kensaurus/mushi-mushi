@@ -169,6 +169,96 @@ describe('POST /v1/admin/fixes/dispatch (V5.3 §2.10)', () => {
   })
 })
 
+// Wave S (2026-04-23): in-memory contract for the /cancel endpoint. The
+// admin UI has had a "Cancel" button on the PDCA drawer for weeks but the
+// corresponding route was missing — every click hit a 404. This test
+// locks in the state-machine invariants so the route can't drift back to
+// accepting cancels on terminal statuses or non-members.
+class CancelHandler extends DispatchHandler {
+  cancel(userId: string, dispatchId: string): ApiResponse<{ id: string; status: DispatchRow['status'] }> {
+    const job = this.jobs.find(j => j.id === dispatchId)
+    if (!job) return { ok: false, error: { code: 'NOT_FOUND', message: 'Dispatch not found' }, status: 404 }
+    if (!this.members.get(userId)?.has(job.project_id)) {
+      return { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member' }, status: 403 }
+    }
+    if (job.status !== 'queued' && job.status !== 'running') {
+      return {
+        ok: false,
+        error: { code: 'INVALID_STATE', message: `Dispatch is already ${job.status}; cannot cancel.` },
+        status: 409,
+      }
+    }
+    job.status = 'cancelled'
+    return { ok: true, data: { id: job.id, status: job.status } }
+  }
+}
+
+describe('POST /v1/admin/fixes/dispatches/:id/cancel (Wave S)', () => {
+  it('cancels a queued dispatch for a project member', () => {
+    const h = new CancelHandler()
+    h.enroll('user-1', 'proj-1')
+    h.setAutofix('proj-1', true)
+    const d = h.dispatch('user-1', { reportId: 'rep-1', projectId: 'proj-1' })
+    expect(d.ok).toBe(true)
+    if (!d.ok) return
+
+    const res = h.cancel('user-1', d.data.id)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.status).toBe('cancelled')
+  })
+
+  it('cancels a running dispatch on a best-effort basis', () => {
+    const h = new CancelHandler()
+    h.enroll('user-1', 'proj-1')
+    h.setAutofix('proj-1', true)
+    const d = h.dispatch('user-1', { reportId: 'rep-1', projectId: 'proj-1' })
+    if (!d.ok) throw new Error('setup failed')
+    h.jobs[0].status = 'running'
+
+    const res = h.cancel('user-1', d.data.id)
+    expect(res.ok).toBe(true)
+    if (!res.ok) return
+    expect(res.data.status).toBe('cancelled')
+  })
+
+  it('returns 404 for an unknown dispatch id', () => {
+    const h = new CancelHandler()
+    const res = h.cancel('user-1', 'does-not-exist')
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 403 when the caller is not a project member', () => {
+    const h = new CancelHandler()
+    h.enroll('user-1', 'proj-1')
+    h.setAutofix('proj-1', true)
+    const d = h.dispatch('user-1', { reportId: 'rep-1', projectId: 'proj-1' })
+    if (!d.ok) throw new Error('setup failed')
+
+    const res = h.cancel('intruder', d.data.id)
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.status).toBe(403)
+  })
+
+  it('returns 409 when dispatch is already in a terminal state', () => {
+    const h = new CancelHandler()
+    h.enroll('user-1', 'proj-1')
+    h.setAutofix('proj-1', true)
+    const d = h.dispatch('user-1', { reportId: 'rep-1', projectId: 'proj-1' })
+    if (!d.ok) throw new Error('setup failed')
+    h.jobs[0].status = 'completed'
+
+    const res = h.cancel('user-1', d.data.id)
+    expect(res.ok).toBe(false)
+    if (res.ok) return
+    expect(res.status).toBe(409)
+    expect(res.error.code).toBe('INVALID_STATE')
+  })
+})
+
 describe('orchestrator validateResult gating (V5.3 §2.10)', () => {
   type FixResult = { success: boolean; linesChanged: number; filesChanged: string[]; branch: string; summary: string; error?: string }
   type FixContext = { config: { maxLines: number; scopeRestriction: 'component' | 'directory' | 'none' }; report: { component?: string } }

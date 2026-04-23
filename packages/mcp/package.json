@@ -74,5 +74,8 @@
     "llm",
     "developer-tools",
     "sdk"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

@@ -46,7 +46,7 @@ Each trigger respects its config flag — set `rageClick: false` to disable rage
 
 ## Bundle Size
 
-~6 KB brotli (limit: 30 KB). Requires `@mushi-mushi/core` as a dependency (not bundled inline).
+~6 KB brotli, enforced at **15 KB gzipped** via `size-limit` in CI. Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
 
 ## Quick Start
 
@@ -98,6 +98,28 @@ setupProactiveTriggers({
   },
 });
 ```
+
+## Test utilities (`./test-utils`)
+
+Deterministic Playwright / jsdom helpers, published as a separate
+entry-point so production bundles pay nothing for them:
+
+```ts
+import { triggerBug, openReport, waitForQueueDrain } from '@mushi-mushi/web/test-utils';
+```
+
+| Export              | Purpose                                                                 |
+|---------------------|-------------------------------------------------------------------------|
+| `triggerBug(opts?)` | Submit a report bypassing the widget. Returns the server-assigned id.   |
+| `openReport(cat?)`  | Open the widget programmatically without submitting.                    |
+| `waitForQueueDrain` | Resolve once the offline queue is empty (number remaining at timeout).  |
+
+Every helper no-ops when `Mushi.getInstance()` returns `null`, so
+conditional-wiring tests (e.g. cloud vs local targets) don't need to
+branch. For browser-context use in Playwright's `page.evaluate`, import
+the SDK via the app's own bundle (`window.__mushi__` in dev builds) or
+POST to `/v1/reports` directly — `page.evaluate` has no npm resolver in
+the browser context.
 
 ## License
 

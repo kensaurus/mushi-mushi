@@ -6,6 +6,7 @@
  */
 
 import { Card } from '../ui'
+import { ChartActionsMenu } from '../ChartActionsMenu'
 import type { QueueSummary } from './types'
 
 interface Props {
@@ -28,9 +29,25 @@ export function QueueStageBreakdown({ summary, selectedStage, onSelect }: Props)
 
   return (
     <Card elevated className="p-3">
-      <h3 className="text-2xs uppercase tracking-wider text-fg-muted mb-1.5">
-        Backlog by stage
-      </h3>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <h3 className="text-2xs uppercase tracking-wider text-fg-muted">
+          Backlog by stage
+        </h3>
+        <ChartActionsMenu
+          label="Backlog by stage"
+          exportFilename={`queue-stage-breakdown-${new Date().toISOString().slice(0, 10)}.csv`}
+          onExportCsv={() => {
+            const header = ['stage', ...STATUS_ORDER].join(',')
+            const rows = summary.stages.map((s) => {
+              const b = summary.byStage[s] ?? {}
+              return [s, ...STATUS_ORDER.map((st) => b[st] ?? 0)].join(',')
+            })
+            return [header, ...rows].join('\n')
+          }}
+          openFilterTo="/queue?status=dead_letter"
+          openFilterLabel="Open dead-letter lane"
+        />
+      </div>
       <div className="space-y-1.5">
         {summary.stages.map((s) => {
           const breakdown = summary.byStage[s] ?? {}

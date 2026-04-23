@@ -166,6 +166,7 @@ const STAGE_ROUTES: Array<{ prefix: string; stage: PdcaStageId }> = [
   { prefix: '/anti-gaming',   stage: 'plan' },
   { prefix: '/queue',         stage: 'plan' },
   { prefix: '/fixes',         stage: 'do' },
+  { prefix: '/repo',           stage: 'do' },
   { prefix: '/prompt-lab',    stage: 'do' },
   { prefix: '/judge',         stage: 'check' },
   { prefix: '/health',        stage: 'check' },
