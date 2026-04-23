@@ -9,7 +9,19 @@
 // from argv[2].
 //
 // Usage:
-//   node scripts/deploy-edge-function.mjs <slug> [--no-verify-jwt] [--verify-jwt]
+//   node scripts/deploy-edge-function.mjs <slug> [--no-verify-jwt|--verify-jwt]
+//
+// verify_jwt resolution (precedence, highest first):
+//   1. CLI flag: --verify-jwt or --no-verify-jwt
+//   2. supabase/config.toml: [functions.<slug>] verify_jwt = …
+//   3. Platform default: true
+//
+// This matches what `supabase functions deploy <slug>` would do, so a
+// missing entry in config.toml keeps the default JWT gate on (NOT off).
+// The previous behaviour of unconditionally passing --no-verify-jwt from
+// CI silently disabled the gate for the six functions that intentionally
+// rely on the platform default (stripe-webhooks, slack-interactions,
+// soc2-evidence, usage-aggregator, intelligence-report, generate-synthetic).
 //
 // The script bundles `packages/server/supabase/functions/<slug>/**` plus
 // `packages/server/supabase/functions/_shared/**` (the function tree-shakes
@@ -70,6 +82,35 @@ function flag(name) {
   return process.argv.includes(name)
 }
 
+// Tiny config.toml reader scoped to `[functions.<slug>] verify_jwt = …`.
+// We deliberately don't pull in a full TOML parser — the only key we ever
+// need is verify_jwt, and the supabase config schema for it is a trivial
+// boolean inside a `[functions.<slug>]` table. Keeping this lightweight
+// avoids adding a runtime dependency for one regex.
+function readVerifyJwtFromConfig(slug) {
+  let raw
+  try {
+    raw = readFileSync(join(SERVER_PKG_ABS, 'supabase/config.toml'), 'utf8')
+  } catch {
+    return null
+  }
+  const lines = raw.split(/\r?\n/)
+  const header = `[functions.${slug}]`
+  let inBlock = false
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      inBlock = trimmed === header
+      continue
+    }
+    if (!inBlock) continue
+    const m = trimmed.match(/^verify_jwt\s*=\s*(true|false)\b/i)
+    if (m) return m[1].toLowerCase() === 'true'
+  }
+  return null
+}
+
 async function main() {
   loadDotenv()
   const slug = process.argv[2]
@@ -83,7 +124,30 @@ async function main() {
     process.exit(2)
   }
   const projectRef = process.env.SUPABASE_PROJECT_REF || 'dxptnwrhwsqckaftyymj'
-  const verifyJwt = flag('--verify-jwt') ? true : flag('--no-verify-jwt') ? false : false
+
+  // Resolve verify_jwt with the same precedence as `supabase functions
+  // deploy`: explicit flag > config.toml entry > platform default (true).
+  // Importantly, an absent config.toml entry must NOT fall through to
+  // false — that would silently weaken JWT enforcement for any new
+  // function added to the repo without an explicit verify_jwt setting.
+  let verifyJwt
+  let verifyJwtSource
+  if (flag('--verify-jwt')) {
+    verifyJwt = true
+    verifyJwtSource = 'flag'
+  } else if (flag('--no-verify-jwt')) {
+    verifyJwt = false
+    verifyJwtSource = 'flag'
+  } else {
+    const fromConfig = readVerifyJwtFromConfig(slug)
+    if (fromConfig === null) {
+      verifyJwt = true
+      verifyJwtSource = 'platform-default'
+    } else {
+      verifyJwt = fromConfig
+      verifyJwtSource = 'config.toml'
+    }
+  }
 
   const fnRootAbs = join(SERVER_PKG_ABS, FUNCTIONS_ROOT_REL)
   const fnDirAbs = join(fnRootAbs, slug)
@@ -129,7 +193,7 @@ async function main() {
 
   const url = `${SUPABASE_API}/v1/projects/${projectRef}/functions/deploy?slug=${encodeURIComponent(slug)}`
   console.error(`> POST ${url}`)
-  console.error(`> ${allFiles.length} files, ${(totalBytes / 1024).toFixed(1)} KiB total, verify_jwt=${verifyJwt}`)
+  console.error(`> ${allFiles.length} files, ${(totalBytes / 1024).toFixed(1)} KiB total, verify_jwt=${verifyJwt} (source: ${verifyJwtSource})`)
   console.error(`> entrypoint=${entrypointRel}`)
 
   const started = Date.now()

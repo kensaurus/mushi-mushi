@@ -100,10 +100,14 @@ jobs:
           for fn in $FUNCTIONS; do
             echo ""
             echo "::group::Deploy $fn"
-            # verify_jwt is read from supabase/config.toml when deploying via
-            # the Management API. Our script defaults to false; the api function
-            # is the only public endpoint and is configured the same way.
-            if node scripts/deploy-edge-function.mjs "$fn" --no-verify-jwt; then
+            # No --verify-jwt / --no-verify-jwt flag here on purpose:
+            # the script reads packages/server/supabase/config.toml and
+            # falls back to the platform default (true) when a function
+            # has no explicit setting. That mirrors what the supabase
+            # CLI would do, and keeps the JWT gate ON for functions
+            # like stripe-webhooks / soc2-evidence / usage-aggregator
+            # that don't declare verify_jwt = false.
+            if node scripts/deploy-edge-function.mjs "$fn"; then
               echo "::notice::deployed: $fn"
             else
               echo "::error::failed to deploy: $fn"
