@@ -1,5 +1,12 @@
 # @mushi-mushi/mcp
 
+## 0.3.3
+
+### Patch Changes
+
+- Updated dependencies [71b2fe8]
+  - @mushi-mushi/core@0.4.0
+
 ## 0.3.2
 
 ### Patch Changes
