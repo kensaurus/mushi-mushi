@@ -665,6 +665,110 @@ select, input, textarea {
 }
 
 /* ---------------------------------------------------------------------------
+   ASK MUSHI — markdown prose
+   Streamdown renders the assistant's reply as semantic HTML (p, ul, code,
+   pre, table, blockquote). Without explicit styles all of that inherits
+   the bare browser defaults and clashes with the dense admin chrome —
+   wide gaps, full-width tables, default code colors. This block tunes
+   only what's needed to make a chat bubble read cleanly using the same
+   tokens the rest of the admin uses (no separate prose theme dep).
+--------------------------------------------------------------------------- */
+
+.prose-mushi { color: var(--color-fg); font-size: 0.75rem; line-height: 1.55; }
+.prose-mushi > * + * { margin-top: 0.5rem; }
+.prose-mushi p { margin: 0; }
+.prose-mushi strong { color: var(--color-fg); font-weight: 600; }
+.prose-mushi em { color: var(--color-fg-secondary); font-style: italic; }
+.prose-mushi a {
+  color: var(--color-brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in oklch, var(--color-brand) 50%, transparent);
+}
+.prose-mushi a:hover { color: var(--color-brand-hover); }
+.prose-mushi ul,
+.prose-mushi ol {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--color-fg-secondary);
+}
+.prose-mushi ul { list-style: disc; }
+.prose-mushi ol { list-style: decimal; }
+.prose-mushi li + li { margin-top: 0.15rem; }
+.prose-mushi code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.7rem;
+  background: color-mix(in oklch, var(--color-surface-overlay) 70%, transparent);
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 0.125rem;
+  padding: 0 0.25rem;
+  color: var(--color-fg);
+}
+.prose-mushi pre {
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 0.25rem;
+  overflow-x: auto;
+  font-size: 0.7rem;
+}
+.prose-mushi pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+}
+.prose-mushi blockquote {
+  margin: 0;
+  padding: 0.25rem 0.625rem;
+  border-left: 2px solid var(--color-edge);
+  color: var(--color-fg-muted);
+  background: color-mix(in oklch, var(--color-surface-overlay) 30%, transparent);
+  border-radius: 0 0.125rem 0.125rem 0;
+}
+.prose-mushi table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.7rem;
+  border: 1px solid var(--color-edge-subtle);
+  border-radius: 0.125rem;
+  overflow: hidden;
+}
+.prose-mushi th,
+.prose-mushi td {
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid var(--color-edge-subtle);
+  text-align: left;
+  vertical-align: top;
+}
+.prose-mushi th {
+  background: color-mix(in oklch, var(--color-surface-raised) 60%, transparent);
+  color: var(--color-fg);
+  font-weight: 600;
+}
+.prose-mushi tr:last-child td { border-bottom: 0; }
+.prose-mushi h1,
+.prose-mushi h2,
+.prose-mushi h3,
+.prose-mushi h4 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-fg);
+  line-height: 1.25;
+}
+.prose-mushi h1 { font-size: 0.875rem; }
+.prose-mushi h2 { font-size: 0.8125rem; }
+.prose-mushi h3 { font-size: 0.78125rem; }
+.prose-mushi h4 { font-size: 0.75rem; color: var(--color-fg-secondary); }
+.prose-mushi hr {
+  border: 0;
+  border-top: 1px solid var(--color-edge-subtle);
+  margin: 0.5rem 0;
+}
+
+/* ---------------------------------------------------------------------------
    REDUCED MOTION
    Disable transitions and animations for users who prefer reduced motion.
 --------------------------------------------------------------------------- */

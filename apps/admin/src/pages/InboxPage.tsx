@@ -165,6 +165,16 @@ export function InboxPage() {
     title: 'Action inbox',
     summary: unreadCritical > 0 ? `${unreadCritical} open action${unreadCritical === 1 ? '' : 's'}` : 'All clear',
     criticalCount: unreadCritical,
+    questions: unreadCritical > 0
+      ? [
+          'Which action should I tackle first?',
+          'Why is the highest-severity card blocking?',
+          'Group these by PDCA stage and tell me where the loop is stuck.',
+        ]
+      : [
+          'Is there anything that should be on this inbox but isn\u2019t?',
+          'What changed in the last 24h to clear the inbox?',
+        ],
   })
 
   if (loading) return <Loading text="Loading inbox…" />
