@@ -52,6 +52,8 @@
     "mushi-mushi",
     "bug-reporting",
     "user-feedback",
+    "user-report",
+    "feedback-widget",
     "angular",
     "ngmodule",
     "error-handler",
@@ -59,8 +61,12 @@
     "screenshot",
     "shake-to-report",
     "sentry-companion",
+    "sentry-alternative",
     "error-tracking",
     "ai-triage",
+    "auto-fix",
+    "llm-ops",
+    "ai-agent",
     "sdk"
   ],
   "exports": {

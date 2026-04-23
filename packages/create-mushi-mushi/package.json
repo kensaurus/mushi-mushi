@@ -58,6 +58,8 @@
     "wizard",
     "bug-reporting",
     "user-feedback",
+    "user-report",
+    "feedback-widget",
     "session-replay",
     "screenshot",
     "shake-to-report",
@@ -72,7 +74,12 @@
     "react-native",
     "expo",
     "capacitor",
-    "ionic"
+    "ionic",
+    "sentry-companion",
+    "sentry-alternative",
+    "error-tracking",
+    "ai-triage",
+    "auto-fix"
   ],
   "type": "module",
   "engines": {

@@ -587,3 +587,9 @@ Issues and PRs welcome. To get started: `pnpm install && pnpm dev`. See individu
 
 - **SDK packages** (core, web, react, vue, svelte, angular, react-native, cli, mcp): [MIT](./LICENSE)
 - **Server, agents, verify**: [BSL 1.1](./packages/server/LICENSE) — converts to Apache 2.0 on April 15, 2029
+
+---
+
+<div align="center">
+<sub>もしMushi-chanのお役に立てたら、⭐ をひとつ — next devs find the repo faster that way. <a href="https://github.com/kensaurus/mushi-mushi/stargazers">Star the repo</a> · <a href="https://github.com/kensaurus/mushi-mushi/issues/new/choose">Open an issue</a> · <a href="https://bsky.app/profile/mushimushi.dev">Follow Mushi on Bluesky</a></sub>
+</div>

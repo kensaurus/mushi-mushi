@@ -1,0 +1,32 @@
+[
+  {
+    "scheduled_for": "2026-04-23T08:00:00Z",
+    "text": "ok, proper hello 👋\n\nI'm Mushi-chan. one command and your app gets a shake-to-report button + AI triage that opens draft PRs for the small bugs.\n\n  $ npx mushi-mushi\n\nworks with React, Next, Vue, Nuxt, Svelte, Angular, React Native, Expo, Capacitor.\n\nMIT · live demo: https://kensaur.us/mushi-mushi/",
+    "image": {
+      "path": "docs/marketing/social/images/launch-card.jpg",
+      "alt": "A hand-illustrated Mushi-chan — a chubby kawaii ladybug mascot with a red dome shell and big shiny eyes — pointing at a cosy dark terminal window. The terminal shows the command `$ npx mushi-mushi` with a subtitle in red reading 'bug reports that fix themselves'. Warm cream-pink background with little floating spots."
+    },
+    "posted_at": "2026-04-23T08:21:38.105Z",
+    "uri": "at://did:plc:vqnjcidnmtgklbqqt4czvell/app.bsky.feed.post/3mk5lf6f3cb27"
+  },
+  {
+    "scheduled_for": "2026-04-24T15:00:00Z",
+    "text": "the gap nobody talks about:\n\nSentry sees what your code throws.\nMushi sees what your users feel.\n\nLogin button does nothing on iPad Safari? No exception fires. No 5xx. Sentry green. User gone.\n\nThat's the bug we built Mushi for.\n\nhttps://github.com/kensaurus/mushi-mushi"
+  },
+  {
+    "scheduled_for": "2026-04-25T15:00:00Z",
+    "text": "today's tiny win 🌱\n\nshipped a `/repo` page that shows one node per branch the auto-fix agent has opened, grouped by CI status, with a live event stream on the right.\n\nyou can leave it open on a second monitor and watch the loop close in real time.\n\nhttps://kensaur.us/mushi-mushi/repo"
+  },
+  {
+    "scheduled_for": "2026-04-27T15:00:00Z",
+    "text": "weird thing about open-source devtools:\n\nthe live demo does more work than the README hero.\n\nso we made ours dark, seeded, and clickable on first paint. press ⌘K to jump anywhere.\n\nhttps://kensaur.us/mushi-mushi/ 🐛\n\n  $ npx mushi-mushi   # install in your own app",
+    "image": {
+      "path": "docs/marketing/social/images/launch-card.jpg",
+      "alt": "Same hand-illustrated Mushi-chan launch card showing the install command `$ npx mushi-mushi`."
+    }
+  },
+  {
+    "scheduled_for": "2026-04-30T15:00:00Z",
+    "text": "we picked BSL 1.1 for the backend because:\n\n→ self-hosting up to 10M reports/month: free, forever\n→ reselling Mushi as a managed product: paid\n→ your team's internal install: free, no asterisks\n\nif you've been bitten by a license bait-and-switch before, that's why.\n\nhttps://github.com/kensaurus/mushi-mushi"
+  }
+]
