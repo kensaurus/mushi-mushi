@@ -85,13 +85,27 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.1",
       "0.6.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
+      }
+    ],
     "packages": [
       {
         "name": "mushi-mushi",
-        "version": "0.6.0"
+        "version": "0.6.1"
       }
     ]
   },
@@ -106,6 +120,18 @@
     ],
     "highlights": [
       {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
+      },
+      {
         "title": "Community files in-tarball.",
         "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
       },
@@ -118,6 +144,18 @@
         "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
       },
       {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
+      },
+      {
         "title": "Community files in-tarball.",
         "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
       },
@@ -128,40 +166,16 @@
       {
         "title": "`.github/FUNDING.yml`",
         "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
-      },
-      {
-        "title": "Hero image up top.",
-        "description": "`docs/screenshots/report-detail-dark.png` is now embedded (via absolute `raw.githubusercontent.com` URL so npmjs.com renders it), linking to the live admin demo."
-      },
-      {
-        "title": "15-word tagline.",
-        "description": "\"Ship a shake-to-report button. Get AI-classified, deduped, ready-to-fix bug reports.\" Frameworks listed directly under."
-      },
-      {
-        "title": "\"What you get\"",
-        "description": "— 6 benefit bullets with emoji, each tied to a capability, not a wizard step."
-      },
-      {
-        "title": "\"Who it's for\"",
-        "description": "— 4 personas (solo dev, PM/designer, AI-native team, enterprise) so visitors self-identify in 10 seconds."
-      },
-      {
-        "title": "\"Mushi vs your existing stack\"",
-        "description": "— 9-row comparison table showing what Sentry/Datadog miss. Makes the companion-not-replacement positioning concrete."
-      },
-      {
-        "title": "\"Integrates with\"",
-        "description": "— 10-cell grid covering GitHub, Sentry, Slack, Jira, Linear, PagerDuty, Langfuse, Cursor, Claude Code, Zapier. Plus a line for Datadog/New Relic/Honeycomb/Grafana via `@mushi-mushi/adapters`."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.1"
+        "version": "0.5.2"
       },
       {
         "name": "mushi-mushi",
@@ -174,32 +188,21 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.4.1",
       "0.4.0"
     ],
     "highlights": [
       {
-        "title": "`@mushi-mushi/cli` `0.3.0`",
-        "description": "New `mushi init` command — interactive wizard built on `@clack/prompts` that auto-detects framework (Next, Nuxt, SvelteKit, Angular, Expo, Capacitor, plain React/Vue/Svelte, vanilla), package manager (npm/pnpm/yarn/bun), installs the right SDK, writes env vars with the right prefix (`NEXT_PUBLIC_`, `NUXT_PUBLIC_`, `VITE_`), warns when `.env.local` isn't gitignored, and prints the framework-specific snippet. Idempotent: never overwrites existing `MUSHI_*` env vars. Exposes new `./init` and `./detect` subpath exports for downstream packages."
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
       },
       {
-        "title": "`mushi-mushi` `0.3.0` (NEW, unscoped)",
-        "description": "One-command launcher — `npx mushi-mushi` runs the wizard. Gives the SDK a single brand entry point on npm so users don't have to know to look under `@mushi-mushi/*` first."
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
       },
       {
-        "title": "`create-mushi-mushi` `0.3.0` (NEW)",
-        "description": "`npm create mushi-mushi` — same wizard via the standard npm-create convention."
-      },
-      {
-        "title": "All 16 published packages",
-        "description": "keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking."
-      },
-      {
-        "title": "All SDK READMEs",
-        "description": "discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa."
-      },
-      {
-        "title": "Root README",
-        "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
       },
       {
         "title": "`@mushi-mushi/cli` `0.3.0`",
@@ -224,12 +227,24 @@
       {
         "title": "Root README",
         "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
+      },
+      {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -237,15 +252,15 @@
       },
       {
         "name": "@mushi-mushi/core",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       {
         "name": "@mushi-mushi/react",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       {
         "name": "create-mushi-mushi",
@@ -262,12 +277,25 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.3.4",
       "0.3.3",
       "0.3.2",
       "0.3.1",
       "0.3.0"
     ],
     "highlights": [
+      {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
+      },
       {
         "title": "Community files in-tarball.",
         "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
@@ -303,24 +331,12 @@
       {
         "title": "Root README",
         "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
-      },
-      {
-        "title": "Native iOS SDK",
-        "description": "(`MushiMushi`, SwiftPM + CocoaPods): shake-to-report"
-      },
-      {
-        "title": "Native Android SDK",
-        "description": "(`dev.mushimushi:sdk`, Maven Central + AAR):"
-      },
-      {
-        "title": "Flutter SDK",
-        "description": "(`mushi_mushi` on pub.dev): pure-Dart with platform"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/capacitor",
@@ -332,11 +348,11 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.3.3"
+        "version": "0.3.4"
       },
       {
         "name": "@mushi-mushi/node",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -348,15 +364,15 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       {
         "name": "@mushi-mushi/web",
@@ -376,6 +392,18 @@
     ],
     "highlights": [
       {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
+      },
+      {
         "title": "Community files in-tarball.",
         "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
       },
@@ -410,24 +438,12 @@
       {
         "title": "`create-mushi-mushi` `0.3.0` (NEW)",
         "description": "`npm create mushi-mushi` — same wizard via the standard npm-create convention."
-      },
-      {
-        "title": "All 16 published packages",
-        "description": "keyword sweep — every package now ships `mushi-mushi` plus its framework-specific terms (`react`, `next.js`, `vue`, `nuxt`, `svelte`, `sveltekit`, `angular`, `react-native`, `expo`, `capacitor`, `ionic`, etc.) plus product terms (`session-replay`, `screenshot`, `shake-to-report`, `sentry-companion`, `error-tracking`, `ai-triage`) for npm search ranking."
-      },
-      {
-        "title": "All SDK READMEs",
-        "description": "discoverability cross-link header at the top — points users to the wizard and to every other framework SDK so people who land on `@mushi-mushi/react` can find `@mushi-mushi/vue` and vice-versa."
-      },
-      {
-        "title": "Root README",
-        "description": "quick-start now leads with `npx mushi-mushi`, with the manual install path documented as the fallback. Packages table gains a row for the launcher."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/angular",

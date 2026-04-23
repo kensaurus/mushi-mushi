@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/vue",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "description": "Vue 3 SDK for Mushi Mushi — plugin, composables, error handler integration",
   "main": "./dist/index.js",
