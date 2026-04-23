@@ -7109,8 +7109,13 @@ app.get('/v1/admin/integrations/platform', jwtAuth, async (c) => {
     return v
   }
 
+  // Only iterate kinds we actually have platform fields for. INTEGRATION_KINDS
+  // includes LLM providers (anthropic/openai) which are BYOK rather than
+  // platform integrations — those live in `llm_byok_keys`, not project_settings,
+  // and iterating them here would try to read `undefined` as an array and 500.
   const platform: Record<string, Record<string, unknown>> = {}
-  for (const kind of INTEGRATION_KINDS) {
+  const platformKinds = Object.keys(PLATFORM_KIND_FIELDS) as Array<keyof typeof PLATFORM_KIND_FIELDS>
+  for (const kind of platformKinds) {
     platform[kind] = {}
     for (const f of PLATFORM_KIND_FIELDS[kind]) {
       platform[kind][f] = maskField(f, (settings as Record<string, unknown> | null)?.[f])

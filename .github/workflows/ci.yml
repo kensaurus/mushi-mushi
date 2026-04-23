@@ -62,13 +62,22 @@ jobs:
   e2e:
     # End-to-end Playwright dogfood suite. Runs against a local Supabase
     # stack spun up by the Supabase CLI action — no cloud credentials
-    # required. GitHub is mocked by msw so Act stage is hermetic (set
+    # required. GitHub is mocked by msw so the Act stage is hermetic (set
     # E2E_LIVE_GITHUB=1 to override on demand).
     #
+    # Opt-in via repository variable `ENABLE_E2E_CI=true`. When disabled
+    # the job is skipped entirely so it doesn't show as a failure on PRs
+    # while the Anthropic / OpenAI / Supabase CI secrets are still being
+    # provisioned. Flip the variable to 'true' once secrets are seeded:
+    #
+    #   gh variable set ENABLE_E2E_CI --body 'true'
+    #   gh secret set ANTHROPIC_API_KEY_CI --body '<key>'
+    #   gh secret set OPENAI_API_KEY_CI    --body '<key>'
+    #
     # Kept in a separate job so a flake here doesn't block the fast build
-    # CI feedback loop; required to pass via branch protection, not via
-    # `needs` on build.
+    # CI feedback loop.
     name: E2E (full-PDCA dogfood)
+    if: ${{ vars.ENABLE_E2E_CI == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:

@@ -63,7 +63,8 @@
       "supabase"
     ],
     "overrides": {
-      "undici@<6.24.0": ">=6.24.0"
+      "undici@<6.24.0": ">=6.24.0",
+      "@xmldom/xmldom@<0.9.10": ">=0.9.10"
     }
   },
   "devDependencies": {
