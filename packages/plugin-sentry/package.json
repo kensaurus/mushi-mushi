@@ -61,5 +61,8 @@
     "observability",
     "bug-reporting",
     "integration"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

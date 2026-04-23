@@ -49,6 +49,12 @@ COMMENT ON COLUMN project_codebase_files.tombstoned_at IS
   'V5.3 §2.3.4: Soft-delete timestamp for incremental re-indexing without referential loss.';
 
 -- Update RPC to surface symbol-aware fields and exclude tombstoned rows.
+-- Earlier migrations (20260416300000, 20260416700000) defined this function
+-- with a narrower OUT-parameter row type. Postgres refuses to CREATE OR
+-- REPLACE when the return type changes, so drop + recreate explicitly.
+DROP FUNCTION IF EXISTS match_codebase_files(vector, uuid, integer);
+DROP FUNCTION IF EXISTS match_codebase_files(vector(1536), uuid, integer);
+
 CREATE OR REPLACE FUNCTION match_codebase_files(
   query_embedding vector(1536),
   match_project uuid,

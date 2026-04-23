@@ -20,8 +20,7 @@ BEGIN
     HAVING COUNT(*) > 1
   ) dups;
   IF dup_count > 0 THEN
-    RAISE NOTICE 'Found % duplicate (project_id, stage, version) groups in prompt_versions; ' ||
-                 'keeping the row with the most evaluations and deleting the rest.', dup_count;
+    RAISE NOTICE 'Found % duplicate (project_id, stage, version) groups in prompt_versions; keeping the row with the most evaluations and deleting the rest.', dup_count;
     -- Keep the row with the highest total_evaluations (or latest created_at as tiebreaker).
     DELETE FROM prompt_versions p
     USING (
@@ -40,5 +39,4 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_prompt_versions_scope
   ON prompt_versions ((COALESCE(project_id::text, 'global')), stage, version);
 
 COMMENT ON INDEX uq_prompt_versions_scope IS
-  'V5.3 §2.7: prevents recordPromptResult from corrupting running averages when ' ||
-  'two projects share a version label.';
+  'V5.3 §2.7: prevents recordPromptResult from corrupting running averages when two projects share a version label.';

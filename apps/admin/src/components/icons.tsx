@@ -346,3 +346,16 @@ export function IconAlertTriangle(p: IconProps) {
     <circle cx="8" cy="11" r="0.6" fill="currentColor" stroke="none" />
   </>)
 }
+
+// Git-branch glyph: two commits on a main line, a feature branch to the
+// right with its own commit. Matches the FixGitGraph visual language so
+// section headers and the inline SVG feel like one system.
+export function IconGit(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="4" cy="4" r="1.6" />
+    <circle cx="4" cy="12" r="1.6" />
+    <circle cx="12" cy="8" r="1.6" />
+    <line x1="4" y1="5.6" x2="4" y2="10.4" />
+    <path d="M4 7 C 7 7, 9 8, 10.4 8" />
+  </>)
+}

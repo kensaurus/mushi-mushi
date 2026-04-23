@@ -23,6 +23,7 @@ import { useCommandPalette } from '../lib/useCommandPalette'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { apiFetch } from '../lib/supabase'
 import { STATIC_ROUTES, type PaletteGroup, type StaticRoute } from '../lib/searchIndex'
+import { usePageContext } from '../lib/pageContext'
 
 interface LiveReport {
   id: string
@@ -84,6 +85,7 @@ export function CommandPalette() {
   const { isOpen, close } = useCommandPalette()
   const navigate = useNavigate()
   const { mode, setMode } = useAdminMode()
+  const pageCtx = usePageContext()
 
   const [query, setQuery] = useState('')
   const [recents, setRecents] = useState<string[]>(() => readRecents())
@@ -138,6 +140,15 @@ export function CommandPalette() {
 
   const routesByGroup = useMemo(() => groupRoutes(STATIC_ROUTES), [])
 
+  // Stable lookup used both by the Recent-group renderer and by
+  // `handleSelect` to decide whether a selection is worth recording.
+  // The "Recent" group has always been *recent navigation* — any other
+  // selection (filter shortcut, mode switch, page-contributed action,
+  // live report / fix hit) can't be resolved back to a StaticRoute and
+  // would silently evict a real route from the 5-slot cap if we wrote
+  // it anyway. See `handleSelect` below.
+  const routeIds = useMemo(() => new Set(STATIC_ROUTES.map((r) => r.id)), [])
+
   const recentRoutes = useMemo(() => {
     if (query.trim()) return []
     const byId = new Map(STATIC_ROUTES.map((r) => [r.id, r]))
@@ -145,9 +156,18 @@ export function CommandPalette() {
   }, [recents, query])
 
   function handleSelect(id: string, action: () => void) {
-    const next = [id, ...recents.filter((x) => x !== id)].slice(0, MAX_RECENTS)
-    setRecents(next)
-    writeRecents(next)
+    // Only route ids feed the "Recent" group. Quick actions, mode
+    // toggles, page-contributed actions (`page:*`), and live API hits
+    // (`report:*`, `fix:*`) used to be recorded here too — but
+    // `recentRoutes` drops anything it can't resolve in STATIC_ROUTES,
+    // so those writes just wasted slots and pushed real navigation
+    // recents out of the 5-slot cap. After a few filter-shortcut /
+    // page-action uses the Recent group would silently empty out.
+    if (routeIds.has(id)) {
+      const next = [id, ...recents.filter((x) => x !== id)].slice(0, MAX_RECENTS)
+      setRecents(next)
+      writeRecents(next)
+    }
     close()
     // Defer navigation to the next tick so the dialog can unmount first —
     // otherwise the focus-restoration fights with React Router's own
@@ -201,6 +221,27 @@ export function CommandPalette() {
           <Command.Empty className="px-4 py-6 text-center text-xs text-fg-muted">
             No matches. Try "reports", "prompt", or a bug description.
           </Command.Empty>
+
+          {/* Page-contributed actions — promoted above everything else so
+              the most context-relevant commands are the first things the
+              user sees when opening the palette from a working page. */}
+          {pageCtx && pageCtx.actions && pageCtx.actions.length > 0 && (
+            <Command.Group
+              heading={`On this page — ${pageCtx.title}`}
+              className="cmdk-group"
+            >
+              {pageCtx.actions.map((a) => (
+                <PaletteActionItem
+                  key={`page:${a.id}`}
+                  id={`page:${a.id}`}
+                  label={a.label}
+                  hint={a.hint ?? pageCtx.summary ?? ''}
+                  keywords={['page', 'here', 'current', pageCtx.title.toLowerCase()]}
+                  onSelect={() => handleSelect(`page:${a.id}`, a.run)}
+                />
+              ))}
+            </Command.Group>
+          )}
 
           {recentRoutes.length > 0 && (
             <Command.Group heading="Recent" className="cmdk-group">

@@ -66,8 +66,8 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 <table width="100%">
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/quickstart-dark.png" alt="Quickstart mode — three-page sidebar (Setup, Bugs to fix, Fixes ready), verb-led labels, zero PDCA jargon, 'You're caught up' caught-up banner, 'Open inbox →' single primary action above page content. The user's plug-and-play answer to a 23-page admin." /></a>
-    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors. Pill-toggle up to Beginner (9 pages) or Advanced (23 pages) anytime.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/quickstart-dark.png" alt="Quickstart mode — three-page sidebar (Setup, Bugs to fix, Fixes ready), verb-led labels, zero PDCA jargon, 'You're caught up' caught-up banner, 'Open inbox →' single primary action above page content. The user's plug-and-play answer to a full-featured admin." /></a>
+    <p align="center"><b>Quickstart mode</b> · <sub>3 pages, verb-led labels, no PDCA jargon. The default for first-time visitors. Pill-toggle up to Beginner (9 pages) or Advanced (all pages) anytime.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/"><img src="./docs/screenshots/first-run-tour-dark.png" alt="First-run interactive tour — spotlight cutout around the Plan tile, dark backdrop dimming everything else, coach-mark panel reading 'TOUR - 1 OF 5 · Plan — bugs your users felt · Each tile is a stage of the loop. Plan is where real user complaints land, get classified, and get scored by severity. Click any tile to drill in.' with a Next button and a Don't show again link." /></a>
@@ -259,7 +259,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 - **Global command palette** — press `⌘K` (macOS) or `Ctrl+K` (Linux/Windows) anywhere in the admin to jump to any page, filtered view, or real report / fix by name. `cmdk`-backed, keyword aliases (`bugs` → Reports, `pr` → Fixes, `spam` → Anti-Gaming), debounced live API search, recents persist per browser.
 - **PDCA as a live React Flow canvas** — the dashboard loop is now a diamond of Plan / Do / Check / Act nodes with gradient bezier edges and a marching-ants animation on the current bottleneck. Narrow viewports keep the stacked cockpit fallback; onboarding ships the same flow as an explainer.
 - **Responsive tables** — new `ResponsiveTable` primitive with edge-fade scroll shadows, opt-in sticky first column, and a global comfy / compact density toggle that persists per browser. Reports, Judge leaderboards, and Compliance evidence / DSAR tables already use it.
-- **Quickstart mode** — the default 3-page admin (`Setup → Bugs to fix → Fixes ready`) for humans who'd rather not know what PDCA stands for. Pill-toggle up to Beginner (9 pages) or Advanced (23 pages) when you're ready.
+- **Quickstart mode** — the default 3-page admin (`Setup → Bugs to fix → Fixes ready`) for humans who'd rather not know what PDCA stands for. Pill-toggle up to Beginner (9 pages) or Advanced (full console) when you're ready. Advanced mode now groups its pages under the four PDCA stages with staleness badges and per-page "next best action" strips so the density doesn't hide what to do next.
 - **First-run tour** — a 5-stop spotlight that auto-launches once, skips stops that need real data, and resumes when the first report lands. No `react-joyride` dep, inherits dark theme tokens.
 - **Themed dialogs** — native `window.confirm/prompt` retired in favour of focus-trapped `<ConfirmDialog>` / `<PromptDialog>` with proper `tone="danger"` for destructive actions.
 - **N+1 slayed** — `apiFetch` now dedups in-flight requests + keeps a 200 ms micro-cache. The old 24× storm on `/v1/admin/setup` is now 1 request.
@@ -405,7 +405,7 @@ See [`apps/docs/content/concepts/architecture.mdx`](./apps/docs/content/concepts
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@mushi-mushi/server`  | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer, vision air-gap, judge with OpenAI fallback, plugin runtime |
 | `@mushi-mushi/agents`  | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction, MCP JSON-RPC 2.0 client, multi-repo coordinator                                  |
-| `@mushi-mushi/verify`  | Playwright fix verification — screenshot visual diff + feature-complete step interpreter (`navigate`, `click`, `type`, `press`, `select`, `assertText`, `waitFor`, `observe`). Attach step arrays to a fix attempt via the REST API and the verifier replays + diffs automatically. |
+| `@mushi-mushi/verify`  | Playwright fix verification — screenshot visual diff + feature-complete step interpreter (`navigate`, `click`, `type`, `press`, `select`, `assertText`, `waitFor`, `observe`). Attach step arrays _at call-time_ via `verifyFix({ steps })` and correlate runs to an attempt with `verifyFix({ fixAttemptId })` — the verifier replays, diffs, writes `fix_verifications`, and mirrors the result into `fix_attempts.verify_steps` so the judge can answer "did attempt X verify?" without a timestamp join. |
 
 </details>
 
@@ -511,6 +511,11 @@ Requires Node.js ≥ 22 and pnpm ≥ 10.
 | `pnpm check:secrets` | Scan the whole tree for leaked AWS / Stripe / Slack / GitHub / OpenAI / Anthropic / Supabase / JWT tokens. Also runs staged-only on every commit via the auto-installed `pre-commit` hook. |
 | `pnpm check:design-tokens` | Flag Tailwind classes in `apps/admin/` that reference retired aliases (`success*` / `error*` / `surface-subtle`) or typo against real `--color-*` namespaces defined in `apps/admin/src/index.css`. Catches the "invisible transparent element" bug class at commit time. |
 | `pnpm check:catalog-sync` | Verify `packages/mcp/src/catalog.ts` and its admin mirror `apps/admin/src/lib/mcpCatalog.ts` haven't drifted. |
+| `pnpm check:publish-readiness` | Assert every publishable `package.json` has `name`, `version`, `license`, `engines.node >=20`, `repository.directory`, `files` (incl. README + LICENSE), and `exports`/`main` or `bin`. Runs in CI and the release workflow before `changeset publish`. |
+| `pnpm check:license-headers` | Assert every package's `license` field matches its folder's canonical license (BSL for `server` / `agents` / `verify`, MIT for the rest) and that a matching `LICENSE` file exists. |
+| `pnpm check:dead-buttons` | Grep `apps/admin/**/*.tsx` for `<button disabled>` / `disabled={true}` with no `aria-label` or tooltip — catches "button exists but does nothing" regressions at commit time. |
+| `pnpm size`       | Run `size-limit` against the built `@mushi-mushi/web` bundle (15 KB gzipped budget). |
+| `pnpm e2e`        | Run the full-PDCA Playwright dogfood suite in `examples/e2e-dogfood/`. Assumes Supabase + admin + the dogfood app are already running locally — see the workspace README for setup. |
 
 #### Admin console (zero-config)
 

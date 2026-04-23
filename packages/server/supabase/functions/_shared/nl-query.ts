@@ -5,6 +5,8 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { createTrace } from './observability.ts'
 import { resolveLlmKey } from './byok.ts'
 import { detectGraphQuery, executeGraphQuery } from './graph-nl.ts'
+import { NL_QUERY_PLANNER_MODEL, NL_QUERY_SUMMARY_MODEL } from './models.ts'
+import { getPromptForStage } from './prompt-ab.ts'
 
 // SEC (Wave S1 / D-12): widen the blocklist. The original regex missed
 // administrative and filesystem-style verbs that happen to be valid Postgres
@@ -86,13 +88,18 @@ export async function executeNaturalLanguageQuery(
   })
 
   const planSpan = trace.span('generate-sql')
+  const nlPlanSelection = projectIds.length > 0
+    ? await getPromptForStage(db, projectIds[0], 'nl_plan')
+    : { promptTemplate: null, promptVersion: null, isCandidate: false }
+  const nlPlanBasePrompt = nlPlanSelection.promptTemplate
+    ?? `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.`
   const { object: queryPlan, usage: planUsage } = await generateObject({
-    model: anthropic('claude-sonnet-4-6'),
+    model: anthropic(NL_QUERY_PLANNER_MODEL),
     schema: sqlSchema,
-    system: `You are a SQL query generator. Generate a single SELECT query that answers the user's question about their bug reports.\n\n${SCHEMA_CONTEXT}`,
+    system: `${nlPlanBasePrompt}\n\n${SCHEMA_CONTEXT}`,
     prompt: question,
   })
-  planSpan.end({ model: 'claude-sonnet-4-6', inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
+  planSpan.end({ model: NL_QUERY_PLANNER_MODEL, inputTokens: planUsage?.promptTokens, outputTokens: planUsage?.completionTokens })
 
   if (DANGEROUS_PATTERNS.test(queryPlan.sql)) {
     throw new Error('Query contains disallowed operations. Only SELECT queries are permitted.')
@@ -140,11 +147,17 @@ export async function executeNaturalLanguageQuery(
   }
 
   const summarySpan = trace.span('summarize')
+  const nlSummarySelection = projectIds.length > 0
+    ? await getPromptForStage(db, projectIds[0], 'nl_summary')
+    : { promptTemplate: null, promptVersion: null, isCandidate: false }
+  const summarySystem = nlSummarySelection.promptTemplate
+    ?? 'Summarize these query results in 2-3 sentences for a developer. Never invent numbers not in the input.'
   const { text: summary, usage: summaryUsage } = await generateText({
-    model: anthropic('claude-haiku-4-5-20251001'),
-    prompt: `Summarize these query results in 2-3 sentences for a developer.\n\nQuestion: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
+    model: anthropic(NL_QUERY_SUMMARY_MODEL),
+    system: summarySystem,
+    prompt: `Question: ${question}\nResults (${results.length} rows): ${JSON.stringify(results.slice(0, 20))}`,
   })
-  summarySpan.end({ model: 'claude-haiku-4-5-20251001', inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
+  summarySpan.end({ model: NL_QUERY_SUMMARY_MODEL, inputTokens: summaryUsage?.promptTokens, outputTokens: summaryUsage?.completionTokens })
   await trace.end()
 
   return {

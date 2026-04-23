@@ -6,13 +6,14 @@ import { getServiceClient } from '../_shared/db.ts'
 import { createTrace } from '../_shared/observability.ts'
 import { sendSlackNotification } from '../_shared/slack.ts'
 import { log as rootLog } from '../_shared/logger.ts'
-import { recordPromptResult, checkPromotionEligibility, promoteCandidate } from '../_shared/prompt-ab.ts'
+import { recordPromptResult, checkPromotionEligibility, promoteCandidate, getPromptForStage, resolveJudgeWeights } from '../_shared/prompt-ab.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
+import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -110,27 +111,51 @@ Deno.serve(withSentry('judge-batch', async (req) => {
     // without fishing through edge-function stdout. Surfaced on cron_runs.metadata.
     const evalErrors: Array<{ reportId: string; err: string }> = []
 
+    // Wave S (2026-04-23, PERF): the previous loop issued one
+    // project_settings SELECT per project. For cron runs that span 50+
+    // tenants, that was a 50 round-trip tax before any LLM work. Fetch
+    // all settings once and index in-memory — the table has exactly one
+    // row per project.
+    const { data: allSettings } = await db
+      .from('project_settings')
+      .select('project_id, judge_enabled, judge_model, judge_sample_size, slack_webhook_url, discord_webhook_url, judge_fallback_provider, judge_fallback_model')
+      .in('project_id', projects.map(p => p.id))
+    const settingsByProject = new Map<string, {
+      judge_enabled: boolean | null
+      judge_model: string | null
+      judge_sample_size: number | null
+      slack_webhook_url: string | null
+      discord_webhook_url: string | null
+      judge_fallback_provider: string | null
+      judge_fallback_model: string | null
+    }>(
+      (allSettings ?? []).map((s) => [s.project_id, s as unknown as {
+        judge_enabled: boolean | null
+        judge_model: string | null
+        judge_sample_size: number | null
+        slack_webhook_url: string | null
+        discord_webhook_url: string | null
+        judge_fallback_provider: string | null
+        judge_fallback_model: string | null
+      }]),
+    )
+
     for (const project of projects) {
-      const { data: settings } = await db
-        .from('project_settings')
-        .select('judge_enabled, judge_model, judge_sample_size, slack_webhook_url, discord_webhook_url, judge_fallback_provider, judge_fallback_model')
-        .eq('project_id', project.id)
-        .single()
+      const settings = settingsByProject.get(project.id)
 
       if (!settings?.judge_enabled) continue
 
       const sampleSize = settings.judge_sample_size ?? 50
-      // LLM-1/LLM-2 (audit 2026-04-21): default judge flipped from
-      // claude-opus-4-6 to claude-sonnet-4-6. Opus is $15/$75 per 1M tokens
-      // vs Sonnet's $3/$15 — running Opus as judge of a Sonnet classifier
-      // was ~5x over-spec and the audit measured 100% primary-path
-      // failure + 62% disagreement, suggesting Opus was being rate-limited
-      // under load and silently handing every eval to the OpenAI fallback.
-      // Sonnet-on-Sonnet is the same-tier baseline; upgrade to Opus
-      // deliberately (not by default) if disagreement trends high.
-      const modelId = settings.judge_model ?? 'claude-sonnet-4-6'
+      // Wave R (audit 2026-04-22): judge upgraded from claude-sonnet-4-6 to
+      // claude-opus-4-7 (released 2026-04-16). The prior Sonnet-on-Sonnet
+      // baseline saved cost but capped disagreement detection at the
+      // classifier's own ceiling. Opus-4-7 brings frontier reasoning to
+      // self-critique and is used only on the sampled batch (default 50
+      // reports / project / night) so cost stays bounded. Operators can still
+      // override back to Sonnet via `project_settings.judge_model`.
+      const modelId = settings.judge_model ?? JUDGE_MODEL
       const fallbackProvider = (settings.judge_fallback_provider ?? 'openai') as 'openai' | 'none'
-      const fallbackModelId = settings.judge_fallback_model ?? 'gpt-4.1'
+      const fallbackModelId = settings.judge_fallback_model ?? JUDGE_FALLBACK
 
       const { data: reports } = await db
         .from('reports')
@@ -145,6 +170,21 @@ Deno.serve(withSentry('judge-batch', async (req) => {
 
       const trace = createTrace('judge-batch', { projectId: project.id, reportCount: reports.length })
 
+      // Wave S (2026-04-23, PERF): resolve the judge prompt ONCE per project
+      // instead of per report. The prior implementation re-queried
+      // prompt_versions inside the fan-out, making the lookup N+1 and
+      // shifting A/B traffic decisions per report rather than per batch
+      // (which breaks stable versioning in the evaluations table).
+      const judgePromptSelection = await getPromptForStage(db, project.id, 'judge')
+      const SYSTEM_PROMPT = judgePromptSelection.promptTemplate
+        ?? `You are a senior QA engineer evaluating the quality of an automated bug classification. Be strict but fair.`
+      // Wave S (2026-04-23): the composite score weights now come from
+      // `prompt_versions.judge_rubric` (per-project override) with the
+      // historical 0.35/0.25/0.2/0.2 as fallback. resolveJudgeWeights
+      // guarantees the weights are positive and sum to 1 regardless of
+      // operator input.
+      const weights = resolveJudgeWeights(judgePromptSelection.judgeRubric)
+
       // Wave S3 (PERF): fan out judge evaluations with concurrency=5 so a
       // 50-report batch completes in ~10× fewer wall-clock seconds. The
       // provider rate limit (~50 req/min) tolerates this; DB pool pressure
@@ -154,7 +194,6 @@ Deno.serve(withSentry('judge-batch', async (req) => {
         const start = Date.now()
 
         try {
-          const SYSTEM_PROMPT = `You are a senior QA engineer evaluating the quality of an automated bug classification. Be strict but fair.`
           const USER_PROMPT = `Evaluate this classification:
 
 **Original Report:**
@@ -271,10 +310,10 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           }
 
           const compositeScore = (
-            evaluation.accuracy * 0.35 +
-            evaluation.severity_calibration * 0.25 +
-            evaluation.component_tagging * 0.2 +
-            evaluation.repro_quality * 0.2
+            evaluation.accuracy * weights.accuracy +
+            evaluation.severity_calibration * weights.severity +
+            evaluation.component_tagging * weights.component +
+            evaluation.repro_quality * weights.repro
           )
 
           await db.from('classification_evaluations').insert({

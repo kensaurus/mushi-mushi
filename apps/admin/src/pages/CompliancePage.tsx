@@ -8,6 +8,8 @@ import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTab
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface RetentionPolicy {
   project_id: string
@@ -217,6 +219,15 @@ export function CompliancePage() {
         </Btn>
         <TableDensityToggle />
       </PageHeader>
+
+      <PageActionBar
+        scope="compliance"
+        action={useNextBestAction({
+          scope: 'compliance',
+          openControls: dsars.filter((d) => d.status !== 'completed' && d.status !== 'rejected').length,
+          nextReviewInDays: null,
+        })}
+      />
 
       <PageHelp
         title="About Compliance"

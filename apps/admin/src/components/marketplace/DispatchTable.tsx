@@ -105,7 +105,7 @@ export function DispatchTable({
                           <div className="text-3xs text-fg-muted uppercase tracking-wider mb-1">
                             Full response · delivery {d.delivery_id.slice(0, 8)}…
                           </div>
-                          <pre className="text-3xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap break-all bg-surface-raised rounded-sm p-2">
+                          <pre className="text-3xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere bg-surface-raised rounded-sm p-2 max-h-64">
                             {d.response_excerpt}
                           </pre>
                         </td>

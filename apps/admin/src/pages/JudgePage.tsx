@@ -32,6 +32,9 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
+import { ChartActionsMenu } from '../components/ChartActionsMenu'
 
 interface WeekData {
   week_start: string
@@ -307,6 +310,20 @@ export function JudgePage() {
         )}
       </PageHeader>
 
+      <PageActionBar
+        scope="judge"
+        action={useNextBestAction({
+          scope: 'judge',
+          disagreementRate: evals.length > 0
+            ? evals.filter((e) => e.classification_agreed === false).length / evals.length
+            : null,
+          sampledCount: evals.length,
+          staleHoursAgo: evals[0]?.created_at
+            ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
+            : null,
+        })}
+      />
+
       <PageHelp
         title={copy?.help?.title ?? 'About the Judge'}
         whatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
@@ -363,7 +380,24 @@ export function JudgePage() {
       </KpiRow>
 
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-        <Section title="Score trend (12w)">
+        <Section
+          title="Score trend (12w)"
+          action={
+            <ChartActionsMenu
+              label="Score trend"
+              exportFilename={`judge-score-trend-${new Date().toISOString().slice(0, 10)}.csv`}
+              onExportCsv={() => {
+                const header = 'week_start,avg_score,avg_accuracy,avg_severity,avg_component,avg_repro,eval_count'
+                const rows = weeks.map((w) =>
+                  [w.week_start, w.avg_score, w.avg_accuracy, w.avg_severity, w.avg_component, w.avg_repro, w.eval_count].join(','),
+                )
+                return [header, ...rows].join('\n')
+              }}
+              openFilterTo="/judge?filter=disagreement"
+              openFilterLabel="Browse disagreements"
+            />
+          }
+        >
           {weeks.length === 0 ? (
             <EmptyState
               icon={<HeroJudgeScale />}

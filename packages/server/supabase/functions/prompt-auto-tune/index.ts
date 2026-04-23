@@ -34,6 +34,8 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { createTrace } from '../_shared/observability.ts'
+import { PROMPT_TUNE_MODEL } from '../_shared/models.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('prompt-auto-tune')
 
@@ -64,11 +66,13 @@ function getDb(): SupabaseClient {
   )
 }
 
-function authorized(req: Request): boolean {
-  const expected = `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''}`
-  const got = req.headers.get('Authorization') ?? ''
-  return Boolean(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) && got === expected
-}
+// Wave S (2026-04-23): the hand-rolled `authorized()` only accepted the
+// service-role key. Postgres cron (pg_net) can't read the auto-injected
+// `SUPABASE_SERVICE_ROLE_KEY` — the Supabase CLI refuses to set secrets that
+// start with `SUPABASE_` — so every pg_cron caller of this function actually
+// sent `MUSHI_INTERNAL_CALLER_SECRET`, which this check rejected. We now
+// delegate to the shared `requireServiceRoleAuth` which accepts either
+// secret via constant-time compare.
 
 interface FailureSample {
   reportDescription: string
@@ -174,7 +178,11 @@ async function proposeCandidate(
   }
 
   const anthropic = createAnthropic({ apiKey })
-  const model = 'claude-sonnet-4-6'
+  // Wave R (2026-04-22): Promoted from Sonnet 4-6 to Opus 4-7 — prompt rewrites
+  // benefit most from the frontier self-critique. Falls back silently when
+  // Opus isn't in the account; the judge-batch evaluator re-scores outputs
+  // regardless.
+  const model = PROMPT_TUNE_MODEL
 
   const failuresPrompt = failures
     .map((f, i) => `### Failure ${i + 1} (judge_score=${f.judgeScore.toFixed(2)}, bucket=${f.disagreementReason ?? 'low_score'})
@@ -238,18 +246,41 @@ async function processStage(
   projectId: string,
   stage: Stage,
 ): Promise<{ status: 'ok' | 'skipped' | 'failed'; reason: string; candidateId?: string }> {
-  // Resolve the active prompt for this scope. Only project-scoped prompts
-  // are auto-tuned; the global defaults stay frozen so a regression in one
-  // project never bleeds across the platform.
-  const { data: active } = await db
+  // Resolve the active prompt for this scope. We auto-tune project-scoped
+  // prompts directly; the global defaults stay frozen so a regression in
+  // one project never bleeds across the platform.
+  //
+  // Wave S (2026-04-23) — previously, projects that had NEVER forked the
+  // global prompt were silently skipped ("no project-scoped active
+  // prompt"). That meant a brand-new tenant accumulating bad judge scores
+  // never got an auto-candidate, even though the tuner has all the data
+  // it needs. We now fall back to forking the matching global-scope
+  // prompt: the candidate we insert is still project-scoped (so the
+  // platform default is untouched), but the operator gets a first
+  // proposal instead of a cold start.
+  let active = (await db
     .from('prompt_versions')
     .select('id, version, prompt_template')
     .eq('project_id', projectId)
     .eq('stage', stage)
     .eq('is_active', true)
-    .maybeSingle()
+    .maybeSingle()).data as { id: string; version: string; prompt_template: string } | null
 
-  if (!active) return { status: 'skipped', reason: 'no project-scoped active prompt' }
+  let forkedFromGlobal = false
+  if (!active) {
+    const { data: globalActive } = await db
+      .from('prompt_versions')
+      .select('id, version, prompt_template')
+      .is('project_id', null)
+      .eq('stage', stage)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (!globalActive) {
+      return { status: 'skipped', reason: 'no active prompt (neither project nor global)' }
+    }
+    active = globalActive
+    forkedFromGlobal = true
+  }
 
   // Cooldown: don't pile up auto candidates if one is already pending.
   const cutoff = new Date(Date.now() - COOLDOWN_DAYS * 24 * 60 * 60 * 1000).toISOString()
@@ -304,6 +335,11 @@ async function processStage(
         changeSummary: candidate.changeSummary,
         generatedAt: new Date().toISOString(),
         model: candidate.model,
+        // Wave S (2026-04-23): expose the fork source so the Prompt Lab
+        // can badge "forked from global defaults" on the first candidate
+        // a tenant ever sees — otherwise it's indistinguishable from a
+        // regular iteration of the tenant's own prompt.
+        forkedFromGlobal,
       },
     })
     .select('id')
@@ -327,7 +363,8 @@ interface StageResult {
 app.get('/prompt-auto-tune/health', (c) => c.json({ ok: true }))
 
 app.post('/prompt-auto-tune', async (c) => {
-  if (!authorized(c.req.raw)) return c.json({ ok: false, error: 'unauthorized' }, 401)
+  const unauthorized = requireServiceRoleAuth(c.req.raw)
+  if (unauthorized) return unauthorized
 
   const db = getDb()
 

@@ -31,6 +31,7 @@ import { log } from '../_shared/logger.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { recordMeterEvent, stripeFromEnv } from '../_shared/stripe.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 const ulog = log.child('usage-aggregator')
 
@@ -50,7 +51,18 @@ interface MeteredEvent {
 const meterIdentifier = (event: string, projectId: string, day: string) =>
   `mushi:${event}:${projectId}:${day}`
 
-const handler = async (_req: Request): Promise<Response> => {
+const handler = async (req: Request): Promise<Response> => {
+  // Wave S (2026-04-23): previously this handler ran with zero auth before
+  // touching `getServiceClient()` + Stripe. Anyone who guessed the function
+  // URL could trigger a full aggregator pass, abuse Stripe metering, and
+  // mark rows synced. We now require the same internal-caller auth as every
+  // other cron-triggered internal function (fast-filter, classify-report,
+  // judge-batch, intelligence-report). pg_cron passes
+  // `MUSHI_INTERNAL_CALLER_SECRET`; in-runtime function-to-function calls
+  // use the auto-injected service-role key.
+  const unauthorized = requireServiceRoleAuth(req)
+  if (unauthorized) return unauthorized
+
   const cfg = stripeFromEnv()
   if (!cfg.secretKey) {
     ulog.error('missing_stripe_secret_key')
@@ -82,14 +94,29 @@ const handler = async (_req: Request): Promise<Response> => {
       }
       const rows = (data ?? []) as SummaryRow[]
       totalBatches += rows.length
+      if (rows.length === 0) continue
+
+      // Wave S (2026-04-23, PERF): previously we issued one SELECT on
+      // `billing_customers` per unsynced (project, day) summary row. A
+      // backlog of 500 rows after a cron skip meant 500 round-trips before
+      // a single Stripe call landed. Bulk-fetch once and index in-memory.
+      const uniqueProjectIds = [...new Set(rows.map(r => r.project_id))]
+      const { data: customers, error: custBatchErr } = await db
+        .from('billing_customers')
+        .select('project_id, stripe_customer_id')
+        .in('project_id', uniqueProjectIds)
+      if (custBatchErr) {
+        ulog.error('billing_customers_batch_failed', { event: me.internal, error: custBatchErr.message })
+        continue
+      }
+      const customerByProject = new Map<string, string>()
+      for (const c of customers ?? []) {
+        if (c.stripe_customer_id) customerByProject.set(c.project_id, c.stripe_customer_id)
+      }
 
       for (const row of rows) {
-        const { data: customer, error: custErr } = await db
-          .from('billing_customers')
-          .select('stripe_customer_id')
-          .eq('project_id', row.project_id)
-          .maybeSingle()
-        if (custErr || !customer?.stripe_customer_id) {
+        const customerId = customerByProject.get(row.project_id)
+        if (!customerId) {
           ulog.warn('skipped_no_customer', { project_id: row.project_id, event: me.internal })
           continue
         }
@@ -97,7 +124,7 @@ const handler = async (_req: Request): Promise<Response> => {
         try {
           const result = await recordMeterEvent(cfg, {
             identifier: meterIdentifier(me.internal, row.project_id, row.day_utc),
-            customer: customer.stripe_customer_id,
+            customer: customerId,
             value: row.total,
             timestamp: Math.floor(new Date(`${row.day_utc}T23:59:59Z`).getTime() / 1000),
             eventName: me.stripe,

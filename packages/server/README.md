@@ -18,7 +18,11 @@ supabase/functions/
   sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
   fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
   _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
-                             telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit, ...)
+                             telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit,
+                             models, ...). `_shared/models.ts` is the single source of truth for model IDs
+                             and stage → model defaults (Haiku 4.5 fast-filter, Sonnet 4.6 classify/judge/
+                             assist, Opus 4.7 promoter). Admin UI dropdowns and
+                             `project_settings.*_model` defaults read from here.
 
 supabase/templates/          Branded HTML email templates (confirmation, recovery)
 supabase/migrations/         PostgreSQL schema + RLS policies (latest: audit-remediation —
@@ -101,6 +105,8 @@ All routes are served from the `api` function under `/v1/`:
 - `POST /v1/admin/billing/checkout` — Start a Stripe Checkout session
 - `POST /v1/admin/billing/portal` — Open the Stripe Billing Portal
 - `POST /v1/admin/queue/flush-queued` — Force-process reports stuck in `status='queued'` (kicks `fast-filter` for each)
+- `GET /v1/admin/repo/overview?project_id=...` — Repo-wide rollup for the admin `/repo` page. Returns `{ repo: { repo_url, default_branch, github_app_installation_id, last_indexed_at }, counts: { open, ci_passing, ci_failed, merged, failed_to_open }, branches: FixAttempt[50] }`. Each branch row carries `id`, `branch`, `pr_url`, `pr_number`, `status`, `check_run_status`, `check_run_conclusion`, `files_changed`, `started_at`, `completed_at`, `report_id`, `report_summary`. RLS mirrors the `fix_attempts` table — requester must be a member of the project
+- `GET /v1/admin/repo/activity?project_id=...&limit=100` — Chronological timeline of branch / PR events synthesised from `fix_attempts` (and `fix_events` where available): dispatched → branch created → commit → PR opened → CI resolved → completed / failed. Default limit 100, capped at 500. Same RLS as `/repo/overview`
 - `GET | POST | DELETE /v1/admin/integrations[/:type]` — Integration credentials CRUD. `GET` masks secrets; `POST` merges with existing masked values so partial updates don't drop tokens
 - `GET | POST /v1/admin/sso`, `DELETE /v1/admin/sso/:id` — SAML provider self-service via Supabase Auth Admin API. Returns ACS URL + Entity ID for IdP setup. OIDC currently writes config and returns a hint pending GoTrue admin OIDC support
 - `GET/POST /v1/admin/plugins` — Marketplace registry CRUD
@@ -140,6 +146,34 @@ sites that previously sidestepped Hono's `app.onError` and never reached
 Sentry. **If you add a new admin route, use `return dbError(c, error)` instead
 of building the 500 by hand** — otherwise the new route's errors will be
 invisible to the on-call dashboard.
+
+### PostgrestBuilder is *not* a Promise — no `.catch()`
+
+A recurring foot-gun: Supabase's `db.from(...).insert/.upsert/.update/.delete()`
+and `db.rpc(...)` return a `PostgrestBuilder`. It is a *thenable* (`.then` only)
+— it does **not** implement `.catch`. Writing
+
+```ts
+// BROKEN — throws TypeError at runtime
+await db.from('audit_log').insert({...}).catch(() => {})
+```
+
+crashes with `TypeError: db.from(...).insert(...).catch is not a function`,
+which bubbles to `app.onError` and masks the *preceding* work as a generic 500.
+This silently erased a successful BYOK vault write in Apr 2026
+([MUSHI-MUSHI-SERVER-F](https://sakuramoto.sentry.io/issues/MUSHI-MUSHI-SERVER-F)).
+
+**Use `try/await` for fire-and-forget writes:**
+
+```ts
+try {
+  await db.from('audit_log').insert({...})
+} catch { /* best-effort */ }
+```
+
+Note: DB-level errors (unique violation, RLS denial) return `{data, error}`
+synchronously — they never reject. `.catch()` wouldn't help there either; for
+those, branch on `error` explicitly or let `dbError()` handle them.
 
 ## Stage 2 air-gap
 

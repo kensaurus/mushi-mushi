@@ -8,16 +8,25 @@
 
 /** USD per 1M tokens. Add new models here; the SQL backfill must mirror. */
 export const LLM_PRICING_PER_M_TOKENS: Record<string, { in: number; out: number }> = {
-  'claude-haiku-4-6':           { in: 0.25, out: 1.25 },
-  'claude-haiku-3-5':           { in: 0.80, out: 4.00 },
-  'claude-sonnet-4-6':          { in: 3.00, out: 15.00 },
-  'claude-sonnet-3-7':          { in: 3.00, out: 15.00 },
-  'claude-opus-4-6':            { in: 15.00, out: 75.00 },
-  'gpt-4.1':                    { in: 2.00, out: 8.00 },
-  'gpt-4.1-mini':               { in: 0.40, out: 1.60 },
-  'gpt-5':                      { in: 5.00, out: 15.00 },
-  'text-embedding-3-small':     { in: 0.02, out: 0.00 },
-  'text-embedding-3-large':     { in: 0.13, out: 0.00 },
+  // Anthropic — current generation (2026-Q1/Q2)
+  'claude-haiku-4-5':            { in: 1.00, out: 5.00 },
+  'claude-haiku-4-5-20251001':   { in: 1.00, out: 5.00 },
+  'claude-haiku-4-6':            { in: 0.25, out: 1.25 },
+  'claude-haiku-3-5':            { in: 0.80, out: 4.00 },
+  'claude-sonnet-4-5-20250929':  { in: 3.00, out: 15.00 },
+  'claude-sonnet-4-6':           { in: 3.00, out: 15.00 },
+  'claude-sonnet-3-7':           { in: 3.00, out: 15.00 },
+  'claude-opus-4-6':             { in: 15.00, out: 75.00 },
+  'claude-opus-4-7':             { in: 15.00, out: 75.00 },
+  // OpenAI — current generation (GPT-5 family, released 2026)
+  'gpt-4.1':                     { in: 2.00, out: 8.00 },
+  'gpt-4.1-mini':                { in: 0.40, out: 1.60 },
+  'gpt-5':                       { in: 5.00, out: 15.00 },
+  'gpt-5.4':                     { in: 5.00, out: 15.00 },
+  'gpt-5.4-mini':                { in: 0.60, out: 2.40 },
+  // Embeddings
+  'text-embedding-3-small':      { in: 0.02, out: 0.00 },
+  'text-embedding-3-large':      { in: 0.13, out: 0.00 },
 }
 
 /**

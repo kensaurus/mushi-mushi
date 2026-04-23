@@ -416,7 +416,7 @@ export function McpPage() {
             </button>
           </div>
           <pre
-            className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap break-all max-h-64 select-all"
+            className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
             data-testid="mcp-snippet"
           >
             {snippet}
@@ -520,7 +520,7 @@ export function McpPage() {
                 className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:transition-colors hover:border-edge"
               >
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <code className="text-xs font-mono text-fg break-all">{r.uri}</code>
+                  <code className="text-xs font-mono text-fg wrap-anywhere">{r.uri}</code>
                   <Badge className={scopeBadgeTone(r.scope)}>{r.scope}</Badge>
                 </div>
                 <div className="text-xs text-fg-muted leading-snug">{r.description}</div>
@@ -574,7 +574,7 @@ function ToolCard({ tool }: ToolCardProps) {
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-fg">{tool.title}</div>
-          <code className="text-2xs text-fg-muted font-mono break-all">{tool.name}</code>
+          <code className="text-2xs text-fg-muted font-mono wrap-anywhere">{tool.name}</code>
         </div>
         <Badge className={scopeBadgeTone(tool.scope)}>{tool.scope}</Badge>
       </div>

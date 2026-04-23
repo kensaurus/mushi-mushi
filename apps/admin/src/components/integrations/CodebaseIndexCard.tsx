@@ -221,7 +221,7 @@ function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss:
       <div className="text-2xs text-warn font-medium uppercase tracking-wider mb-2">
         ⚠️ One-time webhook secret — copy now, will not be shown again
       </div>
-      <pre className="font-mono text-xs text-fg bg-surface-raised px-2 py-1 rounded-sm block whitespace-pre-wrap break-all select-all">
+      <pre className="font-mono text-xs text-fg bg-surface-raised px-2 py-1 rounded-sm block whitespace-pre-wrap wrap-anywhere select-all">
         {secret}
       </pre>
       <div className="mt-2 flex items-center gap-2">

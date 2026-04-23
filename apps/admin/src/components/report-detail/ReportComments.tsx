@@ -60,7 +60,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
                   </Tooltip>
                 )}
               </div>
-              <div className="text-fg-secondary whitespace-pre-wrap break-words">{c.body}</div>
+              <div className="text-fg-secondary whitespace-pre-wrap wrap-break-word text-pretty leading-relaxed">{c.body}</div>
             </div>
             <button
               type="button"

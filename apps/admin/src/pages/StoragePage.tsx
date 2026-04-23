@@ -16,6 +16,8 @@ import { PageHeader, PageHelp, Card, Btn, ErrorAlert, Input, SelectField } from 
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
 
@@ -173,6 +175,16 @@ export function StoragePage() {
         title="Storage"
         description="Per-project bucket usage and retention policy for screenshots, logs, and uploaded artefacts."
       />
+
+      <PageActionBar
+        scope="storage"
+        action={useNextBestAction({
+          scope: 'storage',
+          approachingQuotaPct: null,
+          failedUploadsLastHour: settings.filter((s) => s.health_status === 'failing').length,
+        })}
+      />
+
       <PageHelp
         title="About BYO Storage"
         whatIsIt="Per-project storage backend for screenshots, intelligence-report PDFs, and fix attachments. Defaults to the cluster's Supabase Storage; switch to AWS S3, Cloudflare R2, Google Cloud Storage, or MinIO to keep customer data inside your existing infrastructure."
@@ -236,7 +248,7 @@ export function StoragePage() {
             <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-fg truncate">{projectName}</div>
-                <code className="text-3xs opacity-70 font-mono break-all">{s.project_id}</code>
+                <code className="text-3xs opacity-70 font-mono wrap-anywhere">{s.project_id}</code>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {!existing ? (

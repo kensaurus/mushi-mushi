@@ -89,5 +89,8 @@
     "bug-tracking",
     "integrations",
     "sdk"
-  ]
+  ],
+  "engines": {
+    "node": ">=20"
+  }
 }

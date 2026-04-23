@@ -28,6 +28,8 @@ import { SetupNudge } from '../components/SetupNudge'
 import { PromptDialog } from '../components/ConfirmDialog'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
+import { PageActionBar } from '../components/PageActionBar'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 interface ReporterDevice {
   id: string
@@ -235,6 +237,15 @@ export function AntiGamingPage() {
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
 
+      <PageActionBar
+        scope="anti-gaming"
+        action={useNextBestAction({
+          scope: 'anti-gaming',
+          flaggedLastHour: stats.flagged,
+          blockedIps: stats.crossAccount,
+        })}
+      />
+
       <PageHelp
         title="About Anti-Gaming"
         whatIsIt="Detects abusive reporters: the same device fingerprint registering many distinct reporter tokens (multi-account), or a single token submitting too many reports in a short window (velocity anomaly). Device fingerprint is derived server-side from IP + User-Agent and supplemented by an SDK-supplied stable hash."
@@ -341,7 +352,7 @@ export function AntiGamingPage() {
                           </span>
                         </div>
                         {d.flag_reason && (
-                          <p className="mt-1 text-xs text-danger">{d.flag_reason}</p>
+                          <p className="mt-1 text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
                         )}
                         <p className="mt-1 text-2xs text-fg-faint">
                           First seen {new Date(d.created_at).toLocaleString()} · last activity {new Date(d.updated_at).toLocaleString()}

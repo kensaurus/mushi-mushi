@@ -13,9 +13,11 @@ import {
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
   IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
-  IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconSparkle,
+  IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconSparkle, IconGit,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
+import { SidebarHealthDot } from './SidebarHealthDot'
+import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
@@ -26,6 +28,12 @@ import { QuickstartMegaCta } from './QuickstartMegaCta'
 import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
+import { HotkeysModal } from './HotkeysModal'
+import { ActivityDrawer } from './ActivityDrawer'
+import { DensitySidebarToggle } from './DensitySidebarToggle'
+import { ThemeSidebarToggle } from './ThemeSidebarToggle'
+import { WhatsNewModal, useWhatsNew } from './WhatsNew'
+import { AIAssistSidebar } from './AIAssistSidebar'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 
@@ -82,6 +90,10 @@ const NAV: NavSection[] = [
   {
     id: 'start',
     title: 'Start here',
+    // Advanced-mode users already know the basics; collapse so the 4 PDCA
+    // groups dominate the sidebar. Beginner/Quickstart still show it first
+    // because the mode-specific NAV projection (see below) overrides this.
+    defaultCollapsed: true,
     items: [
       { label: 'Dashboard',   path: '/',           icon: IconDashboard, beginner: true },
       { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
@@ -106,6 +118,7 @@ const NAV: NavSection[] = [
     hint: 'Turn classified reports into draft pull requests. Tune the prompt that does it.',
     items: [
       { label: 'Fixes',      path: '/fixes',      icon: IconFixes,       beginner: true, quickstartLabel: 'Fixes ready' },
+      { label: 'Repo',       path: '/repo',       icon: IconGit },
       { label: 'Prompt Lab', path: '/prompt-lab', icon: IconFineTuning },
     ],
   },
@@ -229,10 +242,19 @@ export function Layout({ children }: { children: ReactNode }) {
   const [collapsedMap, setCollapsedMap] = useState<Record<string, boolean>>(() => readCollapsedState())
   const { mode, setMode, isQuickstart, isBeginner, isAdvanced } = useAdminMode()
   const palette = useCommandPalette()
+  const [hotkeysOpen, setHotkeysOpen] = useState(false)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activityUnread, setActivityUnread] = useState(0)
+  const [aiOpen, setAiOpen] = useState(false)
+  const whatsNew = useWhatsNew()
+  const navCounts = useNavCounts()
 
   // Global Cmd/Ctrl+K opens the command palette. `allowInInputs: true`
   // because the shortcut's whole point is to be reachable while the user
   // is mid-type in a search box or filter field.
+  // Global `?` opens the shortcut cheatsheet. We match on `shift: true`
+  // because `?` requires Shift on US layouts but allow `e.key === '?'`
+  // on AZERTY/non-shift layouts that produce the literal character.
   useHotkeys(
     [
       {
@@ -254,6 +276,32 @@ export function Layout({ children }: { children: ReactNode }) {
         },
         ctrl: true,
         allowInInputs: true,
+      },
+      {
+        key: '?',
+        description: 'Toggle keyboard shortcuts',
+        handler: (e) => {
+          e.preventDefault()
+          setHotkeysOpen((v) => !v)
+        },
+      },
+      {
+        key: 'j',
+        description: 'Toggle AI sidebar (scoped to current page)',
+        handler: (e) => {
+          e.preventDefault()
+          setAiOpen((v) => !v)
+        },
+        meta: true,
+      },
+      {
+        key: 'j',
+        description: 'Toggle AI sidebar (scoped to current page)',
+        handler: (e) => {
+          e.preventDefault()
+          setAiOpen((v) => !v)
+        },
+        ctrl: true,
       },
     ],
   )
@@ -284,8 +332,15 @@ export function Layout({ children }: { children: ReactNode }) {
       },
     ]
   } else if (isBeginner) {
+    // Beginner mode keeps Start expanded by default — first-run users
+    // need the Dashboard / Get started pair in view, not hidden behind
+    // a chevron like in advanced mode.
     visibleNav = NAV
-      .map(s => ({ ...s, items: s.items.filter(i => i.beginner) }))
+      .map(s => ({
+        ...s,
+        defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
+        items: s.items.filter(i => i.beginner),
+      }))
       .filter(s => s.items.length > 0)
   } else {
     visibleNav = NAV
@@ -353,6 +408,10 @@ export function Layout({ children }: { children: ReactNode }) {
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
           const collapsible = section.defaultCollapsed !== undefined || section.id === 'workspace'
+          // Per-stage staleness — surfaced on the collapsed section header
+          // so advanced users can still see at a glance which PDCA stage
+          // needs their attention without expanding.
+          const staleness = computeStaleness(section.id, navCounts)
           return (
             <div key={section.id}>
               <SectionHeader
@@ -360,6 +419,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 collapsed={collapsed}
                 collapsible={collapsible}
                 isActiveStage={isActiveStage}
+                staleness={staleness}
                 onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
               />
               {!collapsed && (
@@ -377,6 +437,35 @@ export function Layout({ children }: { children: ReactNode }) {
                         <Icon className="nav-link-icon" />
                         <span>{label}</span>
                         {path === '/integrations' && <IntegrationHealthDot />}
+                        {path === '/reports' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.ready ? toneForBacklog(navCounts.untriagedBacklog) : 'loading'}
+                            count={navCounts.untriagedBacklog}
+                            label={`${navCounts.untriagedBacklog} untriaged ${navCounts.untriagedBacklog === 1 ? 'report' : 'reports'}`}
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/fixes' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.fixesFailed > 0 ? toneForFailed(navCounts.fixesFailed) : toneForInFlight(navCounts.fixesInFlight)}
+                            count={navCounts.fixesFailed > 0 ? navCounts.fixesFailed : navCounts.fixesInFlight}
+                            label={
+                              navCounts.fixesFailed > 0
+                                ? `${navCounts.fixesFailed} failed fixes — needs attention`
+                                : navCounts.fixesInFlight > 0
+                                  ? `${navCounts.fixesInFlight} fixes in flight`
+                                  : 'No active fixes'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/repo' && navCounts.ready && navCounts.prsOpen > 0 && (
+                          <SidebarHealthDot
+                            tone="ok"
+                            count={navCounts.prsOpen}
+                            label={`${navCounts.prsOpen} PRs open awaiting review`}
+                          />
+                        )}
                       </Link>
                     )
                   })}
@@ -388,7 +477,9 @@ export function Layout({ children }: { children: ReactNode }) {
       </nav>
 
       {/* User footer */}
-      <div className="px-3 py-2.5 border-t border-edge/60">
+      <div className="px-3 py-2.5 border-t border-edge/60 space-y-2">
+        <DensitySidebarToggle />
+        <ThemeSidebarToggle />
         <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
         <button
           onClick={signOut}
@@ -463,6 +554,60 @@ export function Layout({ children }: { children: ReactNode }) {
         {/* Desktop sub-header — project switcher pinned to the right */}
         <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
           <SearchButton />
+          <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'}>
+            <button
+              type="button"
+              onClick={() => setActivityOpen(true)}
+              aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
+              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <IconBell className="h-3.5 w-3.5" />
+              {activityUnread > 0 && (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-[0.55rem] font-semibold leading-none motion-safe:animate-pulse"
+                >
+                  {activityUnread > 9 ? '9+' : activityUnread}
+                </span>
+              )}
+            </button>
+          </Tooltip>
+          <Tooltip content="Keyboard shortcuts (press ?)">
+            <button
+              type="button"
+              onClick={() => setHotkeysOpen(true)}
+              aria-label="Open keyboard shortcuts"
+              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <span aria-hidden className="font-mono text-xs leading-none">?</span>
+            </button>
+          </Tooltip>
+          <Tooltip content={whatsNew.hasUnread ? 'What\'s new — new release notes' : 'What\'s new'}>
+            <button
+              type="button"
+              onClick={whatsNew.openPanel}
+              aria-label={whatsNew.hasUnread ? 'Open what\'s new (unread updates)' : 'Open what\'s new'}
+              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <span aria-hidden className="font-mono text-xs leading-none">✦</span>
+              {whatsNew.hasUnread && (
+                <span
+                  aria-hidden
+                  className="absolute -right-0.5 -top-0.5 inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse"
+                />
+              )}
+            </button>
+          </Tooltip>
+          <Tooltip content="AI sidebar (Cmd/Ctrl+J)">
+            <button
+              type="button"
+              onClick={() => setAiOpen(true)}
+              aria-label="Open AI sidebar"
+              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            >
+              <span aria-hidden className="font-mono text-xs leading-none">✨</span>
+            </button>
+          </Tooltip>
           <PlanBadge />
           <ProjectSwitcher />
         </header>
@@ -478,6 +623,22 @@ export function Layout({ children }: { children: ReactNode }) {
       </div>
       <FirstRunTour />
       <CommandPalette />
+      <HotkeysModal open={hotkeysOpen} onClose={() => setHotkeysOpen(false)} />
+      <ActivityDrawer
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
+        onUnreadChange={setActivityUnread}
+      />
+      <WhatsNewModal
+        open={whatsNew.open}
+        onClose={whatsNew.closePanel}
+        entries={whatsNew.entries}
+      />
+      <AIAssistSidebar
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        route={pathname}
+      />
     </div>
   )
 }
@@ -532,15 +693,70 @@ function ModeToggle({ mode, onSelect }: { mode: AdminMode; onSelect: (next: Admi
   )
 }
 
+interface SectionStaleness {
+  count: number
+  tone: 'ok' | 'warn' | 'danger'
+  label: string
+}
+
 interface SectionHeaderProps {
   section: NavSection
   collapsed: boolean
   collapsible: boolean
   isActiveStage: boolean
+  staleness: SectionStaleness | null
   onToggle: () => void
 }
 
-function SectionHeader({ section, collapsed, collapsible, isActiveStage, onToggle }: SectionHeaderProps) {
+/**
+ * Compute a single "how stale is this stage" badge for the PDCA sections.
+ * Only Plan + Do have cheap aggregate counts today (reused from
+ * `useNavCounts`). Check + Act return null — the section header simply
+ * has no badge, which is indistinguishable from "no work pending".
+ */
+function computeStaleness(
+  sectionId: string,
+  navCounts: ReturnType<typeof useNavCounts>,
+): SectionStaleness | null {
+  if (!navCounts.ready) return null
+  switch (sectionId) {
+    case 'plan': {
+      const backlog = navCounts.untriagedBacklog
+      if (backlog === 0) return null
+      // `toneForBacklog` returns 'ok' only when n === 0; we've already
+      // returned above in that case, so the remaining tones are a subset
+      // of SectionStaleness['tone'].
+      const tone = toneForBacklog(backlog) as SectionStaleness['tone']
+      return {
+        count: backlog,
+        tone,
+        label: `${backlog} untriaged report${backlog === 1 ? '' : 's'} waiting`,
+      }
+    }
+    case 'do': {
+      const active = navCounts.fixesFailed + navCounts.fixesInFlight
+      if (active === 0) return null
+      const tone = navCounts.fixesFailed > 0 ? 'danger' : 'warn'
+      return {
+        count: active,
+        tone,
+        label: navCounts.fixesFailed > 0
+          ? `${navCounts.fixesFailed} failed fix${navCounts.fixesFailed === 1 ? '' : 'es'} · ${navCounts.fixesInFlight} in flight`
+          : `${navCounts.fixesInFlight} fix${navCounts.fixesInFlight === 1 ? '' : 'es'} in flight`,
+      }
+    }
+    default:
+      return null
+  }
+}
+
+const STALENESS_TONE: Record<SectionStaleness['tone'], string> = {
+  ok: 'bg-ok-muted text-ok',
+  warn: 'bg-warn-muted text-warn',
+  danger: 'bg-danger-muted text-danger',
+}
+
+function SectionHeader({ section, collapsed, collapsible, isActiveStage, staleness, onToggle }: SectionHeaderProps) {
   const inner = (
     <span className="flex items-center gap-1.5 min-w-0 w-full">
       {section.stage && (
@@ -552,6 +768,15 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, onToggl
         </span>
       )}
       <span className="truncate flex-1 text-left">{section.title}</span>
+      {staleness && (
+        <span
+          className={`inline-flex items-center justify-center min-w-[1rem] px-1 h-3.5 rounded-sm text-[0.55rem] font-mono font-bold leading-none shrink-0 ${STALENESS_TONE[staleness.tone]}`}
+          aria-label={staleness.label}
+          title={staleness.label}
+        >
+          {staleness.count > 99 ? '99+' : staleness.count}
+        </span>
+      )}
       {isActiveStage && (
         <span
           className="text-3xs font-medium normal-case tracking-normal text-brand shrink-0"

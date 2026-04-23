@@ -80,6 +80,17 @@ export const STATIC_ROUTES: StaticRoute[] = [
     keywords: ['pull request', 'pr', 'patch', 'diff', 'merge', 'codex', 'llm', 'agent', 'drafts'],
   },
   {
+    id: 'nav:repo',
+    label: 'Repo',
+    path: '/repo',
+    description: 'Every auto-fix branch and PR across the connected GitHub repo, with CI status.',
+    group: 'Do',
+    keywords: [
+      'repo', 'repository', 'branch', 'branches', 'git', 'github',
+      'pr', 'pull request', 'ci', 'checks', 'merge', 'activity',
+    ],
+  },
+  {
     id: 'nav:prompt-lab',
     label: 'Prompt Lab',
     path: '/prompt-lab',

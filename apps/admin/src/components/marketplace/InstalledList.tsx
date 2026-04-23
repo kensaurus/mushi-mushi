@@ -32,7 +32,7 @@ export function InstalledList({ installed }: Props) {
               <p className="text-xs font-semibold">{p.plugin_name}</p>
               {!p.is_active && <Badge className="bg-fg-muted/10 text-fg-muted">disabled</Badge>}
             </div>
-            <p className="text-2xs text-fg-muted font-mono break-all">
+            <p className="text-2xs text-fg-muted font-mono wrap-anywhere">
               {p.webhook_url ?? '(built-in)'}
             </p>
             <div className="flex flex-wrap gap-1 mt-1">
