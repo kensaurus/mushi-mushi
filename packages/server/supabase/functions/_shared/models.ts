@@ -57,8 +57,26 @@ export const STAGE2_MODEL = ANTHROPIC_SONNET
 /** classify-report cross-vendor fallback. */
 export const STAGE2_FALLBACK = OPENAI_PRIMARY
 
-/** judge-batch primary (`project_settings.judge_model` overrides). */
-export const JUDGE_MODEL = ANTHROPIC_OPUS
+/** judge-batch primary (`project_settings.judge_model` overrides).
+ *
+ * Sentry MUSHI-MUSHI-SERVER-9 (regressed 2026-04-23, SECOND occurrence
+ * 2026-04-24 03:00 UTC after `e218bbf` "fix"): we briefly upgraded this to
+ * Opus 4.7 in Wave R (2026-04-22). Opus 4.7 deprecated `temperature`, AI
+ * SDK v4's `prepareCallSettings` hardcodes `temperature ?? 0`, and the
+ * `e218bbf` workaround (enable thinking to strip `temperature`) tripped
+ * Anthropic's OTHER constraint:
+ *
+ *   "Thinking may not be enabled when tool_choice forces tool use."
+ *
+ * `generateObject` ALWAYS sets `tool_choice: { type: 'tool', name: 'json' }`
+ * for Anthropic — confirmed by Anthropic docs (extended-thinking + tool-use)
+ * and tracked upstream in vercel/ai#7220 (closed, no built-in fix) and
+ * vercel/ai#9351 (open, requesting native middleware). Until the SDK ships
+ * native support OR we migrate to AI SDK v5, judge stays on Sonnet 4.6
+ * (which still accepts `temperature` and works with `generateObject`
+ * directly). Operators can still override per-project via
+ * `project_settings.judge_model`. */
+export const JUDGE_MODEL = ANTHROPIC_SONNET
 /** judge-batch cross-vendor fallback (`project_settings.judge_fallback_model` overrides). */
 export const JUDGE_FALLBACK = OPENAI_PRIMARY
 
@@ -79,9 +97,12 @@ export const SYNTHETIC_FALLBACK = OPENAI_PRIMARY
 export const MODERNIZER_MODEL = ANTHROPIC_SONNET
 export const MODERNIZER_FALLBACK = OPENAI_PRIMARY
 
-/** prompt-auto-tune — uses the same frontier model as judge so rewrites are
- *  graded and rewritten by the same ceiling. */
-export const PROMPT_TUNE_MODEL = ANTHROPIC_OPUS
+/** prompt-auto-tune — uses the same model as judge so rewrites are graded
+ *  and rewritten by the same ceiling. Pinned to Sonnet 4.6 for the same
+ *  reason as `JUDGE_MODEL` above (Opus 4.7 + `generateObject` + thinking
+ *  is incompatible in AI SDK v4 — vercel/ai#7220, vercel/ai#9351). Revisit
+ *  when the SDK ships native middleware. */
+export const PROMPT_TUNE_MODEL = ANTHROPIC_SONNET
 export const PROMPT_TUNE_FALLBACK = OPENAI_PRIMARY
 
 /** Ask Mushi / `/v1/admin/ask-mushi/messages` — scoped chat assistant that answers
@@ -113,6 +134,73 @@ export const HEALTH_PROBE_OPENAI_MODEL = OPENAI_MINI
 export function normalizeModelId(model: string | null | undefined): string {
   const key = (model ?? '').toLowerCase()
   return key.includes('/') ? key.split('/').slice(-1)[0] : key
+}
+
+/**
+ * Returns true iff the model accepts the legacy sampling knobs (`temperature`,
+ * `top_p`, `top_k`). Anthropic deprecated these on Opus 4.7 (2026-04-16): the
+ * API now hard-rejects ANY value (the parameter itself is gone) with
+ * `400 invalid_request_error "temperature is deprecated for this model"`.
+ * See: https://forum.cursor.com/t/opus-4-7-not-functioning-on-bedrock-because-of-temperature-deprecation-400/158212
+ *
+ * Sentry MUSHI-MUSHI-SERVER-9 (regressed 2026-04-23): AI SDK v4's
+ * `prepareCallSettings` hardcodes `temperature ?? 0` (see
+ * https://github.com/vercel/ai/blob/ai%404.3.16/packages/ai/core/prompt/prepare-call-settings.ts#L96)
+ * — there is no way to OMIT the field through the public `generateObject`
+ * surface. The only escape hatch the `@ai-sdk/anthropic` provider offers is
+ * thinking mode (`anthropic-messages-language-model.ts` line ~140 strips
+ * `temperature`/`topK`/`topP` whenever `providerOptions.anthropic.thinking
+ * .type === 'enabled'`).
+ *
+ * !!! BUT — and this is the second-order failure that re-fired SERVER-9 on
+ * 2026-04-24 03:00 UTC after `e218bbf` shipped: Anthropic ALSO forbids
+ * "thinking + tool_choice forces tool use", and `generateObject` ALWAYS sets
+ * `tool_choice: { type: 'tool', name: 'json' }` for Anthropic. So enabling
+ * thinking just trades one 400 for another:
+ *
+ *   "Thinking may not be enabled when tool_choice forces tool use."
+ *
+ * Confirmed by Anthropic docs (extended-thinking + tool-use) and upstream:
+ *   - https://github.com/vercel/ai/issues/7220 (closed, no built-in fix)
+ *   - https://github.com/vercel/ai/issues/9351 (open, native middleware ask)
+ *
+ * Until vercel/ai ships native middleware OR we migrate to AI SDK v5,
+ * `acceptsSamplingKnobs(model) === false` callers MUST NOT use
+ * `generateObject`. They have to switch to `generateText` + manual Zod
+ * parsing (no forced tool_choice), OR pin themselves to a model that does
+ * accept sampling knobs (Sonnet 4.6, Haiku). For now we do the latter:
+ * `JUDGE_MODEL` and `PROMPT_TUNE_MODEL` are both pinned to Sonnet 4.6.
+ *
+ * Future Anthropic generations are expected to keep the no-temperature
+ * restriction, so the matcher is family-level (Opus 4.7+, Opus 5+) rather
+ * than the single SKU. The helper stays exported so a future
+ * `generateText`-based caller can branch on it correctly.
+ */
+export function acceptsSamplingKnobs(model: string | null | undefined): boolean {
+  const key = normalizeModelId(model)
+  // Anthropic Opus 4.7+ — locked-default sampling. Any future Anthropic model
+  // family that ships with the same restriction should be added here.
+  if (/^claude-opus-(?:[4-9]-[7-9]|[4-9]-\d{2,}|[5-9]-)/i.test(key)) return false
+  return true
+}
+
+/**
+ * Builds the AI SDK v4 `experimental_providerMetadata` (or v5 `providerOptions`)
+ * payload that flips `@ai-sdk/anthropic` into thinking mode with a minimal
+ * budget. Used by callers of `generateText` to suppress the SDK's mandatory
+ * `temperature: 0` default on Opus 4.7+ models.
+ *
+ * !!! Do NOT pass this to `generateObject` — Anthropic rejects "thinking +
+ * forced tool_choice" with HTTP 400, and `generateObject` always forces
+ * tool_choice. See `acceptsSamplingKnobs` for the full failure history
+ * (MUSHI-MUSHI-SERVER-9, vercel/ai#7220, vercel/ai#9351).
+ */
+export function anthropicThinkingProviderOptions(budgetTokens = 4096) {
+  return {
+    anthropic: {
+      thinking: { type: 'enabled' as const, budgetTokens },
+    },
+  } as const
 }
 
 /** Every non-embedding model currently used anywhere in the pipeline. Use for

@@ -26,6 +26,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
+import { ConfigHelp } from '../components/ConfigHelp'
 
 interface ReporterNotification {
   id: string
@@ -114,6 +115,7 @@ export function NotificationsPage() {
       >
         <SelectField
           label="Show"
+          helpId="notifications.show_filter"
           value={filter}
           onChange={(e) => updateParam('show', e.currentTarget.value)}
           className="w-32"
@@ -127,6 +129,7 @@ export function NotificationsPage() {
           options={TYPE_OPTIONS}
           onChange={(e) => updateParam('type', e.currentTarget.value)}
         />
+        <ConfigHelp helpId="notifications.type_filter" />
         <Btn
           variant="ghost"
           size="sm"

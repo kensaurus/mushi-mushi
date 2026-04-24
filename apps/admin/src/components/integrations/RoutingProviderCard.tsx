@@ -6,6 +6,8 @@
 
 import { Card, Btn, Badge, Input, RelativeTime } from '../ui'
 import { HealthPill } from '../charts'
+import { ConfigHelp } from '../ConfigHelp'
+import { resolveValidator } from '../../lib/validators'
 import { PLATFORM_STATUS_MAP, type RoutingIntegration, type RoutingProviderDef } from './types'
 
 interface Props {
@@ -87,15 +89,19 @@ export function RoutingProviderCard({
         <div className="mt-3 space-y-2 border-t border-edge-subtle pt-3">
           {provider.fields.map((field) => (
             <div key={field.name}>
-              <label className="block text-2xs text-fg-muted mb-0.5">
-                {field.label}
-                {field.required && <span className="text-danger ml-0.5">*</span>}
+              <label className="text-2xs text-fg-muted mb-0.5 flex items-center gap-1">
+                <span>
+                  {field.label}
+                  {field.required && <span className="text-danger ml-0.5">*</span>}
+                </span>
+                {field.helpId && <ConfigHelp helpId={field.helpId} />}
               </label>
               <Input
                 type={field.type ?? 'text'}
                 placeholder={field.placeholder}
                 value={draft[field.name] ?? ''}
                 onChange={(e) => onChangeField(field.name, e.target.value)}
+                validate={resolveValidator(field.validator)}
               />
               <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
             </div>

@@ -7,6 +7,7 @@
 
 import { Btn, Input, Section } from '../ui'
 import type { MarketplacePlugin } from './types'
+import { httpsUrl, token } from '../../lib/validators'
 
 interface Props {
   target: MarketplacePlugin
@@ -43,17 +44,22 @@ export function InstallForm({
       </p>
       <Input
         label="Webhook URL"
+        helpId="marketplace.plugin_webhook_url"
         value={webhookUrl}
         placeholder="https://your-receiver.example.com/mushi/webhook"
         onChange={(e) => onWebhookUrlChange(e.target.value)}
+        validate={httpsUrl({ optional: false })}
       />
       <Input
         label="Signing secret (HMAC-SHA256, store this — shown only once)"
+        helpId="marketplace.plugin_signing_secret"
         value={webhookSecret}
         onChange={(e) => onWebhookSecretChange(e.target.value)}
+        validate={token({ minLength: 32, optional: false })}
       />
       <Input
         label="Subscribed events (comma-separated, * for all)"
+        helpId="marketplace.subscribed_events"
         value={events}
         onChange={(e) => onEventsChange(e.target.value)}
       />

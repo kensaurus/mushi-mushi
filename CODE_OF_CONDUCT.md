@@ -33,7 +33,7 @@ Examples of unacceptable behavior:
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the project team at **security@mushimushi.dev**.
+reported to the project team at **kensaurus@gmail.com**.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

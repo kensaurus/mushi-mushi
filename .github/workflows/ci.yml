@@ -70,6 +70,12 @@ jobs:
         # so dead-click regressions fail PR CI before they ship.
         run: node scripts/check-dead-buttons.mjs
 
+      - name: Check config docs are in sync
+        # Regression guard: docs/CONFIG_REFERENCE.md is auto-generated from
+        # apps/admin/src/lib/configDocs.ts and must not drift. Run
+        # `pnpm gen:config-docs` and commit the result if this fails.
+        run: pnpm check:config-docs
+
       - name: Check JSX unicode escapes
         # Regression guard for the 2026-04-23 InboxPage bug: a `\uXXXX`
         # sequence inside a JSX attribute value or JSX text child renders

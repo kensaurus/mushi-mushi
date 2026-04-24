@@ -324,6 +324,7 @@ export function StoragePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <SelectField
                 label="Provider"
+                helpId="storage.provider"
                 value={m.provider}
                 onChange={(e) => updateDraft(s.project_id, { provider: e.target.value as Provider })}
               >
@@ -335,41 +336,48 @@ export function StoragePage() {
               </SelectField>
               <Input
                 label="Bucket"
+                helpId="storage.bucket"
                 value={m.bucket}
                 onChange={(e) => updateDraft(s.project_id, { bucket: e.target.value })}
               />
               <Input
                 label="Region"
+                helpId="storage.region"
                 value={m.region ?? ''}
                 placeholder={m.provider === 'r2' ? 'auto' : 'us-east-1'}
                 onChange={(e) => updateDraft(s.project_id, { region: e.target.value || null as unknown as string })}
               />
               <Input
                 label="Endpoint (S3-compatible only)"
+                helpId="storage.endpoint"
                 value={m.endpoint ?? ''}
                 placeholder="https://s3.us-east-1.amazonaws.com"
                 onChange={(e) => updateDraft(s.project_id, { endpoint: e.target.value || null as unknown as string })}
               />
               <Input
                 label="Path prefix"
+                helpId="storage.path_prefix"
                 value={m.path_prefix}
                 placeholder="mushi-mushi/"
                 onChange={(e) => updateDraft(s.project_id, { path_prefix: e.target.value })}
               />
               <Input
                 label="Signed URL TTL (seconds)"
+                helpId="storage.signed_url_ttl_secs"
                 type="number"
                 value={String(m.signed_url_ttl_secs)}
                 onChange={(e) => updateDraft(s.project_id, { signed_url_ttl_secs: parseInt(e.target.value, 10) || 3600 })}
               />
               <Input
                 label="Access key Vault ref"
+                helpId="storage.access_key_ref"
                 value={m.access_key_vault_ref ?? ''}
                 placeholder="mushi_s3_access_key_<project>"
                 onChange={(e) => updateDraft(s.project_id, { access_key_vault_ref: e.target.value || null as unknown as string })}
               />
               <Input
                 label="Secret key Vault ref"
+                helpId="storage.secret_key_ref"
                 value={m.secret_key_vault_ref ?? ''}
                 placeholder="mushi_s3_secret_key_<project>"
                 onChange={(e) => updateDraft(s.project_id, { secret_key_vault_ref: e.target.value || null as unknown as string })}
@@ -384,6 +392,7 @@ export function StoragePage() {
               ) : null}
               <Input
                 label="KMS Key ID (optional)"
+                helpId="storage.kms_key_id"
                 value={m.kms_key_id ?? ''}
                 onChange={(e) => updateDraft(s.project_id, { kms_key_id: e.target.value || null as unknown as string })}
               />

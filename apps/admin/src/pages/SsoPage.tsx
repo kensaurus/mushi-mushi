@@ -114,19 +114,29 @@ export function SsoPage() {
       <Card className="p-3 space-y-3">
         <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Add Identity Provider</h3>
         <div className="grid grid-cols-2 gap-2">
-          <SelectField value={form.providerType} onChange={(e) => setForm({ ...form, providerType: e.currentTarget.value })}>
+          <SelectField label="Provider type" helpId="sso.provider_type" value={form.providerType} onChange={(e) => setForm({ ...form, providerType: e.currentTarget.value })}>
             <option value="saml">SAML 2.0</option>
             <option value="oidc">OpenID Connect</option>
           </SelectField>
-          <Input placeholder="Provider name (e.g. Okta)" value={form.providerName} onChange={(e) => setForm({ ...form, providerName: e.target.value })} />
+          <Input label="Provider name" placeholder="e.g. Okta" value={form.providerName} onChange={(e) => setForm({ ...form, providerName: e.target.value })} />
           <Input
-            placeholder={form.providerType === 'saml' ? 'Metadata URL (required)' : 'Metadata URL (optional)'}
+            label="Metadata URL"
+            helpId="sso.metadata_url"
+            placeholder={form.providerType === 'saml' ? 'Required' : 'Optional'}
             value={form.metadataUrl}
             onChange={(e) => setForm({ ...form, metadataUrl: e.target.value })}
           />
-          <Input placeholder="Entity ID (optional, parsed from metadata)" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} />
           <Input
-            placeholder="Email domains (comma-separated, e.g. acme.com,acme.io)"
+            label="Entity ID"
+            helpId="sso.entity_id"
+            placeholder="Optional, parsed from metadata"
+            value={form.entityId}
+            onChange={(e) => setForm({ ...form, entityId: e.target.value })}
+          />
+          <Input
+            label="Email domains"
+            helpId="sso.allowed_domains"
+            placeholder="acme.com, acme.io"
             value={form.domains}
             onChange={(e) => setForm({ ...form, domains: e.target.value })}
             className="col-span-2"

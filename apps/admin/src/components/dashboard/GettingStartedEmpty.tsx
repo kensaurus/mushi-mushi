@@ -96,7 +96,7 @@ export function GettingStartedEmpty() {
 
       <div className="mt-4 text-2xs text-fg-faint flex flex-wrap gap-x-4 gap-y-1">
         <span>
-          Active project: <span className="font-mono text-fg-secondary">{project.project_name}</span>
+          Viewing: <span className="font-mono text-fg-secondary">{project.project_name}</span>
         </span>
         <span>
           {project.report_count} {pluralize(project.report_count, 'report')} · {project.fix_count} {pluralize(project.fix_count, 'fix', 'fixes')} dispatched

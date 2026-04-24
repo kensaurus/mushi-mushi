@@ -21,6 +21,22 @@ export interface HealthRow {
   checked_at: string
 }
 
+/** Named validator picked by the card at render time. Kept as a string
+ *  union (rather than a function reference) so this types module stays
+ *  pure data — easy to serialise, easy to snapshot-test, and cheap for the
+ *  card to look up via `resolveValidator()` in `lib/validators.ts`. */
+export type FieldValidatorName =
+  | 'url'
+  | 'httpsUrl'
+  | 'email'
+  | 'sentryDsn'
+  | 'slug'
+  | 'token'
+  | 'tokenLong'
+  | 'jiraProjectKey'
+  | 'githubRepoUrl'
+  | 'pagerdutyRoutingKey'
+
 export interface PlatformFieldDef {
   name: string
   label: string
@@ -28,6 +44,13 @@ export interface PlatformFieldDef {
   type?: 'text' | 'password' | 'url'
   help: string
   required?: boolean
+  /** Optional id into `apps/admin/src/lib/configDocs.ts`. When set, the
+   *  per-field input renders the rich `<ConfigHelp>` popover next to the
+   *  label in addition to the short `help` hover-string. */
+  helpId?: string
+  /** Named validator from `lib/validators.ts`. Card resolves this to a
+   *  real validator function. Empty / undefined = no validation. */
+  validator?: FieldValidatorName
 }
 
 export interface PlatformDef {
@@ -77,11 +100,11 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Mirror Sentry user-feedback submissions into the report queue',
     ],
     fields: [
-      { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'Your Sentry organization slug — visible in the Sentry URL after sentry.io/organizations/.', required: true },
-      { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'The specific Sentry project for this codebase.' },
-      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_xxx (or vault://id)', type: 'password', help: 'User-level auth token with project:read + event:read scope. Create at sentry.io/settings/account/api/auth-tokens/.', required: true },
-      { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.' },
-      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Configure the same value in Sentry → Settings → Webhooks for inbound user-feedback mirroring.' },
+      { name: 'sentry_org_slug', label: 'Org slug', placeholder: 'my-company', help: 'Your Sentry organization slug — visible in the Sentry URL after sentry.io/organizations/.', required: true, helpId: 'integrations.sentry.org_slug', validator: 'slug' },
+      { name: 'sentry_project_slug', label: 'Project slug', placeholder: 'web-app', help: 'The specific Sentry project for this codebase.', helpId: 'integrations.sentry.project_slug', validator: 'slug' },
+      { name: 'sentry_auth_token_ref', label: 'Auth token', placeholder: 'sntrys_xxx (or vault://id)', type: 'password', help: 'User-level auth token with project:read + event:read scope. Create at sentry.io/settings/account/api/auth-tokens/.', required: true, helpId: 'integrations.sentry.auth_token', validator: 'token' },
+      { name: 'sentry_dsn', label: 'DSN (optional)', placeholder: 'https://abc@o0.ingest.sentry.io/0', help: 'DSN for the SDK to send events. Only needed if you want Mushi reports forwarded as Sentry events.', helpId: 'settings.general.sentry_dsn', validator: 'sentryDsn' },
+      { name: 'sentry_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Configure the same value in Sentry → Settings → Webhooks for inbound user-feedback mirroring.', helpId: 'settings.general.sentry_webhook_secret', validator: 'token' },
     ],
   },
   {
@@ -94,9 +117,9 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Replay any failing prompt against a different model from the Prompt Lab',
     ],
     fields: [
-      { name: 'langfuse_host', label: 'Host', placeholder: 'https://cloud.langfuse.com', type: 'url', help: 'Cloud or self-hosted Langfuse base URL (no trailing slash).', required: true },
-      { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-… (or vault://id)', type: 'password', help: 'Langfuse public key. From Project Settings → API Keys.', required: true },
-      { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-… (or vault://id)', type: 'password', help: 'Langfuse secret key. Pairs with the public key above for HTTP Basic auth.', required: true },
+      { name: 'langfuse_host', label: 'Host', placeholder: 'https://cloud.langfuse.com', type: 'url', help: 'Cloud or self-hosted Langfuse base URL (no trailing slash).', required: true, helpId: 'integrations.langfuse.host', validator: 'httpsUrl' },
+      { name: 'langfuse_public_key_ref', label: 'Public key', placeholder: 'pk-lf-… (or vault://id)', type: 'password', help: 'Langfuse public key. From Project Settings → API Keys.', required: true, helpId: 'integrations.langfuse.public_key', validator: 'token' },
+      { name: 'langfuse_secret_key_ref', label: 'Secret key', placeholder: 'sk-lf-… (or vault://id)', type: 'password', help: 'Langfuse secret key. Pairs with the public key above for HTTP Basic auth.', required: true, helpId: 'integrations.langfuse.secret_key', validator: 'token' },
     ],
   },
   {
@@ -109,10 +132,10 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Pre-emptive code-context retrieval so the fix prompt has the surrounding lines',
     ],
     fields: [
-      { name: 'github_repo_url', label: 'Repo URL', placeholder: 'https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true },
-      { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".' },
-      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_… (or vault://id)', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true },
-      { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).' },
+      { name: 'github_repo_url', label: 'Repo URL', placeholder: 'https://github.com/owner/repo', type: 'url', help: 'Full HTTPS URL to the repo Mushi should patch. SSH URLs are normalized server-side.', required: true, helpId: 'integrations.github.repo_url', validator: 'githubRepoUrl' },
+      { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
+      { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_… (or vault://id)', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
+      { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
     ],
   },
 ]
@@ -128,10 +151,10 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       'Two-way link: closing the Jira issue resolves the Mushi report',
     ],
     fields: [
-      { name: 'baseUrl', label: 'Base URL', placeholder: 'https://acme.atlassian.net', type: 'url', help: 'Your Atlassian Cloud or Server base URL.', required: true },
-      { name: 'email', label: 'User email', placeholder: 'bot@acme.com', help: 'Email of the Jira user owning the API token.', required: true },
-      { name: 'apiToken', label: 'API token', placeholder: 'ATATT3xFf...', type: 'password', help: 'Create at id.atlassian.com → Security → API tokens.', required: true },
-      { name: 'projectKey', label: 'Project key', placeholder: 'BUG', help: 'Short uppercase code prefixing every issue (e.g. BUG-123).', required: true },
+      { name: 'baseUrl', label: 'Base URL', placeholder: 'https://acme.atlassian.net', type: 'url', help: 'Your Atlassian Cloud or Server base URL.', required: true, helpId: 'integrations.routing.jira.base_url', validator: 'httpsUrl' },
+      { name: 'email', label: 'User email', placeholder: 'bot@acme.com', help: 'Email of the Jira user owning the API token.', required: true, helpId: 'integrations.routing.jira.email', validator: 'email' },
+      { name: 'apiToken', label: 'API token', placeholder: 'ATATT3xFf...', type: 'password', help: 'Create at id.atlassian.com → Security → API tokens.', required: true, helpId: 'integrations.routing.jira.api_token', validator: 'tokenLong' },
+      { name: 'projectKey', label: 'Project key', placeholder: 'BUG', help: 'Short uppercase code prefixing every issue (e.g. BUG-123).', required: true, helpId: 'integrations.routing.jira.project_key', validator: 'jiraProjectKey' },
     ],
   },
   {
@@ -144,8 +167,8 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       'Link the Linear issue back into the report for round-trip context',
     ],
     fields: [
-      { name: 'apiKey', label: 'API key', placeholder: 'lin_api_...', type: 'password', help: 'Personal API key from Linear → Settings → API.', required: true },
-      { name: 'teamId', label: 'Team ID', placeholder: 'TEAM-uuid', help: 'UUID of the Linear team that should receive issues.', required: true },
+      { name: 'apiKey', label: 'API key', placeholder: 'lin_api_...', type: 'password', help: 'Personal API key from Linear → Settings → API.', required: true, helpId: 'integrations.routing.linear.api_key', validator: 'token' },
+      { name: 'teamId', label: 'Team ID', placeholder: 'TEAM-uuid', help: 'UUID of the Linear team that should receive issues.', required: true, helpId: 'integrations.routing.linear.team_id', validator: 'token' },
     ],
   },
   {
@@ -158,9 +181,9 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       'Closes the issue automatically when the linked report is resolved',
     ],
     fields: [
-      { name: 'token', label: 'Personal access token', placeholder: 'ghp_...', type: 'password', help: 'Fine-grained PAT with Issues:write on the target repo.', required: true },
-      { name: 'owner', label: 'Owner', placeholder: 'acme', help: 'Org or user that owns the repo.', required: true },
-      { name: 'repo', label: 'Repo', placeholder: 'public-tracker', help: 'Repository name (no owner prefix).', required: true },
+      { name: 'token', label: 'Personal access token', placeholder: 'ghp_...', type: 'password', help: 'Fine-grained PAT with Issues:write on the target repo.', required: true, helpId: 'integrations.routing.github_issues.token', validator: 'token' },
+      { name: 'owner', label: 'Owner', placeholder: 'acme', help: 'Org or user that owns the repo.', required: true, helpId: 'integrations.routing.github_issues.owner', validator: 'slug' },
+      { name: 'repo', label: 'Repo', placeholder: 'public-tracker', help: 'Repository name (no owner prefix).', required: true, helpId: 'integrations.routing.github_issues.repo', validator: 'slug' },
     ],
   },
   {
@@ -173,7 +196,7 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
       'Auto-resolve the incident when the linked report is closed',
     ],
     fields: [
-      { name: 'routingKey', label: 'Routing key', placeholder: '32-char integration key', type: 'password', help: 'Events API v2 integration key from PagerDuty service.', required: true },
+      { name: 'routingKey', label: 'Routing key', placeholder: '32-char integration key', type: 'password', help: 'Events API v2 integration key from PagerDuty service.', required: true, helpId: 'integrations.routing.pagerduty.routing_key', validator: 'pagerdutyRoutingKey' },
     ],
   },
 ]

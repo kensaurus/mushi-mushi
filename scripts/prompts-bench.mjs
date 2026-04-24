@@ -15,7 +15,9 @@
  * Prereq env:
  *   SUPABASE_URL              — https://xxx.supabase.co
  *   SUPABASE_SERVICE_ROLE_KEY — service role JWT
- *   ANTHROPIC_API_KEY         — scoring model (judge uses Opus 4.7 by default)
+ *   ANTHROPIC_API_KEY         — scoring model (judge uses Sonnet 4.6 by default;
+ *                               Opus 4.7 was briefly tried 2026-04-22 then reverted
+ *                               2026-04-24 — see SERVER-9 / `_shared/models.ts`)
  *
  * This is a DEV tool. It writes nothing to the database; the A/B scoring
  * that actually promotes prompts lives in judge-batch and runs nightly.

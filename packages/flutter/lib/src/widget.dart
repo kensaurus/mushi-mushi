@@ -47,7 +47,8 @@ class _MushiReportSheetState extends State<MushiReportSheet> {
   static const _categories = ['bug', 'slow', 'visual', 'confusing'];
   String _category = _categories.first;
 
-  bool get _valid => _controller.text.length >= widget.config.minDescriptionLength;
+  bool get _valid =>
+      _controller.text.length >= widget.config.minDescriptionLength;
 
   @override
   void dispose() {

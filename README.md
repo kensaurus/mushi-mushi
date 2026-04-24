@@ -343,6 +343,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 **This month's highlights** 🐛
 
+- **Living config help** — every configuration knob in the admin (80+ across 18 sections) now ships with a click-to-open popover that explains in plain English what the setting does, the backend table/column it writes to, and which edge function reads it. The same content auto-mirrors to [`docs/CONFIG_REFERENCE.md`](./docs/CONFIG_REFERENCE.md), regenerated from a single typed dictionary on every commit. A pre-commit guard fails on drift, and a backend-allowlist test fails the build if a documented column ever leaves the API's whitelist.
 - **Decide / Act / Verify page hero** — every Advanced PDCA page now opens with a 3-tile hero strip (Decide = one headline metric, Act = the current next-best-action with a single CTA, Verify = deeplink to the evidence). Charts moved below the fold. Beginner mode collapses it to a one-line summary. Source: `apps/admin/src/components/PageHero.tsx`.
 - **Live `/repo` page** — one node per branch the auto-fix agent has opened, grouped by CI status (open / passing / failing / merged / stuck), with a live event stream on the right via Supabase Realtime on the new `fix_events` table. Each branch shows its own mini PDCA graph (Plan → Dispatch → Branch → Commit → PR → CI → Merge) so you can see the loop progress without leaving the page.
 - **Dynamic tab titles + favicon badges** — `useDocumentTitle` keeps `document.title` in sync with the active page via the shared `pageContext` registry (`Reports · 60 reports · 2 critical — Mushi Mushi`) and `useFaviconBadge` paints a red dot on the favicon whenever `criticalCount > 0`, so operators see urgency from any other browser tab. Both are data-layer driven — zero per-page wiring.
@@ -526,6 +527,23 @@ Or via Supabase CLI directly — see [SELF_HOSTED.md](./SELF_HOSTED.md). A Helm 
 
 ---
 
+## Configuration reference (living)
+
+Every knob in the admin console has a small `i` icon next to it. Click it for a plain-English explanation of what the setting does, the backend table/column it writes to, and which edge function reads it — no spelunking required for non-technical operators.
+
+The same content is mirrored to [`docs/CONFIG_REFERENCE.md`](./docs/CONFIG_REFERENCE.md) so you can search, link, and review configuration choices outside the app. Both surfaces read from the same source of truth ([`apps/admin/src/lib/configDocs.ts`](./apps/admin/src/lib/configDocs.ts)) — the markdown is regenerated on every commit and a pre-commit guard fails if the two drift.
+
+To add or update a knob:
+
+```bash
+# 1. Edit apps/admin/src/lib/configDocs.ts
+# 2. Regenerate the markdown
+pnpm gen:config-docs
+# 3. Commit both files together (the pre-commit guard will block you otherwise)
+```
+
+---
+
 ## Monitoring & privacy (this repo's deployment)
 
 The hosted instance reports to two Sentry projects under the [`sakuramoto`](https://sakuramoto.sentry.io) org:
@@ -558,7 +576,7 @@ How each piece works:
 
 - **Operator push** (`packages/server/supabase/functions/_shared/operator-notify.ts`): a single helper that knows how to render Slack Block Kit *and* Discord rich embeds. Severity drives colour; `urgent` pings `@here` on Discord. Failures are captured to Sentry but never block the webhook from 200-ing back to Stripe.
 - **In-app support form** (`/v1/support/contact`): JWT-gated, rate-limited to 5 tickets/hour/user, captures plan tier at submit time so paid tickets jump the queue. Customer sees status updates inline on `/billing`. PII (passwords, API keys) explicitly called out as off-limits in the form copy.
-- **Centralised support address** (`SUPPORT_EMAIL` env var, defaults to `support@mushimushi.dev`): used in the Checkout `custom_text`, the BillingPage "Need help?" mailto, and the rate-limit error message.
+- **Centralised support address** (`SUPPORT_EMAIL` env var, defaults to `kensaurus@gmail.com` — the maintainer's inbox; there is no `*@mushimushi.dev` mailbox, that domain is branding/URLs only): used in the Checkout `custom_text`, the BillingPage "Need help?" mailto, and the rate-limit error message. **Self-hosters must override this** so their tenants don't email the upstream maintainer.
 
 To enable the operator push for a self-hosted instance:
 
@@ -569,7 +587,8 @@ To enable the operator push for a self-hosted instance:
 supabase secrets set OPERATOR_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 # or
 supabase secrets set OPERATOR_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-# 3. Optionally override the support address (defaults to support@mushimushi.dev):
+# 3. Override the support address (defaults to kensaurus@gmail.com — the
+#    upstream maintainer's inbox; self-hosters MUST set this):
 supabase secrets set SUPPORT_EMAIL=ops@yourdomain.com
 # 4. Redeploy the api + stripe-webhooks functions:
 supabase functions deploy api stripe-webhooks

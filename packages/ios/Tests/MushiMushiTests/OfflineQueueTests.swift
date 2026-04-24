@@ -30,11 +30,13 @@ final class OfflineQueueTests: XCTestCase {
     }
 
     func testTrimsOldestWhenOverBudget() {
-        // Cap at ~250 bytes; each report serialized is roughly ~80 bytes.
+        // Cap at 250 B. JSONEncoder lines match Android/Gson (~44 B each with newline)
+        // ⇒ five newest rows survive after trimming the five oldest.
         let q = OfflineQueue(maxBytes: 250, directory: tmpDir)
         for i in 0..<10 {
             q.enqueue(["description": "report-\(i)", "category": "bug"])
         }
-        XCTAssertLessThanOrEqual(q.count, 4)
+        XCTAssertEqual(q.count, 5)
+        XCTAssertEqual(q.peek(limit: 1).first?["description"] as? String, "report-5")
     }
 }

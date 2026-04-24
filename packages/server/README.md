@@ -19,10 +19,14 @@ supabase/functions/
   fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
   _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
                              telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit,
-                             models, ...). `_shared/models.ts` is the single source of truth for model IDs
-                             and stage → model defaults (Haiku 4.5 fast-filter, Sonnet 4.6 classify/judge/
-                             assist, Opus 4.7 promoter). Admin UI dropdowns and
-                             `project_settings.*_model` defaults read from here.
+                             models, fix-schema, ...). `_shared/models.ts` is the single source of truth for
+                             model IDs and stage → model defaults (Haiku 4.5 fast-filter, Sonnet 4.6
+                             classify/judge/promoter). Opus 4.7 was briefly assigned to judge + promoter on
+                             2026-04-22 then reverted on 2026-04-24 — Opus 4.7 dropped sampling knobs and
+                             AI SDK v4's `generateObject` forces `tool_choice`, which Anthropic forbids when
+                             thinking-mode is on; see SERVER-9 inline comments and
+                             `_shared/models.ts#acceptsSamplingKnobs` for the full migration note. Admin UI
+                             dropdowns and `project_settings.*_model` defaults read from here.
 
 supabase/templates/          Branded HTML email templates (confirmation, recovery)
 supabase/migrations/         PostgreSQL schema + RLS policies (latest: audit-remediation —

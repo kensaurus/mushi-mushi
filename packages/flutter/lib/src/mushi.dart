@@ -66,7 +66,9 @@ class Mushi {
     if (metadata != null) payload['metadata'] = metadata;
 
     if (cfg.captureScreenshot && screenshotBoundaryKey != null) {
-      final shot = await ScreenshotCapture.captureBoundary(screenshotBoundaryKey!);
+      final shot = await ScreenshotCapture.captureBoundary(
+        screenshotBoundaryKey!,
+      );
       if (shot != null) payload['screenshot'] = shot;
     }
 

@@ -231,7 +231,7 @@ export function PlanComparisonTable({ plans, currentPlanId, busy = false, onSele
               )}
               {p.id === 'enterprise' && !isCurrent && (
                 <a
-                  href="mailto:hello@mushimushi.dev?subject=Enterprise%20inquiry"
+                  href="mailto:kensaurus@gmail.com?subject=Enterprise%20inquiry"
                   className="mt-2 block text-2xs text-brand hover:text-brand-hover"
                 >
                   Email sales →

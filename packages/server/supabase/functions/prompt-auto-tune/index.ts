@@ -193,10 +193,20 @@ Judge's correction: ${JSON.stringify(f.suggestedCorrection ?? {}).slice(0, 200)}
     .join('\n\n')
 
   const span = trace.span('generate-candidate')
+  // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23, then 2026-04-24 03:00 UTC):
+  // Opus 4.7 dropped sampling knobs. AI SDK v4 hardcodes `temperature ?? 0`
+  // — flipping Anthropic into thinking mode strips it BUT also trips
+  // Anthropic's "thinking + tool_choice forces tool use" 400, which
+  // `generateObject` always forces. Until vercel/ai ships native
+  // middleware (vercel/ai#7220 / #9351), PROMPT_TUNE_MODEL stays on
+  // Sonnet 4.6 — accepts `temperature: 0` and works with `generateObject`
+  // directly. See `_shared/models.ts` `acceptsSamplingKnobs` for the full
+  // migration note.
   try {
     const { object, usage } = await generateObject({
       model: anthropic(model),
       schema: candidateSchema,
+      temperature: 0,
       system: `You are a senior prompt engineer for an automated bug-classification pipeline. You will be shown the current prompt for ${stage} and a sample of recent classifications the LLM judge disagreed with. Propose a revised prompt that addresses the dominant failure modes WITHOUT changing template variables (anything inside {{ ... }}) or breaking the existing output schema.
 
 Hard constraints:

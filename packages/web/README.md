@@ -16,9 +16,32 @@ Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM 
 - IndexedDB offline queue with auto-sync
 - On-device pre-filter (blocks spam before server submission)
 - Client-side rate limiting (token bucket self-throttle)
-- Light/dark theme with auto-detection
+- Light/dark theme with auto-detection (`prefers-color-scheme`)
 - **Proactive triggers** — rage click, long task, API cascade failure detection
 - **Report fatigue prevention** — session limits, cooldowns, permanent suppression
+- Keyboard-first: `Esc` to close, `⌘/Ctrl + Enter` to submit, focus-trapped panel
+- Honours `prefers-reduced-motion` (animations collapse to instant)
+
+## Design language — "Mushi Mushi Editorial"
+
+The widget is intentionally not a generic SaaS chatbot. The visual system is
+defined in [`src/styles.ts`](./src/styles.ts) and uses:
+
+- **Paper + sumi ink** — warm washi cream surface (`#F8F4ED`), deep ink type
+  (`#0E0D0B`), and a subtle paper grain. No flat white modal.
+- **Vermillion 朱** (`#E03C2C`) — single signature accent, used as a hanko
+  stamp colour for the active state, focus underline, submit button, and the
+  success-step 朱印 ring.
+- **System serif display** — Iowan Old Style → Palatino → Georgia stack for
+  headings. Pure system fonts: zero web-font fetch, zero FOUT.
+- **Mono metadata** — `ui-monospace` for the `01 / 03` step ledger and
+  receipt timestamp, evoking a printer's contents page.
+- **Rule lines, not boxes** — categories render as an editorial contents
+  list with 1px hairline separators.
+
+All design tokens are named by **material** (`paper`, `ink`, `rule`,
+`vermillion`) rather than role (`primary`, `secondary`) so the palette is
+hard to dilute via a generic rename later.
 
 ## Contents
 
@@ -46,7 +69,7 @@ Each trigger respects its config flag — set `rageClick: false` to disable rage
 
 ## Bundle Size
 
-~6 KB brotli, enforced at **15 KB gzipped** via `size-limit` in CI. Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
+~7 KB brotli, enforced at **22 KB gzipped** via `size-limit` in CI (budget raised for the 2026 editorial widget refresh — still a single-digit-kilobyte footprint). Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
 
 ## Quick Start
 
