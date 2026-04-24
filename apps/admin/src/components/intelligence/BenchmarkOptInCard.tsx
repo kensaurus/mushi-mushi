@@ -34,6 +34,7 @@ export function BenchmarkOptInCard({ benchmark, onToggle }: Props) {
         <Toggle
           checked={benchmark.optIn}
           onChange={onToggle}
+          helpId="intelligence.benchmarking_optin"
           label={benchmark.optIn ? 'Sharing on' : 'Sharing off'}
         />
       </div>

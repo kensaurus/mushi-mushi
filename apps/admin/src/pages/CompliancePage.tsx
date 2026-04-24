@@ -3,6 +3,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
+import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
 import { useToast } from '../lib/toast'
@@ -344,7 +345,10 @@ export function CompliancePage() {
 
           <Card className="p-5">
             <div className="flex items-baseline justify-between mb-2">
-              <div className="text-xs font-medium uppercase tracking-wider">Data residency</div>
+              <div className="text-xs font-medium uppercase tracking-wider inline-flex items-center gap-1">
+                Data residency
+                <ConfigHelp helpId="compliance.residency.region" />
+              </div>
               <span className="text-2xs opacity-70">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
             </div>
             <p className="text-2xs text-fg-muted mb-3 max-w-2xl leading-relaxed">
@@ -394,34 +398,41 @@ export function CompliancePage() {
               <div className="space-y-2">
                 {policies.map((p) => (
                   <div key={p.project_id} className="rounded border border-edge-subtle p-2">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-2 gap-2">
                       <code className="text-2xs opacity-70 font-mono">{p.project_id}</code>
-                      <Btn
-                        size="sm"
-                        variant={p.legal_hold ? 'danger' : 'ghost'}
-                        onClick={() => updatePolicy(p.project_id, { legal_hold: !p.legal_hold })}
-                      >
-                        {p.legal_hold ? 'Lift legal hold' : 'Place on legal hold'}
-                      </Btn>
+                      <div className="inline-flex items-center gap-1">
+                        <Btn
+                          size="sm"
+                          variant={p.legal_hold ? 'danger' : 'ghost'}
+                          onClick={() => updatePolicy(p.project_id, { legal_hold: !p.legal_hold })}
+                        >
+                          {p.legal_hold ? 'Lift legal hold' : 'Place on legal hold'}
+                        </Btn>
+                        <ConfigHelp helpId="compliance.legal_hold" />
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                       <RetentionInput
                         label="Reports"
+                        helpId="compliance.retention.reports_days"
                         value={p.reports_retention_days}
                         onChange={(v) => updatePolicy(p.project_id, { reports_retention_days: v })}
                       />
                       <RetentionInput
                         label="Audit"
+                        helpId="compliance.retention.audit_days"
                         value={p.audit_retention_days}
                         onChange={(v) => updatePolicy(p.project_id, { audit_retention_days: v })}
                       />
                       <RetentionInput
                         label="LLM traces"
+                        helpId="compliance.retention.events_days"
                         value={p.llm_traces_retention_days}
                         onChange={(v) => updatePolicy(p.project_id, { llm_traces_retention_days: v })}
                       />
                       <RetentionInput
                         label="BYOK audit"
+                        helpId="compliance.retention.attachments_days"
                         value={p.byok_audit_retention_days}
                         onChange={(v) => updatePolicy(p.project_id, { byok_audit_retention_days: v })}
                       />
@@ -454,6 +465,7 @@ export function CompliancePage() {
               </SelectField>
               <Input
                 label="Subject email"
+                helpId="compliance.dsar.subject_email"
                 placeholder="user@example.com"
                 value={dsarForm.subjectEmail}
                 onChange={(e) => setDsarForm((f) => ({ ...f, subjectEmail: e.target.value }))}
@@ -521,7 +533,7 @@ export function CompliancePage() {
   )
 }
 
-function RetentionInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+function RetentionInput({ label, value, onChange, helpId }: { label: string; value: number; onChange: (v: number) => void; helpId?: string }) {
   const [draft, setDraft] = useState(String(value))
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -535,7 +547,10 @@ function RetentionInput({ label, value, onChange }: { label: string; value: numb
 
   return (
     <label className="flex flex-col gap-1 text-3xs">
-      <span className="opacity-60 uppercase tracking-wider">{label} (days)</span>
+      <span className="opacity-60 uppercase tracking-wider inline-flex items-center gap-1">
+        <span>{label} (days)</span>
+        {helpId && <ConfigHelp helpId={helpId} />}
+      </span>
       <input
         ref={inputRef}
         type="number"

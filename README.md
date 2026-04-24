@@ -343,6 +343,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 **This month's highlights** 🐛
 
+- **Living config help** — every configuration knob in the admin (80+ across 18 sections) now ships with a click-to-open popover that explains in plain English what the setting does, the backend table/column it writes to, and which edge function reads it. The same content auto-mirrors to [`docs/CONFIG_REFERENCE.md`](./docs/CONFIG_REFERENCE.md), regenerated from a single typed dictionary on every commit. A pre-commit guard fails on drift, and a backend-allowlist test fails the build if a documented column ever leaves the API's whitelist.
 - **Decide / Act / Verify page hero** — every Advanced PDCA page now opens with a 3-tile hero strip (Decide = one headline metric, Act = the current next-best-action with a single CTA, Verify = deeplink to the evidence). Charts moved below the fold. Beginner mode collapses it to a one-line summary. Source: `apps/admin/src/components/PageHero.tsx`.
 - **Live `/repo` page** — one node per branch the auto-fix agent has opened, grouped by CI status (open / passing / failing / merged / stuck), with a live event stream on the right via Supabase Realtime on the new `fix_events` table. Each branch shows its own mini PDCA graph (Plan → Dispatch → Branch → Commit → PR → CI → Merge) so you can see the loop progress without leaving the page.
 - **Dynamic tab titles + favicon badges** — `useDocumentTitle` keeps `document.title` in sync with the active page via the shared `pageContext` registry (`Reports · 60 reports · 2 critical — Mushi Mushi`) and `useFaviconBadge` paints a red dot on the favicon whenever `criticalCount > 0`, so operators see urgency from any other browser tab. Both are data-layer driven — zero per-page wiring.
@@ -523,6 +524,23 @@ docker compose up -d
 Or via Supabase CLI directly — see [SELF_HOSTED.md](./SELF_HOSTED.md). A Helm chart lives at `deploy/helm/` (incomplete — missing migrations ConfigMap).
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware, which accepts **either** `MUSHI_INTERNAL_CALLER_SECRET` (used by `pg_cron` → `pg_net`, mirrored into `public.mushi_runtime_config.service_role_key`) or the auto-injected `SUPABASE_SERVICE_ROLE_KEY` (used for function-to-function calls). Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet. See [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
+
+---
+
+## Configuration reference (living)
+
+Every knob in the admin console has a small `i` icon next to it. Click it for a plain-English explanation of what the setting does, the backend table/column it writes to, and which edge function reads it — no spelunking required for non-technical operators.
+
+The same content is mirrored to [`docs/CONFIG_REFERENCE.md`](./docs/CONFIG_REFERENCE.md) so you can search, link, and review configuration choices outside the app. Both surfaces read from the same source of truth ([`apps/admin/src/lib/configDocs.ts`](./apps/admin/src/lib/configDocs.ts)) — the markdown is regenerated on every commit and a pre-commit guard fails if the two drift.
+
+To add or update a knob:
+
+```bash
+# 1. Edit apps/admin/src/lib/configDocs.ts
+# 2. Regenerate the markdown
+pnpm gen:config-docs
+# 3. Commit both files together (the pre-commit guard will block you otherwise)
+```
 
 ---
 

@@ -26,6 +26,7 @@ import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { restartFirstRunTour } from '../components/FirstRunTour'
+import { ConfigHelp } from '../components/ConfigHelp'
 
 interface ApiKey {
   key: string
@@ -226,6 +227,8 @@ export function OnboardingPage() {
           <div className="flex gap-2">
             <div className="flex-1">
               <Input
+                label="Project name"
+                helpId="onboarding.project_name"
                 placeholder="e.g. My SaaS App"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
@@ -252,9 +255,12 @@ export function OnboardingPage() {
           </div>
           {!apiKey ? (
             <>
-              <Btn onClick={generateKey} loading={generatingKey} disabled={generatingKey}>
-                Generate API Key
-              </Btn>
+              <div className="inline-flex items-center gap-1">
+                <Btn onClick={generateKey} loading={generatingKey} disabled={generatingKey}>
+                  Generate API Key
+                </Btn>
+                <ConfigHelp helpId="onboarding.first_key_label" />
+              </div>
               {error && <p className="text-xs text-danger">{error}</p>}
             </>
           ) : (

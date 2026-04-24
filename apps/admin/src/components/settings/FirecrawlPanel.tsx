@@ -10,6 +10,7 @@ import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { Section, Input, Btn, ErrorAlert, ResultChip } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
+import { ConfigHelp } from '../ConfigHelp'
 
 interface FirecrawlConfig {
   configured: boolean
@@ -154,6 +155,7 @@ export function FirecrawlPanel() {
 
           <Input
             label="Firecrawl API key"
+            helpId="settings.firecrawl.api_key"
             type="password"
             value={keyDraft}
             onChange={(e) => setKeyDraft(e.target.value)}
@@ -162,8 +164,9 @@ export function FirecrawlPanel() {
           />
 
           <label className="block">
-            <span className="text-2xs text-fg-muted mb-1 block">
-              Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span>
+            <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
+              <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
+              <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
             </span>
             <textarea
               className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
@@ -174,8 +177,9 @@ export function FirecrawlPanel() {
           </label>
 
           <label className="block">
-            <span className="text-2xs text-fg-muted mb-1 block">
-              Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span>
+            <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
+              <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
+              <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
             </span>
             <input
               type="range" min="1" max="20" step="1"

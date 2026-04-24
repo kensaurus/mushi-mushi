@@ -25,6 +25,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile, type KpiDelta } from '../components/charts'
 import { SetupNudge } from '../components/SetupNudge'
+import { ConfigHelp } from '../components/ConfigHelp'
 import { PromptDialog } from '../components/ConfirmDialog'
 import { useMergedErrors } from '../lib/useMergedErrors'
 import { pluralizeWithCount } from '../lib/format'
@@ -241,6 +242,7 @@ export function AntiGamingPage() {
           options={['flagged', 'all']}
           onChange={(e) => setFilter(e.currentTarget.value as 'flagged' | 'all')}
         />
+        <ConfigHelp helpId="anti-gaming.flagged_filter" />
         <Btn variant="ghost" size="sm" onClick={reloadAll}>Refresh</Btn>
       </PageHeader>
 
@@ -470,6 +472,7 @@ export function AntiGamingPage() {
                 className="h-3 w-3 accent-brand"
               />
               Group identical
+              <ConfigHelp helpId="anti-gaming.aggregate_identical" />
             </label>
             <FilterSelect
               label="Type"

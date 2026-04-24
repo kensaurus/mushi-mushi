@@ -43,6 +43,8 @@
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs",
+    "gen:config-docs": "node scripts/generate-config-reference.mjs",
+    "check:config-docs": "node scripts/check-config-docs.mjs",
     "check:community-files": "node scripts/sync-community-files.mjs --check",
     "sync:community-files": "node scripts/sync-community-files.mjs",
     "release": "pnpm sync:community-files && turbo run build && pnpm check:publish && changeset publish",
@@ -70,6 +72,7 @@
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "jiti": "^2.6.1",
     "prettier": "^3.5.3",
     "turbo": "^2.5.4"
   },

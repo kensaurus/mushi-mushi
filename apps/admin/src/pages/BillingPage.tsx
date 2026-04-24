@@ -37,6 +37,7 @@ import {
   Textarea,
   SelectField,
 } from '../components/ui'
+import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PlanComparisonTable } from '../components/billing/PlanComparisonTable'
 import { PlanBenefitsList } from '../components/billing/PlanBenefitsList'
@@ -366,6 +367,7 @@ function ProjectBillingCard({
               Manage
             </Btn>
           )}
+          <ConfigHelp helpId="billing.plan" />
         </div>
       </header>
 
@@ -826,6 +828,7 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
         </SelectField>
         <SelectField
           label="Category"
+          helpId="billing.support_category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         >
@@ -837,6 +840,7 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
       </div>
       <Input
         label="Subject"
+        helpId="billing.support_subject"
         value={subject}
         onChange={(e) => setSubject(e.target.value)}
         placeholder="One-line summary"
@@ -846,6 +850,7 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
       />
       <Textarea
         label="What's going on?"
+        helpId="billing.support_body"
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={5}

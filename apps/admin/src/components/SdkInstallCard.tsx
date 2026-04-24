@@ -31,6 +31,7 @@
 
 import { useMemo, useState } from 'react'
 import { Card } from './ui'
+import { ConfigHelp } from './ConfigHelp'
 import {
   DEFAULT_SDK_CONFIG,
   FRAMEWORKS,
@@ -143,7 +144,8 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
         <div className="space-y-3">
-          <div role="tablist" aria-label="Framework" className="flex gap-1 border-b border-edge-subtle pb-2">
+          <div role="tablist" aria-label="Framework" className="flex items-center gap-1 border-b border-edge-subtle pb-2">
+            <ConfigHelp helpId="sdk-install.framework" />
             {FRAMEWORKS.map((fw) => (
               <button
                 key={fw}
@@ -315,7 +317,18 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
         // Pure visual mock — clicking does nothing on purpose.
         onClick={(e) => e.preventDefault()}
       >
-        <span aria-hidden="true">{config.triggerText || '\u{1F41B}'}</span>
+        {/* Trim BEFORE falling back, not after. Bare `||` would treat `"   "`
+            as truthy and render three invisible spaces — a blank trigger button
+            visually identical to the regression we just patched in widget.ts.
+            The snippet generator (sdkSnippets.ts widgetLines) already trims
+            before deciding whether to emit `triggerText`; this keeps the
+            preview's "is this empty?" semantics IDENTICAL to the snippet's.
+
+            Render the *original* (untrimmed) string when non-empty after trim
+            — the snippet emits `JSON.stringify(cfg.triggerText)` which
+            preserves leading/trailing whitespace verbatim, so a deliberate
+            ` Report ` should look the same in the preview. */}
+        <span aria-hidden="true">{config.triggerText.trim() ? config.triggerText : '\u{1F41B}'}</span>
         {/* Pulsing 朱 indicator dot */}
         <span
           aria-hidden="true"
@@ -361,7 +374,10 @@ function ConfiguratorPanel({
     <div className="space-y-3 text-2xs">
       {/* Position 4-corner picker */}
       <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">Position</legend>
+        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+          Position
+          <ConfigHelp helpId="sdk-install.position" />
+        </legend>
         <div
           className="grid grid-cols-2 gap-1 w-32 p-1 bg-surface-raised border border-edge-subtle rounded-sm"
           role="radiogroup"
@@ -389,7 +405,10 @@ function ConfiguratorPanel({
       {/* Theme + trigger text on one row */}
       <div className="grid grid-cols-2 gap-3">
         <fieldset>
-          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">Theme</legend>
+          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+            Theme
+            <ConfigHelp helpId="sdk-install.theme" />
+          </legend>
           <div className="flex gap-1" role="radiogroup" aria-label="Widget theme">
             {THEMES.map((t) => (
               <button
@@ -411,7 +430,10 @@ function ConfiguratorPanel({
         </fieldset>
 
         <label className="block">
-          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Trigger</span>
+          <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium inline-flex items-center gap-1">
+            Trigger
+            <ConfigHelp helpId="sdk-install.trigger_text" />
+          </span>
           <input
             type="text"
             value={config.triggerText}
@@ -430,27 +452,34 @@ function ConfiguratorPanel({
         <div className="grid grid-cols-2 gap-1.5">
           <CaptureToggle
             label="Console logs"
+            helpId="sdk-install.capture_console"
             checked={config.capture.console}
             onChange={(v) => updateCapture('console', v)}
           />
           <CaptureToggle
             label="Network calls"
+            helpId="sdk-install.capture_network"
             checked={config.capture.network}
             onChange={(v) => updateCapture('network', v)}
           />
           <CaptureToggle
             label="Performance"
+            helpId="sdk-install.capture_performance"
             checked={config.capture.performance}
             onChange={(v) => updateCapture('performance', v)}
           />
           <CaptureToggle
             label="Element picker"
+            helpId="sdk-install.capture_element_picker"
             checked={config.capture.elementSelector}
             onChange={(v) => updateCapture('elementSelector', v)}
           />
         </div>
         <label className="block mt-2">
-          <span className="text-fg-muted">Screenshot</span>
+          <span className="text-fg-muted inline-flex items-center gap-1">
+            Screenshot
+            <ConfigHelp helpId="sdk-install.screenshot_mode" />
+          </span>
           <select
             value={config.capture.screenshot}
             onChange={(e) => updateCapture('screenshot', e.target.value as ScreenshotMode)}
@@ -470,10 +499,13 @@ function CaptureToggle({
   label,
   checked,
   onChange,
+  helpId,
 }: {
   label: string
   checked: boolean
   onChange: (v: boolean) => void
+  /** Optional id into `apps/admin/src/lib/configDocs.ts`. */
+  helpId?: string
 }) {
   return (
     <label className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -483,7 +515,10 @@ function CaptureToggle({
         onChange={(e) => onChange(e.target.checked)}
         className="h-3 w-3 accent-brand"
       />
-      <span className="text-fg-secondary">{label}</span>
+      <span className="text-fg-secondary inline-flex items-center gap-1">
+        {label}
+        {helpId && <ConfigHelp helpId={helpId} />}
+      </span>
     </label>
   )
 }

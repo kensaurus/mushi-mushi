@@ -34,6 +34,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SdkInstallCard } from '../components/SdkInstallCard'
+import { ConfigHelp } from '../components/ConfigHelp'
 import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
@@ -374,7 +375,8 @@ export function McpPage() {
           </p>
         </div>
 
-        <div className="flex gap-1 border-b border-edge-subtle pb-2">
+        <div className="flex items-center gap-1 border-b border-edge-subtle pb-2">
+          <ConfigHelp helpId="mcp.snippet_mode" />
           {(['cursor', 'env'] as const).map((m) => (
             <button
               key={m}

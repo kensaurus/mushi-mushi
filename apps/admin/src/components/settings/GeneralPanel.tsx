@@ -11,6 +11,8 @@ import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
 import { Section, Input, SelectField, Btn, ErrorAlert, Checkbox } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
+import { ConfigHelp } from '../ConfigHelp'
+import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -59,10 +61,12 @@ export function GeneralPanel() {
         <Section title="Notifications" className="space-y-3">
           <Input
             label="Slack Webhook URL"
+            helpId="settings.general.slack_webhook_url"
             type="url"
             value={settings.slack_webhook_url ?? ''}
             onChange={(e) => update({ slack_webhook_url: e.target.value })}
             placeholder="https://hooks.slack.com/services/..."
+            validate={slackWebhookUrl()}
           />
         </Section>
       </div>
@@ -70,18 +74,24 @@ export function GeneralPanel() {
       <Section title="Sentry Integration" className="space-y-3">
         <Input
           label="Sentry DSN"
+          helpId="settings.general.sentry_dsn"
           type="text"
           value={settings.sentry_dsn ?? ''}
           onChange={(e) => update({ sentry_dsn: e.target.value })}
+          placeholder="https://abc@o0.ingest.sentry.io/4511023875"
+          validate={sentryDsn()}
         />
         <Input
           label="Webhook Secret"
+          helpId="settings.general.sentry_webhook_secret"
           type="password"
           value={settings.sentry_webhook_secret ?? ''}
           onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
+          validate={token({ minLength: 16 })}
         />
         <Checkbox
           label="Consume Sentry User Feedback as Mushi reports"
+          helpId="settings.general.sentry_consume_user_feedback"
           checked={settings.sentry_consume_user_feedback ?? true}
           onChange={(v) => update({ sentry_consume_user_feedback: v })}
         />
@@ -90,6 +100,7 @@ export function GeneralPanel() {
       <Section title="LLM Pipeline" className="space-y-3">
         <SelectField
           label="Stage 2 Model"
+          helpId="settings.general.stage2_model"
           value={settings.stage2_model ?? 'claude-sonnet-4-6'}
           onChange={(e) => update({ stage2_model: e.target.value })}
         >
@@ -109,6 +120,7 @@ export function GeneralPanel() {
         </SelectField>
         <Slider
           label="Stage 1 Confidence Threshold"
+          helpId="settings.general.stage1_confidence_threshold"
           value={settings.stage1_confidence_threshold ?? 0.85}
           onChange={(v) => update({ stage1_confidence_threshold: v })}
         />
@@ -117,6 +129,7 @@ export function GeneralPanel() {
       <Section title="Deduplication" className="space-y-3">
         <Slider
           label="Similarity Threshold"
+          helpId="settings.general.dedup_threshold"
           value={settings.dedup_threshold ?? 0.82}
           onChange={(v) => update({ dedup_threshold: v })}
         />
@@ -138,13 +151,18 @@ interface SliderProps {
   label: string
   value: number
   onChange: (v: number) => void
+  /** Optional id into `apps/admin/src/lib/configDocs.ts`. */
+  helpId?: string
 }
 
-function Slider({ label, value, onChange }: SliderProps) {
+function Slider({ label, value, onChange, helpId }: SliderProps) {
   return (
     <label className="block">
-      <span className="text-xs text-fg-muted mb-1 block">
-        {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
+      <span className="text-xs text-fg-muted mb-1 flex items-center gap-1">
+        <span>
+          {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
+        </span>
+        {helpId && <ConfigHelp helpId={helpId} />}
       </span>
       <input
         type="range"

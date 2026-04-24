@@ -29,6 +29,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
+import { ConfigHelp } from '../components/ConfigHelp'
 
 interface ApiKey {
   id: string
@@ -261,9 +262,11 @@ export function ProjectsPage() {
         howToUse="Create a project, generate an API key, then drop it into the SDK or send it as the X-API-Key header. Use Switch to to change which project the admin console is showing, or use the project picker in the top-right header. Use the Test report action to verify ingest before wiring up production traffic."
       />
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-end">
         <div className="flex-1">
           <Input
+            label="Project name"
+            helpId="projects.create_project"
             type="text"
             placeholder="New project name (e.g. Acme iOS app)"
             value={newName}
@@ -325,14 +328,17 @@ export function ProjectsPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     {!isActive && (
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setActive(project.id, project.name)}
-                        title="Switch the admin console UI to focus on this project. Your other projects keep ingesting reports either way — this is just which one Reports / Fixes / Dashboard etc. show by default."
-                      >
-                        Switch to
-                      </Btn>
+                      <span className="inline-flex items-center gap-1">
+                        <Btn
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setActive(project.id, project.name)}
+                          title="Switch the admin console UI to focus on this project. Your other projects keep ingesting reports either way — this is just which one Reports / Fixes / Dashboard etc. show by default."
+                        >
+                          Switch to
+                        </Btn>
+                        <ConfigHelp helpId="projects.active_project" />
+                      </span>
                     )}
                     <Link to={`/reports?project=${project.id}`} className={LINK_CHIP_CLASS}>
                       Reports
@@ -356,6 +362,7 @@ export function ProjectsPage() {
                       <label htmlFor={`key-scope-${project.id}`} className="sr-only">
                         API key scope for {project.name}
                       </label>
+                      <ConfigHelp helpId="projects.api_key_scope" />
                       <select
                         id={`key-scope-${project.id}`}
                         data-testid={`key-scope-${project.id}`}
@@ -471,7 +478,17 @@ export function ProjectsPage() {
                     <span aria-hidden="true" className="text-2xs text-fg-faint group-open:rotate-90 motion-safe:transition-transform">›</span>
                   </summary>
                   <div className="mt-3">
-                    <SdkInstallCard projectId={project.id} compact />
+                    {/* Pass `revealed?.key` so the snippet shows the real,
+                        just-minted plaintext key instead of the `mushi_xxx`
+                        placeholder. `revealed` is the same value the
+                        RevealedKeyCard above uses, so the user can copy the
+                        snippet without manually replacing a placeholder
+                        whose actual value is sitting on screen literally
+                        inches above. Once the user dismisses the reveal
+                        (or reloads), `revealed` becomes undefined and the
+                        card cleanly falls back to the placeholder — which
+                        is what we want, since we don't persist plaintext. */}
+                    <SdkInstallCard projectId={project.id} apiKey={revealed?.key} compact />
                   </div>
                 </details>
               </Card>
