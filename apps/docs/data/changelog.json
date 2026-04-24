@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "0.6",
     "headline": null,
     "pending": false,
@@ -101,6 +93,18 @@
         "version": "0.5.2"
       },
       {
+        "name": "@mushi-mushi/core",
+        "version": "0.5.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.5.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "0.5.0"
+      },
+      {
         "name": "create-mushi-mushi",
         "version": "0.5.2"
       },
@@ -115,6 +119,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.4.2",
       "0.4.1",
       "0.4.0"
     ],
@@ -171,7 +176,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -204,6 +209,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.3.5",
       "0.3.4",
       "0.3.3",
       "0.3.2",
@@ -263,7 +269,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/capacitor",
@@ -275,11 +281,11 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.3.4"
+        "version": "0.3.5"
       },
       {
         "name": "@mushi-mushi/node",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -291,15 +297,15 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       {
         "name": "@mushi-mushi/web",
@@ -312,6 +318,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.4",
       "0.2.3",
       "0.2.2",
       "0.2.1",
@@ -370,7 +377,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.3"
+        "version": "0.2.4"
       },
       {
         "name": "@mushi-mushi/angular",
