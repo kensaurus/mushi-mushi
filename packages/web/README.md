@@ -69,7 +69,7 @@ Each trigger respects its config flag — set `rageClick: false` to disable rage
 
 ## Bundle Size
 
-~6 KB brotli, enforced at **15 KB gzipped** via `size-limit` in CI. Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
+~7 KB brotli, enforced at **22 KB gzipped** via `size-limit` in CI (budget raised for the 2026 editorial widget refresh — still a single-digit-kilobyte footprint). Requires `@mushi-mushi/core` as a dependency (not bundled inline). The `./test-utils` entry is a separate artifact and is never pulled into production bundles.
 
 ## Quick Start
 

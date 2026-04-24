@@ -34,6 +34,9 @@ class OfflineQueueTest {
         repeat(10) { i ->
             q.enqueue(mapOf("description" to "report-$i", "category" to "bug"))
         }
-        assertTrue(q.count() <= 4)
+        // Each NDJSON line is ~44 B (Gson map + newline). Budget 250 B ⇒ five
+        // newest rows survive after trimming the five oldest.
+        assertEquals(5, q.count())
+        assertEquals("report-5", q.peek(1).first()["description"])
     }
 }

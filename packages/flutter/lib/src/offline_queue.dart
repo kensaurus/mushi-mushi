@@ -36,25 +36,26 @@ class OfflineQueue {
     await f.writeAsBytes(bytes, flush: true);
   });
 
-  Future<List<Map<String, dynamic>>> peek({int limit = 25}) => _lock.run(() async {
-    final f = await _resolveFile();
-    if (!f.existsSync()) return <Map<String, dynamic>>[];
-    final lines = (await f.readAsString())
-        .split('\n')
-        .where((l) => l.isNotEmpty)
-        .take(limit);
-    return lines
-        .map((l) {
-          try {
-            final decoded = jsonDecode(l);
-            return decoded is Map<String, dynamic> ? decoded : null;
-          } catch (_) {
-            return null;
-          }
-        })
-        .whereType<Map<String, dynamic>>()
-        .toList();
-  });
+  Future<List<Map<String, dynamic>>> peek({int limit = 25}) =>
+      _lock.run(() async {
+        final f = await _resolveFile();
+        if (!f.existsSync()) return <Map<String, dynamic>>[];
+        final lines = (await f.readAsString())
+            .split('\n')
+            .where((l) => l.isNotEmpty)
+            .take(limit);
+        return lines
+            .map((l) {
+              try {
+                final decoded = jsonDecode(l);
+                return decoded is Map<String, dynamic> ? decoded : null;
+              } catch (_) {
+                return null;
+              }
+            })
+            .whereType<Map<String, dynamic>>()
+            .toList();
+      });
 
   Future<void> clearDelivered(int count) => _lock.run(() async {
     if (count <= 0) return;
@@ -87,10 +88,9 @@ class _AsyncLock {
 
   Future<T> run<T>(Future<T> Function() fn) {
     final completer = Completer<T>();
-    final next = _last.then((_) => fn()).then(
-          completer.complete,
-          onError: completer.completeError,
-        );
+    final next = _last
+        .then((_) => fn())
+        .then(completer.complete, onError: completer.completeError);
     _last = next.catchError((_) {});
     return completer.future;
   }
