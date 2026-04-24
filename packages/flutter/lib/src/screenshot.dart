@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 
 /// Captures a base64 PNG of a widget rendered behind a [RepaintBoundary].
 /// Best-effort; returns `null` on any failure.
