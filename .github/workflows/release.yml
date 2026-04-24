@@ -39,11 +39,18 @@ on:
   # uploaded to the transparency log**. This 404 is npm's way of saying
   # "Trusted Publisher rule didn't match the OIDC claims" — same payload as
   # a missing-package 404, no usable hint about which claim diverged.
-  # Reproduces on both `push` and `workflow_dispatch`. Fix lives outside CI:
-  # update the per-package Trusted Publisher rule on npmjs.com to match
-  # `kensaurus/mushi-mushi/.github/workflows/release.yml` on `master`. Until
-  # then v0.4.x stays the latest published version — the in-repo bump to
-  # v0.5.0 is checked in but cannot reach the registry.
+  #
+  # ROOT CAUSE: npm CLI < 11.5.1 ships a half-baked OIDC handshake that
+  # silently falls back to the missing-package 404 when the Trusted Publisher
+  # exchange fails. npm 11.5.1 (bundled with Node.js 24+) added clearer
+  # diagnostics and the actual fix. setup-node@v4 with `node-version: 22`
+  # gives you Node 22 + npm 10, which is too old. Bump to `node-version: 24`
+  # to ship npm 11.5+ with the working OIDC code path.
+  #
+  # Secondary requirement: every publishable package must have a Trusted
+  # Publisher rule on npmjs.com pointing at
+  # `kensaurus/mushi-mushi/.github/workflows/release.yml` on `master`.
+  # Reproduces on both `push` and `workflow_dispatch`.
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -68,7 +75,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -116,7 +123,10 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: 22
+          # MUST be 24+: ships npm >= 11.5.1, required for working OIDC
+          # Trusted Publisher handshake. Node 22 ships npm 10 which produces
+          # a misleading 404 when the OIDC exchange fails.
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
