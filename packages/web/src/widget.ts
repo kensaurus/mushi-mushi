@@ -78,7 +78,14 @@ export class MushiWidget {
     this.config = {
       position: config.position ?? 'bottom-right',
       theme: config.theme ?? 'auto',
-      triggerText: config.triggerText ?? '\uD83D\uDC1B',
+      // Falsy-OR (NOT `??`) on purpose: `triggerText: ''` is semantically
+      // nonsense — it would render a labelless, glyphless trigger button
+      // that users can't see or aim at. Treat empty string the same as
+      // omitted so any caller that wires this to a cleared form input or
+      // pastes a legacy snippet that emitted `triggerText: ""` (see
+      // apps/admin/src/lib/sdkSnippets.ts widgetLines history) still gets
+      // the default 🐛 and a visible button.
+      triggerText: config.triggerText || '\uD83D\uDC1B',
       expandedTitle: config.expandedTitle ?? '',
       mode: config.mode ?? 'conversational',
       locale: config.locale ?? 'auto',

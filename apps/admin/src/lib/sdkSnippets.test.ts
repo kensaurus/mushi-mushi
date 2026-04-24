@@ -137,3 +137,39 @@ describe('renderSnippet — Vanilla', () => {
     expect(out).toContain('console: false')
   })
 })
+
+/**
+ * Regression: the live preview renders an empty triggerText input as the
+ * default 🐛 (`config.triggerText.trim() ? config.triggerText : '\u{1F41B}'`
+ * in SdkInstallCard.tsx — note the `.trim()`, which is what makes the
+ * whitespace-only case below WYSIWYG-faithful), so the generated snippet
+ * MUST also treat empty as "use default" — not emit `triggerText: ""` and
+ * ship the user a literal invisible button.
+ *
+ * Whitespace-only input ("   ") behaves the same way: previously the bare
+ * `||` in the preview let `"   "` through as truthy and rendered three
+ * invisible spaces, while the snippet (this file) correctly omitted the
+ * field. Both sides now share the same trim-then-fallback rule.
+ *
+ * Tested across all four framework adapters because every one of them
+ * passes through `widgetLines` and the bug would have surfaced
+ * identically in each.
+ */
+describe('renderSnippet — empty triggerText (WYSIWYG with the preview)', () => {
+  for (const fw of ['react', 'vue', 'svelte', 'vanilla'] as const) {
+    it(`omits triggerText entirely when the input is empty (${fw})`, () => {
+      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: '' })
+      expect(out).not.toContain('triggerText')
+    })
+
+    it(`omits triggerText entirely when the input is whitespace-only (${fw})`, () => {
+      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: '   ' })
+      expect(out).not.toContain('triggerText')
+    })
+
+    it(`still emits triggerText when the user typed a real override (${fw})`, () => {
+      const out = renderSnippet(fw, PROJECT, KEY, { ...DEFAULT_SDK_CONFIG, triggerText: 'Report' })
+      expect(out).toContain('triggerText: "Report"')
+    })
+  }
+})

@@ -100,7 +100,20 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   const lines: string[] = []
   if (cfg.position !== d.position) lines.push(`${indent}  position: '${cfg.position}',`)
   if (cfg.theme !== d.theme) lines.push(`${indent}  theme: '${cfg.theme}',`)
-  if (cfg.triggerText !== d.triggerText) {
+  // Empty / whitespace-only input means "I cleared the box" — the preview
+  // already falls back to the default 🐛 in that case (see SdkInstallCard's
+  // `config.triggerText.trim() ? config.triggerText : '\u{1F41B}'`, which
+  // uses the SAME trim-then-fallback rule as the line below). Emitting
+  // `triggerText: ""` here would break the WYSIWYG promise: the SDK
+  // constructor used to take that empty string verbatim and render an
+  // invisible trigger button. Treat empty as "unset" so what users see
+  // is what they get.
+  //
+  // We compare the trimmed value to the default but emit the ORIGINAL
+  // (untrimmed) string via JSON.stringify, so a deliberate ` Report `
+  // round-trips exactly — preview, snippet, and SDK all preserve the
+  // surrounding whitespace.
+  if (cfg.triggerText.trim() && cfg.triggerText !== d.triggerText) {
     lines.push(`${indent}  triggerText: ${JSON.stringify(cfg.triggerText)},`)
   }
   if (lines.length === 0) return ''
