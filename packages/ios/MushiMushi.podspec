@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
 
   s.homepage         = 'https://github.com/kenroy/mushi-mushi'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
-  s.author           = { 'Mushi Mushi' => 'oss@mushimushi.dev' }
+  s.author           = { 'Mushi Mushi' => 'kensaurus@gmail.com' }
   s.source           = {
     :git => 'https://github.com/kenroy/mushi-mushi.git',
     :tag => "ios-v#{s.version}"

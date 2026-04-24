@@ -6,11 +6,15 @@
  *   - The /v1/support/contact endpoint's reply-to header
  *   - The admin BillingPage "Need help?" panel (via /v1/admin/support/info)
  *
- * Override with SUPPORT_EMAIL env var (required for self-hosters who don't
- * want to expose mushimushi.dev to their tenants).
+ * NOTE: There is no real `*@mushimushi.dev` mailbox — that domain is used
+ * for branding/URLs only. The default below is the maintainer's actual
+ * inbox. Self-hosters should override with the SUPPORT_EMAIL env var so
+ * their tenants don't email the upstream maintainer; we keep a real
+ * fallback rather than a placeholder so a forgotten env var still routes
+ * mail somewhere a human reads.
  */
 
-const DEFAULT_SUPPORT_EMAIL = 'support@mushimushi.dev'
+const DEFAULT_SUPPORT_EMAIL = 'kensaurus@gmail.com'
 const DEFAULT_SUPPORT_URL = 'https://mushimushi.dev/support'
 
 export const SUPPORT_EMAIL =

@@ -1,5 +1,6 @@
 import { Btn } from '../ui'
 import { Modal } from '../Modal'
+import { ConfigHelp } from '../ConfigHelp'
 import type { PromptVersion } from './types'
 
 interface PromptEditorModalProps {
@@ -25,10 +26,13 @@ export function PromptEditorModal({ prompt, onChange, onClose, onSave, saving }:
         </>
       }
     >
-      <p className="text-2xs text-fg-faint mb-2">
-        The prompt is hot-reloaded by the pipeline within seconds. Use{' '}
-        <code className="font-mono text-fg-secondary">{'{{report_text}}'}</code>{' '}
-        and other template variables that the worker substitutes.
+      <p className="text-2xs text-fg-faint mb-2 inline-flex items-center gap-1">
+        <span>
+          The prompt is hot-reloaded by the pipeline within seconds. Use{' '}
+          <code className="font-mono text-fg-secondary">{'{{report_text}}'}</code>{' '}
+          and other template variables that the worker substitutes.
+        </span>
+        <ConfigHelp helpId="prompt-lab.prompt_body" />
       </p>
       <textarea
         className="w-full min-h-72 h-[min(60dvh,28rem)] bg-surface-overlay border border-edge-subtle rounded-sm p-2 text-2xs font-mono text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand/40"

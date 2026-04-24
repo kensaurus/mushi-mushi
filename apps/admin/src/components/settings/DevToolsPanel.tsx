@@ -13,6 +13,7 @@ export function DevToolsPanel() {
       <Section title="Developer Tools">
         <Toggle
           label="Debug mode — log all API calls, auth events, and timings to browser console"
+          helpId="settings.devtools.debug_mode"
           checked={isDebugEnabled()}
           onChange={(v) => { setDebugEnabled(v); window.location.reload() }}
         />

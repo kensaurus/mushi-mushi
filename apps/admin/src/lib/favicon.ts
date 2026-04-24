@@ -30,9 +30,22 @@ import { useEffect } from 'react'
 import { usePageContext } from './pageContext'
 
 const FAVICON_SIZE = 32
-/** Size of the red dot in canvas pixels. */
+/** Size of the badge pip in canvas pixels. */
 const DOT_RADIUS = 6
-const DOT_COLOR = '#ef4444' // Tailwind red-500 — matches Sentry's critical pill
+/**
+ * Badge colours, tuned for the vermillion 朱印 hanko favicon.
+ *
+ * The previous palette was Tailwind red-500 with a near-black ring — that
+ * works on any *neutral* favicon, but the new mark is itself vermillion,
+ * so a red-on-red badge would vanish into the stamp. Inverting it (paper
+ * cream pip + sumi ink ring) gives maximum contrast on vermillion *and*
+ * keeps the on-brand "stamp + paper notification pip" visual metaphor.
+ *
+ * If the favicon is ever recoloured back to a neutral surface, swap these
+ * back to a warning red — there's nothing in the API that needs to change.
+ */
+const DOT_COLOR = '#F8F4ED' // paper cream — same token as packages/web/src/styles.ts
+const DOT_RING_COLOR = '#0E0D0B' // sumi ink — gives the pip a crisp edge on vermillion
 const BASE_SRC = '/favicon.svg'
 
 let baseImage: HTMLImageElement | null = null
@@ -128,12 +141,16 @@ export async function updateFaviconBadge(count: number): Promise<void> {
     ctx.clearRect(0, 0, FAVICON_SIZE, FAVICON_SIZE)
     ctx.drawImage(img, 0, 0, FAVICON_SIZE, FAVICON_SIZE)
 
-    // Red dot with a thin dark ring so it reads as a badge at 16 px.
+    // Notification pip with a thin contrasting ring so it reads as a
+    // badge at 16 px even on top of the vermillion hanko mark. Ring is
+    // drawn first as a slightly larger filled circle so the pip cleanly
+    // overpaints the centre — saves us from stroke-width quirks at this
+    // tiny canvas resolution.
     const cx = FAVICON_SIZE - DOT_RADIUS - 1
     const cy = DOT_RADIUS + 1
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS + 1, 0, Math.PI * 2)
-    ctx.fillStyle = '#09090b'
+    ctx.fillStyle = DOT_RING_COLOR
     ctx.fill()
     ctx.beginPath()
     ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2)

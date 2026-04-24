@@ -30,6 +30,7 @@ import { ConfirmDialog, PromptDialog } from '../components/ConfirmDialog'
 import { EvalDatasetCard } from '../components/prompt-lab/EvalDatasetCard'
 import { FineTuningJobsCard } from '../components/prompt-lab/FineTuningJobsCard'
 import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsCard'
+import { ConfigHelp } from '../components/ConfigHelp'
 
 export function PromptLabPage() {
   const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -268,7 +269,8 @@ export function PromptLabPage() {
       </KpiRow>
 
       {orderedStages.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 border-b border-border-subtle">
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border-subtle">
+          <ConfigHelp helpId="prompt-lab.stage" />
           {orderedStages.map((stage) => {
             const count = grouped[stage]?.length ?? 0
             const active = visibleStage === stage

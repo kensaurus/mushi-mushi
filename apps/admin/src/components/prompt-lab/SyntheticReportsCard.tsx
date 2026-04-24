@@ -6,6 +6,7 @@ import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
 import { formatPct } from '../charts'
 import { PromptDialog } from '../ConfirmDialog'
+import { ConfigHelp } from '../ConfigHelp'
 import type { SyntheticReportRow } from './types'
 
 interface SyntheticPayload {
@@ -60,6 +61,7 @@ export function SyntheticReportsCard() {
           <Btn size="sm" onClick={() => setAskingCount(true)} disabled={generating} loading={generating}>
             Generate
           </Btn>
+          <ConfigHelp helpId="prompt-lab.synthetic_count" />
         </div>
       </div>
 

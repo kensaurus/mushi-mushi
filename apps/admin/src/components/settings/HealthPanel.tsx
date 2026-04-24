@@ -10,6 +10,7 @@ import { apiFetch } from '../../lib/supabase'
 import { Section, Btn, Card, ResultChip, type ResultChipTone } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { RESOLVED_API_URL } from '../../lib/env'
+import { SdkInstallCard } from '../SdkInstallCard'
 
 interface TestProject {
   id: string
@@ -17,6 +18,22 @@ interface TestProject {
 }
 
 export function HealthPanel() {
+  // Fetch the first project once at the panel level so both the SDK install
+  // snippet and the smoke-test button share a single round trip and stay in
+  // sync (you'd be surprised how often two near-identical components on the
+  // same page would otherwise show different "active project" values for a
+  // few hundred ms after a switch).
+  const [project, setProject] = useState<TestProject | null>(null)
+  const [projectLoading, setProjectLoading] = useState(true)
+
+  useEffect(() => {
+    apiFetch<{ projects: TestProject[] }>('/v1/admin/projects')
+      .then((res) => {
+        if (res.ok && res.data) setProject(res.data.projects?.[0] ?? null)
+      })
+      .finally(() => setProjectLoading(false))
+  }, [])
+
   return (
     <div className="space-y-4 max-w-2xl">
       <Card className="p-4">
@@ -35,28 +52,34 @@ export function HealthPanel() {
         </div>
       </Section>
 
-      <QuickTestSection />
+      <Section title="Install the SDK">
+        <p className="text-2xs text-fg-muted mb-2">
+          Per-framework <code className="font-mono">npm install</code> command and init snippet,
+          pre-filled with this project's id.
+        </p>
+        {project ? (
+          <SdkInstallCard projectId={project.id} />
+        ) : projectLoading ? (
+          <p className="text-2xs text-fg-faint">Loading project…</p>
+        ) : (
+          <p className="text-2xs text-fg-faint">Create a project first to see install snippets.</p>
+        )}
+      </Section>
+
+      <QuickTestSection project={project} projectLoading={projectLoading} />
     </div>
   )
 }
 
-function QuickTestSection() {
+interface QuickTestSectionProps {
+  project: TestProject | null
+  projectLoading: boolean
+}
+
+function QuickTestSection({ project, projectLoading }: QuickTestSectionProps) {
   const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [detail, setDetail] = useState('')
   const [lastRunAt, setLastRunAt] = useState<string | null>(null)
-  const [project, setProject] = useState<TestProject | null>(null)
-  const [projectLoading, setProjectLoading] = useState(true)
-
-  // The pipeline test runs against the user's first project. We don't render a
-  // picker because the test is a smoke check — owners with multiple projects
-  // can rerun against a specific one from that project's settings later.
-  useEffect(() => {
-    apiFetch<{ projects: TestProject[] }>('/v1/admin/projects')
-      .then((res) => {
-        if (res.ok && res.data) setProject(res.data.projects?.[0] ?? null)
-      })
-      .finally(() => setProjectLoading(false))
-  }, [])
 
   async function runTest() {
     if (!project) return

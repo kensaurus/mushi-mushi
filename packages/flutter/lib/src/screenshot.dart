@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart';
 
 /// Captures a base64 PNG of a widget rendered behind a [RepaintBoundary].
 /// Best-effort; returns `null` on any failure.
@@ -23,8 +24,9 @@ class ScreenshotCapture {
           key.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
       final ui.Image image = await boundary.toImage(pixelRatio: 1.0);
-      final ByteData? byteData =
-          await image.toByteData(format: ui.ImageByteFormat.png);
+      final ByteData? byteData = await image.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       if (byteData == null) return null;
       return base64Encode(byteData.buffer.asUint8List());
     } catch (_) {

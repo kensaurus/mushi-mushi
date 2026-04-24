@@ -12,7 +12,7 @@ If you discover a security vulnerability, please report it responsibly.
 
 **Do NOT open a public GitHub issue.**
 
-Instead, email: **security@mushimushi.dev**
+Instead, email: **kensaurus@gmail.com**
 
 Include:
 - Description of the vulnerability

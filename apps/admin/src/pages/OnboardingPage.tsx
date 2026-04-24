@@ -10,7 +10,7 @@
  *          admin sees.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { Btn, Card, Input, PageHelp, ErrorAlert, ResultChip, type ResultChipTone } from '../components/ui'
@@ -19,55 +19,19 @@ import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
 import { ProjectNarrativeStrip } from '../components/dashboard/ProjectNarrativeStrip'
 import { PdcaFlow } from '../components/pdca-flow/PdcaFlow'
+import { SdkInstallCard } from '../components/SdkInstallCard'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { restartFirstRunTour } from '../components/FirstRunTour'
+import { ConfigHelp } from '../components/ConfigHelp'
 
 interface ApiKey {
   key: string
   prefix: string
 }
-
-const SDK_SNIPPETS = {
-  react: (projectId: string, apiKey: string) => `import { MushiProvider } from '@mushi-mushi/react'
-
-function App() {
-  return (
-    <MushiProvider config={{
-      projectId: '${projectId}',
-      apiKey: '${apiKey}',
-    }}>
-      <YourApp />
-    </MushiProvider>
-  )
-}`,
-
-  vue: (projectId: string, apiKey: string) => `import { MushiPlugin } from '@mushi-mushi/vue'
-import { Mushi } from '@mushi-mushi/web'
-
-app.use(MushiPlugin, { projectId: '${projectId}', apiKey: '${apiKey}' })
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
-
-  svelte: (projectId: string, apiKey: string) => `import { initMushi } from '@mushi-mushi/svelte'
-import { Mushi } from '@mushi-mushi/web'
-
-initMushi({ projectId: '${projectId}', apiKey: '${apiKey}' })
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
-
-  vanilla: (projectId: string, apiKey: string) => `import { Mushi } from '@mushi-mushi/web'
-
-Mushi.init({
-  projectId: '${projectId}',
-  apiKey: '${apiKey}',
-  widget: { position: 'bottom-right', theme: 'auto' },
-  capture: { console: true, network: true, screenshot: 'on-report' },
-})`,
-}
-
-type Framework = keyof typeof SDK_SNIPPETS
 
 export function OnboardingPage() {
   const navigate = useNavigate()
@@ -82,8 +46,6 @@ export function OnboardingPage() {
   const [keyCopied, setKeyCopied] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [testRanAt, setTestRanAt] = useState<string | null>(null)
-  const [framework, setFramework] = useState<Framework>('react')
-  const [snippetCopied, setSnippetCopied] = useState(false)
   const [error, setError] = useState('')
 
   // Must be called unconditionally on every render — the skeleton/error
@@ -104,16 +66,13 @@ export function OnboardingPage() {
     [project],
   )
 
-  // When the user completes the basics + lands here from the dashboard banner,
-  // they shouldn't be stuck on a wizard with nothing to do — redirect home.
-  useEffect(() => {
-    if (!setup.loading && project?.done && !apiKey && testStatus !== 'pass') {
-      // Only auto-bounce when there's truly nothing left to do AND the user
-      // didn't just generate a one-time-revealable API key (so they can copy it).
-      const allOptionalDoneToo = project.complete >= project.total
-      if (allOptionalDoneToo) navigate('/', { replace: true })
-    }
-  }, [setup.loading, project, apiKey, testStatus, navigate])
+  // NOTE: We deliberately do NOT auto-redirect when the project is fully set
+  // up. An earlier version bounced finished projects to `/`, which made the
+  // SDK install snippet (Card 4) unreachable from the sidebar "Setup" link,
+  // command palette, or any bookmark — the snippet existed nowhere else in
+  // the app, so finished users had no way to look it up again. Instead we
+  // render a "Setup complete" hero at the top so the page reads well in
+  // both first-run and post-onboarding states.
 
   if (setup.loading) return <OnboardingSkeleton />
   if (setup.error) return <ErrorAlert message={setup.error} onRetry={setup.reload} />
@@ -181,6 +140,10 @@ export function OnboardingPage() {
   const hasReports = (project?.report_count ?? 0) > 0
   const hasFix = (project?.fix_count ?? 0) > 0
   const hasMerged = (project?.merged_fix_count ?? 0) > 0
+  // Render a "Setup complete" hero (instead of bouncing) when there's nothing
+  // left for this project to do. Keeps the page useful as a permanent SDK
+  // reference for fully onboarded users.
+  const setupComplete = Boolean(project?.done && project.complete >= project.total)
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -190,6 +153,30 @@ export function OnboardingPage() {
           Live progress — every step is verified against your project's data, not local cache.
         </p>
       </div>
+
+      {setupComplete && (
+        <Card className="p-4 border-ok/30 bg-ok/5">
+          <div className="flex items-start gap-3">
+            <div
+              aria-hidden="true"
+              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok/15 text-ok text-xs font-bold"
+            >
+              ✓
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold text-fg">Setup complete</h3>
+              <p className="text-xs text-fg-muted mt-0.5">
+                Bookmark this page — the SDK install snippet below stays handy when you wire Mushi into a new
+                framework, repo, or environment.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Btn size="sm" variant="ghost" onClick={() => navigate('/')}>Open dashboard</Btn>
+                <Btn size="sm" variant="ghost" onClick={() => navigate('/projects')}>Manage projects</Btn>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {project && (
         <ProjectNarrativeStrip
@@ -206,7 +193,7 @@ export function OnboardingPage() {
         whatIsIt={copy?.help?.whatIsIt ?? 'A guided flow that creates your first project, generates an API key, verifies the pipeline, and shows the SDK snippet. State syncs across devices.'}
         useCases={copy?.help?.useCases ?? [
           'Create the project that will receive bug reports from your app',
-          'Mint and copy the API key that authenticates SDK requests',
+          'Generate and copy the API key that authenticates SDK requests',
           'Confirm the ingest pipeline is reachable before shipping any code',
         ]}
         howToUse={copy?.help?.howToUse ?? 'Complete the required steps in order. The API key is only shown once \u2014 copy it before continuing. You can rerun the test report any time from Settings.'}
@@ -240,6 +227,8 @@ export function OnboardingPage() {
           <div className="flex gap-2">
             <div className="flex-1">
               <Input
+                label="Project name"
+                helpId="onboarding.project_name"
                 placeholder="e.g. My SaaS App"
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
@@ -266,9 +255,12 @@ export function OnboardingPage() {
           </div>
           {!apiKey ? (
             <>
-              <Btn onClick={generateKey} loading={generatingKey} disabled={generatingKey}>
-                Generate API Key
-              </Btn>
+              <div className="inline-flex items-center gap-1">
+                <Btn onClick={generateKey} loading={generatingKey} disabled={generatingKey}>
+                  Generate API Key
+                </Btn>
+                <ConfigHelp helpId="onboarding.first_key_label" />
+              </div>
               {error && <p className="text-xs text-danger">{error}</p>}
             </>
           ) : (
@@ -313,63 +305,17 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {/* Card 4: SDK snippet — always available once a key exists */}
+      {/* Card 4: SDK snippet — always available once a key exists. Lives in
+          the shared `<SdkInstallCard>` so the same install + init copy
+          renders identically here, on Projects, in Settings → Health, and
+          on the MCP page. */}
       {project && !setup.isStepIncomplete('api_key_generated') && (
-        <Card className="p-5 space-y-4">
-          <div>
-            <h3 className="text-sm font-semibold text-fg">Integrate the SDK</h3>
-            <p className="text-xs text-fg-muted mt-1">
-              Install the package for your framework and drop in this snippet. Your project ID is pre-filled; replace
-              <code className="mx-1 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary">mushi_xxx</code>
-              with the API key above (or generate a new one in Projects).
-            </p>
-          </div>
-
-          <div className="flex gap-1 border-b border-edge-subtle pb-2">
-            {(Object.keys(SDK_SNIPPETS) as Framework[]).map((fw) => (
-              <button
-                key={fw}
-                onClick={() => { setFramework(fw); setSnippetCopied(false) }}
-                className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
-                  framework === fw
-                    ? 'bg-brand text-brand-fg font-medium'
-                    : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
-                }`}
-              >
-                {fw === 'vanilla' ? 'Vanilla JS' : fw.charAt(0).toUpperCase() + fw.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          <div>
-            <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Install</span>
-            <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-xs font-mono text-fg-secondary">
-              npm install @mushi-mushi/{framework === 'vanilla' ? 'web' : framework}{framework !== 'react' && framework !== 'vanilla' ? ' @mushi-mushi/web' : ''}
-            </pre>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Code</span>
-              <button
-                onClick={() => copyToClipboard(
-                  SDK_SNIPPETS[framework](project.project_id, apiKey?.key ?? 'mushi_xxx'),
-                  setSnippetCopied,
-                )}
-                className="text-2xs text-brand hover:text-brand-hover"
-              >
-                {snippetCopied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
-              {SDK_SNIPPETS[framework](project.project_id, apiKey?.key ?? 'mushi_xxx')}
-            </pre>
-          </div>
-
-          <div className="flex gap-2 pt-2">
+        <div className="space-y-3">
+          <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} />
+          <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/')}>Go to Dashboard</Btn>
           </div>
-        </Card>
+        </div>
       )}
 
       <p className="text-center flex items-center justify-center gap-3">
