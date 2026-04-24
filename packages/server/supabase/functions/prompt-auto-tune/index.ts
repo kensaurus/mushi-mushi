@@ -34,7 +34,7 @@ import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { createTrace } from '../_shared/observability.ts'
-import { PROMPT_TUNE_MODEL } from '../_shared/models.ts'
+import { PROMPT_TUNE_MODEL, acceptsSamplingKnobs, anthropicThinkingProviderOptions } from '../_shared/models.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 ensureSentry('prompt-auto-tune')
@@ -193,10 +193,18 @@ Judge's correction: ${JSON.stringify(f.suggestedCorrection ?? {}).slice(0, 200)}
     .join('\n\n')
 
   const span = trace.span('generate-candidate')
+  // Sentry MUSHI-MUSHI-SERVER-9 (regressed 2026-04-23): Opus 4.7 dropped
+  // sampling knobs. AI SDK v4 always sends `temperature: 0` unless we flip
+  // Anthropic into thinking mode, which strips it on the way to the wire.
+  // See `acceptsSamplingKnobs` for the full migration note.
+  const useSamplingKnobs = acceptsSamplingKnobs(model)
   try {
     const { object, usage } = await generateObject({
       model: anthropic(model),
       schema: candidateSchema,
+      ...(useSamplingKnobs
+        ? {}
+        : { experimental_providerMetadata: anthropicThinkingProviderOptions() }),
       system: `You are a senior prompt engineer for an automated bug-classification pipeline. You will be shown the current prompt for ${stage} and a sample of recent classifications the LLM judge disagreed with. Propose a revised prompt that addresses the dominant failure modes WITHOUT changing template variables (anything inside {{ ... }}) or breaking the existing output schema.
 
 Hard constraints:

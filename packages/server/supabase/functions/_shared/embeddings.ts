@@ -34,13 +34,25 @@ interface ResolvedOpenAi {
  * version prefix (which is the OpenAI SDK default — e.g. OpenRouter stores
  * `https://openrouter.ai/api/v1`), we'd hit `/api/v1/v1/embeddings` and get
  * a Next.js 404 HTML page — the exact failure that kept the glot.it repo
- * index at 0 rows. Strip the trailing `/v1` (and any trailing slash) so both
- * forms land on `<base>/v1/embeddings`.
+ * index at 0 rows.
+ *
+ * Sentry MUSHI-MUSHI-SERVER-G/B (regression, 2026-04-23): the original fix
+ * stripped exactly ONE trailing `/v1` segment — so a stored URL of
+ * `https://openrouter.ai/api/v1/v1` (a doubled prefix that crept in via copy-
+ * paste from the OpenAI Python SDK docs, or a settings UI that auto-appends
+ * `/v1`) leaked one suffix through and produced the same `/api/v1/v1/embeddings`
+ * 404. Loop the strip so the function is idempotent against any number of
+ * trailing `/v1` segments and any trailing-slash mix.
  */
-function normalizeOpenAiBaseUrl(raw: string | null | undefined): string {
-  const trimmed = (raw ?? '').replace(/\/+$/, '')
+export function normalizeOpenAiBaseUrl(raw: string | null | undefined): string {
+  let trimmed = (raw ?? '').trim().replace(/\/+$/, '')
   if (!trimmed) return 'https://api.openai.com'
-  return trimmed.replace(/\/v1$/i, '')
+  // Strip every trailing `/v1` (and any slashes that re-surface between hops)
+  // so `…/api`, `…/api/v1`, `…/api/v1/`, `…/api/v1/v1` all collapse to `…/api`.
+  while (/\/v1\/*$/i.test(trimmed)) {
+    trimmed = trimmed.replace(/\/v1\/*$/i, '').replace(/\/+$/, '')
+  }
+  return trimmed
 }
 
 /**

@@ -115,6 +115,62 @@ export function normalizeModelId(model: string | null | undefined): string {
   return key.includes('/') ? key.split('/').slice(-1)[0] : key
 }
 
+/**
+ * Returns true iff the model accepts the legacy sampling knobs (`temperature`,
+ * `top_p`, `top_k`). Anthropic deprecated these on Opus 4.7 (2026-04-16): the
+ * API now hard-rejects ANY value (the parameter itself is gone) with
+ * `400 invalid_request_error "temperature is deprecated for this model"`.
+ * See: https://forum.cursor.com/t/opus-4-7-not-functioning-on-bedrock-because-of-temperature-deprecation-400/158212
+ *
+ * Sentry MUSHI-MUSHI-SERVER-9 (regressed 2026-04-23): AI SDK v4's
+ * `prepareCallSettings` hardcodes `temperature ?? 0` (see
+ * https://github.com/vercel/ai/blob/ai%404.3.16/packages/ai/core/prompt/prepare-call-settings.ts#L96)
+ * — there is no way to OMIT the field through the public `generateObject`
+ * surface. The only escape hatch the `@ai-sdk/anthropic` provider offers is
+ * thinking mode (`anthropic-messages-language-model.ts` line ~140 strips
+ * `temperature`/`topK`/`topP` whenever `providerOptions.anthropic.thinking
+ * .type === 'enabled'`). So the architectural fix is: when the model can't
+ * take sampling knobs, callers MUST enable thinking — see `anthropicThinkingProviderOptions`.
+ *
+ * Future Anthropic generations are expected to keep this restriction, so the
+ * matcher is family-level (Opus 4.7+, Opus 5+) rather than the single SKU.
+ *
+ * Caller convention:
+ *   const useSamplingKnobs = acceptsSamplingKnobs(modelId)
+ *   await generateObject({
+ *     model: anthropic(modelId),
+ *     ...(useSamplingKnobs ? { temperature: 0 } : {}),
+ *     ...(useSamplingKnobs ? {} : { providerOptions: anthropicThinkingProviderOptions() }),
+ *     ...
+ *   })
+ */
+export function acceptsSamplingKnobs(model: string | null | undefined): boolean {
+  const key = normalizeModelId(model)
+  // Anthropic Opus 4.7+ — locked-default sampling. Any future Anthropic model
+  // family that ships with the same restriction should be added here.
+  if (/^claude-opus-(?:[4-9]-[7-9]|[4-9]-\d{2,}|[5-9]-)/i.test(key)) return false
+  return true
+}
+
+/**
+ * Builds the AI SDK v4 `experimental_providerMetadata` (or v5 `providerOptions`)
+ * payload that flips `@ai-sdk/anthropic` into thinking mode with a minimal
+ * budget. Used by callers of `generateObject`/`generateText` to suppress the
+ * SDK's mandatory `temperature: 0` default on Opus 4.7+ models.
+ *
+ * The default budget (4096) is the smallest value that reliably produces a
+ * usable structured response on Opus 4.7's tool-use path during local
+ * verification of the MUSHI-MUSHI-SERVER-9 fix. Callers that want extended
+ * reasoning can pass a higher budget; Anthropic accepts up to 128k.
+ */
+export function anthropicThinkingProviderOptions(budgetTokens = 4096) {
+  return {
+    anthropic: {
+      thinking: { type: 'enabled' as const, budgetTokens },
+    },
+  } as const
+}
+
 /** Every non-embedding model currently used anywhere in the pipeline. Use for
  *  pre-flight checks (e.g. confirm pricing exists for every active model). */
 export const ALL_ACTIVE_CHAT_MODELS: readonly string[] = [

@@ -13,7 +13,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
-import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
+import { JUDGE_MODEL, JUDGE_FALLBACK, acceptsSamplingKnobs, anthropicThinkingProviderOptions } from '../_shared/models.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -235,9 +235,24 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           if (tryAnthropic) {
             try {
               const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
+              // Sentry MUSHI-MUSHI-SERVER-9 (regressed 2026-04-23): Anthropic
+              // deprecated `temperature`/`top_p`/`top_k` on Opus 4.7 — the
+              // parameter is gone and any value 400s. AI SDK v4
+              // `prepareCallSettings` hardcodes `temperature ?? 0` so we can't
+              // omit it through the public surface. The only escape hatch the
+              // `@ai-sdk/anthropic` provider gives us is thinking mode, which
+              // strips `temperature`/`top_k`/`top_p` before they hit the wire.
+              // We flip it on for any model the helper says can't take the
+              // legacy knobs — Sonnet/Haiku still accept temperature so they
+              // get the deterministic `0` like before.
+              const useSamplingKnobs = acceptsSamplingKnobs(modelId)
               const result = await generateObject({
                 model: anthropic(modelId),
                 schema: judgeSchema,
+                ...(useSamplingKnobs ? { temperature: 0 } : {}),
+                ...(useSamplingKnobs
+                  ? {}
+                  : { experimental_providerMetadata: anthropicThinkingProviderOptions() }),
                 messages: [
                   {
                     role: 'system',
