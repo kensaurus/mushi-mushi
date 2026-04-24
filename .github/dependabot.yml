@@ -6,6 +6,20 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    # Defence-in-depth on top of pnpm's `minimumReleaseAge` (see
+    # pnpm-workspace.yaml). Even when a contributor merges a Dependabot PR
+    # without thinking, the *graph* won't include anything younger than
+    # the cooldown window. Routine upgrades wait; security advisories
+    # bypass the cooldown automatically — Dependabot's `cooldown` only
+    # applies to version-bump PRs, not security PRs.
+    # SOURCE: https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#cooldown--
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+      include:
+        - "*"
     groups:
       dev-dependencies:
         dependency-type: development
@@ -22,3 +36,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Same rationale as the npm cooldown above. Pinning Actions by SHA
+    # (which we already do in .github/workflows/release.yml) doesn't
+    # protect against a freshly-pushed malicious tag/SHA — only time does.
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+      semver-minor-days: 7
+      semver-patch-days: 3
+      include:
+        - "*"

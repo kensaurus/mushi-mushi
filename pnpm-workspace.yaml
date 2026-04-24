@@ -3,3 +3,44 @@ packages:
   - "apps/*"
   - "tooling/*"
   - "examples/*"
+
+# ---------------------------------------------------------------------------
+# Supply-chain hardening (pnpm)
+#
+# This is the setting that actually runs in CI: every Release/CI workflow
+# invokes `pnpm install --frozen-lockfile`, and pnpm reads its config from
+# pnpm-workspace.yaml (npm's `.npmrc` is a fallback for non-pnpm flags only).
+#
+# minimumReleaseAge: 10080
+#   = 7 days × 24 h × 60 min. Refuses to resolve a package version that was
+#     published less than 7 days ago, slamming shut the window in which
+#     real-world npm supply-chain attacks were detected and removed
+#     (Axios 1.14.1 / 0.30.4: ~5 hours; Shai-Hulud worm Sept 2025: <12 h).
+#     A 7-day cooldown would have blocked every public 2025–2026 incident.
+#     SOURCE: https://pnpm.io/settings#minimumreleaseage
+#
+# minimumReleaseAgeExclude:
+#   Our own scope is exempt so internal dogfooding (e.g. `pnpm add
+#   @mushi-mushi/react@latest` minutes after a publish) keeps working.
+# ---------------------------------------------------------------------------
+minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  - "@mushi-mushi/*"
+  - "mushi-mushi"
+
+# strictDepBuilds: fail-fast on any dep that tries to run a postinstall
+# hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies
+# or this file's allowBuilds). Without this, pnpm only warns and keeps
+# installing — turning it on means a malicious postinstall slipping into a
+# transitive dep stops the install instead of running silently.
+# SOURCE: https://pnpm.io/settings#strictdepbuilds  (default flips to true
+# in pnpm v11; opt-in in 10.x)
+strictDepBuilds: true
+
+# blockExoticSubdeps: refuses to install transitive dependencies that resolve
+# to a git URL, tarball URL, or filesystem path (i.e. anything that didn't
+# go through the npm registry's signing pipeline). Direct workspace deps
+# can still use these — but a malicious or compromised dep can't pull a
+# silent git checkout into the tree.
+# SOURCE: https://pnpm.io/settings#blockexoticsubdeps  (added pnpm 10.26)
+blockExoticSubdeps: true

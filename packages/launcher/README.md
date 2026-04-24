@@ -10,6 +10,7 @@ One `npx` command. Works with React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angu
 [![npm downloads](https://img.shields.io/npm/dm/mushi-mushi?color=cb3837&label=downloads)](https://www.npmjs.com/package/mushi-mushi)
 [![License](https://img.shields.io/npm/l/mushi-mushi?color=blue)](https://github.com/kensaurus/mushi-mushi/blob/master/LICENSE)
 [![Provenance](https://img.shields.io/badge/npm-provenance-8957e5?logo=npm)](https://docs.npmjs.com/generating-provenance-statements)
+[![Socket](https://socket.dev/api/badge/npm/package/mushi-mushi)](https://socket.dev/npm/package/mushi-mushi)
 [![Node](https://img.shields.io/node/v/mushi-mushi?color=339933&logo=node.js)](https://nodejs.org)
 
 <a href="https://kensaur.us/mushi-mushi/" title="Open the live admin demo">
@@ -202,6 +203,22 @@ npx mushi-mushi --help
 - The wizard rejects pasted secrets containing CR/LF/NUL to prevent `.env` injection.
 - All prompts validate format: `proj_[A-Za-z0-9_-]{10,}` and `mushi_[A-Za-z0-9_-]{10,}`.
 - This release ships with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) — verify with `npm audit signatures`.
+
+</details>
+
+<details>
+<summary><b>Supply-chain & verification (Socket, Bundlephobia, Snyk)</b></summary>
+
+Mushi is a CLI launcher — it spawns one `npm install` and writes one `.env.local` line. Here's what each scanner shows and why:
+
+| Scanner                | What it shows                                  | What it actually means                                                                                                                              |
+| ---------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **npm provenance**     | ✅ Signed by `kensaurus/mushi-mushi @ master`   | Cryptographic Sigstore attestation — `npm audit signatures` will verify this build came from this exact commit on this exact CI workflow.            |
+| **Socket.dev**         | Score + a few low-signal alerts                | Alerts are expected and benign: `child_process.spawn` (used to invoke `npm install`), `process.env` (read `DEBUG`, `npm_config_*`), URL strings (printed in help text). All visible in `src/index.ts` — ~150 LOC, easy to audit.|
+| **Bundlephobia**       | ❌ EntryPointError                             | **Expected.** This is a CLI (`bin` only — no `main`/`module`/`exports`), so there is no importable bundle to measure. Bundlephobia only works for libraries you `import`. |
+| **Snyk Advisor**       | Health score (lower right after publish)        | Snyk's crawler often lags by 1–2 weeks for new public packages — score corrects itself once it picks up the actual `package.json` (`CONTRIBUTING.md`, `funding`, downloads, repo activity). |
+
+If something looks off to you, [open an issue](https://github.com/kensaurus/mushi-mushi/issues) — the source is 100% public and the CI build is reproducible.
 
 </details>
 
