@@ -45,7 +45,17 @@ export const STATIC_ROUTES: StaticRoute[] = [
     path: '/reports',
     description: 'Triage inbound bug reports — grouped, scored, ranked.',
     group: 'Plan',
-    keywords: ['bugs', 'inbox', 'triage', 'complaints', 'issues', 'incidents', 'tickets', 'queue'],
+    // 'inbox' intentionally removed — the Action Inbox is its own page (/inbox)
+    // and was previously stealing palette hits for the literal word "inbox".
+    keywords: ['bugs', 'triage', 'complaints', 'issues', 'incidents', 'tickets', 'queue'],
+  },
+  {
+    id: 'nav:inbox',
+    label: 'Inbox',
+    path: '/inbox',
+    description: 'Action inbox — every event awaiting your decision in one place.',
+    group: 'Plan',
+    keywords: ['inbox', 'action', 'todo', 'queue', 'notifications', 'unread', 'pending'],
   },
   {
     id: 'nav:graph',
@@ -137,6 +147,14 @@ export const STATIC_ROUTES: StaticRoute[] = [
     description: 'Connect Slack, Discord, GitHub, Sentry, Stripe, and more.',
     group: 'Act',
     keywords: ['slack', 'discord', 'github', 'sentry', 'stripe', 'webhook', 'connect', 'plug'],
+  },
+  {
+    id: 'nav:mcp',
+    label: 'MCP',
+    path: '/mcp',
+    description: 'Connect Cursor, Claude Desktop, and other MCP agents to this project.',
+    group: 'Act',
+    keywords: ['mcp', 'claude', 'cursor', 'agent', 'tools', 'context', 'protocol', 'windsurf'],
   },
   {
     id: 'nav:marketplace',

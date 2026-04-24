@@ -79,7 +79,7 @@ const pricingTiers = [
       'Annual SOC 2 / ISO evidence pack',
       'Dedicated success engineer, 4h SLA',
     ],
-    cta: { label: 'Email sales', href: 'mailto:hello@mushimushi.dev' },
+    cta: { label: 'Email sales', href: 'mailto:kensaurus@gmail.com?subject=Enterprise%20inquiry' },
   },
 ]
 
@@ -220,7 +220,7 @@ export default function Home() {
         <p className="mt-6 text-xs text-neutral-500">
           Prices in USD. EU, UK, and JP customers are billed in their local
           currency at Stripe's daily rate. Volume discounts available for
-          annual contracts — <Link href="mailto:hello@mushimushi.dev" className="underline">talk to us</Link>.
+          annual contracts — <Link href="mailto:kensaurus@gmail.com" className="underline">talk to us</Link>.
         </p>
       </section>
 

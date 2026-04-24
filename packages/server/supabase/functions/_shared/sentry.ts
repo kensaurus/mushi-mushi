@@ -71,11 +71,56 @@ export function reportMessage(
   Sentry.captureMessage(msg, { level, ...ctx })
 }
 
-/** Drop-in handler for `app.onError(sentryHonoErrorHandler)` on a Hono app. */
+/**
+ * Drop-in handler for `app.onError(sentryHonoErrorHandler)` on a Hono app.
+ *
+ * Sentry MUSHI-MUSHI-SERVER-H (regressed 2026-04-23): Hono's CORS middleware
+ * crashed with `RangeError: status (0) is not equal to 101 and outside [200,
+ * 599]` whenever a downstream handler returned `Response.error()` (status 0,
+ * the default for failed `fetch()` outputs) or hit an `AbortError` mid-stream.
+ * Hono then tried to clone that Response inside `Context.set res` and the
+ * native `Response` constructor threw — which Hono's onError caught, but the
+ * resulting Sentry event had ZERO app-frame stack so the operator couldn't
+ * tell which route emitted the bad Response.
+ *
+ * The handler now tags every reported error with the underlying status code
+ * (when discoverable), the route, the method, and a `range_error_status_0`
+ * boolean so the next recurrence is immediately greppable in Sentry. We also
+ * special-case the `RangeError` so the user-facing response is `502 upstream
+ * fetch failed` instead of a plain `500 internal` — the route handler did
+ * succeed at signalling a network failure; the `RangeError` was just our own
+ * adapter's loss-of-fidelity bug.
+ */
 export function sentryHonoErrorHandler(err: Error, c: Context): Response {
+  const isRangeStatusZero =
+    err instanceof RangeError && /status.*\(0\)|status.+not equal to 101/i.test(err.message)
   reportError(err, {
-    tags: { path: c.req.path, method: c.req.method },
+    tags: {
+      path: c.req.path,
+      method: c.req.method,
+      range_error_status_0: isRangeStatusZero ? 'true' : 'false',
+    },
+    extra: {
+      // The cause chain occasionally carries the original fetch failure
+      // (AbortError, "fetch failed", DNS failure) that produced the
+      // status-0 Response in the first place.
+      cause:
+        err.cause !== undefined
+          ? String((err.cause as { message?: string }).message ?? err.cause).slice(0, 500)
+          : null,
+      message: err.message,
+    },
   })
+  if (isRangeStatusZero) {
+    return c.json(
+      {
+        error: 'upstream_fetch_failed',
+        detail:
+          'A downstream fetch returned no response (status 0) — usually a network/DNS failure or an aborted request. See Sentry for the underlying cause.',
+      },
+      502,
+    )
+  }
   return c.json({ error: 'internal' }, 500)
 }
 

@@ -54,17 +54,24 @@ public final class Mushi {
 
         #if os(iOS)
         if config.captureScreenshot {
+            let submit: ([String: Any]) -> Void = { client.submitReport($0) }
             if Thread.isMainThread {
-                if let s = ScreenshotCapture.captureBase64() {
-                    payload["screenshot"] = s
+                MainActor.assumeIsolated {
+                    var p = payload
+                    if let s = ScreenshotCapture.captureBase64() {
+                        p["screenshot"] = s
+                    }
+                    submit(p)
                 }
-                client.submitReport(payload)
             } else {
                 DispatchQueue.main.async {
-                    if let s = ScreenshotCapture.captureBase64() {
-                        payload["screenshot"] = s
+                    MainActor.assumeIsolated {
+                        var p = payload
+                        if let s = ScreenshotCapture.captureBase64() {
+                            p["screenshot"] = s
+                        }
+                        submit(p)
                     }
-                    client.submitReport(payload)
                 }
             }
             return
@@ -89,7 +96,7 @@ public final class Mushi {
     public func showWidget() {
         #if os(iOS)
         guard let config, let client = apiClient else { return }
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { @MainActor in
             guard let topVC = Self.topViewController() else { return }
             let screenshot = config.captureScreenshot
                 ? ScreenshotCapture.captureBase64()

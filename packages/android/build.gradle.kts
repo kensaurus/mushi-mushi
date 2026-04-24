@@ -84,7 +84,7 @@ publishing {
                     developer {
                         id.set("mushimushi")
                         name.set("Mushi Mushi")
-                        email.set("oss@mushimushi.dev")
+                        email.set("kensaurus@gmail.com")
                     }
                 }
                 scm {

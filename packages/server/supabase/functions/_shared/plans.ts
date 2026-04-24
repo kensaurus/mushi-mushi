@@ -62,7 +62,40 @@ async function loadPlans(): Promise<Map<string, PricingPlan>> {
       .eq('active', true)
       .order('position', { ascending: true })
     if (error) {
-      plog.error('plans_load_failed', { error: error.message })
+      // Sentry MUSHI-MUSHI-SERVER-K (regressed 2026-04-23): the Supabase REST
+      // gateway in front of `pricing_plans` returns transient 502/503/504 +
+      // "Bad Gateway" HTML from Cloudflare during regional cold-starts (~5–10
+      // events / day). The hobby fallback below already keeps the gateway
+      // open, so these are NOT real errors — logging them at `error` level
+      // creates Sentry noise that drowns out the genuine load failures (e.g.
+      // schema drift, RLS misconfig, hard 4xx). Classify the upstream 5xx /
+      // network blips as `warn` and reserve `error` for status codes that
+      // actually require code or schema action.
+      const code = (error as { code?: string }).code ?? null
+      const status =
+        (error as { statusCode?: number }).statusCode ??
+        (error as { status?: number }).status ??
+        null
+      const isTransientUpstream =
+        // PostgREST / Supabase relays the gateway status through `code` and
+        // `statusCode`. 502/503/504 + the JS-side "fetch failed" wrapper are
+        // all "external blip, retry", not "we have a bug".
+        (typeof status === 'number' && status >= 500 && status < 600) ||
+        code === 'PGRST301' || // pool timeout
+        /(?:bad gateway|gateway timeout|fetch failed|network|temporarily unavailable)/i.test(
+          error.message ?? '',
+        )
+      const logFields = {
+        error: error.message,
+        code,
+        status,
+        transient: isTransientUpstream,
+      }
+      if (isTransientUpstream) {
+        plog.warn('plans_load_failed_transient', logFields)
+      } else {
+        plog.error('plans_load_failed', logFields)
+      }
       // Fail open with a hobby-only catalog so quota.ts still has a baseline.
       const fallback = new Map<string, PricingPlan>([['hobby', HOBBY_FALLBACK]])
       inflight = null

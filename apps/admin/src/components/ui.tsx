@@ -9,6 +9,28 @@ import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttr
 import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 import { pctToneClass } from '../lib/tokens'
+import { ConfigHelp } from './ConfigHelp'
+
+/* ── LabelHelp ──────────────────────────────────────────────────────────────
+ *
+ * Tiny shared helper used by every form primitive below. Picks the right help
+ * affordance for a label given the two opt-in props every primitive now
+ * accepts:
+ *
+ *   - `helpId`  → rich click-to-open <ConfigHelp> popover (5-section card,
+ *                 dictionary-backed, also feeds docs/CONFIG_REFERENCE.md).
+ *   - `tooltip` → legacy short-string hover tooltip via <InfoHint>. Kept for
+ *                 backwards compatibility with the dozens of existing call
+ *                 sites that pass a one-line hint inline.
+ *
+ * `helpId` wins when both are set — the dictionary entry's `summary` already
+ * powers the trigger's hover preview, so showing both would duplicate the
+ * one-liner. */
+function LabelHelp({ helpId, tooltip }: { helpId?: string; tooltip?: string }) {
+  if (helpId) return <ConfigHelp helpId={helpId} />
+  if (tooltip) return <InfoHint content={tooltip} />
+  return null
+}
 
 /* ── Badge ──────────────────────────────────────────────────────────────── */
 
@@ -205,6 +227,10 @@ interface FieldProps {
   value: string
   mono?: boolean
   tooltip?: string
+  /** Optional id into `apps/admin/src/lib/configDocs.ts`. When set, an
+   *  italic "i" sits next to the label and opens the rich 5-section help
+   *  popover. Wins over `tooltip` when both are provided. */
+  helpId?: string
   copyable?: boolean
   valueClassName?: string
   /**
@@ -240,14 +266,14 @@ function looksLikeCodeValue(value: string): 'url' | 'id' | 'hash' | null {
   return null
 }
 
-export function Field({ label, value, mono, tooltip, copyable, valueClassName = '', longForm }: FieldProps) {
+export function Field({ label, value, mono, tooltip, helpId, copyable, valueClassName = '', longForm }: FieldProps) {
   const useProse = longForm ?? (!mono && looksLikeProse(value))
   const codeTone = mono ? looksLikeCodeValue(value) : null
   return (
     <div className="mb-2 last:mb-0">
       <span className="flex items-center gap-1 text-xs text-fg-muted font-medium">
         {label}
-        {tooltip && <InfoHint content={tooltip} />}
+        <LabelHelp helpId={helpId} tooltip={tooltip} />
       </span>
       <div className="flex items-start gap-1.5 mt-0.5">
         {useProse ? (
@@ -639,6 +665,8 @@ interface IdFieldProps {
   value: string
   prefixLength?: number
   tooltip?: string
+  /** Id into `apps/admin/src/lib/configDocs.ts`. */
+  helpId?: string
   /** Render the full value as a code block instead of a truncated prefix.
    *  Use on detail pages where the ID is evidence the user came to see;
    *  keep the default truncated form for tables and list rows. */
@@ -647,13 +675,13 @@ interface IdFieldProps {
   tone?: CodeValueTone
 }
 
-export function IdField({ label, value, prefixLength = 12, tooltip, full, tone = 'id' }: IdFieldProps) {
+export function IdField({ label, value, prefixLength = 12, tooltip, helpId, full, tone = 'id' }: IdFieldProps) {
   if (full) {
     return (
       <div className="mb-2 last:mb-0">
         <span className="flex items-center gap-1 text-xs text-fg-muted font-medium mb-1">
           {label}
-          {tooltip && <InfoHint content={tooltip} />}
+          <LabelHelp helpId={helpId} tooltip={tooltip} />
         </span>
         <CodeValue value={value} tone={tone} />
       </div>
@@ -664,7 +692,7 @@ export function IdField({ label, value, prefixLength = 12, tooltip, full, tone =
     <div className="mb-2 last:mb-0">
       <span className="flex items-center gap-1 text-xs text-fg-muted font-medium">
         {label}
-        {tooltip && <InfoHint content={tooltip} />}
+        <LabelHelp helpId={helpId} tooltip={tooltip} />
       </span>
       <div className="flex items-center gap-1 mt-0.5">
         <Tooltip content={value}>
@@ -1397,6 +1425,7 @@ const FIELD_BASE =
 
 const FIELD_LABEL = 'text-xs text-fg-muted mb-1 block font-medium'
 const FIELD_ERROR = 'mt-1 text-2xs text-danger'
+const FIELD_WARN = 'mt-1 text-2xs text-warn'
 
 /* ── Input ──────────────────────────────────────────────────────────────── */
 
@@ -1405,20 +1434,67 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   /** Inline error message rendered below the field. Setting this also
    *  flips `aria-invalid` so the brand ring becomes a danger ring. */
   error?: string
+  /** Short hover-only hint (legacy). Renders an italic "i" next to the
+   *  label that shows the string in a single-line Tooltip. Use `helpId`
+   *  for anything longer than ~10 words. */
+  tooltip?: string
+  /** Id into `apps/admin/src/lib/configDocs.ts`. When set, the "i" icon
+   *  opens a click-to-explain popover with the dictionary entry's full
+   *  5-section card. Wins over `tooltip` if both are provided. */
+  helpId?: string
+  /** Pure validator from `lib/validators.ts`. Runs on blur (not on every
+   *  keystroke — that's a known UX anti-pattern), and re-runs on change
+   *  ONLY after the field has been blurred once, so the user gets live
+   *  correctness feedback while editing without being yelled at the
+   *  moment the cursor lands. The explicit `error` prop still wins —
+   *  callers can use it for server-side validation that happens after
+   *  Save and shouldn't be silently overwritten. */
+  validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
 }
 
-export function Input({ label, className = '', id, error, ...rest }: InputProps) {
+export function Input({ label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, ...rest }: InputProps) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
+  const [touched, setTouched] = useState(false)
+  const [localResult, setLocalResult] = useState<{ message: string; severity?: 'error' | 'warn' } | null>(null)
+  const value = (rest.value ?? '') as string
+
+  // Re-validate on `value` change AFTER the field has been blurred once,
+  // so live edits clear the error as soon as the user types something
+  // valid. Before blur, suppress validation entirely — premature errors
+  // are the #1 form-validation UX complaint.
+  useEffect(() => {
+    if (!touched || !validate) return
+    setLocalResult(validate(typeof value === 'string' ? value : String(value)))
+  }, [value, touched, validate])
+
+  // The visible message: explicit `error` prop > local async validator.
+  const visibleError = error ?? (localResult?.severity !== 'warn' ? localResult?.message : undefined)
+  const visibleWarn = !visibleError && localResult?.severity === 'warn' ? localResult.message : undefined
+
   return (
     <label className="block">
-      {label && <span className={FIELD_LABEL}>{label}</span>}
+      {label && (
+        <span className={`${FIELD_LABEL} flex items-center gap-1`}>
+          {label}
+          <LabelHelp helpId={helpId} tooltip={tooltip} />
+        </span>
+      )}
       <input
         id={inputId}
-        aria-invalid={error ? true : undefined}
+        aria-invalid={visibleError ? true : undefined}
         className={`${FIELD_BASE} ${className}`}
         {...rest}
+        onBlur={(e) => {
+          if (!touched) setTouched(true)
+          if (validate) setLocalResult(validate(e.target.value))
+          onBlur?.(e)
+        }}
+        onChange={(e) => {
+          onChange?.(e)
+        }}
       />
-      {error && <p className={FIELD_ERROR}>{error}</p>}
+      {visibleError && <p className={FIELD_ERROR}>{visibleError}</p>}
+      {visibleWarn && <p className={FIELD_WARN}>{visibleWarn}</p>}
     </label>
   )
 }
@@ -1429,12 +1505,23 @@ interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string
   children: ReactNode
   error?: string
+  /** Short hover-only hint (legacy). Renders an italic "i" next to the
+   *  label. */
+  tooltip?: string
+  /** Id into `apps/admin/src/lib/configDocs.ts`. When set, opens the rich
+   *  click-to-explain popover. Wins over `tooltip`. */
+  helpId?: string
 }
 
-export function SelectField({ label, children, className = '', error, ...rest }: SelectFieldProps) {
+export function SelectField({ label, children, className = '', error, tooltip, helpId, ...rest }: SelectFieldProps) {
   return (
     <label className="block">
-      {label && <span className={FIELD_LABEL}>{label}</span>}
+      {label && (
+        <span className={`${FIELD_LABEL} flex items-center gap-1`}>
+          {label}
+          <LabelHelp helpId={helpId} tooltip={tooltip} />
+        </span>
+      )}
       <select
         aria-invalid={error ? true : undefined}
         className={`${FIELD_BASE} ${className}`}
@@ -1454,9 +1541,13 @@ interface CheckboxProps {
   checked?: boolean
   onChange?: (checked: boolean) => void
   disabled?: boolean
+  /** Short hover-only hint (legacy). */
+  tooltip?: string
+  /** Id into `apps/admin/src/lib/configDocs.ts`. */
+  helpId?: string
 }
 
-export function Checkbox({ label, checked, onChange, disabled }: CheckboxProps) {
+export function Checkbox({ label, checked, onChange, disabled, tooltip, helpId }: CheckboxProps) {
   return (
     <label className={`group inline-flex items-center gap-2 cursor-pointer ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <input
@@ -1466,7 +1557,10 @@ export function Checkbox({ label, checked, onChange, disabled }: CheckboxProps) 
         disabled={disabled}
         className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface motion-safe:transition-colors"
       />
-      <span className="text-xs text-fg-secondary group-hover:text-fg select-none motion-safe:transition-colors">{label}</span>
+      <span className="inline-flex items-center gap-1 text-xs text-fg-secondary group-hover:text-fg select-none motion-safe:transition-colors">
+        {label}
+        <LabelHelp helpId={helpId} tooltip={tooltip} />
+      </span>
     </label>
   )
 }
@@ -1478,9 +1572,13 @@ interface ToggleProps {
   checked?: boolean
   onChange?: (checked: boolean) => void
   disabled?: boolean
+  /** Short hover-only hint (legacy). */
+  tooltip?: string
+  /** Id into `apps/admin/src/lib/configDocs.ts`. */
+  helpId?: string
 }
 
-export function Toggle({ label, checked, onChange, disabled }: ToggleProps) {
+export function Toggle({ label, checked, onChange, disabled, tooltip, helpId }: ToggleProps) {
   return (
     <label className={`inline-flex items-center gap-2 cursor-pointer ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       <button
@@ -1496,7 +1594,12 @@ export function Toggle({ label, checked, onChange, disabled }: ToggleProps) {
           aria-hidden="true"
         />
       </button>
-      {label && <span className="text-xs text-fg-secondary select-none">{label}</span>}
+      {label && (
+        <span className="inline-flex items-center gap-1 text-xs text-fg-secondary select-none">
+          {label}
+          <LabelHelp helpId={helpId} tooltip={tooltip} />
+        </span>
+      )}
     </label>
   )
 }
@@ -1506,20 +1609,50 @@ export function Toggle({ label, checked, onChange, disabled }: ToggleProps) {
 interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string
   error?: string
+  /** Short hover-only hint (legacy). */
+  tooltip?: string
+  /** Id into `apps/admin/src/lib/configDocs.ts`. */
+  helpId?: string
+  /** Same blur-then-live validation contract as `<Input validate={…} />`.
+   *  See InputProps.validate for the full rationale. */
+  validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
 }
 
-export function Textarea({ label, className = '', id, error, ...rest }: TextareaProps) {
+export function Textarea({ label, className = '', id, error, tooltip, helpId, validate, onBlur, ...rest }: TextareaProps) {
   const textareaId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
+  const [touched, setTouched] = useState(false)
+  const [localResult, setLocalResult] = useState<{ message: string; severity?: 'error' | 'warn' } | null>(null)
+  const value = (rest.value ?? '') as string
+
+  useEffect(() => {
+    if (!touched || !validate) return
+    setLocalResult(validate(typeof value === 'string' ? value : String(value)))
+  }, [value, touched, validate])
+
+  const visibleError = error ?? (localResult?.severity !== 'warn' ? localResult?.message : undefined)
+  const visibleWarn = !visibleError && localResult?.severity === 'warn' ? localResult.message : undefined
+
   return (
     <label className="block">
-      {label && <span className={FIELD_LABEL}>{label}</span>}
+      {label && (
+        <span className={`${FIELD_LABEL} flex items-center gap-1`}>
+          {label}
+          <LabelHelp helpId={helpId} tooltip={tooltip} />
+        </span>
+      )}
       <textarea
         id={textareaId}
-        aria-invalid={error ? true : undefined}
+        aria-invalid={visibleError ? true : undefined}
         className={`${FIELD_BASE} resize-y min-h-20 ${className}`}
         {...rest}
+        onBlur={(e) => {
+          if (!touched) setTouched(true)
+          if (validate) setLocalResult(validate(e.target.value))
+          onBlur?.(e)
+        }}
       />
-      {error && <p className={FIELD_ERROR}>{error}</p>}
+      {visibleError && <p className={FIELD_ERROR}>{visibleError}</p>}
+      {visibleWarn && <p className={FIELD_WARN}>{visibleWarn}</p>}
     </label>
   )
 }

@@ -48,8 +48,3 @@ enum DeviceContext {
         return info
     }
 }
-
-enum MushiInfo {
-    /// Bumped automatically by the release script. Do not hand-edit.
-    public static let sdkVersion = "0.2.0"
-}

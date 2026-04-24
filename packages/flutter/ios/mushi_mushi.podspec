@@ -8,7 +8,7 @@ Pod::Spec.new do |s|
   DESC
   s.homepage         = 'https://mushimushi.dev'
   s.license          = { :type => 'MIT', :file => '../LICENSE' }
-  s.author           = { 'Mushi Mushi' => 'oss@mushimushi.dev' }
+  s.author           = { 'Mushi Mushi' => 'kensaurus@gmail.com' }
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
   s.dependency 'Flutter'

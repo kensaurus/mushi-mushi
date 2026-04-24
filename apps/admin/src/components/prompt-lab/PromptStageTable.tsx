@@ -1,4 +1,5 @@
 import { Card, Badge, Btn, RelativeTime } from '../ui'
+import { ConfigHelp } from '../ConfigHelp'
 import type { PromptVersion } from './types'
 import { STAGE_LABELS } from './types'
 
@@ -58,7 +59,12 @@ export function PromptStageTable({
               <tr>
                 <th className="text-left font-normal px-2 py-1">Version</th>
                 <th className="text-left font-normal px-2 py-1">State</th>
-                <th className="text-right font-normal px-2 py-1">Traffic</th>
+                <th className="text-right font-normal px-2 py-1">
+                  <span className="inline-flex items-center gap-1">
+                    Traffic
+                    <ConfigHelp helpId="prompt-lab.traffic_percentage" />
+                  </span>
+                </th>
                 <th className="text-right font-normal px-2 py-1">Judge score</th>
                 <th className="text-right font-normal px-2 py-1">Evals</th>
                 <th className="text-left font-normal px-2 py-1">Updated</th>

@@ -50,6 +50,7 @@ const HOOK_BODY = `#!/bin/sh
 #   - secret scanner       (scripts/check-no-secrets.mjs)
 #   - design-token drift   (scripts/check-design-tokens.mjs)
 #   - MCP catalog sync     (scripts/check-mcp-catalog-sync.mjs)
+#   - config docs drift    (scripts/check-config-docs.mjs)
 #   - community-file drift (scripts/sync-community-files.mjs --check)
 #   - dead buttons         (scripts/check-dead-buttons.mjs)
 #   - JSX unicode escapes  (scripts/check-jsx-unicode-escapes.mjs)
@@ -57,6 +58,7 @@ const HOOK_BODY = `#!/bin/sh
 node scripts/check-no-secrets.mjs || exit 1
 node scripts/check-design-tokens.mjs || exit 1
 node scripts/check-mcp-catalog-sync.mjs || exit 1
+node scripts/check-config-docs.mjs || exit 1
 node scripts/sync-community-files.mjs --check || exit 1
 node scripts/check-dead-buttons.mjs || exit 1
 node scripts/check-jsx-unicode-escapes.mjs || exit 1

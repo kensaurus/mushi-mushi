@@ -55,6 +55,7 @@ const GROUPS: ShortcutGroup[] = [
     items: [
       { keys: [MOD, 'K'], desc: 'Open command palette', hint: 'Jump to any page or action by name.' },
       { keys: [MOD, 'J'], desc: 'Open Ask Mushi', hint: 'Scoped to the current page — filters + focus are sent with each question. Use /commands or @mentions in the composer.' },
+      { keys: [MOD, 'Shift', 'I'], desc: 'Open the Action Inbox', hint: 'Jumps straight to /inbox from anywhere — works even while typing in a search field.' },
       { keys: ['?'], desc: 'Toggle this cheatsheet' },
       { keys: ['Esc'], desc: 'Close modal, drawer, or clear selection' },
     ],

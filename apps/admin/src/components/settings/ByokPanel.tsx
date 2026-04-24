@@ -12,6 +12,7 @@ import { useHotkeys } from '../../lib/useHotkeys'
 import { Section, Input, Btn, ErrorAlert, ResultChip, type ResultChipTone } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { ConfigHelp } from '../ConfigHelp'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
@@ -254,7 +255,10 @@ export function ByokPanel() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-fg-primary">{meta.name}</span>
+                  <span className="text-sm font-medium text-fg-primary inline-flex items-center gap-1">
+                    {meta.name}
+                    <ConfigHelp helpId={k.provider === 'anthropic' ? 'settings.byok.anthropic_key' : 'settings.byok.openai_key'} />
+                  </span>
                   <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${k.configured ? 'bg-ok/10 text-ok' : 'bg-surface-raised text-fg-muted'}`}>
                     {k.configured ? 'BYOK' : 'platform default'}
                   </span>
@@ -300,8 +304,9 @@ export function ByokPanel() {
 
             {k.provider === 'openai' && (
               <div className="space-y-1.5">
-                <label className="text-2xs text-fg-muted block">
-                  Base URL <span className="text-fg-faint">(optional — leave empty for OpenAI)</span>
+                <label className="text-2xs text-fg-muted flex items-center gap-1">
+                  <span>Base URL <span className="text-fg-faint">(optional — leave empty for OpenAI)</span></span>
+                  <ConfigHelp helpId="settings.byok.openai_base_url" />
                 </label>
                 <Input
                   type="url"

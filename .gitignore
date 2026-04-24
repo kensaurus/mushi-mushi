@@ -120,6 +120,10 @@ audit-after-*/
 
 # --- Sentry ------------------------------------------------------------------
 .sentryclirc
+# Local triage workspace — Sentry API JSON dumps pulled while debugging issues
+# (event payloads, stack traces, regression diffs). Routinely contain org
+# slugs, issue permalinks, and customer-side stack frames; never commit.
+.sentry-triage/
 # Sourcemaps must never be served from the public S3 bucket. The Vite plugin
 # already deletes them after upload (apps/admin/vite.config.ts), this is
 # belt-and-suspenders so a stray local build can't accidentally commit one.

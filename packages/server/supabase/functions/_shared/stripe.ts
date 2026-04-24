@@ -15,6 +15,7 @@
 // without bundling 600KB. The contract is documented inline.
 // ============================================================
 import { log } from './logger.ts'
+import { SUPPORT_EMAIL } from './support.ts'
 
 const stripeLog = log.child('stripe')
 
@@ -132,7 +133,11 @@ export const createCheckoutSession = (
   cfg: StripeConfig,
   args: CreateCheckoutSessionArgs,
 ): Promise<CheckoutSession> => {
-  const supportEmail = (Deno.env.get('SUPPORT_EMAIL') ?? '').trim() || 'support@mushimushi.dev'
+  // Read from the canonical SUPPORT_EMAIL helper rather than re-implementing
+  // the env-var fallback inline (the previous duplicate hard-coded
+  // `support@mushimushi.dev` and silently drifted out of sync with
+  // `_shared/support.ts` once we changed the maintainer inbox).
+  const supportEmail = SUPPORT_EMAIL
   const body = form({
     mode: 'subscription',
     customer: args.customer,

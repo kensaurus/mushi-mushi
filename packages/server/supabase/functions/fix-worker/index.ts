@@ -83,35 +83,13 @@ import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
 // ----------------------------------------------------------------------------
-// Structured fix output. The LLM gets a strict shape — no shell, no tool calls.
+// Structured fix output lives in `_shared/fix-schema.ts` so the regression
+// tests can import the schema without dragging in the Edge runtime's `npm:`
+// specifiers. See that file for the MUSHI-MUSHI-SERVER-J/8 placeholder-rejection
+// rationale.
 // ----------------------------------------------------------------------------
-const fixSchema = z.object({
-  // Single short-form summary that becomes the PR title.
-  summary: z.string().min(10).max(120)
-    .describe('A short, conventional-commit-friendly title for the PR (e.g. "fix(button): prevent rage-click double-submit"). Must fit GitHub PR title limits.'),
 
-  // Long-form rationale — the WHY of the change. Becomes part of the PR body.
-  rationale: z.string().min(20).max(2000)
-    .describe('Explain *why* this fix resolves the report — root cause + how the change addresses it. Reviewer-facing, plain English.'),
-
-  // Each file is a full-content rewrite (path + new contents). The Edge
-  // Function diffs against the existing file to validate scope. We don't
-  // accept patch hunks — they're too brittle for an LLM to emit reliably.
-  files: z.array(z.object({
-    path: z.string().min(1).max(500)
-      .describe('Repo-relative file path (forward-slashed). Must be inside the scope directory or a test file.'),
-    contents: z.string().max(50_000)
-      .describe('Full new file contents. The Edge Function replaces the file atomically — never partial.'),
-    reason: z.string().min(5).max(500)
-      .describe('One-line per-file reason for the change.'),
-  })).min(1).max(10)
-    .describe('Files to change. Keep the set minimal — adding test files is encouraged.'),
-
-  needsHumanReview: z.boolean()
-    .describe('Set true when confidence is low or the fix touches security-sensitive code. Forces draft PR.'),
-})
-
-type FixOutput = z.infer<typeof fixSchema>
+import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts'
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -125,7 +103,13 @@ Rules:
 5. If you are not confident the fix is correct, set needsHumanReview=true and explain in the rationale.
 6. Never invent file paths. Use ONLY paths that appear in the "Relevant code" context. If the right file isn't there, set needsHumanReview=true and propose what to look at instead.
 7. Never include secrets, credentials, or hardcoded API keys in your output.
-8. Stay within the configured scope directory unless adding tests.`
+8. Stay within the configured scope directory unless adding tests.
+
+NEVER emit placeholder output. The strings "placeholder", "TODO", "lorem ipsum", "FIXME", "...", or any stub stand-in for real content are FORBIDDEN as the value of \`summary\`, \`rationale\`, \`files[].contents\`, or \`files[].reason\`. The schema will reject them and you will be retried. If you do not have enough context to write a real fix:
+  - set \`needsHumanReview: true\`
+  - in \`rationale\`, explain exactly which file or snippet you would need to see
+  - in \`files\`, emit the SMALLEST plausible defensive change you can justify (e.g. an explicit error message at the crash site) rather than a placeholder
+  - never emit a draft PR full of stub files just to satisfy the schema`
 
 interface FixRequestBody {
   dispatchId: string

@@ -229,7 +229,7 @@ function buildAgentCard(req: Request): Record<string, unknown> {
       rest: { base: apiBase, openapi: `${apiBase}/openapi.json` },
       mcp: { base: mcpBase },
     },
-    contact: { email: 'oss@mushimushi.dev', issues: 'https://github.com/kensaurus/mushi-mushi/issues' },
+    contact: { email: 'kensaurus@gmail.com', issues: 'https://github.com/kensaurus/mushi-mushi/issues' },
     license: { id: 'MIT', url: 'https://opensource.org/licenses/MIT' },
     generatedAt: new Date().toISOString(),
   }

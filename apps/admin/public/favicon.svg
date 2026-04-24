@@ -1,4 +1,40 @@
+<!--
+  FILE: apps/admin/public/favicon.svg
+  PURPOSE: Browser-tab brand mark. Reads the "Mushi Mushi Editorial" design
+           language used by the floating widget (paper + sumi ink, single 朱
+           vermillion accent, 印鑑 hanko stamp metaphor) and compresses it
+           into ~16×16 pixels of tab real estate.
+
+  DESIGN
+    - Vermillion #E03C2C rounded-square stamp (the 朱印 hanko shape — see
+      packages/web/src/styles.ts, where the same colour is used for the
+      widget trigger's bottom edge and the success-step 受 ring).
+    - Slight -3° tilt so it reads as a *hand-stamped* mark rather than
+      a perfectly geometric SaaS icon. Real hanko prints are never level.
+    - The kanji 虫 (mushi = "bug, insect") inside, in paper cream so the
+      negative space tells the brand story without a second colour.
+    - Mincho serif stack for a brush-carved feel; falls back through every
+      common Japanese serif by OS, then SimSun (Windows ZH fallback that
+      still has CJK ideographs), then generic serif. Even on a CJK-fontless
+      system the user sees a vermillion hanko shape — degraded but on-brand,
+      not the previous "weird black circle".
+
+  PAINT PIPELINE COMPATIBILITY
+    apps/admin/src/lib/favicon.ts rasterises this SVG to a 32×32 canvas
+    when painting the critical-count badge. Two requirements drove the
+    explicit `width`/`height` here: (1) viewBox-only SVGs throw
+    EncodingError when fed to an `Image` element on Chromium, (2) the
+    canvas pipeline reads those attributes when sizing `drawImage`. Keep
+    them in sync if you ever bump the artwork.
+-->
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 100 100">
-  <circle cx="50" cy="50" r="45" fill="#18181b"/>
-  <text x="50" y="68" font-size="52" text-anchor="middle" font-family="system-ui">=</text>
+  <g transform="rotate(-3 50 50)">
+    <rect x="8" y="8" width="84" height="84" rx="12" fill="#E03C2C"/>
+    <text x="50" y="78"
+          text-anchor="middle"
+          fill="#F8F4ED"
+          font-family="'Hiragino Mincho ProN','Yu Mincho Pr6N','Yu Mincho','Source Han Serif JP','Noto Serif CJK JP','SimSun',serif"
+          font-weight="700"
+          font-size="62">虫</text>
+  </g>
 </svg>

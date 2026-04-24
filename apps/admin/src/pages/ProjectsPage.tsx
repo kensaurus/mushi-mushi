@@ -7,7 +7,7 @@
  *          copy-pasting an API key.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -28,6 +28,8 @@ import { useCreateProject } from '../lib/useCreateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
+import { SdkInstallCard } from '../components/SdkInstallCard'
+import { ConfigHelp } from '../components/ConfigHelp'
 
 interface ApiKey {
   id: string
@@ -139,6 +141,18 @@ export function ProjectsPage() {
   const [newName, setNewName] = useState('')
   const [busyProject, setBusyProject] = useState<string | null>(null)
   const [revealedKeys, setRevealedKeys] = useState<Record<string, { key: string; scopes: string[] }>>({})
+  /* SDK configurator open/closed state per project. The default is "open iff
+     this row is the project we're currently viewing", but the user can
+     manually toggle a row open or closed and that override should stick
+     until they Switch to a different project (at which point the override
+     map clears so the new active row auto-opens and the previously-active
+     row auto-collapses). Tracking overrides explicitly — instead of letting
+     <details> own its own state — is what lets us collapse the prior row
+     on Switch without fighting the user's manual toggles in steady state. */
+  const [sdkOpenOverride, setSdkOpenOverride] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    setSdkOpenOverride({})
+  }, [activeProjectId])
   // Per-project preset selection so multiple keys can be minted without
   // losing the user's last choice on rerender.
   const [keyScopePreset, setKeyScopePreset] = useState<Record<string, ScopePresetId>>({})
@@ -169,7 +183,7 @@ export function ProjectsPage() {
           body: JSON.stringify({ scopes: preset.scopes }),
         },
       )
-      if (!res.ok) throw new Error(res.error?.message ?? 'Mint failed')
+      if (!res.ok) throw new Error(res.error?.message ?? 'Failed to generate key')
       const key = res.data?.key
       const scopes = res.data?.scopes ?? preset.scopes
       if (key) {
@@ -181,7 +195,7 @@ export function ProjectsPage() {
             'It will not be shown again — store it in your secrets manager.',
           )
         } catch {
-          toast.success(`${preset.label} key minted`, 'Copy it now — it will not be shown again.')
+          toast.success(`${preset.label} key generated`, 'Copy it now — it will not be shown again.')
         }
       }
       reload()
@@ -226,7 +240,7 @@ export function ProjectsPage() {
     const next = new URLSearchParams(searchParams)
     next.set('project', projectId)
     setSearchParams(next, { replace: true })
-    toast.success(`Switched active project to ${name}`)
+    toast.success(`Now viewing ${name}`)
   }
 
   if (loading) return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
@@ -243,13 +257,16 @@ export function ProjectsPage() {
           'Separate reports from your iOS app, Android app, and backend API',
           'Rotate credentials by revoking and re-issuing API keys without downtime',
           'Scope per-project routing rules and SLAs in Settings, then share read access via members',
+          'The "Viewing" badge marks which project the rest of the admin console is focused on — Reports, Fixes, Dashboard, Billing, and Health all filter to that one. Every project keeps ingesting reports in the background regardless; this is just a UI lens.',
         ]}
-        howToUse="Create a project, mint an API key, then drop it into the SDK or send it as the X-API-Key header. Use the Test report action to verify ingest before wiring up production traffic."
+        howToUse="Create a project, generate an API key, then drop it into the SDK or send it as the X-API-Key header. Use Switch to to change which project the admin console is showing, or use the project picker in the top-right header. Use the Test report action to verify ingest before wiring up production traffic."
       />
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-end">
         <div className="flex-1">
           <Input
+            label="Project name"
+            helpId="projects.create_project"
             type="text"
             placeholder="New project name (e.g. Acme iOS app)"
             value={newName}
@@ -280,7 +297,14 @@ export function ProjectsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-medium text-fg">{project.name}</h3>
-                      {isActive && <Badge className="bg-brand/15 text-brand">Active</Badge>}
+                      {isActive && (
+                        <Badge
+                          className="bg-brand/15 text-brand"
+                          title="The admin console pages (Reports, Fixes, Dashboard, etc.) are currently filtered to this project. All your other projects are still live and ingesting reports — this is just which one the UI is focused on."
+                        >
+                          Viewing
+                        </Badge>
+                      )}
                       <code className="text-2xs font-mono text-fg-faint">{project.slug}</code>
                     </div>
                     <p className="text-2xs text-fg-faint mt-0.5">
@@ -304,9 +328,17 @@ export function ProjectsPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     {!isActive && (
-                      <Btn variant="ghost" size="sm" onClick={() => setActive(project.id, project.name)}>
-                        Set active
-                      </Btn>
+                      <span className="inline-flex items-center gap-1">
+                        <Btn
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setActive(project.id, project.name)}
+                          title="Switch the admin console UI to focus on this project. Your other projects keep ingesting reports either way — this is just which one Reports / Fixes / Dashboard etc. show by default."
+                        >
+                          Switch to
+                        </Btn>
+                        <ConfigHelp helpId="projects.active_project" />
+                      </span>
                     )}
                     <Link to={`/reports?project=${project.id}`} className={LINK_CHIP_CLASS}>
                       Reports
@@ -330,6 +362,7 @@ export function ProjectsPage() {
                       <label htmlFor={`key-scope-${project.id}`} className="sr-only">
                         API key scope for {project.name}
                       </label>
+                      <ConfigHelp helpId="projects.api_key_scope" />
                       <select
                         id={`key-scope-${project.id}`}
                         data-testid={`key-scope-${project.id}`}
@@ -354,7 +387,7 @@ export function ProjectsPage() {
                         loading={isBusy}
                         data-testid={`generate-key-${project.id}`}
                       >
-                        Mint key
+                        Generate key
                       </Btn>
                     </div>
                   </div>
@@ -401,6 +434,63 @@ export function ProjectsPage() {
                     </div>
                   </details>
                 )}
+
+                {/* Per-project SDK CONFIGURATOR + install snippet. Stays
+                    collapsed by default so the row remains scannable when
+                    the user is just managing keys, but the disclosure
+                    header is now full-width with an icon + descriptive
+                    sub-line so the eye actually catches it (the previous
+                    tiny "SDK install snippet" link looked identical to
+                    the keys row above and was getting missed). */}
+                {/* Open the configurator for whichever project the user is
+                    currently viewing; collapse it for the others so the rows
+                    stay scannable. Open state is `override ?? isActive`, so
+                    a user-toggled value wins on re-renders (project data
+                    refetches won't snap it back), but the override map is
+                    cleared whenever `activeProjectId` changes (see the
+                    `useEffect` above) — that way clicking Switch to on
+                    another row collapses the previous one and opens the new
+                    one with no leftover override fighting the new default. */}
+                <details
+                  className="mt-3 pt-3 border-t border-edge-subtle group"
+                  data-testid={`sdk-configurator-${project.id}`}
+                  open={sdkOpenOverride[project.id] ?? isActive}
+                  onToggle={(e) => {
+                    const nextOpen = (e.currentTarget as HTMLDetailsElement).open
+                    setSdkOpenOverride((prev) => {
+                      // No-op: matches what the default would be anyway, so
+                      // don't grow the override map unnecessarily.
+                      if (nextOpen === isActive && !(project.id in prev)) return prev
+                      return { ...prev, [project.id]: nextOpen }
+                    })
+                  }}
+                >
+                  <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-colors">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span aria-hidden="true" className="text-fg-muted text-xs">{'\u{1F41B}'}</span>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-fg">Preview, configure & install the SDK widget</div>
+                        <div className="text-2xs text-fg-faint">
+                          Live mock preview · 4-corner position picker · theme · capture flags · auto-updating snippet
+                        </div>
+                      </div>
+                    </div>
+                    <span aria-hidden="true" className="text-2xs text-fg-faint group-open:rotate-90 motion-safe:transition-transform">›</span>
+                  </summary>
+                  <div className="mt-3">
+                    {/* Pass `revealed?.key` so the snippet shows the real,
+                        just-minted plaintext key instead of the `mushi_xxx`
+                        placeholder. `revealed` is the same value the
+                        RevealedKeyCard above uses, so the user can copy the
+                        snippet without manually replacing a placeholder
+                        whose actual value is sitting on screen literally
+                        inches above. Once the user dismisses the reveal
+                        (or reloads), `revealed` becomes undefined and the
+                        card cleanly falls back to the placeholder — which
+                        is what we want, since we don't persist plaintext. */}
+                    <SdkInstallCard projectId={project.id} apiKey={revealed?.key} compact />
+                  </div>
+                </details>
               </Card>
             )
           })}
