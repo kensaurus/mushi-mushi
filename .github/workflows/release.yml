@@ -32,13 +32,18 @@ on:
   # GitHub's anti-loop protection. Use this to re-fire the publish step against
   # the current `master` HEAD without rewriting history.
   #
-  # CAVEAT (observed 2026-04-24, run 24880104469): npm provenance via OIDC
-  # successfully signs+attests, but the actual PUT to the registry returns
-  # `404 Not Found - "<package>@<version>" is not in this registry` for every
-  # `@mushi-mushi/*` package when the workflow runs from a `workflow_dispatch`
-  # event. Every previous publish ran from `push` and worked. Until the npm
-  # Trusted Publisher rule is widened (or the cause is understood), rely on a
-  # `push` event — merge any small follow-up PR to master to re-fire it.
+  # OIDC TRUSTED-PUBLISHER GOTCHA (observed 2026-04-24, runs 24880104469 and
+  # 24880565985): with NPM_CONFIG_PROVENANCE=true, npm rejects the publish
+  # PUT with `404 Not Found - "<pkg>@<version>" is not in this registry`
+  # **even though Sigstore signing succeeds and the provenance statement is
+  # uploaded to the transparency log**. This 404 is npm's way of saying
+  # "Trusted Publisher rule didn't match the OIDC claims" — same payload as
+  # a missing-package 404, no usable hint about which claim diverged.
+  # Reproduces on both `push` and `workflow_dispatch`. Fix lives outside CI:
+  # update the per-package Trusted Publisher rule on npmjs.com to match
+  # `kensaurus/mushi-mushi/.github/workflows/release.yml` on `master`. Until
+  # then v0.4.x stays the latest published version — the in-repo bump to
+  # v0.5.0 is checked in but cannot reach the registry.
   workflow_dispatch:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
