@@ -33,6 +33,7 @@ import { IconIntegrations, IconCopy, IconCheck, IconArrowRight } from '../compon
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
+import { SdkInstallCard } from '../components/SdkInstallCard'
 import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
@@ -246,7 +247,7 @@ export function McpPage() {
       >
         <Link to="/projects">
           <Btn variant="ghost" size="sm" data-testid="mcp-mint-key-link">
-            Mint an API key
+            Generate an API key
           </Btn>
         </Link>
       </PageHeader>
@@ -262,7 +263,7 @@ export function McpPage() {
         ]}
         howToUse={
           '1. On /projects, pick a scope preset (MCP read-only to browse, MCP read + write to dispatch). ' +
-          '2. Click "Mint key" — the reveal card shows the exact .env.local and .cursor/mcp.json blocks to copy. ' +
+          '2. Click "Generate key" — the reveal card shows the exact .env.local and .cursor/mcp.json blocks to copy. ' +
           '3. Paste the .cursor/mcp.json block into your IDE\'s MCP settings, then restart the IDE. ' +
           '4. Ask your agent "list mushi tools" to confirm the handshake.'
         }
@@ -310,12 +311,12 @@ export function McpPage() {
           <QuickstartStep
             n={1}
             tone={step1Tone}
-            title="Mint an API key"
+            title="Generate an API key"
             body={
               status.hasReadKey ? (
                 <span>
                   <span className="text-ok">{status.activeKeyCount} active key{status.activeKeyCount === 1 ? '' : 's'}</span> on{' '}
-                  <span className="font-mono text-fg-secondary">{projectName}</span>. Mint more anytime.
+                  <span className="font-mono text-fg-secondary">{projectName}</span>. Generate more anytime.
                 </span>
               ) : (
                 <span>
@@ -352,7 +353,7 @@ export function McpPage() {
           <div className="pt-1">
             <Link to="/projects">
               <Btn size="sm" data-testid="mcp-status-mint">
-                Mint a key on /projects
+                Generate a key on /projects
                 <IconArrowRight className="h-3.5 w-3.5 ml-1" />
               </Btn>
             </Link>
@@ -367,9 +368,9 @@ export function McpPage() {
         <div>
           <h3 className="text-sm font-semibold text-fg">Install snippet</h3>
           <p className="text-xs text-fg-muted mt-1">
-            Your active project id is pre-filled. Replace{' '}
+            The id of the project you're currently viewing is pre-filled. Replace{' '}
             <code className="mx-0.5 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary font-mono text-2xs">paste-your-key-here</code>{' '}
-            with a key minted on <Link to="/projects" className="text-accent hover:underline">/projects</Link>.
+            with a key generated on <Link to="/projects" className="text-accent hover:underline">/projects</Link>.
           </p>
         </div>
 
@@ -423,6 +424,26 @@ export function McpPage() {
           </pre>
         </div>
       </Card>
+
+      {/* ── Bug-capture web SDK install ───────────────────────────────
+          MCP wires AGENTS to the project (read/write tools). The
+          bug-capture web SDK wires END USERS in your app to the same
+          project (one-tap report submission). Surfacing the framework
+          install here so MCP visitors realise the two are independent
+          install paths and don't have to dig through /onboarding to
+          find it. */}
+      {status.activeProject && (
+        <Card className="p-5 space-y-4">
+          <div>
+            <h3 className="text-sm font-semibold text-fg">Or wire end users to this project</h3>
+            <p className="text-xs text-fg-muted mt-1">
+              The MCP block above connects coding agents. To let real users in your app submit bug reports too,
+              install the bug-capture web SDK with this project's id pre-filled.
+            </p>
+          </div>
+          <SdkInstallCard projectId={status.activeProject.id} compact />
+        </Card>
+      )}
 
       {/* ── Use cases ────────────────────────────────────────────────
           Each card shows (agent ask) + (tool chain it will run) so a

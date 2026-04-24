@@ -452,7 +452,7 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
       </div>
       <p className="text-2xs text-fg-faint mt-2">
         Need an air-gapped install, custom DPA, or &gt; 500k reports/mo?{' '}
-        <a href="mailto:hello@mushimushi.dev" className="text-brand hover:text-brand-hover">
+        <a href="mailto:kensaurus@gmail.com" className="text-brand hover:text-brand-hover">
           Email sales
         </a>{' '}
         for Enterprise.

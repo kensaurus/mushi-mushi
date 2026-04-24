@@ -179,7 +179,7 @@ export function CompliancePage() {
       return
     }
     if (!setup.activeProject) {
-      toast.error('No active project', 'Pick a project in the header switcher before filing a DSAR.')
+      toast.error('No project selected', 'Pick a project in the header switcher before filing a DSAR.')
       return
     }
     setFiling(true)

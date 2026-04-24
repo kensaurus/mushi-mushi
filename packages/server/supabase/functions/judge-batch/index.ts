@@ -13,7 +13,7 @@ import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
-import { JUDGE_MODEL, JUDGE_FALLBACK, acceptsSamplingKnobs, anthropicThinkingProviderOptions } from '../_shared/models.ts'
+import { JUDGE_MODEL, JUDGE_FALLBACK } from '../_shared/models.ts'
 
 /**
  * OpenRouter / Together / Fireworks expect `vendor/model` slugs. Operators
@@ -49,7 +49,16 @@ const judgeSchema = z.object({
   component_tagging: z.number().min(0).max(1).describe('Is the component correctly identified?'),
   repro_quality: z.number().min(0).max(1).describe('Are reproduction steps actionable?'),
   classification_agreed: z.boolean().describe('Would you agree with the overall classification?'),
-  reasoning: z.string().max(500).describe('Brief justification for scores'),
+  // Sentry MUSHI-MUSHI-SERVER-9 follow-up (2026-04-24): Sonnet 4.6 (and
+  // any modern frontier model under our judge prompt) routinely emits
+  // 700–1500 chars of reasoning when classification_agreed=false. The
+  // previous 500-cap caused AI_TypeValidationError on every disagreement,
+  // which surfaced as the same `Failed to evaluate report` Sentry log as
+  // the underlying 400 we just fixed. Cap is now 2000 — comfortably above
+  // the 1500-char p95 we measured on the live failing reports without
+  // letting the model run away. `reports.judge_reasoning` is `text` so
+  // there is no DB-side ceiling to coordinate with.
+  reasoning: z.string().max(2000).describe('Justification for scores; concise but may explain multiple sub-scores when classification_agreed is false'),
   suggested_correction: z.object({
     category: z.string().nullable().describe('Suggested category, or null if no change'),
     severity: z.string().nullable().describe('Suggested severity, or null if no change'),
@@ -235,24 +244,21 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           if (tryAnthropic) {
             try {
               const anthropic = createAnthropic({ apiKey: anthropicResolved?.key ?? Deno.env.get('ANTHROPIC_API_KEY') })
-              // Sentry MUSHI-MUSHI-SERVER-9 (regressed 2026-04-23): Anthropic
-              // deprecated `temperature`/`top_p`/`top_k` on Opus 4.7 — the
-              // parameter is gone and any value 400s. AI SDK v4
-              // `prepareCallSettings` hardcodes `temperature ?? 0` so we can't
-              // omit it through the public surface. The only escape hatch the
-              // `@ai-sdk/anthropic` provider gives us is thinking mode, which
-              // strips `temperature`/`top_k`/`top_p` before they hit the wire.
-              // We flip it on for any model the helper says can't take the
-              // legacy knobs — Sonnet/Haiku still accept temperature so they
-              // get the deterministic `0` like before.
-              const useSamplingKnobs = acceptsSamplingKnobs(modelId)
+              // Sentry MUSHI-MUSHI-SERVER-9 (2026-04-23, then 2026-04-24
+              // 03:00 UTC): the Wave-R upgrade to Opus 4.7 + the `e218bbf`
+              // thinking-mode workaround both 400. Opus 4.7 deprecated
+              // `temperature`, AI SDK v4 hardcodes it, enabling thinking
+              // strips it BUT Anthropic forbids "thinking + tool_choice
+              // forces tool use" which `generateObject` always sets for
+              // Anthropic. See `_shared/models.ts` `acceptsSamplingKnobs`
+              // for the full migration note plus vercel/ai#7220 / #9351.
+              // Until vercel/ai ships native middleware OR we move to AI
+              // SDK v5, JUDGE_MODEL stays on Sonnet 4.6 — which accepts
+              // `temperature: 0` and works with `generateObject` directly.
               const result = await generateObject({
                 model: anthropic(modelId),
                 schema: judgeSchema,
-                ...(useSamplingKnobs ? { temperature: 0 } : {}),
-                ...(useSamplingKnobs
-                  ? {}
-                  : { experimental_providerMetadata: anthropicThinkingProviderOptions() }),
+                temperature: 0,
                 messages: [
                   {
                     role: 'system',
@@ -398,9 +404,42 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
           // AI SDK wraps provider errors in AI_APICallError — pull the raw
           // response body / status when available so the operator can see
           // "model not found" vs "rate limit" vs "invalid key" at a glance.
-          const e = err as { responseBody?: string; statusCode?: number; cause?: unknown; message?: string }
+          //
+          // Sentry MUSHI-MUSHI-SERVER-9 follow-up (2026-04-24): when the
+          // SERVER-9 root cause was the Opus-4.7 400, this catch also caught
+          // `AI_NoObjectGeneratedError` (raw-text path) but stringified it as
+          // just "No object generated: response did not match schema." with
+          // no payload — making the second-order fix invisible. AI SDK
+          // exposes the offending text on `err.text` and the Zod issues on
+          // `err.cause` (`ZodError.issues`). Surface both, capped, so the
+          // operator can tell "Sonnet returned the wrong enum value" apart
+          // from "model returned plain prose, not a tool_use" without
+          // re-running judge with debug instrumentation.
+          const e = err as {
+            responseBody?: string
+            statusCode?: number
+            cause?: unknown
+            message?: string
+            name?: string
+            text?: string
+          }
+          let extra = ''
+          if (e.name === 'AI_NoObjectGeneratedError' || e.message?.startsWith('No object generated')) {
+            const cause = e.cause as
+              | { issues?: Array<{ path?: unknown[]; message?: string; code?: string }>; message?: string; name?: string }
+              | undefined
+            const issuesArr = cause?.issues
+            const issuesStr = issuesArr
+              ? issuesArr
+                  .map(i => `${(i.path ?? []).join('.') || '<root>'}:${i.code ?? ''}:${i.message ?? ''}`)
+                  .join(' | ')
+                  .slice(0, 400)
+              : `<no .issues> causeName=${cause?.name ?? 'na'} causeMsg=${(cause?.message ?? '').slice(0, 200)}`
+            const rawText = e.text?.slice(0, 600)
+            extra = ` | issues=${issuesStr} | text=${rawText ?? '<none>'}`
+          }
           const detail = e.responseBody?.slice(0, 300) ?? e.message ?? String(err)
-          const errMsg = `${e.statusCode ? `[${e.statusCode}] ` : ''}${detail}`.slice(0, 400)
+          const errMsg = `${e.statusCode ? `[${e.statusCode}] ` : ''}${detail}${extra}`.slice(0, 1500)
           rootLog.child('judge').error('Failed to evaluate report', { reportId: report.id, err: errMsg })
           evalErrors.push({ reportId: report.id, err: errMsg })
           span.end({ error: errMsg })

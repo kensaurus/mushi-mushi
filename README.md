@@ -558,7 +558,7 @@ How each piece works:
 
 - **Operator push** (`packages/server/supabase/functions/_shared/operator-notify.ts`): a single helper that knows how to render Slack Block Kit *and* Discord rich embeds. Severity drives colour; `urgent` pings `@here` on Discord. Failures are captured to Sentry but never block the webhook from 200-ing back to Stripe.
 - **In-app support form** (`/v1/support/contact`): JWT-gated, rate-limited to 5 tickets/hour/user, captures plan tier at submit time so paid tickets jump the queue. Customer sees status updates inline on `/billing`. PII (passwords, API keys) explicitly called out as off-limits in the form copy.
-- **Centralised support address** (`SUPPORT_EMAIL` env var, defaults to `support@mushimushi.dev`): used in the Checkout `custom_text`, the BillingPage "Need help?" mailto, and the rate-limit error message.
+- **Centralised support address** (`SUPPORT_EMAIL` env var, defaults to `kensaurus@gmail.com` — the maintainer's inbox; there is no `*@mushimushi.dev` mailbox, that domain is branding/URLs only): used in the Checkout `custom_text`, the BillingPage "Need help?" mailto, and the rate-limit error message. **Self-hosters must override this** so their tenants don't email the upstream maintainer.
 
 To enable the operator push for a self-hosted instance:
 
@@ -569,7 +569,8 @@ To enable the operator push for a self-hosted instance:
 supabase secrets set OPERATOR_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 # or
 supabase secrets set OPERATOR_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-# 3. Optionally override the support address (defaults to support@mushimushi.dev):
+# 3. Override the support address (defaults to kensaurus@gmail.com — the
+#    upstream maintainer's inbox; self-hosters MUST set this):
 supabase secrets set SUPPORT_EMAIL=ops@yourdomain.com
 # 4. Redeploy the api + stripe-webhooks functions:
 supabase functions deploy api stripe-webhooks
