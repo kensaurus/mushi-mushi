@@ -77,7 +77,7 @@ describe('slackWebhookUrl', () => {
   it('warns (not errors) on a non-slack host so user can override', () => {
     const result = v('https://hooks.example.com/services/T123/B456/XYZ')
     expect(result?.severity).toBe('warn')
-    expect(result?.message).toMatch(/hooks\.slack\.com/)
+    expect(result?.message).toContain('hooks.slack.com')
   })
 
   it('errors on http://', () => {

@@ -35,6 +35,9 @@ void main() {
     for (var i = 0; i < 10; i++) {
       await q.enqueue({'description': 'report-$i', 'category': 'bug'});
     }
-    expect((await q.count()) <= 4, isTrue);
+    // Matches iOS/Android contract: each ~44 B NDJSON line, 250 B cap
+    // ⇒ five newest rows survive after trimming the five oldest.
+    expect(await q.count(), 5);
+    expect((await q.peek(limit: 1)).first['description'], 'report-5');
   });
 }
