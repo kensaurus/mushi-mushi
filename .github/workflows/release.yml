@@ -154,7 +154,12 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add CHANGELOG.md apps/docs/data/changelog.json
             git commit -m "chore: refresh public changelog [skip ci]"
-            git push
+            # Use HEAD:<branch> form because changesets/action checks out
+            # `changeset-release/master` (or master itself on a publish) without
+            # setting upstream tracking on the local ref. A bare `git push`
+            # therefore fails with "no upstream branch", aborting the release.
+            current_branch=$(git rev-parse --abbrev-ref HEAD)
+            git push origin "HEAD:${current_branch}"
           else
             echo "changelog: no drift to commit"
           fi
