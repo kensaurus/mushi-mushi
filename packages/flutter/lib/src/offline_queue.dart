@@ -24,17 +24,17 @@ class OfflineQueue {
   }
 
   Future<void> enqueue(Map<String, dynamic> payload) => _lock.run(() async {
-    final f = await _resolveFile();
-    final line = utf8.encode('${jsonEncode(payload)}\n');
-    var bytes = f.existsSync() ? await f.readAsBytes() : Uint8List(0);
-    bytes = Uint8List.fromList([...bytes, ...line]);
-    while (bytes.length > maxBytes) {
-      final nl = bytes.indexOf(0x0A);
-      if (nl < 0) break;
-      bytes = bytes.sublist(nl + 1);
-    }
-    await f.writeAsBytes(bytes, flush: true);
-  });
+        final f = await _resolveFile();
+        final line = utf8.encode('${jsonEncode(payload)}\n');
+        var bytes = f.existsSync() ? await f.readAsBytes() : Uint8List(0);
+        bytes = Uint8List.fromList([...bytes, ...line]);
+        while (bytes.length > maxBytes) {
+          final nl = bytes.indexOf(0x0A);
+          if (nl < 0) break;
+          bytes = bytes.sublist(nl + 1);
+        }
+        await f.writeAsBytes(bytes, flush: true);
+      });
 
   Future<List<Map<String, dynamic>>> peek({int limit = 25}) =>
       _lock.run(() async {
@@ -58,29 +58,29 @@ class OfflineQueue {
       });
 
   Future<void> clearDelivered(int count) => _lock.run(() async {
-    if (count <= 0) return;
-    final f = await _resolveFile();
-    if (!f.existsSync()) return;
-    final remaining = (await f.readAsString())
-        .split('\n')
-        .where((l) => l.isNotEmpty)
-        .skip(count)
-        .toList();
-    if (remaining.isEmpty) {
-      await f.delete();
-    } else {
-      await f.writeAsString('${remaining.join('\n')}\n', flush: true);
-    }
-  });
+        if (count <= 0) return;
+        final f = await _resolveFile();
+        if (!f.existsSync()) return;
+        final remaining = (await f.readAsString())
+            .split('\n')
+            .where((l) => l.isNotEmpty)
+            .skip(count)
+            .toList();
+        if (remaining.isEmpty) {
+          await f.delete();
+        } else {
+          await f.writeAsString('${remaining.join('\n')}\n', flush: true);
+        }
+      });
 
   Future<int> count() => _lock.run(() async {
-    final f = await _resolveFile();
-    if (!f.existsSync()) return 0;
-    return (await f.readAsString())
-        .split('\n')
-        .where((l) => l.isNotEmpty)
-        .length;
-  });
+        final f = await _resolveFile();
+        if (!f.existsSync()) return 0;
+        return (await f.readAsString())
+            .split('\n')
+            .where((l) => l.isNotEmpty)
+            .length;
+      });
 }
 
 class _AsyncLock {
