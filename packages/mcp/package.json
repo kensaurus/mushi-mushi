@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "license": "MIT",
   "description": "MCP server exposing Mushi Mushi reports to coding agents",
   "type": "module",
