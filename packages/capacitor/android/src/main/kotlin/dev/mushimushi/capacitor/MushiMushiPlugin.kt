@@ -88,7 +88,24 @@ class MushiMushiPlugin : Plugin() {
 
     @PluginMethod
     fun showWidget(call: PluginCall) {
-        Mushi.showWidget()
+        Mushi.showWidget(
+            category = call.getString("category"),
+            metadata = call.getObject("metadata")?.toMap()
+        )
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setUser(call: PluginCall) {
+        Mushi.setUser(call.getObject("user")?.toMap())
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun setMetadata(call: PluginCall) {
+        val key = call.getString("key")
+            ?: return call.reject("key is required")
+        Mushi.setMetadata(key, call.data.opt("value"))
         call.resolve()
     }
 
@@ -98,5 +115,9 @@ class MushiMushiPlugin : Plugin() {
         // contract symmetric across iOS/Android.
         val res = JSObject().apply { put("delivered", 0) }
         call.resolve(res)
+    }
+
+    private fun JSObject.toMap(): Map<String, Any?> = buildMap {
+        keys().forEachRemaining { key -> put(key, opt(key)) }
     }
 }

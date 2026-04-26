@@ -2,6 +2,7 @@ import {
   type MushiConfig,
   type MushiReport,
   type MushiReportCategory,
+  type MushiRuntimeSdkConfig,
   type MushiEventType,
   type MushiEventHandler,
   type MushiSDKInstance,
@@ -69,6 +70,8 @@ export class Mushi {
 }
 
 function createInstance(config: MushiConfig): MushiSDKInstance {
+  const bootstrapConfig: MushiConfig = config;
+  let activeConfig: MushiConfig = config;
   const log = (config.debug ?? false)
     ? createLogger({ scope: 'mushi', level: 'debug', format: 'pretty' })
     : noopLogger;
@@ -83,22 +86,59 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const offlineQueue = createOfflineQueue(config.offline);
   const rateLimiter = createRateLimiter({ maxBurst: 10, refillRate: 1, refillIntervalMs: 5_000 });
   const piiScrubber = createPiiScrubber();
-  const consoleCap = config.capture?.console !== false ? createConsoleCapture() : null;
-  const networkCap = config.capture?.network !== false ? createNetworkCapture() : null;
-  const perfCap = config.capture?.performance !== false ? createPerformanceCapture() : null;
-  const screenshotCap = config.capture?.screenshot !== 'off' ? createScreenshotCapture() : null;
-  const elementSelector = config.capture?.elementSelector !== false ? createElementSelector() : null;
+  let consoleCap: ReturnType<typeof createConsoleCapture> | null = null;
+  let networkCap: ReturnType<typeof createNetworkCapture> | null = null;
+  let perfCap: ReturnType<typeof createPerformanceCapture> | null = null;
+  let screenshotCap: ReturnType<typeof createScreenshotCapture> | null = null;
+  let elementSelector: ReturnType<typeof createElementSelector> | null = null;
+
+  function syncCaptureModules() {
+    if (activeConfig.capture?.console !== false) {
+      consoleCap ??= createConsoleCapture();
+    } else {
+      consoleCap?.destroy();
+      consoleCap = null;
+    }
+
+    if (activeConfig.capture?.network !== false) {
+      networkCap ??= createNetworkCapture();
+    } else {
+      networkCap?.destroy();
+      networkCap = null;
+    }
+
+    if (activeConfig.capture?.performance !== false) {
+      perfCap ??= createPerformanceCapture();
+    } else {
+      perfCap?.destroy();
+      perfCap = null;
+    }
+
+    screenshotCap = activeConfig.capture?.screenshot !== 'off'
+      ? (screenshotCap ?? createScreenshotCapture())
+      : null;
+    if (!screenshotCap) pendingScreenshot = null;
+
+    if (activeConfig.capture?.elementSelector !== false) {
+      elementSelector ??= createElementSelector();
+    } else {
+      elementSelector?.deactivate();
+      elementSelector = null;
+      pendingElement = null;
+    }
+  }
 
   const listeners = new Map<MushiEventType, Set<MushiEventHandler>>();
   function emit(type: MushiEventType, data?: unknown) {
     listeners.get(type)?.forEach((handler) => handler({ type, data }));
   }
 
-  let userInfo: { id: string; email?: string; name?: string } | null = null;
-  const customMetadata: Record<string, unknown> = {};
   let pendingScreenshot: string | null = null;
   let pendingElement: { tagName: string; id?: string; className?: string; xpath?: string } | null = null;
   let pendingProactiveTrigger: string | null = null;
+  let userInfo: { id: string; email?: string; name?: string } | null = null;
+  const customMetadata: Record<string, unknown> = {};
+  syncCaptureModules();
 
   const widget = new MushiWidget(config.widget, {
     onSubmit: async ({ category, description, intent }) => {
@@ -122,13 +162,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       emit('widget:closed');
     },
     onScreenshotRequest: async () => {
-      if (!screenshotCap) return;
+      if (!screenshotCap || activeConfig.capture?.screenshot === 'off') return;
       log.debug('Taking screenshot');
       pendingScreenshot = await screenshotCap.take();
       widget.setScreenshotAttached(pendingScreenshot !== null);
     },
     onElementSelectorRequest: async () => {
-      if (!elementSelector) return;
+      if (!elementSelector || activeConfig.capture?.elementSelector === false) return;
       log.debug('Element selector activated');
       const el = await elementSelector.activate();
       if (el) {
@@ -195,6 +235,36 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (result.sent > 0) log.info('Synced offline reports', { sent: result.sent });
   });
 
+  function applyRuntimeConfig(runtime: MushiRuntimeSdkConfig) {
+    if (runtime.enabled === false) {
+      activeConfig = bootstrapConfig;
+      clearCachedRuntimeConfig(config.projectId);
+      syncCaptureModules();
+      widget.updateConfig(activeConfig.widget);
+      log.debug('Runtime SDK config disabled; using bootstrap config', { version: runtime.version });
+      return;
+    }
+    activeConfig = mergeRuntimeConfig(activeConfig, runtime);
+    syncCaptureModules();
+    if (runtime.widget) widget.updateConfig(activeConfig.widget);
+    log.debug('Applied runtime SDK config', { version: runtime.version });
+  }
+
+  if (config.runtimeConfig !== false) {
+    const cached = readCachedRuntimeConfig(config.projectId);
+    if (cached) applyRuntimeConfig(cached);
+    apiClient.getSdkConfig().then((result) => {
+      if (result.ok && result.data) {
+        cacheRuntimeConfig(config.projectId, result.data);
+        applyRuntimeConfig(result.data);
+      } else if (result.error) {
+        log.debug('Runtime SDK config unavailable', result.error);
+      }
+    }).catch((err) => {
+      log.debug('Runtime SDK config fetch failed', { error: err instanceof Error ? err.message : String(err) });
+    });
+  }
+
   log.info('Initialized', { projectId: config.projectId });
 
   async function submitReport(category: MushiReportCategory, description: string, intent?: string) {
@@ -250,9 +320,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       description: scrubbedDescription,
       userIntent: intent,
       environment: captureEnvironment(),
-      consoleLogs: consoleCap?.getEntries(),
-      networkLogs: networkCap?.getEntries(),
-      performanceMetrics: perfCap?.getMetrics(),
+      consoleLogs: activeConfig.capture?.console === false ? undefined : consoleCap?.getEntries(),
+      networkLogs: activeConfig.capture?.network === false ? undefined : networkCap?.getEntries(),
+      performanceMetrics: activeConfig.capture?.performance === false ? undefined : perfCap?.getMetrics(),
       screenshotDataUrl: pendingScreenshot ?? undefined,
       selectedElement: pendingElement ?? undefined,
       metadata: {
@@ -340,6 +410,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.close();
     },
 
+    updateConfig(runtimeConfig) {
+      applyRuntimeConfig(runtimeConfig);
+    },
+
     destroy() {
       proactiveTriggers?.destroy();
       proactiveManager?.reset();
@@ -412,6 +486,57 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   return sdk;
 }
 
+function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig): MushiConfig {
+  return {
+    ...config,
+    widget: {
+      ...config.widget,
+      ...runtime.widget,
+    },
+    capture: {
+      ...config.capture,
+      ...runtime.capture,
+    },
+  };
+}
+
+function runtimeConfigCacheKey(projectId: string): string {
+  return `mushi:sdk-config:${projectId}`;
+}
+
+function readCachedRuntimeConfig(projectId: string): MushiRuntimeSdkConfig | null {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(runtimeConfigCacheKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { config?: MushiRuntimeSdkConfig };
+    return parsed.config ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheRuntimeConfig(projectId: string, config: MushiRuntimeSdkConfig): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(runtimeConfigCacheKey(projectId), JSON.stringify({
+      cachedAt: Date.now(),
+      config,
+    }));
+  } catch {
+    // Storage can be unavailable in private/restricted contexts.
+  }
+}
+
+function clearCachedRuntimeConfig(projectId: string): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.removeItem(runtimeConfigCacheKey(projectId));
+  } catch {
+    // Storage can be unavailable in private/restricted contexts.
+  }
+}
+
 function createNoopInstance(): MushiSDKInstance {
   return {
     report: () => {},
@@ -421,6 +546,7 @@ function createNoopInstance(): MushiSDKInstance {
     isOpen: () => false,
     open: () => {},
     close: () => {},
+    updateConfig: () => {},
     destroy: () => {
       instance = null;
     },

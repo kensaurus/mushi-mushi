@@ -12,10 +12,12 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
     private let submitButton = UIButton(type: .system)
     private let segmented = UISegmentedControl(items: ["Bug", "Slow", "Visual", "Confusing"])
     private let attachedScreenshot: String?
+    private let initialCategory: String?
 
-    init(config: MushiConfig, screenshot: String?, onSubmit: @escaping ([String: Any]) -> Void) {
+    init(config: MushiConfig, screenshot: String?, initialCategory: String? = nil, onSubmit: @escaping ([String: Any]) -> Void) {
         self.config = config
         self.attachedScreenshot = screenshot
+        self.initialCategory = initialCategory
         self.onSubmit = onSubmit
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .pageSheet
@@ -38,7 +40,7 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
 
-        segmented.selectedSegmentIndex = 0
+        segmented.selectedSegmentIndex = Self.categoryIndex(for: initialCategory)
         stack.addArrangedSubview(segmented)
 
         let textContainer = UIView()
@@ -98,9 +100,10 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
 
     @objc private func submit() {
         let categories = ["bug", "slow", "visual", "confusing"]
+        let idx = min(max(segmented.selectedSegmentIndex, 0), categories.count - 1)
         var report: [String: Any] = [
             "description": textView.text ?? "",
-            "category": categories[segmented.selectedSegmentIndex],
+            "category": categories[idx],
             "context": DeviceContext.capture()
         ]
         if let s = attachedScreenshot {
@@ -111,18 +114,10 @@ final class MushiWidgetController: UIViewController, UITextViewDelegate {
     }
 
     @objc private func cancel() { dismiss(animated: true) }
-}
 
-private extension UIColor {
-    convenience init?(hex: String) {
-        var s = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-            .replacingOccurrences(of: "#", with: "")
-        guard s.count == 6, let v = UInt32(s, radix: 16) else { return nil }
-        self.init(
-            red: CGFloat((v >> 16) & 0xFF) / 255,
-            green: CGFloat((v >> 8) & 0xFF) / 255,
-            blue: CGFloat(v & 0xFF) / 255,
-            alpha: 1)
+    private static func categoryIndex(for category: String?) -> Int {
+        guard let category else { return 0 }
+        return ["bug", "slow", "visual", "confusing"].firstIndex(of: category) ?? 0
     }
 }
 #endif

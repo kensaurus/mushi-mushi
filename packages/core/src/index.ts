@@ -24,6 +24,7 @@ export type {
   MushiCaptureEventInput,
   MushiApiClient,
   MushiApiResponse,
+  MushiRuntimeSdkConfig,
   MushiOnDeviceClassifier,
   MushiOnDeviceClassifierInput,
   MushiOnDeviceClassifierResult,

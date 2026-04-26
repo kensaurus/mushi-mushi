@@ -77,6 +77,16 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
     this.notifyListeners('widgetRequested', {});
   }
 
+  async setUser(): Promise<void> {
+    // Native-only bridge. Browser previews should pass user context through
+    // the standard web SDK instead.
+  }
+
+  async setMetadata(): Promise<void> {
+    // Native-only bridge. Browser previews should pass metadata through the
+    // standard web SDK instead.
+  }
+
   async flushQueue(): Promise<{ delivered: number }> {
     // The web `createApiClient` retries internally, so there's no separate
     // queue to flush. Return zero to keep the contract.

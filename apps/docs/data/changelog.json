@@ -1,5 +1,26 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Supply-chain hardening",
+        "description": "workspace-wide 7-day cooldown on new dep"
+      },
+      {
+        "title": "Launcher README",
+        "description": "adds a Socket.dev badge and a new \"Supply-chain &"
+      },
+      {
+        "title": "CLI",
+        "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened"
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "0.6",
     "headline": null,
     "pending": false,
