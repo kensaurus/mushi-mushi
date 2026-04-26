@@ -29,9 +29,10 @@
  *          dominating it.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card } from './ui'
 import { ConfigHelp } from './ConfigHelp'
+import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
   DEFAULT_SDK_CONFIG,
   FRAMEWORKS,
@@ -62,6 +63,7 @@ interface Props {
 const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
 const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
+const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
 
 const POSITION_LABEL: Record<WidgetPosition, string> = {
   'top-left': 'Top left',
@@ -76,14 +78,88 @@ const SCREENSHOT_LABEL: Record<ScreenshotMode, string> = {
   off: 'Never',
 }
 
+interface RemoteSdkConfig {
+  enabled?: boolean
+  widget?: {
+    position?: WidgetPosition
+    theme?: WidgetTheme
+    triggerText?: string | null
+  }
+  capture?: SdkPreviewConfig['capture']
+  native?: SdkPreviewConfig['native']
+}
+
+function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
+  return {
+    position: remote.widget?.position ?? DEFAULT_SDK_CONFIG.position,
+    theme: remote.widget?.theme ?? DEFAULT_SDK_CONFIG.theme,
+    triggerText: remote.widget?.triggerText ?? DEFAULT_SDK_CONFIG.triggerText,
+    capture: {
+      console: remote.capture?.console ?? DEFAULT_SDK_CONFIG.capture.console,
+      network: remote.capture?.network ?? DEFAULT_SDK_CONFIG.capture.network,
+      performance: remote.capture?.performance ?? DEFAULT_SDK_CONFIG.capture.performance,
+      screenshot: remote.capture?.screenshot ?? DEFAULT_SDK_CONFIG.capture.screenshot,
+      elementSelector: remote.capture?.elementSelector ?? DEFAULT_SDK_CONFIG.capture.elementSelector,
+    },
+    native: {
+      triggerMode: remote.native?.triggerMode ?? DEFAULT_SDK_CONFIG.native.triggerMode,
+      minDescriptionLength: remote.native?.minDescriptionLength ?? DEFAULT_SDK_CONFIG.native.minDescriptionLength,
+    },
+  }
+}
+
+function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkConfig {
+  return {
+    enabled,
+    widget: {
+      position: config.position,
+      theme: config.theme,
+      triggerText: config.triggerText.trim() ? config.triggerText : null,
+    },
+    capture: config.capture,
+    native: config.native,
+  }
+}
+
 export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
+  const [savedConfig, setSavedConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
+  const [enabled, setEnabled] = useState(true)
+  const [savedEnabled, setSavedEnabled] = useState(true)
+  const [loadingConfig, setLoadingConfig] = useState(false)
+  const [savingConfig, setSavingConfig] = useState(false)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
   const code = useMemo(() => renderSnippet(framework, projectId, apiKey, config), [framework, projectId, apiKey, config])
   const install = installCommand(framework)
+  const isDirty = enabled !== savedEnabled || JSON.stringify(config) !== JSON.stringify(savedConfig)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoadingConfig(true)
+    setSaveMessage(null)
+    void apiFetch<RemoteSdkConfig>(`/v1/admin/projects/${projectId}/sdk-config`).then((res) => {
+      if (cancelled) return
+      if (res.ok && res.data) {
+        const next = fromRemoteConfig(res.data)
+        setConfig(next)
+        setSavedConfig(next)
+        const nextEnabled = res.data.enabled !== false
+        setEnabled(nextEnabled)
+        setSavedEnabled(nextEnabled)
+      } else {
+        setSaveMessage(res.error?.message ?? 'Could not load saved SDK config')
+      }
+    }).finally(() => {
+      if (!cancelled) setLoadingConfig(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [projectId])
 
   function copy(text: string, setter: (v: boolean) => void) {
     navigator.clipboard.writeText(text).then(() => {
@@ -94,9 +170,35 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
 
   function reset() {
     setConfig(DEFAULT_SDK_CONFIG)
+    setEnabled(true)
+  }
+
+  async function saveConfig() {
+    setSavingConfig(true)
+    setSaveMessage(null)
+    const res = await apiFetch<RemoteSdkConfig>(`/v1/admin/projects/${projectId}/sdk-config`, {
+      method: 'PUT',
+      body: JSON.stringify(toRemoteConfig(config, enabled)),
+    })
+    setSavingConfig(false)
+    if (res.ok && res.data) {
+      const next = fromRemoteConfig(res.data)
+      setConfig(next)
+      setSavedConfig(next)
+      const nextEnabled = res.data.enabled !== false
+      setEnabled(nextEnabled)
+      setSavedEnabled(nextEnabled)
+      invalidateApiCache(`/v1/admin/projects/${projectId}/sdk-config`)
+      setSaveMessage(nextEnabled
+        ? 'Saved. Apps will pick this up from runtime config.'
+        : 'Saved. Runtime config is disabled; apps will keep local defaults.')
+    } else {
+      setSaveMessage(res.error?.message ?? 'Save failed')
+    }
   }
 
   const isDefault =
+    enabled &&
     config.position === DEFAULT_SDK_CONFIG.position &&
     config.theme === DEFAULT_SDK_CONFIG.theme &&
     config.triggerText === DEFAULT_SDK_CONFIG.triggerText &&
@@ -104,7 +206,9 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
     config.capture.network === DEFAULT_SDK_CONFIG.capture.network &&
     config.capture.performance === DEFAULT_SDK_CONFIG.capture.performance &&
     config.capture.screenshot === DEFAULT_SDK_CONFIG.capture.screenshot &&
-    config.capture.elementSelector === DEFAULT_SDK_CONFIG.capture.elementSelector
+    config.capture.elementSelector === DEFAULT_SDK_CONFIG.capture.elementSelector &&
+    config.native.triggerMode === DEFAULT_SDK_CONFIG.native.triggerMode &&
+    config.native.minDescriptionLength === DEFAULT_SDK_CONFIG.native.minDescriptionLength
 
   return (
     <Card className={compact ? 'p-3 space-y-4' : 'p-5 space-y-5'}>
@@ -139,7 +243,24 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             <WidgetPreview config={config} />
           </div>
 
-          <ConfiguratorPanel config={config} onChange={setConfig} />
+          <ConfiguratorPanel config={config} enabled={enabled} onEnabledChange={setEnabled} onChange={setConfig} />
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-2xs text-fg-faint">
+              {loadingConfig ? 'Loading saved config…' : saveMessage ?? 'Saved config is served to SDKs at startup.'}
+            </p>
+            <button
+              type="button"
+              onClick={saveConfig}
+              disabled={!isDirty || savingConfig || loadingConfig}
+              className={`px-2.5 py-1 rounded-sm text-2xs font-medium transition-colors ${
+                isDirty && !savingConfig && !loadingConfig
+                  ? 'bg-brand text-brand-fg hover:bg-brand-hover'
+                  : 'bg-surface-raised text-fg-faint cursor-not-allowed'
+              }`}
+            >
+              {savingConfig ? 'Saving…' : isDirty ? 'Save config' : 'Saved'}
+            </button>
+          </div>
         </div>
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
@@ -357,9 +478,13 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
 
 function ConfiguratorPanel({
   config,
+  enabled,
+  onEnabledChange,
   onChange,
 }: {
   config: SdkPreviewConfig
+  enabled: boolean
+  onEnabledChange: (next: boolean) => void
   onChange: (next: SdkPreviewConfig) => void
 }) {
   function update<K extends keyof SdkPreviewConfig>(k: K, v: SdkPreviewConfig[K]) {
@@ -370,8 +495,27 @@ function ConfiguratorPanel({
     onChange({ ...config, capture: { ...config.capture, [k]: v } })
   }
 
+  function updateNative<K extends keyof SdkPreviewConfig['native']>(k: K, v: SdkPreviewConfig['native'][K]) {
+    onChange({ ...config, native: { ...config.native, [k]: v } })
+  }
+
   return (
     <div className="space-y-3 text-2xs">
+      <label className="flex items-start gap-2 rounded-sm border border-edge-subtle bg-surface-raised/60 p-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={(e) => onEnabledChange(e.target.checked)}
+          className="mt-0.5 h-3 w-3 accent-brand"
+        />
+        <span>
+          <span className="block text-fg-secondary font-medium">Serve runtime config</span>
+          <span className="block text-fg-faint mt-0.5">
+            Turn off to make installed SDKs ignore saved console settings and keep their local bootstrap defaults.
+          </span>
+        </span>
+      </label>
+
       {/* Position 4-corner picker */}
       <fieldset>
         <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
@@ -490,6 +634,37 @@ function ConfiguratorPanel({
             ))}
           </select>
         </label>
+      </fieldset>
+
+      <fieldset>
+        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1">
+          Native mobile
+        </legend>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-fg-muted">Trigger</span>
+            <select
+              value={config.native.triggerMode}
+              onChange={(e) => updateNative('triggerMode', e.target.value as SdkPreviewConfig['native']['triggerMode'])}
+              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+            >
+              {NATIVE_TRIGGER_MODES.map((mode) => (
+                <option key={mode} value={mode}>{mode}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-fg-muted">Min description</span>
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              value={config.native.minDescriptionLength}
+              onChange={(e) => updateNative('minDescriptionLength', Number(e.target.value))}
+              className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand"
+            />
+          </label>
+        </div>
       </fieldset>
     </div>
   )

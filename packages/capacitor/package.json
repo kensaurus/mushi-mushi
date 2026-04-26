@@ -34,6 +34,7 @@
     "ios/Plugin",
     "android/src/main",
     "android/build.gradle",
+    "Package.swift",
     "MushiMushiCapacitor.podspec",
     "README.md",
     "LICENSE",

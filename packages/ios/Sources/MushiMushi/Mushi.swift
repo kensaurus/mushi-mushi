@@ -24,6 +24,12 @@ public final class Mushi {
     private var apiClient: ApiClient?
     private var queue: OfflineQueue?
     private var flushTimer: Timer?
+    private var user: [String: Any]?
+    private var globalMetadata: [String: Any] = [:]
+    #if os(iOS)
+    private weak var floatingButton: UIButton?
+    private var foregroundObserver: NSObjectProtocol?
+    #endif
 
     private init() {}
 
@@ -32,8 +38,30 @@ public final class Mushi {
         let q = OfflineQueue(maxBytes: config.offlineQueueMaxBytes)
         self.queue = q
         self.apiClient = ApiClient(config: config, queue: q)
+        #if os(iOS)
+        removeFloatingButton()
+        if let foregroundObserver {
+            NotificationCenter.default.removeObserver(foregroundObserver)
+            self.foregroundObserver = nil
+        }
+        #endif
         installTriggers()
         startFlushTimer()
+    }
+
+    /// Attach app/user identity to subsequent native reports.
+    public func setUser(_ user: [String: Any]?) {
+        self.user = user
+    }
+
+    /// Attach or clear a metadata key that should be sent with subsequent
+    /// native reports.
+    public func setMetadata(_ key: String, value: Any?) {
+        if let value {
+            globalMetadata[key] = value
+        } else {
+            globalMetadata.removeValue(forKey: key)
+        }
     }
 
     /// Submit a report with the given description and optional category.
@@ -50,7 +78,8 @@ public final class Mushi {
             "category": category,
             "context": DeviceContext.capture()
         ]
-        if let metadata { payload["metadata"] = metadata }
+        let mergedMetadata = mergeMetadata(metadata)
+        if !mergedMetadata.isEmpty { payload["metadata"] = mergedMetadata }
 
         #if os(iOS)
         if config.captureScreenshot {
@@ -93,7 +122,7 @@ public final class Mushi {
     }
 
     /// Programmatically present the bottom sheet widget.
-    public func showWidget() {
+    public func showWidget(category: String? = nil, metadata: [String: Any]? = nil) {
         #if os(iOS)
         guard let config, let client = apiClient else { return }
         DispatchQueue.main.async { @MainActor in
@@ -101,8 +130,11 @@ public final class Mushi {
             let screenshot = config.captureScreenshot
                 ? ScreenshotCapture.captureBase64()
                 : nil
-            let widget = MushiWidgetController(config: config, screenshot: screenshot) { payload in
-                client.submitReport(payload)
+            let widget = MushiWidgetController(config: config, screenshot: screenshot, initialCategory: category) { [weak self] payload in
+                var report = payload
+                let mergedMetadata = self?.mergeMetadata(metadata) ?? [:]
+                if !mergedMetadata.isEmpty { report["metadata"] = mergedMetadata }
+                client.submitReport(report)
             }
             let nav = UINavigationController(rootViewController: widget)
             topVC.present(nav, animated: true)
@@ -124,12 +156,76 @@ public final class Mushi {
     private func installTriggers() {
         #if os(iOS)
         guard let config else { return }
+        ShakeDetector.onShake = nil
         if config.triggerMode == .shake || config.triggerMode == .both {
             ShakeDetector.install()
             ShakeDetector.onShake = { [weak self] in self?.showWidget() }
         }
+        if config.triggerMode == .button || config.triggerMode == .both {
+            foregroundObserver = NotificationCenter.default.addObserver(
+                forName: UIApplication.didBecomeActiveNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in self?.installFloatingButtonIfNeeded() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.installFloatingButtonIfNeeded()
+            }
+        } else {
+            removeFloatingButton()
+        }
         #endif
     }
+
+    private func mergeMetadata(_ metadata: [String: Any]?) -> [String: Any] {
+        var merged = globalMetadata
+        metadata?.forEach { merged[$0.key] = $0.value }
+        if let user { merged["user"] = user }
+        return merged
+    }
+
+    #if os(iOS)
+    private func installFloatingButtonIfNeeded() {
+        guard floatingButton == nil, let config else { return }
+        guard config.triggerMode == .button || config.triggerMode == .both else { return }
+        guard let window = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow) else { return }
+
+        let button = UIButton(type: .system)
+        button.setTitle("🐛", for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 24)
+        button.accessibilityLabel = "Report a bug"
+        button.backgroundColor = config.theme.dark ? .black : .systemBackground
+        button.tintColor = UIColor(hex: config.theme.accentColor) ?? .systemBlue
+        button.layer.cornerRadius = 28
+        button.layer.borderWidth = 1
+        button.layer.borderColor = button.tintColor.cgColor
+        button.layer.shadowColor = UIColor.black.cgColor
+        button.layer.shadowOpacity = 0.18
+        button.layer.shadowRadius = 12
+        button.layer.shadowOffset = CGSize(width: 0, height: 6)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.addTarget(self, action: #selector(showWidgetFromButton), for: .touchUpInside)
+        window.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.widthAnchor.constraint(equalToConstant: 56),
+            button.heightAnchor.constraint(equalToConstant: 56),
+            button.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            button.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -96)
+        ])
+        floatingButton = button
+    }
+
+    @objc private func showWidgetFromButton() {
+        showWidget()
+    }
+
+    private func removeFloatingButton() {
+        floatingButton?.removeFromSuperview()
+        floatingButton = nil
+    }
+    #endif
 
     private func startFlushTimer() {
         flushTimer?.invalidate()
