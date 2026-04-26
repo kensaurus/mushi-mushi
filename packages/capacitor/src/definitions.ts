@@ -41,6 +41,18 @@ export interface MushiCapacitorReport {
   metadata?: Record<string, unknown>;
 }
 
+export interface MushiCapacitorUser {
+  id?: string;
+  email?: string | null;
+  name?: string | null;
+  [key: string]: unknown;
+}
+
+export interface MushiCapacitorWidgetOptions {
+  category?: 'bug' | 'slow' | 'visual' | 'confusing' | string;
+  metadata?: Record<string, unknown>;
+}
+
 export interface MushiCapacitorPlugin {
   /** Initialize the plugin. Idempotent. */
   configure(options: MushiCapacitorPluginConfig): Promise<void>;
@@ -55,7 +67,13 @@ export interface MushiCapacitorPlugin {
 
   /** Present the native bottom-sheet widget. Resolves when the user
    *  dismisses or submits. */
-  showWidget(): Promise<void>;
+  showWidget(options?: MushiCapacitorWidgetOptions): Promise<void>;
+
+  /** Attach app/user identity to subsequent native reports. */
+  setUser(payload: { user: MushiCapacitorUser | null }): Promise<void>;
+
+  /** Attach or clear a metadata key on subsequent native reports. */
+  setMetadata(payload: { key: string; value?: unknown }): Promise<void>;
 
   /** Force a flush of the offline queue. */
   flushQueue(): Promise<{ delivered: number }>;

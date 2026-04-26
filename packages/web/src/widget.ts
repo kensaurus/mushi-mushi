@@ -104,6 +104,21 @@ export class MushiWidget {
     this.render();
   }
 
+  updateConfig(config: MushiWidgetConfig = {}): void {
+    this.config = {
+      ...this.config,
+      ...(config.position ? { position: config.position } : {}),
+      ...(config.theme ? { theme: config.theme } : {}),
+      ...(config.triggerText !== undefined ? { triggerText: config.triggerText || '\uD83D\uDC1B' } : {}),
+      ...(config.expandedTitle !== undefined ? { expandedTitle: config.expandedTitle } : {}),
+      ...(config.mode ? { mode: config.mode } : {}),
+      ...(config.locale ? { locale: config.locale } : {}),
+      ...(config.zIndex !== undefined ? { zIndex: config.zIndex } : {}),
+    };
+    this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
+    this.render();
+  }
+
   open(options?: { category?: MushiReportCategory }): void {
     if (this.isOpen) return;
     this.isOpen = true;

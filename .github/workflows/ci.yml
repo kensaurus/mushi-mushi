@@ -28,6 +28,25 @@ permissions:
   contents: read
 
 jobs:
+  # SUPPLY-CHAIN GATE: review every dep diff in a PR for known vulns
+  # before any code runs. This catches a malicious package being added
+  # via `pnpm add` long before it reaches a release. `fail-on-severity:
+  # high` keeps the gate noise-free — moderate/low advisories surface as
+  # warnings in the PR but don't block the merge.
+  # SOURCE: https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configuring-the-dependency-review-action
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48  # v4.9.0
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+
   build:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -38,7 +57,12 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: 22
+          # Bumped to 24 in lockstep with release.yml. Node 22 ships npm
+          # 10, which has a half-baked OIDC handshake (see release.yml
+          # header) and lacks the new `min-release-age` config gate the
+          # supply-chain hardening pass relies on. Node 24 ships npm
+          # 11.5+ which fixes both.
+          node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -124,7 +148,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
 
       - name: Install Supabase CLI

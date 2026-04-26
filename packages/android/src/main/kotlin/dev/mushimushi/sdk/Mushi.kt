@@ -2,8 +2,15 @@ package dev.mushimushi.sdk
 
 import android.app.Activity
 import android.app.Application
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.content.Intent
 import android.os.Bundle
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.fragment.app.FragmentActivity
 import dev.mushimushi.sdk.capture.DeviceContext
 import dev.mushimushi.sdk.capture.ScreenshotCapture
@@ -29,27 +36,50 @@ object Mushi {
     private var apiClient: ApiClient? = null
     private var shakeDetector: ShakeDetector? = null
     private var currentActivity: Activity? = null
+    private var floatingButton: View? = null
+    private var floatingButtonOwner: Activity? = null
     private var flushExecutor: ScheduledExecutorService? = null
+    private var lifecycleRegistered = false
+    private var user: Map<String, Any?>? = null
+    private val globalMetadata = mutableMapOf<String, Any?>()
 
     /** Listener fired after every successful report submission. Used by the
      *  optional Sentry bridge to mirror reports into Sentry's UserFeedback. */
     @Volatile var onReportSubmitted: ((Map<String, Any?>) -> Unit)? = null
 
     fun init(app: Application, config: MushiConfig) {
-        if (initialized) return
         synchronized(this) {
-            if (initialized) return
             this.config = config
-            val q = OfflineQueue(app, config.offlineQueueMaxBytes)
+            val q = queue ?: OfflineQueue(app, config.offlineQueueMaxBytes)
             this.queue = q
             this.apiClient = ApiClient(config, q) { payload ->
                 onReportSubmitted?.invoke(payload)
             }
 
-            app.registerActivityLifecycleCallbacks(LifecycleTracker())
-            installShakeIfNeeded(app)
-            startFlushTimer()
+            if (!lifecycleRegistered) {
+                app.registerActivityLifecycleCallbacks(LifecycleTracker())
+                lifecycleRegistered = true
+            }
+            refreshTriggers(app)
+            refreshFloatingButton()
+            if (!initialized) startFlushTimer()
             initialized = true
+        }
+    }
+
+    fun setUser(user: Map<String, Any?>?) {
+        synchronized(this) {
+            this.user = user
+        }
+    }
+
+    fun setMetadata(key: String, value: Any?) {
+        synchronized(this) {
+            if (value == null) {
+                globalMetadata.remove(key)
+            } else {
+                globalMetadata[key] = value
+            }
         }
     }
 
@@ -68,7 +98,7 @@ object Mushi {
             "category" to category,
             "context" to DeviceContext.capture(ctx)
         )
-        metadata?.let { payload["metadata"] = it }
+        mergeMetadata(metadata).takeIf { it.isNotEmpty() }?.let { payload["metadata"] = it }
 
         if (cfg.captureScreenshot) {
             currentActivity?.let { act ->
@@ -90,27 +120,84 @@ object Mushi {
     }
 
     /** Programmatically present the bottom-sheet widget. */
-    fun showWidget() {
+    fun showWidget(category: String? = null, metadata: Map<String, Any?>? = null) {
         val cfg = config ?: return
         val act = currentActivity as? FragmentActivity ?: return
         val screenshot = if (cfg.captureScreenshot) ScreenshotCapture.captureBase64(act) else null
         MushiBottomSheet().apply {
             this.config = cfg
             this.attachedScreenshot = screenshot
+            this.initialCategory = category
             this.onSubmit = { payload ->
                 val full = payload.toMutableMap().apply {
                     put("context", DeviceContext.capture(act.applicationContext))
+                    mergeMetadata(metadata).takeIf { it.isNotEmpty() }?.let { put("metadata", it) }
                 }
                 apiClient?.submitReport(full)
             }
         }.show(act.supportFragmentManager, "mushi-bottom-sheet")
     }
 
-    private fun installShakeIfNeeded(app: Application) {
+    private fun mergeMetadata(metadata: Map<String, Any?>?): Map<String, Any?> = synchronized(this) {
+        buildMap {
+            putAll(globalMetadata)
+            metadata?.let { putAll(it) }
+            user?.let { put("user", it) }
+        }
+    }
+
+    private fun refreshTriggers(app: Application) {
         val cfg = config ?: return
+        shakeDetector?.stop()
+        shakeDetector = null
         if (cfg.triggerMode == TriggerMode.SHAKE || cfg.triggerMode == TriggerMode.BOTH) {
             shakeDetector = ShakeDetector(app) { showWidget() }.also { it.start() }
         }
+    }
+
+    private fun refreshFloatingButton() {
+        removeFloatingButton()
+        currentActivity?.let { installButtonIfNeeded(it) }
+    }
+
+    private fun installButtonIfNeeded(activity: Activity) {
+        val cfg = config ?: return
+        if (cfg.triggerMode != TriggerMode.BUTTON && cfg.triggerMode != TriggerMode.BOTH) return
+        if (floatingButton?.parent != null && floatingButtonOwner === activity) return
+        removeFloatingButton()
+
+        val root = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+        val accent = runCatching { Color.parseColor(cfg.theme.accentColor) }.getOrDefault(Color.parseColor("#22C55E"))
+        val button = TextView(activity).apply {
+            text = "\uD83D\uDC1B"
+            textSize = 22f
+            gravity = Gravity.CENTER
+            contentDescription = "Report a bug"
+            elevation = 18f
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = 28f
+                setColor(if (cfg.theme.dark) Color.BLACK else Color.WHITE)
+                setStroke(2, accent)
+            }
+            setOnClickListener { showWidget() }
+        }
+        val density = activity.resources.displayMetrics.density
+        val size = (56 * density).toInt()
+        val margin = (20 * density).toInt()
+        val bottom = (96 * density).toInt()
+        root.addView(button, FrameLayout.LayoutParams(size, size).apply {
+            gravity = Gravity.BOTTOM or Gravity.END
+            setMargins(margin, margin, margin, bottom)
+        })
+        floatingButton = button
+        floatingButtonOwner = activity
+    }
+
+    private fun removeFloatingButton() {
+        (floatingButton?.parent as? ViewGroup)?.removeView(floatingButton)
+        floatingButton = null
+        floatingButtonOwner = null
     }
 
     private fun startFlushTimer() {
@@ -126,10 +213,17 @@ object Mushi {
 
     private class LifecycleTracker : Application.ActivityLifecycleCallbacks {
         override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
-        override fun onActivityStarted(activity: Activity) { currentActivity = activity }
-        override fun onActivityResumed(activity: Activity) { currentActivity = activity }
+        override fun onActivityStarted(activity: Activity) {
+            currentActivity = activity
+            installButtonIfNeeded(activity)
+        }
+        override fun onActivityResumed(activity: Activity) {
+            currentActivity = activity
+            installButtonIfNeeded(activity)
+        }
         override fun onActivityPaused(activity: Activity) = Unit
         override fun onActivityStopped(activity: Activity) {
+            if (floatingButtonOwner === activity) removeFloatingButton()
             if (currentActivity === activity) currentActivity = null
         }
         override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
