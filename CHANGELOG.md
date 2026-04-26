@@ -52,7 +52,7 @@ Latest tag: `v0.5.3`
 
 ## v0.4.x
 
-Latest tag: `v0.4.3`
+Latest tag: `v0.4.4`
 
 ### Highlights
 
@@ -71,7 +71,7 @@ Latest tag: `v0.4.3`
 
 ### Packages bumped
 
-- `@mushi-mushi/capacitor` → 0.4.3
+- `@mushi-mushi/capacitor` → 0.4.4
 - `@mushi-mushi/cli` → 0.4.0
 - `@mushi-mushi/core` → 0.4.1
 - `@mushi-mushi/react` → 0.4.1
