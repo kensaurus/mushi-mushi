@@ -61,7 +61,11 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@sentry/cli",
       "esbuild",
+      "msw",
+      "protobufjs",
+      "sharp",
       "supabase"
     ],
     "overrides": {
