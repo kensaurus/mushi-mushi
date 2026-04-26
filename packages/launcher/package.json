@@ -1,6 +1,6 @@
 {
   "name": "mushi-mushi",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "license": "MIT",
   "description": "Ship a shake-to-report button and get AI-classified, deduped, ready-to-fix bug reports — one `npx mushi-mushi` command for React, Next.js, Vue, Nuxt, Svelte, SvelteKit, Angular, React Native, Expo, Capacitor, and vanilla JS. Companion to Sentry: catches the user-felt bugs crash trackers can't see. Wires into GitHub, Slack, Jira, Linear, PagerDuty, Langfuse, and any MCP-compatible AI agent (Cursor, Claude Code, Copilot).",
   "bin": {

@@ -1,14 +1,14 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "0.6",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.6.2",
+      "0.6.1",
+      "0.6.0"
+    ],
     "highlights": [
-      {
-        "title": "Supply-chain hardening",
-        "description": "workspace-wide 7-day cooldown on new dep"
-      },
       {
         "title": "Launcher README",
         "description": "adds a Socket.dev badge and a new \"Supply-chain &"
@@ -16,19 +16,7 @@
       {
         "title": "CLI",
         "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened"
-      }
-    ],
-    "packages": []
-  },
-  {
-    "majorMinor": "0.6",
-    "headline": null,
-    "pending": false,
-    "versions": [
-      "0.6.1",
-      "0.6.0"
-    ],
-    "highlights": [
+      },
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
         "description": "Added"
@@ -45,7 +33,7 @@
     "packages": [
       {
         "name": "mushi-mushi",
-        "version": "0.6.1"
+        "version": "0.6.2"
       }
     ]
   },
@@ -54,34 +42,19 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.3",
       "0.5.2",
       "0.5.1",
       "0.5.0"
     ],
     "highlights": [
       {
-        "title": "npm keyword arrays expanded across all 14 publishable packages.",
-        "description": "Added"
+        "title": "Launcher README",
+        "description": "adds a Socket.dev badge and a new \"Supply-chain &"
       },
       {
-        "title": "README star CTA footer.",
-        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
-      },
-      {
-        "title": "New `docs/marketing/` folder",
-        "description": "with the full growth kit: `VOICE.md`,"
-      },
-      {
-        "title": "Community files in-tarball.",
-        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
-      },
-      {
-        "title": "`publishConfig.provenance: true` everywhere.",
-        "description": "The Release workflow already set `NPM_CONFIG_PROVENANCE=true` at the job level, but per-package `publishConfig` is the explicit signal Socket reads for its Supply Chain score. `@mushi-mushi/cli`, `create-mushi-mushi`, and `mushi-mushi` already had it; the remaining 20 publishable packages now match."
-      },
-      {
-        "title": "`.github/FUNDING.yml`",
-        "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+        "title": "CLI",
+        "description": "bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened"
       },
       {
         "title": "npm keyword arrays expanded across all 14 publishable packages.",
@@ -106,16 +79,32 @@
       {
         "title": "`.github/FUNDING.yml`",
         "description": "points at GitHub Sponsors so the repo exposes a funding signal to scanners and the GitHub UI."
+      },
+      {
+        "title": "npm keyword arrays expanded across all 14 publishable packages.",
+        "description": "Added"
+      },
+      {
+        "title": "README star CTA footer.",
+        "description": "Added the bilingual _\"もしMushi-chanのお役に立てたら、"
+      },
+      {
+        "title": "New `docs/marketing/` folder",
+        "description": "with the full growth kit: `VOICE.md`,"
+      },
+      {
+        "title": "Community files in-tarball.",
+        "description": "Snyk and Socket only credit community signals when the files are shipped inside the npm tarball, not when they live at the monorepo root. A pre-commit guard (`scripts/sync-community-files.mjs --check`) and the `pnpm release` script now auto-sync from the canonical root copies to prevent drift."
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/cli",
-        "version": "0.5.2"
+        "version": "0.5.3"
       },
       {
         "name": "@mushi-mushi/core",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "@mushi-mushi/react",
@@ -123,7 +112,7 @@
       },
       {
         "name": "@mushi-mushi/web",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "create-mushi-mushi",
@@ -140,6 +129,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.4.3",
       "0.4.2",
       "0.4.1",
       "0.4.0"
@@ -197,7 +187,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.4.2"
+        "version": "0.4.3"
       },
       {
         "name": "@mushi-mushi/cli",
