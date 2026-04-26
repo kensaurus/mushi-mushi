@@ -1,5 +1,6 @@
 import Capacitor
 import Foundation
+import MushiMushi
 import UIKit
 
 /// Capacitor iOS plugin. Delegates to the native `MushiMushi` SDK so behaviour
@@ -9,7 +10,7 @@ import UIKit
 public class MushiMushiPlugin: CAPPlugin {
 
     private var configured = false
-    private var triggerMode: TriggerMode = .shake
+    private var triggerMode: MushiConfig.TriggerMode = .shake
     private var theme: MushiConfig.Theme = .init(accentColor: "#FF2D78")
 
     @objc func configure(_ call: CAPPluginCall) {

@@ -9,24 +9,12 @@ let package = Package(
         .tvOS(.v15)
     ],
     products: [
-        .library(name: "MushiMushi", targets: ["MushiMushi"]),
-        .library(name: "MushiMushiSentry", targets: ["MushiMushiSentry"])
-    ],
-    dependencies: [
-        .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "8.0.0")
+        .library(name: "MushiMushi", targets: ["MushiMushi"])
     ],
     targets: [
         .target(
             name: "MushiMushi",
             path: "packages/ios/Sources/MushiMushi"
-        ),
-        .target(
-            name: "MushiMushiSentry",
-            dependencies: [
-                "MushiMushi",
-                .product(name: "Sentry", package: "sentry-cocoa")
-            ],
-            path: "packages/ios/Sources/MushiMushiSentry"
         ),
         .testTarget(
             name: "MushiMushiTests",

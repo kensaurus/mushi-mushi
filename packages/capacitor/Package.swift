@@ -8,15 +8,18 @@ let package = Package(
         .library(name: "MushiMushiCapacitor", targets: ["MushiMushiCapacitor"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "6.0.0"),
-        .package(url: "https://github.com/kensaurus/mushi-mushi.git", branch: "main")
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0")
     ],
     targets: [
+        .target(
+            name: "MushiMushi",
+            path: "ios/MushiMushi/Sources/MushiMushi"
+        ),
         .target(
             name: "MushiMushiCapacitor",
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
-                .product(name: "MushiMushi", package: "mushi-mushi")
+                "MushiMushi"
             ],
             path: "ios/Plugin",
             sources: ["MushiMushiPlugin.swift"]

@@ -314,7 +314,7 @@ Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 
 #### iOS (Swift Package Manager — early dev)
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.1.0")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.2.1")
 
 import Mushi
 Mushi.configure(projectId: "proj_xxx", apiKey: "mushi_xxx")
@@ -323,7 +323,7 @@ Mushi.configure(projectId: "proj_xxx", apiKey: "mushi_xxx")
 #### Android (Maven — early dev)
 ```kotlin
 dependencies {
-  implementation("dev.mushimushi:mushi-android:0.1.0")
+  implementation("dev.mushimushi:mushi-android:0.2.1")
 }
 
 Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey = "mushi_xxx"))

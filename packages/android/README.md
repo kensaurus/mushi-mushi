@@ -3,7 +3,7 @@
 Native Android (Kotlin) SDK for [Mushi Mushi](https://mushimushi.dev) — the
 open-source, LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.2.0 Surface stable; minor changes still possible
+> **Status**: V0.2.1 Surface stable; minor changes still possible
 > before V1.0.
 
 ## Features
@@ -22,7 +22,7 @@ Add to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("dev.mushimushi:mushi-android:0.2.0")
+    implementation("dev.mushimushi:mushi-android:0.2.1")
     // Optional: enable Sentry bridge.
     implementation("io.sentry:sentry-android:7.18.1")
 }

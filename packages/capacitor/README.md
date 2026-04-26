@@ -7,12 +7,12 @@ LLM-driven bug intake, classification, and autofix platform.
 >
 > **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
 
-> **Status**: V0.2.0 Surface stable; minor changes still possible
+> **Status**: V0.4.4 Surface stable; minor changes still possible
 > before V1.0.
 
-The plugin reuses our standalone iOS and Android SDKs (`MushiMushi` /
-`mushi-android`) for the native side, so you get one canonical
-implementation across pure-native, React Native, Flutter, and Capacitor apps.
+The npm package vendors the standalone iOS and Android SDK sources for the
+native side, so Capacitor apps do not need a separate Maven or SwiftPM Mushi
+dependency at build time.
 
 ## Install
 

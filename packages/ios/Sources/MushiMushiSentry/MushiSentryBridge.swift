@@ -5,8 +5,8 @@ import Sentry
 /// Bridges the Mushi Mushi SDK to Sentry so:
 ///   1. Every Mushi report carries Sentry's most recent event ID and the
 ///      current breadcrumb trail as metadata.
-///   2. Submitted reports also produce a Sentry `UserFeedback` linked to
-///      that event, surfacing in the Sentry UI alongside crashes.
+///   2. Submitted reports also produce Sentry user feedback through the
+///      current Sentry Cocoa feedback API.
 ///
 /// Usage:
 /// ```swift
@@ -32,18 +32,19 @@ public enum MushiSentryBridge {
             guard let info = note.userInfo,
                   let description = info["description"] as? String else { return }
 
-            let eventId = SentrySDK.capture(message: "MushiReport: \(description.prefix(80))") { scope in
+            SentrySDK.capture(message: "MushiReport: \(description.prefix(80))") { scope in
                 scope.setTag(value: "mushi", key: "source")
                 if let category = info["category"] as? String {
                     scope.setTag(value: category, key: "mushi.category")
                 }
             }
 
-            let feedback = UserFeedback(eventId: eventId)
-            feedback.comments = description
-            feedback.email = info["email"] as? String ?? ""
-            feedback.name = info["name"] as? String ?? ""
-            SentrySDK.capture(userFeedback: feedback)
+            SentrySDK.capture(feedback: .init(
+                message: description,
+                name: info["name"] as? String,
+                email: info["email"] as? String,
+                source: .custom
+            ))
         }
     }
 }
