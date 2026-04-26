@@ -18,8 +18,8 @@ let package = Package(
     ],
     dependencies: [
         // Pinned to a major; Sentry follows SemVer and ships breaking changes
-        // only on majors. Bumping the upper bound is a Wave-D housekeeping task.
-        .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "8.0.0")
+        // only on majors.
+        .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "9.0.0")
     ],
     targets: [
         .target(

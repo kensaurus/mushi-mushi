@@ -1,5 +1,11 @@
 # @mushi-mushi/capacitor
 
+## 0.4.4
+
+### Patch Changes
+
+- Restore Capacitor 8 native compatibility by packaging the iOS and Android native SDK sources with the npm plugin, lowering Android support to minSdk 24, and removing the fragile remote SwiftPM branch dependency.
+
 ## 0.4.3
 
 ### Patch Changes
