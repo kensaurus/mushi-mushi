@@ -3,7 +3,7 @@
 Native iOS SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.2.0 Surface stable; minor changes still possible
+> **Status**: V0.2.1 Surface stable; minor changes still possible
 > before V1.0.
 
 ## Features
@@ -13,7 +13,7 @@ LLM-driven bug intake, classification, and autofix platform.
 - 🎯 **Native bottom-sheet widget** with category picker and live min-length validation
 - 🌐 **Device + app context** auto-attached to every report
 - 🔌 **Optional Sentry bridge** (`MushiMushiSentry`) that mirrors reports into
-  Sentry `UserFeedback` and links them to the most recent crash event
+  Sentry's current feedback API
 - 🧪 **Tested** — `swift test` runs the offline-queue + persistence suite
 
 ## Install
@@ -21,7 +21,7 @@ LLM-driven bug intake, classification, and autofix platform.
 ### Swift Package Manager (recommended)
 
 ```swift
-.package(url: "https://github.com/kenroy/mushi-mushi.git", from: "ios-v0.2.0")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.2.1")
 ```
 
 then add `MushiMushi` (and optionally `MushiMushiSentry`) to your target.
@@ -90,7 +90,7 @@ MushiSentryBridge.install()
 ```
 
 Every Mushi report now produces a Sentry event with tag `source=mushi` and a
-linked `UserFeedback` so it appears alongside crashes in the Sentry UI.
+custom feedback item so it appears in Sentry's feedback workflow.
 
 ## Configuration
 

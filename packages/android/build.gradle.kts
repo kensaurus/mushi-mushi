@@ -6,14 +6,14 @@ plugins {
 }
 
 group = "dev.mushimushi"
-version = "0.2.0"
+version = "0.2.1"
 
 android {
     namespace = "dev.mushimushi.sdk"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 24
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
@@ -73,7 +73,7 @@ publishing {
             pom {
                 name.set("Mushi Mushi Android SDK")
                 description.set("Native Android SDK for the Mushi Mushi LLM-driven bug intake & autofix platform.")
-                url.set("https://github.com/kenroy/mushi-mushi")
+                url.set("https://github.com/kensaurus/mushi-mushi")
                 licenses {
                     license {
                         name.set("MIT")
@@ -88,9 +88,9 @@ publishing {
                     }
                 }
                 scm {
-                    url.set("https://github.com/kenroy/mushi-mushi")
-                    connection.set("scm:git:git://github.com/kenroy/mushi-mushi.git")
-                    developerConnection.set("scm:git:ssh://git@github.com/kenroy/mushi-mushi.git")
+                    url.set("https://github.com/kensaurus/mushi-mushi")
+                    connection.set("scm:git:git://github.com/kensaurus/mushi-mushi.git")
+                    developerConnection.set("scm:git:ssh://git@github.com/kensaurus/mushi-mushi.git")
                 }
             }
         }

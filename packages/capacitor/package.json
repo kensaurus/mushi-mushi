@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/capacitor",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "Capacitor plugin for Mushi Mushi — shake-to-report, screenshot capture, offline queue, and bottom-sheet widget for iOS/Android Capacitor apps.",
   "license": "MIT",
   "author": "Kenji Sakuramoto",
@@ -32,7 +32,9 @@
   "files": [
     "dist",
     "ios/Plugin",
+    "ios/MushiMushi",
     "android/src/main",
+    "android/mushi-android",
     "android/build.gradle",
     "Package.swift",
     "MushiMushiCapacitor.podspec",
@@ -48,7 +50,9 @@
   },
   "sideEffects": false,
   "scripts": {
-    "build": "tsup",
+    "sync:native": "node scripts/sync-native-sources.mjs",
+    "build": "node scripts/sync-native-sources.mjs && tsup",
+    "prepack": "node scripts/sync-native-sources.mjs",
     "dev": "tsup --watch",
     "clean": "rm -rf dist .turbo",
     "lint": "eslint src/",

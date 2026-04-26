@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'MushiMushi'
-  s.version          = '0.2.0'
+  s.version          = '0.2.1'
   s.summary          = 'Native iOS SDK for the Mushi Mushi LLM-driven bug intake & autofix platform.'
   s.description      = <<-DESC
     MushiMushi is an LLM-driven bug intake, classification, and autofix
@@ -9,11 +9,11 @@ Pod::Spec.new do |s|
     Sentry bridge that mirrors reports into Sentry's UserFeedback channel.
   DESC
 
-  s.homepage         = 'https://github.com/kenroy/mushi-mushi'
+  s.homepage         = 'https://github.com/kensaurus/mushi-mushi'
   s.license          = { :type => 'MIT', :file => 'LICENSE' }
   s.author           = { 'Mushi Mushi' => 'kensaurus@gmail.com' }
   s.source           = {
-    :git => 'https://github.com/kenroy/mushi-mushi.git',
+    :git => 'https://github.com/kensaurus/mushi-mushi.git',
     :tag => "ios-v#{s.version}"
   }
   s.documentation_url = 'https://docs.mushimushi.dev/sdks/ios'
@@ -32,6 +32,6 @@ Pod::Spec.new do |s|
   s.subspec 'Sentry' do |sentry|
     sentry.source_files = 'Sources/MushiMushiSentry/**/*.swift'
     sentry.dependency 'MushiMushi/Core'
-    sentry.dependency 'Sentry', '~> 8.0'
+    sentry.dependency 'Sentry', '~> 9.0'
   end
 end

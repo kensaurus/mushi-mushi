@@ -1,12 +1,12 @@
 #if os(iOS)
 import UIKit
 
-enum ScreenshotCapture {
+public enum ScreenshotCapture {
     /// Takes a screenshot of the foreground key window. Returns a JPEG-encoded
     /// base64 data URL (no `data:` prefix — server expects raw base64).
     /// Returns nil if no window is visible.
     @MainActor
-    static func captureBase64(quality: CGFloat = 0.7) -> String? {
+    public static func captureBase64(quality: CGFloat = 0.7) -> String? {
         guard let window = activeWindow() else { return nil }
         let renderer = UIGraphicsImageRenderer(bounds: window.bounds)
         let image = renderer.image { _ in
