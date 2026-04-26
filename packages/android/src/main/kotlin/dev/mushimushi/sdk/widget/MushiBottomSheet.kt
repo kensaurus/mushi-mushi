@@ -29,6 +29,7 @@ class MushiBottomSheet : AppCompatDialogFragment() {
 
     var config: MushiConfig? = null
     var attachedScreenshot: String? = null
+    var initialCategory: String? = null
     var onSubmit: ((Map<String, Any?>) -> Unit)? = null
 
     override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
@@ -72,7 +73,7 @@ class MushiBottomSheet : AppCompatDialogFragment() {
             radio.addView(RadioButton(ctx).apply {
                 id = idx
                 text = label
-                if (idx == 0) isChecked = true
+                if (idx == (categories.indexOf(initialCategory).takeIf { it >= 0 } ?: 0)) isChecked = true
             })
         }
         root.addView(radio)

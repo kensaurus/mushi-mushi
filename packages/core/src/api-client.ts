@@ -1,4 +1,4 @@
-import type { MushiApiClient, MushiApiResponse, MushiReport, MushiReportStatus } from './types';
+import type { MushiApiClient, MushiApiResponse, MushiReport, MushiReportStatus, MushiRuntimeSdkConfig } from './types';
 
 export interface ApiClientOptions {
   projectId: string;
@@ -78,12 +78,17 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
           error: {
             code: `HTTP_${response.status}`,
             message:
-              (errorBody as { message?: string }).message || `HTTP ${response.status} error`,
+              (errorBody as { message?: string; error?: { message?: string } }).error?.message ||
+              (errorBody as { message?: string }).message ||
+              `HTTP ${response.status} error`,
           },
         };
       }
 
-      const data = (await response.json()) as T;
+      const payload = await response.json();
+      const data = payload && typeof payload === 'object' && 'ok' in payload && 'data' in payload
+        ? (payload as { data: T }).data
+        : payload as T;
       return { ok: true, data };
     } catch (error) {
       clearTimeout(timer);
@@ -110,6 +115,10 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
 
     async getReportStatus(reportId: string) {
       return request<{ status: MushiReportStatus }>('GET', `/v1/reports/${reportId}/status`);
+    },
+
+    async getSdkConfig() {
+      return request<MushiRuntimeSdkConfig>('GET', '/v1/sdk/config');
     },
   };
 }

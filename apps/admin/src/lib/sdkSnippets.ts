@@ -39,6 +39,10 @@ export interface SdkPreviewConfig {
     screenshot: ScreenshotMode
     elementSelector: boolean
   }
+  native: {
+    triggerMode: 'shake' | 'button' | 'both' | 'none'
+    minDescriptionLength: number
+  }
 }
 
 /** Defaults match `MushiWidget` constructor defaults in packages/web/src/widget.ts
@@ -53,6 +57,10 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
     performance: false,
     screenshot: 'on-report',
     elementSelector: false,
+  },
+  native: {
+    triggerMode: 'both',
+    minDescriptionLength: 20,
   },
 }
 

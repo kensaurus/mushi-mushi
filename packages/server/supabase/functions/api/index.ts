@@ -134,6 +134,11 @@ const ADMIN_ORIGIN_ALLOWLIST = ((): string[] => {
 })()
 
 // Public SDK / widget / webhook paths: Access-Control-Allow-Origin: *
+app.use('/v1/sdk/*', cors({
+  origin: '*',
+  allowHeaders: ['Content-Type', 'X-Mushi-Api-Key', 'X-Mushi-Project'],
+  allowMethods: ['GET', 'OPTIONS'],
+}))
 app.use('/v1/reports/*', cors({
   origin: '*',
   allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Sentry-Hook-Signature'],
@@ -647,6 +652,141 @@ async function handleQueueFailure(db: ReturnType<typeof getServiceClient>, repor
 // ============================================================
 // SDK ROUTES (API key auth)
 // ============================================================
+
+const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const
+const SDK_WIDGET_THEMES = ['auto', 'light', 'dark'] as const
+const SDK_SCREENSHOT_MODES = ['on-report', 'auto', 'off'] as const
+const SDK_NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
+
+type SdkWidgetPosition = typeof SDK_WIDGET_POSITIONS[number]
+type SdkWidgetTheme = typeof SDK_WIDGET_THEMES[number]
+type SdkScreenshotMode = typeof SDK_SCREENSHOT_MODES[number]
+type SdkNativeTriggerMode = typeof SDK_NATIVE_TRIGGER_MODES[number]
+
+interface SdkConfigRow {
+  project_id?: string
+  sdk_config_enabled?: boolean | null
+  sdk_widget_position?: string | null
+  sdk_widget_theme?: string | null
+  sdk_widget_trigger_text?: string | null
+  sdk_capture_console?: boolean | null
+  sdk_capture_network?: boolean | null
+  sdk_capture_performance?: boolean | null
+  sdk_capture_screenshot?: string | null
+  sdk_capture_element_selector?: boolean | null
+  sdk_native_trigger_mode?: string | null
+  sdk_min_description_length?: number | null
+  sdk_config_updated_at?: string | null
+}
+
+function oneOf<T extends readonly string[]>(value: unknown, allowed: T, fallback: T[number]): T[number] {
+  return isOneOf(value, allowed)
+    ? value as T[number]
+    : fallback
+}
+
+function isOneOf<T extends readonly string[]>(value: unknown, allowed: T): value is T[number] {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeSdkConfig(row?: SdkConfigRow | null) {
+  return {
+    enabled: row?.sdk_config_enabled ?? true,
+    version: row?.sdk_config_updated_at ?? null,
+    widget: {
+      position: oneOf(row?.sdk_widget_position, SDK_WIDGET_POSITIONS, 'bottom-right'),
+      theme: oneOf(row?.sdk_widget_theme, SDK_WIDGET_THEMES, 'auto'),
+      triggerText: row?.sdk_widget_trigger_text ?? null,
+    },
+    capture: {
+      console: row?.sdk_capture_console ?? true,
+      network: row?.sdk_capture_network ?? true,
+      performance: row?.sdk_capture_performance ?? false,
+      screenshot: oneOf(row?.sdk_capture_screenshot, SDK_SCREENSHOT_MODES, 'on-report'),
+      elementSelector: row?.sdk_capture_element_selector ?? false,
+    },
+    native: {
+      triggerMode: oneOf(row?.sdk_native_trigger_mode, SDK_NATIVE_TRIGGER_MODES, 'both'),
+      minDescriptionLength: Math.max(0, Math.min(1000, row?.sdk_min_description_length ?? 20)),
+    },
+  }
+}
+
+function coerceSdkConfigUpdate(body: Record<string, unknown>): Record<string, unknown> {
+  const updates: Record<string, unknown> = {}
+  const widget = isRecord(body.widget) ? body.widget : {}
+  const capture = isRecord(body.capture) ? body.capture : {}
+  const native = isRecord(body.native) ? body.native : {}
+
+  if (typeof body.enabled === 'boolean') updates.sdk_config_enabled = body.enabled
+  if (isOneOf(widget.position, SDK_WIDGET_POSITIONS)) updates.sdk_widget_position = widget.position
+  if (isOneOf(widget.theme, SDK_WIDGET_THEMES)) updates.sdk_widget_theme = widget.theme
+  if (typeof widget.triggerText === 'string') {
+    const trimmed = widget.triggerText.trim()
+    updates.sdk_widget_trigger_text = trimmed ? widget.triggerText.slice(0, 24) : null
+  } else if (widget.triggerText === null) {
+    updates.sdk_widget_trigger_text = null
+  }
+  if (typeof capture.console === 'boolean') updates.sdk_capture_console = capture.console
+  if (typeof capture.network === 'boolean') updates.sdk_capture_network = capture.network
+  if (typeof capture.performance === 'boolean') updates.sdk_capture_performance = capture.performance
+  if (isOneOf(capture.screenshot, SDK_SCREENSHOT_MODES)) updates.sdk_capture_screenshot = capture.screenshot
+  if (typeof capture.elementSelector === 'boolean') updates.sdk_capture_element_selector = capture.elementSelector
+  if (isOneOf(native.triggerMode, SDK_NATIVE_TRIGGER_MODES)) updates.sdk_native_trigger_mode = native.triggerMode
+  if (Number.isFinite(native.minDescriptionLength)) {
+    updates.sdk_min_description_length = Math.max(0, Math.min(1000, Math.round(native.minDescriptionLength)))
+  }
+  updates.sdk_config_updated_at = new Date().toISOString()
+  return updates
+}
+
+async function canManageProjectSdkConfig(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data: project } = await db
+    .from('projects')
+    .select('owner_id')
+    .eq('id', projectId)
+    .maybeSingle()
+
+  if (!project) return false
+  if ((project as { owner_id?: string | null }).owner_id === userId) return true
+
+  const { data: member } = await db
+    .from('project_members')
+    .select('role')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .in('role', ['owner', 'admin'])
+    .maybeSingle()
+
+  return Boolean(member)
+}
+
+app.get('/v1/sdk/config', apiKeyAuth, async (c) => {
+  const projectId = c.get('projectId') as string
+  const db = getServiceClient()
+  const { data, error } = await db
+    .from('project_settings')
+    .select(
+      'sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+      'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
+      'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
+    )
+    .eq('project_id', projectId)
+    .maybeSingle()
+
+  if (error) return dbError(c, error)
+  c.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300')
+  c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key')
+  return c.json({ ok: true, data: normalizeSdkConfig(data as SdkConfigRow | null) })
+})
 
 app.post('/v1/reports', apiKeyAuth, async (c) => {
   try {
@@ -3109,6 +3249,55 @@ app.patch('/v1/admin/settings', jwtAuth, async (c) => {
 
   if (error) return dbError(c, error)
   return c.json({ ok: true })
+})
+
+app.get('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+
+  if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+  }
+
+  const { data, error } = await db
+    .from('project_settings')
+    .select(
+      'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+      'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
+      'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
+    )
+    .eq('project_id', projectId)
+    .maybeSingle()
+  if (error) return dbError(c, error)
+
+  return c.json({ ok: true, data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow | null) } })
+})
+
+app.put('/v1/admin/projects/:id/sdk-config', jwtAuth, async (c) => {
+  const projectId = c.req.param('id')
+  const userId = c.get('userId') as string
+  const body = await c.req.json().catch(() => ({})) as Record<string, unknown>
+  const db = getServiceClient()
+
+  if (!(await canManageProjectSdkConfig(db, projectId, userId))) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404)
+  }
+
+  const updates = coerceSdkConfigUpdate(body)
+  const { data, error } = await db
+    .from('project_settings')
+    .upsert({ project_id: projectId, ...updates }, { onConflict: 'project_id' })
+    .select(
+      'project_id, sdk_config_enabled, sdk_widget_position, sdk_widget_theme, sdk_widget_trigger_text, ' +
+      'sdk_capture_console, sdk_capture_network, sdk_capture_performance, sdk_capture_screenshot, ' +
+      'sdk_capture_element_selector, sdk_native_trigger_mode, sdk_min_description_length, sdk_config_updated_at',
+    )
+    .single()
+
+  if (error) return dbError(c, error)
+  await logAudit(db, projectId, userId, 'settings.updated', 'sdk_config', projectId, updates).catch(() => {})
+  return c.json({ ok: true, data: { projectId, ...normalizeSdkConfig(data as SdkConfigRow) } })
 })
 
 // ============================================================

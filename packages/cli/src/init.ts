@@ -220,8 +220,11 @@ async function promptText(opts: {
   const value = await p.text({
     message: opts.message,
     placeholder: opts.placeholder,
+    // @clack/prompts v1 widened the validate input to `string | undefined`
+    // (the previous v0.x API guaranteed a string). Guard the empty case
+    // explicitly so the rest of the pipeline keeps its `string` invariant.
     validate: (v) => {
-      const clean = sanitizeSecret(v)
+      const clean = sanitizeSecret(v ?? '')
       if (clean.length === 0) return 'Required'
       return opts.validate ? opts.validate(clean) : undefined
     },

@@ -160,6 +160,34 @@ jobs:
           PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
         run: node scripts/verify-published-tarballs.mjs
 
+      # SUPPLY-CHAIN VERIFY (post-publish):
+      #   `npm audit signatures` checks every installed dep against npm's
+      #   ECDSA registry signatures + Sigstore provenance. If a transitive
+      #   dep got swapped on the registry between resolution and now (e.g.
+      #   tarball tampering), this fails and we get a loud signal in the
+      #   release job summary instead of finding out from a user.
+      #
+      # NOTE: pnpm doesn't expose this, so we shell out to npm itself.
+      # `--audit-level=high` keeps the gate noise-free — low/info findings
+      # don't block the release, but tampered/missing signatures will.
+      - name: Audit signatures of installed dependencies
+        if: steps.changesets.outputs.published == 'true'
+        run: |
+          # Materialise an npm-style install just to feed `audit signatures`.
+          # We don't replace pnpm — we use a throwaway folder so it doesn't
+          # touch the workspace lockfile or node_modules.
+          mkdir -p /tmp/audit-sigs && cd /tmp/audit-sigs
+          # Reuse the published tarballs we just verified so the audit set
+          # mirrors what real users will install.
+          for pkg in $(echo "$PUBLISHED" | jq -r '.[].name'); do
+            ver=$(echo "$PUBLISHED" | jq -r --arg n "$pkg" '.[] | select(.name == $n) | .version')
+            echo "Auditing signatures for ${pkg}@${ver}"
+            npm install --no-save --ignore-scripts "${pkg}@${ver}"
+          done
+          npm audit signatures --audit-level=high
+        env:
+          PUBLISHED: ${{ steps.changesets.outputs.publishedPackages }}
+
       # Wave D D2: regenerate the customer-facing changelog whenever Changesets
       # has actually bumped versions (either on a publish or when refreshing
       # the release PR). The script is deterministic, so committing it back is

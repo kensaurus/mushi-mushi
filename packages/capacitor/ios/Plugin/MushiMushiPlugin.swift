@@ -9,6 +9,8 @@ import UIKit
 public class MushiMushiPlugin: CAPPlugin {
 
     private var configured = false
+    private var triggerMode: TriggerMode = .shake
+    private var theme: MushiConfig.Theme = .init(accentColor: "#FF2D78")
 
     @objc func configure(_ call: CAPPluginCall) {
         guard let projectId = call.getString("projectId"),
@@ -25,7 +27,7 @@ public class MushiMushiPlugin: CAPPlugin {
         // Cross-platform parity: unknown strings fall back to `.shake` (the
         // documented default and the native SDK default), matching the Android
         // Capacitor plugin. A typo must never silently disable all triggers.
-        let trigger: TriggerMode = {
+        triggerMode = {
             switch triggerStr {
             case "shake": return .shake
             case "button": return .button
@@ -37,13 +39,21 @@ public class MushiMushiPlugin: CAPPlugin {
 
         // Reuse the native SDK so the offline queue / shake / API client
         // are exactly one implementation across native + Capacitor apps.
+        if let themeObj = call.getObject("theme") {
+            theme = .init(
+                accentColor: themeObj["accentColor"] as? String ?? "#FF2D78",
+                dark: themeObj["dark"] as? Bool ?? false
+            )
+        }
+
         let config = MushiConfig(
             projectId: projectId,
             apiKey: apiKey,
             endpoint: endpoint,
-            triggerMode: trigger,
+            triggerMode: triggerMode,
             captureScreenshot: captureScreenshot,
-            minDescriptionLength: minDescriptionLength
+            minDescriptionLength: minDescriptionLength,
+            theme: theme
         )
         Mushi.shared.configure(with: config)
 
@@ -80,7 +90,27 @@ public class MushiMushiPlugin: CAPPlugin {
     }
 
     @objc func showWidget(_ call: CAPPluginCall) {
-        Mushi.shared.showWidget()
+        let metadata = call.getObject("metadata") as? [String: Any]
+        Mushi.shared.showWidget(category: call.getString("category"), metadata: metadata)
+        call.resolve()
+    }
+
+    @objc func setUser(_ call: CAPPluginCall) {
+        if let user = call.getObject("user") as? [String: Any] {
+            Mushi.shared.setUser(user)
+        } else {
+            Mushi.shared.setUser(nil)
+        }
+        call.resolve()
+    }
+
+    @objc func setMetadata(_ call: CAPPluginCall) {
+        guard let key = call.getString("key") else {
+            call.reject("key is required")
+            return
+        }
+        let value = call.options["value"] as Any?
+        Mushi.shared.setMetadata(key, value: value is NSNull ? nil : value)
         call.resolve()
     }
 

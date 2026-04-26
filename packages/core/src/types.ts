@@ -6,6 +6,12 @@ export interface MushiConfig {
   projectId: string;
   apiKey: string;
   apiEndpoint?: string;
+  /**
+   * Fetch non-secret widget/capture settings from the Mushi project at
+   * startup. Defaults to true so console changes apply without rebuilding
+   * host apps. Set false for fully static/offline deployments.
+   */
+  runtimeConfig?: boolean;
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
@@ -270,6 +276,7 @@ export interface MushiSDKInstance {
   open(): void;
   close(): void;
   destroy(): void;
+  updateConfig(config: MushiRuntimeSdkConfig): void;
 
   /**
    * Wave G4 — unified `captureEvent` API. Submits a bug report
@@ -311,10 +318,22 @@ export interface MushiCaptureEventInput {
 export interface MushiApiClient {
   submitReport(report: MushiReport): Promise<MushiApiResponse<{ reportId: string }>>;
   getReportStatus(reportId: string): Promise<MushiApiResponse<{ status: MushiReportStatus }>>;
+  getSdkConfig(): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
 }
 
 export interface MushiApiResponse<T> {
   ok: boolean;
   data?: T;
   error?: { code: string; message: string };
+}
+
+export interface MushiRuntimeSdkConfig {
+  enabled?: boolean;
+  version?: string | null;
+  widget?: MushiWidgetConfig;
+  capture?: MushiCaptureConfig;
+  native?: {
+    triggerMode?: 'shake' | 'button' | 'both' | 'none';
+    minDescriptionLength?: number;
+  };
 }
