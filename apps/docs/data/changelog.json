@@ -1,11 +1,42 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "0.7",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.7.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/angular",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/core",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/svelte",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/vue",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "0.7.0"
+      }
+    ]
   },
   {
     "majorMinor": "0.6",
@@ -137,6 +168,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.4.6",
       "0.4.4",
       "0.4.3",
       "0.4.2",
@@ -196,7 +228,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.4.4"
+        "version": "0.4.6"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -229,6 +261,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.3.6",
       "0.3.5",
       "0.3.4",
       "0.3.3",
@@ -301,11 +334,11 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.3.5"
+        "version": "0.3.6"
       },
       {
         "name": "@mushi-mushi/node",
-        "version": "0.3.2"
+        "version": "0.3.3"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -338,6 +371,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.5",
       "0.2.4",
       "0.2.3",
       "0.2.2",
@@ -397,7 +431,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/angular",

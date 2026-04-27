@@ -1,5 +1,13 @@
 # @mushi-mushi/capacitor
 
+## 0.4.6
+
+### Patch Changes
+
+- 15462c8: Vendor updated iOS and Android native SDK sources with configurable native trigger insets and programmatic trigger visibility.
+- Updated dependencies [15462c8]
+  - @mushi-mushi/core@0.7.0
+
 ## 0.4.4
 
 ### Patch Changes

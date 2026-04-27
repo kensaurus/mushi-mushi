@@ -1,5 +1,16 @@
 # @mushi-mushi/vue
 
+## 0.7.0
+
+### Minor Changes
+
+- 15462c8: Add production-grade trigger controls for embedded apps: manual and attach modes, runtime show/hide APIs, edge-tab and smart-hide behavior, configurable insets, and React Native custom launcher/shake support.
+
+### Patch Changes
+
+- Updated dependencies [15462c8]
+  - @mushi-mushi/core@0.7.0
+
 ## 0.3.2
 
 ### Patch Changes

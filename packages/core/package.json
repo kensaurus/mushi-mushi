@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Core types, API client, and pre-filter for Mushi Mushi SDK",
   "license": "MIT",
   "type": "module",
