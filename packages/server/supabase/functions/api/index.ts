@@ -13,6 +13,7 @@ import {
   GATED_ROUTES,
   type FeatureFlag,
 } from '../_shared/entitlements.ts'
+import { requireSuperAdmin } from '../_shared/super-admin.ts'
 import { checkIngestQuota } from '../_shared/quota.ts'
 import { regionRouter, currentRegion, lookupProjectRegion, regionEndpoint } from '../_shared/region.ts'
 import { getStorageAdapter, invalidateStorageCache } from '../_shared/storage.ts'
@@ -4342,6 +4343,174 @@ app.get('/v1/admin/entitlements', jwtAuth, async (c) => {
       isSuperAdmin,
       hasProject: true,
       userEmail: userEmail ?? null,
+    },
+  })
+})
+
+// ============================================================
+// /v1/super-admin/* — operator-only directory + metrics.
+//
+// These endpoints expose cross-tenant rollups (every signup, every
+// active subscription, total MRR). The `requireSuperAdmin` middleware
+// gates on `auth.users.raw_app_meta_data.role === 'super_admin'` and
+// returns an opaque 404 to anyone else — including authenticated
+// non-operator users — so probing the surface looks the same as
+// hitting an unknown route.
+//
+// Reads come from the `super_admin_user_directory` and
+// `super_admin_metrics` views, which are owned by `service_role` and
+// REVOKE'd from `anon`/`authenticated`. The view does the joins so
+// we don't have to thread Postgres semantics into TypeScript.
+// ============================================================
+
+interface SuperAdminUserRow {
+  user_id: string
+  email: string | null
+  signed_up_at: string
+  last_sign_in_at: string | null
+  signup_plan: string | null
+  role: string | null
+  project_count: number | null
+  current_plan: string | null
+  reports_last_30d: number | null
+  last_report_at: string | null
+}
+
+// List signups with optional search + plan filter. Cursor-paginated by
+// `signed_up_at DESC` so we never miss new rows during paging — the
+// directory grows monotonically by signup time.
+app.get('/v1/super-admin/users', jwtAuth, requireSuperAdmin, async (c) => {
+  const db = getServiceClient()
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10) || 50, 200)
+  const search = (c.req.query('search') ?? '').trim().toLowerCase()
+  const planFilter = (c.req.query('plan') ?? '').trim()
+  const cursor = c.req.query('cursor') ?? null
+
+  let query = db
+    .from('super_admin_user_directory')
+    .select(
+      'user_id, email, signed_up_at, last_sign_in_at, signup_plan, role, project_count, current_plan, reports_last_30d, last_report_at',
+    )
+    .order('signed_up_at', { ascending: false })
+    .limit(limit + 1)
+
+  if (search) {
+    query = query.ilike('email', `%${search}%`)
+  }
+  if (planFilter) {
+    if (planFilter === 'paid') {
+      query = query.not('current_plan', 'is', null).neq('current_plan', 'hobby')
+    } else if (planFilter === 'hobby') {
+      // Hobby = no active paid sub. The view stores `null` in that case.
+      query = query.is('current_plan', null)
+    } else {
+      query = query.eq('current_plan', planFilter)
+    }
+  }
+  if (cursor) {
+    query = query.lt('signed_up_at', cursor)
+  }
+
+  const { data, error } = await query
+  if (error) {
+    log.error('super_admin_users_list_failed', { err: error.message })
+    return c.json({ ok: false, error: { code: 'INTERNAL', message: 'Failed to list users' } }, 500)
+  }
+
+  const rows = (data ?? []) as SuperAdminUserRow[]
+  const hasMore = rows.length > limit
+  const trimmed = hasMore ? rows.slice(0, limit) : rows
+  const nextCursor = hasMore ? trimmed[trimmed.length - 1].signed_up_at : null
+
+  return c.json({
+    ok: true,
+    data: {
+      users: trimmed,
+      next_cursor: nextCursor,
+      limit,
+    },
+  })
+})
+
+// Detail view for one signup: their projects + active subscriptions +
+// recent reports. Used by the row-click drawer in /admin/users.
+app.get('/v1/super-admin/users/:id', jwtAuth, requireSuperAdmin, async (c) => {
+  const db = getServiceClient()
+  const userId = c.req.param('id')
+
+  const { data: directory, error: dirErr } = await db
+    .from('super_admin_user_directory')
+    .select(
+      'user_id, email, signed_up_at, last_sign_in_at, signup_plan, role, project_count, current_plan, reports_last_30d, last_report_at',
+    )
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (dirErr || !directory) {
+    return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Not found.' } }, 404)
+  }
+
+  const [{ data: projects }, { data: subs }, { data: recentReports }] = await Promise.all([
+    db
+      .from('projects')
+      .select('id, name, slug, created_at, plan_tier, data_region')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false }),
+    db
+      .from('billing_subscriptions')
+      .select('id, project_id, plan_id, status, current_period_end, cancel_at_period_end, created_at')
+      .in(
+        'project_id',
+        // Subselect via inner SQL would be cheaper but the JS client
+        // forces a 2-call pattern. Acceptable here — operator endpoint
+        // hit at most a few times per day.
+        (
+          await db.from('projects').select('id').eq('owner_id', userId)
+        ).data?.map((p: { id: string }) => p.id) ?? [],
+      )
+      .order('created_at', { ascending: false }),
+    db
+      .from('reports')
+      .select('id, project_id, category, severity, status, created_at')
+      .in(
+        'project_id',
+        (
+          await db.from('projects').select('id').eq('owner_id', userId)
+        ).data?.map((p: { id: string }) => p.id) ?? [],
+      )
+      .order('created_at', { ascending: false })
+      .limit(20),
+  ])
+
+  return c.json({
+    ok: true,
+    data: {
+      user: directory,
+      projects: projects ?? [],
+      subscriptions: subs ?? [],
+      recent_reports: recentReports ?? [],
+    },
+  })
+})
+
+// One-row aggregate of MRR + signup velocity + churn. Pulled from the
+// `super_admin_metrics` view so the SQL stays in one place.
+app.get('/v1/super-admin/metrics', jwtAuth, requireSuperAdmin, async (c) => {
+  const db = getServiceClient()
+  const { data, error } = await db.from('super_admin_metrics').select('*').maybeSingle()
+  if (error) {
+    log.error('super_admin_metrics_failed', { err: error.message })
+    return c.json({ ok: false, error: { code: 'INTERNAL', message: 'Failed to load metrics' } }, 500)
+  }
+  return c.json({
+    ok: true,
+    data: data ?? {
+      total_users: 0,
+      paid_users: 0,
+      mrr_usd: 0,
+      signups_last_7d: 0,
+      signups_last_30d: 0,
+      churn_last_30d: 0,
     },
   })
 })

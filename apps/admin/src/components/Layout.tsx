@@ -18,6 +18,7 @@ import {
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
 import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
+import { useEntitlements } from '../lib/useEntitlements'
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
@@ -56,6 +57,11 @@ interface NavItem {
    *  into Advanced mode. Routes still resolve in either mode — only the
    *  sidebar is filtered, so deep links + bookmarks survive. */
   beginner?: boolean
+  /** When true, the item is gated on `useEntitlements().isSuperAdmin`.
+   *  Operator-only routes like /users are hidden from the sidebar for
+   *  non-operators (the route itself ALSO refuses to render — the
+   *  sidebar gate is just to avoid teasing it). */
+  superAdmin?: boolean
 }
 
 interface NavSection {
@@ -170,6 +176,11 @@ const NAV: NavSection[] = [
       { label: 'Compliance', path: '/compliance', icon: IconCompliance },
       { label: 'Storage',    path: '/storage',    icon: IconStorage },
       { label: 'Query',      path: '/query',      icon: IconQuery },
+      // Phase 2c (2026-04-27) — operator-only directory. Hidden from
+      // the sidebar for everyone except super-admins (kensaurus@…).
+      // The page itself re-checks the role + the gateway returns 404
+      // for non-operators, so this is just a usability gate.
+      { label: 'Users',      path: '/users',      icon: IconShield, superAdmin: true },
     ],
   },
 ]
@@ -494,6 +505,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false)
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
+  const { isSuperAdmin } = useEntitlements()
   const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
@@ -597,10 +609,16 @@ export function Layout({ children }: { children: ReactNode }) {
   //  • Advanced: full 23-page console.
   // Sections collapse to an empty shell if all their items are filtered
   // out; we drop them entirely so the sidebar stays tight.
+  // Always strip operator-only routes for non-super-admins, regardless
+  // of mode. The gateway also enforces this — UI hiding is purely so
+  // we don't tease a feature non-operators can't access.
+  const visibleByRole = (i: NavItem) => !i.superAdmin || isSuperAdmin
+
   let visibleNav: NavSection[]
   if (isQuickstart) {
     const quickItems: NavItem[] = NAV.flatMap(s =>
       s.items
+        .filter(visibleByRole)
         .filter(i => i.quickstartLabel !== undefined)
         .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
     )
@@ -620,11 +638,14 @@ export function Layout({ children }: { children: ReactNode }) {
       .map(s => ({
         ...s,
         defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
-        items: s.items.filter(i => i.beginner),
+        items: s.items.filter(visibleByRole).filter(i => i.beginner),
       }))
       .filter(s => s.items.length > 0)
   } else {
-    visibleNav = NAV
+    visibleNav = NAV.map(s => ({
+      ...s,
+      items: s.items.filter(visibleByRole),
+    }))
   }
 
   // Force-open the section that contains the current page so the user

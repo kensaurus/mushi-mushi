@@ -54,6 +54,11 @@ const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ defaul
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
 // the first-paint bundle isn't inflated for users who don't open it.
 const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m.InboxPage })))
+// Phase 2c (2026-04-27) — operator-only signup directory. Lazy-loaded
+// like every other route so the bundle cost is zero for non-operators.
+// The page itself re-checks `isSuperAdmin` and renders an opaque "Page
+// not found" if a non-operator deep-links here.
+const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -138,6 +143,7 @@ export function App() {
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
                   <Route path="/inbox" element={<InboxPage />} />
+                  <Route path="/users" element={<UsersPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </SentryRoutes>
                 </Suspense>
