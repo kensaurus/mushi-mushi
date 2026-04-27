@@ -6,4 +6,5 @@ library mushi_mushi;
 
 export 'src/config.dart';
 export 'src/mushi.dart';
+export 'src/overlay.dart';
 export 'src/widget.dart';

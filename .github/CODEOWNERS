@@ -1,0 +1,44 @@
+# CODEOWNERS — required reviewers for sensitive paths.
+#
+# WHY: The OpenSSF Scorecard "Code-Review" check looks for this file as
+# evidence that changes go through review. For a single-maintainer repo
+# the file primarily documents ownership, but it also wires up GitHub's
+# auto-request-review so a future co-maintainer is automatically tagged
+# without having to remember which paths are sensitive.
+#
+# The catch-all at the end declares the maintainer for any path not
+# explicitly listed; the more-specific lines above it govern the
+# supply-chain hot paths (workflows, release scripts, security policy,
+# package.json files that drive `npm publish`).
+#
+# REFERENCE: https://docs.github.com/en/repositories/managing-your-repositories-settings-and-features/customizing-your-repository/about-code-owners
+
+# CI / CD / supply-chain hot paths — anything here can ship to npm or
+# touch repository secrets, so review must not be skipped.
+/.github/                       @kensaurus
+/.github/workflows/             @kensaurus
+/.github/dependabot.yml         @kensaurus
+/.github/CODEOWNERS             @kensaurus
+/.npmrc                         @kensaurus
+/pnpm-workspace.yaml            @kensaurus
+
+# Release tooling — `pnpm release` is the only path that publishes to
+# npm. A change here can silently neutralise the publish-readiness,
+# tarball-verify, or workspace-protocol guards.
+/scripts/check-publish-readiness.mjs        @kensaurus
+/scripts/check-workspace-protocol.mjs       @kensaurus
+/scripts/verify-published-tarballs.mjs      @kensaurus
+/scripts/check-no-secrets.mjs               @kensaurus
+/scripts/install-git-hooks.mjs              @kensaurus
+
+# Security policy + license — never edited as part of a normal PR.
+/SECURITY.md                    @kensaurus
+/LICENSE                        @kensaurus
+
+# Package manifests that drive what gets published. A typo or a missing
+# `files`/`exports`/`publishConfig` field breaks every external install.
+/packages/*/package.json        @kensaurus
+/package.json                   @kensaurus
+
+# Catch-all
+*                               @kensaurus

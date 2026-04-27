@@ -6,7 +6,7 @@
  * - Creates MushiContext with open/close/submitReport/capture accessors
  * - Sets up console + network capture on mount, tears down on unmount
  * - Renders MushiBottomSheet and (optionally) MushiFloatingButton as siblings of children
- * - widget.trigger controls auto-UI: 'button' shows FAB, 'manual' shows nothing
+ * - widget.trigger controls auto-UI: 'button'/'auto' shows FAB, 'manual' shows nothing
  *
  * DEPENDENCIES:
  * - ./capture/* for console, network, device info
@@ -19,11 +19,11 @@
  *
  * TECHNICAL DETAILS:
  * - open() / close() toggle `sheetVisible` state which drives the bottom sheet
- * - MushiRNConfig.widget.trigger: 'button' (default) | 'manual'
+ * - MushiRNConfig.widget.trigger: 'button' (default) | 'shake' | 'both' | 'manual'
  * - MushiRNConfig.widget.buttonPosition: 'bottom-right' (default) | 'bottom-left'
  *
  * NOTES:
- * - The 'shake' trigger from the original config type is kept for future use
+ * - Shake installs lazily through expo-sensors when available.
  * - submitReport flushes captured logs at call-time, then enqueues on failure
  */
 
@@ -50,9 +50,10 @@ export interface MushiRNConfig {
   apiKey: string
   endpoint?: string
   widget?: {
-    trigger?: 'shake' | 'button' | 'both' | 'manual'
+    trigger?: 'shake' | 'button' | 'both' | 'manual' | 'auto' | 'edge-tab' | 'hidden' | 'attach'
     shakeThreshold?: number
     buttonPosition?: 'bottom-right' | 'bottom-left'
+    inset?: { bottom?: number; left?: number; right?: number }
   }
   capture?: {
     console?: boolean
@@ -70,6 +71,7 @@ export interface MushiRNConfig {
 export interface MushiRNInstance {
   open(): void
   close(): void
+  attachTo(): { onPress: () => void }
   submitReport(data: { description: string; category: string }): Promise<void>
   getDeviceInfo(): ReturnType<typeof getDeviceInfo>
   getConsoleEntries(): ReturnType<ReturnType<typeof setupConsoleCapture>['getEntries']>
@@ -77,6 +79,13 @@ export interface MushiRNInstance {
 }
 
 const MushiContext = createContext<MushiRNInstance | null>(null)
+
+type ExpoSensorsModule = {
+  Accelerometer: {
+    setUpdateInterval(ms: number): void
+    addListener(listener: (event: { x: number; y: number; z: number }) => void): { remove(): void }
+  }
+}
 
 export function MushiProvider({ children, ...config }: MushiRNConfig & { children: ReactNode }) {
   const consoleRef = useRef<ReturnType<typeof setupConsoleCapture> | null>(null)
@@ -117,6 +126,40 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
 
   const open = useCallback(() => setSheetVisible(true), [])
   const close = useCallback(() => setSheetVisible(false), [])
+  const attachTo = useCallback(() => ({ onPress: open }), [open])
+
+  useEffect(() => {
+    const trigger = config.widget?.trigger ?? 'button'
+    if (trigger !== 'shake' && trigger !== 'both') return
+
+    let disposed = false
+    let cleanup: (() => void) | undefined
+    let lastShake = 0
+    const threshold = config.widget?.shakeThreshold ?? 2.7
+
+    ;(new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<ExpoSensorsModule>)('expo-sensors')
+      .then((mod) => {
+        if (disposed) return
+        mod.Accelerometer.setUpdateInterval(120)
+        const sub = mod.Accelerometer.addListener((evt) => {
+          const g = Math.sqrt(evt.x * evt.x + evt.y * evt.y + evt.z * evt.z)
+          if (g < threshold) return
+          const now = Date.now()
+          if (now - lastShake < 1000) return
+          lastShake = now
+          open()
+        })
+        cleanup = () => sub.remove()
+      })
+      .catch(() => {
+        // expo-sensors is optional so bare React Native apps can stay dependency-light.
+      })
+
+    return () => {
+      disposed = true
+      cleanup?.()
+    }
+  }, [config.widget?.trigger, config.widget?.shakeThreshold, open])
 
   const submitReport = useCallback(
     async (data: { description: string; category: string }) => {
@@ -160,16 +203,17 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     () => ({
       open,
       close,
+      attachTo,
       submitReport,
       getDeviceInfo,
       getConsoleEntries: () => consoleRef.current?.getEntries() ?? [],
       getNetworkEntries: () => networkRef.current?.getEntries() ?? [],
     }),
-    [open, close, submitReport],
+    [open, close, attachTo, submitReport],
   )
 
   const trigger = config.widget?.trigger ?? 'button'
-  const showFab = trigger === 'button' || trigger === 'both'
+  const showFab = trigger === 'button' || trigger === 'both' || trigger === 'auto' || trigger === 'edge-tab'
 
   return (
     <MushiContext.Provider value={instance}>
@@ -178,6 +222,7 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
         <MushiFloatingButton
           onPress={open}
           position={config.widget?.buttonPosition}
+          inset={config.widget?.inset}
         />
       )}
       <MushiBottomSheet visible={sheetVisible} onClose={close} />

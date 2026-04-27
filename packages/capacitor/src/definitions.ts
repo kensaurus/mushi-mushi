@@ -33,6 +33,8 @@ export interface MushiCapacitorPluginConfig {
   useNativeWidget?: boolean;
   /** Theme overrides for the native bottom sheet. */
   theme?: { accentColor?: string; dark?: boolean };
+  /** Native trigger offset in logical px/dp. Defaults keep the historical bottom-right button. */
+  triggerInset?: { bottom?: number; leading?: number; trailing?: number; start?: number; end?: number };
 }
 
 export interface MushiCapacitorReport {

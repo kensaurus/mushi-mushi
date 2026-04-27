@@ -63,6 +63,12 @@ export class MushiWidget {
   private screenshotAttached = false;
   private elementSelected = false;
   private submitting = false;
+  private triggerVisible = true;
+  private triggerShrunk = false;
+  private triggerHiddenByScroll = false;
+  private attachedLaunchers: Array<() => void> = [];
+  private smartHideCleanup: (() => void) | null = null;
+  private smartHideTimer: ReturnType<typeof setTimeout> | null = null;
   /** Captured at the moment of submit so the success ledger metadata
    *  ("REPORT · 14:23:07 JST") doesn't drift while the success step
    *  is on screen. */
@@ -90,6 +96,15 @@ export class MushiWidget {
       mode: config.mode ?? 'conversational',
       locale: config.locale ?? 'auto',
       zIndex: config.zIndex ?? 99999,
+      trigger: config.trigger ?? 'auto',
+      attachToSelector: config.attachToSelector ?? '',
+      inset: config.inset ?? {},
+      respectSafeArea: config.respectSafeArea ?? true,
+      hideOnSelector: config.hideOnSelector ?? '',
+      hideOnRoutes: config.hideOnRoutes ?? [],
+      environments: config.environments ?? {},
+      smartHide: config.smartHide ?? false,
+      draggable: config.draggable ?? false,
     };
     this.callbacks = callbacks;
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
@@ -101,6 +116,8 @@ export class MushiWidget {
 
   mount(): void {
     document.body.appendChild(this.host);
+    this.syncAttachedLaunchers();
+    this.syncSmartHide();
     this.render();
   }
 
@@ -114,8 +131,19 @@ export class MushiWidget {
       ...(config.mode ? { mode: config.mode } : {}),
       ...(config.locale ? { locale: config.locale } : {}),
       ...(config.zIndex !== undefined ? { zIndex: config.zIndex } : {}),
+      ...(config.trigger ? { trigger: config.trigger } : {}),
+      ...(config.attachToSelector !== undefined ? { attachToSelector: config.attachToSelector } : {}),
+      ...(config.inset !== undefined ? { inset: config.inset } : {}),
+      ...(config.respectSafeArea !== undefined ? { respectSafeArea: config.respectSafeArea } : {}),
+      ...(config.hideOnSelector !== undefined ? { hideOnSelector: config.hideOnSelector } : {}),
+      ...(config.hideOnRoutes !== undefined ? { hideOnRoutes: config.hideOnRoutes } : {}),
+      ...(config.environments !== undefined ? { environments: config.environments } : {}),
+      ...(config.smartHide !== undefined ? { smartHide: config.smartHide } : {}),
+      ...(config.draggable !== undefined ? { draggable: config.draggable } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
+    this.syncAttachedLaunchers();
+    this.syncSmartHide();
     this.render();
   }
 
@@ -152,6 +180,36 @@ export class MushiWidget {
     return this.isOpen;
   }
 
+  showTrigger(): void {
+    this.triggerVisible = true;
+    this.render();
+  }
+
+  hideTrigger(): void {
+    this.triggerVisible = false;
+    this.render();
+  }
+
+  setTrigger(trigger: NonNullable<MushiWidgetConfig['trigger']>): void {
+    this.updateConfig({ trigger });
+  }
+
+  attachTo(selectorOrElement: string | Element, options: MushiWidgetConfig = {}): () => void {
+    const elements = typeof selectorOrElement === 'string'
+      ? Array.from(document.querySelectorAll(selectorOrElement))
+      : [selectorOrElement];
+    const cleanups = elements.map((el) => {
+      const onClick = (event: Event) => {
+        event.preventDefault();
+        this.updateConfig(options);
+        this.open();
+      };
+      el.addEventListener('click', onClick);
+      return () => el.removeEventListener('click', onClick);
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }
+
   setScreenshotAttached(attached: boolean): void {
     this.screenshotAttached = attached;
     if (this.isOpen) this.render();
@@ -171,7 +229,95 @@ export class MushiWidget {
       clearTimeout(this.autoCloseTimer);
       this.autoCloseTimer = null;
     }
+    if (this.smartHideTimer !== null) {
+      clearTimeout(this.smartHideTimer);
+      this.smartHideTimer = null;
+    }
+    this.smartHideCleanup?.();
+    this.smartHideCleanup = null;
+    this.attachedLaunchers.forEach((cleanup) => cleanup());
+    this.attachedLaunchers = [];
     this.host.remove();
+  }
+
+  private syncAttachedLaunchers(): void {
+    this.attachedLaunchers.forEach((cleanup) => cleanup());
+    this.attachedLaunchers = [];
+    if (this.config.trigger !== 'attach' || !this.config.attachToSelector) return;
+    if (typeof document === 'undefined') return;
+    this.attachedLaunchers.push(this.attachTo(this.config.attachToSelector));
+  }
+
+  private syncSmartHide(): void {
+    this.smartHideCleanup?.();
+    this.smartHideCleanup = null;
+    this.triggerShrunk = false;
+    this.triggerHiddenByScroll = false;
+    if (!this.config.smartHide || typeof window === 'undefined') return;
+
+    const smart = this.config.smartHide === true
+      ? { onMobile: 'edge-tab' as const, onScroll: 'shrink' as const, onIdleMs: 900 }
+      : this.config.smartHide;
+    if (!smart.onScroll) return;
+
+    const onScroll = () => {
+      if (smart.onScroll === 'hide') {
+        this.triggerHiddenByScroll = true;
+      } else {
+        this.triggerShrunk = true;
+      }
+      this.render();
+      if (this.smartHideTimer !== null) clearTimeout(this.smartHideTimer);
+      this.smartHideTimer = setTimeout(() => {
+        this.triggerHiddenByScroll = false;
+        this.triggerShrunk = false;
+        this.render();
+      }, smart.onIdleMs ?? 900);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    this.smartHideCleanup = () => window.removeEventListener('scroll', onScroll);
+  }
+
+  private shouldRenderTrigger(): boolean {
+    if (!this.triggerVisible) return false;
+    if (this.triggerHiddenByScroll) return false;
+    if (this.config.trigger === 'manual' || this.config.trigger === 'hidden' || this.config.trigger === 'attach') {
+      return false;
+    }
+    if (this.isMobileSmartHidden()) return false;
+    if (this.isRouteHidden()) return false;
+    if (this.config.hideOnSelector && document.querySelector(this.config.hideOnSelector)) return false;
+    const action = this.config.environments[this.detectEnvironment()];
+    return action !== 'never' && action !== 'manual';
+  }
+
+  private effectiveTrigger(): NonNullable<MushiWidgetConfig['trigger']> {
+    if (!this.config.smartHide || typeof window === 'undefined') return this.config.trigger;
+    const smart = this.config.smartHide === true
+      ? { onMobile: 'edge-tab' as const }
+      : this.config.smartHide;
+    if (window.matchMedia('(max-width: 768px)').matches && smart.onMobile === 'edge-tab') {
+      return 'edge-tab';
+    }
+    return this.config.trigger;
+  }
+
+  private isMobileSmartHidden(): boolean {
+    if (!this.config.smartHide || typeof window === 'undefined') return false;
+    const smart = this.config.smartHide === true ? { onMobile: 'edge-tab' as const } : this.config.smartHide;
+    return window.matchMedia('(max-width: 768px)').matches && smart.onMobile === 'hide';
+  }
+
+  private detectEnvironment(): 'production' | 'staging' | 'development' {
+    const host = typeof location !== 'undefined' ? location.hostname : '';
+    if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.local')) return 'development';
+    if (/\b(staging|stage|preview|dev)\b/i.test(host)) return 'staging';
+    return 'production';
+  }
+
+  private isRouteHidden(): boolean {
+    if (!this.config.hideOnRoutes.length || typeof location === 'undefined') return false;
+    return this.config.hideOnRoutes.some((route) => location.pathname.includes(route));
   }
 
   private getTheme(): 'light' | 'dark' {
@@ -193,18 +339,22 @@ export class MushiWidget {
     style.textContent = getWidgetStyles(theme);
     this.shadow.appendChild(style);
 
-    const trigger = document.createElement('button');
-    trigger.className = `mushi-trigger ${pos}`;
-    trigger.textContent = this.config.triggerText;
-    trigger.setAttribute('aria-label', t.widget.trigger);
-    trigger.setAttribute('aria-haspopup', 'dialog');
-    trigger.setAttribute('aria-expanded', String(this.isOpen));
-    trigger.style.zIndex = String(this.config.zIndex);
-    trigger.addEventListener('click', () => {
-      if (this.isOpen) this.close();
-      else this.open();
-    });
-    this.shadow.appendChild(trigger);
+    if (this.shouldRenderTrigger()) {
+      const effectiveTrigger = this.effectiveTrigger();
+      const trigger = document.createElement('button');
+      trigger.className = `mushi-trigger ${pos}${effectiveTrigger === 'edge-tab' ? ' edge-tab' : ''}${this.triggerShrunk ? ' shrunk' : ''}`;
+      trigger.textContent = this.config.triggerText;
+      trigger.setAttribute('aria-label', t.widget.trigger);
+      trigger.setAttribute('aria-haspopup', 'dialog');
+      trigger.setAttribute('aria-expanded', String(this.isOpen));
+      trigger.style.zIndex = String(this.config.zIndex);
+      this.applyInsetVars(trigger);
+      trigger.addEventListener('click', () => {
+        if (this.isOpen) this.close();
+        else this.open();
+      });
+      this.shadow.appendChild(trigger);
+    }
 
     const panel = document.createElement('div');
     panel.className = `mushi-panel ${pos}${this.isOpen ? ' open' : ' closed'}`;
@@ -212,6 +362,7 @@ export class MushiWidget {
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', t.widget.title);
     panel.style.zIndex = String(this.config.zIndex + 1);
+    this.applyInsetVars(panel);
 
     if (this.isOpen) {
       panel.innerHTML = this.renderStep();
@@ -219,6 +370,21 @@ export class MushiWidget {
       this.attachHandlers(panel);
       this.trapFocus(panel);
     }
+  }
+
+  private applyInsetVars(el: HTMLElement): void {
+    const { inset } = this.config;
+    if (!this.config.respectSafeArea) {
+      (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+        if (inset[edge] === undefined) el.style.setProperty(`--mushi-${edge}`, '24px');
+      });
+    }
+    (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+      const value = inset[edge];
+      if (value === undefined) return;
+      el.style.setProperty(`--mushi-${edge}`, value === 'auto' ? 'auto' : `${value}px`);
+    });
+    el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
   }
 
   private renderStep(): string {

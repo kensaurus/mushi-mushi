@@ -406,6 +406,26 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       widget.open();
     },
 
+    openWith(category) {
+      widget.open({ category });
+    },
+
+    show() {
+      widget.showTrigger();
+    },
+
+    hide() {
+      widget.hideTrigger();
+    },
+
+    attachTo(selectorOrElement, options) {
+      return widget.attachTo(selectorOrElement, options);
+    },
+
+    setTrigger(trigger) {
+      widget.setTrigger(trigger);
+    },
+
     close() {
       widget.close();
     },
@@ -487,11 +507,15 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 }
 
 function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig): MushiConfig {
+  const nativeTrigger = runtime.native?.triggerMode;
+  const widgetTrigger = runtime.widget?.trigger
+    ?? (nativeTrigger === 'none' || nativeTrigger === 'shake' ? 'manual' : undefined);
   return {
     ...config,
     widget: {
       ...config.widget,
       ...runtime.widget,
+      ...(widgetTrigger ? { trigger: widgetTrigger } : {}),
     },
     capture: {
       ...config.capture,
@@ -547,6 +571,11 @@ function createNoopInstance(): MushiSDKInstance {
     open: () => {},
     close: () => {},
     updateConfig: () => {},
+    openWith: () => {},
+    show: () => {},
+    hide: () => {},
+    attachTo: () => () => {},
+    setTrigger: () => {},
     destroy: () => {
       instance = null;
     },

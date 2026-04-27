@@ -4,10 +4,19 @@ title: Mushi Mushi — User-side bug intelligence
 
 # Mushi Mushi
 
-> Your users find bugs your monitoring can't.
-> **Mushi** captures user-side friction, classifies it with an LLM pipeline,
-> and lets an agentic fix orchestrator turn approved triage decisions into
-> pull requests.
+<div style={{ border: '1px solid var(--mushi-rule, rgba(14,13,11,0.12))', borderRadius: 24, padding: '2rem', background: 'var(--mushi-paper, #f8f4ed)', color: 'var(--mushi-ink, #0e0d0b)' }}>
+  <p style={{ fontFamily: 'ui-monospace, SF Mono, Menlo, monospace', fontSize: 12, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--mushi-vermillion, #e03c2c)' }}>
+    Mushi / 虫々 / little bug helper
+  </p>
+  <p style={{ marginTop: 12, fontFamily: 'Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif', fontSize: 'clamp(2.5rem, 7vw, 5.5rem)', lineHeight: 0.95, letterSpacing: '-0.06em' }}>
+    Bugs your users feel, walked into a fix.
+  </p>
+  <p style={{ marginTop: 20, maxWidth: 680, color: 'var(--mushi-ink-muted, #5c5852)', fontSize: 18, lineHeight: 1.7 }}>
+    Mushi turns a wobbly checkout, confusing screen, or tiny visual regression
+    into a report your team can understand, repair, and learn from. No heavy
+    ticket ceremony. Just a clear trail.
+  </p>
+</div>
 
 Mushi sits **upstream** of Sentry. Sentry sees what your code throws; Mushi
 sees what your users feel. The two are designed to compose: Mushi's

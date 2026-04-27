@@ -17,6 +17,7 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@mushi-mushi/brand": "workspace:*",
     "@sentry/react": "^10.49.0",
     "@supabase/supabase-js": "^2.103.3",
     "@tanstack/react-table": "^8.21.3",

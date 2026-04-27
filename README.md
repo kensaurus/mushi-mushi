@@ -314,7 +314,7 @@ Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' })
 
 #### iOS (Swift Package Manager — early dev)
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.2.1")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.3.0")
 
 import Mushi
 Mushi.configure(projectId: "proj_xxx", apiKey: "mushi_xxx")
@@ -323,7 +323,7 @@ Mushi.configure(projectId: "proj_xxx", apiKey: "mushi_xxx")
 #### Android (Maven — early dev)
 ```kotlin
 dependencies {
-  implementation("dev.mushimushi:mushi-android:0.2.1")
+  implementation("dev.mushimushi:mushi-android:0.3.0")
 }
 
 Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey = "mushi_xxx"))
@@ -337,7 +337,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 
 ## Where the project is today
 
-**Published:** SDKs at `0.2.x` (all seven frameworks + node + adapters + capacitor), CLI + launcher at `0.4.x`, MCP + MCP-CI at `0.1.x`, admin at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) (auto-deployed to S3 + CloudFront on every push to `master`).
+**Published:** active SDK releases now span core / web / React / Vue / Svelte / Angular / React Native at `0.6.x`, the launcher at `0.6.x`, CLI / create packages at `0.5.x`, Capacitor at `0.4.x`, Node / MCP at `0.3.x`, native iOS / Android / Flutter at `0.3.x`, and plugins / adapters / MCP-CI / wasm at `0.2.x`. The hosted admin lives at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) and auto-deploys to S3 + CloudFront on every push to `master`.
 
 **Dogfood:** end-to-end loop validated on a real production webapp. Report → LLM triage → "Dispatch fix" → draft GitHub PR → live in `/fixes` → live branch graph in `/repo` with per-event Supabase Realtime stream. Sentry, Langfuse, and GitHub all probe **Healthy** from the Integrations page, with a nightly Playwright dogfood against the production stack catching regressions before they reach users.
 

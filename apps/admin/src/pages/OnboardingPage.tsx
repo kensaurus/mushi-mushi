@@ -147,10 +147,15 @@ export function OnboardingPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-fg">Get started with Mushi Mushi</h2>
-        <p className="text-xs text-fg-muted mt-0.5">
-          Live progress — every step is verified against your project's data, not local cache.
+      <div className="overflow-hidden rounded-xl border border-edge bg-surface-raised p-5">
+        <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
+        <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
+          User-felt bugs, ready for your first project.
+        </h2>
+        <p className="mt-3 text-xs leading-6 text-fg-muted">
+          Create a project, mint an ingest key, and verify the first report
+          against live backend state. This mirrors the cloud landing promise:
+          install the SDK once, then let every report enter the repair loop.
         </p>
       </div>
 

@@ -11,6 +11,9 @@ on:
       - 'packages/ios/**'
       - '.github/workflows/ios.yml'
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: swift test (macOS)
@@ -20,7 +23,16 @@ jobs:
       run:
         working-directory: packages/ios
     steps:
-      - uses: actions/checkout@v4
+      # SUPPLY-CHAIN HARDENING: macOS runners only support `audit` mode
+      # — Harden-Runner can't enforce egress blocks on macOS today, but
+      # it still records every outbound call to the StepSecurity
+      # dashboard so a regression is detectable post-hoc. Linux jobs
+      # gain the option to flip to `block` + allowlist later.
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
@@ -33,11 +45,8 @@ jobs:
       - name: Resolve dependencies
         run: swift package resolve
 
-      - name: Build (MushiMushi only)
+      - name: Build (MushiMushi)
         run: swift build --target MushiMushi
-
-      - name: Build (MushiMushiSentry)
-        run: swift build --target MushiMushiSentry
 
       - name: Run tests
         run: swift test --parallel
@@ -55,7 +64,11 @@ jobs:
       run:
         working-directory: packages/ios
     steps:
-      - uses: actions/checkout@v4
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app

@@ -26,6 +26,10 @@ pnpm lint         # ESLint
 pnpm format       # Prettier
 ```
 
+Ad-hoc screenshots captured during UI reviews can live temporarily at the repo
+root, but root-level `*.png` files are intentionally ignored. Canonical
+screenshots that should be versioned belong under `docs/screenshots/`.
+
 ### Working on a single package
 
 ```bash

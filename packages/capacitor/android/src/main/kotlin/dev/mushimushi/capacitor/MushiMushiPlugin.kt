@@ -8,6 +8,7 @@ import com.getcapacitor.annotation.CapacitorPlugin
 import dev.mushimushi.sdk.Mushi
 import dev.mushimushi.sdk.config.MushiConfig
 import dev.mushimushi.sdk.config.Theme
+import dev.mushimushi.sdk.config.TriggerInset
 import dev.mushimushi.sdk.config.TriggerMode
 
 /**
@@ -38,6 +39,12 @@ class MushiMushiPlugin : Plugin() {
             "none" -> TriggerMode.NONE
             else -> TriggerMode.SHAKE
         }
+        val triggerInsetObj = call.getObject("triggerInset")
+        val triggerInset = TriggerInset(
+            bottomDp = triggerInsetObj?.optInt("bottom", 96) ?: 96,
+            startDp = triggerInsetObj?.takeIf { it.has("start") }?.optInt("start"),
+            endDp = triggerInsetObj?.takeIf { it.has("end") }?.optInt("end", 20) ?: 20
+        )
 
         val config = MushiConfig(
             projectId = projectId,
@@ -47,7 +54,8 @@ class MushiMushiPlugin : Plugin() {
             triggerMode = triggerMode,
             captureScreenshot = call.getBoolean("captureScreenshot", true) ?: true,
             minDescriptionLength = call.getInt("minDescriptionLength", 20) ?: 20,
-            theme = theme
+            theme = theme,
+            triggerInset = triggerInset
         )
         Mushi.init(activity.application, config)
 

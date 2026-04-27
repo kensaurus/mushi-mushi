@@ -1350,6 +1350,26 @@ const SDK_INSTALL: ConfigDoc[] = [
     whenToChange: 'Pick the corner that doesn\'t collide with your existing chrome (chat bubbles usually live bottom-right, so move Mushi to bottom-left if so).',
   },
   {
+    id: 'sdk-install.trigger_mode',
+    label: 'Trigger mode',
+    summary: 'Controls whether Mushi injects its own launcher, pins a slim edge tab, binds to your button, or stays programmatic-only.',
+    howItWorks:
+      '`auto` keeps the default editorial stamp button. `edge-tab` makes the trigger less obstructive on dense apps. `attach` hides the default button and binds to `attachToSelector`, while `manual` / `hidden` render no launcher so host apps can call `Mushi.open()` themselves.',
+    default: { value: 'auto' },
+    whenToChange: 'Use `attach` for mature production apps with a help menu. Use `edge-tab` when bottom nav or chat widgets compete with the default corner trigger. Use `manual` on regulated or fullscreen flows.',
+    learnMore: { label: 'Trigger modes', href: 'apps/docs/content/concepts/trigger-modes.mdx' },
+  },
+  {
+    id: 'sdk-install.smart_hide',
+    label: 'Smart hide',
+    summary: 'Lets the launcher shrink, hide, or become an edge tab on mobile and while the user scrolls.',
+    howItWorks:
+      'The SDK listens for scroll and viewport changes inside the host app and adjusts only the launcher, not the capture pipeline. Reports can still be opened programmatically while the trigger is hidden or shrunk.',
+    default: { value: 'off in 0.6; planned default after dogfood' },
+    whenToChange: 'Enable on consumer apps where the report button competes with bottom navigation, media controls, chat bubbles, or primary checkout CTAs.',
+    learnMore: { label: 'Trigger modes', href: 'apps/docs/content/concepts/trigger-modes.mdx' },
+  },
+  {
     id: 'sdk-install.theme',
     label: 'Widget theme',
     summary: 'Light, dark, or auto — auto follows the user\'s `prefers-color-scheme` media query.',

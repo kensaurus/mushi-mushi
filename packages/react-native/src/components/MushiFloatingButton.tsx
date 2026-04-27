@@ -35,11 +35,13 @@ import {
 export interface MushiFloatingButtonProps {
   onPress: () => void
   position?: 'bottom-right' | 'bottom-left'
+  inset?: { bottom?: number; left?: number; right?: number }
 }
 
 export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
   onPress,
   position = 'bottom-right',
+  inset,
 }) => {
   const scheme = useColorScheme()
   const dark = scheme === 'dark'
@@ -64,7 +66,9 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
   }, [scale])
 
   const positionStyle: ViewStyle =
-    position === 'bottom-left' ? { left: 20 } : { right: 20 }
+    position === 'bottom-left'
+      ? { left: inset?.left ?? 20 }
+      : { right: inset?.right ?? 20 }
 
   return (
     <TouchableWithoutFeedback
@@ -76,6 +80,7 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
         style={[
           s.fab,
           positionStyle,
+          { bottom: inset?.bottom ?? (Platform.OS === 'ios' ? 50 : 28) },
           {
             backgroundColor: dark ? '#0a84ff' : '#007aff',
             transform: [{ scale }],
@@ -92,7 +97,6 @@ export const MushiFloatingButton: FC<MushiFloatingButtonProps> = ({
 const s = StyleSheet.create({
   fab: {
     position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 50 : 28,
     width: 56,
     height: 56,
     borderRadius: 28,

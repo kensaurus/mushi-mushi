@@ -36,6 +36,7 @@ import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { AskMushiSidebar } from './AskMushiSidebar'
+import { PageHero } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
@@ -173,6 +174,25 @@ const NAV: NavSection[] = [
   },
 ]
 
+const PAGE_HERO_FALLBACKS: Record<string, { title: string; kicker: string; scope: string }> = {
+  '/': { title: 'Dashboard', kicker: 'Start', scope: 'dashboard' },
+  '/reports': { title: 'Reports', kicker: 'Plan', scope: 'reports' },
+  '/fixes': { title: 'Fixes', kicker: 'Do', scope: 'fixes' },
+  '/repo': { title: 'Repo', kicker: 'Do', scope: 'repo' },
+  '/prompt-lab': { title: 'Prompt Lab', kicker: 'Do', scope: 'prompt-lab' },
+  '/integrations': { title: 'Integrations', kicker: 'Act', scope: 'integrations' },
+  '/mcp': { title: 'MCP', kicker: 'Act', scope: 'mcp' },
+  '/marketplace': { title: 'Marketplace', kicker: 'Act', scope: 'marketplace' },
+  '/notifications': { title: 'Notifications', kicker: 'Act', scope: 'notifications' },
+  '/billing': { title: 'Billing', kicker: 'Workspace', scope: 'billing' },
+  '/projects': { title: 'Projects', kicker: 'Workspace', scope: 'projects' },
+  '/settings': { title: 'Settings', kicker: 'Workspace', scope: 'settings' },
+  '/sso': { title: 'SSO', kicker: 'Workspace', scope: 'sso' },
+  '/onboarding': { title: 'Onboarding', kicker: 'Start', scope: 'onboarding' },
+  '/research': { title: 'Research', kicker: 'Check', scope: 'research' },
+  '/inbox': { title: 'Inbox', kicker: 'Start', scope: 'inbox' },
+}
+
 const NAV_COLLAPSED_KEY = 'mushi:nav:collapsed:v1'
 
 function readCollapsedState(): Record<string, boolean> {
@@ -258,6 +278,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false)
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
+  const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
   // with the page the user is on. Both hooks read from `pageContext` so
@@ -663,6 +684,24 @@ export function Layout({ children }: { children: ReactNode }) {
             <PipelineStatusRibbon />
             <NextBestAction />
             <ScrollToHashAnchor />
+            {fallbackHero && (
+              <PageHero
+                scope={fallbackHero.scope}
+                title={fallbackHero.title}
+                kicker={fallbackHero.kicker}
+                decide={{
+                  label: 'Ready',
+                  metric: 'Live',
+                  summary: 'This page is wired into the shared Decide / Act / Verify entry pattern.',
+                  severity: 'info',
+                }}
+                act={null}
+                verify={{
+                  label: 'Evidence',
+                  detail: `${fallbackHero.title} page loaded`,
+                }}
+              />
+            )}
             {children}
           </div>
         </main>

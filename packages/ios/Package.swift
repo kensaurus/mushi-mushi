@@ -9,30 +9,12 @@ let package = Package(
         .tvOS(.v15)
     ],
     products: [
-        .library(name: "MushiMushi", targets: ["MushiMushi"]),
-        // Optional Sentry bridge — pulls in `sentry-cocoa` so reports captured
-        // by Mushi are also routed to Sentry's UserFeedback channel and the
-        // Sentry breadcrumb trail is attached to every Mushi report. Consumers
-        // who don't use Sentry should keep depending on `MushiMushi` only.
-        .library(name: "MushiMushiSentry", targets: ["MushiMushiSentry"])
-    ],
-    dependencies: [
-        // Pinned to a major; Sentry follows SemVer and ships breaking changes
-        // only on majors.
-        .package(url: "https://github.com/getsentry/sentry-cocoa.git", from: "9.0.0")
+        .library(name: "MushiMushi", targets: ["MushiMushi"])
     ],
     targets: [
         .target(
             name: "MushiMushi",
             path: "Sources/MushiMushi"
-        ),
-        .target(
-            name: "MushiMushiSentry",
-            dependencies: [
-                "MushiMushi",
-                .product(name: "Sentry", package: "sentry-cocoa")
-            ],
-            path: "Sources/MushiMushiSentry"
         ),
         .testTarget(
             name: "MushiMushiTests",

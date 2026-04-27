@@ -44,6 +44,7 @@ import {
   type SdkPreviewConfig,
   type WidgetPosition,
   type WidgetTheme,
+  type WidgetTrigger,
 } from '../lib/sdkSnippets'
 
 interface Props {
@@ -62,6 +63,7 @@ interface Props {
 
 const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
+const TRIGGERS: WidgetTrigger[] = ['auto', 'edge-tab', 'attach', 'manual']
 const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
 const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
 
@@ -83,6 +85,7 @@ interface RemoteSdkConfig {
   widget?: {
     position?: WidgetPosition
     theme?: WidgetTheme
+    trigger?: WidgetTrigger
     triggerText?: string | null
   }
   capture?: SdkPreviewConfig['capture']
@@ -93,6 +96,7 @@ function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
   return {
     position: remote.widget?.position ?? DEFAULT_SDK_CONFIG.position,
     theme: remote.widget?.theme ?? DEFAULT_SDK_CONFIG.theme,
+    trigger: remote.widget?.trigger ?? DEFAULT_SDK_CONFIG.trigger,
     triggerText: remote.widget?.triggerText ?? DEFAULT_SDK_CONFIG.triggerText,
     capture: {
       console: remote.capture?.console ?? DEFAULT_SDK_CONFIG.capture.console,
@@ -114,6 +118,7 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
     widget: {
       position: config.position,
       theme: config.theme,
+      trigger: config.trigger,
       triggerText: config.triggerText.trim() ? config.triggerText : null,
     },
     capture: config.capture,
@@ -201,6 +206,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
     enabled &&
     config.position === DEFAULT_SDK_CONFIG.position &&
     config.theme === DEFAULT_SDK_CONFIG.theme &&
+    config.trigger === DEFAULT_SDK_CONFIG.trigger &&
     config.triggerText === DEFAULT_SDK_CONFIG.triggerText &&
     config.capture.console === DEFAULT_SDK_CONFIG.capture.console &&
     config.capture.network === DEFAULT_SDK_CONFIG.capture.network &&
@@ -415,29 +421,43 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
         <div className="h-2 w-3/4 rounded-sm" style={{ background: tokens.rule, opacity: 0.7 }} />
       </div>
 
-      {/* Mock trigger — rounded-square paper card with vermillion bottom
-          edge + pulsing 朱 dot, same materiality as the real widget. */}
-      <button
-        type="button"
-        className="absolute flex items-center justify-center transition-transform hover:-translate-y-0.5"
-        style={{
-          ...cornerPos[config.position],
-          height: 44,
-          width: 44,
-          background: tokens.paper,
-          color: tokens.ink,
-          border: `1px solid ${tokens.rule}`,
-          borderRadius: 4,
-          fontSize: 18,
-          lineHeight: 1,
-          fontFamily: "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif",
-          // Two-layer shadow + inset vermillion bar = the "stamp face" look
-          boxShadow: `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset 0 -3px 0 ${tokens.vermillion}`,
-        }}
-        aria-label="Mock bug-capture trigger button"
-        // Pure visual mock — clicking does nothing on purpose.
-        onClick={(e) => e.preventDefault()}
-      >
+      {(config.trigger === 'manual' || config.trigger === 'hidden' || config.trigger === 'attach') ? (
+        <div
+          className="absolute rounded-sm border px-2 py-1 text-[10px]"
+          style={{
+            ...cornerPos[config.position],
+            color: tokens.inkMuted,
+            borderColor: tokens.rule,
+            fontFamily: 'ui-monospace, SF Mono, Menlo, monospace',
+          }}
+        >
+          {config.trigger === 'attach' ? 'HOST BUTTON' : 'NO DEFAULT UI'}
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="absolute flex items-center justify-center transition-transform hover:-translate-y-0.5"
+          style={{
+            ...cornerPos[config.position],
+            height: config.trigger === 'edge-tab' ? 70 : 44,
+            width: config.trigger === 'edge-tab' ? 24 : 44,
+            background: tokens.paper,
+            color: tokens.ink,
+            border: `1px solid ${tokens.rule}`,
+            borderRadius: config.trigger === 'edge-tab' ? '4px 0 0 4px' : 4,
+            fontSize: config.trigger === 'edge-tab' ? 14 : 18,
+            lineHeight: 1,
+            writingMode: config.trigger === 'edge-tab' ? 'vertical-rl' : undefined,
+            fontFamily: "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif",
+            // Two-layer shadow + inset vermillion bar = the "stamp face" look
+            boxShadow: config.trigger === 'edge-tab'
+              ? `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset -3px 0 0 ${tokens.vermillion}`
+              : `0 1px 0 ${tokens.rule}, 0 6px 12px -6px rgba(14,13,11,0.30), inset 0 -3px 0 ${tokens.vermillion}`,
+          }}
+          aria-label="Mock bug-capture trigger button"
+          // Pure visual mock — clicking does nothing on purpose.
+          onClick={(e) => e.preventDefault()}
+        >
         {/* Trim BEFORE falling back, not after. Bare `||` would treat `"   "`
             as truthy and render three invisible spaces — a blank trigger button
             visually identical to the regression we just patched in widget.ts.
@@ -468,7 +488,8 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
             animation: 'pulse 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite',
           }}
         />
-      </button>
+        </button>
+      )}
 
     </div>
   )
@@ -544,6 +565,33 @@ function ConfiguratorPanel({
             />
           ))}
         </div>
+      </fieldset>
+
+      <fieldset>
+        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+          Trigger mode
+          <ConfigHelp helpId="sdk-install.trigger_mode" />
+        </legend>
+        <div className="grid grid-cols-2 gap-1.5">
+          {TRIGGERS.map((trigger) => (
+            <button
+              key={trigger}
+              type="button"
+              onClick={() => update('trigger', trigger)}
+              className={`rounded-sm border px-2 py-1 text-left transition-colors ${
+                config.trigger === trigger
+                  ? 'border-brand bg-brand/15 text-brand'
+                  : 'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
+              }`}
+            >
+              {trigger}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-fg-faint inline-flex items-center gap-1">
+          Smart hide uses this mode as the desktop baseline.
+          <ConfigHelp helpId="sdk-install.smart_hide" />
+        </p>
       </fieldset>
 
       {/* Theme + trigger text on one row */}

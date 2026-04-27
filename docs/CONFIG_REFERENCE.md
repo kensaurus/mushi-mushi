@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_89 configuration knobs across 18 sections · last regenerated 2026-04-26._
+_91 configuration knobs across 18 sections · last regenerated 2026-04-27._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -26,7 +26,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Billing](#billing) (4)
 - [Onboarding](#onboarding) (2)
 - [MCP install](#mcp-install) (1)
-- [SDK install card](#sdk-install-card) (9)
+- [SDK install card](#sdk-install-card) (11)
 
 ## Settings → General
 
@@ -1391,6 +1391,38 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Default** — `bottom-right`
 
 **When to change** — Pick the corner that doesn't collide with your existing chrome (chat bubbles usually live bottom-right, so move Mushi to bottom-left if so).
+
+### Trigger mode
+
+<a id="sdk-install-trigger-mode"></a>
+
+`sdk-install.trigger_mode`
+
+**Summary** — Controls whether Mushi injects its own launcher, pins a slim edge tab, binds to your button, or stays programmatic-only.
+
+**How it works** — `auto` keeps the default editorial stamp button. `edge-tab` makes the trigger less obstructive on dense apps. `attach` hides the default button and binds to `attachToSelector`, while `manual` / `hidden` render no launcher so host apps can call `Mushi.open()` themselves.
+
+**Default** — `auto`
+
+**When to change** — Use `attach` for mature production apps with a help menu. Use `edge-tab` when bottom nav or chat widgets compete with the default corner trigger. Use `manual` on regulated or fullscreen flows.
+
+**Learn more** — [Trigger modes](apps/docs/content/concepts/trigger-modes.mdx)
+
+### Smart hide
+
+<a id="sdk-install-smart-hide"></a>
+
+`sdk-install.smart_hide`
+
+**Summary** — Lets the launcher shrink, hide, or become an edge tab on mobile and while the user scrolls.
+
+**How it works** — The SDK listens for scroll and viewport changes inside the host app and adjusts only the launcher, not the capture pipeline. Reports can still be opened programmatically while the trigger is hidden or shrunk.
+
+**Default** — `off in 0.6; planned default after dogfood`
+
+**When to change** — Enable on consumer apps where the report button competes with bottom navigation, media controls, chat bubbles, or primary checkout CTAs.
+
+**Learn more** — [Trigger modes](apps/docs/content/concepts/trigger-modes.mdx)
 
 ### Widget theme
 
