@@ -9820,6 +9820,163 @@ app.put('/v1/admin/compliance/retention/:projectId', jwtAuth, async (c) => {
   return c.json({ ok: true })
 })
 
+// ----------------------------------------------------------------
+// /v1/admin/retention-status — "when does the next sweep run, and
+// what would it delete from my projects right now?"
+//
+// Why this exists: the daily retention-sweep edge function actually
+// honors `pricing_plans.retention_days` (M2 from the QA report).
+// Customers need a self-service way to see (a) the resolved window
+// per project, (b) the last successful sweep time, (c) a preview
+// of how many `reports` rows are currently older than their cutoff.
+// The Billing/Settings page renders this so the SOC 2 reviewer or
+// a compliance auditor can confirm "yes, my 90-day plan is being
+// enforced".
+//
+// Read shape:
+//   {
+//     projects: [{
+//       project_id, retention_days, plan_id, source: 'override'|'plan'|'fallback',
+//       legal_hold, expired_count, oldest_at, last_swept_at, last_deleted_count
+//     }],
+//     next_sweep_at: ISO timestamp,
+//     last_run: { started_at, finished_at, status, rows_affected } | null,
+//   }
+// ----------------------------------------------------------------
+app.get('/v1/admin/retention-status', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const db = getServiceClient()
+  const projectIds = await ownedProjectIds(db, userId)
+  if (projectIds.length === 0) {
+    return c.json({ ok: true, data: { projects: [], next_sweep_at: null, last_run: null } })
+  }
+
+  const [{ data: policies }, { data: subs }, { data: plansList }, { data: lastRun }] =
+    await Promise.all([
+      db
+        .from('project_retention_policies')
+        .select('project_id, reports_retention_days, legal_hold, legal_hold_reason')
+        .in('project_id', projectIds),
+      db
+        .from('billing_subscriptions')
+        .select('project_id, status, plan_id, current_period_end')
+        .in('project_id', projectIds)
+        .in('status', ['active', 'trialing', 'past_due']),
+      db.from('pricing_plans').select('id, display_name, retention_days'),
+      db
+        .from('cron_runs')
+        .select('id, started_at, finished_at, status, rows_affected, metadata')
+        .eq('job_name', 'retention-sweep')
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ])
+
+  const planById = new Map<string, { id: string; display_name: string; retention_days: number }>()
+  for (const p of plansList ?? []) {
+    planById.set(p.id, p as { id: string; display_name: string; retention_days: number })
+  }
+  const policyByProject = new Map<string, { reports_retention_days: number; legal_hold: boolean }>()
+  for (const r of policies ?? []) {
+    policyByProject.set(r.project_id, {
+      reports_retention_days: r.reports_retention_days,
+      legal_hold: r.legal_hold,
+    })
+  }
+  const subByProject = new Map<string, { plan_id: string | null }>()
+  for (const s of subs ?? []) {
+    if (!subByProject.has(s.project_id)) {
+      subByProject.set(s.project_id, { plan_id: s.plan_id })
+    }
+  }
+
+  const HOBBY_FALLBACK_DAYS = planById.get('hobby')?.retention_days ?? 7
+
+  const now = Date.now()
+  const result = await Promise.all(
+    projectIds.map(async (pid) => {
+      const policy = policyByProject.get(pid)
+      const sub = subByProject.get(pid)
+      const plan = planById.get(sub?.plan_id ?? 'hobby')
+
+      let retention_days = HOBBY_FALLBACK_DAYS
+      let plan_id: string = 'hobby'
+      let source: 'override' | 'plan' | 'fallback' = 'fallback'
+      const legal_hold = policy?.legal_hold === true
+
+      if (legal_hold) {
+        retention_days = policy!.reports_retention_days ?? HOBBY_FALLBACK_DAYS
+        plan_id = 'legal_hold'
+        source = 'override'
+      } else if (policy && policy.reports_retention_days) {
+        retention_days = policy.reports_retention_days
+        plan_id = 'override'
+        source = 'override'
+      } else if (sub && plan) {
+        retention_days = plan.retention_days ?? HOBBY_FALLBACK_DAYS
+        plan_id = plan.id
+        source = 'plan'
+      }
+
+      const cutoffIso = new Date(now - retention_days * 24 * 60 * 60 * 1000).toISOString()
+
+      const [{ count: expiredCount }, { data: oldestRow }, { data: lastSweep }] = await Promise.all([
+        db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid)
+          .lt('created_at', cutoffIso),
+        db
+          .from('reports')
+          .select('created_at')
+          .eq('project_id', pid)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle(),
+        db
+          .from('audit_logs')
+          .select('created_at, metadata')
+          .eq('project_id', pid)
+          .eq('action', 'retention.sweep')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+
+      const lastSweepMeta = (lastSweep?.metadata ?? null) as Record<string, unknown> | null
+
+      return {
+        project_id: pid,
+        retention_days,
+        plan_id,
+        source,
+        legal_hold,
+        expired_count: expiredCount ?? 0,
+        oldest_at: oldestRow?.created_at ?? null,
+        last_swept_at: lastSweep?.created_at ?? null,
+        last_deleted_count:
+          typeof lastSweepMeta?.deleted_count === 'number' ? (lastSweepMeta.deleted_count as number) : null,
+      }
+    }),
+  )
+
+  // Cron runs daily at 03:00 UTC — compute the next firing in absolute time
+  // so the Billing UI can render "next sweep in 3h 12m" without doing the
+  // cron math client-side.
+  const next = new Date()
+  next.setUTCHours(3, 0, 0, 0)
+  if (next.getTime() <= now) next.setUTCDate(next.getUTCDate() + 1)
+
+  return c.json({
+    ok: true,
+    data: {
+      projects: result,
+      next_sweep_at: next.toISOString(),
+      last_run: lastRun ?? null,
+    },
+  })
+})
+
 app.get('/v1/admin/compliance/dsars', jwtAuth, async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()

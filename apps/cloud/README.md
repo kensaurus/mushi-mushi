@@ -233,3 +233,51 @@ After step 4, `kensaur.us/mushi-mushi/` should resolve to the cloud
 landing, `kensaur.us/mushi-mushi/admin/` to the admin SPA, and
 `kensaur.us/mushi-mushi/docs/` to the docs site — all served from a
 single distribution and a single TLS certificate.
+
+### Vercel project + env-var bootstrap (one-time)
+
+Phase 4 of the production-readiness 12/10 PDCA pass is the only step
+that breaks the *current* topology (today `kensaur.us/mushi-mushi/`
+serves the legacy admin SPA from S3). Before triggering
+`deploy-cloud.yml` for the first time, an operator must:
+
+```bash
+# 1. From a workstation that has the Vercel CLI logged in:
+cd apps/cloud
+vercel link --yes --project mushi-mushi-cloud   # create + link
+
+# 2. Capture the IDs the GitHub Actions workflow needs.
+cat .vercel/project.json   # { "orgId": "team_…", "projectId": "prj_…" }
+
+# 3. Mint a long-lived PAT at https://vercel.com/account/tokens
+#    Scope: full account; Expires: 90 days minimum.
+
+# 4. Set the four GitHub Actions secrets so deploy-cloud.yml can run.
+gh secret set VERCEL_TOKEN            --body "<pat>"        --repo kensaurus/mushi-mushi
+gh secret set VERCEL_ORG_ID           --body "<orgId>"      --repo kensaurus/mushi-mushi
+gh secret set VERCEL_PROJECT_ID_CLOUD --body "<projectId>"  --repo kensaurus/mushi-mushi
+gh secret set VERCEL_CLOUD_HOSTNAME   --body "mushi-mushi-cloud.vercel.app" --repo kensaurus/mushi-mushi
+
+# 5. Set Vercel project env vars (production scope).
+vercel env add NEXT_PUBLIC_API_BASE_URL  production  # https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api
+vercel env add NEXT_PUBLIC_CLOUD_URL     production  # https://kensaur.us/mushi-mushi
+vercel env add NEXT_PUBLIC_APP_URL       production  # https://kensaur.us/mushi-mushi/admin
+vercel env add MUSHI_BASE_PATH           production  # /mushi-mushi
+vercel env add NEXT_PUBLIC_SUPABASE_URL  production
+vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY production
+```
+
+Pre-flight before triggering the cutover (this fixes QA report **C3**
+— the Cloud `apiBaseUrl()` default `api.mushimushi.dev` has no DNS, so
+billing CTAs fail silently without `NEXT_PUBLIC_API_BASE_URL`):
+
+* `vercel ls --token=$VERCEL_TOKEN apps/cloud` → preview deploy returns
+  200 against `/`, `/login`, `/signup`, `/dashboard`.
+* `node scripts/smoke-prod-flow.mjs` against the preview URL exits 0.
+
+Only then run `deploy-cloud.yml` — it triggers Vercel deploy *and* the
+CloudFront origin swap that flips the `/mushi-mushi/*` default behavior
+from S3-legacy-admin to Vercel-cloud-app. Rollback is a single re-run
+of `scripts/cloudfront-mushi-update-distribution.mjs` against the
+previous DefaultCacheBehavior config (saved as workflow artifact at
+the start of every run).

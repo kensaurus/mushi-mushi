@@ -377,6 +377,7 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 | M–Q  | 23-page audit + fix-spec sweep — Quickstart mode, first-run tour, themed dialogs, N+1 dedup        |   ✅    |
 |  R   | 7-axis security + perf audit (2026-04-21) — internal-only middleware, expanded PII scrubber, 20 FK indexes, Zod runtime validation, vendor chunks, secrets scanner · [`docs/audit-summary-2026-04-21.md`](./docs/audit-summary-2026-04-21.md) | ✅ |
 |  S   | IA rewrite (2026-04-22/23) — Decide/Act/Verify hero on every advanced page, `/repo` live branch graph + `fix_events` stream, dynamic tab titles, favicon critical-badge, nightly-prod-PDCA workflow, resilient embeddings sweep | ✅ |
+|  T   | Production readiness 12/10 (2026-04-27) — server-side `requireFeature` gate (Hobby callers hitting `/v1/admin/sso/*`, `/byok/*`, `/plugins/*`, `/intelligence/*` now get 402 + `feature_not_in_plan` instead of silent 200), super-admin `/users` operator surface (every signup with current plan + reports/30d, gated by `app_metadata.role`), daily `retention-sweep` cron honoring `pricing_plans.retention_days` (M2 fix), `GET /v1/admin/retention-status` for self-service compliance evidence, `/v1/admin/entitlements` introspection for FE gate sync · [`scripts/smoke-prod-flow.mjs`](./scripts/smoke-prod-flow.mjs) | ✅ |
 
 Handover docs (most recent first) live under [`docs/`](./docs/) — they're the long-form companion to each row above.
 
