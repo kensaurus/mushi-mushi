@@ -17,7 +17,7 @@ permissions:
 jobs:
   test:
     name: swift test (macOS)
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 25
     defaults:
       run:
@@ -34,8 +34,8 @@ jobs:
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Select Xcode 15.4
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
 
       - name: Print toolchain
         run: |
@@ -58,7 +58,7 @@ jobs:
 
   build-ios-app-shell:
     name: xcodebuild (iPhone simulator)
-    runs-on: macos-14
+    runs-on: macos-26
     timeout-minutes: 25
     defaults:
       run:
@@ -70,8 +70,8 @@ jobs:
 
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
-      - name: Select Xcode 15.4
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
 
       - name: Build for iOS Simulator
         run: |
