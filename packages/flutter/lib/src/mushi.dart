@@ -8,6 +8,7 @@ import 'api_client.dart';
 import 'config.dart';
 import 'device_context.dart';
 import 'offline_queue.dart';
+import 'overlay.dart';
 import 'screenshot.dart';
 import 'widget.dart';
 
@@ -22,6 +23,7 @@ class Mushi {
   OfflineQueue? _queue;
   Timer? _flushTimer;
   StreamSubscription<AccelerometerEvent>? _accelSub;
+  OverlayEntry? _buttonOverlay;
   DateTime _lastShake = DateTime.fromMillisecondsSinceEpoch(0);
 
   /// Optional: globalKey for the [RepaintBoundary] wrapping the app — used
@@ -46,7 +48,16 @@ class Mushi {
       onSubmitted: (p) => onReportSubmitted?.call(p),
     );
     _installShakeIfNeeded();
+    _installButtonIfNeeded();
     _startFlushTimer();
+  }
+
+  /// Records the root context and installs the floating trigger when the
+  /// configured mode includes `button`. Prefer calling this from
+  /// `MaterialApp.builder` so the overlay is attached to the app shell.
+  void setRootContext(BuildContext context) {
+    rootContext = context;
+    _installButtonIfNeeded();
   }
 
   Future<void> report({
@@ -130,6 +141,28 @@ class Mushi {
       final ctx = rootContext;
       if (ctx != null && ctx.mounted) showWidget(ctx);
     });
+  }
+
+  void _installButtonIfNeeded() {
+    final cfg = _config;
+    final ctx = rootContext;
+    _buttonOverlay?.remove();
+    _buttonOverlay = null;
+    if (cfg == null || ctx == null || !ctx.mounted) return;
+    if (cfg.triggerMode != MushiTriggerMode.button &&
+        cfg.triggerMode != MushiTriggerMode.both) {
+      return;
+    }
+    final overlay = Overlay.maybeOf(ctx);
+    if (overlay == null) return;
+    final entry = OverlayEntry(
+      builder: (context) => MushiFloatingTrigger(
+        config: cfg,
+        onPressed: () => showWidget(context),
+      ),
+    );
+    overlay.insert(entry);
+    _buttonOverlay = entry;
   }
 
   void _startFlushTimer() {

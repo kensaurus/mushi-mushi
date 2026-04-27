@@ -1677,21 +1677,26 @@ interface EmptyStateProps {
   icon?: ReactNode
 }
 
-export function EmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
+export function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-center">
-      {icon && <div aria-hidden="true" className="mx-auto mb-2 text-fg-faint">{icon}</div>}
-      <p className="text-fg-muted text-sm">{title}</p>
+    <Card className="p-6 text-center border-dashed">
+      <div
+        aria-hidden="true"
+        className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-sm border border-brand/30 bg-brand/10 font-mono text-brand shadow-[inset_0_-3px_0_var(--color-brand)]"
+      >
+        {icon ?? '虫'}
+      </div>
+      <p className="font-serif text-xl leading-tight tracking-[-0.03em] text-fg">{title}</p>
       {description && (
-        <p className="text-fg-faint text-xs mt-1 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
+        <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
           {description}
         </p>
       )}
       {hints && hints.length > 0 && (
-        <ul className="mt-2 inline-block text-left text-2xs text-fg-faint space-y-0.5">
+        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
           {hints.map((hint) => (
             <li key={hint} className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="text-fg-faint">·</span>
+              <span aria-hidden="true" className="text-brand">/</span>
               <span>{hint}</span>
             </li>
           ))}
@@ -1700,6 +1705,10 @@ export function EmptyState({ title, description, action, hints, icon }: EmptySta
       {action && <div className="mt-3">{action}</div>}
     </Card>
   )
+}
+
+export function EmptyState(props: EmptyStateProps) {
+  return <EditorialEmptyState {...props} />
 }
 
 /* ── Loading (spinner + text) ──────────────────────────────────────────── */

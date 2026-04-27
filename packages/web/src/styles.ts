@@ -83,11 +83,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     button { font-family: inherit; }
 
-    /* ── Trigger ─────────────────────────────────────────────────────
-       A small "stamp card" — soft rounded square (4px radius), paper
-       background, vermillion bottom edge that reads as the inked face
-       of a real 印鑑. A pulsing dot in the top-right hints there's a
-       channel here without needing a notification badge. */
     .mushi-trigger {
       position: fixed;
       width: 52px;
@@ -141,10 +136,53 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       outline: 2px solid ${vermillion};
       outline-offset: 3px;
     }
-    .mushi-trigger.bottom-right { bottom: 24px; right: 24px; }
-    .mushi-trigger.bottom-left  { bottom: 24px; left: 24px; }
-    .mushi-trigger.top-right    { top: 24px; right: 24px; }
-    .mushi-trigger.top-left     { top: 24px; left: 24px; }
+    .mushi-trigger.bottom-right {
+      bottom: var(--mushi-bottom, calc(24px + env(safe-area-inset-bottom, 0px)));
+      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+    }
+    .mushi-trigger.bottom-left  {
+      bottom: var(--mushi-bottom, calc(24px + env(safe-area-inset-bottom, 0px)));
+      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+    }
+    .mushi-trigger.top-right    {
+      top: var(--mushi-top, calc(24px + env(safe-area-inset-top, 0px)));
+      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+    }
+    .mushi-trigger.top-left     {
+      top: var(--mushi-top, calc(24px + env(safe-area-inset-top, 0px)));
+      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+    }
+    .mushi-trigger.edge-tab {
+      width: 32px;
+      height: 88px;
+      border-radius: 4px 0 0 4px;
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      font-size: 16px;
+      box-shadow:
+        0 1px 0 ${rule},
+        0 10px 24px -14px rgba(14,13,11,0.45),
+        inset -3px 0 0 ${vermillion};
+    }
+    .mushi-trigger.edge-tab.bottom-right,
+    .mushi-trigger.edge-tab.top-right {
+      right: var(--mushi-right, 0);
+    }
+    .mushi-trigger.edge-tab.bottom-left,
+    .mushi-trigger.edge-tab.top-left {
+      left: var(--mushi-left, 0);
+      border-radius: 0 4px 4px 0;
+      box-shadow:
+        0 1px 0 ${rule},
+        0 10px 24px -14px rgba(14,13,11,0.45),
+        inset 3px 0 0 ${vermillion};
+    }
+    .mushi-trigger.shrunk {
+      width: 36px;
+      height: 36px;
+      opacity: 0.82;
+      transform: scale(0.92);
+    }
 
     @keyframes mushi-pulse {
       0%   { box-shadow: 0 0 0 0 ${vermillion}; opacity: 1; }
@@ -152,12 +190,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       100% { box-shadow: 0 0 0 0 rgba(224,60,44,0); opacity: 1; }
     }
 
-    /* ── Panel ──────────────────────────────────────────────────────
-       Paper-card. Sharper corners (6px) than typical SaaS modals
-       (which default to 12-16px and read as plastic). Two-layer shadow:
-       one hairline that sells the paper edge, one diffuse that lifts
-       the panel off the underlying app. No backdrop-filter — we want
-       the widget to feel like it sits ON the page, not blur INTO it. */
     .mushi-panel {
       position: fixed;
       width: 384px;
@@ -177,10 +209,26 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-panel.open  { animation: mushi-stamp-in 320ms ${easeStamp} both; }
     .mushi-panel.closed { display: none; }
-    .mushi-panel.bottom-right { bottom: 88px; right: 24px; --mushi-origin: bottom right; }
-    .mushi-panel.bottom-left  { bottom: 88px; left: 24px;  --mushi-origin: bottom left; }
-    .mushi-panel.top-right    { top: 88px;    right: 24px; --mushi-origin: top right; }
-    .mushi-panel.top-left     { top: 88px;    left: 24px;  --mushi-origin: top left; }
+    .mushi-panel.bottom-right {
+      bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, 24px) + 64px));
+      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+      --mushi-origin: bottom right;
+    }
+    .mushi-panel.bottom-left  {
+      bottom: var(--mushi-panel-bottom, calc(var(--mushi-bottom, 24px) + 64px));
+      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+      --mushi-origin: bottom left;
+    }
+    .mushi-panel.top-right    {
+      top: var(--mushi-panel-top, calc(var(--mushi-top, 24px) + 64px));
+      right: var(--mushi-right, calc(24px + env(safe-area-inset-right, 0px)));
+      --mushi-origin: top right;
+    }
+    .mushi-panel.top-left     {
+      top: var(--mushi-panel-top, calc(var(--mushi-top, 24px) + 64px));
+      left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
+      --mushi-origin: top left;
+    }
 
     @keyframes mushi-stamp-in {
       0%   { opacity: 0; transform: scale(0.94) translateY(6px); }
@@ -188,10 +236,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       100% { opacity: 1; transform: scale(1) translateY(0); }
     }
 
-    /* ── Header ─────────────────────────────────────────────────────
-       Editorial masthead: small mono eyebrow ("MUSHI / REPORT") on top,
-       serif display headline below, mono step counter on the far right.
-       A single hairline separates header from body — no card stacking. */
     .mushi-header {
       padding: 18px 20px 14px;
       border-bottom: 1px solid ${rule};
@@ -288,10 +332,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     .mushi-body::-webkit-scrollbar { width: 6px; }
     .mushi-body::-webkit-scrollbar-thumb { background: ${inkFaint}; border-radius: 3px; }
 
-    /* ── Step 1: Categories as a contents-page list ─────────────────
-       No boxes. Hairline rules between rows. Hovering a row pulls a
-       vermillion arrow in from the right and tints the row label —
-       reads like flipping through an index card. */
     .mushi-option-btn {
       display: grid;
       grid-template-columns: auto 1fr auto;
@@ -344,11 +384,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       transition: opacity 220ms ${easeStamp}, transform 220ms ${easeStamp}, color 220ms ${easeStamp};
     }
 
-    /* ── Step 2: Selected-category breadcrumb + intent text-buttons ─
-       Breadcrumb is a thin chip with the kanji-stamp aesthetic carried
-       over (vermillion left rule). Intents are inline TEXT buttons
-       with vermillion underlines on hover — not pill-shaped chips,
-       which is the SaaS default and not what we are. */
     .mushi-selected-category {
       display: inline-flex;
       align-items: center;
@@ -404,10 +439,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       box-shadow: inset 2px 0 0 ${vermillion};
     }
 
-    /* ── Step 3: Borderless textarea + minimal attach pills ─────────
-       The textarea has no box around it — just a hairline underline
-       that turns vermillion on focus. Encourages writing rather than
-       form-filling. */
     .mushi-textarea {
       width: 100%;
       min-height: 96px;
@@ -465,10 +496,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       outline-offset: 2px;
     }
 
-    /* ── Footer + submit (vermillion stamp) ─────────────────────────
-       Submit button is the heaviest visual moment in the widget —
-       vermillion fill, mono-caps label, send arrow. Holds an ink-
-       bloom pseudo-element that animates outward when pressed. */
     .mushi-footer {
       padding: 14px 22px 16px;
       border-top: 1px solid ${rule};
@@ -533,10 +560,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-submit:hover .mushi-submit-arrow { transform: translateX(3px); }
 
-    /* ── Step indicator (numeral ledger) ────────────────────────────
-       Replaces the generic three-dots with a typographic series:
-       "01 — 02 — 03". The active step uses serif numerals, the
-       others use mono so the active one literally reads heavier. */
     .mushi-step-indicator {
       display: flex;
       align-items: center;
@@ -564,10 +587,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
     }
     .mushi-step-sep { width: 14px; height: 1px; background: ${rule}; }
 
-    /* ── Success: 朱印 stamp animation ──────────────────────────────
-       The success state is the signature moment. A vermillion ring
-       scribes itself, then a "RECEIVED" mono-caps label fades in at
-       the centre, evoking a hanko being pressed onto the form. */
     .mushi-success {
       text-align: center;
       padding: 28px 16px 20px;
@@ -631,9 +650,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       100% { opacity: 1; transform: rotate(-6deg) scale(1); }
     }
 
-    /* ── Error ──────────────────────────────────────────────────────
-       Inline editorial note rather than a red box. Vermillion left
-       rule keeps the same accent language. */
     .mushi-error {
       margin-top: 10px;
       padding: 8px 0 8px 10px;
@@ -644,9 +660,6 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       letter-spacing: 0.02em;
     }
 
-    /* ── Reduced motion ─────────────────────────────────────────────
-       Honour the OS preference: kill every transition + animation
-       except the focus underline (which is critical feedback). */
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,

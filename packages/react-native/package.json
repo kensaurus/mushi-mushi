@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/react-native",
-  "version": "0.3.2",
+  "version": "0.6.0",
   "license": "MIT",
   "description": "React Native SDK for Mushi Mushi — shake-to-report, bottom sheet widget, full context capture",
   "main": "./dist/index.js",
@@ -14,6 +14,7 @@
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.19",
     "@react-navigation/native": ">=6",
+    "expo-sensors": ">=13",
     "react": ">=18",
     "react-native": ">=0.72"
   },
@@ -22,6 +23,9 @@
       "optional": true
     },
     "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "expo-sensors": {
       "optional": true
     }
   },

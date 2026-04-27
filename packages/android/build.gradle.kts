@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.mushimushi"
-version = "0.2.1"
+version = "0.3.0"
 
 android {
     namespace = "dev.mushimushi.sdk"

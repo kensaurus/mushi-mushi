@@ -1,23 +1,9 @@
 import Link from 'next/link'
-
-const features = [
-  {
-    title: 'User-reported bugs, classified in seconds',
-    body: 'A two-stage LLM pipeline turns raw "this is broken" into a structured report with severity, taxonomy, repro steps, and likely root cause.',
-  },
-  {
-    title: 'Agentic fix orchestrator',
-    body: 'Mushi opens a draft PR with the fix on your repo. You review and merge — or hand it back for another round.',
-  },
-  {
-    title: 'Knowledge graph + intelligence reports',
-    body: 'Every report is linked into a per-project knowledge graph. Get a weekly PDF on top friction trends, blast radius, and customer impact.',
-  },
-  {
-    title: 'BYOK + BYO storage + data residency',
-    body: 'Your Anthropic / OpenAI keys, your S3 / R2 / GCS bucket, your region (US / EU / JP). Mushi never sees a model key in plaintext.',
-  },
-]
+import { ClosingCta } from './_components/ClosingCta'
+import { Hero } from './_components/Hero'
+import { MarketingFooter } from './_components/MarketingFooter'
+import { MushiCanvas } from './_components/MushiCanvas'
+import { contactMailto, docsUrl, repoUrl } from '@/lib/links'
 
 // Mirrors `pricing_plans` in 20260419000000_billing_plans.sql.
 // Pricing copy here is the marketing surface; the gateway reads the DB catalog.
@@ -79,7 +65,7 @@ const pricingTiers = [
       'Annual SOC 2 / ISO evidence pack',
       'Dedicated success engineer, 4h SLA',
     ],
-    cta: { label: 'Email sales', href: 'mailto:kensaurus@gmail.com?subject=Enterprise%20inquiry' },
+    cta: { label: 'Email sales', href: contactMailto('Enterprise inquiry') },
   },
 ]
 
@@ -100,139 +86,158 @@ const addOns = [
 
 export default function Home() {
   return (
-    <main className="mx-auto max-w-6xl px-6 py-16">
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2 font-semibold">
-          <span aria-hidden>🪲</span>
+    <main className="mx-auto max-w-6xl space-y-12 px-6 pb-10 pt-4">
+      <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
+        <Link href="/" className="flex items-center gap-2 font-serif text-base font-semibold text-[var(--mushi-ink)]">
+          <span className="grid h-7 w-7 place-items-center rounded-sm bg-[var(--mushi-vermillion)] font-mono text-xs text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.25)]" aria-hidden>
+            虫
+          </span>
           <span>Mushi Mushi</span>
-        </div>
-        <nav className="flex items-center gap-6 text-sm">
-          <Link href="https://docs.mushimushi.dev" className="text-neutral-400 hover:text-white">
+        </Link>
+        <nav className="flex items-center gap-1 text-sm sm:gap-2">
+          <Link href="#loop" className="hidden rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] sm:inline-block">
+            Loop
+          </Link>
+          <Link href="#pricing" className="hidden rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] sm:inline-block">
+            Pricing
+          </Link>
+          <Link href={docsUrl()} className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]">
             Docs
           </Link>
-          <Link href="/login" className="text-neutral-400 hover:text-white">
+          <Link href="/login" className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]">
             Sign in
           </Link>
           <Link
             href="/signup"
-            className="rounded-md bg-indigo-500 px-3 py-1.5 font-medium text-white hover:bg-indigo-400"
+            className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
           >
             Get started
           </Link>
         </nav>
       </header>
 
-      <section className="mt-20 max-w-3xl">
-        <h1 className="text-balance text-5xl font-semibold tracking-tight">
-          Bug intelligence that <span className="text-indigo-400">fixes itself</span>.
-        </h1>
-        <p className="mt-6 text-lg text-neutral-300">
-          Your users find bugs your monitoring can't. Mushi Mushi captures
-          their reports, classifies them with a self-improving LLM pipeline,
-          and opens fix PRs autonomously. Pay only for what you ingest.
-        </p>
-        <div className="mt-8 flex flex-wrap items-center gap-4">
-          <Link
-            href="/signup"
-            className="rounded-md bg-indigo-500 px-4 py-2 font-medium text-white hover:bg-indigo-400"
-          >
-            Start free — 1,000 reports / month
-          </Link>
-          <Link
-            href="https://docs.mushimushi.dev/quickstart"
-            className="rounded-md border border-neutral-700 px-4 py-2 font-medium hover:border-neutral-500"
-          >
-            Read the quickstart →
-          </Link>
-        </div>
-      </section>
+      <Hero />
+      <MushiCanvas />
 
-      <section className="mt-24 grid gap-6 sm:grid-cols-2">
-        {features.map((f) => (
-          <article
-            key={f.title}
-            className="rounded-xl border border-neutral-800 bg-neutral-950/60 p-6"
-          >
-            <h2 className="text-lg font-semibold">{f.title}</h2>
-            <p className="mt-2 text-sm text-neutral-300">{f.body}</p>
-          </article>
-        ))}
-      </section>
+      {/* Pricing — deliberately small. The OSS path is the answer; cloud
+          tiers are an inline footnote so the page never reads as a sales
+          pitch. Hobby ($0 / 1k reports) lives inside the self-host panel as
+          "or use our free cloud" so the free tier doesn't get lost. */}
+      <section id="pricing" className="space-y-4">
+        <header className="border-t border-[var(--mushi-rule)] pt-5">
+          <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-vermillion)]">
+            Chapter 03 / honest pricing
+          </p>
+          <h2 className="mt-2 max-w-2xl font-serif text-3xl font-semibold leading-[1] tracking-[-0.04em] text-[var(--mushi-ink)] sm:text-4xl">
+            Free, open source, and run-it-yourself.
+          </h2>
+        </header>
 
-      <section id="pricing" className="mt-24">
-        <h2 className="text-3xl font-semibold tracking-tight">Pricing</h2>
-        <p className="mt-2 text-neutral-400">
-          Pay for outcomes — flat plan + cheap overage. No seat tax, no PR fees.
-          Cancel any time.
-        </p>
-        <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {pricingTiers.map((tier) => (
-            <article
-              key={tier.name}
-              className={`flex flex-col rounded-xl border p-6 ${
-                tier.featured
-                  ? 'border-indigo-400 bg-indigo-500/10'
-                  : 'border-neutral-800 bg-neutral-950/60'
-              }`}
-            >
-              <h3 className="text-sm font-medium uppercase tracking-wide text-neutral-400">
-                {tier.name}
-              </h3>
-              <p className="mt-3">
-                <span className="text-3xl font-semibold">{tier.price}</span>{' '}
-                <span className="text-sm text-neutral-400">{tier.cadence}</span>
+        <article className="relative overflow-hidden rounded-2xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] p-6 sm:p-8">
+          <div className="grid gap-6 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-8">
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
+                Self-host
               </p>
-              <p className="mt-1 text-sm text-neutral-300">{tier.headline}</p>
-              <ul className="mt-4 flex-1 space-y-1.5 text-sm text-neutral-300">
-                {tier.points.map((p) => (
-                  <li key={p}>· {p}</li>
-                ))}
-              </ul>
-              <Link
-                href={tier.cta.href}
-                className={`mt-6 inline-block rounded-md px-4 py-2 text-center text-sm font-medium ${
-                  tier.featured
-                    ? 'bg-indigo-500 text-white hover:bg-indigo-400'
-                    : 'border border-neutral-700 hover:border-neutral-500'
-                }`}
-              >
-                {tier.cta.label}
-              </Link>
-            </article>
-          ))}
-        </div>
+              <p className="mt-2 flex items-baseline gap-2">
+                <span className="font-serif text-5xl font-semibold leading-none tracking-[-0.04em] text-[var(--mushi-ink)] sm:text-6xl">
+                  $0
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-vermillion)]">
+                  MIT · forever
+                </span>
+              </p>
+            </div>
+            <p className="text-sm leading-6 text-[var(--mushi-ink-muted)] sm:text-base sm:leading-7">
+              Clone the repo. Run the same admin, gateway, and SDKs on your
+              keys, your storage, your VPC. We never see a request. Or use
+              our free cloud tier &mdash; <span className="font-mono text-[var(--mushi-ink)]">1,000 reports / month</span>{' '}
+              with no credit card &mdash; while you decide.
+            </p>
+          </div>
 
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          {addOns.map((addon) => (
-            <article
-              key={addon.name}
-              className="rounded-lg border border-neutral-800 bg-neutral-950/40 p-5"
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Link
+              href={repoUrl()}
+              className="inline-flex items-center gap-2 rounded-sm border border-[var(--mushi-rule)] bg-white/40 px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-vermillion)] hover:text-[var(--mushi-vermillion)]"
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <h4 className="text-sm font-semibold text-neutral-200">{addon.name}</h4>
-                <span className="text-xs text-neutral-400">{addon.price}</span>
-              </div>
-              <p className="mt-2 text-sm text-neutral-400">{addon.body}</p>
-            </article>
-          ))}
-        </div>
+              Read the source
+              <span aria-hidden="true">→</span>
+            </Link>
+            <Link
+              href={docsUrl('/quickstart')}
+              className="inline-flex items-center gap-2 rounded-sm px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:text-[var(--mushi-vermillion)]"
+            >
+              Self-host guide
+            </Link>
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 rounded-sm px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:text-[var(--mushi-vermillion)]"
+            >
+              Try the free cloud
+              <span aria-hidden="true">↗</span>
+            </Link>
+          </div>
+        </article>
 
-        <p className="mt-6 text-xs text-neutral-500">
-          Prices in USD. EU, UK, and JP customers are billed in their local
-          currency at Stripe's daily rate. Volume discounts available for
-          annual contracts — <Link href="mailto:kensaurus@gmail.com" className="underline">talk to us</Link>.
-        </p>
+        <details className="group rounded-xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] open:bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)]">
+          <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-3 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)] transition group-hover:text-[var(--mushi-vermillion)]">
+            <span>Don&rsquo;t want to host? Cloud tiers ↓</span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
+              Same code · cancel anytime
+            </span>
+          </summary>
+          <ul className="divide-y divide-[var(--mushi-rule)] border-t border-[var(--mushi-rule)]">
+            {pricingTiers
+              .filter((tier) => tier.name !== 'Hobby')
+              .map((tier) => (
+                <li
+                  key={tier.name}
+                  className="grid grid-cols-[4.5rem_auto_1fr_auto] items-center gap-3 px-5 py-2.5 sm:gap-4"
+                >
+                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
+                    {tier.name}
+                  </span>
+                  <span className="flex items-baseline gap-1">
+                    <span className="font-serif text-base font-semibold leading-none tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-lg">
+                      {tier.price}
+                    </span>
+                    <span className="hidden font-mono text-[9px] text-[var(--mushi-ink-muted)] sm:inline">
+                      {tier.cadence}
+                    </span>
+                  </span>
+                  <span className="hidden text-[11px] leading-snug text-[var(--mushi-ink-muted)] sm:inline">
+                    {tier.headline}
+                  </span>
+                  <Link
+                    href={tier.cta.href}
+                    className="justify-self-end rounded-sm border border-[var(--mushi-rule)] px-2.5 py-1 text-center font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition-colors hover:border-[var(--mushi-vermillion)] hover:text-[var(--mushi-vermillion)]"
+                  >
+                    {tier.cta.label}
+                  </Link>
+                </li>
+              ))}
+          </ul>
+          <p className="border-t border-[var(--mushi-rule)] px-5 py-2 text-[11px] leading-5 text-[var(--mushi-ink-muted)]">
+            Add-ons:{' '}
+            {addOns.map((addon, i) => (
+              <span key={addon.name}>
+                <span className="text-[var(--mushi-ink)]">{addon.name.toLowerCase()}</span>{' '}
+                <span className="font-mono text-[var(--mushi-vermillion)]">{addon.price}</span>
+                {i < addOns.length - 1 ? ' · ' : ''}
+              </span>
+            ))}
+            . Volume / annual &mdash;{' '}
+            <Link href={contactMailto('Volume or annual pricing')} className="underline decoration-[var(--mushi-vermillion)] underline-offset-4 hover:text-[var(--mushi-vermillion)]">
+              talk to us
+            </Link>
+            .
+          </p>
+        </details>
       </section>
 
-      <footer className="mt-24 border-t border-neutral-900 pt-8 text-sm text-neutral-500">
-        <p>
-          OSS-first — every line of code is in{' '}
-          <Link href="https://github.com/kensaurus/mushi-mushi" className="underline">
-            kensaurus/mushi-mushi
-          </Link>
-          . Cloud runs the same code, hosted by us.
-        </p>
-      </footer>
+      <ClosingCta />
+      <MarketingFooter />
     </main>
   )
 }

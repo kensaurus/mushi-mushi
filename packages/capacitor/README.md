@@ -7,7 +7,7 @@ LLM-driven bug intake, classification, and autofix platform.
 >
 > **Other frameworks:** [`@mushi-mushi/react`](https://npmjs.com/package/@mushi-mushi/react) · [`@mushi-mushi/vue`](https://npmjs.com/package/@mushi-mushi/vue) · [`@mushi-mushi/svelte`](https://npmjs.com/package/@mushi-mushi/svelte) · [`@mushi-mushi/angular`](https://npmjs.com/package/@mushi-mushi/angular) · [`@mushi-mushi/react-native`](https://npmjs.com/package/@mushi-mushi/react-native) · [`@mushi-mushi/web`](https://npmjs.com/package/@mushi-mushi/web) (vanilla JS)
 
-> **Status**: V0.4.4 Surface stable; minor changes still possible
+> **Status**: V0.4.5 Surface stable; minor changes still possible
 > before V1.0.
 
 The npm package vendors the standalone iOS and Android SDK sources for the
@@ -72,6 +72,7 @@ bottom sheet from the standalone SDKs.
 | `captureScreenshot`    | `true`                               | Disable for HIPAA-sensitive flows |
 | `minDescriptionLength` | `20`                                 | Matches the web/native SDK contracts |
 | `useNativeWidget`      | `false`                              | When `true`, uses the bottom-sheet from the native SDK |
+| `triggerInset`         | `{ right: 24, bottom: 32 }`          | Per-edge offset (in points / dp) forwarded to the iOS `MushiConfig.TriggerInset` and Android `MushiConfig.TriggerInset` so the native FAB clears tab bars and primary CTAs |
 
 ## License
 

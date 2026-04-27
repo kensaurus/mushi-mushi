@@ -1,5 +1,13 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
     "majorMinor": "0.6",
     "headline": null,
     "pending": false,
@@ -129,6 +137,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.4.4",
       "0.4.3",
       "0.4.2",
       "0.4.1",
@@ -187,7 +196,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.4.3"
+        "version": "0.4.4"
       },
       {
         "name": "@mushi-mushi/cli",

@@ -15,6 +15,11 @@ out/
 *.tsbuildinfo
 .next/
 
+# --- Flutter / Dart ----------------------------------------------------------
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+
 # --- Turbo / Vite / Rollup caches -------------------------------------------
 .turbo/
 .vite/
@@ -85,6 +90,8 @@ playwright-report/
 # --- Screenshots --------------------------------------------------------------
 # Never commit ad-hoc test screenshots into the repo root. Real product
 # screenshots belong in docs/screenshots/ and are explicitly allow-listed.
+# Ad-hoc captures and build logs: keep under session-artifacts/ (not the root).
+session-artifacts/
 screenshots/
 !docs/screenshots/
 *.png

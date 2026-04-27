@@ -16,8 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !github.event.issue.pull_request }}
     steps:
+      # SUPPLY-CHAIN HARDENING: this workflow uses `pull_request_target`
+      # which runs with the *base* branch's permissions and the secret
+      # ROADMAP_PROJECT_TOKEN in scope. We deliberately do NOT check out
+      # the PR's HEAD here — every checkout below is from the base ref
+      # only — but Harden-Runner is still the safety net for any
+      # third-party action that gets compromised.
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
       - name: Add issue / PR to roadmap project
-        uses: actions/add-to-project@v1.0.2
+        uses: actions/add-to-project@244f685bbc3b7adfa8466e08b698b5577571133e  # v1.0.2
         with:
           project-url: https://github.com/users/kensaurus/projects/1
           github-token: ${{ secrets.ROADMAP_PROJECT_TOKEN }}
@@ -34,7 +44,7 @@ jobs:
 
       - name: Checkout (needed for sync-roadmap-status.mjs)
         if: ${{ github.event.action == 'labeled' && startsWith(github.event.label.name, 'status:') }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
         with:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false

@@ -1,0 +1,44 @@
+/* ---------------------------------------------------------------------------
+   Mushi Editorial design tokens
+
+   Light is the default everywhere. Dark mode is **opt-in** rather than
+   driven by `prefers-color-scheme`, because:
+
+   * The cloud marketing surface (apps/cloud) is editorial-light by design.
+   * The admin app drives its own theme (`html[data-theme="..."]`) via JS.
+   * The web SDK widget computes light/dark in JS via `matchMedia`.
+
+   Earlier versions auto-swapped on `prefers-color-scheme: dark`, which
+   silently flipped the marketing landing into a dim palette on viewers
+   whose OS was set to dark. We now require an explicit
+   `data-mushi-theme="dark"` (on `<html>` or any ancestor) to flip.
+--------------------------------------------------------------------------- */
+
+:root {
+  --mushi-paper: #f8f4ed;
+  --mushi-paper-wash: #efe7da;
+  --mushi-ink: #0e0d0b;
+  --mushi-ink-muted: #5c5852;
+  --mushi-ink-faint: #9a9489;
+  --mushi-rule: rgba(14, 13, 11, 0.12);
+  --mushi-vermillion: #e03c2c;
+  --mushi-vermillion-wash: rgba(224, 60, 44, 0.08);
+  --mushi-vermillion-ink: #7a1f15;
+  --mushi-dark-paper: #0f0e0c;
+  --mushi-dark-ink: #f2ebdd;
+  --mushi-dark-ink-muted: #928b7e;
+  --mushi-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Cambria, Georgia, "Times New Roman", serif;
+  --mushi-font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  --mushi-font-mono: var(--font-jetbrains-mono, ui-monospace), "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --mushi-ease-stamp: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-mushi-theme="dark"] {
+  --mushi-paper: var(--mushi-dark-paper);
+  --mushi-ink: var(--mushi-dark-ink);
+  --mushi-ink-muted: var(--mushi-dark-ink-muted);
+  --mushi-rule: rgba(242, 235, 221, 0.12);
+  --mushi-vermillion: #ff5a47;
+  --mushi-vermillion-wash: rgba(255, 90, 71, 0.12);
+  --mushi-vermillion-ink: #ffe5e0;
+}
