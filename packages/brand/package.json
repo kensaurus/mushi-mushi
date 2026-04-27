@@ -1,0 +1,37 @@
+{
+  "name": "@mushi-mushi/brand",
+  "version": "0.1.0",
+  "description": "Shared Mushi Mushi editorial design tokens for SDKs and apps",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./editorial.css": "./src/editorial.css",
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/brand"
+  }
+}

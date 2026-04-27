@@ -25,9 +25,24 @@ const fetchBilling = async (token: string, projectId: string): Promise<BillingSt
   }
 }
 
+// All admin API responses use the wrapped envelope `{ ok, data: { ... } }`.
+// The cloud dashboard talks to the gateway with a plain `fetch` (no apiFetch
+// helper, unlike apps/admin), so we have to unwrap `data` ourselves —
+// reading `json.url` directly was the bug that silently broke both the
+// "Add a card" and "Manage card" buttons in production.
+type CheckoutResponse = { ok: boolean; data?: { url?: string; plan_id?: string } }
+type PortalResponse = { ok: boolean; data?: { url?: string } }
+
 const startCheckout = async (formData: FormData) => {
   'use server'
   const projectId = String(formData.get('project_id') ?? '')
+  // Plan tier the user picked on the marketing landing (`/signup?plan=…`).
+  // We persist it in user_metadata at signup; here we round-trip it through
+  // a hidden form field so the server-action body is self-contained.
+  const planId = (() => {
+    const raw = String(formData.get('plan_id') ?? '').trim().toLowerCase()
+    return raw === 'pro' || raw === 'starter' ? raw : 'starter'
+  })()
   const supabase = await getSupabaseServer()
   const { data } = await supabase.auth.getSession()
   const token = data.session?.access_token
@@ -39,10 +54,10 @@ const startCheckout = async (formData: FormData) => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ project_id: projectId, email }),
+    body: JSON.stringify({ project_id: projectId, email, plan_id: planId }),
   })
-  const json = (await res.json()) as { ok: boolean; url?: string }
-  if (json.ok && json.url) redirect(json.url)
+  const json = (await res.json()) as CheckoutResponse
+  if (json.ok && json.data?.url) redirect(json.data.url)
   redirect(`/dashboard?error=checkout_failed`)
 }
 
@@ -61,8 +76,8 @@ const openPortal = async (formData: FormData) => {
     },
     body: JSON.stringify({ project_id: projectId }),
   })
-  const json = (await res.json()) as { ok: boolean; url?: string }
-  if (json.ok && json.url) redirect(json.url)
+  const json = (await res.json()) as PortalResponse
+  if (json.ok && json.data?.url) redirect(json.data.url)
   redirect(`/dashboard?error=portal_failed`)
 }
 
@@ -95,6 +110,16 @@ export default async function DashboardPage() {
   const FREE_TIER = 1000
   const overage = Math.max(0, reports30d - FREE_TIER)
   const adminConsoleUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mushimushi.dev'
+
+  // Pulled from `user_metadata.signup_plan` set by the signup server action
+  // when the user lands on `/signup?plan=starter|pro` from the marketing
+  // pricing CTAs. Without this, both `Start trial` buttons used to
+  // funnel everyone into the same Starter checkout — a silent dead link
+  // for anyone who clicked the Pro tier.
+  const signupPlan = (() => {
+    const raw = String((session.user.user_metadata as Record<string, unknown> | null)?.signup_plan ?? '').toLowerCase()
+    return raw === 'pro' ? 'pro' : 'starter'
+  })()
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
@@ -156,15 +181,17 @@ export default async function DashboardPage() {
         ) : (
           <form action={startCheckout} className="mt-4">
             <input type="hidden" name="project_id" value={project.id} />
+            <input type="hidden" name="plan_id" value={signupPlan} />
             <p className="text-sm text-neutral-400">
-              Add a payment method to ingest more than {FREE_TIER.toLocaleString()} reports per
-              month. We charge $0.0025 per report after that — no seat tax.
+              {signupPlan === 'pro'
+                ? `You picked Pro on signup — that's $99 / project / month for 50,000 reports + $0.002 per report after.`
+                : `Add a payment method to ingest more than ${FREE_TIER.toLocaleString()} reports per month. We charge $0.0025 per report after that — no seat tax.`}
             </p>
             <button
               type="submit"
               className="mt-3 rounded-md bg-indigo-500 px-4 py-2 font-medium text-white hover:bg-indigo-400"
             >
-              Add a card via Stripe →
+              {signupPlan === 'pro' ? 'Subscribe to Pro via Stripe →' : 'Add a card via Stripe →'}
             </button>
           </form>
         )}

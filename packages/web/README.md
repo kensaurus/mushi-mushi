@@ -17,6 +17,8 @@ Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM 
 - On-device pre-filter (blocks spam before server submission)
 - Client-side rate limiting (token bucket self-throttle)
 - Light/dark theme with auto-detection (`prefers-color-scheme`)
+- **Trigger modes** (0.6+) — `auto` / `edge-tab` / `attach` (bring-your-own-button) / `manual` / `hidden`, plus `smartHide`, `hideOnSelector`, `hideOnRoutes`, configurable `inset` and `respectSafeArea`
+- **Runtime trigger APIs** — `Mushi.show()`, `Mushi.hide()`, `Mushi.attachTo(selector)`, `Mushi.setTrigger(mode)`, `Mushi.openWith(category)`
 - **Proactive triggers** — rage click, long task, API cascade failure detection
 - **Report fatigue prevention** — session limits, cooldowns, permanent suppression
 - Keyboard-first: `Esc` to close, `⌘/Ctrl + Enter` to submit, focus-trapped panel
@@ -83,6 +85,45 @@ Mushi.init({
   capture: { console: true, network: true, screenshot: 'on-report' },
 });
 ```
+
+### Bring your own launcher (`trigger: 'attach'`)
+
+For mature production apps, prefer hosting the launcher inside your own help
+menu, settings page, or beta banner. Mushi will not inject any UI of its own.
+
+```typescript
+const mushi = Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'attach',
+    attachToSelector: '[data-mushi-feedback]',
+  },
+});
+
+mushi.attachTo('#support-menu-feedback');
+mushi.hide();
+```
+
+### Smart-hide (`trigger: 'auto'` with viewport awareness)
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  widget: {
+    trigger: 'auto',
+    smartHide: { onMobile: 'edge-tab', onScroll: 'shrink', onIdleMs: 900 },
+    inset: { bottom: 96, right: 20 },
+    hideOnSelector: '[data-fullscreen-player]',
+    hideOnRoutes: ['/checkout/payment'],
+    respectSafeArea: true,
+  },
+});
+```
+
+See [Trigger modes](https://docs.mushimushi.dev/concepts/trigger-modes) for the
+full posture matrix (`auto` / `edge-tab` / `attach` / `manual` / `hidden`).
 
 ### With Proactive Triggers
 

@@ -41,6 +41,40 @@ export interface MushiWidgetConfig {
   mode?: 'simple' | 'conversational';
   locale?: string;
   zIndex?: number;
+  /**
+   * Controls how, or whether, the default trigger is injected.
+   * `auto` preserves the historical floating stamp button.
+   */
+  trigger?: 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden';
+  /** CSS selector used when `trigger` is `attach`. */
+  attachToSelector?: string;
+  /**
+   * Per-edge trigger offset in pixels. `auto` clears the corresponding edge.
+   * Defaults to the historical 24px gutter plus safe-area insets.
+   */
+  inset?: MushiWidgetInset;
+  respectSafeArea?: boolean;
+  /** Hide the launcher while any matching element exists in the document. */
+  hideOnSelector?: string;
+  /** Hide the launcher on matching pathnames. Strings are substring matches. */
+  hideOnRoutes?: string[];
+  environments?: Partial<Record<'production' | 'staging' | 'development', 'always' | 'never' | 'manual'>>;
+  /** Opt-in smart trigger behavior; planned to become the default in a later minor. */
+  smartHide?: boolean | MushiWidgetSmartHideConfig;
+  draggable?: boolean;
+}
+
+export interface MushiWidgetInset {
+  top?: number | 'auto';
+  right?: number | 'auto';
+  bottom?: number | 'auto';
+  left?: number | 'auto';
+}
+
+export interface MushiWidgetSmartHideConfig {
+  onMobile?: 'edge-tab' | 'hide' | false;
+  onScroll?: 'shrink' | 'hide' | false;
+  onIdleMs?: number;
 }
 
 export interface MushiCaptureConfig {
@@ -274,6 +308,11 @@ export interface MushiSDKInstance {
   setMetadata(key: string, value: unknown): void;
   isOpen(): boolean;
   open(): void;
+  openWith(category: MushiReportCategory): void;
+  show(): void;
+  hide(): void;
+  attachTo(selectorOrElement: string | Element, options?: MushiWidgetConfig): () => void;
+  setTrigger(trigger: NonNullable<MushiWidgetConfig['trigger']>): void;
   close(): void;
   destroy(): void;
   updateConfig(config: MushiRuntimeSdkConfig): void;

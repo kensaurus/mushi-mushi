@@ -5,7 +5,7 @@
 Flutter SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.2.0 Surface stable; minor changes still possible
+> **Status**: V0.3.0 Surface stable; minor changes still possible
 > before V1.0.
 
 ## Features
@@ -22,7 +22,7 @@ LLM-driven bug intake, classification, and autofix platform.
 
 ```yaml
 dependencies:
-  mushi_mushi: ^0.2.0
+  mushi_mushi: ^0.3.0
 ```
 
 ## Quickstart
@@ -113,6 +113,7 @@ Mushi.instance.onReportSubmitted = (payload) async {
 | `minDescriptionLength` | `20`                                 | Matches the web SDK contract |
 | `offlineQueueMaxBytes` | `2 * 1024 * 1024`                    | Soft cap; oldest entries trim first |
 | `theme`                | `MushiTheme(accentColor: Color(0xFF22C55E))` | |
+| `triggerInsets`        | `MushiTriggerInsets(right: 24, bottom: 32)` | Per-edge offset for the in-app `MushiFloatingTrigger` overlay (see `lib/src/overlay.dart`). Set `left` to `0` to anchor on the leading edge instead. |
 
 ## Privacy
 

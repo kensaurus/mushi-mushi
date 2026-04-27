@@ -43,6 +43,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # SUPPLY-CHAIN HARDENING: this job has access to PROD_SUPABASE_*
+      # secrets, so the runner must be hardened. See release.yml for the
+      # full rationale.
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1  # v4.1.0
@@ -95,7 +102,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: nightly-prod-pdca-report
           path: examples/e2e-dogfood/playwright-report/
@@ -103,7 +110,7 @@ jobs:
 
       - name: Open / update regression issue on failure
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7.1.0
         with:
           script: |
             const title = '[nightly-pdca] production regression detected'

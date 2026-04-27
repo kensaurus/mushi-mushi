@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/react",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "description": "React bindings for Mushi Mushi — Provider, hooks, and ErrorBoundary integration",
   "license": "MIT",
   "type": "module",

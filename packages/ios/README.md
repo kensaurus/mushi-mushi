@@ -3,7 +3,7 @@
 Native iOS SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.2.1 Surface stable; minor changes still possible
+> **Status**: V0.3.0 Surface stable; minor changes still possible
 > before V1.0.
 
 ## Features
@@ -12,8 +12,6 @@ LLM-driven bug intake, classification, and autofix platform.
 - 📦 **Offline queue** that survives app restarts (file-backed, byte-capped)
 - 🎯 **Native bottom-sheet widget** with category picker and live min-length validation
 - 🌐 **Device + app context** auto-attached to every report
-- 🔌 **Optional Sentry bridge** (`MushiMushiSentry`) that mirrors reports into
-  Sentry's current feedback API
 - 🧪 **Tested** — `swift test` runs the offline-queue + persistence suite
 
 ## Install
@@ -21,17 +19,15 @@ LLM-driven bug intake, classification, and autofix platform.
 ### Swift Package Manager (recommended)
 
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.2.1")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.3.0")
 ```
 
-then add `MushiMushi` (and optionally `MushiMushiSentry`) to your target.
+then add `MushiMushi` to your target.
 
 ### CocoaPods
 
 ```ruby
 pod 'MushiMushi', '~> 0.2'
-# Optional Sentry bridge:
-pod 'MushiMushi/Sentry', '~> 0.2'
 ```
 
 ## Quickstart
@@ -77,20 +73,10 @@ do { try riskyOperation() }
 catch { Mushi.shared.captureError(error) }
 ```
 
-## Sentry bridge
-
-```swift
-import MushiMushi
-import MushiMushiSentry
-import Sentry
-
-SentrySDK.start { o in o.dsn = "https://...sentry.io/0" }
-Mushi.shared.configure(with: MushiConfig(projectId: "...", apiKey: "..."))
-MushiSentryBridge.install()
-```
-
-Every Mushi report now produces a Sentry event with tag `source=mushi` and a
-custom feedback item so it appears in Sentry's feedback workflow.
+If your app already uses Sentry, keep initializing Sentry in the host app and
+attach Mushi report metadata through `setMetadata` or `report(..., metadata:)`.
+The standalone Swift package no longer ships a separate `MushiMushiSentry`
+target, which keeps the native SDK dependency-free by default.
 
 ## Configuration
 

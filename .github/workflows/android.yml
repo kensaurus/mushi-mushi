@@ -11,6 +11,9 @@ on:
       - 'packages/android/**'
       - '.github/workflows/android.yml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Gradle build & test
@@ -20,16 +23,22 @@ jobs:
       run:
         working-directory: packages/android
     steps:
-      - uses: actions/checkout@v4
+      # SUPPLY-CHAIN HARDENING: see .github/workflows/release.yml for
+      # the full rationale on Harden-Runner + SHA-pinned actions.
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9  # v4.8.0
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@d9c87d481d55275bb5441eef3fe0e46805f9ef70  # v3.5.0
         with:
           gradle-version: '8.9'
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
@@ -45,7 +54,7 @@ jobs:
 
       - name: Upload AAR artifact
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: mushi-android-aar
           path: packages/android/build/outputs/aar/*.aar

@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/web",
-  "version": "0.5.1",
+  "version": "0.7.0",
   "description": "Mushi Mushi browser SDK — embeddable bug reporting widget with Shadow DOM isolation",
   "license": "MIT",
   "type": "module",

@@ -25,7 +25,30 @@ The provider renders a floating 🐛 button and a slide-up bottom sheet by defau
 | Value | Behavior |
 |-------|----------|
 | `'button'` (default) | Shows floating action button |
-| `'manual'` | No auto-UI — call `open()` programmatically |
+| `'shake'` | Installs a shake-to-report listener (no visible UI) |
+| `'both'` | Floating button + shake listener |
+| `'manual'` / `'hidden'` / `'none'` | No auto-UI — call `open()` programmatically |
+| `'attach'` | Hides the default UI; the host renders its own button and calls `attachTo()` |
+
+Shake detection requires the optional `expo-sensors` peer dependency. Install
+it once with `expo install expo-sensors` (or `npm install expo-sensors`); the
+listener is wired lazily so apps that ship `'button'` only never pay the cost.
+
+`widget.inset` (and the `MushiFloatingButton` `inset` prop) accepts
+`{ top?, right?, bottom?, left? }` in points so the trigger can clear tab
+bars and host CTAs.
+
+```tsx
+<MushiProvider
+  projectId="proj_xxx"
+  apiKey="mushi_xxx"
+  config={{
+    widget: { trigger: 'both', inset: { bottom: 96, right: 16 } },
+  }}
+>
+  <Navigation />
+</MushiProvider>
+```
 
 ### Hooks
 
@@ -35,6 +58,10 @@ import { useMushi, useMushiReport, useMushiWidget } from '@mushi-mushi/react-nat
 const { submitReport } = useMushiReport()
 const { open, close } = useMushiWidget()
 ```
+
+The provider's `useMushi()` instance also exposes the cross-platform trigger
+controls — `show()`, `hide()`, `attachTo(elementRefOrId)`, and
+`setTrigger(mode)` — so a host app can toggle the launcher per screen.
 
 ### Standalone Components
 
