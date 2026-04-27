@@ -1,17 +1,19 @@
 /**
  * FILE: cloudfront-mushi-spa-response.js
  * PURPOSE: CloudFront Function (viewer-response) that injects security headers
- *          and redirects page-route 403/404 errors to the SPA root.
+ *          and redirects page-route 403/404 errors to the admin SPA root.
  *
  * OVERVIEW:
  * - Injects security headers (CSP, HSTS, X-Frame-Options, etc.) on every response
- * - On 403/404 for page routes: redirects to /mushi-mushi/ so React Router
+ * - On 403/404 for page routes: redirects to /mushi-mushi/admin/ so React Router
  *   renders the appropriate page (or a 404 component)
  * - Static asset 403/404s pass through unchanged
  *
- * DEPLOYMENT:
- * - Create as a CloudFront Function (runtime: cloudfront-js-2.0)
- * - Associate with the /mushi-mushi/* cache behavior on viewer-response
+ * ASSOCIATIONS:
+ * - Attached to the `/mushi-mushi/admin/*` cache behavior (S3 origin) on viewer-response.
+ * - The cloud Vercel origin does NOT use this function — Vercel injects its own
+ *   security headers for the Next.js app, and we don't want to double-CSP.
+ * - The docs behavior uses cloudfront-mushi-docs-response.js (different fallback).
  *
  * NOTES:
  * - CSP allows connections to Supabase (*.supabase.co) for auth and API
@@ -42,10 +44,10 @@ function handler(event) {
     return response;
   }
 
-  // Page routes: redirect to SPA root so React Router handles navigation.
+  // Page routes: redirect to admin SPA root so React Router handles navigation.
   response.statusCode = 302;
   response.statusDescription = 'Found';
-  response.headers['location'] = { value: '/mushi-mushi/' };
+  response.headers['location'] = { value: '/mushi-mushi/admin/' };
   response.headers['cache-control'] = { value: 'no-cache' };
   delete response.body;
 

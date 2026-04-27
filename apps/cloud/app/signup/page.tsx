@@ -1,6 +1,14 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getSupabaseServer } from '@/lib/supabase-server'
+import { cloudUrl } from '@/lib/links'
+import {
+  AuthError,
+  AuthField,
+  AuthShell,
+  authInputClass,
+  authPrimaryBtnClass,
+} from '@/app/_components/AuthShell'
 
 // Mirrors the marketing landing's pricing CTAs: `?plan=starter` and
 // `?plan=pro` flow through here so the user's tier choice survives the
@@ -12,6 +20,19 @@ type SignupPlan = 'starter' | 'pro'
 const parsePlan = (raw: string | undefined): SignupPlan | null => {
   const v = (raw ?? '').trim().toLowerCase()
   return v === 'starter' || v === 'pro' ? v : null
+}
+
+const planCopy: Record<SignupPlan, { headline: string; subline: string }> = {
+  pro: {
+    headline: 'Pro tier · $99 / project / month',
+    subline:
+      "We'll start your trial after email verification — 50,000 reports included, $0.002 per report after that.",
+  },
+  starter: {
+    headline: 'Starter tier · $19 / project / month',
+    subline:
+      "We'll start your trial after email verification — 10,000 reports included, $0.0025 per report after that.",
+  },
 }
 
 const signUp = async (formData: FormData) => {
@@ -29,7 +50,7 @@ const signUp = async (formData: FormData) => {
     email,
     password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.mushimushi.dev'}/auth/callback`,
+      emailRedirectTo: cloudUrl('/auth/callback'),
       data: {
         org_name: orgName,
         // `signup_plan` is read by /dashboard's startCheckout server action
@@ -54,35 +75,50 @@ export default async function SignupPage({
 }) {
   const { error, plan: planRaw } = await searchParams
   const plan = parsePlan(planRaw)
-  return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center px-6 py-16">
-      <Link href="/" className="mb-8 text-sm text-neutral-400 hover:text-white">
-        ← Back to home
-      </Link>
-      <h1 className="text-3xl font-semibold tracking-tight">Create your project</h1>
-      <p className="mt-2 text-sm text-neutral-400">
-        {plan === 'pro'
-          ? 'Pro tier ($99 / project / month) — we\'ll start your trial after email verification.'
-          : plan === 'starter'
-            ? 'Starter tier ($19 / project / month) — we\'ll start your trial after email verification.'
-            : '1,000 reports / month, free forever. No credit card to start.'}
-      </p>
+  const subtitle = plan
+    ? planCopy[plan].subline
+    : '1,000 reports / month, free forever — no card to start.'
+  const planHeadline = plan ? planCopy[plan].headline : 'Hobby tier · free forever'
 
-      <form action={signUp} className="mt-8 space-y-4">
-        {plan && <input type="hidden" name="plan" value={plan} />}
-        <div>
-          <label htmlFor="org" className="text-sm font-medium">Organisation name</label>
+  return (
+    <AuthShell
+      chapter="Chapter 04 / create your project"
+      title="Sign up to Mushi Mushi"
+      subtitle={subtitle}
+      footer={
+        <>
+          Already have an account?{' '}
+          <Link
+            href="/login"
+            className="font-mono uppercase tracking-[0.18em] text-[var(--mushi-vermillion)] underline decoration-[var(--mushi-vermillion)] underline-offset-4 hover:text-[var(--mushi-ink)]"
+          >
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <div className="mb-5 flex items-baseline justify-between gap-3 border-b border-[var(--mushi-rule)] pb-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--mushi-ink-muted)]">
+          Selected
+        </p>
+        <p className="font-serif text-sm text-[var(--mushi-ink)] sm:text-base">{planHeadline}</p>
+      </div>
+
+      <form action={signUp} className="space-y-5">
+        {plan ? <input type="hidden" name="plan" value={plan} /> : null}
+
+        <AuthField id="org" label="Organisation">
           <input
             id="org"
             name="org"
             required
             autoComplete="organization"
             placeholder="Acme Inc."
-            className="mt-1 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-indigo-400"
+            className={authInputClass}
           />
-        </div>
-        <div>
-          <label htmlFor="email" className="text-sm font-medium">Work email</label>
+        </AuthField>
+
+        <AuthField id="email" label="Work email">
           <input
             id="email"
             name="email"
@@ -90,11 +126,15 @@ export default async function SignupPage({
             required
             autoComplete="email"
             placeholder="you@acme.com"
-            className="mt-1 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-indigo-400"
+            className={authInputClass}
           />
-        </div>
-        <div>
-          <label htmlFor="password" className="text-sm font-medium">Password</label>
+        </AuthField>
+
+        <AuthField
+          id="password"
+          label="Password"
+          hint="Twelve characters or more — we'll never email it back to you."
+        >
           <input
             id="password"
             name="password"
@@ -102,34 +142,21 @@ export default async function SignupPage({
             required
             autoComplete="new-password"
             minLength={12}
-            placeholder="At least 12 characters"
-            className="mt-1 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 outline-none focus:border-indigo-400"
+            placeholder="••••••••••••"
+            className={authInputClass}
           />
-        </div>
+        </AuthField>
 
-        {error && (
-          <p
-            role="alert"
-            className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-200"
-          >
-            {error}
-          </p>
-        )}
+        {error ? <AuthError>{error}</AuthError> : null}
 
-        <button
-          type="submit"
-          className="w-full rounded-md bg-indigo-500 px-4 py-2.5 font-medium text-white hover:bg-indigo-400"
-        >
-          Create account
+        <button type="submit" className={authPrimaryBtnClass}>
+          {plan === 'pro'
+            ? 'Start the Pro trial →'
+            : plan === 'starter'
+              ? 'Start the Starter trial →'
+              : 'Create my free project →'}
         </button>
       </form>
-
-      <p className="mt-6 text-center text-sm text-neutral-400">
-        Already have an account?{' '}
-        <Link href="/login" className="text-indigo-400 hover:underline">
-          Sign in
-        </Link>
-      </p>
-    </main>
+    </AuthShell>
   )
 }

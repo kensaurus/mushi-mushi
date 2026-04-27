@@ -9,8 +9,11 @@ export function ClosingCta() {
         className="absolute inset-0 opacity-60 [background-image:radial-gradient(circle_at_50%_-20%,var(--mushi-vermillion-wash),transparent_55%),radial-gradient(circle_at_10%_120%,rgba(14,13,11,0.06),transparent_45%)]"
       />
       <div className="relative">
-        <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-vermillion)]">
-          もしもし? もしもし。
+        <p
+          className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-vermillion)]"
+          lang="ja"
+        >
+          むしむし? むしむし。
         </p>
         <h2 className="mx-auto mt-2 max-w-2xl font-serif text-3xl leading-[1] tracking-[-0.04em] text-[var(--mushi-ink)] sm:text-4xl">
           Your repair loop is now boarding.

@@ -110,37 +110,126 @@ quota usage without opening the billing page.
 NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ…
 NEXT_PUBLIC_API_BASE_URL=https://<ref>.functions.supabase.co
-NEXT_PUBLIC_APP_URL=https://app.mushimushi.dev
+
+# --- highly recommended in non-prod (drives Supabase magic-link `emailRedirectTo`) ---
+# In prod this defaults to https://kensaur.us/mushi-mushi; in local dev, set to
+# http://localhost:3002 so the confirmation email lands you back on the dev box.
+NEXT_PUBLIC_CLOUD_URL=http://localhost:3002
 
 # --- optional, with sensible defaults ---
+# Hosted admin console root. Defaults to the unified deployment topology;
+# override only if you front the admin SPA from a different domain.
+NEXT_PUBLIC_APP_URL=https://kensaur.us/mushi-mushi/admin
 NEXT_PUBLIC_DOCS_URL=https://kensaur.us/mushi-mushi/docs
 NEXT_PUBLIC_REPO_URL=https://github.com/kensaurus/mushi-mushi
 NEXT_PUBLIC_CONTACT_EMAIL=kensaurus@gmail.com
 ```
 
-## Deployment
+> **Magic-link gotcha.** `/signup` asks Supabase to email a confirmation
+> link with `emailRedirectTo = ${NEXT_PUBLIC_CLOUD_URL}/auth/callback`. The
+> handler that exchanges the PKCE `code` for a session lives at
+> `app/auth/callback/route.ts` — without it, the magic link silently 404s.
+> If you fork this app, make sure your Supabase project has **Email ➝ Confirm
+> Email** enabled and that PKCE is the chosen flow (Supabase default since 2024).
 
-Deploys to Vercel as a standard Next.js App Router site. Edge runtime
-is **not** required — server actions run in Node so the Stripe-key API
-calls land server-side.
+## Editorial brand across the auth surface
 
-### Unified `kensaur.us/mushi-mushi/*` topology (work-in-progress)
+`/login`, `/signup`, `/signup/check-email`, and `/dashboard` all wear the
+same washi/sumi/vermillion editorial palette as the marketing landing —
+no more dark indigo islands. The shared chrome lives in
+`app/_components/AuthShell.tsx`:
+
+* `<AuthShell chapter title subtitle>` — paper sheet with a header pill,
+  vermillion **Chapter NN / …** overline, serif title, ledger-mono labels.
+* `<AuthField id label hint>` — labelled input wrapper.
+* `authInputClass`, `authPrimaryBtnClass`, `authGhostBtnClass` —
+  field/button class strings so server-action `<form>` elements stay
+  simple `<input>` / `<button>` markup.
+* `<AuthError>` — vermillion-tinted error banner; replaces the old
+  red-500/40 alert so the failure tone matches the brand.
+
+The `/dashboard` page composes these primitives plus a vermillion ledger
+bar on the **Reports · last 30 days** card (fills as usage approaches
+the free-tier ceiling), serif status word, and a Stripe-branded
+checkout/portal CTA pair gated on `signup_plan` (Starter vs Pro copy).
+
+## Unified `kensaur.us/mushi-mushi/*` topology
 
 The marketing page (`apps/cloud`), admin console (`apps/admin`), and
-docs site (`apps/docs`) are migrating onto a single host so the user
-sees one URL family:
+docs site (`apps/docs`) all live on a single CloudFront distribution at
+`kensaur.us`, with three path-prefix cache behaviors funnelling to the
+right origin:
 
-| Path                              | App           |
-| --------------------------------- | ------------- |
-| `/mushi-mushi/`                   | apps/cloud    |
-| `/mushi-mushi/admin/*`            | apps/admin    |
-| `/mushi-mushi/docs/*`             | apps/docs     |
-| `/mushi-mushi/login`, `/signup`   | apps/cloud    |
-| `/mushi-mushi/dashboard`          | apps/cloud    |
+| Path                              | Origin              | Cache policy        |
+| --------------------------------- | ------------------- | ------------------- |
+| `/mushi-mushi/admin/*`            | S3 (admin SPA)      | CachingOptimized    |
+| `/mushi-mushi/docs/*`             | S3 (docs static)    | CachingOptimized    |
+| `/mushi-mushi/*` *(default)*      | Vercel (cloud SSR)  | CachingDisabled     |
 
-The CTAs on this page already point at the eventual paths via the
-`docsUrl()` / `repoUrl()` helpers — flipping `NEXT_PUBLIC_DOCS_URL` (or
-the default in `lib/links.ts`) is the only app-side change needed once
-the host-level rewrites land. Today, `kensaur.us/mushi-mushi/*` serves
-the admin SPA only; the cloud + docs slots are stubbed and the marketing
-landing runs on `localhost:3002` for dev work.
+Behavior priority is *most-specific first*; CloudFront matches the first
+PathPattern that fits, so admin + docs win their slots and everything
+else (the cloud landing, `/login`, `/signup`, `/dashboard`,
+`/auth/callback`) falls through to the Vercel origin.
+
+### Build-time prefix flip
+
+Both Next.js apps use `MUSHI_BASE_PATH` to flip `basePath` + `assetPrefix`
+on a per-build basis:
+
+```bash
+MUSHI_BASE_PATH=/mushi-mushi      pnpm --filter @mushi-mushi/cloud build  # production
+MUSHI_BASE_PATH=/mushi-mushi/docs MUSHI_ASSET_PREFIX=/mushi-mushi/docs \
+                                  pnpm --filter @mushi-mushi/docs  build  # docs (static export)
+```
+
+Leaving the env unset (local `pnpm dev`) keeps everything served at `/`.
+Vite admin reads `VITE_BASE_PATH=/mushi-mushi/admin/` in CI; locally it
+defaults to `/`.
+
+### Deploy workflows
+
+Three independent GitHub Actions workflows ship the three apps, then the
+cloud workflow runs the idempotent CloudFront updater:
+
+| Workflow                    | Trigger                          | What it does                                           |
+| --------------------------- | -------------------------------- | ------------------------------------------------------ |
+| `deploy-admin.yml`          | push touching `apps/admin/**`    | builds Vite, syncs to `s3://…/mushi-mushi/admin/`, updates `mushi-mushi-spa-router` + `mushi-mushi-spa-response` CloudFront Functions, invalidates `/mushi-mushi/admin/*` |
+| `deploy-docs.yml`           | push touching `apps/docs/**`     | builds Nextra static export, syncs to `s3://…/mushi-mushi/docs/`, updates `mushi-mushi-docs-router` + `mushi-mushi-docs-response`, invalidates `/mushi-mushi/docs/*` |
+| `deploy-cloud.yml`          | push touching `apps/cloud/**`    | builds + deploys to Vercel via CLI, then runs `scripts/cloudfront-mushi-update-distribution.mjs` to (a) ensure the Vercel origin exists on the distribution, (b) re-prepend the three `/mushi-mushi/*` cache behaviors in priority order |
+
+The CloudFront updater is idempotent — it patches the existing distribution
+config rather than replacing it — so re-runs are safe and the script
+exits 0 if the desired state already matches.
+
+### Required GitHub Secrets
+
+Beyond the existing `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` /
+`CLOUDFRONT_DISTRIBUTION_ID` / `VITE_SUPABASE_*` / `SENTRY_*` admin
+secrets, the cloud + docs deploys add:
+
+| Secret                       | Used by             | Notes                                                                |
+| ---------------------------- | ------------------- | -------------------------------------------------------------------- |
+| `VERCEL_TOKEN`               | `deploy-cloud.yml`  | Vercel CLI auth token (`Settings → Tokens`)                          |
+| `VERCEL_ORG_ID`              | `deploy-cloud.yml`  | from `apps/cloud/.vercel/project.json` after first `vercel link`     |
+| `VERCEL_PROJECT_ID_CLOUD`    | `deploy-cloud.yml`  | same file as above                                                   |
+| `VERCEL_CLOUD_HOSTNAME`      | `deploy-cloud.yml`  | the production Vercel hostname, e.g. `mushi-mushi-cloud.vercel.app`  |
+
+`deploy-docs.yml` uses only the existing AWS secrets — the docs site is
+fully static, so no third-party host is involved.
+
+### First-time bootstrap
+
+If you're deploying the unified topology for the first time on a fresh
+distribution, run the workflows in this order:
+
+1. Run `deploy-admin.yml` (creates the two admin CloudFront Functions).
+2. Run `deploy-docs.yml`  (creates the two docs CloudFront Functions).
+3. Link `apps/cloud` to a Vercel project and capture the IDs into the
+   four `VERCEL_*` secrets above.
+4. Run `deploy-cloud.yml`  (deploys to Vercel and patches CloudFront
+   origins + behaviors).
+
+After step 4, `kensaur.us/mushi-mushi/` should resolve to the cloud
+landing, `kensaur.us/mushi-mushi/admin/` to the admin SPA, and
+`kensaur.us/mushi-mushi/docs/` to the docs site — all served from a
+single distribution and a single TLS certificate.

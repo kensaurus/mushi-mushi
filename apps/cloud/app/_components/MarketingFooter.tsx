@@ -32,7 +32,7 @@ export function MarketingFooter() {
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--mushi-rule)] pt-4 font-mono text-[10px] uppercase tracking-[0.22em]">
         <p>© Mushi Mushi · Cloud runs the same OSS code, hosted by us.</p>
-        <p className="text-[var(--mushi-ink-muted)]">もしもし。</p>
+        <p className="text-[var(--mushi-ink-muted)]" lang="ja">むしむし。</p>
       </div>
     </footer>
   )
