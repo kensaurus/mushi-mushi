@@ -19,6 +19,9 @@ export type WidgetPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-
 /** Mirror of `MushiWidgetConfig.theme`. */
 export type WidgetTheme = 'auto' | 'light' | 'dark'
 
+/** Mirror of `MushiWidgetConfig.trigger`. */
+export type WidgetTrigger = 'auto' | 'edge-tab' | 'attach' | 'manual' | 'hidden'
+
 /** Mirror of `MushiCaptureConfig.screenshot`. */
 export type ScreenshotMode = 'on-report' | 'auto' | 'off'
 
@@ -31,6 +34,7 @@ export type ScreenshotMode = 'on-report' | 'auto' | 'off'
 export interface SdkPreviewConfig {
   position: WidgetPosition
   theme: WidgetTheme
+  trigger: WidgetTrigger
   triggerText: string
   capture: {
     console: boolean
@@ -50,6 +54,7 @@ export interface SdkPreviewConfig {
 export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   position: 'bottom-right',
   theme: 'auto',
+  trigger: 'auto',
   triggerText: '\u{1F41B}',
   capture: {
     console: true,
@@ -108,6 +113,7 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   const lines: string[] = []
   if (cfg.position !== d.position) lines.push(`${indent}  position: '${cfg.position}',`)
   if (cfg.theme !== d.theme) lines.push(`${indent}  theme: '${cfg.theme}',`)
+  if (cfg.trigger !== d.trigger) lines.push(`${indent}  trigger: '${cfg.trigger}',`)
   // Empty / whitespace-only input means "I cleared the box" — the preview
   // already falls back to the default 🐛 in that case (see SdkInstallCard's
   // `config.triggerText.trim() ? config.triggerText : '\u{1F41B}'`, which

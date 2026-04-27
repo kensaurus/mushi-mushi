@@ -64,6 +64,16 @@ public final class Mushi {
         }
     }
 
+    #if os(iOS)
+    public func setHidden(_ hidden: Bool) {
+        hidden ? removeFloatingButton() : installFloatingButtonIfNeeded()
+    }
+
+    public func attachTo(_ control: UIControl) {
+        control.addTarget(self, action: #selector(showWidgetFromButton), for: .touchUpInside)
+    }
+    #endif
+
     /// Submit a report with the given description and optional category.
     /// Captures device context and (if enabled) a screenshot automatically.
     public func report(
@@ -208,12 +218,18 @@ public final class Mushi {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.addTarget(self, action: #selector(showWidgetFromButton), for: .touchUpInside)
         window.addSubview(button)
-        NSLayoutConstraint.activate([
+        let inset = config.triggerInset
+        var constraints = [
             button.widthAnchor.constraint(equalToConstant: 56),
             button.heightAnchor.constraint(equalToConstant: 56),
-            button.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-            button.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -96)
-        ])
+            button.bottomAnchor.constraint(equalTo: window.safeAreaLayoutGuide.bottomAnchor, constant: -inset.bottom)
+        ]
+        if let leading = inset.leading {
+            constraints.append(button.leadingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.leadingAnchor, constant: leading))
+        } else {
+            constraints.append(button.trailingAnchor.constraint(equalTo: window.safeAreaLayoutGuide.trailingAnchor, constant: -(inset.trailing ?? 20)))
+        }
+        NSLayoutConstraint.activate(constraints)
         floatingButton = button
     }
 

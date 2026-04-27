@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Top-level Mushi Mushi configuration. Mirrors the shape of
@@ -20,6 +21,7 @@ public struct MushiConfig {
     public var minDescriptionLength: Int
     public var offlineQueueMaxBytes: Int
     public var theme: Theme
+    public var triggerInset: TriggerInset
 
     public enum TriggerMode {
         case shake
@@ -37,6 +39,18 @@ public struct MushiConfig {
         }
     }
 
+    public struct TriggerInset {
+        public var bottom: CGFloat
+        public var leading: CGFloat?
+        public var trailing: CGFloat?
+
+        public init(bottom: CGFloat = 96, leading: CGFloat? = nil, trailing: CGFloat? = 20) {
+            self.bottom = bottom
+            self.leading = leading
+            self.trailing = trailing
+        }
+    }
+
     public init(
         projectId: String,
         apiKey: String,
@@ -48,7 +62,8 @@ public struct MushiConfig {
         captureBreadcrumbs: Bool = true,
         minDescriptionLength: Int = 20,
         offlineQueueMaxBytes: Int = 1_000_000,
-        theme: Theme = Theme()
+        theme: Theme = Theme(),
+        triggerInset: TriggerInset = TriggerInset()
     ) {
         self.projectId = projectId
         self.apiKey = apiKey
@@ -61,5 +76,6 @@ public struct MushiConfig {
         self.minDescriptionLength = minDescriptionLength
         self.offlineQueueMaxBytes = offlineQueueMaxBytes
         self.theme = theme
+        self.triggerInset = triggerInset
     }
 }

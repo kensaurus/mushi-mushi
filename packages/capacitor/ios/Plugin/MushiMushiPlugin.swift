@@ -46,6 +46,12 @@ public class MushiMushiPlugin: CAPPlugin {
                 dark: themeObj["dark"] as? Bool ?? false
             )
         }
+        let triggerInsetObj = call.getObject("triggerInset")
+        let triggerInset = MushiConfig.TriggerInset(
+            bottom: CGFloat(triggerInsetObj?["bottom"] as? Double ?? 96),
+            leading: (triggerInsetObj?["leading"] as? Double).map(CGFloat.init),
+            trailing: (triggerInsetObj?["trailing"] as? Double).map(CGFloat.init) ?? 20
+        )
 
         let config = MushiConfig(
             projectId: projectId,
@@ -54,7 +60,8 @@ public class MushiMushiPlugin: CAPPlugin {
             triggerMode: triggerMode,
             captureScreenshot: captureScreenshot,
             minDescriptionLength: minDescriptionLength,
-            theme: theme
+            theme: theme,
+            triggerInset: triggerInset
         )
         Mushi.shared.configure(with: config)
 

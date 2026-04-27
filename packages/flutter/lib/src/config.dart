@@ -28,6 +28,7 @@ class MushiConfig {
     this.minDescriptionLength = 20,
     this.offlineQueueMaxBytes = 2 * 1024 * 1024,
     this.theme = const MushiTheme(),
+    this.triggerInsets = const MushiTriggerInsets(),
   });
 
   static const String defaultEndpoint = 'https://api.mushimushi.dev';
@@ -41,10 +42,24 @@ class MushiConfig {
   final int minDescriptionLength;
   final int offlineQueueMaxBytes;
   final MushiTheme theme;
+  final MushiTriggerInsets triggerInsets;
+}
+
+@immutable
+class MushiTriggerInsets {
+  const MushiTriggerInsets({
+    this.bottom = 28,
+    this.left,
+    this.right = 20,
+  });
+
+  final double bottom;
+  final double? left;
+  final double? right;
 }
 
 /// Compile-time SDK metadata. Update on version bump.
 class MushiInfo {
   static const String sdkName = '@mushi-mushi/flutter';
-  static const String sdkVersion = '0.2.0';
+  static const String sdkVersion = '0.3.0';
 }

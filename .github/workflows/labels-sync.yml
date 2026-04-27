@@ -15,9 +15,17 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # SUPPLY-CHAIN HARDENING: this job has `issues: write`, so a
+      # compromised label-sync action could mass-edit issues. Harden-
+      # Runner records every outbound call so a regression is visible
+      # in the StepSecurity dashboard.
+      - uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
 
-      - uses: EndBug/label-sync@v2
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - uses: EndBug/label-sync@7753e99e1e64188c24d7deede343c5a63e7c0d39  # v2.3.3
         with:
           config-file: .github/labels.yml
           delete-other-labels: true

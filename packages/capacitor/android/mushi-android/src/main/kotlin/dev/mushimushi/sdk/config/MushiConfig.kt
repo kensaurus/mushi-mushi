@@ -13,7 +13,8 @@ data class MushiConfig(
     val captureBreadcrumbs: Boolean = true,
     val minDescriptionLength: Int = 20,
     val offlineQueueMaxBytes: Long = 2L * 1024 * 1024,
-    val theme: Theme = Theme()
+    val theme: Theme = Theme(),
+    val triggerInset: TriggerInset = TriggerInset()
 ) {
     companion object {
         const val DEFAULT_ENDPOINT = "https://api.mushimushi.dev"
@@ -25,4 +26,10 @@ enum class TriggerMode { SHAKE, BUTTON, BOTH, NONE }
 data class Theme(
     val accentColor: String = "#22C55E",
     val dark: Boolean = false
+)
+
+data class TriggerInset(
+    val bottomDp: Int = 96,
+    val startDp: Int? = null,
+    val endDp: Int? = 20
 )

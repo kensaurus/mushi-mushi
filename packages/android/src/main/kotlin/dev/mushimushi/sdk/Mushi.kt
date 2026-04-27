@@ -83,6 +83,14 @@ object Mushi {
         }
     }
 
+    fun setHidden(hidden: Boolean) {
+        if (hidden) removeFloatingButton() else refreshFloatingButton()
+    }
+
+    fun attachTo(view: View) {
+        view.setOnClickListener { showWidget() }
+    }
+
     /** Submit a report. Auto-attaches device context and (if enabled) a screenshot. */
     fun report(
         description: String,
@@ -184,11 +192,13 @@ object Mushi {
         }
         val density = activity.resources.displayMetrics.density
         val size = (56 * density).toInt()
-        val margin = (20 * density).toInt()
-        val bottom = (96 * density).toInt()
+        val inset = cfg.triggerInset
+        val marginStart = ((inset.startDp ?: 20) * density).toInt()
+        val marginEnd = ((inset.endDp ?: 20) * density).toInt()
+        val bottom = (inset.bottomDp * density).toInt()
         root.addView(button, FrameLayout.LayoutParams(size, size).apply {
-            gravity = Gravity.BOTTOM or Gravity.END
-            setMargins(margin, margin, margin, bottom)
+            gravity = Gravity.BOTTOM or if (inset.startDp != null) Gravity.START else Gravity.END
+            setMargins(marginStart, marginStart, marginEnd, bottom)
         })
         floatingButton = button
         floatingButtonOwner = activity
