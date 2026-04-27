@@ -74,20 +74,20 @@ pnpm deploy                     # Deploy all Edge Functions
 
 Set these as Supabase secrets:
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ANTHROPIC_API_KEY` | Yes | Claude API key for LLM pipeline |
-| `OPENAI_API_KEY` | No | OpenAI fallback when Anthropic is down |
-| `LANGFUSE_SECRET_KEY` | No | Langfuse LLM trace logging |
-| `LANGFUSE_PUBLIC_KEY` | No | Langfuse LLM trace logging |
-| `STRIPE_SECRET_KEY` | Cloud | Stripe server key (apps/cloud billing flow) |
-| `STRIPE_WEBHOOK_SECRET` | Cloud | Verifies signatures on `stripe-webhooks` |
-| `STRIPE_PRICE_ID_REPORTS` | Cloud | Metered price ID used by checkout |
-| `E2B_API_KEY` | No | Managed sandbox provider for fix agents |
-| `MUSHI_REGION` | No | `us` / `eu` / `jp` — data residency tag |
+| Variable                       | Required   | Description                                                                                                                                                                                                                                                                 |
+| ------------------------------ | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`            | Yes        | Claude API key for LLM pipeline                                                                                                                                                                                                                                             |
+| `OPENAI_API_KEY`               | No         | OpenAI fallback when Anthropic is down                                                                                                                                                                                                                                      |
+| `LANGFUSE_SECRET_KEY`          | No         | Langfuse LLM trace logging                                                                                                                                                                                                                                                  |
+| `LANGFUSE_PUBLIC_KEY`          | No         | Langfuse LLM trace logging                                                                                                                                                                                                                                                  |
+| `STRIPE_SECRET_KEY`            | Cloud      | Stripe server key (apps/cloud billing flow)                                                                                                                                                                                                                                 |
+| `STRIPE_WEBHOOK_SECRET`        | Cloud      | Verifies signatures on `stripe-webhooks`                                                                                                                                                                                                                                    |
+| `STRIPE_PRICE_ID_REPORTS`      | Cloud      | Metered price ID used by checkout                                                                                                                                                                                                                                           |
+| `E2B_API_KEY`                  | No         | Managed sandbox provider for fix agents                                                                                                                                                                                                                                     |
+| `MUSHI_REGION`                 | No         | `us` / `eu` / `jp` — data residency tag                                                                                                                                                                                                                                     |
 | `MUSHI_INTERNAL_CALLER_SECRET` | Yes (prod) | Shared secret for cross-function + `pg_cron` → edge-function calls. Must also be mirrored into `public.mushi_runtime_config` (`key='service_role_key'`) so `pg_net` can read it from SQL. See [Internal-caller authentication](#internal-caller-authentication-sec-1) below |
-| `SUPABASE_URL` | Auto | Set by Supabase runtime |
-| `SUPABASE_SERVICE_ROLE_KEY` | Auto | Set by Supabase runtime — auto-injected inside edge functions, not reachable from `pg_net`/`pg_cron`, which is why `MUSHI_INTERNAL_CALLER_SECRET` exists |
+| `SUPABASE_URL`                 | Auto       | Set by Supabase runtime                                                                                                                                                                                                                                                     |
+| `SUPABASE_SERVICE_ROLE_KEY`    | Auto       | Set by Supabase runtime — auto-injected inside edge functions, not reachable from `pg_net`/`pg_cron`, which is why `MUSHI_INTERNAL_CALLER_SECRET` exists                                                                                                                    |
 
 ## API Routes
 
@@ -125,12 +125,12 @@ All routes are served from the `api` function under `/v1/`:
 - `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
 - `POST /v1/admin/auth/token`— OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
 - `POST /v1/admin/projects/:id/keys/rotate`— atomic API key rotation. Revokes every active key for the project (audit-logged with the revoked prefixes), generates a new one, and returns it in the same response (`mushi_<32hex>`, 201). The plaintext is shown exactly once — clients store it immediately or rotate again. Project ownership is enforced via `jwtAuth` + `owner_id` check, so cross-project rotation is impossible
-- See `supabase/functions/api/index.ts` for the full route table
+- See `supabase/functions/api/index.ts` and `supabase/functions/api/routes/*.ts` for the full route table
 
 ## Manifest contract test
 
 `src/__tests__/manifest-contract.test.ts` parses
-`supabase/functions/api/index.ts`, extracts every URL listed inside
+`supabase/functions/api/index.ts` plus route modules, extracts every URL listed inside
 `/v1/admin/auth/manifest`, and asserts each one is registered as a Hono
 route via `app.<method>(<path>, ...)`. If a future PR adds an entry to the
 manifest without wiring up the route — or deletes a route the manifest still
@@ -144,7 +144,7 @@ of bug before it reaches a deploy.
 ## Error handling
 
 Every Postgres error returned to the admin API flows through one helper —
-`dbError(c, err)` in `supabase/functions/api/index.ts`. It:
+`dbError(c, err)` in `supabase/functions/api/shared.ts`. It:
 
 1. Logs to Sentry via `captureException` with `tags = { pg_code, route }` so
    alert filters can split `42703` (undefined column, signals schema drift) from
@@ -158,10 +158,10 @@ Sentry. **If you add a new admin route, use `return dbError(c, error)` instead
 of building the 500 by hand** — otherwise the new route's errors will be
 invisible to the on-call dashboard.
 
-### PostgrestBuilder is *not* a Promise — no `.catch()`
+### PostgrestBuilder is _not_ a Promise — no `.catch()`
 
 A recurring foot-gun: Supabase's `db.from(...).insert/.upsert/.update/.delete()`
-and `db.rpc(...)` return a `PostgrestBuilder`. It is a *thenable* (`.then` only)
+and `db.rpc(...)` return a `PostgrestBuilder`. It is a _thenable_ (`.then` only)
 — it does **not** implement `.catch`. Writing
 
 ```ts
@@ -170,7 +170,7 @@ await db.from('audit_log').insert({...}).catch(() => {})
 ```
 
 crashes with `TypeError: db.from(...).insert(...).catch is not a function`,
-which bubbles to `app.onError` and masks the *preceding* work as a generic 500.
+which bubbles to `app.onError` and masks the _preceding_ work as a generic 500.
 This silently erased a successful BYOK vault write in Apr 2026
 ([MUSHI-MUSHI-SERVER-F](https://sakuramoto.sentry.io/issues/MUSHI-MUSHI-SERVER-F)).
 
@@ -202,10 +202,10 @@ prompt-injection / data-exfiltration vector raised in `MushiMushi_Critical_Analy
 Three internal-only edge functions — `fast-filter`, `classify-report`, and `fix-worker` — previously accepted any caller because Supabase deploys without `--no-verify-jwt` still pass anonymous `anon` requests through. The 2026-04-21 remediation (audit SEC-1) gates them behind a shared middleware in `_shared/auth.ts`:
 
 ```ts
-import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { requireServiceRoleAuth } from '../_shared/auth.ts';
 
-const authErr = requireServiceRoleAuth(req)
-if (authErr) return authErr
+const authErr = requireServiceRoleAuth(req);
+if (authErr) return authErr;
 ```
 
 The middleware accepts **either** token in the `Authorization: Bearer …` header:
@@ -213,7 +213,7 @@ The middleware accepts **either** token in the `Authorization: Bearer …` heade
 1. `MUSHI_INTERNAL_CALLER_SECRET` — a non-reserved shared secret. Used by `pg_cron` → `pg_net.http_post` callers, because Postgres cannot read runtime-injected Supabase env vars. The same value is mirrored into `public.mushi_runtime_config` (row `key='service_role_key'`) so migrations like `recover_stranded_pipeline()` can look it up without a deploy.
 2. `SUPABASE_SERVICE_ROLE_KEY` — auto-injected into the edge runtime. Used for function-to-function calls (`api` → `fast-filter`, `fast-filter` → `classify-report`, etc.) without any bespoke plumbing.
 
-Both paths return `401 UNAUTHORIZED` otherwise. `classify-report` *additionally* requires `body.airGap === true` (SEC-7) so a compromised Stage 1 cannot bypass the air-gap by handing Stage 2 raw user strings.
+Both paths return `401 UNAUTHORIZED` otherwise. `classify-report` _additionally_ requires `body.airGap === true` (SEC-7) so a compromised Stage 1 cannot bypass the air-gap by handing Stage 2 raw user strings.
 
 **To rotate the secret**:
 
