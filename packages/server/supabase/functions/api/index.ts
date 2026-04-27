@@ -7,6 +7,12 @@ import { getServiceClient } from '../_shared/db.ts'
 import { log } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler, reportError } from '../_shared/sentry.ts'
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../_shared/auth.ts'
+import {
+  requireFeature,
+  resolveActiveEntitlement,
+  GATED_ROUTES,
+  type FeatureFlag,
+} from '../_shared/entitlements.ts'
 import { checkIngestQuota } from '../_shared/quota.ts'
 import { regionRouter, currentRegion, lookupProjectRegion, regionEndpoint } from '../_shared/region.ts'
 import { getStorageAdapter, invalidateStorageCache } from '../_shared/storage.ts'
@@ -3346,7 +3352,7 @@ app.get('/v1/admin/byok', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { projectId: project.id, keys } })
 })
 
-app.put('/v1/admin/byok/:provider', jwtAuth, async (c) => {
+app.put('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
   const userId = c.get('userId') as string
   const provider = c.req.param('provider') as ByokProvider
   if (!BYOK_PROVIDERS.includes(provider)) {
@@ -3425,7 +3431,7 @@ app.put('/v1/admin/byok/:provider', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { provider, configured: true, addedAt: now, hint: `…${key.slice(-4)}` } })
 })
 
-app.delete('/v1/admin/byok/:provider', jwtAuth, async (c) => {
+app.delete('/v1/admin/byok/:provider', jwtAuth, requireFeature('byok'), async (c) => {
   const userId = c.get('userId') as string
   const provider = c.req.param('provider') as ByokProvider
   if (!BYOK_PROVIDERS.includes(provider)) {
@@ -3476,7 +3482,7 @@ app.delete('/v1/admin/byok/:provider', jwtAuth, async (c) => {
  * Cost: ~ $0.0001 — uses Anthropic /v1/models or OpenAI /v1/models, both of
  * which are free metadata calls.
  */
-app.post('/v1/admin/byok/:provider/test', jwtAuth, async (c) => {
+app.post('/v1/admin/byok/:provider/test', jwtAuth, requireFeature('byok'), async (c) => {
   const userId = c.get('userId') as string
   const provider = c.req.param('provider') as ByokProvider
   if (!BYOK_PROVIDERS.includes(provider)) {
@@ -3619,7 +3625,7 @@ app.get('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
   })
 })
 
-app.put('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
+app.put('/v1/admin/byok/firecrawl', jwtAuth, requireFeature('byok'), async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json().catch(() => ({})) as {
     key?: string
@@ -3680,7 +3686,7 @@ app.put('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
   return c.json({ ok: true })
 })
 
-app.delete('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
+app.delete('/v1/admin/byok/firecrawl', jwtAuth, requireFeature('byok'), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
@@ -3714,7 +3720,7 @@ app.delete('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
   return c.json({ ok: true })
 })
 
-app.post('/v1/admin/byok/firecrawl/test', jwtAuth, async (c) => {
+app.post('/v1/admin/byok/firecrawl/test', jwtAuth, requireFeature('byok'), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
@@ -4266,6 +4272,79 @@ async function dereferenceMaybeVault(db: ReturnType<typeof getServiceClient>, re
   if (error) return null
   return typeof data === 'string' ? data : null
 }
+
+// Single source of truth for "what can this caller do?". Used by every
+// admin-frontend gate so the UI stays in lockstep with the server-side
+// `requireFeature` middleware. Cheaper than `/v1/admin/billing` (no
+// Stripe round-trip), so the admin app fetches it on every page load
+// and uses it to render `UpgradePrompt` + show the super-admin nav.
+//
+// Shape:
+//   { planId: 'hobby'|'starter'|'pro'|'enterprise', planName: string,
+//     featureFlags: { sso, byok, plugins, intelligence_reports, ... },
+//     gatedRoutes: [{ prefix, flag, allowed }],
+//     isSuperAdmin: boolean }
+//
+// Returns 200 even for hobby callers — this endpoint is *introspection*
+// and must never 402. The 402 happens on the gated route itself.
+app.get('/v1/admin/entitlements', jwtAuth, async (c) => {
+  const userId = c.get('userId') as string
+  const userEmail = c.get('userEmail') as string | undefined
+  const db = getServiceClient()
+
+  const entitlement = await resolveActiveEntitlement(c)
+
+  // No project yet → return a hobby-shaped response so the UI can render
+  // the "create your first project" empty state without crashing.
+  if (!entitlement) {
+    return c.json({
+      ok: true,
+      data: {
+        planId: 'hobby',
+        planName: 'Hobby',
+        featureFlags: {} as Record<FeatureFlag, boolean>,
+        gatedRoutes: GATED_ROUTES.map((r) => ({ ...r, allowed: false })),
+        isSuperAdmin: false,
+        hasProject: false,
+      },
+    })
+  }
+
+  // Super-admin lookup. We piggyback on `auth.users.raw_app_meta_data.role`
+  // because Supabase exposes that as a JWT claim — promoted by the
+  // 20260427_super_admin_role.sql migration. Fail closed on any read
+  // error so a transient outage can't accidentally elevate a caller.
+  let isSuperAdmin = false
+  try {
+    const { data: userRow } = await db.auth.admin.getUserById(userId)
+    const role = (userRow?.user?.app_metadata as Record<string, unknown> | null)?.role
+    isSuperAdmin = role === 'super_admin'
+  } catch (err) {
+    log.warn('entitlements_super_admin_lookup_failed', {
+      userId,
+      err: err instanceof Error ? err.message : String(err),
+    })
+  }
+
+  const flags = (entitlement.plan.feature_flags ?? {}) as Record<string, unknown>
+
+  return c.json({
+    ok: true,
+    data: {
+      planId: entitlement.plan.id,
+      planName: entitlement.plan.display_name,
+      projectId: entitlement.projectId,
+      featureFlags: flags,
+      gatedRoutes: GATED_ROUTES.map((r) => ({
+        ...r,
+        allowed: flags[r.flag] === true,
+      })),
+      isSuperAdmin,
+      hasProject: true,
+      userEmail: userEmail ?? null,
+    },
+  })
+})
 
 // Projects admin endpoints
 // Per-project billing summary for the admin /billing page.
@@ -7768,7 +7847,7 @@ app.get('/v1/admin/sso', jwtAuth, async (c) => {
 //
 // Returns the canonical Auth provider ID + status so the UI can show the
 // admin which step they're on (config saved → registered → active).
-app.post('/v1/admin/sso', jwtAuth, async (c) => {
+app.post('/v1/admin/sso', jwtAuth, requireFeature('sso'), async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json() as {
     providerType: 'saml' | 'oidc'
@@ -7907,7 +7986,7 @@ app.post('/v1/admin/sso', jwtAuth, async (c) => {
 // Allow disconnecting an SSO provider. We deregister from GoTrue first,
 // then mark the config row 'disabled'. We never hard-delete rows because the
 // audit log + sso_state attempts reference them.
-app.delete('/v1/admin/sso/:id', jwtAuth, async (c) => {
+app.delete('/v1/admin/sso/:id', jwtAuth, requireFeature('sso'), async (c) => {
   const userId = c.get('userId') as string
   const configId = c.req.param('id')
   const db = getServiceClient()
@@ -8569,7 +8648,7 @@ app.get('/v1/admin/plugins', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { plugins } })
 })
 
-app.post('/v1/admin/plugins', jwtAuth, async (c) => {
+app.post('/v1/admin/plugins', jwtAuth, requireFeature('plugins'), async (c) => {
   const userId = c.get('userId') as string
   const body = await c.req.json()
   const db = getServiceClient()
@@ -8611,7 +8690,7 @@ app.post('/v1/admin/plugins', jwtAuth, async (c) => {
   return c.json({ ok: true })
 })
 
-app.delete('/v1/admin/plugins/:slug', jwtAuth, async (c) => {
+app.delete('/v1/admin/plugins/:slug', jwtAuth, requireFeature('plugins'), async (c) => {
   const userId = c.get('userId') as string
   const slug = c.req.param('slug')
   const db = getServiceClient()
@@ -8764,7 +8843,7 @@ app.get('/v1/admin/synthetic', jwtAuth, async (c) => {
 // the job id immediately. The page polls /v1/admin/intelligence/jobs and
 // shows a progress card. Avoids the 30s+ "spinner forever" symptom users hit
 // when the call was synchronous.
-app.post('/v1/admin/intelligence', jwtAuth, async (c) => {
+app.post('/v1/admin/intelligence', jwtAuth, requireFeature('intelligence_reports'), async (c) => {
   const userId = c.get('userId') as string
   const db = getServiceClient()
   const { data: project } = await db.from('projects').select('id').eq('owner_id', userId).limit(1).single()
@@ -8893,7 +8972,7 @@ app.get('/v1/admin/intelligence/jobs', jwtAuth, async (c) => {
   return c.json({ ok: true, data: { jobs: data ?? [] } })
 })
 
-app.post('/v1/admin/intelligence/jobs/:id/cancel', jwtAuth, async (c) => {
+app.post('/v1/admin/intelligence/jobs/:id/cancel', jwtAuth, requireFeature('intelligence_reports'), async (c) => {
   const userId = c.get('userId') as string
   const id = c.req.param('id')
   const db = getServiceClient()

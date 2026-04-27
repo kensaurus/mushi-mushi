@@ -168,6 +168,33 @@ async function doFetch<T>(
     if (!res.ok) {
       const body = await res.text()
       debugWarn('api', `${method} ${path} → ${res.status} (${ms}ms)`, { body: body.slice(0, 200) })
+      // Entitlement gate (Phase 1d, 2026-04-27): the server's
+      // `requireFeature` middleware returns 402 + `code: 'feature_not_in_plan'`
+      // when a Hobby user tries to hit a paid endpoint (SSO, BYOK, plugins,
+      // intelligence). We dispatch a window event so a single root-mounted
+      // <UpgradePromptHost> can render the modal once, instead of every
+      // calling site having to know the upgrade UX. The original error
+      // body still propagates to the caller via the JSON.parse below so
+      // callers that want their own inline UI (the gated *pages* render
+      // <UpgradePrompt> in-place anyway) keep working.
+      if (res.status === 402) {
+        try {
+          const parsed = JSON.parse(body) as {
+            error?: { code?: string; flag?: string; current_plan?: string; upgrade_to?: { id: string; display_name: string; monthly_price_usd: number } | null }
+          }
+          if (parsed?.error?.code === 'feature_not_in_plan' && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('mushi:entitlement-blocked', {
+              detail: {
+                flag: parsed.error.flag,
+                currentPlan: parsed.error.current_plan,
+                upgradeTo: parsed.error.upgrade_to,
+                method,
+                path,
+              },
+            }))
+          }
+        } catch { /* malformed 402 body — fall through to generic handling */ }
+      }
       // Telemetry: every non-2xx becomes a Sentry breadcrumb so we get a
       // request log for free in any Sentry event captured later in the same
       // session. 5xx is escalated to a captureMessage because server errors

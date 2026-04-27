@@ -4,6 +4,8 @@ import { usePageData } from '../lib/usePageData'
 import { PageHeader, PageHelp, Card, Badge, Btn, Input, SelectField, ErrorAlert, EmptyState, CodeValue } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { useEntitlements } from '../lib/useEntitlements'
+import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 
 interface SsoConfig {
   id: string
@@ -44,6 +46,8 @@ export function SsoPage() {
   const [lastRegister, setLastRegister] = useState<RegisterResult | null>(null)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
   const toast = useToast()
+  const entitlements = useEntitlements()
+  const ssoUnlocked = entitlements.has('sso')
 
   const addProvider = async () => {
     if (!form.providerName.trim()) {
@@ -111,6 +115,12 @@ export function SsoPage() {
         howToUse="SAML 2.0 is the supported flow today: add your IdP's metadata URL below, then paste the ACS URL and Entity ID we return into your IdP and test with a non-admin user. OIDC is recorded for audit but cannot be auto-registered — it requires Supabase enterprise tier; contact support if you need it."
       />
 
+      {!ssoUnlocked && !entitlements.loading && (
+        <UpgradePrompt flag="sso" currentPlan={entitlements.planName} />
+      )}
+
+      {ssoUnlocked && (
+      <>
       <Card className="p-3 space-y-3">
         <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Add Identity Provider</h3>
         <div className="grid grid-cols-2 gap-2">
@@ -238,6 +248,8 @@ export function SsoPage() {
             </tbody>
           </table>
         </Card>
+      )}
+      </>
       )}
     </div>
   )

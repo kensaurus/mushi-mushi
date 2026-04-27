@@ -24,6 +24,8 @@ import { PageActionBar } from '../components/PageActionBar'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { PageHero } from '../components/PageHero'
 import { usePublishPageContext } from '../lib/pageContext'
+import { useEntitlements } from '../lib/useEntitlements'
+import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import type {
   BenchmarkSettings,
   IntelligenceJob,
@@ -42,6 +44,8 @@ export function IntelligencePage() {
   const [dispatchingId, setDispatchingId] = useState<string | null>(null)
   const toast = useToast()
   const pollRef = useRef<number | null>(null)
+  const entitlements = useEntitlements()
+  const intelligenceUnlocked = entitlements.has('intelligence_reports')
 
   const fetchData = useCallback(async () => {
     setError(false)
@@ -235,7 +239,12 @@ export function IntelligencePage() {
         title="Bug Intelligence"
         description="Aggregate signals across reports — hotspot components, regression patterns, and shifting severity trends."
       >
-        <Btn onClick={generateNow} disabled={generating || !!activeJob} loading={generating || !!activeJob}>
+        <Btn
+          onClick={generateNow}
+          disabled={generating || !!activeJob || (!intelligenceUnlocked && !entitlements.loading)}
+          loading={generating || !!activeJob}
+          title={!intelligenceUnlocked && !entitlements.loading ? 'Locked on your current plan' : undefined}
+        >
           {activeJob ? 'Generating' : 'Generate this week'}
         </Btn>
       </PageHeader>
@@ -289,6 +298,10 @@ export function IntelligencePage() {
         ]}
         howToUse="Reports are generated automatically every Monday by cron. Click Generate to run for the current week — the job runs in the background and the progress card below stays live. If a job is wedged you can cancel it."
       />
+
+      {!intelligenceUnlocked && !entitlements.loading && (
+        <UpgradePrompt flag="intelligence_reports" currentPlan={entitlements.planName} />
+      )}
 
       <ThisWeekNarrative
         latest={reports[0] ?? null}

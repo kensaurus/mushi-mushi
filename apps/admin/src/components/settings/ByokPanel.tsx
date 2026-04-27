@@ -13,6 +13,8 @@ import { Section, Input, Btn, ErrorAlert, ResultChip, type ResultChipTone } from
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { ConfigHelp } from '../ConfigHelp'
+import { useEntitlements } from '../../lib/useEntitlements'
+import { UpgradePrompt } from '../billing/UpgradePrompt'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
@@ -232,6 +234,7 @@ export function ByokPanel() {
 
   return (
     <Section title="LLM Keys (BYOK)" className="space-y-3">
+      <ByokEntitlementGuard />
       <div className="text-2xs text-fg-muted space-y-1">
         <p>
           <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the LLM keys, you pay your own provider, you keep full control over which models touch your bug data. Mushi never proxies, caches, or fine-tunes on your traffic.
@@ -423,4 +426,15 @@ export function ByokPanel() {
       )}
     </Section>
   )
+}
+
+/**
+ * Inline upgrade banner shown above the BYOK panel when the caller's
+ * plan doesn't include the `byok` flag. Kept as a sibling component
+ * so the panel's existing data-loading/error handling stays unchanged.
+ */
+function ByokEntitlementGuard() {
+  const entitlements = useEntitlements()
+  if (entitlements.loading || entitlements.has('byok')) return null
+  return <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
 }

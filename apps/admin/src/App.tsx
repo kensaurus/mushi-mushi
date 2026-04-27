@@ -11,6 +11,7 @@ import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
+import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 
 // Wrap Routes ONCE, at the level where the real (parametrized) route
 // definitions live — i.e. the inner Routes mounted under the auth gate.
@@ -96,6 +97,7 @@ export function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+      <UpgradePromptHost />
       <PasswordRecoveryGate>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
