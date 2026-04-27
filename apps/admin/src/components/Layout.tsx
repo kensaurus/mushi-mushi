@@ -36,7 +36,7 @@ import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { AskMushiSidebar } from './AskMushiSidebar'
-import { PageHero } from './PageHero'
+import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
@@ -174,23 +174,239 @@ const NAV: NavSection[] = [
   },
 ]
 
-const PAGE_HERO_FALLBACKS: Record<string, { title: string; kicker: string; scope: string }> = {
-  '/': { title: 'Dashboard', kicker: 'Start', scope: 'dashboard' },
-  '/reports': { title: 'Reports', kicker: 'Plan', scope: 'reports' },
-  '/fixes': { title: 'Fixes', kicker: 'Do', scope: 'fixes' },
-  '/repo': { title: 'Repo', kicker: 'Do', scope: 'repo' },
-  '/prompt-lab': { title: 'Prompt Lab', kicker: 'Do', scope: 'prompt-lab' },
-  '/integrations': { title: 'Integrations', kicker: 'Act', scope: 'integrations' },
-  '/mcp': { title: 'MCP', kicker: 'Act', scope: 'mcp' },
-  '/marketplace': { title: 'Marketplace', kicker: 'Act', scope: 'marketplace' },
-  '/notifications': { title: 'Notifications', kicker: 'Act', scope: 'notifications' },
-  '/billing': { title: 'Billing', kicker: 'Workspace', scope: 'billing' },
-  '/projects': { title: 'Projects', kicker: 'Workspace', scope: 'projects' },
-  '/settings': { title: 'Settings', kicker: 'Workspace', scope: 'settings' },
-  '/sso': { title: 'SSO', kicker: 'Workspace', scope: 'sso' },
-  '/onboarding': { title: 'Onboarding', kicker: 'Start', scope: 'onboarding' },
-  '/research': { title: 'Research', kicker: 'Check', scope: 'research' },
-  '/inbox': { title: 'Inbox', kicker: 'Start', scope: 'inbox' },
+interface PageHeroFallback {
+  title: string
+  kicker: string
+  scope: string
+  decide: PageHeroDecide
+  verify: PageHeroVerify
+}
+
+const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
+  '/': {
+    title: 'Dashboard',
+    kicker: 'Start',
+    scope: 'dashboard',
+    decide: {
+      label: 'Workspace snapshot',
+      summary: 'Scan the current project for new reports, active fixes, and quality signals before you drill in.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Refresh source',
+      detail: 'Live project data and queue status are shown below.',
+    },
+  },
+  '/reports': {
+    title: 'Reports',
+    kicker: 'Plan',
+    scope: 'reports',
+    decide: {
+      label: 'Triage queue',
+      summary: 'Prioritize incoming reports by severity, status, and evidence before dispatching a fix.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Report evidence',
+      detail: 'Open a report to review screenshots, console logs, network traces, and user context.',
+    },
+  },
+  '/fixes': {
+    title: 'Fixes',
+    kicker: 'Do',
+    scope: 'fixes',
+    decide: {
+      label: 'Fix pipeline',
+      summary: 'Track each attempted fix from dispatch through PR, judge review, and merge readiness.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Pipeline proof',
+      detail: 'Use attempt cards for branch, PR, CI, and trace evidence.',
+    },
+  },
+  '/repo': {
+    title: 'Repo',
+    kicker: 'Do',
+    scope: 'repo',
+    decide: {
+      label: 'Branch health',
+      summary: 'Review generated branches, open PRs, and CI state before landing fixes.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'GitHub evidence',
+      detail: 'Branch cards link back to commits, PRs, and recent repo activity.',
+    },
+  },
+  '/prompt-lab': {
+    title: 'Prompt Lab',
+    kicker: 'Do',
+    scope: 'prompt-lab',
+    decide: {
+      label: 'Prompt quality',
+      summary: 'Compare active and candidate prompts before changing traffic or fine-tuning inputs.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Evaluation data',
+      detail: 'Use scored runs and datasets below to confirm prompt changes improve classification.',
+    },
+  },
+  '/integrations': {
+    title: 'Integrations',
+    kicker: 'Act',
+    scope: 'integrations',
+    decide: {
+      label: 'Connection health',
+      summary: 'Check which routing destinations are connected, stale, or waiting on setup.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Probe history',
+      detail: 'Each integration shows its latest test result and latency where available.',
+    },
+  },
+  '/mcp': {
+    title: 'MCP',
+    kicker: 'Act',
+    scope: 'mcp',
+    decide: {
+      label: 'Agent access',
+      summary: 'Connect MCP-aware agents to the current project with the right read or write scope.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Install check',
+      detail: 'After adding the snippet, ask your agent to list the Mushi tools.',
+    },
+  },
+  '/marketplace': {
+    title: 'Marketplace',
+    kicker: 'Act',
+    scope: 'marketplace',
+    decide: {
+      label: 'Plugin catalog',
+      summary: 'Choose where classified reports and fix events should be routed next.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Delivery log',
+      detail: 'Installed plugins expose delivery attempts and webhook responses below.',
+    },
+  },
+  '/notifications': {
+    title: 'Notifications',
+    kicker: 'Act',
+    scope: 'notifications',
+    decide: {
+      label: 'Reporter updates',
+      summary: 'Review outbound messages so reporters know what happened to the bugs they filed.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Payload audit',
+      detail: 'Open a notification payload to confirm exactly what was sent.',
+    },
+  },
+  '/billing': {
+    title: 'Billing',
+    kicker: 'Workspace',
+    scope: 'billing',
+    decide: {
+      label: 'Plan and usage',
+      summary: 'Compare current usage against plan limits before changing seats, retention, or billing.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Stripe source',
+      detail: 'Billing actions hand off to Stripe for payment method and invoice changes.',
+    },
+  },
+  '/projects': {
+    title: 'Projects',
+    kicker: 'Workspace',
+    scope: 'projects',
+    decide: {
+      label: 'Project list',
+      summary: 'Pick the active project, mint keys, or send a test report from the project cards.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Active context',
+      detail: 'The selected project drives filters and setup state across the console.',
+    },
+  },
+  '/settings': {
+    title: 'Settings',
+    kicker: 'Workspace',
+    scope: 'settings',
+    decide: {
+      label: 'Runtime controls',
+      summary: 'Tune capture, routing, LLM, and developer settings that affect future reports.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Saved state',
+      detail: 'Changed controls only take effect after the settings form is saved.',
+    },
+  },
+  '/sso': {
+    title: 'SSO',
+    kicker: 'Workspace',
+    scope: 'sso',
+    decide: {
+      label: 'Identity setup',
+      summary: 'Configure team sign-in through SAML or OIDC before inviting more users.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Provider metadata',
+      detail: 'Use the generated ACS and entity values when completing setup in your IdP.',
+    },
+  },
+  '/onboarding': {
+    title: 'Onboarding',
+    kicker: 'Start',
+    scope: 'onboarding',
+    decide: {
+      label: 'Setup progress',
+      summary: 'Finish the required project, key, SDK, and first-report steps to complete setup.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'First report',
+      detail: 'Send a test report to confirm the SDK can reach your project.',
+    },
+  },
+  '/research': {
+    title: 'Research',
+    kicker: 'Check',
+    scope: 'research',
+    decide: {
+      label: 'Saved findings',
+      summary: 'Capture product and QA notes that should inform the next loop iteration.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Search history',
+      detail: 'Recent research sessions and pinned notes stay available below.',
+    },
+  },
+  '/inbox': {
+    title: 'Inbox',
+    kicker: 'Start',
+    scope: 'inbox',
+    decide: {
+      label: 'Next actions',
+      summary: 'Review the highest-priority work waiting across Plan, Do, Check, and Act.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Action source',
+      detail: 'Each card links back to the queue, report, fix, or integration that needs attention.',
+    },
+  },
 }
 
 const NAV_COLLAPSED_KEY = 'mushi:nav:collapsed:v1'
@@ -689,17 +905,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 scope={fallbackHero.scope}
                 title={fallbackHero.title}
                 kicker={fallbackHero.kicker}
-                decide={{
-                  label: 'Ready',
-                  metric: 'Live',
-                  summary: 'This page is wired into the shared Decide / Act / Verify entry pattern.',
-                  severity: 'info',
-                }}
+                decide={fallbackHero.decide}
                 act={null}
-                verify={{
-                  label: 'Evidence',
-                  detail: `${fallbackHero.title} page loaded`,
-                }}
+                verify={fallbackHero.verify}
               />
             )}
             {children}
