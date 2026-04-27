@@ -17,7 +17,9 @@ class MushiFloatingTrigger extends StatelessWidget {
     final theme = config.theme;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
     return Positioned(
-      right: config.triggerInsets.left == null ? config.triggerInsets.right : null,
+      right: config.triggerInsets.left == null
+          ? config.triggerInsets.right
+          : null,
       left: config.triggerInsets.left,
       bottom: config.triggerInsets.bottom + bottomPadding,
       child: Semantics(
@@ -27,7 +29,9 @@ class MushiFloatingTrigger extends StatelessWidget {
           onTap: onPressed,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: theme.dark ? const Color(0xFF0F0E0C) : const Color(0xFFF8F4ED),
+              color: theme.dark
+                  ? const Color(0xFF0F0E0C)
+                  : const Color(0xFFF8F4ED),
               border: Border.all(color: theme.accentColor.withOpacity(0.35)),
               borderRadius: BorderRadius.circular(4),
               boxShadow: const [
@@ -46,7 +50,9 @@ class MushiFloatingTrigger extends StatelessWidget {
                   '🐛',
                   style: TextStyle(
                     fontSize: 24,
-                    color: theme.dark ? const Color(0xFFF2EBDD) : const Color(0xFF0E0D0B),
+                    color: theme.dark
+                        ? const Color(0xFFF2EBDD)
+                        : const Color(0xFF0E0D0B),
                   ),
                 ),
               ),
