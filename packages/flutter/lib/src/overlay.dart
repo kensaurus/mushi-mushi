@@ -17,9 +17,7 @@ class MushiFloatingTrigger extends StatelessWidget {
     final theme = config.theme;
     final bottomPadding = MediaQuery.paddingOf(context).bottom;
     return Positioned(
-      right: config.triggerInsets.left == null
-          ? config.triggerInsets.right
-          : null,
+      right: config.triggerInsets.left == null ? config.triggerInsets.right : null,
       left: config.triggerInsets.left,
       bottom: config.triggerInsets.bottom + bottomPadding,
       child: Semantics(
