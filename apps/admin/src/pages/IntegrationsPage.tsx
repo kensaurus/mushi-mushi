@@ -22,6 +22,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
 import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
   PLATFORM_DEFS,
   ROUTING_PROVIDERS,
@@ -74,6 +75,8 @@ export function IntegrationsPage() {
   const [routingEditing, setRoutingEditing] = useState<RoutingProviderDef['type'] | null>(null)
   const [routingDrafts, setRoutingDrafts] = useState<Record<string, Record<string, string>>>({})
   const [routingSaving, setRoutingSaving] = useState<RoutingProviderDef['type'] | null>(null)
+  const [pendingDeleteRouting, setPendingDeleteRouting] = useState<RoutingProviderDef | null>(null)
+  const [deletingRouting, setDeletingRouting] = useState(false)
 
   const latestByKind = useMemo(() => {
     const map: Partial<Record<string, HealthRow>> = {}
@@ -189,9 +192,17 @@ export function IntegrationsPage() {
     routingQuery.reload()
   }
 
-  const deleteRouting = async (provider: RoutingProviderDef) => {
-    if (!confirm(`Disconnect ${provider.label}? Stored credentials will be wiped.`)) return
+  const deleteRouting = (provider: RoutingProviderDef) => {
+    setPendingDeleteRouting(provider)
+  }
+
+  const confirmDeleteRouting = async () => {
+    if (!pendingDeleteRouting) return
+    const provider = pendingDeleteRouting
+    setDeletingRouting(true)
     const res = await apiFetch(`/v1/admin/integrations/${provider.type}`, { method: 'DELETE' })
+    setDeletingRouting(false)
+    setPendingDeleteRouting(null)
     if (!res.ok) {
       toast.error(`Failed to disconnect ${provider.label}`, res.error?.message)
       return
@@ -289,6 +300,21 @@ export function IntegrationsPage() {
           })}
         </div>
       </Section>
+
+      {pendingDeleteRouting && (
+        <ConfirmDialog
+          title={`Disconnect ${pendingDeleteRouting.label}?`}
+          body={`Stored credentials for ${pendingDeleteRouting.label} will be wiped. New triages will stop forwarding here until you reconnect; reports already routed remain in the destination tool.`}
+          confirmLabel="Disconnect"
+          cancelLabel="Keep connected"
+          tone="danger"
+          loading={deletingRouting}
+          onConfirm={() => void confirmDeleteRouting()}
+          onCancel={() => {
+            if (!deletingRouting) setPendingDeleteRouting(null)
+          }}
+        />
+      )}
     </div>
   )
 }

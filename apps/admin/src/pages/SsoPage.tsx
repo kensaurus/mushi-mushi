@@ -6,6 +6,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 interface SsoConfig {
   id: string
@@ -45,6 +46,7 @@ export function SsoPage() {
   const [submitting, setSubmitting] = useState(false)
   const [lastRegister, setLastRegister] = useState<RegisterResult | null>(null)
   const [disconnecting, setDisconnecting] = useState<string | null>(null)
+  const [pendingDisconnect, setPendingDisconnect] = useState<SsoConfig | null>(null)
   const toast = useToast()
   const entitlements = useEntitlements()
   const ssoUnlocked = entitlements.has('sso')
@@ -84,11 +86,13 @@ export function SsoPage() {
     }
   }
 
-  const disconnectProvider = async (config: SsoConfig) => {
-    if (!confirm(`Disconnect ${config.provider_name}? Existing sessions remain valid until expiry, but new logins will fail.`)) return
+  const confirmDisconnectProvider = async () => {
+    if (!pendingDisconnect) return
+    const config = pendingDisconnect
     setDisconnecting(config.id)
     const res = await apiFetch(`/v1/admin/sso/${config.id}`, { method: 'DELETE' })
     setDisconnecting(null)
+    setPendingDisconnect(null)
     if (res.ok) {
       toast.success(`${config.provider_name} disconnected`)
       reload()
@@ -235,7 +239,7 @@ export function SsoPage() {
                       <Btn
                         size="sm"
                         variant="ghost"
-                        onClick={() => disconnectProvider(c)}
+                        onClick={() => setPendingDisconnect(c)}
                         disabled={disconnecting === c.id}
                         loading={disconnecting === c.id}
                       >
@@ -250,6 +254,21 @@ export function SsoPage() {
         </Card>
       )}
       </>
+      )}
+
+      {pendingDisconnect && (
+        <ConfirmDialog
+          title={`Disconnect ${pendingDisconnect.provider_name}?`}
+          body="Existing logged-in sessions remain valid until they expire, but new SSO logins will fail until the provider is re-registered. Stored metadata is wiped."
+          confirmLabel="Disconnect"
+          cancelLabel="Keep connected"
+          tone="danger"
+          loading={disconnecting === pendingDisconnect.id}
+          onConfirm={() => void confirmDisconnectProvider()}
+          onCancel={() => {
+            if (disconnecting !== pendingDisconnect.id) setPendingDisconnect(null)
+          }}
+        />
       )}
     </div>
   )
