@@ -53,6 +53,11 @@ export const reportSubmissionSchema = z.object({
     ttfb: z.number().optional(),
     longTasks: z.number().optional(),
   }).optional(),
+  timeline: z.array(z.object({
+    ts: z.number(),
+    kind: z.enum(['route', 'click', 'request', 'log', 'screen']),
+    payload: z.record(z.unknown()),
+  })).optional(),
 
   screenshotDataUrl: z.string().optional(),
   selectedElement: z.any().optional(),
@@ -67,6 +72,8 @@ export const reportSubmissionSchema = z.object({
    */
   fingerprintHash: z.string().regex(/^[a-f0-9]{64}$|^fbk_[a-f0-9]{8}$/).optional(),
   appVersion: z.string().optional(),
+  sdkPackage: z.string().max(120).optional(),
+  sdkVersion: z.string().max(40).optional(),
   proactiveTrigger: z.string().optional(),
   queuedAt: z.string().optional(),
   createdAt: z.string(),

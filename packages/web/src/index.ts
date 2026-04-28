@@ -7,6 +7,7 @@ export {
   createScreenshotCapture,
   createPerformanceCapture,
   createElementSelector,
+  createTimelineCapture,
 } from './capture';
 
 export type {
@@ -15,6 +16,7 @@ export type {
   ScreenshotCapture,
   PerformanceCapture,
   ElementSelector,
+  TimelineCapture,
 } from './capture';
 
 export { getLocale, getAvailableLocales } from './i18n';
@@ -36,7 +38,12 @@ export type {
   MushiConsoleEntry,
   MushiNetworkEntry,
   MushiPerformanceMetrics,
+  MushiTimelineEntry,
+  MushiTimelineKind,
   MushiWidgetConfig,
+  MushiUrlMatcher,
   MushiEventType,
   MushiEventHandler,
+  MushiDiagnosticsResult,
+  MushiApiCascadeConfig,
 } from '@mushi-mushi/core';
