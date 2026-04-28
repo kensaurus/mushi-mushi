@@ -1,9 +1,14 @@
 export type {
   MushiConfig,
+  MushiPreset,
   MushiSentryConfig,
   MushiWidgetConfig,
+  MushiWidgetAnchor,
   MushiCaptureConfig,
+  MushiPrivacyConfig,
   MushiProactiveConfig,
+  MushiApiCascadeConfig,
+  MushiUrlMatcher,
   MushiCooldownConfig,
   MushiPreFilterConfig,
   MushiIntegrationsConfig,
@@ -18,19 +23,32 @@ export type {
   MushiNetworkEntry,
   MushiPerformanceMetrics,
   MushiSelectedElement,
+  MushiTimelineEntry,
+  MushiTimelineKind,
   MushiEventType,
   MushiEventHandler,
+  MushiDiagnosticsResult,
   MushiSDKInstance,
   MushiCaptureEventInput,
   MushiApiClient,
   MushiApiResponse,
   MushiRuntimeSdkConfig,
+  MushiSdkVersionInfo,
+  MushiReporterReport,
+  MushiReporterComment,
   MushiOnDeviceClassifier,
   MushiOnDeviceClassifierInput,
   MushiOnDeviceClassifierResult,
 } from './types';
 
-export { createApiClient, DEFAULT_API_ENDPOINT, type ApiClientOptions } from './api-client';
+export {
+  createApiClient,
+  DEFAULT_API_ENDPOINT,
+  MUSHI_INTERNAL_HEADER,
+  MUSHI_INTERNAL_INIT_MARKER,
+  type ApiClientOptions,
+  type MushiInternalRequestKind,
+} from './api-client';
 export { resolveRegionEndpoint, REGION_ENDPOINTS, type MushiRegion } from './region';
 export { createPreFilter, type PreFilterResult } from './pre-filter';
 export { createOfflineQueue, type OfflineQueue } from './queue';

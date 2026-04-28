@@ -29,12 +29,26 @@ supabase/functions/
                              dropdowns and `project_settings.*_model` defaults read from here.
 
 supabase/templates/          Branded HTML email templates (confirmation, recovery)
-supabase/migrations/         PostgreSQL schema + RLS policies (latest: Teams v1 —
-                             organizations + organization_members above projects,
-                             invitations table with `accept_invitation(token)` RPC,
-                             plan-gate trigger that rejects invites on hobby/starter,
-                             last-owner guard, and the `private.*` SECURITY DEFINER
-                             helpers used by org-aware RLS to avoid recursion)
+supabase/migrations/         PostgreSQL schema + RLS policies. Recent migrations:
+                               - **Teams v1** — `organizations` + `organization_members`
+                                 above projects, `invitations` table with
+                                 `accept_invitation(token)` RPC, plan-gate trigger
+                                 that rejects invites on hobby/starter, last-owner
+                                 guard, and the `private.*` SECURITY DEFINER helpers
+                                 used by org-aware RLS to avoid recursion.
+                               - **`20260429000000_sdk_versions`** — `sdk_versions`
+                                 catalogue + `reports.sdk_package` / `reports.sdk_version`
+                                 columns; powers the SDK identity + outdated-banner flow.
+                               - **`20260429001000_report_repro_timeline`** — `reports.repro_timeline`
+                                 jsonb column with a partial GIN index for the SDK
+                                 timeline payload (`route` / `click` / `screen` events).
+                               - **`20260430000000_two_way_reply`** — `report_comments.author_kind`
+                                 + `report_comments.reporter_token_hash` columns
+                                 (admin / reporter author union with a CHECK constraint),
+                                 `reports.last_admin_reply_at` / `last_reporter_reply_at`,
+                                 partial indexes for reporter history, and the
+                                 `report_comments_fanout_to_reporter` trigger that
+                                 emits `reporter_notifications` on visible admin replies.
 ```
 
 ## Development
@@ -95,8 +109,12 @@ Set these as Supabase secrets:
 
 All routes are served from the `api` function under `/v1/`:
 
-- `POST /v1/reports` — SDK report submission. Returns **HTTP 402** + `{ code: 'QUOTA_EXCEEDED', limit, used }` when the project's free-tier monthly quota is hit (`_shared/quota.ts`); paid plans bypass via Stripe metered billing
+- `POST /v1/reports` — SDK report submission. Returns **HTTP 402** + `{ code: 'QUOTA_EXCEEDED', limit, used }` when the project's free-tier monthly quota is hit (`_shared/quota.ts`); paid plans bypass via Stripe metered billing. Now persists `sdk_package`, `sdk_version`, and `repro_timeline` from the SDK payload so triage can see what shipped and what the user did before the report
 - `POST /v1/reports/batch` — Batch report submission (up to 10), same quota gate
+- `GET /v1/sdk/latest-version?package=@mushi-mushi/web` — public, unauthenticated. Reads from `public.sdk_versions` and returns `{ package, latest, deprecated, deprecationMessage, releasedAt }` for the SDK's outdated-banner check. CORS allowlist explicitly admits `X-Mushi-Internal` so the SDK's own freshness call doesn't trip self-cascade detection
+- `GET /v1/reporter/reports` — HMAC-authed list of the reporter's own reports for the widget's "Your reports" view. Auth is `X-Reporter-Token-Hash` (sha256 of the reporter token) + `X-Reporter-Ts` + `X-Reporter-Hmac` (sha256-hmac of `projectId.ts.tokenHash` keyed by the public API key); no Supabase auth user required. Each row carries `unread_count` derived from `last_admin_reply_at` vs the reporter's last poll
+- `GET /v1/reporter/reports/:id/comments` — HMAC-authed comment thread, filtered to `visible_to_reporter = true` admin comments and the reporter's own replies (matched on `reporter_token_hash`)
+- `POST /v1/reporter/reports/:id/reply` — HMAC-authed reply endpoint. Inserts into `report_comments` with `author_kind = 'reporter'`; the `report_comments_fanout_to_reporter` trigger flips `reports.last_reporter_reply_at` so the admin list-view can render a "reporter replied" badge
 - `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console. Each returned row carries a `dedup_count` (number of reports sharing the same `report_group_id`) so the admin UI can collapse duplicates into a `+N similar` badge without an N+1 fetch
 - `GET /v1/admin/stats` — Dashboard statistics
 - `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, a `cta` deep-link, **and a 7-day `series: number[]` for sparkline rendering**) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip

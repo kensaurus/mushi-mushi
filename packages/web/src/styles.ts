@@ -229,6 +229,29 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       left: var(--mushi-left, calc(24px + env(safe-area-inset-left, 0px)));
       --mushi-origin: top left;
     }
+    .mushi-outdated {
+      margin: 12px 14px 0;
+      padding: 10px 12px;
+      border: 1px solid ${vermillionWash};
+      background: ${vermillionWash};
+      color: ${vermillionInk};
+      font-family: ${fontBody};
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .mushi-outdated strong {
+      display: block;
+      font-family: ${fontMono};
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .mushi-outdated span {
+      display: block;
+      margin-top: 3px;
+      color: ${inkMuted};
+    }
 
     @keyframes mushi-stamp-in {
       0%   { opacity: 0; transform: scale(0.94) translateY(6px); }
@@ -383,6 +406,75 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       transform: translateX(-4px);
       transition: opacity 220ms ${easeStamp}, transform 220ms ${easeStamp}, color 220ms ${easeStamp};
     }
+    .mushi-report-row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 0;
+      border: 0;
+      border-bottom: 1px solid ${rule};
+      background: transparent;
+      color: ${ink};
+      cursor: pointer;
+      text-align: left;
+    }
+    .mushi-report-status {
+      font-family: ${fontMono};
+      font-size: 10px;
+      color: ${vermillion};
+      text-transform: uppercase;
+    }
+    .mushi-report-title {
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .mushi-thread-summary {
+      border-bottom: 1px solid ${rule};
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+    }
+    .mushi-thread-summary span {
+      font-family: ${fontMono};
+      font-size: 10px;
+      color: ${vermillion};
+      text-transform: uppercase;
+    }
+    .mushi-thread {
+      display: grid;
+      gap: 8px;
+      max-height: 180px;
+      overflow: auto;
+      margin-bottom: 12px;
+    }
+    .mushi-thread-comment {
+      padding: 8px 10px;
+      border: 1px solid ${rule};
+      background: ${isDark ? 'rgba(242,235,221,0.04)' : 'rgba(14,13,11,0.03)'};
+    }
+    .mushi-thread-comment.reporter {
+      border-color: ${vermillionWash};
+      background: ${vermillionWash};
+    }
+    .mushi-thread-comment strong {
+      display: block;
+      font-family: ${fontMono};
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    .mushi-thread-comment p,
+    .mushi-muted,
+    .mushi-error-inline {
+      font-size: 12px;
+      color: ${inkMuted};
+      line-height: 1.45;
+    }
+    .mushi-error-inline { color: ${vermillion}; }
 
     .mushi-selected-category {
       display: inline-flex;
@@ -491,6 +583,16 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       border-color: ${vermillion};
       background: ${vermillionWash};
     }
+    .mushi-attach-btn.danger {
+      color: ${vermillionInk};
+      border-color: ${vermillionWash};
+      background: transparent;
+    }
+    .mushi-attach-btn.danger:hover {
+      color: ${vermillion};
+      border-color: ${vermillion};
+      background: ${vermillionWash};
+    }
     .mushi-attach-btn:focus-visible {
       outline: 2px solid ${vermillion};
       outline-offset: 2px;
@@ -559,6 +661,17 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       transition: transform 220ms ${easeStamp};
     }
     .mushi-submit:hover .mushi-submit-arrow { transform: translateX(3px); }
+
+    .mushi-brand-footer {
+      padding: 9px 14px 11px;
+      border-top: 1px solid ${rule};
+      color: ${inkFaint};
+      font-family: ${fontMono};
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-align: center;
+      text-transform: uppercase;
+    }
 
     .mushi-step-indicator {
       display: flex;

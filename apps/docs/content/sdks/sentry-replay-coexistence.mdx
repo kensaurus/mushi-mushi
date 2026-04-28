@@ -1,0 +1,34 @@
+---
+title: Sentry Replay coexistence
+---
+
+# Sentry Replay coexistence
+
+Initialize Sentry first, then Mushi. Mushi reads Sentry event and replay IDs when available and sends them with the report.
+
+```ts
+import * as Sentry from '@sentry/browser'
+import { Mushi } from '@mushi-mushi/web'
+
+Sentry.init({
+  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
+  integrations: [Sentry.replayIntegration()],
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+})
+
+Mushi.init({
+  projectId: '...',
+  apiKey: 'mush_pk_...',
+  preset: 'production-calm',
+  sentry: {
+    useReplay: true,
+  },
+  capture: {
+    network: true,
+    ignoreUrls: ['sentry.io', '/api/health'],
+  },
+})
+```
+
+If Sentry or your host app patches `fetch`, Mushi still ignores its own config, report, notification, and version-check endpoints so proactive `api_cascade` prompts reflect your app, not Mushi itself.

@@ -33,6 +33,12 @@ export interface ReportFixAttempt {
   langfuse_trace_id?: string | null
 }
 
+export interface ReportTimelineEntry {
+  ts: number
+  kind: 'route' | 'click' | 'request' | 'log' | 'screen'
+  payload: Record<string, unknown>
+}
+
 export interface ReportJudgeEval {
   id: string
   judge_score: number | null
@@ -52,6 +58,7 @@ export interface ReportDetail {
   console_logs: Array<{ level: string; message: string; timestamp: number }> | null
   network_logs: Array<{ method: string; url: string; status: number; duration: number }> | null
   performance_metrics: Record<string, number> | null
+  repro_timeline: ReportTimelineEntry[] | null
   stage1_classification: Record<string, unknown> | null
   stage1_model: string | null
   stage1_latency_ms: number | null

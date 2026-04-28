@@ -44,13 +44,16 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
           <div className="text-xs text-fg-muted italic">No comments yet. Add the first triage note below.</div>
         )}
         {comments.map((c) => (
-          <div key={c.id} className="flex gap-2 items-start text-xs">
+          <div key={c.id} className={`flex gap-2 items-start text-xs ${c.author_kind === 'reporter' ? 'rounded-md border border-accent/20 bg-accent/5 p-2' : ''}`}>
             <div className="w-6 h-6 rounded-full bg-surface-raised border border-edge text-2xs flex items-center justify-center flex-shrink-0">
-              {(c.author_name ?? '?').slice(0, 2).toUpperCase()}
+              {c.author_kind === 'reporter' ? 'RP' : (c.author_name ?? '?').slice(0, 2).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="font-medium text-fg">{c.author_name ?? 'Unknown'}</span>
+                <span className="font-medium text-fg">{c.author_kind === 'reporter' ? 'Reporter' : (c.author_name ?? 'Unknown')}</span>
+                {c.author_kind === 'reporter' && (
+                  <span className="text-2xs text-accent border border-accent/40 px-1 rounded">reporter replied</span>
+                )}
                 <span className="text-2xs text-fg-muted">
                   <RelativeTime value={c.created_at} />
                 </span>

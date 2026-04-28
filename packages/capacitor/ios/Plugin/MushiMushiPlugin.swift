@@ -47,8 +47,10 @@ public class MushiMushiPlugin: CAPPlugin {
             )
         }
         let triggerInsetObj = call.getObject("triggerInset")
+        let triggerInsetPreset = call.getString("triggerInsetPreset")
+        let presetBottom: Double = triggerInsetPreset == "tabBarSafe" ? 72 : 96
         let triggerInset = MushiConfig.TriggerInset(
-            bottom: CGFloat(triggerInsetObj?["bottom"] as? Double ?? 96),
+            bottom: CGFloat(triggerInsetObj?["bottom"] as? Double ?? presetBottom),
             leading: (triggerInsetObj?["leading"] as? Double).map(CGFloat.init),
             trailing: (triggerInsetObj?["trailing"] as? Double).map(CGFloat.init) ?? 20
         )

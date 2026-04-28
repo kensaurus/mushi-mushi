@@ -7,6 +7,8 @@ export interface ReportCommentRow {
   report_id: string
   project_id: string
   author_user_id: string | null
+  author_kind?: 'admin' | 'reporter'
+  reporter_token_hash?: string | null
   author_name: string | null
   body: string
   visible_to_reporter: boolean
@@ -77,6 +79,7 @@ export function useReportComments(opts: UseReportCommentsOptions): {
       report_id: reportId,
       project_id: projectId,
       author_user_id: me.id,
+      author_kind: 'admin',
       author_name: me.user_metadata?.full_name ?? me.email ?? null,
       body: trimmed,
       visible_to_reporter: options?.visibleToReporter ?? false,

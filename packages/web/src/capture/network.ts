@@ -1,16 +1,24 @@
-import type { MushiNetworkEntry } from '@mushi-mushi/core';
+import type { MushiNetworkEntry, MushiUrlMatcher } from '@mushi-mushi/core';
+import { getInternalRequestKind, getRequestUrl, shouldIgnoreMushiUrl } from '../internal-requests';
 
 const MAX_ENTRIES = 30;
 
 export interface NetworkCapture {
   getEntries(): MushiNetworkEntry[];
   clear(): void;
+  updateOptions(options: NetworkCaptureOptions): void;
   destroy(): void;
 }
 
-export function createNetworkCapture(): NetworkCapture {
+export interface NetworkCaptureOptions {
+  apiEndpoint?: string;
+  ignoreUrls?: MushiUrlMatcher[];
+}
+
+export function createNetworkCapture(options: NetworkCaptureOptions = {}): NetworkCapture {
   const entries: MushiNetworkEntry[] = [];
   const originalFetch = globalThis.fetch;
+  let activeOptions = options;
 
   globalThis.fetch = async function mushiFetchInterceptor(
     input: RequestInfo | URL,
@@ -18,29 +26,35 @@ export function createNetworkCapture(): NetworkCapture {
   ): Promise<Response> {
     const startTime = Date.now();
     const method = init?.method?.toUpperCase() ?? 'GET';
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = getRequestUrl(input);
+    const internalKind = getInternalRequestKind(input, init);
+    const shouldRecord = !internalKind && !shouldIgnoreMushiUrl(url, activeOptions);
 
     try {
       const response = await originalFetch.call(globalThis, input, init);
 
-      addEntry({
-        method,
-        url: truncateUrl(url),
-        status: response.status,
-        duration: Date.now() - startTime,
-        timestamp: startTime,
-      });
+      if (shouldRecord) {
+        addEntry({
+          method,
+          url: truncateUrl(url),
+          status: response.status,
+          duration: Date.now() - startTime,
+          timestamp: startTime,
+        });
+      }
 
       return response;
     } catch (error) {
-      addEntry({
-        method,
-        url: truncateUrl(url),
-        status: 0,
-        duration: Date.now() - startTime,
-        timestamp: startTime,
-        error: error instanceof Error ? error.message : 'Network error',
-      });
+      if (shouldRecord) {
+        addEntry({
+          method,
+          url: truncateUrl(url),
+          status: 0,
+          duration: Date.now() - startTime,
+          timestamp: startTime,
+          error: error instanceof Error ? error.message : 'Network error',
+        });
+      }
       throw error;
     }
   };
@@ -58,6 +72,9 @@ export function createNetworkCapture(): NetworkCapture {
     },
     clear() {
       entries.length = 0;
+    },
+    updateOptions(nextOptions) {
+      activeOptions = nextOptions;
     },
     destroy() {
       globalThis.fetch = originalFetch;

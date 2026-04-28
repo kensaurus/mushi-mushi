@@ -1,0 +1,30 @@
+---
+title: Next.js static export
+---
+
+# Next.js static export
+
+Static exports cannot rely on server-side runtime configuration. Either keep the public Mushi env vars in `NEXT_PUBLIC_*` or disable runtime config explicitly.
+
+```tsx
+Mushi.init({
+  projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+  apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+  apiEndpoint: process.env.NEXT_PUBLIC_MUSHI_API_ENDPOINT,
+  runtimeConfig: false,
+  preset: 'production-calm',
+})
+```
+
+For local static previews, the default `runtimeConfig: 'auto'` skips localhost config fetches so a stopped local Supabase stack does not create self-noise or `api_cascade` prompts.
+
+Use `widget.anchor` instead of Shadow DOM CSS injection when the exported site has sticky UI:
+
+```ts
+widget: {
+  anchor: {
+    bottom: 'calc(72px + env(safe-area-inset-bottom))',
+    right: '16px',
+  },
+}
+```

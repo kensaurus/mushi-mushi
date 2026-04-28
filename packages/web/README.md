@@ -19,8 +19,16 @@ Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM 
 - Light/dark theme with auto-detection (`prefers-color-scheme`)
 - **Trigger modes** (0.6+) — `auto` / `edge-tab` / `attach` (bring-your-own-button) / `manual` / `hidden`, plus `smartHide`, `hideOnSelector`, `hideOnRoutes`, configurable `inset` and `respectSafeArea`
 - **Runtime trigger APIs** — `Mushi.show()`, `Mushi.hide()`, `Mushi.attachTo(selector)`, `Mushi.setTrigger(mode)`, `Mushi.openWith(category)`
+- **Widget anchor** (0.9+) — `widget.anchor` accepts raw CSS (including `var()` and `env()`) so the launcher honours your app shell's tab bars, docks, mini-players, and cookie banners without Shadow-DOM patching
+- **Presets** (0.9+) — `preset: 'production-calm' | 'beta-loud' | 'internal-debug' | 'manual-only'` flips a coherent bundle of widget / capture / proactive defaults so prod apps stay quiet and internal builds stay loud
 - **Proactive triggers** — rage click, long task, API cascade failure detection
 - **Report fatigue prevention** — session limits, cooldowns, permanent suppression
+- **Privacy controls** (0.9.1+) — `privacy.maskSelectors`, `privacy.blockSelectors`, `privacy.allowUserRemoveScreenshot` for selector-level screenshot redaction and a one-tap "Remove screenshot" button in the panel
+- **Repro timeline** (0.10+) — auto-captures route changes, clicks, and SDK lifecycle into a normalised `MushiReport.timeline`; pair with `Mushi.setScreen({ name, route, feature })` for screen-level grouping in the admin
+- **Two-way replies** (0.11+) — the panel ships a "Your reports" view that polls comments authored by the dev team and lets the reporter reply, all signed with HMAC against the public API key (no auth user required)
+- **SDK identity & freshness** (0.8+) — every report ships `sdkPackage` + `sdkVersion`; the widget polls `/v1/sdk/latest-version` and surfaces an outdated banner (configurable via `widget.outdatedBanner`)
+- **Self-noise filters** (0.7.1+) — internal Mushi requests are tagged with `X-Mushi-Internal` and excluded from network capture + `apiCascade`; configurable `capture.ignoreUrls` and `proactive.apiCascade.ignoreUrls` for host-app endpoints you also don't want counted
+- **`Mushi.diagnose()`** (0.7.1+) — one-call CSP / runtime-config / capture / widget health check (also runs without an init for pre-install smoke tests)
 - Keyboard-first: `Esc` to close, `⌘/Ctrl + Enter` to submit, focus-trapped panel
 - Honours `prefers-reduced-motion` (animations collapse to instant)
 
@@ -163,6 +171,118 @@ setupProactiveTriggers({
 });
 ```
 
+### Self-noise filters and CSP diagnostics
+
+Out of the box the SDK tags every request it makes with `X-Mushi-Internal` and skips
+those URLs in `capture.network` + `proactive.apiCascade`, so an unconfigured CSP
+or a flaky local Supabase stack can no longer make Mushi report on Mushi:
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  // 'auto' (default) skips the runtime-config fetch on localhost endpoints —
+  // pass `true` to force it everywhere, `false` to disable entirely.
+  runtimeConfig: 'auto',
+  capture: {
+    network: true,
+    ignoreUrls: [/\/api\/internal\//, 'https://posthog.example.com'],
+  },
+  proactive: {
+    apiCascade: {
+      enabled: true,
+      ignoreUrls: ['https://feature-flags.example.com'],
+    },
+  },
+});
+
+const health = await Mushi.diagnose();
+// → { apiEndpointReachable, cspAllowsEndpoint, widgetMounted, shadowDomAvailable,
+//     dialogSupported, runtimeConfigLoaded, captureScreenshotAvailable,
+//     captureNetworkIntercepting, sdkVersion }
+```
+
+`Mushi.diagnose()` works **before** `Mushi.init()` too — call it from a debug
+console or installer wizard to surface CSP / endpoint problems with zero risk
+of accidentally booting the widget.
+
+### Presets and widget anchor
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  // production-calm = manual trigger, screenshot only on report, no proactive prompts
+  // beta-loud       = proactive triggers + console + network always on
+  // internal-debug  = above + verbose debug + always-on screenshot
+  // manual-only     = trigger only, every proactive surface off
+  preset: 'production-calm',
+  widget: {
+    // Raw CSS strings (including `var()` and `env()`) win over `position` /
+    // `inset` so the launcher tracks your app shell's tab bars or mini-player.
+    anchor: {
+      bottom: 'calc(var(--app-dock-h, 0px) + env(safe-area-inset-bottom))',
+      right: 'calc(0.75rem + env(safe-area-inset-right))',
+    },
+    brandFooter: true,
+    outdatedBanner: 'auto',
+  },
+});
+```
+
+### Privacy and screenshot redaction
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  privacy: {
+    maskSelectors: ['[data-private]', 'input', '.thai-answer-draft'],
+    blockSelectors: ['[data-payment]', '[data-auth-token]'],
+    allowUserRemoveScreenshot: true,
+  },
+});
+```
+
+`maskSelectors` paints a solid block over matching elements before serialisation;
+`blockSelectors` removes them entirely. `allowUserRemoveScreenshot` adds a
+"Remove screenshot" affordance next to the attachment chip in the panel, so the
+reporter can yank a screenshot they didn't realise contained sensitive data.
+
+### Repro timeline and `setScreen()`
+
+```typescript
+const mushi = Mushi.init({ /* ... */ });
+mushi.setScreen({ name: 'Chat', route: '/chat', feature: 'roleplay' });
+```
+
+The SDK auto-records `route` (initial + `pushState` / `popstate` / `hashchange`),
+`click` (with selector + text snippet), and `screen` events into a 120-entry
+ring buffer. Submissions ship the trail as `MushiReport.timeline` and the admin
+console renders it as a chronological "what happened before the report" card on
+`/reports/:id`.
+
+### Two-way replies (Your reports)
+
+The widget mounts a "Your reports" tab that lists this reporter's history,
+unread admin replies (with a count badge on the trigger), and a reply input.
+Calls are signed with an HMAC over `projectId.timestamp.sha256(reporterToken)`
+using the public API key as the secret, so no Supabase auth is required.
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  widget: { brandFooter: true, outdatedBanner: 'auto' },
+});
+```
+
+Endpoints (Edge Function): `GET /v1/reporter/reports`,
+`GET /v1/reporter/reports/:id/comments`, `POST /v1/reporter/reports/:id/reply`.
+The DB-side `report_comments_fanout_to_reporter` trigger creates a
+`reporter_notifications` row whenever a `visible_to_reporter` admin comment
+lands, so the unread count stays in sync without polling.
+
 ## Test utilities (`./test-utils`)
 
 Deterministic Playwright / jsdom helpers, published as a separate
@@ -172,11 +292,14 @@ entry-point so production bundles pay nothing for them:
 import { triggerBug, openReport, waitForQueueDrain } from '@mushi-mushi/web/test-utils';
 ```
 
-| Export              | Purpose                                                                 |
-|---------------------|-------------------------------------------------------------------------|
-| `triggerBug(opts?)` | Submit a report bypassing the widget. Returns the server-assigned id.   |
-| `openReport(cat?)`  | Open the widget programmatically without submitting.                    |
-| `waitForQueueDrain` | Resolve once the offline queue is empty (number remaining at timeout).  |
+| Export                       | Purpose                                                                                                                     |
+|------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `triggerBug(opts?)`          | Submit a report bypassing the widget. Returns the server-assigned id.                                                       |
+| `openReport(cat?)`           | Open the widget programmatically without submitting.                                                                        |
+| `openMushiWidget(cat?)`      | Alias for `openReport` — Playwright-friendly name for the dogfood contract suite.                                           |
+| `waitForQueueDrain`          | Resolve once the offline queue is empty (number remaining at timeout).                                                      |
+| `expectMushiReady(opts?)`    | Resolve with a `MushiDiagnosticsResult` once the SDK is initialised and reachable. Fails if `apiEndpointReachable === false`. |
+| `expectNoMushiSelfCascade()` | Run an action and assert no internal Mushi request fired the `api_cascade` proactive trigger. Catches CSP / runtime-config self-noise. |
 
 Every helper no-ops when `Mushi.getInstance()` returns `null`, so
 conditional-wiring tests (e.g. cloud vs local targets) don't need to

@@ -1,0 +1,57 @@
+---
+title: Next.js App Router + CSP
+---
+
+# Next.js App Router + CSP
+
+Mount Mushi inside a client component:
+
+```tsx
+'use client'
+
+import { useEffect } from 'react'
+import { Mushi } from '@mushi-mushi/web'
+
+export function MushiClient() {
+  useEffect(() => {
+    Mushi.init({
+      projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+      apiKey: process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+      apiEndpoint: process.env.NEXT_PUBLIC_MUSHI_API_ENDPOINT,
+      preset: 'production-calm',
+    })
+    return () => Mushi.destroy()
+  }, [])
+  return null
+}
+```
+
+Add the API host to `connect-src`. If the widget can attach screenshots, keep `img-src data:` too.
+
+```ts
+// next.config.ts
+const mushiApi = 'https://dxptnwrhwsqckaftyymj.supabase.co'
+
+export default {
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              `connect-src 'self' ${mushiApi}`,
+              "img-src 'self' data: blob:",
+              "style-src 'self' 'unsafe-inline'",
+            ].join('; '),
+          },
+        ],
+      },
+    ]
+  },
+}
+```
+
+Run `await Mushi.diagnose()` in the browser console if reports are not reaching Mushi. It checks endpoint reachability, CSP, widget mount state, capture modules, and SDK version.
