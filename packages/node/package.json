@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/node",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Server-side Node SDK — framework middleware (Express / Fastify / Hono), unhandled-rejection hook, OTel trace propagation, bidirectional Sentry correlation. The 'glue' SDK for server-originated reports.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/adapters",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "license": "MIT",
   "description": "Bidirectional adapters — translate Datadog, Honeycomb, New Relic, Grafana Loki errors into Mushi reports (and vice versa). Each adapter is tree-shakeable from its own subpath import.",
   "type": "module",

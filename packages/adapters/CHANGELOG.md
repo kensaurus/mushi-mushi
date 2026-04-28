@@ -1,5 +1,12 @@
 # @mushi-mushi/adapters
 
+## 0.2.6
+
+### Patch Changes
+
+- Updated dependencies [ef0036d]
+  - @mushi-mushi/core@0.8.0
+
 ## 0.2.5
 
 ### Patch Changes
