@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@mushi-mushi/brand": "workspace:*",
+    "@mushi-mushi/marketing-ui": "workspace:*",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.103.3",
     "@xyflow/react": "^12.10.2",

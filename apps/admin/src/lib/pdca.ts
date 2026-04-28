@@ -183,12 +183,12 @@ export function stageForPath(pathname: string): PdcaStageId | null {
 }
 
 /** Returns the chip identity to render in the page-header chip slot.
- *  Pages under a real stage prefix get that stage; the dashboard ("/") gets
+ *  Pages under a real stage prefix get that stage; the dashboard gets
  *  the synthetic 'overview' chip; everything else returns null so the chip
  *  is suppressed (login, settings, billing — none of which sit in the loop).
  */
 export function chipForPath(pathname: string): PdcaChipId | null {
-  if (pathname === '/' || pathname === '') return 'overview'
+  if (pathname === '/dashboard' || pathname === '') return 'overview'
   return stageForPath(pathname)
 }
 

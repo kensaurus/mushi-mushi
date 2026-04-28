@@ -72,8 +72,8 @@ const GROUPS: FeatureGroup[] = [
       {
         key: 'seats',
         label: 'Admin seats',
-        hint: 'Team members that can access the admin console.',
-        render: p => (p.seat_limit == null ? 'Unlimited' : String(p.seat_limit)),
+        hint: 'Team members that can access the admin console. Self-serve teams start at Pro.',
+        render: p => Boolean(p.feature_flags?.teams) ? (p.seat_limit == null ? 'Unlimited' : String(p.seat_limit)) : 'Solo',
       },
     ],
   },

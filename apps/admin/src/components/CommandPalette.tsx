@@ -24,6 +24,7 @@ import { useAdminMode, type AdminMode } from '../lib/mode'
 import { apiFetch } from '../lib/supabase'
 import { STATIC_ROUTES, type PaletteGroup, type StaticRoute } from '../lib/searchIndex'
 import { usePageContext } from '../lib/pageContext'
+import { useRecentEntities } from '../lib/recentEntities'
 
 interface LiveReport {
   id: string
@@ -86,6 +87,7 @@ export function CommandPalette() {
   const navigate = useNavigate()
   const { mode, setMode } = useAdminMode()
   const pageCtx = usePageContext()
+  const recentEntities = useRecentEntities()
 
   const [query, setQuery] = useState('')
   const [recents, setRecents] = useState<string[]>(() => readRecents())
@@ -243,8 +245,23 @@ export function CommandPalette() {
             </Command.Group>
           )}
 
+          {!query.trim() && recentEntities.length > 0 && (
+            <Command.Group heading="Recently viewed" className="cmdk-group">
+              {recentEntities.slice(0, 8).map((entity) => (
+                <PaletteActionItem
+                  key={`entity:${entity.kind}:${entity.id}`}
+                  id={`entity:${entity.kind}:${entity.id}`}
+                  label={entity.label}
+                  hint={`${entity.kind} · ${new Date(entity.at).toLocaleString()}`}
+                  keywords={[entity.kind, entity.id, entity.label]}
+                  onSelect={() => handleSelect(`entity:${entity.kind}:${entity.id}`, () => navigate(entity.url))}
+                />
+              ))}
+            </Command.Group>
+          )}
+
           {recentRoutes.length > 0 && (
-            <Command.Group heading="Recent" className="cmdk-group">
+            <Command.Group heading="Recent routes" className="cmdk-group">
               {recentRoutes.map((r) => (
                 <PaletteRouteItem
                   key={`recent-${r.id}`}

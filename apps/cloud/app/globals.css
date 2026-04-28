@@ -1,7 +1,13 @@
 @import 'tailwindcss';
 @import '@mushi-mushi/brand/editorial.css';
+@import '@mushi-mushi/marketing-ui/styles.css';
 @import '@xyflow/react/dist/style.css';
-@import './_components/MushiCanvas/canvas.css';
+
+/* Tell Tailwind v4 to scan the marketing-ui source so the utility classes
+   used inside <Hero />, <MushiCanvas />, etc. are emitted in this app's CSS.
+   Path is relative to this file (apps/cloud/app/globals.css). */
+@source "../../../packages/marketing-ui/src/**/*.{ts,tsx}";
+
 
 /* Marketing surface is editorial-light by design — see brand notes. We
    pin `color-scheme: light` so form controls / scrollbars don't flip

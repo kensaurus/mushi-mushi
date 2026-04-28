@@ -58,7 +58,7 @@ Keywords have been populated. Now confirm each package README opens strong:
 The demo is the secret weapon — most OSS devtools don't have one. It has to
 feel alive in the first 10 seconds.
 
-- [ ] **First-visit banner** on the dashboard: *"Moshi moshi — I'm Mushi-chan.
+- [ ] **First-visit banner** on the dashboard: *"Mushi mushi — I'm Mushi-chan.
   Click any tile to see what I caught today. 🐛"* (sets the voice immediately).
 - [x] **Seeded demo content (script)** — five realistic, plausible bugs ready
   to fire via `node scripts/marketing/seed-demo.mjs` (covers all four

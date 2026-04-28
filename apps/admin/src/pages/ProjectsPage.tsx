@@ -26,6 +26,7 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from '../lib/activeProject'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
@@ -57,7 +58,7 @@ const SCOPE_PRESETS: Array<{ id: ScopePresetId; label: string; scopes: string[];
     id: 'sdk',
     label: 'SDK ingest',
     scopes: ['report:write'],
-    hint: 'For your app\'s Mushi SDK — submit reports, nothing else.',
+    hint: "For your app's Mushi SDK — submit reports, nothing else.",
   },
   {
     id: 'mcp-read',
@@ -115,8 +116,6 @@ const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
   act: '/integrations',
 }
 
-const STORAGE_KEY = 'mushi:active_project_id'
-
 const LINK_CHIP_CLASS =
   'inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-sm gap-1.5 ' +
   'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg ' +
@@ -140,7 +139,9 @@ export function ProjectsPage() {
 
   const [newName, setNewName] = useState('')
   const [busyProject, setBusyProject] = useState<string | null>(null)
-  const [revealedKeys, setRevealedKeys] = useState<Record<string, { key: string; scopes: string[] }>>({})
+  const [revealedKeys, setRevealedKeys] = useState<
+    Record<string, { key: string; scopes: string[] }>
+  >({})
   /* SDK configurator open/closed state per project. The default is "open iff
      this row is the project we're currently viewing", but the user can
      manually toggle a row open or closed and that override should stick
@@ -157,7 +158,9 @@ export function ProjectsPage() {
   // losing the user's last choice on rerender.
   const [keyScopePreset, setKeyScopePreset] = useState<Record<string, ScopePresetId>>({})
 
-  const { data, loading, error, reload } = usePageData<{ projects: Project[] }>('/v1/admin/projects')
+  const { data, loading, error, reload } = usePageData<{ projects: Project[] }>(
+    '/v1/admin/projects',
+  )
   const projects = useMemo(() => data?.projects ?? [], [data])
 
   const { create: createProjectRaw, creating } = useCreateProject({
@@ -195,7 +198,10 @@ export function ProjectsPage() {
             'It will not be shown again — store it in your secrets manager.',
           )
         } catch {
-          toast.success(`${preset.label} key generated`, 'Copy it now — it will not be shown again.')
+          toast.success(
+            `${preset.label} key generated`,
+            'Copy it now — it will not be shown again.',
+          )
         }
       }
       reload()
@@ -209,7 +215,9 @@ export function ProjectsPage() {
   async function revokeKey(projectId: string, keyId: string) {
     if (!confirm('Revoke this API key? Any client using it will start failing immediately.')) return
     try {
-      const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, { method: 'DELETE' })
+      const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, {
+        method: 'DELETE',
+      })
       if (!res.ok) throw new Error(res.error?.message ?? 'Revoke failed')
       toast.success('API key revoked')
       reload()
@@ -223,7 +231,10 @@ export function ProjectsPage() {
     try {
       const res = await apiFetch(`/v1/admin/projects/${projectId}/test-report`, { method: 'POST' })
       if (!res.ok) throw new Error(res.error?.message ?? 'Test report failed')
-      toast.success(`Test report queued for ${name}`, 'Watch /reports for it to land in the next ~10s.',)
+      toast.success(
+        `Test report queued for ${name}`,
+        'Watch /reports for it to land in the next ~10s.',
+      )
     } catch (err) {
       toast.error('Could not send test report', err instanceof Error ? err.message : String(err))
     } finally {
@@ -232,23 +243,23 @@ export function ProjectsPage() {
   }
 
   function setActive(projectId: string, name: string) {
-    try {
-      localStorage.setItem(STORAGE_KEY, projectId)
-    } catch {
-      /* private mode */
-    }
+    setActiveProjectIdSnapshot(projectId)
     const next = new URLSearchParams(searchParams)
-    next.set('project', projectId)
+    next.set(ACTIVE_PROJECT_QUERY_PARAM, projectId)
     setSearchParams(next, { replace: true })
     toast.success(`Now viewing ${name}`)
   }
 
-  if (loading) return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
+  if (loading)
+    return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
   if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reload} />
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Projects" description={`${pluralizeWithCount(projects.length, 'project')} owned by you`} />
+      <PageHeader
+        title="Projects"
+        description={`${pluralizeWithCount(projects.length, 'project')} owned by you`}
+      />
 
       <PageHelp
         title="About Projects"
@@ -308,12 +319,22 @@ export function ProjectsPage() {
                       <code className="text-2xs font-mono text-fg-faint">{project.slug}</code>
                     </div>
                     <p className="text-2xs text-fg-faint mt-0.5">
-                      Created {new Date(project.created_at).toLocaleDateString()} · last report {relativeTime(project.last_report_at)}
+                      Created {new Date(project.created_at).toLocaleDateString()} · last report{' '}
+                      {relativeTime(project.last_report_at)}
                     </p>
                     <div className="flex items-center gap-3 mt-2 text-2xs text-fg-secondary flex-wrap">
-                      <span><span className="font-mono text-fg">{project.report_count}</span> {pluralize(project.report_count, 'report')}</span>
-                      <span><span className="font-mono text-fg">{project.active_key_count}</span> active {pluralize(project.active_key_count, 'key')}</span>
-                      <span><span className="font-mono text-fg">{project.member_count}</span> {pluralize(project.member_count, 'member')}</span>
+                      <span>
+                        <span className="font-mono text-fg">{project.report_count}</span>{' '}
+                        {pluralize(project.report_count, 'report')}
+                      </span>
+                      <span>
+                        <span className="font-mono text-fg">{project.active_key_count}</span> active{' '}
+                        {pluralize(project.active_key_count, 'key')}
+                      </span>
+                      <span>
+                        <span className="font-mono text-fg">{project.member_count}</span>{' '}
+                        {pluralize(project.member_count, 'member')}
+                      </span>
                       {project.pdca_bottleneck && project.pdca_bottleneck_label && (
                         <Link
                           to={`${PDCA_BOTTLENECK_DEEP_LINK[project.pdca_bottleneck]}&project=${project.id}`}
@@ -368,15 +389,22 @@ export function ProjectsPage() {
                         data-testid={`key-scope-${project.id}`}
                         className="text-2xs bg-surface-raised border border-edge rounded-sm px-2 py-1 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-accent"
                         value={keyScopePreset[project.id] ?? 'sdk'}
-                        onChange={(e) => setKeyScopePreset((prev) => ({
-                          ...prev,
-                          [project.id]: e.target.value as ScopePresetId,
-                        }))}
+                        onChange={(e) =>
+                          setKeyScopePreset((prev) => ({
+                            ...prev,
+                            [project.id]: e.target.value as ScopePresetId,
+                          }))
+                        }
                         disabled={isBusy}
-                        title={SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? 'sdk'))?.hint}
+                        title={
+                          SCOPE_PRESETS.find((p) => p.id === (keyScopePreset[project.id] ?? 'sdk'))
+                            ?.hint
+                        }
                       >
                         {SCOPE_PRESETS.map((preset) => (
-                          <option key={preset.id} value={preset.id}>{preset.label}</option>
+                          <option key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </option>
                         ))}
                       </select>
                       <Btn
@@ -399,33 +427,51 @@ export function ProjectsPage() {
                     projectName={project.name}
                     apiKey={revealed.key}
                     scopes={revealed.scopes}
-                    onDismiss={() => setRevealedKeys((prev) => {
-                      const { [project.id]: _, ...rest } = prev
-                      return rest
-                    })}
+                    onDismiss={() =>
+                      setRevealedKeys((prev) => {
+                        const { [project.id]: _, ...rest } = prev
+                        return rest
+                      })
+                    }
                   />
                 )}
 
                 {project.api_keys.length > 0 && (
                   <details className="mt-3 pt-2 border-t border-edge-subtle">
                     <summary className="text-2xs text-fg-muted cursor-pointer select-none hover:text-fg">
-                      {pluralizeWithCount(project.api_keys.length, 'key')} ({project.active_key_count} active)
+                      {pluralizeWithCount(project.api_keys.length, 'key')} (
+                      {project.active_key_count} active)
                     </summary>
                     <div className="mt-2 space-y-1">
                       {project.api_keys.map((key) => (
-                        <div key={key.id} className="flex items-center justify-between text-2xs gap-2">
+                        <div
+                          key={key.id}
+                          className="flex items-center justify-between text-2xs gap-2"
+                        >
                           <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                            <code className={`font-mono ${key.revoked ? 'text-fg-faint line-through' : 'text-fg-secondary'}`}>
+                            <code
+                              className={`font-mono ${key.revoked ? 'text-fg-faint line-through' : 'text-fg-secondary'}`}
+                            >
                               {key.key_prefix}…
                             </code>
                             {(key.scopes ?? []).map((s) => (
-                              <Badge key={s} className={scopeBadgeTone(s)}>{s}</Badge>
+                              <Badge key={s} className={scopeBadgeTone(s)}>
+                                {s}
+                              </Badge>
                             ))}
-                            <span className="text-fg-faint">created {relativeTime(key.created_at)}</span>
-                            {key.revoked && <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>}
+                            <span className="text-fg-faint">
+                              created {relativeTime(key.created_at)}
+                            </span>
+                            {key.revoked && (
+                              <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>
+                            )}
                           </div>
                           {!key.revoked && (
-                            <Btn variant="danger" size="sm" onClick={() => revokeKey(project.id, key.id)}>
+                            <Btn
+                              variant="danger"
+                              size="sm"
+                              onClick={() => revokeKey(project.id, key.id)}
+                            >
                               Revoke
                             </Btn>
                           )}
@@ -467,15 +513,25 @@ export function ProjectsPage() {
                 >
                   <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-2 py-1.5 -mx-2 rounded-sm hover:bg-surface-overlay transition-colors">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span aria-hidden="true" className="text-fg-muted text-xs">{'\u{1F41B}'}</span>
+                      <span aria-hidden="true" className="text-fg-muted text-xs">
+                        {'\u{1F41B}'}
+                      </span>
                       <div className="min-w-0">
-                        <div className="text-xs font-medium text-fg">Preview, configure & install the SDK widget</div>
+                        <div className="text-xs font-medium text-fg">
+                          Preview, configure & install the SDK widget
+                        </div>
                         <div className="text-2xs text-fg-faint">
-                          Live mock preview · 4-corner position picker · theme · capture flags · auto-updating snippet
+                          Live mock preview · 4-corner position picker · theme · capture flags ·
+                          auto-updating snippet
                         </div>
                       </div>
                     </div>
-                    <span aria-hidden="true" className="text-2xs text-fg-faint group-open:rotate-90 motion-safe:transition-transform">›</span>
+                    <span
+                      aria-hidden="true"
+                      className="text-2xs text-fg-faint group-open:rotate-90 motion-safe:transition-transform"
+                    >
+                      ›
+                    </span>
                   </summary>
                   <div className="mt-3">
                     {/* Pass `revealed?.key` so the snippet shows the real,

@@ -39,7 +39,7 @@ const DEFAULT_TITLE = 'Mushi Mushi — Bug Intelligence for Software Teams'
  * override this with a live, contextual title.
  */
 const ROUTE_TITLES: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\/$/, 'Dashboard'],
+  [/^\/dashboard$/, 'Dashboard'],
   [/^\/reports\/[^/]+$/, 'Report'],
   [/^\/reports$/, 'Reports'],
   [/^\/projects$/, 'Projects'],

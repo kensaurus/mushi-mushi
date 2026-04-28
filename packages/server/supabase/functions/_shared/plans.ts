@@ -46,7 +46,7 @@ const HOBBY_FALLBACK: PricingPlan = {
   seat_limit: 3,
   is_self_serve: true,
   active: true,
-  feature_flags: { sso: false, byok: false, plugins: false, sla_hours: null, audit_log: false },
+  feature_flags: { sso: false, byok: false, plugins: false, sla_hours: null, audit_log: false, teams: false },
 }
 
 async function loadPlans(): Promise<Map<string, PricingPlan>> {

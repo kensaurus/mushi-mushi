@@ -1,0 +1,39 @@
+# Teams and Members
+
+Teams are modeled as organizations. An organization owns projects, billing, invitations, and the member roster. Every project keeps its existing `project_id`, but access is granted through `organization_members`.
+
+## Plans
+
+Teams are available on Pro and Enterprise.
+
+| Plan | Teams |
+| --- | --- |
+| Hobby | Solo workspace |
+| Starter | Solo workspace |
+| Pro | Invite teammates and share projects |
+| Enterprise | Teams plus SSO and SOC 2 controls |
+
+The product enforces this in three places:
+
+- The admin UI hides the invite form and shows an upgrade prompt.
+- The API returns `402 feature_not_in_plan` for invitation attempts below Pro.
+- The database rejects invitation inserts with the `invitations_plan_gate` trigger.
+
+## Roles
+
+| Role | Use |
+| --- | --- |
+| Owner | Billing, plan changes, member management, last-owner protected |
+| Admin | Invite users, manage project settings and integrations |
+| Member | Work in shared projects and triage reports |
+| Viewer | Read-only access to shared project data |
+
+## Invitation Flow
+
+1. An owner or admin opens **Members** in the admin console.
+2. They invite an email with a role.
+3. Mushi creates an `invitations` row with a one-time token and sends a Supabase Auth invite email when possible.
+4. The invitee signs in and opens `/invite/accept?token=...`.
+5. The `accept_invitation(token)` RPC verifies the email, locks the invite row, inserts the membership, and marks the invite accepted.
+
+The accept step is atomic so double-clicks, expired tokens, and email mismatches fail cleanly.

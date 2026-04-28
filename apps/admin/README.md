@@ -7,11 +7,12 @@ Admin console for Mushi Mushi — report triage, analytics dashboard, knowledge 
 - React 19 + React Router 7
 - Tailwind CSS v4 (CSS-first `@theme` tokens)
 - Vite 8
-- Supabase Auth + Realtime
+- Supabase Auth + Realtime (with native WebAuthn passkey support, opt-in via `experimental.passkey`)
+- `@mushi-mushi/marketing-ui` (workspace) — shared editorial Hero / MushiCanvas / ClosingCta / MarketingFooter rendered on the public homepage at `/`. Uses the same components the cloud Next.js landing renders, via a router-agnostic `<MarketingProvider>` adapter that injects react-router's `<Link>`. Brings `framer-motion` and `@xyflow/react` into the bundle, but they're React.lazy'd inside `<MushiCanvas />` so only visitors to `/` pay the download cost
 
 ## Live Demo
 
-**https://kensaur.us/mushi-mushi/** — sign up and explore. No setup required.
+**https://kensaur.us/mushi-mushi/admin/** — sign up and explore. No setup required.
 
 ## Getting Started
 
@@ -42,7 +43,15 @@ The console detects a non-cloud `VITE_SUPABASE_URL` and switches to self-hosted 
 | `VITE_SUPABASE_ANON_KEY` | No | Supabase anonymous key. Defaults to cloud key |
 | `VITE_API_URL` | No | Override API base URL (defaults to Supabase functions) |
 | `VITE_INSTANCE_TYPE` | No | Force `self-hosted` mode (auto-detected otherwise) |
-| `VITE_BASE_PATH` | No | Public base path for the build. Defaults to `/`. The CloudFront deployment sets this to `/mushi-mushi/` in `.github/workflows/deploy-admin.yml` |
+| `VITE_BASE_PATH` | No | Public base path for the build. Defaults to `/`. The CloudFront deployment sets this to `/mushi-mushi/admin/` in `.github/workflows/deploy-admin.yml` |
+
+### Auth redirects and deep links
+
+- Local dev uses `http://localhost:6464/` with `BrowserRouter` basename `/`.
+- Hosted admin uses `https://kensaur.us/mushi-mushi/admin/` with basename `/mushi-mushi/admin/`.
+- Protected deep links such as `/reports?project=...` redirect through `/login?next=...` and return to the original path after sign-in.
+- Supabase email confirmation redirects to the app root; password recovery redirects to `/reset-password` under the active basename.
+- The login form can remember the last email address on this device. It never stores passwords.
 
 ## Design System
 
@@ -167,11 +176,22 @@ The sidebar (`src/components/Layout.tsx`) groups the 24 admin pages into the sam
 - **Do — dispatch fixes** — `Fixes`, `Repo`, `Prompt Lab`
 - **Check — verify quality** — `Judge`, `Health`, `Intelligence`, `Research`
 - **Act — integrate & scale** — `Integrations`, `MCP`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
-- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
+- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Members`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
 
 `SSO` and `Billing` deliberately sit in **Workspace**, not Act — they're one-time admin / account concerns that don't iterate every loop. Act is reserved for tabs that turn a verified fix into something the rest of the team's toolchain consumes.
 
-The global header (desktop + mobile) also mounts a **`PlanBadge`** next to the `ProjectSwitcher` — a tier-toned pill (Hobby / Starter / Pro / Enterprise) that shows the active project's subscription at a glance, surfaces a yellow `%` chip at ≥80% quota and a red `!` at 100%, and deep-links to `/billing`. Driven by `useActivePlan()` which reads from the already-cached `/v1/admin/billing` payload, so there's zero extra network cost. Gives paid members an always-visible "you're on Pro" signal and gives free users a proactive "you're 4% of the way to your quota" nudge — both research-backed fixes for the two biggest SaaS pricing UX anti-patterns (no plan recognition + hidden benefits).
+The global header (desktop + mobile) mounts an **`OrgSwitcher`**, **`ProjectSwitcher`**, and **`PlanBadge`**. `OrgSwitcher` persists `mushi:active_org_id` and sends `X-Mushi-Org-Id` through `apiFetch`; `ProjectSwitcher` keeps project focus with `X-Mushi-Project-Id`; `PlanBadge` deep-links to `/billing`. Together they make the team → project → plan context explicit before any page data loads.
+
+### Teams and members
+
+`/organization/members` is the self-serve roster for Pro and Enterprise organizations. Hobby and Starter render an upgrade prompt and the backend returns `402 feature_not_in_plan` for invite attempts. The page reads `/v1/org/:id/members`, creates invites through `/v1/org/:id/invitations`, and accepts invite links at `/invite/accept?token=...`.
+
+Roles:
+
+- `owner` — billing, plan changes, member management; protected by the last-owner database trigger.
+- `admin` — invite members and manage shared project settings.
+- `member` — work in shared projects and triage reports.
+- `viewer` — read-only shared project access.
 
 Each section header carries a stage badge (`P` / `D` / `C` / `A`) and a tooltip explaining the PDCA phase. The Dashboard page mirrors this with a `PdcaCockpit` strip — see [Dashboard composition](#dashboard-composition) below.
 
@@ -246,20 +266,36 @@ Logs all API calls (URL, status, latency), auth state changes, and response deta
 
 ## Authentication
 
-- **Sign in** — email + password
+- **Passkey-first** — when the browser advertises WebAuthn (`PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` resolves true), the login surface offers a one-tap **Sign in with passkey** button as the *primary* path. Backed by Supabase's experimental WebAuthn API (`@supabase/supabase-js` v2.103+) gated through `experimental: { passkey: true }` in `src/lib/supabase.ts`. The thin wrapper in `src/lib/passkeys.ts` lazy-imports the API surface so older `supabase-js` versions still build, gracefully degrades to "passkey enrollment unavailable on this server" when the runtime hasn't shipped the endpoint yet, and never crashes the login screen
+- **Magic link** — paste-free email-based sign-in via `signInWithMagicLink()` (`src/lib/auth.tsx`). Renders a delivery-confirmation panel (`Check <email>`) so users don't go hunt for a button that already worked. Honors the same `next` param the password flow uses, so a magic link can deliver the user straight to a deep-linked report
+- **Sign in (password)** — kept as the always-available fallback so private-browsing / no-passkey-yet users are never stranded
 - **Sign up** — creates account, sends branded confirmation email, shows "check your email" feedback
 - **Forgot password** — sends reset link; user clicks link → lands on `/reset-password` to set new password
-- **Email redirect** — confirmation and recovery emails redirect to the correct origin (cloud or localhost) via `emailRedirectTo`
+- **Email redirect** — confirmation and recovery emails redirect to the correct origin (cloud or localhost) via `emailRedirectTo`. The redirect target is normalised through `src/lib/authRedirect.ts` (`FALLBACK_PATH = '/dashboard'`) so a sign-in with no `next` param lands on the dashboard rather than the marketing homepage
 
 Email templates are branded HTML stored in `packages/server/supabase/templates/`.
+
+### Resilience layer
+
+A small set of `src/lib/*` hooks plus `src/components/OfflineBanner.tsx` keep the console honest about what it knows from the network — surfaced from `App.tsx` via the unobtrusive `<ResilienceLayer />`:
+
+- **`src/lib/onlineStatus.ts > useOnlineStatus()`** — subscribes to `online` / `offline` events and renders `<OfflineBanner />` as a sticky pill at the top of every authenticated page when the browser drops the link, so users know the screen they're looking at is now stale
+- **`src/lib/sessionWatcher.ts > useSessionWatcher()`** — proactive Supabase session refresh. Schedules a `refreshSession()` call ~60s before the access token's `expires_at`, so a long-idle Reports page doesn't suddenly start 401-ing mid-triage. Pauses while the tab is hidden (no point refreshing a backgrounded tab); resumes on `visibilitychange`
+- **`src/lib/authBroadcast.ts`** — `BroadcastChannel('mushi:auth')` cross-tab sync. When tab A signs out (or its session expires), tab B reacts within the same tick instead of waiting for the next API call to 401. Wraps the channel in a feature-detect so older browsers degrade silently
+- **`src/lib/focusMode.ts > useFocusMode()`** + the focus-mode toggle in `Layout.tsx` — `Cmd/Ctrl+.` (or the chip in the header) collapses the sidebar + chrome to give the active list / detail view full width. Persisted in `localStorage:'mushi:focus-mode:v1'`
+- **`src/lib/recentEntities.ts > useRecentEntities()`** + the command palette — every report or fix you open is logged into `localStorage:'mushi:recent-entities:v1'` (LRU, capped). The command palette surfaces the last few as the first results when you open it on an unrelated page, so jumping back to "the report I was just looking at" is one keystroke
+- **`src/lib/useOptimisticMutation.ts`** — generic `useOptimistic`-shaped hook for list pages that need to flip a row's status before the server round-trip resolves and roll back on failure. Used by the Fixes page's retry actions; the same primitive is the migration path for any future "click feels slow" dispatch button
+- **`src/components/CopyViewLinkButton.tsx`** — one-click copy of the current URL (search params + scroll anchor inclusive). Mounted from `src/components/ui.tsx` as the standard "send this to a teammate" affordance, so deep-link sharing doesn't require URL-bar gymnastics
 
 ## Pages
 
 | Route | Page |
 |-------|------|
-| `/login` | Sign in / Sign up / Forgot password |
+| `/` | **Public landing** (`src/pages/PublicHomePage.tsx`) — public, unauthenticated. Renders the same editorial Hero / MushiCanvas / ClosingCta / MarketingFooter as the cloud Next.js landing at `kensaur.us/mushi-mushi/` via the shared **[`@mushi-mushi/marketing-ui`](../../packages/marketing-ui)** package. CTAs deep-link straight to the auth surface (`/login`) or the dashboard (`/dashboard`, with a `next` param when unauthenticated) so the local-dev surface stops feeling like a bare redirect-to-login |
+| `/login` | Sign in / Sign up / Forgot password — passkey-first when supported (`@supabase/supabase-js` v2.103+ experimental WebAuthn, `src/lib/passkeys.ts`) with magic link + password fallbacks; success panel for magic-link delivery |
 | `/reset-password` | Set new password after recovery link |
-| `/` | Dashboard — **`PdcaCockpit`** strip up top (4 stage tiles with the bottleneck stage ringed + a single-sentence callout), then stat cards and category/severity breakdowns; **`QuotaBanner`** above KPIs surfaces any project ≥50% of its monthly free-tier report quota (warn / danger tones, deep-links to `/billing`); **`FirstReportHero`** when the SDK is installed but no reports have landed (one-tap "Send test report" CTA); PDCA-framed `GettingStartedEmpty` when no project exists yet |
+| `/console` | Permanent redirect → `/dashboard` (legacy alias preserved for any external link or bookmark that still points at the old root-mounted dashboard) |
+| `/dashboard` | Dashboard — **`PdcaCockpit`** strip up top (4 stage tiles with the bottleneck stage ringed + a single-sentence callout), then stat cards and category/severity breakdowns; **`QuotaBanner`** above KPIs surfaces any project ≥50% of its monthly free-tier report quota (warn / danger tones, deep-links to `/billing`); **`FirstReportHero`** when the SDK is installed but no reports have landed (one-tap "Send test report" CTA); PDCA-framed `GettingStartedEmpty` when no project exists yet |
 | `/inbox` | **Action inbox** (`src/pages/InboxPage.tsx`) — single-stop surface for "what should I do next?" across the whole PDCA loop. Builds one card per actionable stage (Plan / Do / Check / Act / Ops) from `computeNextBestAction` with live counts from the shared `/v1/admin/dashboard` aggregate, so the inbox's numbers stay in lockstep with the dashboard cards. Each card has a single primary CTA that deep-links to the page where the action happens; "nothing to do" renders as an "All clear" affordance so `3 criticals waiting` reads visually different from `nothing is broken`. Reachable from the sidebar `Start here` section, the `⌘⇧I` / `Ctrl⇧I` hotkey, or the command palette. Every card carries `data-inbox-card` / `data-inbox-primary` test hooks used by `examples/e2e-dogfood/tests/dead-buttons.spec.ts` |
 | `/onboarding` | First-run setup wizard (project, API key, test, SDK snippet). The active step is highlighted with a "do this next" chip + brand ring on the checklist row, and the banner version auto-collapses once required steps are done **or** completion ≥ 80% |
 | `/reports` | Filterable report list (status / category / severity / `component` / `reporter`); top of page shows a **`ReportsKpiStrip`** with 14-day severity rollups; rows render a **`StatusStepper`** (`new → classified → fixing → fixed`) instead of a static badge, a 4 px left-edge severity stripe, a `+N similar` badge for deduped reports (driven by `report_group_id`), an **`unique_users` blast-radius column** powered by a `COUNT(DISTINCT)` Postgres RPC, and a single primary action button — `Triage →` / `Dispatch fix →` (gated on `DISPATCH_ELIGIBLE_STATUSES`). Group-by-fingerprint collapse is on by default (`?group=fingerprint`); expanded groups persist in `?expand=<id>` so deep links restore state |
@@ -397,7 +433,7 @@ These were added to support the page rebuilds and live in `packages/server/supab
 
 ## Deployment
 
-The admin console is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/`.
+The admin console is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/admin/`.
 
 - **CI/CD**: `.github/workflows/deploy-admin.yml` — triggers on push to `master` when `apps/admin/**` changes
 - **S3 bucket**: `kensaur.us-mushi-mushi` (ap-northeast-1)

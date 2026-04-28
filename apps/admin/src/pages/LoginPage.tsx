@@ -7,13 +7,20 @@
 
 import { useState, useEffect, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom'
 import { Input, Btn, Tooltip } from '../components/ui'
 import { isCloudMode } from '../lib/env'
+import { nextPathFromLoginState } from '../lib/authRedirect'
+import {
+  forgetRememberedLoginEmail,
+  readRememberedLoginEmail,
+  rememberLoginEmail,
+} from '../lib/rememberedLogin'
+import { canUsePasskeys } from '../lib/passkeys'
 
 type HealthStatus = 'checking' | 'ok' | 'error' | 'unknown'
-type FormMode = 'login' | 'signup' | 'forgot'
-type SuccessState = null | 'signup-confirm' | 'reset-sent'
+type FormMode = 'login' | 'magic' | 'signup' | 'forgot'
+type SuccessState = null | 'signup-confirm' | 'reset-sent' | 'magic-sent'
 
 const cloud = isCloudMode()
 
@@ -40,16 +47,23 @@ function classifyAuthError(raw: string): string {
 }
 
 export function LoginPage() {
-  const { session, signIn, signUp, resetPassword } = useAuth()
-  const [email, setEmail] = useState('')
+  const { session, signIn, signInWithMagicLink, signInWithPasskey, signUp, resetPassword } = useAuth()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+  const initialRememberedEmail = readRememberedLoginEmail()
+  const [rememberedEmail, setRememberedEmail] = useState<string | null>(initialRememberedEmail)
+  const [email, setEmail] = useState(initialRememberedEmail ?? '')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<FormMode>('login')
   const [success, setSuccess] = useState<SuccessState>(null)
+  const [rememberEmail, setRememberEmail] = useState(true)
   const [health, setHealth] = useState<HealthStatus>(cloud ? 'ok' : 'checking')
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false)
 
   const supabaseHost = getSupabaseHost()
+  const nextPath = nextPathFromLoginState(location.state, searchParams.get('next'))
 
   useEffect(() => {
     if (cloud) return
@@ -68,12 +82,36 @@ export function LoginPage() {
     return () => controller.abort()
   }, [])
 
-  if (session) return <Navigate to="/" replace />
+  useEffect(() => {
+    setPasskeyAvailable(canUsePasskeys())
+  }, [])
+
+  if (session) return <Navigate to={nextPath} replace />
 
   const switchMode = (next: FormMode) => {
     setMode(next)
     setError('')
     setSuccess(null)
+    if (next === 'signup') setRememberEmail(false)
+    if (next === 'login') setRememberEmail(true)
+  }
+
+  const clearRememberedEmail = () => {
+    forgetRememberedLoginEmail()
+    setRememberedEmail(null)
+    setEmail('')
+    setRememberEmail(false)
+    setPassword('')
+  }
+
+  const persistEmailChoice = () => {
+    if (rememberEmail) {
+      const remembered = rememberLoginEmail(email)
+      setRememberedEmail(remembered)
+    } else {
+      forgetRememberedLoginEmail()
+      setRememberedEmail(null)
+    }
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -88,18 +126,32 @@ export function LoginPage() {
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else {
+          persistEmailChoice()
           setSuccess('reset-sent')
+        }
+      } else if (mode === 'magic') {
+        const result = await signInWithMagicLink(email)
+        if (result.error) {
+          setError(classifyAuthError(result.error))
+        } else {
+          persistEmailChoice()
+          setSuccess('magic-sent')
         }
       } else if (mode === 'signup') {
         const result = await signUp(email, password)
         if (result.error) {
           setError(classifyAuthError(result.error))
         } else if (result.needsConfirmation) {
+          persistEmailChoice()
           setSuccess('signup-confirm')
         }
       } else {
         const result = await signIn(email, password)
-        if (result.error) setError(classifyAuthError(result.error))
+        if (result.error) {
+          setError(classifyAuthError(result.error))
+        } else {
+          persistEmailChoice()
+        }
       }
     } catch {
       setError(
@@ -108,6 +160,15 @@ export function LoginPage() {
           : 'Cannot reach the authentication server. Is your Supabase URL correct?',
       )
     }
+    setLoading(false)
+  }
+
+  const handlePasskeySignIn = async () => {
+    setError('')
+    setSuccess(null)
+    setLoading(true)
+    const result = await signInWithPasskey()
+    if (result.error) setError(classifyAuthError(result.error))
     setLoading(false)
   }
 
@@ -199,6 +260,46 @@ export function LoginPage() {
           </div>
         )}
 
+        {success === 'magic-sent' && (
+          <div className="overflow-hidden bg-surface border border-brand/30 rounded-md p-5 space-y-4 shadow-raised">
+            <div className="relative flex items-center justify-center">
+              <span className="absolute h-16 w-16 rounded-full bg-brand/15 blur-xl" aria-hidden="true" />
+              <span className="relative inline-flex h-11 w-11 items-center justify-center rounded-full border border-brand/30 bg-brand/10 text-brand">
+                @
+              </span>
+            </div>
+            <div className="space-y-1 text-center">
+              <h2 className="text-sm font-semibold">Check your inbox</h2>
+              <p className="text-xs text-fg-muted">
+                We sent a sign-in link to <strong className="text-fg">{email}</strong>. Keep this tab open, then follow
+                the email link to land in your dashboard.
+              </p>
+            </div>
+            <div className="rounded-sm border border-edge-subtle bg-surface-raised/50 px-3 py-2">
+              <p className="text-2xs text-fg-faint">
+                Tip: if the link opens a new tab, every other signed-out tab will sync automatically once the session is
+                active.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Btn
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setSuccess(null)
+                  setMode('magic')
+                }}
+                className="flex-1 justify-center"
+              >
+                Send again
+              </Btn>
+              <Btn type="button" onClick={() => switchMode('login')} className="flex-1 justify-center">
+                Use password
+              </Btn>
+            </div>
+          </div>
+        )}
+
         {/* Main form (login / signup / forgot) */}
         {!success && (
           <form onSubmit={handleSubmit} className="space-y-3 bg-surface border border-edge rounded-md p-5">
@@ -218,15 +319,73 @@ export function LoginPage() {
               </div>
             )}
 
+            {mode === 'login' || mode === 'magic' ? (
+              <div className="grid grid-cols-2 rounded-md border border-edge-subtle bg-surface-root/40 p-1">
+                <button
+                  type="button"
+                  onClick={() => switchMode('login')}
+                  className={`rounded-sm px-2 py-1.5 text-2xs font-medium motion-safe:transition-colors ${mode === 'login' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+                >
+                  Password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode('magic')}
+                  className={`rounded-sm px-2 py-1.5 text-2xs font-medium motion-safe:transition-colors ${mode === 'magic' ? 'bg-surface-raised text-fg shadow-card' : 'text-fg-faint hover:text-fg-muted'}`}
+                >
+                  Email link
+                </button>
+              </div>
+            ) : null}
+
+            {mode === 'login' && (
+              <button
+                type="button"
+                onClick={handlePasskeySignIn}
+                disabled={loading || !passkeyAvailable}
+                className="group flex w-full items-center justify-between rounded-md border border-brand/30 bg-brand/10 px-3 py-2.5 text-left text-xs text-fg motion-safe:transition-all hover:border-brand/60 hover:bg-brand/15 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <span>
+                  <span className="block font-semibold">Continue with passkey</span>
+                  <span className="block text-2xs text-fg-muted">
+                    {passkeyAvailable ? 'Touch ID, Windows Hello, or security key' : 'Use email link or password on this browser'}
+                  </span>
+                </span>
+                <span className="text-brand motion-safe:transition-transform group-hover:translate-x-0.5" aria-hidden="true">
+                  -&gt;
+                </span>
+              </button>
+            )}
+
             <p className="text-xs text-fg-muted text-center">
               {mode === 'forgot'
                 ? 'Enter your email to receive a password reset link'
+                : mode === 'magic'
+                  ? 'Email yourself a secure one-click sign-in link'
                 : mode === 'signup'
                   ? 'Create your account'
                   : cloud
                     ? 'Sign in to your account'
                     : 'Sign in with your Supabase project account'}
             </p>
+
+            {mode === 'login' && rememberedEmail && (
+              <div className="rounded-sm border border-edge-subtle bg-surface-raised/40 px-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-2xs uppercase tracking-wider text-fg-faint">Last used email</p>
+                    <p className="truncate text-xs font-medium text-fg-secondary">{rememberedEmail}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearRememberedEmail}
+                    className="shrink-0 text-2xs text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors"
+                  >
+                    Not you?
+                  </button>
+                </div>
+              </div>
+            )}
 
             <Input
               label="Email"
@@ -237,9 +396,10 @@ export function LoginPage() {
               required
               placeholder="you@company.com"
               autoComplete="email"
+              autoFocus={!rememberedEmail}
             />
 
-            {mode !== 'forgot' && (
+            {mode !== 'forgot' && mode !== 'magic' && (
               <Input
                 label="Password"
                 id="password"
@@ -250,7 +410,20 @@ export function LoginPage() {
                 minLength={6}
                 placeholder="••••••••"
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                autoFocus={mode === 'login' && Boolean(rememberedEmail)}
               />
+            )}
+
+            {mode !== 'signup' && (
+              <label className="inline-flex items-center gap-2 text-2xs text-fg-muted">
+                <input
+                  type="checkbox"
+                  checked={rememberEmail}
+                  onChange={(e) => setRememberEmail(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded-sm border-edge bg-surface-raised accent-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                />
+                Remember this email on this device
+              </label>
             )}
 
             {error && (
@@ -274,6 +447,8 @@ export function LoginPage() {
                 ? 'Please wait...'
                 : mode === 'forgot'
                   ? 'Send reset link'
+                  : mode === 'magic'
+                    ? 'Send sign-in link'
                   : mode === 'signup'
                     ? 'Create account'
                     : 'Sign in'}
@@ -295,6 +470,13 @@ export function LoginPage() {
                   Remember your password?{' '}
                   <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
                     Sign in
+                  </button>
+                </>
+              ) : mode === 'magic' ? (
+                <>
+                  Prefer a password?{' '}
+                  <button type="button" onClick={() => switchMode('login')} className="text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-2 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors">
+                    Use password
                   </button>
                 </>
               ) : mode === 'login' ? (

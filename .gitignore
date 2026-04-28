@@ -109,6 +109,7 @@ nul
 *.tgz
 .eslintcache
 .cache/
+.refactor-backups/
 
 # Scratch directory for ad-hoc debugging artefacts — edge-function payload
 # bundles (built by scripts/build-edge-payload.mjs), Sentry API response
