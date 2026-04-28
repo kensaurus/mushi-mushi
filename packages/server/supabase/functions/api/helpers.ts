@@ -111,14 +111,31 @@ export async function canManageProjectSdkConfig(
   projectId: string,
   userId: string,
 ): Promise<boolean> {
+  // Write gate for SDK config. Three paths to "yes":
+  //   1. Direct project owner.
+  //   2. Org owner/admin (Teams v1) — they implicitly own all projects.
+  //   3. Per-project owner/admin (legacy project_members rows).
+  // Member/viewer roles intentionally excluded — they can read but not
+  // mutate the SDK config.
   const { data: project } = await db
     .from('projects')
-    .select('owner_id')
+    .select('owner_id, organization_id')
     .eq('id', projectId)
     .maybeSingle();
-
   if (!project) return false;
+
   if ((project as { owner_id?: string | null }).owner_id === userId) return true;
+
+  if ((project as { organization_id?: string | null }).organization_id) {
+    const { data: orgMember } = await db
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', (project as { organization_id: string }).organization_id)
+      .eq('user_id', userId)
+      .in('role', ['owner', 'admin'])
+      .maybeSingle();
+    if (orgMember) return true;
+  }
 
   const { data: member } = await db
     .from('project_members')

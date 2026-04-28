@@ -153,14 +153,30 @@ export function registerPublicRoutes(app: Hono): void {
     projectId: string,
     userId: string,
   ): Promise<boolean> {
+    // Mirrors api/helpers.ts canManageProjectSdkConfig — kept as a private
+    // copy here because public.ts mounts on the public path and avoids
+    // importing from the admin barrel. Three paths to allowed: direct
+    // project owner, org owner/admin (Teams v1), or legacy
+    // project_members owner/admin.
     const { data: project } = await db
       .from('projects')
-      .select('owner_id')
+      .select('owner_id, organization_id')
       .eq('id', projectId)
       .maybeSingle();
-
     if (!project) return false;
+
     if ((project as { owner_id?: string | null }).owner_id === userId) return true;
+
+    if ((project as { organization_id?: string | null }).organization_id) {
+      const { data: orgMember } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', (project as { organization_id: string }).organization_id)
+        .eq('user_id', userId)
+        .in('role', ['owner', 'admin'])
+        .maybeSingle();
+      if (orgMember) return true;
+    }
 
     const { data: member } = await db
       .from('project_members')
