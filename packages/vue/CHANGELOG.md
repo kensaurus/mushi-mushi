@@ -1,5 +1,22 @@
 # @mushi-mushi/vue
 
+## 0.8.0
+
+### Minor Changes
+
+- ef0036d: Ship SDK dogfood hardening and a two-way reporter channel.
+  - Ignore Mushi's own config/report/notification requests in network capture and proactive API cascade detection.
+  - Add `Mushi.diagnose()` for endpoint, CSP, widget, capture, runtime-config, and SDK-version health checks.
+  - Send `sdkPackage` and `sdkVersion` with reports, expose `/v1/sdk/latest-version`, and surface outdated SDK state in the widget.
+  - Add `widget.anchor`, deployment presets, privacy screenshot masks/blocks, screenshot removal, `setScreen()`, and normalized repro timelines.
+  - Add reporter history/reply APIs so the widget can show report status, developer replies, and reporter responses.
+  - Add Capacitor bottom-dock trigger inset presets.
+
+### Patch Changes
+
+- Updated dependencies [ef0036d]
+  - @mushi-mushi/core@0.8.0
+
 ## 0.7.0
 
 ### Minor Changes

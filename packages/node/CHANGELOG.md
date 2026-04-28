@@ -1,5 +1,12 @@
 # @mushi-mushi/node
 
+## 0.3.4
+
+### Patch Changes
+
+- Updated dependencies [ef0036d]
+  - @mushi-mushi/core@0.8.0
+
 ## 0.3.3
 
 ### Patch Changes
