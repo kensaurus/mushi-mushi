@@ -80,7 +80,7 @@ app.use(
   '/v1/sdk/*',
   cors({
     origin: '*',
-    allowHeaders: ['Content-Type', 'X-Mushi-Api-Key', 'X-Mushi-Project'],
+    allowHeaders: ['Content-Type', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Mushi-Internal'],
     allowMethods: ['GET', 'OPTIONS'],
   }),
 );
@@ -93,9 +93,61 @@ app.use(
       'Authorization',
       'X-Mushi-Api-Key',
       'X-Mushi-Project',
+      'X-Mushi-Internal',
       'X-Sentry-Hook-Signature',
     ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  }),
+);
+app.use(
+  '/v1/reporter/*',
+  cors({
+    origin: '*',
+    allowHeaders: [
+      'Content-Type',
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+      'X-Reporter-Token',
+      'X-Reporter-Token-Hash',
+      'X-Reporter-Ts',
+      'X-Reporter-Hmac',
+    ],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+  }),
+);
+app.use(
+  '/v1/notifications/*',
+  cors({
+    origin: '*',
+    allowHeaders: [
+      'Content-Type',
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+      'X-Reporter-Token',
+      'X-Reporter-Token-Hash',
+      'X-Reporter-Ts',
+      'X-Reporter-Hmac',
+    ],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+  }),
+);
+app.use(
+  '/v1/notifications',
+  cors({
+    origin: '*',
+    allowHeaders: [
+      'Content-Type',
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+      'X-Reporter-Token',
+      'X-Reporter-Token-Hash',
+      'X-Reporter-Ts',
+      'X-Reporter-Hmac',
+    ],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
   }),
 );
 app.use(
@@ -135,8 +187,12 @@ app.use(
 app.use(
   '/v1/org/*',
   cors({
+    // apps/admin/src/lib/supabase.ts injects BOTH X-Mushi-Project-Id and
+    // X-Mushi-Org-Id on every apiFetch call (so caches stay scoped per
+    // org+project), even on /v1/org endpoints. Both must be in the
+    // allowlist or the browser drops the preflight.
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Org-Id'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -145,7 +201,7 @@ app.use(
   '/v1/invitations/*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
     allowMethods: ['POST', 'OPTIONS'],
     credentials: true,
   }),
@@ -157,7 +213,7 @@ app.use(
   '*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Mushi-Internal'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   }),
 );

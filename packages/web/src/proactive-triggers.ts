@@ -1,7 +1,11 @@
+import type { MushiApiCascadeConfig, MushiUrlMatcher } from '@mushi-mushi/core'
+import { getInternalRequestKind, getRequestUrl, shouldIgnoreMushiUrl } from './internal-requests'
+
 export interface ProactiveTriggerConfig {
   rageClick?: boolean
   longTask?: boolean
-  apiCascade?: boolean
+  apiCascade?: boolean | MushiApiCascadeConfig
+  apiEndpoint?: string
   errorBoundary?: boolean
 }
 
@@ -68,37 +72,28 @@ export function setupProactiveTriggers(
   }
 
   // --- API Cascade Failure ---
-  if (config.apiCascade !== false) {
+  const apiCascade = normalizeApiCascadeConfig(config.apiCascade)
+  if (apiCascade.enabled) {
     const failedRequests: number[] = []
     const origFetch = globalThis.fetch
 
     globalThis.fetch = async function (this: unknown, ...args: Parameters<typeof fetch>) {
+      const [input, init] = args
+      const url = getRequestUrl(input)
+      const ignoreFailure = Boolean(getInternalRequestKind(input, init))
+        || shouldIgnoreMushiUrl(url, {
+          apiEndpoint: config.apiEndpoint,
+          ignoreUrls: apiCascade.ignoreUrls,
+        })
+
       try {
         const res = await origFetch.apply(this, args)
-        if (!res.ok && res.status >= 400) {
-          const now = Date.now()
-          failedRequests.push(now)
-          const recentFailures = failedRequests.filter(t => now - t < 10000)
-          if (recentFailures.length >= 3) {
-            callbacks.onTrigger('api_cascade', {
-              failureCount: recentFailures.length,
-              windowMs: 10000,
-            })
-            failedRequests.length = 0
-          }
+        if (!ignoreFailure && !res.ok && res.status >= 400) {
+          recordApiFailure(failedRequests, callbacks)
         }
         return res
       } catch (err) {
-        const now = Date.now()
-        failedRequests.push(now)
-        const recentFailures = failedRequests.filter(t => now - t < 10000)
-        if (recentFailures.length >= 3) {
-          callbacks.onTrigger('api_cascade', {
-            failureCount: recentFailures.length,
-            windowMs: 10000,
-          })
-          failedRequests.length = 0
-        }
+        if (!ignoreFailure) recordApiFailure(failedRequests, callbacks)
         throw err
       }
     } as typeof fetch
@@ -134,5 +129,31 @@ export function setupProactiveTriggers(
     destroy() {
       cleanups.forEach(fn => fn())
     },
+  }
+}
+
+function normalizeApiCascadeConfig(
+  config: boolean | MushiApiCascadeConfig | undefined,
+): Required<Pick<MushiApiCascadeConfig, 'enabled'>> & { ignoreUrls: MushiUrlMatcher[] } {
+  if (config === false) return { enabled: false, ignoreUrls: [] }
+  if (config && typeof config === 'object') {
+    return {
+      enabled: config.enabled !== false,
+      ignoreUrls: config.ignoreUrls ?? [],
+    }
+  }
+  return { enabled: true, ignoreUrls: [] }
+}
+
+function recordApiFailure(failedRequests: number[], callbacks: ProactiveTriggerCallbacks): void {
+  const now = Date.now()
+  failedRequests.push(now)
+  const recentFailures = failedRequests.filter(t => now - t < 10000)
+  if (recentFailures.length >= 3) {
+    callbacks.onTrigger('api_cascade', {
+      failureCount: recentFailures.length,
+      windowMs: 10000,
+    })
+    failedRequests.length = 0
   }
 }

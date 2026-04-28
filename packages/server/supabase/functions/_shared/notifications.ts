@@ -3,7 +3,14 @@ import { log } from './logger.ts'
 
 const notifLog = log.child('notifications')
 
-export type NotificationType = 'classified' | 'confirmed' | 'fixed' | 'dismissed' | 'points_awarded'
+export type NotificationType =
+  | 'classified'
+  | 'confirmed'
+  | 'fixed'
+  | 'dismissed'
+  | 'points_awarded'
+  | 'comment_reply'
+  | 'admin_message_seen'
 
 interface NotificationPayload {
   message: string
@@ -52,6 +59,10 @@ export function buildNotificationMessage(type: NotificationType, context: {
       return `Your report was reviewed and closed`
     case 'points_awarded':
       return `You earned ${context.points ?? 0} points!`
+    case 'comment_reply':
+      return 'A developer replied to your report'
+    case 'admin_message_seen':
+      return 'The reporter replied in the triage thread'
     default:
       return 'Your report has been updated'
   }

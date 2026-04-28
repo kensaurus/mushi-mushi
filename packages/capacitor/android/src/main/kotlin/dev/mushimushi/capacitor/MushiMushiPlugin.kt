@@ -40,8 +40,9 @@ class MushiMushiPlugin : Plugin() {
             else -> TriggerMode.SHAKE
         }
         val triggerInsetObj = call.getObject("triggerInset")
+        val presetBottom = if (call.getString("triggerInsetPreset") == "tabBarSafe") 72 else 96
         val triggerInset = TriggerInset(
-            bottomDp = triggerInsetObj?.optInt("bottom", 96) ?: 96,
+            bottomDp = triggerInsetObj?.optInt("bottom", presetBottom) ?: presetBottom,
             startDp = triggerInsetObj?.takeIf { it.has("start") }?.optInt("start"),
             endDp = triggerInsetObj?.takeIf { it.has("end") }?.optInt("end", 20) ?: 20
         )
