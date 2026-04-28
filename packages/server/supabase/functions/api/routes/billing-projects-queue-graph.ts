@@ -435,14 +435,48 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db
-      .from('projects')
-      .select('id, name, slug, created_at')
-      .eq('owner_id', userId)
-      .order('created_at', { ascending: false });
+    // Teams v1: a user can see every project in any organization they're a
+    // member of, plus any legacy project they directly own (covers
+    // pre-org-backfill rows). The previous `.eq('owner_id', userId)` filter
+    // showed "0 projects" to every team member who wasn't also the owner —
+    // so an invited collaborator hit /onboarding and couldn't reach the org's
+    // real projects (verified in production: kensaurus@gmail.com saw 0 of
+    // 3 projects despite being a confirmed member of test@mushimushi.dev's
+    // org). `accessibleProjectIds` is the canonical helper already used by
+    // /v1/admin/billing/* and the entitlements layer; the projects list is
+    // the only owner-only filter that hadn't been migrated.
+    const accessibleIds = await ownedProjectIds(db, userId);
+    if (accessibleIds.length === 0) return c.json({ ok: true, data: { projects: [] } });
 
-    const projectIds = (projects ?? []).map((p) => p.id);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { projects: [] } });
+    // Pull the projects + the user's role in each project's org so the FE can
+    // gate destructive actions (delete project, manage members) on org role
+    // without a second round-trip per row.
+    const [{ data: projectRows }, { data: memberships }] = await Promise.all([
+      db
+        .from('projects')
+        .select('id, name, slug, created_at, organization_id')
+        .in('id', accessibleIds)
+        .order('created_at', { ascending: false }),
+      db
+        .from('organization_members')
+        .select('organization_id, role')
+        .eq('user_id', userId),
+    ]);
+
+    const roleByOrg = new Map<string, string>();
+    for (const m of memberships ?? []) roleByOrg.set(m.organization_id, m.role);
+
+    const projects = (projectRows ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      created_at: p.created_at,
+      organization_id: p.organization_id,
+      // null for legacy owned-but-not-in-org rows; FE treats that as 'owner'.
+      organization_role: p.organization_id ? roleByOrg.get(p.organization_id) ?? null : null,
+    }));
+
+    const projectIds = projects.map((p) => p.id);
 
     // `latestReports` is one query per project so each project gets its true
     // most-recent report. The previous single-query approach with a global
@@ -635,6 +669,122 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       );
 
     return c.json({ ok: true, data: { id: data.id, slug } }, 201);
+  });
+
+  // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
+  // shared.ts rejects seed/test rows like `a0000000-0000-0000-0000-000000000001`
+  // because the version nibble is `0`. We need to delete those, so be
+  // permissive at the boundary and let the DB enforce key shape.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // Permanently deletes a project. All FKs to `projects.id` use ON DELETE
+  // CASCADE so this single statement removes reports, comments, fix_attempts,
+  // api_keys, settings, members, integrations, billing_subscriptions, etc.
+  // (54 cascading tables as of 2026-04-28). This is irreversible.
+  //
+  // Authz: only an org `owner` or `admin` can delete a project. `member`
+  // and `viewer` get a 403. Solo accounts (legacy `owner_id` rows with no
+  // org row) fall back to `owner_id == userId`.
+  //
+  // UX defense: the FE ships a type-the-slug-to-confirm modal. The backend
+  // also accepts an optional `{ confirm_slug }` body and rejects mismatches
+  // so a stolen JWT or a broken FE can't blow away a project with a single
+  // verb-only request.
+  //
+  // Audit: `audit_logs` cascades with the project, so a row written there
+  // would die with the data it documents. Log the deletion event to Sentry
+  // (`category=project.deleted`) so monitoring keeps the receipt.
+  app.delete('/v1/admin/projects/:id', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as { confirm_slug?: string };
+
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('id, name, slug, organization_id, owner_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectErr) return dbError(c, projectErr);
+    if (!project) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Belt-and-suspenders: if FE sent a confirm_slug it MUST match. Treat
+    // a mismatch as a hard 400, never silently delete.
+    if (body.confirm_slug !== undefined && body.confirm_slug !== project.slug) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'SLUG_MISMATCH',
+            message: `confirm_slug must equal "${project.slug}"`,
+          },
+        },
+        400,
+      );
+    }
+
+    // Resolve the caller's role in this project's org. Two-tier authz:
+    //   • Org-backed project (the new normal) → require role in
+    //     {owner, admin}.
+    //   • Legacy ownerless-org project → fall back to owner_id match.
+    let allowed = false;
+    if (project.organization_id) {
+      const { data: membership } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', project.organization_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const role = membership?.role ?? null;
+      allowed = role === 'owner' || role === 'admin';
+    } else if (project.owner_id === userId) {
+      allowed = true;
+    }
+
+    if (!allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only org owners or admins can delete a project',
+          },
+        },
+        403,
+      );
+    }
+
+    const { error: deleteErr } = await db.from('projects').delete().eq('id', projectId);
+    if (deleteErr) return dbError(c, deleteErr);
+
+    // Sentry breadcrumb-style log. Real monitoring hook: filter by
+    // `category:project.deleted` to spot accidental mass-deletions.
+    try {
+      log('project.deleted', {
+        project_id: project.id,
+        project_slug: project.slug,
+        project_name: project.name,
+        organization_id: project.organization_id,
+        deleted_by: userId,
+      });
+    } catch {
+      // Logger failures must never block the delete from succeeding.
+    }
+
+    return c.json({
+      ok: true,
+      data: { id: project.id, slug: project.slug, name: project.name },
+    });
   });
 
   // Scopes vocabulary is enforced at the DB level (CHECK constraint from
