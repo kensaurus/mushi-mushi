@@ -10,9 +10,10 @@
  *          filter chip.
  */
 
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import { FilterChip } from './ui'
 import { useSavedViews, type SavedView } from '../lib/useSavedViews'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface Props {
   /** Opaque key for localStorage, e.g. `reports`, `fixes`. */
@@ -30,6 +31,10 @@ interface Props {
 
 export function SavedViewsRow({ scope, currentQuery, onApply, isActive }: Props) {
   const { views, save, remove } = useSavedViews(scope)
+  // Holds the saved view targeted for deletion. Drives the themed
+  // ConfirmDialog so we don't fall back to window.confirm (jarring on
+  // dark theme + breaks Playwright smoke tests on the saved-views row).
+  const [pendingRemove, setPendingRemove] = useState<{ id: string; name: string } | null>(null)
 
   const activeCheck = useCallback(
     (v: SavedView) => (isActive ? isActive(v, currentQuery) : v.query === currentQuery),
@@ -45,63 +50,83 @@ export function SavedViewsRow({ scope, currentQuery, onApply, isActive }: Props)
     save(name, currentQuery)
   }, [save, currentQuery])
 
-  const handleRemove = useCallback(
-    (id: string, name: string) => {
-      if (!window.confirm(`Remove saved view "${name}"?`)) return
-      remove(id)
-    },
-    [remove],
-  )
+  const handleRemove = useCallback((id: string, name: string) => {
+    setPendingRemove({ id, name })
+  }, [])
+
+  const confirmRemove = useCallback(() => {
+    if (!pendingRemove) return
+    remove(pendingRemove.id)
+    setPendingRemove(null)
+  }, [pendingRemove, remove])
+
+  const dialog = pendingRemove ? (
+    <ConfirmDialog
+      title={`Remove saved view "${pendingRemove.name}"?`}
+      body="This view only lives in your browser's local storage, so removing it doesn't affect teammates. You can recreate it any time by re-saving the current filters."
+      confirmLabel="Remove view"
+      cancelLabel="Keep"
+      tone="danger"
+      onConfirm={confirmRemove}
+      onCancel={() => setPendingRemove(null)}
+    />
+  ) : null
 
   if (views.length === 0) {
     return (
-      <div className="mb-2 flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={handleSave}
-          className="inline-flex items-center gap-1 rounded-full border border-edge/60 px-2.5 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-          title="Save the current filters as a named view. Persists in your browser."
-        >
-          <span aria-hidden className="text-sm leading-none">+</span>
-          <span>Save view</span>
-        </button>
-      </div>
+      <>
+        <div className="mb-2 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={handleSave}
+            className="inline-flex items-center gap-1 rounded-full border border-edge/60 px-2.5 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            title="Save the current filters as a named view. Persists in your browser."
+          >
+            <span aria-hidden className="text-sm leading-none">+</span>
+            <span>Save view</span>
+          </button>
+        </div>
+        {dialog}
+      </>
     )
   }
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Saved views">
-      <span className="text-2xs uppercase tracking-wider text-fg-faint">Views</span>
-      {views.map((v) => {
-        const active = activeCheck(v)
-        return (
-          <span key={v.id} className="group relative inline-flex items-center">
-            <FilterChip
-              label={v.name}
-              active={active}
-              onClick={() => onApply(v.query)}
-              tone={v.tone ?? 'default'}
-              hint={`Apply saved filters: ?${v.query || '(no filters)'}`}
-            />
-            <button
-              type="button"
-              onClick={() => handleRemove(v.id, v.name)}
-              aria-label={`Remove saved view ${v.name}`}
-              className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-fg-faint opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 hover:text-danger focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger/60"
-            >
-              <span aria-hidden className="text-2xs leading-none">×</span>
-            </button>
-          </span>
-        )
-      })}
-      <button
-        type="button"
-        onClick={handleSave}
-        className="ml-1 inline-flex items-center gap-1 rounded-full border border-edge/60 px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-        title="Save current filters as a new view"
-      >
-        <span aria-hidden className="text-sm leading-none">+</span>
-      </button>
-    </div>
+    <>
+      <div className="mb-2 flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Saved views">
+        <span className="text-2xs uppercase tracking-wider text-fg-faint">Views</span>
+        {views.map((v) => {
+          const active = activeCheck(v)
+          return (
+            <span key={v.id} className="group relative inline-flex items-center">
+              <FilterChip
+                label={v.name}
+                active={active}
+                onClick={() => onApply(v.query)}
+                tone={v.tone ?? 'default'}
+                hint={`Apply saved filters: ?${v.query || '(no filters)'}`}
+              />
+              <button
+                type="button"
+                onClick={() => handleRemove(v.id, v.name)}
+                aria-label={`Remove saved view ${v.name}`}
+                className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-fg-faint opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 hover:text-danger focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-danger/60"
+              >
+                <span aria-hidden className="text-2xs leading-none">×</span>
+              </button>
+            </span>
+          )
+        })}
+        <button
+          type="button"
+          onClick={handleSave}
+          className="ml-1 inline-flex items-center gap-1 rounded-full border border-edge/60 px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay/60 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          title="Save current filters as a new view"
+        >
+          <span aria-hidden className="text-sm leading-none">+</span>
+        </button>
+      </div>
+      {dialog}
+    </>
   )
 }

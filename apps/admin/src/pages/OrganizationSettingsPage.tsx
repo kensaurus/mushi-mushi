@@ -5,6 +5,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, SelectField } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -46,6 +47,11 @@ export function OrganizationSettingsPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Invitation['role']>('member')
   const [submitting, setSubmitting] = useState(false)
+  // Pending-remove holds the member targeted by the Remove button. Replaces
+  // the previous one-click DELETE which fired without any confirmation —
+  // a single misclick could evict a teammate from every project in the org.
+  const [pendingRemove, setPendingRemove] = useState<Member | null>(null)
+  const [removing, setRemoving] = useState(false)
   const path = activeOrgId ? `/v1/org/${activeOrgId}/members` : null
   const { data, loading, error, reload } = usePageData<MembersResponse>(path)
 
@@ -88,14 +94,17 @@ export function OrganizationSettingsPage() {
     reload()
   }
 
-  async function removeMember(userId: string) {
-    if (!activeOrgId) return
-    const res = await apiFetch(`/v1/org/${activeOrgId}/members/${userId}`, { method: 'DELETE' })
+  async function confirmRemoveMember() {
+    if (!activeOrgId || !pendingRemove) return
+    setRemoving(true)
+    const res = await apiFetch(`/v1/org/${activeOrgId}/members/${pendingRemove.user_id}`, { method: 'DELETE' })
+    setRemoving(false)
     if (!res.ok) {
       toast.error('Could not remove member', res.error?.message)
       return
     }
-    toast.success('Member removed')
+    toast.success('Member removed', `${pendingRemove.email ?? pendingRemove.user_id} no longer has access to this organization.`)
+    setPendingRemove(null)
     reload()
   }
 
@@ -194,7 +203,13 @@ export function OrganizationSettingsPage() {
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  <Btn size="sm" variant="ghost" onClick={() => void removeMember(member.user_id)} disabled={!canManage}>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setPendingRemove(member)}
+                    disabled={!canManage || member.role === 'owner'}
+                    title={member.role === 'owner' ? 'Owners cannot be removed from the org' : undefined}
+                  >
                     Remove
                   </Btn>
                 </td>
@@ -216,6 +231,21 @@ export function OrganizationSettingsPage() {
             ))}
           </div>
         </Card>
+      )}
+
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Remove this teammate?"
+          body={`${pendingRemove.email ?? pendingRemove.user_id} will lose access to every project in ${data?.organization?.name ?? 'this organization'}. They can be re-invited later, but anything they had drafted in their own session will be gone.`}
+          confirmLabel="Remove member"
+          cancelLabel="Keep member"
+          tone="danger"
+          loading={removing}
+          onConfirm={() => void confirmRemoveMember()}
+          onCancel={() => {
+            if (!removing) setPendingRemove(null)
+          }}
+        />
       )}
     </div>
   )
