@@ -52,10 +52,11 @@ permissions:
 env:
   AWS_REGION: ap-northeast-1
   S3_BUCKET: kensaur.us-mushi-mushi
-  # Admin SPA now lives under /mushi-mushi/admin/ so /mushi-mushi/ itself can
-  # be claimed by the cloud Next.js app (Vercel origin) once deploy-cloud.yml
-  # lands. Coordinated with cloudfront-mushi-spa-router.js which rewrites
-  # /mushi-mushi/admin/* page routes to /mushi-mushi/admin/index.html.
+  # Admin SPA lives under /mushi-mushi/admin/. The single CloudFront Function
+  # `mushi-mushi-spa-router` (scripts/cloudfront-mushi-spa-router.js) is the
+  # router for ALL three /mushi-mushi/* prefixes (admin SPA, docs static
+  # export, and a 302 to /mushi-mushi/admin/ for everything else — which is
+  # how the canonical landing page gets served today).
   S3_PREFIX: mushi-mushi/admin
 
 jobs:
@@ -259,10 +260,15 @@ jobs:
             --region us-east-1
 
       - name: Invalidate CloudFront cache
+        # Invalidate the full /mushi-mushi/* tree, not just /mushi-mushi/admin/*.
+        # The spa-router CloudFront Function controls every prefix (admin SPA,
+        # docs static export, and the bare-root 302), so a router code change
+        # must purge cached HTML at every level — otherwise edge POPs serve
+        # stale rewrites for hours.
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/mushi-mushi/admin/*" \
+            --paths "/mushi-mushi/*" \
             --region us-east-1
 
       - name: Post-deploy health check
