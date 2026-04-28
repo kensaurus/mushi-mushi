@@ -14,13 +14,7 @@ export function StageScreenshot({ stageId, sample }: StageScreenshotProps) {
   return <EvolveShot sample={sample} />
 }
 
-function ShotShell({
-  label,
-  children,
-}: {
-  label: string
-  children: ReactNode
-}) {
+function ShotShell({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] p-4 shadow-[0_28px_70px_-48px_rgba(14,13,11,0.8)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-[var(--mushi-vermillion)]" />

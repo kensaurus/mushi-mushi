@@ -14,17 +14,35 @@ Marketing landing + sign-up + billing dashboard for **Mushi Mushi Cloud**
 | `/login`             | Sign in with Supabase Auth                         |
 | `/dashboard`         | First project's billing state, usage, Stripe portal entry |
 
-The landing page's interactive **MushiCanvas** lives in
-`app/_components/MushiCanvas/` (lazy-loaded React Flow scene with five
-stage cards — Capture / Classify / Dispatch / Verify / Evolve — a paper
-edge animation, a CSS-only stage drawer, and a log ticker). It depends on
-[`@xyflow/react`](https://reactflow.dev), [`framer-motion`](https://www.framer.com/motion),
-and the shared `@mushi-mushi/brand` editorial tokens. Mushi Editorial CSS
-variables (`--mushi-paper`, `--mushi-ink`, `--mushi-vermillion`, …) come
-from `@mushi-mushi/brand/editorial.css` and are imported once in
-`app/globals.css`. The page is editorial-light by design — the brand
-package ships dark-mode tokens behind an explicit `[data-mushi-theme="dark"]`
-attribute, so OS-level dark preference never flips the marketing surface.
+The landing page composes its hero / canvas / closing CTA / footer from
+the shared **[`@mushi-mushi/marketing-ui`](../../packages/marketing-ui)**
+package — same source-of-truth as the admin SPA's public homepage, so a
+brand tweak ships once and renders everywhere. The marketing surface in
+`app/page.tsx` is a thin wrapper:
+
+1. **`<MarketingShell>`** (`app/_components/MarketingShell.tsx`) — wraps
+   the surface in `<MarketingProvider>` with a Next.js-flavoured `Link`
+   adapter (anchors / mailto / external pass through to plain `<a>`,
+   internal routes go through `next/link`) and the URL helpers from
+   `lib/links.ts`.
+2. `<Hero />` → `<MushiCanvas />` (lazy-loaded React Flow scene with five
+   stage cards — Capture / Classify / Dispatch / Verify / Evolve — a paper
+   edge animation, a CSS-only stage drawer, and a log ticker) → custom
+   `Pricing` block → `<ClosingCta />` → `<MarketingFooter apiBaseUrl={…} />`.
+
+The package depends on [`@xyflow/react`](https://reactflow.dev),
+[`framer-motion`](https://www.framer.com/motion), and the shared
+`@mushi-mushi/brand` editorial tokens. Mushi Editorial CSS variables
+(`--mushi-paper`, `--mushi-ink`, `--mushi-vermillion`, …) come from
+`@mushi-mushi/brand/editorial.css`; the canvas + stage / log-ticker
+animation styles come from `@mushi-mushi/marketing-ui/styles.css` — both
+imported once in `app/globals.css`. Tailwind v4's `@source` directive is
+pointed at `../../packages/marketing-ui/src/**/*` so utility classes used
+inside the package are emitted in this app's CSS.
+
+The page is editorial-light by design — the brand package ships dark-mode
+tokens behind an explicit `[data-mushi-theme="dark"]` attribute, so
+OS-level dark preference never flips the marketing surface.
 
 ### Outbound URLs — single source of truth
 
@@ -45,9 +63,10 @@ twelve.
 
 ### Live gateway-health pill
 
-The marketing footer renders `<StatusPill />` (in `app/_components/`),
-which polls the public `/health` endpoint on `NEXT_PUBLIC_API_BASE_URL`
-every 60 s and renders one of three states:
+The marketing footer renders `<StatusPill />` (from
+`@mushi-mushi/marketing-ui`), which polls the public `/health` endpoint
+on `NEXT_PUBLIC_API_BASE_URL` (passed in via the `apiBaseUrl` prop on
+`<MarketingFooter />`) every 60 s and renders one of three states:
 
 * `Checking gateway…` — initial render, neutral pulse.
 * `Gateway healthy · <region>` — emerald pulse, `{ status: 'ok' }` from `/health`.

@@ -36,6 +36,7 @@ import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
 import { useAdminMode } from '../lib/mode'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
+import { recordVisit } from '../lib/recentEntities'
 import {
   ClassificationFields,
   ScreenshotHero,
@@ -62,6 +63,16 @@ export function ReportDetailPage() {
 
   useEffect(() => {
     if (serverReport) setReport(serverReport)
+  }, [serverReport])
+
+  useEffect(() => {
+    if (!serverReport) return
+    recordVisit({
+      kind: 'report',
+      id: serverReport.id,
+      label: serverReport.description?.slice(0, 80) ?? `Report ${serverReport.id.slice(0, 8)}`,
+      url: `/reports/${serverReport.id}`,
+    })
   }, [serverReport])
 
   // Make the browser tab read "MSHREP-abcd1234 · <category> — Mushi Mushi"

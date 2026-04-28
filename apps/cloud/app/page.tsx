@@ -1,8 +1,6 @@
 import Link from 'next/link'
-import { ClosingCta } from './_components/ClosingCta'
-import { Hero } from './_components/Hero'
-import { MarketingFooter } from './_components/MarketingFooter'
-import { MushiCanvas } from './_components/MushiCanvas'
+import { ClosingCta, Hero, MarketingFooter, MushiCanvas } from '@mushi-mushi/marketing-ui'
+import { MarketingShell } from './_components/MarketingShell'
 import { contactMailto, docsUrl, repoUrl } from '@/lib/links'
 
 // Mirrors `pricing_plans` in 20260419000000_billing_plans.sql.
@@ -86,6 +84,7 @@ const addOns = [
 
 export default function Home() {
   return (
+    <MarketingShell>
     <main className="mx-auto max-w-6xl space-y-12 px-6 pb-10 pt-4">
       <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
         <Link href="/" className="flex items-center gap-2 font-serif text-base font-semibold text-[var(--mushi-ink)]">
@@ -237,7 +236,8 @@ export default function Home() {
       </section>
 
       <ClosingCta />
-      <MarketingFooter />
+      <MarketingFooter apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL} />
     </main>
+    </MarketingShell>
   )
 }

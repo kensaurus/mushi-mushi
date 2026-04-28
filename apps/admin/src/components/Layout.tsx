@@ -42,6 +42,7 @@ import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { useFaviconBadge } from '../lib/favicon'
+import { useFocusMode } from '../lib/focusMode'
 
 interface NavItem {
   label: string
@@ -106,7 +107,7 @@ const NAV: NavSection[] = [
     // because the mode-specific NAV projection (see below) overrides this.
     defaultCollapsed: true,
     items: [
-      { label: 'Dashboard',   path: '/',           icon: IconDashboard, beginner: true },
+      { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
       // "what should I do next?" across the whole PDCA surface. Pinned above
       // the PDCA sections so Advanced users land on it the same way beginner
@@ -194,7 +195,7 @@ interface PageHeroFallback {
 }
 
 const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
-  '/': {
+  '/dashboard': {
     title: 'Dashboard',
     kicker: 'Start',
     scope: 'dashboard',
@@ -507,6 +508,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const navCounts = useNavCounts()
   const { isSuperAdmin } = useEntitlements()
   const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
+  const [focusMode, setFocusMode] = useFocusMode()
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
   // with the page the user is on. Both hooks read from `pageContext` so
@@ -594,6 +596,26 @@ export function Layout({ children }: { children: ReactNode }) {
         },
         ctrl: true,
         shift: true,
+        allowInInputs: true,
+      },
+      {
+        key: '.',
+        description: 'Toggle focus mode',
+        handler: (e) => {
+          e.preventDefault()
+          setFocusMode((value) => !value)
+        },
+        meta: true,
+        allowInInputs: true,
+      },
+      {
+        key: '.',
+        description: 'Toggle focus mode',
+        handler: (e) => {
+          e.preventDefault()
+          setFocusMode((value) => !value)
+        },
+        ctrl: true,
         allowInInputs: true,
       },
     ],
@@ -782,6 +804,15 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="px-3 py-2.5 border-t border-edge/60 space-y-2">
         <DensitySidebarToggle />
         <ThemeSidebarToggle />
+        <button
+          type="button"
+          onClick={() => setFocusMode((value) => !value)}
+          className="nav-link w-full text-xs"
+          aria-pressed={focusMode}
+        >
+          <IconSparkle className="nav-link-icon" />
+          <span>{focusMode ? 'Exit focus mode' : 'Focus mode'}</span>
+        </button>
         <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
         <button
           onClick={signOut}
@@ -806,9 +837,11 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-52 flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col">
-        {sidebarContent}
-      </aside>
+      {!focusMode && (
+        <aside className="hidden md:flex w-52 flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col">
+          {sidebarContent}
+        </aside>
+      )}
 
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -855,7 +888,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>
 
         {/* Desktop sub-header — project switcher pinned to the right */}
-        <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
+        {!focusMode && <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
           <SearchButton />
           <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'}>
             <button
@@ -913,13 +946,13 @@ export function Layout({ children }: { children: ReactNode }) {
           </Tooltip>
           <PlanBadge />
           <ProjectSwitcher />
-        </header>
+        </header>}
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
-          <div className="max-w-6xl mx-auto px-5 py-4">
-            <QuickstartMegaCta />
-            <PipelineStatusRibbon />
-            <NextBestAction />
+          <div className={`${focusMode ? 'max-w-[92rem]' : 'max-w-6xl'} mx-auto px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base`}>
+            {!focusMode && <QuickstartMegaCta />}
+            {!focusMode && <PipelineStatusRibbon />}
+            {!focusMode && <NextBestAction />}
             <ScrollToHashAnchor />
             {fallbackHero && (
               <PageHero

@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { PublicHomePage } from './pages/PublicHomePage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
@@ -12,6 +13,9 @@ import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
+import { loginPathForLocation } from './lib/authRedirect'
+import { OfflineBanner } from './components/OfflineBanner'
+import { useSessionWatcher } from './lib/sessionWatcher'
 
 // Wrap Routes ONCE, at the level where the real (parametrized) route
 // definitions live — i.e. the inner Routes mounted under the auth gate.
@@ -69,7 +73,7 @@ function NotFoundPage() {
       <p className="text-sm text-fg-muted mb-6">
         <code className="text-2xs bg-surface-raised px-1.5 py-0.5 rounded">{pathname}</code> doesn't exist.
       </p>
-      <Link to="/" className="text-sm text-brand hover:text-brand-hover transition-colors">
+      <Link to="/dashboard" className="text-sm text-brand hover:text-brand-hover transition-colors">
         ← Back to Dashboard
       </Link>
     </div>
@@ -89,9 +93,15 @@ function PasswordRecoveryGate({ children }: { children: ReactNode }) {
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
-  if (!session) return <Navigate to="/login" replace />
+  if (!session) return <Navigate to={loginPathForLocation(location)} replace state={{ from: location }} />
   return <>{children}</>
+}
+
+function ResilienceLayer() {
+  useSessionWatcher()
+  return <OfflineBanner />
 }
 
 export function App() {
@@ -102,9 +112,11 @@ export function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+      <ResilienceLayer />
       <UpgradePromptHost />
       <PasswordRecoveryGate>
       <Routes>
+        <Route path="/" element={<PublicHomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
@@ -115,7 +127,8 @@ export function App() {
                 <ErrorBoundary>
                 <Suspense fallback={<Loading text="Loading..." />}>
                 <SentryRoutes>
-                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
                   <Route path="/projects" element={<ProjectsPage />} />

@@ -31,6 +31,9 @@ importers:
       '@mushi-mushi/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@mushi-mushi/marketing-ui':
+        specifier: workspace:*
+        version: link:../../packages/marketing-ui
       '@sentry/react':
         specifier: ^10.49.0
         version: 10.49.0(react@19.2.5)
@@ -46,6 +49,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      framer-motion:
+        specifier: ^12.38.0
+        version: 12.38.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       react:
         specifier: ^19.0.0
         version: 19.2.5
@@ -110,6 +116,9 @@ importers:
       '@mushi-mushi/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@mushi-mushi/marketing-ui':
+        specifier: workspace:*
+        version: link:../../packages/marketing-ui
       '@supabase/ssr':
         specifier: ^0.5.2
         version: 0.5.2(@supabase/supabase-js@2.103.3)
@@ -464,6 +473,43 @@ importers:
       vitest:
         specifier: ^4.1.4
         version: 4.1.4(@types/node@22.19.17)(jsdom@29.0.2)(msw@2.13.4(@types/node@22.19.17)(typescript@6.0.2))(vite@8.0.8(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.3))
+
+  packages/marketing-ui:
+    dependencies:
+      '@mushi-mushi/brand':
+        specifier: workspace:*
+        version: link:../brand
+      '@xyflow/react':
+        specifier: ^12.10.2
+        version: 12.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      framer-motion:
+        specifier: ^12.38.0
+        version: 12.38.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+    devDependencies:
+      '@mushi-mushi/eslint-config':
+        specifier: workspace:*
+        version: link:../../tooling/eslint-config
+      '@mushi-mushi/tsconfig':
+        specifier: workspace:*
+        version: link:../../tooling/tsconfig
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      eslint:
+        specifier: ^10.2.0
+        version: 10.2.0(jiti@2.6.1)
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
 
   packages/mcp:
     dependencies:

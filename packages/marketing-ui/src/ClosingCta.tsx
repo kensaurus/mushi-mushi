@@ -1,7 +1,10 @@
-import Link from 'next/link'
-import { repoUrl } from '@/lib/links'
+'use client'
+
+import { useMarketing } from './context'
 
 export function ClosingCta() {
+  const { Link, urls } = useMarketing()
+
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] bg-[var(--mushi-vermillion-wash)] p-6 text-center sm:p-8">
       <div
@@ -20,13 +23,13 @@ export function ClosingCta() {
         </h2>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           <Link
-            href="/signup"
+            href={urls.signup}
             className="inline-block rounded-sm bg-[var(--mushi-vermillion)] px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5"
           >
             Deploy Mushi
           </Link>
           <Link
-            href={repoUrl()}
+            href={urls.repo()}
             className="inline-block rounded-sm border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-4 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-vermillion)]"
           >
             Read the source

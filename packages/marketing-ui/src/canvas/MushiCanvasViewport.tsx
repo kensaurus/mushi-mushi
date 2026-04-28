@@ -30,23 +30,19 @@ import {
 const nodeTypes: NodeTypes = { stage: StageNode }
 const edgeTypes: EdgeTypes = { paper: PaperEdge }
 
-// Idle auto-cycle: when no stage is selected, advance focus every N ms so
-// the canvas always *looks alive* instead of frozen on stage 01. Pauses
-// while the user is hovering the frame or has a drawer open. The cycle
-// is paused entirely for `prefers-reduced-motion` users.
 const AUTO_CYCLE_MS = 3600
 
-export function MushiCanvasClient() {
+export function MushiCanvasViewport() {
   return (
     <div className="relative">
       <ReactFlowProvider>
-        <MushiCanvasViewport />
+        <CanvasInner />
       </ReactFlowProvider>
     </div>
   )
 }
 
-function MushiCanvasViewport() {
+function CanvasInner() {
   const [focusIndex, setFocusIndex] = useState(0)
   const [selectedStageId, setSelectedStageId] = useState<MushiStageId | null>(null)
   const [hovering, setHovering] = useState(false)
@@ -57,7 +53,6 @@ function MushiCanvasViewport() {
     ? stages.find((stage) => stage.id === selectedStageId) ?? null
     : null
 
-  // Initial fit so the entire loop is visible no matter the breakpoint.
   useEffect(() => {
     const id = window.setTimeout(() => {
       fitView({ padding: 0.18, duration: reducedMotion ? 0 : 560 })
@@ -66,9 +61,6 @@ function MushiCanvasViewport() {
     return () => window.clearTimeout(id)
   }, [fitView, reducedMotion])
 
-  // Idle auto-cycle: only when no drawer is open and the user isn't
-  // hovering. This is what makes the canvas feel inhabited the moment
-  // it scrolls into view.
   useEffect(() => {
     if (reducedMotion) return
     if (selectedStageId) return
@@ -81,9 +73,6 @@ function MushiCanvasViewport() {
     return () => window.clearInterval(id)
   }, [reducedMotion, selectedStageId, hovering])
 
-  // Camera follows either the selected stage (drawer-priority) or the
-  // current focus. When the drawer is open we shift centerY upward so
-  // the active card stays visible above the bottom drawer overlay.
   useEffect(() => {
     const target = selectedStage ?? focusStage
     const drawerOpen = !!selectedStage
@@ -144,8 +133,6 @@ function MushiCanvasViewport() {
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {/* Stage badge — top-left. Reads as a film-strip slate so users
-          immediately know they're watching one report walk. */}
       <div className="pointer-events-none absolute left-4 top-4 z-10 inline-flex items-center gap-2.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-3 py-1.5 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur sm:left-6 sm:top-6">
         <span aria-hidden="true" className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]" />
         <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[var(--mushi-ink-muted)]">
@@ -157,9 +144,6 @@ function MushiCanvasViewport() {
         </p>
       </div>
 
-      {/* Stage progress dock — five clickable pips. Click jumps focus
-          AND opens the drawer for that stage. Auto-cycle pauses while
-          a drawer is open or the user is hovering anywhere on the frame. */}
       <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
         <div className="flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2 py-1.5 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur">
           {stages.map((stage) => {
@@ -192,9 +176,6 @@ function MushiCanvasViewport() {
         </div>
       </div>
 
-      {/* Hint pill — bottom-left. Tells users the canvas is interactive
-          without resorting to a tutorial overlay. Hidden when a drawer
-          is open (the drawer itself is the "you've discovered it" payoff). */}
       {!selectedStageId && (
         <div className="pointer-events-none absolute bottom-4 left-4 z-10 hidden items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-3 py-1.5 shadow-[0_10px_40px_-30px_rgba(14,13,11,0.45)] backdrop-blur sm:left-6 sm:bottom-6 sm:inline-flex">
           <span aria-hidden="true" className="font-mono text-[10px] tracking-[0.24em] text-[var(--mushi-vermillion)]">

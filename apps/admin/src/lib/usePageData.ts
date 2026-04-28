@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ZodType } from 'zod'
 import { apiFetch } from './supabase'
+import { useActiveProjectSignal } from './activeProject'
 
 export interface PageDataState<T> {
   data: T | null
@@ -69,6 +70,7 @@ export function usePageData<T>(
   opts: UsePageDataOptions<T> = {},
 ): PageDataState<T> {
   const { autoLoad = true, deps = [], schema } = opts
+  const activeProjectSignal = useActiveProjectSignal()
   const [data, setData] = useState<T | null>(null)
   const [loading, setLoading] = useState<boolean>(autoLoad && path != null)
   const [isValidating, setIsValidating] = useState<boolean>(autoLoad && path != null)
@@ -151,7 +153,7 @@ export function usePageData<T>(
     }
     // depKey is the JSON-serialised version of `deps`, so we intentionally
     // depend on it instead of `deps` itself to avoid array-identity churn.
-  }, [path, autoLoad, tick, depKey, schema])
+  }, [path, autoLoad, tick, depKey, schema, activeProjectSignal])
 
   return { data, loading, error, isValidating, lastFetchedAt, reload }
 }

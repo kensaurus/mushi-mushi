@@ -1,17 +1,16 @@
-import { docsUrl } from '@/lib/links'
+/**
+ * FILE: data.ts
+ * PURPOSE: Static stage / edge / log / sample data for the MushiCanvas.
+ *
+ * The drawer-link `href` for each stage was previously computed via a Next.js-
+ * specific `docsUrl()` helper (apps/cloud/lib/links.ts). To keep this package
+ * router/framework-agnostic, the data now stores the *path suffix only*; the
+ * components resolve the full URL through `useMarketing().urls.docs(suffix)`.
+ */
 
 export type MushiStageId = 'capture' | 'classify' | 'dispatch' | 'verify' | 'evolve'
 
-/**
- * Each stage carries a *semantic tone* that drives its data-pill colour:
- *   - alert  → vermillion (severity / pulse)
- *   - count  → ink         (numeric meta)
- *   - link   → ink-wash    (PR / issue ref)
- *   - pass   → emerald     (judge / score above threshold)
- *   - memory → indigo-wash (knowledge graph / time)
- * The colour is a stand-in for cognitive function, not for new brand
- * palette — every tone composes against the editorial paper / sumi base.
- */
+/** Cognitive tone — see ../README for the colour/meaning map. */
 export type StageTone = 'alert' | 'count' | 'link' | 'pass' | 'memory'
 
 export interface MushiStage {
@@ -25,6 +24,7 @@ export interface MushiStage {
   bullets: string[]
   stat: string
   tone: StageTone
+  /** Docs path suffix — resolved via useMarketing().urls.docs(href) at render. */
   href: string
   position: { x: number; y: number }
 }
@@ -43,9 +43,7 @@ export interface MushiEdge {
   id: string
   source: MushiStageId
   target: MushiStageId
-  /** Handle id on the source node — must match a Handle id on StageNode. */
   sourceHandle?: StageHandleId
-  /** Handle id on the target node — must match a Handle id on StageNode. */
   targetHandle?: StageHandleId
   label: string
 }
@@ -85,14 +83,6 @@ export const reportSample: ReportSample = {
   judgeScore: '0.91',
 }
 
-// Layout — closed-loop ("U-loop") so the visual *is* the repair loop:
-//   01 capture → 02 classify → 03 dispatch
-//                                   ↓
-//   05 evolve  ← 04 verify ←
-//        ↑__ feedback __ → 01 capture
-// The bounding box (~ 700 × 320) matches a 16:9-ish frame much better
-// than the previous 5-across zigzag (~ 1280 × 350) and gives the
-// feedback edge a natural diagonal home.
 export const stages: MushiStage[] = [
   {
     id: 'capture',
@@ -106,7 +96,7 @@ export const stages: MushiStage[] = [
     bullets: ['Screenshot and page context travel together.', 'The widget stays out of the way until someone needs it.'],
     stat: '1 report',
     tone: 'count',
-    href: docsUrl('/quickstart'),
+    href: '/quickstart',
     position: { x: 0, y: 0 },
   },
   {
@@ -121,7 +111,7 @@ export const stages: MushiStage[] = [
     bullets: ['Two-stage triage keeps noisy reports calm.', 'Engineers and support see the same friendly summary.'],
     stat: 'High',
     tone: 'alert',
-    href: docsUrl('/concepts/classification'),
+    href: '/concepts/classification',
     position: { x: 290, y: 0 },
   },
   {
@@ -136,7 +126,7 @@ export const stages: MushiStage[] = [
     bullets: ['Branch, commit, and test notes are grouped together.', 'You keep the final approval step.'],
     stat: 'PR #42',
     tone: 'link',
-    href: docsUrl('/concepts/fix-orchestrator'),
+    href: '/concepts/fix-orchestrator',
     position: { x: 580, y: 0 },
   },
   {
@@ -151,7 +141,7 @@ export const stages: MushiStage[] = [
     bullets: ['A rubric score makes risk visible.', 'Thresholds stay configurable per project.'],
     stat: '0.91',
     tone: 'pass',
-    href: docsUrl('/concepts/classification'),
+    href: '/concepts/classification',
     position: { x: 580, y: 320 },
   },
   {
@@ -166,21 +156,16 @@ export const stages: MushiStage[] = [
     bullets: ['Weekly PDFs focus on customer impact.', 'The knowledge graph keeps related bugs connected.'],
     stat: '7 days',
     tone: 'memory',
-    href: docsUrl('/concepts/knowledge-graph'),
+    href: '/concepts/knowledge-graph',
     position: { x: 290, y: 320 },
   },
 ]
 
 export const stageEdges: MushiEdge[] = [
-  // Top row, L→R
   { id: 'capture-classify', source: 'capture', target: 'classify', sourceHandle: 'right', targetHandle: 'left', label: 'screenshot + note' },
   { id: 'classify-dispatch', source: 'classify', target: 'dispatch', sourceHandle: 'right', targetHandle: 'left', label: 'triage packet' },
-  // Right column, top → bottom (drop down to the verify card)
   { id: 'dispatch-verify', source: 'dispatch', target: 'verify', sourceHandle: 'bottom', targetHandle: 'top', label: 'diff + tests' },
-  // Bottom row, R→L (we need an explicit source-on-left handle here, hence `left-out`)
   { id: 'verify-evolve', source: 'verify', target: 'evolve', sourceHandle: 'left-out', targetHandle: 'right-in', label: 'judged & shipped' },
-  // Feedback edge — closes the visual loop. Every fix becomes input
-  // to the next capture, which is the entire pitch of the page.
   { id: 'evolve-capture', source: 'evolve', target: 'capture', sourceHandle: 'left-out', targetHandle: 'bottom-in', label: 'memory feeds the next' },
 ]
 

@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef } from 'react'
+import { useMarketing } from '../context'
 import type { MushiStage, ReportSample } from './data'
 import { StageScreenshot } from './StageScreenshot'
 
@@ -23,6 +24,7 @@ const focusableSelector = [
 export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
   const panelRef = useRef<HTMLElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
+  const { urls } = useMarketing()
 
   useEffect(() => {
     if (!stage) return
@@ -95,10 +97,6 @@ export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
             </button>
           </div>
 
-          {/* Report metadata strip — segmented label/value chips. Each
-              pill's "value" half is solid-coloured by semantics (alert /
-              class / pass) so the reader scans triage state in one
-              glance instead of reading three lines of equal-weight serif. */}
           <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-lg border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_80%,white)] px-3 py-2.5">
             <DrawerPill label="Severity" value={sample.severity} tone="alert" />
             <DrawerPill label="Class" value={sample.taxonomy} tone="ink" />
@@ -133,7 +131,7 @@ export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
                 </ul>
               </div>
               <a
-                href={stage.href}
+                href={urls.docs(stage.href)}
                 className="inline-flex w-fit items-center gap-2 rounded-sm bg-[var(--mushi-ink)] px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-paper)] transition hover:-translate-y-0.5"
               >
                 Learn the details

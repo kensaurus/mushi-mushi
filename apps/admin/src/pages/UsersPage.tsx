@@ -156,7 +156,7 @@ export function UsersPage() {
         title="Page not found"
         description="This page doesn't exist or you don't have access."
         action={
-          <Link to="/" className="text-sm text-brand hover:text-brand-hover">
+          <Link to="/dashboard" className="text-sm text-brand hover:text-brand-hover">
             ← Back to Dashboard
           </Link>
         }

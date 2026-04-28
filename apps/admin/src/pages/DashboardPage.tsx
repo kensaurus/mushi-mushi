@@ -61,7 +61,7 @@ export function DashboardPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const [showFullDashboard, setShowFullDashboard] = useState(false)
-  const copy = usePageCopy('/')
+  const copy = usePageCopy('/dashboard')
 
   // First-fix-merged celebration: when `merged_fix_count` flips 0 → 1 we
   // fire a confetti burst + a toast with a CTA to the merged PR. This is the
@@ -110,7 +110,7 @@ export function DashboardPage() {
         ? `${dashCounts.openBacklog} to triage · ${dashFix?.inProgress ?? 0} fix${(dashFix?.inProgress ?? 0) === 1 ? '' : 'es'} in flight${dashFix?.failed ? ` · ${dashFix.failed} failed` : ''}`
         : undefined
   usePublishPageContext({
-    route: '/',
+    route: '/dashboard',
     title: dashProjectName ? `Dashboard · ${dashProjectName}` : 'Dashboard',
     summary: dashSummary,
     // `openBacklog` is the queue of reports the user still needs to

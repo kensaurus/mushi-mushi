@@ -97,7 +97,24 @@ const OPENAI_BASE_URL_PRESETS: BaseUrlPreset[] = [
 ]
 
 export function ByokPanel() {
-  const { data, loading, error, reload } = usePageData<{ keys: ByokKey[] }>('/v1/admin/byok')
+  // Resolve entitlement BEFORE touching `/v1/admin/byok`. The earlier
+  // design rendered an in-panel <ByokEntitlementGuard> banner inside
+  // the success branch of usePageData, but the `if (error) return
+  // <ErrorAlert>` early-return below masked that banner whenever the
+  // listing endpoint failed for ANY reason (network glitch, 5xx, or a
+  // future PR that wraps GET in requireFeature('byok') the way the
+  // 12 write routes already are). Hobby users would then see a
+  // cryptic "Failed to load BYOK status" instead of the contextual
+  // upgrade panel. Short-circuiting at the top guarantees the upsell.
+  const entitlements = useEntitlements()
+  const byokLocked = !entitlements.loading && !entitlements.has('byok')
+
+  // Skip the fetch when we know the caller can't use BYOK — usePageData
+  // accepts `null` as "no-op" so this is the canonical opt-out and stays
+  // forward-compatible if the GET ever joins the gated set.
+  const { data, loading, error, reload } = usePageData<{ keys: ByokKey[] }>(
+    byokLocked ? null : '/v1/admin/byok',
+  )
   const keys = data?.keys ?? null
 
   const [pending, setPending] = useState<ByokKey['provider'] | null>(null)
@@ -229,12 +246,23 @@ export function ByokPanel() {
     !loading && !!firstConfigured,
   )
 
-  if (loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
+  // Locked tenants get a panel that consists ONLY of the upgrade
+  // prompt — no input fields they can fill in to no effect, no
+  // skeleton flash, no later-fired ErrorAlert. Mirrors the SsoPage /
+  // IntelligencePage pattern.
+  if (byokLocked) {
+    return (
+      <Section title="LLM Keys (BYOK)" className="space-y-3">
+        <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
+      </Section>
+    )
+  }
+
+  if (entitlements.loading || loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
   if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
 
   return (
     <Section title="LLM Keys (BYOK)" className="space-y-3">
-      <ByokEntitlementGuard />
       <div className="text-2xs text-fg-muted space-y-1">
         <p>
           <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the LLM keys, you pay your own provider, you keep full control over which models touch your bug data. Mushi never proxies, caches, or fine-tunes on your traffic.
@@ -426,15 +454,4 @@ export function ByokPanel() {
       )}
     </Section>
   )
-}
-
-/**
- * Inline upgrade banner shown above the BYOK panel when the caller's
- * plan doesn't include the `byok` flag. Kept as a sibling component
- * so the panel's existing data-loading/error handling stays unchanged.
- */
-function ByokEntitlementGuard() {
-  const entitlements = useEntitlements()
-  if (entitlements.loading || entitlements.has('byok')) return null
-  return <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
 }

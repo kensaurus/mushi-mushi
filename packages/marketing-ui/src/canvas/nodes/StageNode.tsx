@@ -1,31 +1,15 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { StageNodeData, StageTone } from '../data'
 
-// Semantic stat-pill style. Tone is *cognitive*, not brand-decorative —
-// it tells the reader at a glance whether this number is alert, count,
-// link, pass, or memory. Cards always render against the editorial
-// paper background; tones recolour only the stat chip.
 const TONE_STYLES: Record<StageTone, { bg: string; fg: string; border: string }> = {
-  alert: {
-    bg: 'var(--mushi-vermillion)',
-    fg: '#ffffff',
-    border: 'var(--mushi-vermillion)',
-  },
-  count: {
-    bg: 'var(--mushi-ink)',
-    fg: 'var(--mushi-paper)',
-    border: 'var(--mushi-ink)',
-  },
+  alert: { bg: 'var(--mushi-vermillion)', fg: '#ffffff', border: 'var(--mushi-vermillion)' },
+  count: { bg: 'var(--mushi-ink)', fg: 'var(--mushi-paper)', border: 'var(--mushi-ink)' },
   link: {
     bg: 'color-mix(in oklch, var(--mushi-ink) 12%, var(--mushi-paper))',
     fg: 'var(--mushi-ink)',
     border: 'var(--mushi-rule)',
   },
-  pass: {
-    bg: '#10b981',
-    fg: '#ffffff',
-    border: '#059669',
-  },
+  pass: { bg: '#10b981', fg: '#ffffff', border: '#059669' },
   memory: {
     bg: 'color-mix(in oklch, var(--mushi-vermillion) 12%, var(--mushi-paper))',
     fg: 'var(--mushi-vermillion-ink)',
@@ -47,11 +31,6 @@ export function StageNode({ data }: NodeProps) {
       onPointerDown={() => onSelect(stage.id)}
       onClick={() => onSelect(stage.id)}
     >
-      {/* 8 invisible handles — every side gets both a source and a
-          target handle with the same DOM position, so the U-loop edges
-          (right→left, bottom→top, left→right, left→bottom) all resolve
-          unambiguously. Different IDs are required for React Flow to
-          treat them as distinct. */}
       <Handle id="top" type="target" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-transparent !opacity-0" />
       <Handle id="top-out" type="source" position={Position.Top} className="!h-1 !w-1 !border-0 !bg-transparent !opacity-0" />
       <Handle id="right" type="source" position={Position.Right} className="!h-1 !w-1 !border-0 !bg-transparent !opacity-0" />

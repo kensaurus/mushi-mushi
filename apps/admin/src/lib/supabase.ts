@@ -10,8 +10,25 @@ import * as Sentry from '@sentry/react'
 import type { ZodType } from 'zod'
 import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
+import { getActiveProjectIdSnapshot } from './activeProject'
 
-export const supabase = createClient(RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY)
+const authOptions = {
+  // Web defaults are true today, but making them explicit documents the
+  // session-continuity contract for the admin console: reloads restore the
+  // existing session, tokens refresh in the background, and recovery links
+  // are detected from the URL fragment/query payload.
+  persistSession: true,
+  autoRefreshToken: true,
+  detectSessionInUrl: true,
+  // Supabase passkeys are experimental in current supabase-js. Keeping this
+  // opt-in beside the client makes the passkey UI a progressive enhancement:
+  // older builds simply report that passkeys are unavailable.
+  experimental: { passkey: true },
+}
+
+export const supabase = createClient(RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, {
+  auth: authOptions,
+})
 
 const API_BASE = RESOLVED_API_URL
 
@@ -24,7 +41,10 @@ async function getAccessToken(): Promise<string | null> {
 
   const { data } = await supabase.auth.getSession()
   const session = data.session
-  if (!session) { _cachedToken = null; return null }
+  if (!session) {
+    _cachedToken = null
+    return null
+  }
 
   _cachedToken = session.access_token
   _tokenExpiresAt = session.expires_at ?? 0
@@ -34,7 +54,10 @@ async function getAccessToken(): Promise<string | null> {
 supabase.auth.onAuthStateChange((event, session) => {
   _cachedToken = session?.access_token ?? null
   _tokenExpiresAt = session?.expires_at ?? 0
-  debugLog('auth', `State changed: ${event}`, { email: session?.user?.email, expiresAt: session?.expires_at })
+  debugLog('auth', `State changed: ${event}`, {
+    email: session?.user?.email,
+    expiresAt: session?.expires_at,
+  })
 })
 
 export type ApiResult<T> = { ok: boolean; data?: T; error?: { code: string; message: string } }
@@ -73,10 +96,14 @@ function rememberRecent(key: string, value: ApiResult<unknown>): void {
   }
 }
 
-function coalesceKey(method: string, path: string, body: BodyInit | null | undefined): string | null {
+function coalesceKey(
+  method: string,
+  path: string,
+  body: BodyInit | null | undefined,
+): string | null {
   if (method !== 'GET' && method !== 'HEAD') return null
   if (body != null) return null
-  return `${method}:${path}`
+  return `${method}:${getActiveProjectIdSnapshot() ?? 'no-project'}:${path}`
 }
 
 export function invalidateApiCache(pathPrefix?: string): void {
@@ -108,9 +135,7 @@ export async function apiFetch<T>(
   options?: ApiFetchOptions<T>,
 ): Promise<ApiResult<T>> {
   const method = (options?.method ?? 'GET').toUpperCase()
-  const cacheKey = options?.cache === 'no-store'
-    ? null
-    : coalesceKey(method, path, options?.body)
+  const cacheKey = options?.cache === 'no-store' ? null : coalesceKey(method, path, options?.body)
 
   if (cacheKey) {
     const cached = recent.get(cacheKey)
@@ -153,12 +178,14 @@ async function doFetch<T>(
 
   try {
     const token = await getAccessToken()
+    const activeProjectId = getActiveProjectIdSnapshot()
 
     const res = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
         ...options?.headers,
       },
     })
@@ -180,20 +207,29 @@ async function doFetch<T>(
       if (res.status === 402) {
         try {
           const parsed = JSON.parse(body) as {
-            error?: { code?: string; flag?: string; current_plan?: string; upgrade_to?: { id: string; display_name: string; monthly_price_usd: number } | null }
+            error?: {
+              code?: string
+              flag?: string
+              current_plan?: string
+              upgrade_to?: { id: string; display_name: string; monthly_price_usd: number } | null
+            }
           }
           if (parsed?.error?.code === 'feature_not_in_plan' && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('mushi:entitlement-blocked', {
-              detail: {
-                flag: parsed.error.flag,
-                currentPlan: parsed.error.current_plan,
-                upgradeTo: parsed.error.upgrade_to,
-                method,
-                path,
-              },
-            }))
+            window.dispatchEvent(
+              new CustomEvent('mushi:entitlement-blocked', {
+                detail: {
+                  flag: parsed.error.flag,
+                  currentPlan: parsed.error.current_plan,
+                  upgradeTo: parsed.error.upgrade_to,
+                  method,
+                  path,
+                },
+              }),
+            )
           }
-        } catch { /* malformed 402 body — fall through to generic handling */ }
+        } catch {
+          /* malformed 402 body — fall through to generic handling */
+        }
       }
       // Telemetry: every non-2xx becomes a Sentry breadcrumb so we get a
       // request log for free in any Sentry event captured later in the same
@@ -231,16 +267,28 @@ async function doFetch<T>(
           Sentry.captureMessage(`API ${res.status} ${method} ${path} (sampled)`, {
             level: 'warning',
             fingerprint: ['apiFetch', method, path, String(res.status)],
-            tags: { source: 'apiFetch', http_status: String(res.status), api_path: path, sampled: 'true' },
+            tags: {
+              source: 'apiFetch',
+              http_status: String(res.status),
+              api_path: path,
+              sampled: 'true',
+            },
             contexts: { http: { method, url: path, status_code: res.status, duration_ms: ms } },
             extra: { response_snippet: body.slice(0, 500) },
           })
         }
       }
-      try { return JSON.parse(body) } catch { return { ok: false, error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` } } }
+      try {
+        return JSON.parse(body)
+      } catch {
+        return {
+          ok: false,
+          error: { code: 'HTTP_ERROR', message: `${res.status}: ${body.slice(0, 200)}` },
+        }
+      }
     }
 
-    const result = await res.json() as ApiResult<T>
+    const result = (await res.json()) as ApiResult<T>
     debugLog('api', `${method} ${path} → ${res.status} (${ms}ms)`)
 
     // FE-API-1: opt-in Zod validation. We only validate the `data` slice —
@@ -252,7 +300,9 @@ async function doFetch<T>(
       const parsed = options.schema.safeParse(result.data)
       if (!parsed.success) {
         const firstIssue = parsed.error.issues[0]
-        const issueSummary = firstIssue ? `${firstIssue.path.join('.')}: ${firstIssue.message}` : 'validation failed'
+        const issueSummary = firstIssue
+          ? `${firstIssue.path.join('.')}: ${firstIssue.message}`
+          : 'validation failed'
         Sentry.captureMessage(`API response failed Zod validation ${method} ${path}`, {
           level: 'error',
           fingerprint: ['apiFetch-zod', method, path, firstIssue?.code ?? 'unknown'],
@@ -297,18 +347,17 @@ async function doFetch<T>(
 // instrumentation so streaming endpoints (SSE, CSV export) were invisible
 // to observability. We now emit the same breadcrumb + 5xx capture pattern
 // as apiFetch, but leave body-parsing to the caller.
-export async function apiFetchRaw(
-  path: string,
-  options?: RequestInit,
-): Promise<Response> {
+export async function apiFetchRaw(path: string, options?: RequestInit): Promise<Response> {
   const method = (options?.method ?? 'GET').toUpperCase()
   const t0 = performance.now()
   try {
     const token = await getAccessToken()
+    const activeProjectId = getActiveProjectIdSnapshot()
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
         ...options?.headers,
       },
     })

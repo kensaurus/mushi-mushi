@@ -1,7 +1,11 @@
-import Link from 'next/link'
-import { reportSample } from './MushiCanvas/data'
+'use client'
+
+import { useMarketing } from './context'
+import { reportSample } from './canvas/data'
 
 export function Hero() {
+  const { Link, urls } = useMarketing()
+
   return (
     <section className="relative overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] bg-[var(--mushi-paper)] px-6 py-8 shadow-[0_24px_80px_-48px_rgba(14,13,11,0.45)] sm:px-10 sm:py-10 lg:px-14">
       <div className="absolute inset-0 opacity-70 [background-image:radial-gradient(circle_at_18%_12%,var(--mushi-vermillion-wash),transparent_30%),radial-gradient(circle_at_84%_18%,rgba(14,13,11,0.06),transparent_32%)]" />
@@ -22,13 +26,13 @@ export function Hero() {
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link
-              href="/signup"
+              href={urls.signup}
               className="rounded-sm bg-[var(--mushi-vermillion)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[inset_0_-3px_0_rgba(0,0,0,0.22)] transition hover:-translate-y-0.5"
             >
               Start free, no card
             </Link>
             <Link
-              href="#loop"
+              href={urls.loopAnchor}
               className="inline-flex items-center gap-2 rounded-sm border border-[var(--mushi-rule)] bg-white/25 px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:border-[var(--mushi-vermillion)]"
             >
               Watch the loop
@@ -57,16 +61,12 @@ export function Hero() {
   )
 }
 
-// Hero side preview — a credible "first report" panel built from the same
-// reportSample the canvas uses below. Replaces the earlier placeholder SVG so
-// the eye lands on real product material instead of a toy diagram.
 function ReportPreview() {
   return (
     <aside
       aria-label="Preview of a Mushi report"
       className="relative overflow-hidden rounded-2xl border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] p-5 shadow-[0_22px_60px_-40px_rgba(14,13,11,0.55)]"
     >
-      {/* vermillion ribbon — single decorative cue that the card has a "stamp" face */}
       <span aria-hidden="true" className="absolute inset-x-0 top-0 h-[3px] bg-[var(--mushi-vermillion)]" />
 
       <header className="flex items-center justify-between gap-3">
@@ -92,11 +92,6 @@ function ReportPreview() {
         &ldquo;{reportSample.userNote}&rdquo;
       </blockquote>
 
-      {/* Three semantic data blocks — colour + scale encode meaning.
-          alert (vermillion) for severity, ink for taxonomy, emerald for the
-          judge score above its threshold. Each block stacks label / value
-          like a real bug-tracker chip rather than a thin pill, giving the
-          card the "card-of-information" weight the page was missing. */}
       <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-[var(--mushi-rule)] pt-3">
         <DataPill label="Severity" value={reportSample.severity} tone="alert" />
         <DataPill label="Class" value={reportSample.taxonomy} tone="ink" />
@@ -109,24 +104,9 @@ function ReportPreview() {
 type PillTone = 'alert' | 'ink' | 'pass'
 
 const PILL_TONES: Record<PillTone, { bg: string; fg: string; dot: string; border: string }> = {
-  alert: {
-    bg: 'var(--mushi-vermillion)',
-    fg: '#ffffff',
-    dot: '#ffffff',
-    border: 'var(--mushi-vermillion)',
-  },
-  ink: {
-    bg: 'var(--mushi-ink)',
-    fg: 'var(--mushi-paper)',
-    dot: 'var(--mushi-vermillion)',
-    border: 'var(--mushi-ink)',
-  },
-  pass: {
-    bg: '#10b981',
-    fg: '#ffffff',
-    dot: '#ffffff',
-    border: '#059669',
-  },
+  alert: { bg: 'var(--mushi-vermillion)', fg: '#ffffff', dot: '#ffffff', border: 'var(--mushi-vermillion)' },
+  ink: { bg: 'var(--mushi-ink)', fg: 'var(--mushi-paper)', dot: 'var(--mushi-vermillion)', border: 'var(--mushi-ink)' },
+  pass: { bg: '#10b981', fg: '#ffffff', dot: '#ffffff', border: '#059669' },
 }
 
 function DataPill({ label, value, tone, suffix }: { label: string; value: string; tone: PillTone; suffix?: string }) {
@@ -148,11 +128,7 @@ function DataPill({ label, value, tone, suffix }: { label: string; value: string
           />
         )}
         {tone === 'ink' && (
-          <span
-            aria-hidden="true"
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: colors.dot }}
-          />
+          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: colors.dot }} />
         )}
         <span className="truncate">{value}</span>
         {suffix && (

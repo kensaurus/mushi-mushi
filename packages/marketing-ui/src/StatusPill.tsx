@@ -3,51 +3,48 @@
 import { useEffect, useState } from 'react'
 
 /**
- * Live gateway-health pill rendered in the marketing footer.
+ * Live gateway-health pill.
  *
- * Why this exists
- * ---------------
- * The footer used to render a hardcoded `<span class="animate-pulse">` that
- * always said "Sentry · Langfuse · GitHub healthy" — even when the gateway
- * was down. That's the worst kind of dead UI: it actively lies. We swap it
- * for a real probe of the public `/health` endpoint exposed by
- * `packages/server/supabase/functions/api/index.ts`.
+ * The pill polls `${apiBaseUrl}/health` every 60s and renders one of four
+ * states: unknown (no URL configured), checking (probe in flight), healthy,
+ * or down. When `apiBaseUrl` is undefined / empty we skip the probe entirely
+ * and render the muted unknown state — used by the admin app's marketing
+ * surface where there's no public API to probe. Rendering "Gateway
+ * unreachable" in that case would be a false alarm to visitors.
  *
- * Behaviour
- * ---------
- *   - First render: shows a neutral "checking…" state (no false green).
- *   - On 2xx + `{ status: 'ok' }` → emerald pulse, "Gateway healthy".
- *   - On non-2xx, network error, or AbortError → muted red, "Gateway unreachable".
- *   - Re-checks every 60s while mounted.
- *
- * The pill is intentionally minimal — it's a trust signal, not a status page.
- * `apps/admin` has the rich per-project Sentry/Langfuse/GitHub diagnostics.
+ * apps/cloud was previously responsible for reading `process.env.NEXT_PUBLIC_API_BASE_URL`
+ * inside this component. To keep the package framework-agnostic the URL is
+ * now passed in as a prop; the consuming app decides how to source it
+ * (env var, runtime config, etc).
  */
 
-type Status = 'checking' | 'healthy' | 'down'
+type Status = 'unknown' | 'checking' | 'healthy' | 'down'
 
 const HEALTH_PATH = '/health'
 const POLL_MS = 60_000
 const TIMEOUT_MS = 6_000
 
-const apiBase = (): string =>
-  (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').replace(/\/+$/, '')
+export interface StatusPillProps {
+  apiBaseUrl?: string
+}
 
-export function StatusPill() {
-  const [status, setStatus] = useState<Status>('checking')
+export function StatusPill({ apiBaseUrl }: StatusPillProps) {
+  const base = (apiBaseUrl ?? '').replace(/\/+$/, '')
+  const [status, setStatus] = useState<Status>(base ? 'checking' : 'unknown')
   const [region, setRegion] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!base) {
+      // No probe URL → stay in the muted unknown state, don't poll.
+      setStatus('unknown')
+      setRegion(null)
+      return
+    }
+
     let cancelled = false
+    setStatus('checking')
 
     async function check() {
-      // No API base configured → don't pretend. Render the muted unknown state.
-      const base = apiBase()
-      if (!base) {
-        if (!cancelled) setStatus('down')
-        return
-      }
-
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
       try {
@@ -77,7 +74,7 @@ export function StatusPill() {
       cancelled = true
       window.clearInterval(id)
     }
-  }, [])
+  }, [base])
 
   const label =
     status === 'healthy'
@@ -86,14 +83,18 @@ export function StatusPill() {
         : 'Gateway healthy'
       : status === 'down'
         ? 'Gateway unreachable'
-        : 'Checking gateway…'
+        : status === 'checking'
+          ? 'Checking gateway…'
+          : 'Gateway status unknown'
 
   const dotClass =
     status === 'healthy'
       ? 'h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500'
       : status === 'down'
         ? 'h-1.5 w-1.5 rounded-full bg-red-500/80'
-        : 'h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-ink-faint)]'
+        : status === 'checking'
+          ? 'h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-ink-faint)]'
+          : 'h-1.5 w-1.5 rounded-full bg-[var(--mushi-ink-faint)]/60'
 
   return (
     <p

@@ -1,11 +1,20 @@
 'use client'
 
-import dynamic from 'next/dynamic'
+import { lazy, Suspense } from 'react'
 import { stages } from './data'
 
-// Static stage strip used both as the lazy-load skeleton AND as the no-JS /
-// reduced-motion fallback. The interactive React Flow scene replaces it once
-// it hydrates.
+/**
+ * Static stage strip — both the loading skeleton AND the no-JS / reduced-
+ * motion fallback. The interactive React Flow scene replaces it after hydration.
+ *
+ * IMPL NOTE: the cloud app used `next/dynamic({ ssr: false, loading })` to ship
+ * this server-rendered while the heavy ReactFlow bundle loaded client-side.
+ * The shared package can't depend on Next, so we use React.lazy + Suspense,
+ * which behaves identically in apps/cloud (Next handles RSC + hydration) and
+ * apps/admin (Vite SPA, never SSR'd in the first place). The viewport import
+ * must stay in a dynamic factory to keep ReactFlow + framer-motion out of the
+ * first-paint bundle.
+ */
 function StaticStageStrip() {
   return (
     <div
@@ -42,12 +51,8 @@ function StaticStageStrip() {
   )
 }
 
-const MushiCanvasScene = dynamic(
-  () => import('./MushiCanvasClient').then((mod) => mod.MushiCanvasClient),
-  {
-    ssr: false,
-    loading: () => <StaticStageStrip />,
-  },
+const MushiCanvasViewport = lazy(() =>
+  import('./MushiCanvasViewport').then((mod) => ({ default: mod.MushiCanvasViewport })),
 )
 
 export function MushiCanvas() {
@@ -66,7 +71,9 @@ export function MushiCanvas() {
           Click any card to inspect →
         </p>
       </header>
-      <MushiCanvasScene />
+      <Suspense fallback={<StaticStageStrip />}>
+        <MushiCanvasViewport />
+      </Suspense>
     </section>
   )
 }
