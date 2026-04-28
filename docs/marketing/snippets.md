@@ -55,7 +55,7 @@ the GIF, a screenshot, or the install command.
 
 ### Hook B — the mascot intro
 
-> Moshi moshi. I'm Mushi-chan.
+> Mushi mushi. I'm Mushi-chan.
 >
 > I live in the corner of your app. When a user wiggles their phone because something feels off, I write it down, screenshot it, classify it with an LLM, and — if you ask — open the fix PR on your repo.
 >

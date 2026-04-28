@@ -1,8 +1,6 @@
 import Link from 'next/link'
-import { ClosingCta } from './_components/ClosingCta'
-import { Hero } from './_components/Hero'
-import { MarketingFooter } from './_components/MarketingFooter'
-import { MushiCanvas } from './_components/MushiCanvas'
+import { ClosingCta, Hero, MarketingFooter, MushiCanvas } from '@mushi-mushi/marketing-ui'
+import { MarketingShell } from './_components/MarketingShell'
 import { contactMailto, docsUrl, repoUrl } from '@/lib/links'
 
 // Mirrors `pricing_plans` in 20260419000000_billing_plans.sql.
@@ -17,7 +15,7 @@ const pricingTiers = [
       'All 8 SDKs (web, mobile, desktop)',
       'Hosted admin console + dashboards',
       '7-day report retention',
-      'Up to 3 teammates',
+      'Solo workspace',
       'Community Discord support',
     ],
     cta: { label: 'Start free', href: '/signup' },
@@ -29,7 +27,7 @@ const pricingTiers = [
     headline: '10,000 reports + $0.0025/report after',
     points: [
       'Everything in Hobby',
-      'Unlimited teammates',
+      'Solo workspace, paid usage',
       '30-day report retention',
       'Plugin marketplace + webhooks',
       'BYOK (bring your own LLM keys)',
@@ -45,6 +43,7 @@ const pricingTiers = [
     headline: '50,000 reports + $0.002/report after',
     points: [
       'Everything in Starter',
+      'Teams & shared projects',
       '90-day report retention + audit log',
       'SSO (SAML / OIDC)',
       'Weekly intelligence reports (PDF)',
@@ -86,6 +85,7 @@ const addOns = [
 
 export default function Home() {
   return (
+    <MarketingShell>
     <main className="mx-auto max-w-6xl space-y-12 px-6 pb-10 pt-4">
       <header className="sticky top-3 z-30 flex items-center justify-between rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-4 py-2 shadow-[0_18px_40px_-32px_rgba(14,13,11,0.5)] backdrop-blur sm:px-5">
         <Link href="/" className="flex items-center gap-2 font-serif text-base font-semibold text-[var(--mushi-ink)]">
@@ -237,7 +237,8 @@ export default function Home() {
       </section>
 
       <ClosingCta />
-      <MarketingFooter />
+      <MarketingFooter apiBaseUrl={process.env.NEXT_PUBLIC_API_BASE_URL} />
     </main>
+    </MarketingShell>
   )
 }

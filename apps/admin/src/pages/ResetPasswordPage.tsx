@@ -84,7 +84,7 @@ export function ResetPasswordPage() {
             <div className="pt-1">
               <Btn
                 type="button"
-                onClick={() => window.location.replace(import.meta.env.BASE_URL)}
+                onClick={() => window.location.replace(`${import.meta.env.BASE_URL}dashboard`)}
                 className="w-full justify-center"
               >
                 Go to Dashboard

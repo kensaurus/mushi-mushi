@@ -26,7 +26,7 @@ export const STATIC_ROUTES: StaticRoute[] = [
   {
     id: 'nav:dashboard',
     label: 'Dashboard',
-    path: '/',
+    path: '/dashboard',
     description: 'Live PDCA loop — bugs in, fixes out, judge scores, shipped impact.',
     group: 'Start',
     keywords: ['home', 'overview', 'kpi', 'metrics', 'loop', 'landing', 'summary'],

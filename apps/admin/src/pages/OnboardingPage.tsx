@@ -175,7 +175,7 @@ export function OnboardingPage() {
                 framework, repo, or environment.
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3">
-                <Btn size="sm" variant="ghost" onClick={() => navigate('/')}>Open dashboard</Btn>
+                <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
                 <Btn size="sm" variant="ghost" onClick={() => navigate('/projects')}>Manage projects</Btn>
               </div>
             </div>
@@ -318,14 +318,14 @@ export function OnboardingPage() {
         <div className="space-y-3">
           <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} />
           <div className="flex gap-2">
-            <Btn variant="ghost" onClick={() => navigate('/')}>Go to Dashboard</Btn>
+            <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>
         </div>
       )}
 
       <p className="text-center flex items-center justify-center gap-3">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
         >
           Skip setup — go to dashboard
@@ -334,7 +334,7 @@ export function OnboardingPage() {
         <button
           onClick={() => {
             restartFirstRunTour()
-            navigate('/')
+            navigate('/dashboard')
           }}
           className="text-2xs text-fg-faint hover:text-fg-muted transition-colors"
         >

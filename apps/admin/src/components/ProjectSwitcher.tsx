@@ -12,8 +12,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
-
-const STORAGE_KEY = 'mushi:active_project_id'
+import {
+  ACTIVE_PROJECT_QUERY_PARAM,
+  getActiveProjectIdSnapshot,
+  setActiveProjectIdSnapshot,
+} from '../lib/activeProject'
 
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
@@ -28,18 +31,18 @@ export function ProjectSwitcher() {
     if (setup.loading || !setup.data) return
     const projects = setup.data.projects
     if (projects.length === 0) return
-    const fromUrl = searchParams.get('project')
-    const fromStorage = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
+    const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
+    const fromStorage = getActiveProjectIdSnapshot()
     const candidate = fromUrl ?? fromStorage
-    const known = projects.find(p => p.project_id === candidate)
+    const known = projects.find((p) => p.project_id === candidate)
     if (known) {
       if (fromStorage !== known.project_id) {
-        try { localStorage.setItem(STORAGE_KEY, known.project_id) } catch { /* private mode */ }
+        setActiveProjectIdSnapshot(known.project_id)
       }
       return
     }
     // No valid candidate — fall back to first owned project.
-    try { localStorage.setItem(STORAGE_KEY, projects[0].project_id) } catch { /* private mode */ }
+    setActiveProjectIdSnapshot(projects[0].project_id)
   }, [setup.loading, setup.data, searchParams])
 
   // Close on outside click so the dropdown doesn't stay pinned open behind nav.
@@ -72,15 +75,16 @@ export function ProjectSwitcher() {
   }
 
   const projects = setup.data.projects
-  const activeId = searchParams.get('project')
-    ?? (typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null)
-    ?? projects[0].project_id
-  const active = projects.find(p => p.project_id === activeId) ?? projects[0]
+  const activeId =
+    searchParams.get(ACTIVE_PROJECT_QUERY_PARAM) ??
+    getActiveProjectIdSnapshot() ??
+    projects[0].project_id
+  const active = projects.find((p) => p.project_id === activeId) ?? projects[0]
 
   function pick(id: string) {
-    try { localStorage.setItem(STORAGE_KEY, id) } catch { /* private mode */ }
+    setActiveProjectIdSnapshot(id)
     const next = new URLSearchParams(searchParams)
-    next.set('project', id)
+    next.set(ACTIVE_PROJECT_QUERY_PARAM, id)
     setSearchParams(next, { replace: true })
     setOpen(false)
   }
@@ -89,14 +93,22 @@ export function ProjectSwitcher() {
     <div ref={containerRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
         className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-2 py-1 text-2xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
       >
         <span className="text-3xs uppercase tracking-wider text-fg-faint">Project</span>
         <span className="font-medium truncate max-w-[12rem]">{active.project_name}</span>
-        <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden
+        >
           <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -105,7 +117,7 @@ export function ProjectSwitcher() {
           role="listbox"
           className="absolute right-0 top-full z-50 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
         >
-          {projects.map(p => {
+          {projects.map((p) => {
             const isActive = p.project_id === active.project_id
             return (
               <li key={p.project_id}>
@@ -138,8 +150,7 @@ export function ProjectSwitcher() {
 /** Companion hook so pages can consistently read the same active id. */
 export function useActiveProjectId(): string | null {
   const [searchParams] = useSearchParams()
-  const fromUrl = searchParams.get('project')
+  const fromUrl = searchParams.get(ACTIVE_PROJECT_QUERY_PARAM)
   if (fromUrl) return fromUrl
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem(STORAGE_KEY)
+  return getActiveProjectIdSnapshot()
 }

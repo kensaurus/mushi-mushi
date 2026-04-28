@@ -18,7 +18,9 @@ import {
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
 import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
+import { useEntitlements } from '../lib/useEntitlements'
 import { ProjectSwitcher } from './ProjectSwitcher'
+import { OrgSwitcher } from './OrgSwitcher'
 import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
@@ -36,11 +38,12 @@ import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
 import { AskMushiSidebar } from './AskMushiSidebar'
-import { PageHero } from './PageHero'
+import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
 import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { useFaviconBadge } from '../lib/favicon'
+import { useFocusMode } from '../lib/focusMode'
 
 interface NavItem {
   label: string
@@ -56,6 +59,11 @@ interface NavItem {
    *  into Advanced mode. Routes still resolve in either mode — only the
    *  sidebar is filtered, so deep links + bookmarks survive. */
   beginner?: boolean
+  /** When true, the item is gated on `useEntitlements().isSuperAdmin`.
+   *  Operator-only routes like /users are hidden from the sidebar for
+   *  non-operators (the route itself ALSO refuses to render — the
+   *  sidebar gate is just to avoid teasing it). */
+  superAdmin?: boolean
 }
 
 interface NavSection {
@@ -100,7 +108,7 @@ const NAV: NavSection[] = [
     // because the mode-specific NAV projection (see below) overrides this.
     defaultCollapsed: true,
     items: [
-      { label: 'Dashboard',   path: '/',           icon: IconDashboard, beginner: true },
+      { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
       // "what should I do next?" across the whole PDCA surface. Pinned above
       // the PDCA sections so Advanced users land on it the same way beginner
@@ -163,6 +171,7 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
+      { label: 'Members',    path: '/organization/members', icon: IconProjects },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
       { label: 'SSO',        path: '/sso',        icon: IconSSO },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
@@ -170,27 +179,248 @@ const NAV: NavSection[] = [
       { label: 'Compliance', path: '/compliance', icon: IconCompliance },
       { label: 'Storage',    path: '/storage',    icon: IconStorage },
       { label: 'Query',      path: '/query',      icon: IconQuery },
+      // Phase 2c (2026-04-27) — operator-only directory. Hidden from
+      // the sidebar for everyone except super-admins (kensaurus@…).
+      // The page itself re-checks the role + the gateway returns 404
+      // for non-operators, so this is just a usability gate.
+      { label: 'Users',      path: '/users',      icon: IconShield, superAdmin: true },
     ],
   },
 ]
 
-const PAGE_HERO_FALLBACKS: Record<string, { title: string; kicker: string; scope: string }> = {
-  '/': { title: 'Dashboard', kicker: 'Start', scope: 'dashboard' },
-  '/reports': { title: 'Reports', kicker: 'Plan', scope: 'reports' },
-  '/fixes': { title: 'Fixes', kicker: 'Do', scope: 'fixes' },
-  '/repo': { title: 'Repo', kicker: 'Do', scope: 'repo' },
-  '/prompt-lab': { title: 'Prompt Lab', kicker: 'Do', scope: 'prompt-lab' },
-  '/integrations': { title: 'Integrations', kicker: 'Act', scope: 'integrations' },
-  '/mcp': { title: 'MCP', kicker: 'Act', scope: 'mcp' },
-  '/marketplace': { title: 'Marketplace', kicker: 'Act', scope: 'marketplace' },
-  '/notifications': { title: 'Notifications', kicker: 'Act', scope: 'notifications' },
-  '/billing': { title: 'Billing', kicker: 'Workspace', scope: 'billing' },
-  '/projects': { title: 'Projects', kicker: 'Workspace', scope: 'projects' },
-  '/settings': { title: 'Settings', kicker: 'Workspace', scope: 'settings' },
-  '/sso': { title: 'SSO', kicker: 'Workspace', scope: 'sso' },
-  '/onboarding': { title: 'Onboarding', kicker: 'Start', scope: 'onboarding' },
-  '/research': { title: 'Research', kicker: 'Check', scope: 'research' },
-  '/inbox': { title: 'Inbox', kicker: 'Start', scope: 'inbox' },
+interface PageHeroFallback {
+  title: string
+  kicker: string
+  scope: string
+  decide: PageHeroDecide
+  verify: PageHeroVerify
+}
+
+const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
+  '/dashboard': {
+    title: 'Dashboard',
+    kicker: 'Start',
+    scope: 'dashboard',
+    decide: {
+      label: 'Workspace snapshot',
+      summary: 'Scan the current project for new reports, active fixes, and quality signals before you drill in.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Refresh source',
+      detail: 'Live project data and queue status are shown below.',
+    },
+  },
+  '/reports': {
+    title: 'Reports',
+    kicker: 'Plan',
+    scope: 'reports',
+    decide: {
+      label: 'Triage queue',
+      summary: 'Prioritize incoming reports by severity, status, and evidence before dispatching a fix.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Report evidence',
+      detail: 'Open a report to review screenshots, console logs, network traces, and user context.',
+    },
+  },
+  '/fixes': {
+    title: 'Fixes',
+    kicker: 'Do',
+    scope: 'fixes',
+    decide: {
+      label: 'Fix pipeline',
+      summary: 'Track each attempted fix from dispatch through PR, judge review, and merge readiness.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Pipeline proof',
+      detail: 'Use attempt cards for branch, PR, CI, and trace evidence.',
+    },
+  },
+  '/repo': {
+    title: 'Repo',
+    kicker: 'Do',
+    scope: 'repo',
+    decide: {
+      label: 'Branch health',
+      summary: 'Review generated branches, open PRs, and CI state before landing fixes.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'GitHub evidence',
+      detail: 'Branch cards link back to commits, PRs, and recent repo activity.',
+    },
+  },
+  '/prompt-lab': {
+    title: 'Prompt Lab',
+    kicker: 'Do',
+    scope: 'prompt-lab',
+    decide: {
+      label: 'Prompt quality',
+      summary: 'Compare active and candidate prompts before changing traffic or fine-tuning inputs.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Evaluation data',
+      detail: 'Use scored runs and datasets below to confirm prompt changes improve classification.',
+    },
+  },
+  '/integrations': {
+    title: 'Integrations',
+    kicker: 'Act',
+    scope: 'integrations',
+    decide: {
+      label: 'Connection health',
+      summary: 'Check which routing destinations are connected, stale, or waiting on setup.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Probe history',
+      detail: 'Each integration shows its latest test result and latency where available.',
+    },
+  },
+  '/mcp': {
+    title: 'MCP',
+    kicker: 'Act',
+    scope: 'mcp',
+    decide: {
+      label: 'Agent access',
+      summary: 'Connect MCP-aware agents to the current project with the right read or write scope.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Install check',
+      detail: 'After adding the snippet, ask your agent to list the Mushi tools.',
+    },
+  },
+  '/marketplace': {
+    title: 'Marketplace',
+    kicker: 'Act',
+    scope: 'marketplace',
+    decide: {
+      label: 'Plugin catalog',
+      summary: 'Choose where classified reports and fix events should be routed next.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Delivery log',
+      detail: 'Installed plugins expose delivery attempts and webhook responses below.',
+    },
+  },
+  '/notifications': {
+    title: 'Notifications',
+    kicker: 'Act',
+    scope: 'notifications',
+    decide: {
+      label: 'Reporter updates',
+      summary: 'Review outbound messages so reporters know what happened to the bugs they filed.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Payload audit',
+      detail: 'Open a notification payload to confirm exactly what was sent.',
+    },
+  },
+  '/billing': {
+    title: 'Billing',
+    kicker: 'Workspace',
+    scope: 'billing',
+    decide: {
+      label: 'Plan and usage',
+      summary: 'Compare current usage against plan limits before changing seats, retention, or billing.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Stripe source',
+      detail: 'Billing actions hand off to Stripe for payment method and invoice changes.',
+    },
+  },
+  '/projects': {
+    title: 'Projects',
+    kicker: 'Workspace',
+    scope: 'projects',
+    decide: {
+      label: 'Project list',
+      summary: 'Pick the active project, mint keys, or send a test report from the project cards.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Active context',
+      detail: 'The selected project drives filters and setup state across the console.',
+    },
+  },
+  '/settings': {
+    title: 'Settings',
+    kicker: 'Workspace',
+    scope: 'settings',
+    decide: {
+      label: 'Runtime controls',
+      summary: 'Tune capture, routing, LLM, and developer settings that affect future reports.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Saved state',
+      detail: 'Changed controls only take effect after the settings form is saved.',
+    },
+  },
+  '/sso': {
+    title: 'SSO',
+    kicker: 'Workspace',
+    scope: 'sso',
+    decide: {
+      label: 'Identity setup',
+      summary: 'Configure team sign-in through SAML or OIDC before inviting more users.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Provider metadata',
+      detail: 'Use the generated ACS and entity values when completing setup in your IdP.',
+    },
+  },
+  '/onboarding': {
+    title: 'Onboarding',
+    kicker: 'Start',
+    scope: 'onboarding',
+    decide: {
+      label: 'Setup progress',
+      summary: 'Finish the required project, key, SDK, and first-report steps to complete setup.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'First report',
+      detail: 'Send a test report to confirm the SDK can reach your project.',
+    },
+  },
+  '/research': {
+    title: 'Research',
+    kicker: 'Check',
+    scope: 'research',
+    decide: {
+      label: 'Saved findings',
+      summary: 'Capture product and QA notes that should inform the next loop iteration.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Search history',
+      detail: 'Recent research sessions and pinned notes stay available below.',
+    },
+  },
+  '/inbox': {
+    title: 'Inbox',
+    kicker: 'Start',
+    scope: 'inbox',
+    decide: {
+      label: 'Next actions',
+      summary: 'Review the highest-priority work waiting across Plan, Do, Check, and Act.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Action source',
+      detail: 'Each card links back to the queue, report, fix, or integration that needs attention.',
+    },
+  },
 }
 
 const NAV_COLLAPSED_KEY = 'mushi:nav:collapsed:v1'
@@ -278,7 +508,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false)
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
+  const { isSuperAdmin } = useEntitlements()
   const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
+  const [focusMode, setFocusMode] = useFocusMode()
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
   // with the page the user is on. Both hooks read from `pageContext` so
@@ -368,6 +600,26 @@ export function Layout({ children }: { children: ReactNode }) {
         shift: true,
         allowInInputs: true,
       },
+      {
+        key: '.',
+        description: 'Toggle focus mode',
+        handler: (e) => {
+          e.preventDefault()
+          setFocusMode((value) => !value)
+        },
+        meta: true,
+        allowInInputs: true,
+      },
+      {
+        key: '.',
+        description: 'Toggle focus mode',
+        handler: (e) => {
+          e.preventDefault()
+          setFocusMode((value) => !value)
+        },
+        ctrl: true,
+        allowInInputs: true,
+      },
     ],
   )
 
@@ -381,10 +633,16 @@ export function Layout({ children }: { children: ReactNode }) {
   //  • Advanced: full 23-page console.
   // Sections collapse to an empty shell if all their items are filtered
   // out; we drop them entirely so the sidebar stays tight.
+  // Always strip operator-only routes for non-super-admins, regardless
+  // of mode. The gateway also enforces this — UI hiding is purely so
+  // we don't tease a feature non-operators can't access.
+  const visibleByRole = (i: NavItem) => !i.superAdmin || isSuperAdmin
+
   let visibleNav: NavSection[]
   if (isQuickstart) {
     const quickItems: NavItem[] = NAV.flatMap(s =>
       s.items
+        .filter(visibleByRole)
         .filter(i => i.quickstartLabel !== undefined)
         .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
     )
@@ -404,11 +662,14 @@ export function Layout({ children }: { children: ReactNode }) {
       .map(s => ({
         ...s,
         defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
-        items: s.items.filter(i => i.beginner),
+        items: s.items.filter(visibleByRole).filter(i => i.beginner),
       }))
       .filter(s => s.items.length > 0)
   } else {
-    visibleNav = NAV
+    visibleNav = NAV.map(s => ({
+      ...s,
+      items: s.items.filter(visibleByRole),
+    }))
   }
 
   // Force-open the section that contains the current page so the user
@@ -545,6 +806,15 @@ export function Layout({ children }: { children: ReactNode }) {
       <div className="px-3 py-2.5 border-t border-edge/60 space-y-2">
         <DensitySidebarToggle />
         <ThemeSidebarToggle />
+        <button
+          type="button"
+          onClick={() => setFocusMode((value) => !value)}
+          className="nav-link w-full text-xs"
+          aria-pressed={focusMode}
+        >
+          <IconSparkle className="nav-link-icon" />
+          <span>{focusMode ? 'Exit focus mode' : 'Focus mode'}</span>
+        </button>
         <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
         <button
           onClick={signOut}
@@ -569,9 +839,11 @@ export function Layout({ children }: { children: ReactNode }) {
       </a>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-52 flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col">
-        {sidebarContent}
-      </aside>
+      {!focusMode && (
+        <aside className="hidden md:flex w-52 flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col">
+          {sidebarContent}
+        </aside>
+      )}
 
       {/* Mobile overlay */}
       {mobileOpen && (
@@ -613,12 +885,13 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-2">
             <SearchButton />
             <PlanBadge />
+            <OrgSwitcher />
             <ProjectSwitcher />
           </div>
         </header>
 
         {/* Desktop sub-header — project switcher pinned to the right */}
-        <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
+        {!focusMode && <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
           <SearchButton />
           <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'}>
             <button
@@ -675,31 +948,24 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </Tooltip>
           <PlanBadge />
+          <OrgSwitcher />
           <ProjectSwitcher />
-        </header>
+        </header>}
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
-          <div className="max-w-6xl mx-auto px-5 py-4">
-            <QuickstartMegaCta />
-            <PipelineStatusRibbon />
-            <NextBestAction />
+          <div className={`${focusMode ? 'max-w-[92rem]' : 'max-w-6xl'} mx-auto px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base`}>
+            {!focusMode && <QuickstartMegaCta />}
+            {!focusMode && <PipelineStatusRibbon />}
+            {!focusMode && <NextBestAction />}
             <ScrollToHashAnchor />
             {fallbackHero && (
               <PageHero
                 scope={fallbackHero.scope}
                 title={fallbackHero.title}
                 kicker={fallbackHero.kicker}
-                decide={{
-                  label: 'Ready',
-                  metric: 'Live',
-                  summary: 'This page is wired into the shared Decide / Act / Verify entry pattern.',
-                  severity: 'info',
-                }}
+                decide={fallbackHero.decide}
                 act={null}
-                verify={{
-                  label: 'Evidence',
-                  detail: `${fallbackHero.title} page loaded`,
-                }}
+                verify={fallbackHero.verify}
               />
             )}
             {children}

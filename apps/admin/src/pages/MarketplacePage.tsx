@@ -26,6 +26,8 @@ import { DispatchTable } from '../components/marketplace/DispatchTable'
 import { InstallForm } from '../components/marketplace/InstallForm'
 import { InstalledList } from '../components/marketplace/InstalledList'
 import { PluginCard } from '../components/marketplace/PluginCard'
+import { useEntitlements } from '../lib/useEntitlements'
+import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
   type DispatchEntry,
   type InstalledPlugin,
@@ -35,6 +37,8 @@ import {
 
 export function MarketplacePage() {
   const toast = useToast()
+  const entitlements = useEntitlements()
+  const pluginsUnlocked = entitlements.has('plugins')
   const catalogQuery = usePageData<{ plugins: MarketplacePlugin[] }>('/v1/marketplace/plugins')
   const installedQuery = usePageData<{ plugins: InstalledPlugin[] }>('/v1/admin/plugins')
   const dispatchQuery = usePageData<{ entries: DispatchEntry[] }>(
@@ -232,6 +236,10 @@ export function MarketplacePage() {
         ]}
         howToUse="Pick a plugin, deploy its webhook receiver (or use one of the reference plugins under packages/plugin-*), then click Install and paste the receiver URL. Mushi generates a signing secret and stores it in Supabase Vault — the raw value is shown only once."
       />
+
+      {!pluginsUnlocked && !entitlements.loading && (
+        <UpgradePrompt flag="plugins" currentPlan={entitlements.planName} />
+      )}
 
       {installTarget ? (
         <InstallForm

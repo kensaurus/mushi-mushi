@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
+import { PublicHomePage } from './pages/PublicHomePage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { SetupGatePage } from './pages/SetupGatePage'
 import { checkEnv } from './lib/env'
@@ -11,6 +12,10 @@ import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { ToastProvider } from './lib/toast'
+import { UpgradePromptHost } from './components/billing/UpgradePrompt'
+import { loginPathForLocation } from './lib/authRedirect'
+import { OfflineBanner } from './components/OfflineBanner'
+import { useSessionWatcher } from './lib/sessionWatcher'
 
 // Wrap Routes ONCE, at the level where the real (parametrized) route
 // definitions live — i.e. the inner Routes mounted under the auth gate.
@@ -50,9 +55,16 @@ const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default:
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
+const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
+const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
 // the first-paint bundle isn't inflated for users who don't open it.
 const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m.InboxPage })))
+// Phase 2c (2026-04-27) — operator-only signup directory. Lazy-loaded
+// like every other route so the bundle cost is zero for non-operators.
+// The page itself re-checks `isSuperAdmin` and renders an opaque "Page
+// not found" if a non-operator deep-links here.
+const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -63,7 +75,7 @@ function NotFoundPage() {
       <p className="text-sm text-fg-muted mb-6">
         <code className="text-2xs bg-surface-raised px-1.5 py-0.5 rounded">{pathname}</code> doesn't exist.
       </p>
-      <Link to="/" className="text-sm text-brand hover:text-brand-hover transition-colors">
+      <Link to="/dashboard" className="text-sm text-brand hover:text-brand-hover transition-colors">
         ← Back to Dashboard
       </Link>
     </div>
@@ -83,9 +95,15 @@ function PasswordRecoveryGate({ children }: { children: ReactNode }) {
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const { session, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <div className="flex h-screen items-center justify-center"><Loading text="Loading..." /></div>
-  if (!session) return <Navigate to="/login" replace />
+  if (!session) return <Navigate to={loginPathForLocation(location)} replace state={{ from: location }} />
   return <>{children}</>
+}
+
+function ResilienceLayer() {
+  useSessionWatcher()
+  return <OfflineBanner />
 }
 
 export function App() {
@@ -96,10 +114,21 @@ export function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+      <ResilienceLayer />
+      <UpgradePromptHost />
       <PasswordRecoveryGate>
       <Routes>
+        <Route path="/" element={<PublicHomePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route
+          path="/invite/accept"
+          element={
+            <Suspense fallback={<Loading text="Loading invite..." />}>
+              <AcceptInvitePage />
+            </Suspense>
+          }
+        />
         <Route
           path="/*"
           element={
@@ -108,7 +137,8 @@ export function App() {
                 <ErrorBoundary>
                 <Suspense fallback={<Loading text="Loading..." />}>
                 <SentryRoutes>
-                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/console" element={<Navigate to="/dashboard" replace />} />
                   <Route path="/reports" element={<ReportsPage />} />
                   <Route path="/reports/:id" element={<ReportDetailPage />} />
                   <Route path="/projects" element={<ProjectsPage />} />
@@ -135,7 +165,10 @@ export function App() {
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/organization/members" element={<OrganizationSettingsPage />} />
+                  <Route path="/org/:slug/settings/*" element={<OrganizationSettingsPage />} />
                   <Route path="/inbox" element={<InboxPage />} />
+                  <Route path="/users" element={<UsersPage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </SentryRoutes>
                 </Suspense>

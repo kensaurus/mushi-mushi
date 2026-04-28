@@ -17,6 +17,7 @@
     "@mushi-mushi/web": "workspace:*",
     "@playwright/test": "^1.54.0",
     "@supabase/supabase-js": "^2.80.0",
+    "@types/node": "^25.6.0",
     "msw": "^2.11.4",
     "typescript": "^6.0.2"
   }

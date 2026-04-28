@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import * as Sentry from '@sentry/react'
 import { supabase } from './supabase'
 import type { Session, User } from '@supabase/supabase-js'
+import { authRedirectUrl } from './authRedirect'
+import { notifySignOut, subscribeAuthBroadcast } from './authBroadcast'
+import { signInWithPasskey as signInWithPasskeyApi } from './passkeys'
 
 // Attach the Supabase user id (UUID — not PII) to every Sentry event so we can
 // answer "which user hit this?" without scanning replays. Email is intentionally
@@ -21,6 +24,8 @@ interface AuthContextValue {
   isPasswordRecovery: boolean
   clearPasswordRecovery: () => void
   signIn: (email: string, password: string) => Promise<{ error?: string }>
+  signInWithMagicLink: (email: string) => Promise<{ error?: string }>
+  signInWithPasskey: () => Promise<{ error?: string }>
   signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<{ error?: string }>
@@ -28,7 +33,11 @@ interface AuthContextValue {
 }
 
 function getRedirectUrl(): string {
-  return `${window.location.origin}${import.meta.env.BASE_URL}`
+  return authRedirectUrl('/dashboard')
+}
+
+function getResetPasswordRedirectUrl(): string {
+  return authRedirectUrl('/reset-password')
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -38,6 +47,8 @@ const AuthContext = createContext<AuthContextValue>({
   isPasswordRecovery: false,
   clearPasswordRecovery: () => {},
   signIn: async () => ({}),
+  signInWithMagicLink: async () => ({}),
+  signInWithPasskey: async () => ({}),
   signUp: async () => ({}),
   signOut: async () => {},
   resetPassword: async () => ({}),
@@ -62,15 +73,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true)
       }
+      if (event === 'SIGNED_OUT') {
+        notifySignOut()
+        setIsPasswordRecovery(false)
+      }
     })
 
-    return () => subscription.unsubscribe()
+    const unsubscribeBroadcast = subscribeAuthBroadcast((event) => {
+      if (event !== 'SIGNED_OUT') return
+      setSession(null)
+      syncSentryUser(null)
+      setIsPasswordRecovery(false)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+      unsubscribeBroadcast()
+    }
   }, [])
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return { error: error?.message }
   }
+
+  const signInWithMagicLink = async (email: string) => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: getRedirectUrl(),
+        shouldCreateUser: false,
+      },
+    })
+    return { error: error?.message }
+  }
+
+  const signInWithPasskey = async () => signInWithPasskeyApi()
 
   const signUp = async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signUp({
@@ -85,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const resetPassword = async (email: string) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: getRedirectUrl(),
+      redirectTo: getResetPasswordRedirectUrl(),
     })
     return { error: error?.message }
   }
@@ -109,7 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       session, user: session?.user ?? null, loading,
       isPasswordRecovery, clearPasswordRecovery,
-      signIn, signUp, signOut, resetPassword, updatePassword,
+      signIn, signInWithMagicLink, signInWithPasskey, signUp, signOut, resetPassword, updatePassword,
     }}>
       {children}
     </AuthContext.Provider>

@@ -25,6 +25,7 @@ export interface PlanFeatureFlags {
   intelligence_reports?: boolean
   soc2?: boolean
   self_hosted?: boolean
+  teams?: boolean
   sla_hours?: number | null
 }
 
