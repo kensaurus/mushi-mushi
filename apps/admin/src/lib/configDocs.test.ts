@@ -14,8 +14,8 @@
  *          instead of shipping a 404 link in the popover.
  */
 
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -27,9 +27,9 @@ import {
 
 const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..')
 const README_PATH = resolve(REPO_ROOT, 'README.md')
-const SETTINGS_API_PATH = resolve(
+const SETTINGS_API_ROOT = resolve(
   REPO_ROOT,
-  'packages/server/supabase/functions/api/index.ts',
+  'packages/server/supabase/functions/api',
 )
 
 const ID_PATTERN = /^[a-z][a-z0-9-]*(\.[a-z][a-z0-9_-]*)+$/
@@ -51,6 +51,20 @@ function slugifyHeading(text: string): string {
     .replace(/-+/g, '-')
 }
 
+function readApiSources(dir = SETTINGS_API_ROOT): string {
+  return readdirSync(dir)
+    .sort()
+    .map((entry) => {
+      const full = join(dir, entry)
+      const stat = statSync(full)
+      if (stat.isDirectory()) return readApiSources(full)
+      if (!entry.endsWith('.ts')) return ''
+      return readFileSync(full, 'utf8')
+    })
+    .filter(Boolean)
+    .join('\n')
+}
+
 /**
  * Pull the column allowlist out of the live admin endpoint so the test breaks
  * the moment someone renames a settings column without updating the dictionary.
@@ -58,7 +72,7 @@ function slugifyHeading(text: string): string {
  * `app.patch('/v1/admin/settings', …)` handler.
  */
 function extractSettingsAllowlist(): Set<string> {
-  const src = readFileSync(SETTINGS_API_PATH, 'utf8')
+  const src = readApiSources()
   const block = src.match(
     /app\.patch\(\s*['"]\/v1\/admin\/settings['"][\s\S]*?const allowed = \[([\s\S]*?)\]/,
   )

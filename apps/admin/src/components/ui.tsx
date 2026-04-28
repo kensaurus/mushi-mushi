@@ -10,6 +10,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 import { pctToneClass } from '../lib/tokens'
 import { ConfigHelp } from './ConfigHelp'
+import { CopyViewLinkButton } from './CopyViewLinkButton'
 
 /* ── LabelHelp ──────────────────────────────────────────────────────────────
  *
@@ -1043,9 +1044,10 @@ interface PageHeaderProps {
    * every PDCA page surfaces the active project so the user
    *  can tell which app a bug came from without scanning the switcher. */
   projectScope?: string | null
+  showCopyLink?: boolean
 }
 
-export function PageHeader({ title, description, children, contextChip, projectScope }: PageHeaderProps) {
+export function PageHeader({ title, description, children, contextChip, projectScope, showCopyLink = true }: PageHeaderProps) {
   // `undefined` = render the auto URL-derived stage chip; `null` = explicitly
   // suppressed; anything else = caller-provided chip. This keeps the audit
   // invariant ("every PDCA page shows its stage above the title") without
@@ -1070,7 +1072,12 @@ export function PageHeader({ title, description, children, contextChip, projectS
           </p>
         )}
       </div>
-      {children && <div className="flex items-center gap-2 shrink-0">{children}</div>}
+      {(children || showCopyLink) && (
+        <div className="flex items-center gap-2 shrink-0">
+          {showCopyLink && <CopyViewLinkButton />}
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -1677,15 +1684,29 @@ interface EmptyStateProps {
   icon?: ReactNode
 }
 
+/**
+ * Editorial empty state — the "hero" variant: dashed-border card, branded
+ * 44px icon stamp, and a large serif title. Use this for full-page or
+ * full-card empty states where the missing data deserves a moment of
+ * attention (e.g. /reports with no reports yet, /audit with no entries,
+ * /health with no LLM calls). Callers MUST pass an explicit `icon` —
+ * the editorial treatment without one would render a stranded icon box.
+ *
+ * For compact/inline empty states inside tables, sub-sections, or stacked
+ * cards, use the `EmptyState` wrapper below instead — it auto-falls back
+ * to a minimal, icon-less, small-text variant when `icon` is omitted.
+ */
 export function EditorialEmptyState({ title, description, action, hints, icon }: EmptyStateProps) {
   return (
     <Card className="p-6 text-center border-dashed">
-      <div
-        aria-hidden="true"
-        className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-sm border border-brand/30 bg-brand/10 font-mono text-brand shadow-[inset_0_-3px_0_var(--color-brand)]"
-      >
-        {icon ?? '虫'}
-      </div>
+      {icon && (
+        <div
+          aria-hidden="true"
+          className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-sm border border-brand/30 bg-brand/10 font-mono text-brand shadow-[inset_0_-3px_0_var(--color-brand)]"
+        >
+          {icon}
+        </div>
+      )}
       <p className="font-serif text-xl leading-tight tracking-[-0.03em] text-fg">{title}</p>
       {description && (
         <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
@@ -1707,8 +1728,53 @@ export function EditorialEmptyState({ title, description, action, hints, icon }:
   )
 }
 
+/**
+ * Compact empty state — the original minimal variant: plain card, no icon
+ * block, small muted title. Designed for inline contexts like an empty
+ * table body, a sub-section inside a larger Card, or a stacked list where
+ * an editorial hero would be visually overpowering. This is the variant
+ * `EmptyState` falls back to when no `icon` is provided.
+ */
+function CompactEmptyState({ title, description, action, hints }: EmptyStateProps) {
+  return (
+    <Card className="p-6 text-center">
+      <p className="text-fg-muted text-sm">{title}</p>
+      {description && (
+        <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
+          {description}
+        </p>
+      )}
+      {hints && hints.length > 0 && (
+        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
+          {hints.map((hint) => (
+            <li key={hint} className="flex items-start gap-1.5">
+              <span aria-hidden="true" className="text-brand">/</span>
+              <span>{hint}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {action && <div className="mt-3">{action}</div>}
+    </Card>
+  )
+}
+
+/**
+ * Smart empty-state wrapper. Routes to the editorial hero variant when an
+ * `icon` is provided (explicit opt-in: "this empty state deserves the
+ * spotlight") and falls back to the compact, minimal variant otherwise —
+ * preserving the long-standing "no icon = no icon box" behavior that 20+
+ * inline call sites (CompliancePage residency/DSAR/policy lists,
+ * AntiGamingPage device/event lists, MarketplacePage filters, etc.) rely
+ * on for density. Callers that want the editorial card without an icon
+ * can still call `EditorialEmptyState` directly and pass an explicit
+ * `icon` node.
+ */
 export function EmptyState(props: EmptyStateProps) {
-  return <EditorialEmptyState {...props} />
+  if (props.icon) {
+    return <EditorialEmptyState {...props} />
+  }
+  return <CompactEmptyState {...props} />
 }
 
 /* ── Loading (spinner + text) ──────────────────────────────────────────── */

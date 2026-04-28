@@ -74,10 +74,10 @@ export function useWhatsNew() {
   useEffect(() => {
     let cancelled = false
     // Resolve against Vite's BASE_URL so the demo, hosted under a
-    // sub-path (e.g. https://kensaur.us/mushi-mushi/), still finds the
+    // sub-path (e.g. https://kensaur.us/mushi-mushi/admin/), still finds the
     // file. A bare leading-slash path would 404 there because it would
     // resolve to https://kensaur.us/changelog.json instead of
-    // https://kensaur.us/mushi-mushi/changelog.json.
+    // https://kensaur.us/mushi-mushi/admin/changelog.json.
     const base = (import.meta.env.BASE_URL ?? '/').replace(/\/+$/, '')
     // Cache-bust with a short TTL query so a freshly-deployed bundle is
     // still fetched even if the browser aggressively caches static JSON.

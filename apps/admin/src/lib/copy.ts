@@ -47,7 +47,7 @@ export const COPY: CopyRegistry = {
   // landing. Everything else falls through to beginner copy via
   // `usePageCopy`..
   quickstart: {
-    '/': {
+    '/dashboard': {
       title: 'Bugs to fix',
       description: "Your real users hit these. Click any to see the screenshot, console, and steps — then send to auto-fix.",
       help: {
@@ -109,7 +109,7 @@ export const COPY: CopyRegistry = {
     },
   },
   beginner: {
-    '/': {
+    '/dashboard': {
       title: 'Your bug-fix loop',
       description: 'Watch a real user complaint travel from your app to a merged PR.',
       help: {
@@ -267,7 +267,7 @@ export const COPY: CopyRegistry = {
   // audience, so we don't touch sections/help here. Keeping the registry
   // flat makes it obvious what beginner mode adds rather than what it strips.
   advanced: {
-    '/': {
+    '/dashboard': {
       title: 'PDCA cockpit',
       description: 'Plan → Do → Check → Act, with 14d intake, LLM cost, judge trend, fix throughput.',
     },

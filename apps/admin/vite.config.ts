@@ -7,7 +7,7 @@ import path from 'node:path'
 // Base path is environment-driven so the same build works for:
 //   - local dev      (VITE_BASE_PATH unset → "/")
 //   - self-hosted    (any path the operator wants, e.g. "/admin/")
-//   - kensaur.us     (set to "/mushi-mushi/" in .github/workflows/deploy-admin.yml)
+//   - kensaur.us     (set to "/mushi-mushi/admin/" in .github/workflows/deploy-admin.yml)
 // The router (`BrowserRouter basename={import.meta.env.BASE_URL}`) and auth
 // redirects (`lib/auth.tsx`) already read `BASE_URL`, so no other code needs
 // to change when this flips.

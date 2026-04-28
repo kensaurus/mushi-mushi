@@ -38,7 +38,7 @@
 //   [
 //     {
 //       "scheduled_for": "2026-04-25T16:00Z",
-//       "text": "moshi moshi 🐛 ...",
+//       "text": "mushi mushi 🐛 ...",
 //       "image": {                        // optional
 //         "path": "docs/marketing/social/images/launch-card.jpg",
 //         "alt": "Mushi-chan kawaii ladybug mascot pointing at a terminal showing `npx mushi-mushi` …"

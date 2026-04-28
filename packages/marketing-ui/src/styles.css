@@ -1,0 +1,144 @@
+/* =============================================================================
+   FILE: styles.css
+   PURPOSE: Marketing-surface styles shared between apps/cloud and apps/admin.
+   Imported by the host app (alongside Tailwind's own entry) so the @xyflow
+   chrome and the Mushi canvas / stage / log-ticker visuals are available
+   wherever <MushiCanvas /> renders.
+
+   IMPORTING:
+     apps/cloud:   handled by globals.css (already imports the brand tokens
+                    + xyflow chrome explicitly; this file is loaded via the
+                    package import chain).
+     apps/admin:   imports this file from src/index.css (see Tailwind v4 setup).
+
+   The file is intentionally token-driven: every colour, radius, and shadow
+   resolves through `--mushi-*` custom properties from @mushi-mushi/brand so
+   either editorial-light (default) or [data-mushi-theme="dark"] just works.
+============================================================================= */
+
+@import '@xyflow/react/dist/style.css';
+
+.mushi-canvas-light {
+  --mushi-canvas-glow: color-mix(in oklch, var(--mushi-vermillion) 18%, transparent);
+  --mushi-canvas-wash: color-mix(in oklch, var(--mushi-paper) 90%, white);
+}
+
+.mushi-canvas-frame {
+  background:
+    radial-gradient(circle at 16% 20%, var(--mushi-canvas-glow), transparent 18rem),
+    radial-gradient(circle at 82% 10%, color-mix(in oklch, var(--mushi-ink) 8%, transparent), transparent 16rem),
+    linear-gradient(180deg, var(--mushi-canvas-wash), var(--mushi-paper));
+}
+
+.mushi-canvas-frame .react-flow__pane {
+  cursor: default;
+}
+
+.mushi-canvas-frame .react-flow__attribution {
+  display: none;
+}
+
+.mushi-stage-node {
+  width: 230px;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.7rem;
+  background:
+    linear-gradient(180deg, color-mix(in oklch, var(--mushi-paper) 98%, white), var(--mushi-paper)),
+    var(--mushi-paper);
+  box-shadow:
+    0 1px 0 var(--mushi-rule),
+    0 22px 48px -34px rgba(14, 13, 11, 0.55),
+    inset 0 -4px 0 var(--mushi-vermillion);
+  padding: 1.05rem 1.1rem;
+  text-align: left;
+  transition:
+    border-color 180ms ease,
+    box-shadow 220ms ease,
+    transform 220ms ease;
+}
+
+.mushi-stage-node:hover,
+.mushi-stage-node:focus-visible,
+.mushi-stage-node.is-focused,
+.mushi-stage-node.is-selected {
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 66%, var(--mushi-rule));
+  box-shadow:
+    0 1px 0 var(--mushi-rule),
+    0 30px 64px -34px rgba(14, 13, 11, 0.82),
+    0 0 0 4px var(--mushi-vermillion-wash),
+    inset 0 -4px 0 var(--mushi-vermillion);
+  transform: translateY(-2px);
+}
+
+.mushi-stage-node:focus-visible {
+  outline: 2px solid var(--mushi-vermillion);
+  outline-offset: 4px;
+}
+
+.mushi-edge-dot {
+  animation: mushi-dot-travel 2400ms linear infinite;
+  filter: drop-shadow(0 0 4px var(--mushi-vermillion));
+}
+
+.mushi-log-ticker {
+  animation: mushi-stamp-ink 4200ms ease-in-out infinite;
+}
+
+@keyframes mushi-march {
+  from { stroke-dashoffset: 14; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes mushi-dot-travel {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes mushi-stamp-ink {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+
+[data-mushi-theme="dark"] .mushi-canvas-light {
+  --mushi-canvas-wash: color-mix(in oklch, var(--mushi-paper) 82%, white 8%);
+}
+
+@media (max-width: 820px) {
+  .mushi-stage-node {
+    width: 194px;
+    padding: 0.85rem 0.9rem;
+  }
+  .mushi-stage-node h3 {
+    font-size: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mushi-stage-node,
+  .mushi-edge-dot,
+  .mushi-log-ticker {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   MARKETING SURFACE PAGE BACKGROUND
+   apps/cloud's globals.css used to bake this into <body>. Moving it here lets
+   apps/admin opt in by adding a `mushi-marketing-surface` class to its <main>
+   wrapper (since admin's body is the dark dashboard surface and must NOT flip
+   globally). Cloud can keep using body or switch to the class — either works.
+---------------------------------------------------------------------------- */
+
+.mushi-marketing-surface {
+  background:
+    radial-gradient(circle at 12% 0%, var(--mushi-vermillion-wash), transparent 28rem),
+    radial-gradient(circle at 88% 32%, color-mix(in oklch, var(--mushi-vermillion) 8%, transparent), transparent 30rem),
+    radial-gradient(circle at 50% 78%, color-mix(in oklch, var(--mushi-paper) 60%, var(--mushi-vermillion-wash)), transparent 36rem),
+    var(--mushi-paper);
+  background-attachment: fixed;
+  color: var(--mushi-ink);
+  font-family: var(--mushi-font-body);
+  color-scheme: light;
+}

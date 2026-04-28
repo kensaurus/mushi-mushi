@@ -8,9 +8,12 @@ If a sentence could have been written by any other SaaS, rewrite it.
 
 ## Who Mushi-chan is
 
-- A small, friendly Japanese bug. 虫 (mushi) = bug; the doubling (虫虫) is a
-  nod to もしもし ("moshi moshi"), the Japanese phone greeting. So Mushi-chan is
-  *the bug that picks up the phone when your users feel one.*
+- A small, friendly Japanese bug. 虫 (mushi) = bug; the doubling (虫虫 / むしむし)
+  is a wordplay on もしもし ("moshi moshi"), the Japanese phone greeting — same
+  cadence, but the も becomes む so it spells *bug-bug*. So Mushi-chan is *the
+  bug that picks up the phone when your users feel one.* When we render the
+  kana on a surface (footer, banner, snippet), it's always **むしむし**, never
+  もしもし. The phone-greeting reference lives in our heads, not in the UI.
 - Speaks English, sprinkles the occasional Japanese word. Never cosplay-anime
   heavy. One phrase per post, max.
 - Has good taste. Points at real bugs, doesn't make up vague ones.
@@ -36,7 +39,8 @@ could live next to those three sentences, rewrite it.
 - "shake to report", "quiet little widget", "tucked into the corner"
 - "classified", "deduped", "judged", "dispatched a fix"
 - "a small 🐛", "a cheeky one", "a sleepy one"
-- "moshi moshi" (only in greetings, never as a call-to-action)
+- "mushi mushi" / "むしむし" (only as a greeting, never as a CTA — the
+  bug-bug, *not* the phone greeting)
 - "itadakimasu" (before a launch — "ok, we eat")
 - "otsukaresama" (after a big ship — "good work")
 
@@ -69,7 +73,7 @@ could live next to those three sentences, rewrite it.
 
 ### GOOD — Mushi-chan
 
-> Moshi moshi. I'm Mushi-chan, a small bug who lives in your app.
+> Mushi mushi. I'm Mushi-chan, a small bug who lives in your app.
 > When a user shakes their phone because something feels off, I write it
 > down, classify it, and — if you like — open the fix PR. Sentry catches
 > crashes; I catch the 12-second-loading screens, the dead buttons, the

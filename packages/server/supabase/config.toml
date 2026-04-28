@@ -104,3 +104,12 @@ verify_jwt = false
 # this function.
 [functions.ci-sync]
 verify_jwt = false
+
+# retention-sweep is invoked daily by pg_cron with the internal-caller
+# bearer. It walks every project, resolves the effective retention window
+# from project_retention_policies → pricing_plans.retention_days → hobby
+# fallback, and deletes reports older than the cutoff in 1k-row batches.
+# Auth is enforced inside the handler via requireServiceRoleAuth — the
+# function MUST NOT be reachable without the shared internal secret.
+[functions.retention-sweep]
+verify_jwt = false

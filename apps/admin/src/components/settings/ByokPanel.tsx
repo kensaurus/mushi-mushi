@@ -13,6 +13,8 @@ import { Section, Input, Btn, ErrorAlert, ResultChip, type ResultChipTone } from
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../ConfirmDialog'
 import { ConfigHelp } from '../ConfigHelp'
+import { useEntitlements } from '../../lib/useEntitlements'
+import { UpgradePrompt } from '../billing/UpgradePrompt'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
@@ -95,7 +97,24 @@ const OPENAI_BASE_URL_PRESETS: BaseUrlPreset[] = [
 ]
 
 export function ByokPanel() {
-  const { data, loading, error, reload } = usePageData<{ keys: ByokKey[] }>('/v1/admin/byok')
+  // Resolve entitlement BEFORE touching `/v1/admin/byok`. The earlier
+  // design rendered an in-panel <ByokEntitlementGuard> banner inside
+  // the success branch of usePageData, but the `if (error) return
+  // <ErrorAlert>` early-return below masked that banner whenever the
+  // listing endpoint failed for ANY reason (network glitch, 5xx, or a
+  // future PR that wraps GET in requireFeature('byok') the way the
+  // 12 write routes already are). Hobby users would then see a
+  // cryptic "Failed to load BYOK status" instead of the contextual
+  // upgrade panel. Short-circuiting at the top guarantees the upsell.
+  const entitlements = useEntitlements()
+  const byokLocked = !entitlements.loading && !entitlements.has('byok')
+
+  // Skip the fetch when we know the caller can't use BYOK — usePageData
+  // accepts `null` as "no-op" so this is the canonical opt-out and stays
+  // forward-compatible if the GET ever joins the gated set.
+  const { data, loading, error, reload } = usePageData<{ keys: ByokKey[] }>(
+    byokLocked ? null : '/v1/admin/byok',
+  )
   const keys = data?.keys ?? null
 
   const [pending, setPending] = useState<ByokKey['provider'] | null>(null)
@@ -227,7 +246,19 @@ export function ByokPanel() {
     !loading && !!firstConfigured,
   )
 
-  if (loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
+  // Locked tenants get a panel that consists ONLY of the upgrade
+  // prompt — no input fields they can fill in to no effect, no
+  // skeleton flash, no later-fired ErrorAlert. Mirrors the SsoPage /
+  // IntelligencePage pattern.
+  if (byokLocked) {
+    return (
+      <Section title="LLM Keys (BYOK)" className="space-y-3">
+        <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
+      </Section>
+    )
+  }
+
+  if (entitlements.loading || loading) return <PanelSkeleton rows={3} label="Loading BYOK status" inCard={false} />
   if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
 
   return (

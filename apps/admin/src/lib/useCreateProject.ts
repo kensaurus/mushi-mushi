@@ -9,6 +9,7 @@
 import { useCallback, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from './supabase'
+import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from './activeProject'
 import { useToast } from './toast'
 
 interface CreatedProject {
@@ -23,8 +24,6 @@ interface Options {
    *  (writes `?project=<id>` + localStorage). Default: true. */
   autoSelect?: boolean
 }
-
-const STORAGE_KEY = 'mushi:active_project_id'
 
 export function useCreateProject({ onCreated, autoSelect = true }: Options = {}) {
   const toast = useToast()
@@ -46,22 +45,15 @@ export function useCreateProject({ onCreated, autoSelect = true }: Options = {})
         }
         toast.success('Project created', name)
         if (autoSelect) {
-          try {
-            localStorage.setItem(STORAGE_KEY, res.data.id)
-          } catch {
-            /* private mode */
-          }
+          setActiveProjectIdSnapshot(res.data.id)
           const next = new URLSearchParams(searchParams)
-          next.set('project', res.data.id)
+          next.set(ACTIVE_PROJECT_QUERY_PARAM, res.data.id)
           setSearchParams(next, { replace: true })
         }
         onCreated?.(res.data)
         return res.data
       } catch (err) {
-        toast.error(
-          'Failed to create project',
-          err instanceof Error ? err.message : String(err),
-        )
+        toast.error('Failed to create project', err instanceof Error ? err.message : String(err))
         return null
       } finally {
         setCreating(false)

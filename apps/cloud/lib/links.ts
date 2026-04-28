@@ -37,6 +37,43 @@ export const docsUrl = (path = ''): string => {
 }
 
 /**
+ * Hosted admin console root. The dashboard's "Open admin console" CTA and
+ * the "Reports" footer link both point here. The canonical home is
+ * `kensaur.us/mushi-mushi/admin/` (S3 + CloudFront), but legacy / preview
+ * environments may still serve from a Vercel admin domain — `NEXT_PUBLIC_APP_URL`
+ * remains the override knob for those (kept for back-compat with anyone whose
+ * `.env.local` already sets it).
+ */
+export const adminUrl = (path = ''): string => {
+  const base = trimTrail(
+    process.env.NEXT_PUBLIC_APP_URL ?? 'https://kensaur.us/mushi-mushi/admin',
+  )
+  if (!path) return base
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${base}${p}`
+}
+
+/**
+ * Cloud app origin — the surface that hosts /signup, /login, /dashboard, the
+ * marketing landing, and `/auth/callback`. Distinct from `adminUrl()` because
+ * the admin console and the marketing/auth surface live at different
+ * subpaths (`/mushi-mushi/admin/` vs `/mushi-mushi/`) on the unified domain.
+ *
+ * Used for absolute-URL contexts that can't accept a relative path (the
+ * Supabase magic-link `emailRedirectTo`, server-side fetches, etc).
+ *
+ * Override per-env with `NEXT_PUBLIC_CLOUD_URL`.
+ */
+export const cloudUrl = (path = ''): string => {
+  const base = trimTrail(
+    process.env.NEXT_PUBLIC_CLOUD_URL ?? 'https://kensaur.us/mushi-mushi',
+  )
+  if (!path) return base
+  const p = path.startsWith('/') ? path : `/${path}`
+  return `${base}${p}`
+}
+
+/**
  * Canonical OSS repo. We expose a helper rather than hardcoding so the URL
  * tracks a single env override if you ever fork or move the canonical repo.
  */

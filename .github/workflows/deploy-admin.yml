@@ -52,7 +52,11 @@ permissions:
 env:
   AWS_REGION: ap-northeast-1
   S3_BUCKET: kensaur.us-mushi-mushi
-  S3_PREFIX: mushi-mushi
+  # Admin SPA now lives under /mushi-mushi/admin/ so /mushi-mushi/ itself can
+  # be claimed by the cloud Next.js app (Vercel origin) once deploy-cloud.yml
+  # lands. Coordinated with cloudfront-mushi-spa-router.js which rewrites
+  # /mushi-mushi/admin/* page routes to /mushi-mushi/admin/index.html.
+  S3_PREFIX: mushi-mushi/admin
 
 jobs:
   deploy:
@@ -102,10 +106,10 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # CloudFront serves this build under /mushi-mushi/, so all asset URLs
+          # CloudFront serves this build under /mushi-mushi/admin/, so all asset URLs
           # and the React Router basename must be prefixed accordingly. Local
           # dev and other deployments leave this unset and serve from /.
-          VITE_BASE_PATH: /mushi-mushi/
+          VITE_BASE_PATH: /mushi-mushi/admin/
           # Sentry — DSN baked into bundle, auth token + org/project let the
           # Vite plugin upload sourcemaps. VITE_RELEASE tags the release so
           # Sentry can group events by version and resolve them automatically.
@@ -258,16 +262,16 @@ jobs:
         run: |
           aws cloudfront create-invalidation \
             --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/mushi-mushi/*" \
+            --paths "/mushi-mushi/admin/*" \
             --region us-east-1
 
       - name: Post-deploy health check
         run: |
           sleep 10
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://kensaur.us/mushi-mushi/version.json" || echo "000")
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://kensaur.us/mushi-mushi/admin/version.json" || echo "000")
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::warning::Health check returned HTTP $HTTP_CODE — CloudFront may still be propagating"
             exit 0
           fi
-          DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/version.json" | jq -r '.version // "unknown"')
+          DEPLOYED=$(curl -s "https://kensaur.us/mushi-mushi/admin/version.json" | jq -r '.version // "unknown"')
           echo "Deployed version: $DEPLOYED"
