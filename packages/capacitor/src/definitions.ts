@@ -9,6 +9,15 @@
  */
 
 export type MushiTriggerMode = 'shake' | 'button' | 'both' | 'none';
+export type MushiTriggerInsetPreset = 'tabBarSafe' | 'dockSafe';
+
+export const triggerInsetPresets: Record<
+  MushiTriggerInsetPreset,
+  { bottom: number; leading?: number; trailing?: number; start?: number; end?: number }
+> = {
+  tabBarSafe: { bottom: 72, trailing: 20, end: 20 },
+  dockSafe: { bottom: 96, trailing: 20, end: 20 },
+};
 
 export interface MushiCapacitorPluginConfig {
   /** Project UUID from the Mushi admin console. */
@@ -35,6 +44,8 @@ export interface MushiCapacitorPluginConfig {
   theme?: { accentColor?: string; dark?: boolean };
   /** Native trigger offset in logical px/dp. Defaults keep the historical bottom-right button. */
   triggerInset?: { bottom?: number; leading?: number; trailing?: number; start?: number; end?: number };
+  /** Convenience preset for common mobile shells; explicit `triggerInset` wins when both are provided. */
+  triggerInsetPreset?: MushiTriggerInsetPreset;
 }
 
 export interface MushiCapacitorReport {

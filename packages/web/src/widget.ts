@@ -10,11 +10,16 @@
  *         user-facing ARIA / keyboard wiring.
  */
 
-import type { MushiReportCategory, MushiWidgetConfig } from '@mushi-mushi/core';
+import type {
+  MushiReportCategory,
+  MushiReporterComment,
+  MushiReporterReport,
+  MushiWidgetConfig,
+} from '@mushi-mushi/core';
 import { getLocale, type MushiLocale } from './i18n';
 import { getWidgetStyles } from './styles';
 
-type WidgetStep = 'category' | 'intent' | 'details' | 'success';
+type WidgetStep = 'category' | 'intent' | 'details' | 'success' | 'reports' | 'report-detail';
 
 const CATEGORY_ICONS: Record<MushiReportCategory, string> = {
   bug: '\u26A0\uFE0F',
@@ -34,6 +39,8 @@ const STEP_NUMBER: Record<Exclude<WidgetStep, 'success'>, number> = {
   category: 1,
   intent: 2,
   details: 3,
+  reports: 1,
+  'report-detail': 1,
 };
 
 /** Detects modifier-key presses for the Ctrl/Cmd+Enter submit shortcut.
@@ -42,12 +49,25 @@ function isSubmitShortcut(e: KeyboardEvent): boolean {
   return (e.metaKey || e.ctrlKey) && e.key === 'Enter';
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export interface WidgetCallbacks {
   onSubmit(data: { category: MushiReportCategory; description: string; intent?: string }): void;
   onOpen(): void;
   onClose(): void;
   onScreenshotRequest(): void;
+  onScreenshotRemove?(): void;
   onElementSelectorRequest?(): void;
+  onReporterReportsRequest?(): Promise<MushiReporterReport[]>;
+  onReporterCommentsRequest?(reportId: string): Promise<MushiReporterComment[]>;
+  onReporterReply?(reportId: string, body: string): Promise<void>;
 }
 
 export class MushiWidget {
@@ -61,11 +81,18 @@ export class MushiWidget {
   private selectedCategory: MushiReportCategory | null = null;
   private selectedIntent: string | null = null;
   private screenshotAttached = false;
+  private allowScreenshotRemove = true;
   private elementSelected = false;
   private submitting = false;
   private triggerVisible = true;
   private triggerShrunk = false;
   private triggerHiddenByScroll = false;
+  private sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null = null;
+  private reporterReports: MushiReporterReport[] = [];
+  private reporterComments: MushiReporterComment[] = [];
+  private selectedReportId: string | null = null;
+  private reporterLoading = false;
+  private reporterError: string | null = null;
   private attachedLaunchers: Array<() => void> = [];
   private smartHideCleanup: (() => void) | null = null;
   private smartHideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -80,9 +107,10 @@ export class MushiWidget {
   private successTimer: ReturnType<typeof setTimeout> | null = null;
   private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks) {
+  constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
     this.config = {
       position: config.position ?? 'bottom-right',
+      anchor: config.anchor ?? {},
       theme: config.theme ?? 'auto',
       // Falsy-OR (NOT `??`) on purpose: `triggerText: ''` is semantically
       // nonsense — it would render a labelless, glyphless trigger button
@@ -105,6 +133,8 @@ export class MushiWidget {
       environments: config.environments ?? {},
       smartHide: config.smartHide ?? false,
       draggable: config.draggable ?? false,
+      brandFooter: config.brandFooter ?? true,
+      outdatedBanner: config.outdatedBanner ?? 'auto',
     };
     this.callbacks = callbacks;
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
@@ -115,16 +145,22 @@ export class MushiWidget {
   }
 
   mount(): void {
+    if (this.host.isConnected) return;
     document.body.appendChild(this.host);
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.render();
   }
 
+  getIsMounted(): boolean {
+    return this.host.isConnected;
+  }
+
   updateConfig(config: MushiWidgetConfig = {}): void {
     this.config = {
       ...this.config,
       ...(config.position ? { position: config.position } : {}),
+      ...(config.anchor !== undefined ? { anchor: config.anchor } : {}),
       ...(config.theme ? { theme: config.theme } : {}),
       ...(config.triggerText !== undefined ? { triggerText: config.triggerText || '\uD83D\uDC1B' } : {}),
       ...(config.expandedTitle !== undefined ? { expandedTitle: config.expandedTitle } : {}),
@@ -140,6 +176,8 @@ export class MushiWidget {
       ...(config.environments !== undefined ? { environments: config.environments } : {}),
       ...(config.smartHide !== undefined ? { smartHide: config.smartHide } : {}),
       ...(config.draggable !== undefined ? { draggable: config.draggable } : {}),
+      ...(config.brandFooter !== undefined ? { brandFooter: config.brandFooter } : {}),
+      ...(config.outdatedBanner !== undefined ? { outdatedBanner: config.outdatedBanner } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     this.syncAttachedLaunchers();
@@ -215,8 +253,18 @@ export class MushiWidget {
     if (this.isOpen) this.render();
   }
 
+  setAllowScreenshotRemove(allow: boolean): void {
+    this.allowScreenshotRemove = allow;
+    if (this.isOpen) this.render();
+  }
+
   setElementSelected(selected: boolean): void {
     this.elementSelected = selected;
+    if (this.isOpen) this.render();
+  }
+
+  setSdkFreshness(info: { latest: string | null; current: string; deprecated: boolean; message?: string | null }): void {
+    this.sdkFreshness = info;
     if (this.isOpen) this.render();
   }
 
@@ -365,7 +413,7 @@ export class MushiWidget {
     this.applyInsetVars(panel);
 
     if (this.isOpen) {
-      panel.innerHTML = this.renderStep();
+      panel.innerHTML = `${this.renderOutdatedBanner()}${this.renderStep()}${this.renderBrandFooter()}`;
       this.shadow.appendChild(panel);
       this.attachHandlers(panel);
       this.trapFocus(panel);
@@ -373,6 +421,16 @@ export class MushiWidget {
   }
 
   private applyInsetVars(el: HTMLElement): void {
+    const { anchor } = this.config;
+    if (anchor && Object.keys(anchor).length > 0) {
+      (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
+        const value = anchor[edge];
+        if (value !== undefined) el.style.setProperty(`--mushi-${edge}`, value);
+      });
+      el.style.setProperty('--mushi-safe-area', this.config.respectSafeArea ? '1' : '0');
+      return;
+    }
+
     const { inset } = this.config;
     if (!this.config.respectSafeArea) {
       (['top', 'right', 'bottom', 'left'] as const).forEach((edge) => {
@@ -393,7 +451,28 @@ export class MushiWidget {
       case 'intent': return this.renderIntentStep();
       case 'details': return this.renderDetailsStep();
       case 'success': return this.renderSuccessStep();
+      case 'reports': return this.renderReportsStep();
+      case 'report-detail': return this.renderReportDetailStep();
     }
+  }
+
+  private renderOutdatedBanner(): string {
+    if (!this.sdkFreshness) return '';
+    if (this.config.outdatedBanner === 'off' || this.config.outdatedBanner === 'console-only') return '';
+    const { latest, current, deprecated, message } = this.sdkFreshness;
+    if (!latest && !deprecated) return '';
+    return `
+      <div class="mushi-outdated" role="status">
+        <strong>Mushi SDK ${escapeHtml(current)}</strong>
+        ${latest ? `latest is ${escapeHtml(latest)}.` : 'needs attention.'}
+        ${message ? `<span>${escapeHtml(message)}</span>` : ''}
+      </div>
+    `;
+  }
+
+  private renderBrandFooter(): string {
+    if (this.config.brandFooter === false) return '';
+    return `<div class="mushi-brand-footer">Powered by Mushi v${escapeHtml(this.sdkVersion)}</div>`;
   }
 
   /**
@@ -473,9 +552,61 @@ export class MushiWidget {
     return `
       ${this.renderHeader({ title: t.step1.heading, step: STEP_NUMBER.category })}
       <div class="mushi-body" role="radiogroup" aria-label="${t.step1.heading}">
+        <button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
+          <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
+          <div class="mushi-option-text">
+            <span class="mushi-option-label">Your reports${this.unreadCount() ? ` (${this.unreadCount()} new)` : ''}</span>
+            <span class="mushi-option-desc">See status, developer replies, and respond</span>
+          </div>
+          <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
+        </button>
         ${categories}
       </div>
       ${this.renderStepIndicator(STEP_NUMBER.category)}
+    `;
+  }
+
+  private renderReportsStep(): string {
+    const reports = this.reporterReports.map((report) => `
+      <button type="button" class="mushi-report-row" data-report-id="${escapeHtml(report.id)}">
+        <span class="mushi-report-status">${escapeHtml(report.status)}</span>
+        <span class="mushi-report-title">${escapeHtml(report.summary ?? report.description ?? `Report ${report.id.slice(0, 8)}`)}</span>
+        ${report.unread_count ? `<b>${report.unread_count}</b>` : ''}
+      </button>
+    `).join('');
+    return `
+      ${this.renderHeader({ title: 'Your reports', showBack: true, eyebrow: 'Mushi · Inbox' })}
+      <div class="mushi-body">
+        ${this.reporterLoading ? '<p class="mushi-muted">Loading reports…</p>' : ''}
+        ${this.reporterError ? `<p class="mushi-error-inline">${escapeHtml(this.reporterError)}</p>` : ''}
+        ${reports || (!this.reporterLoading ? '<p class="mushi-muted">No reports from this browser yet.</p>' : '')}
+      </div>
+    `;
+  }
+
+  private renderReportDetailStep(): string {
+    const report = this.reporterReports.find((r) => r.id === this.selectedReportId);
+    const comments = this.reporterComments.map((comment) => `
+      <div class="mushi-thread-comment ${comment.author_kind}">
+        <strong>${escapeHtml(comment.author_kind === 'reporter' ? 'You' : (comment.author_name ?? 'Developer'))}</strong>
+        <p>${escapeHtml(comment.body)}</p>
+      </div>
+    `).join('');
+    return `
+      ${this.renderHeader({ title: 'Report thread', showBack: true, eyebrow: 'Mushi · Inbox' })}
+      <div class="mushi-body">
+        <div class="mushi-thread-summary">
+          <span>${escapeHtml(report?.status ?? 'unknown')}</span>
+          <p>${escapeHtml(report?.summary ?? report?.description ?? 'Report details')}</p>
+        </div>
+        <div class="mushi-thread">
+          ${this.reporterLoading ? '<p class="mushi-muted">Loading thread…</p>' : comments || '<p class="mushi-muted">No developer replies yet.</p>'}
+        </div>
+        <textarea class="mushi-textarea" data-role="reporter-reply" rows="3" placeholder="Reply to the developer…"></textarea>
+        <button type="button" class="mushi-submit" data-action="reporter-reply">
+          <span>Reply</span><span class="mushi-submit-arrow" aria-hidden="true">\u2192</span>
+        </button>
+      </div>
     `;
   }
 
@@ -522,6 +653,9 @@ export class MushiWidget {
           <button type="button" class="mushi-attach-btn${this.screenshotAttached ? ' active' : ''}" data-action="screenshot">
             \uD83D\uDCF8 ${this.screenshotAttached ? t.step3.screenshotAttached : t.step3.screenshotButton}
           </button>
+          ${this.screenshotAttached && this.allowScreenshotRemove
+            ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot">\u2715 Remove screenshot</button>'
+            : ''}
           <button type="button" class="mushi-attach-btn${this.elementSelected ? ' active' : ''}" data-action="element">
             \uD83C\uDFAF ${this.elementSelected ? t.step3.elementSelected : t.step3.elementButton}
           </button>
@@ -574,7 +708,24 @@ export class MushiWidget {
     panel.querySelector('[data-action="back"]')?.addEventListener('click', () => {
       if (this.step === 'intent') { this.step = 'category'; this.selectedCategory = null; }
       else if (this.step === 'details') { this.step = 'intent'; this.selectedIntent = null; }
+      else if (this.step === 'reports') { this.step = 'category'; }
+      else if (this.step === 'report-detail') { this.step = 'reports'; this.selectedReportId = null; }
       this.render();
+    });
+
+    panel.querySelector('[data-action="reports"]')?.addEventListener('click', () => {
+      void this.loadReporterReports();
+    });
+
+    panel.querySelectorAll('[data-report-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const reportId = (btn as HTMLElement).dataset.reportId;
+        if (reportId) void this.loadReporterComments(reportId);
+      });
+    });
+
+    panel.querySelector('[data-action="reporter-reply"]')?.addEventListener('click', () => {
+      void this.submitReporterReply(panel);
     });
 
     panel.querySelectorAll('[data-category]').forEach((btn) => {
@@ -595,6 +746,9 @@ export class MushiWidget {
 
     panel.querySelector('[data-action="screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRequest();
+    });
+    panel.querySelector('[data-action="remove-screenshot"]')?.addEventListener('click', () => {
+      this.callbacks.onScreenshotRemove?.();
     });
 
     panel.querySelector('[data-action="element"]')?.addEventListener('click', () => {
@@ -670,5 +824,65 @@ export class MushiWidget {
       const focusable = panel.querySelectorAll('button, textarea, [tabindex]');
       if (focusable.length > 0) (focusable[0] as HTMLElement).focus();
     });
+  }
+
+  private unreadCount(): number {
+    return this.reporterReports.reduce((sum, report) => sum + (report.unread_count ?? 0), 0);
+  }
+
+  private async loadReporterReports(): Promise<void> {
+    this.step = 'reports';
+    this.reporterLoading = true;
+    this.reporterError = null;
+    this.render();
+    try {
+      this.reporterReports = await this.callbacks.onReporterReportsRequest?.() ?? [];
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not load reports.';
+    } finally {
+      this.reporterLoading = false;
+      this.render();
+    }
+  }
+
+  private async loadReporterComments(reportId: string): Promise<void> {
+    this.selectedReportId = reportId;
+    this.step = 'report-detail';
+    this.reporterLoading = true;
+    this.reporterError = null;
+    this.render();
+    try {
+      this.reporterComments = await this.callbacks.onReporterCommentsRequest?.(reportId) ?? [];
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not load thread.';
+    } finally {
+      this.reporterLoading = false;
+      this.render();
+    }
+  }
+
+  private async submitReporterReply(panel: HTMLElement): Promise<void> {
+    const reportId = this.selectedReportId;
+    const textarea = panel.querySelector('[data-role="reporter-reply"]') as HTMLTextAreaElement | null;
+    const replyButton = panel.querySelector('[data-action="reporter-reply"]') as HTMLButtonElement | null;
+    const body = textarea?.value.trim() ?? '';
+    // Guard: reject empty bodies AND already-in-flight submits — both prevented
+    // double-posts in dogfood when users mashed Enter on a slow link.
+    if (!reportId || !body || this.reporterLoading) return;
+    this.reporterLoading = true;
+    if (replyButton) replyButton.disabled = true;
+    this.render();
+    try {
+      await this.callbacks.onReporterReply?.(reportId, body);
+      // Clear the field on success so the next render (driven by
+      // loadReporterComments) doesn't repaint the just-sent text and tempt
+      // the user into a duplicate submit.
+      if (textarea) textarea.value = '';
+      await this.loadReporterComments(reportId);
+    } catch (err) {
+      this.reporterError = err instanceof Error ? err.message : 'Could not send reply.';
+      this.reporterLoading = false;
+      this.render();
+    }
   }
 }

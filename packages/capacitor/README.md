@@ -73,6 +73,7 @@ bottom sheet from the standalone SDKs.
 | `minDescriptionLength` | `20`                                 | Matches the web/native SDK contracts |
 | `useNativeWidget`      | `false`                              | When `true`, uses the bottom-sheet from the native SDK |
 | `triggerInset`         | `{ right: 24, bottom: 32 }`          | Per-edge offset (in points / dp) forwarded to the iOS `MushiConfig.TriggerInset` and Android `MushiConfig.TriggerInset` so the native FAB clears tab bars and primary CTAs |
+| `triggerInsetPreset`   | _none_                               | `'tabBarSafe'` (≈72 pt bottom — apps with a bottom tab bar) or `'dockSafe'` (≈96 pt bottom — apps with a tall iOS-style dock or mini-player). Only fills in fields you didn't already set on `triggerInset`, so you can override per-edge while keeping the safe baseline |
 
 ## License
 

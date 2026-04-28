@@ -76,6 +76,10 @@ function ReportRowViewInner({
   const uniqueUsers = row.unique_users ?? 0
   const blastRadius = uniqueUsers > 0 ? uniqueUsers : dedupCount
   const canDispatch = DISPATCH_ELIGIBLE_STATUSES.has(row.status)
+  const reporterReplied = Boolean(
+    row.last_reporter_reply_at
+      && (!row.last_admin_reply_at || new Date(row.last_reporter_reply_at) > new Date(row.last_admin_reply_at)),
+  )
 
   // "Loud" rows = critical OR significant blast (>=3 distinct users felt it).
   // These get a slightly tinted background so triagers can scan the page and
@@ -198,6 +202,13 @@ function ReportRowViewInner({
                 }`}
               >
                 ×{blastRadius} felt
+              </span>
+            </Tooltip>
+          )}
+          {reporterReplied && (
+            <Tooltip content="Reporter replied after the last developer response. Open the report thread.">
+              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border bg-accent/15 text-accent border-accent/30">
+                reporter replied
               </span>
             </Tooltip>
           )}
