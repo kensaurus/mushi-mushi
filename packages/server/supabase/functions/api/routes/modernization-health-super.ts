@@ -536,6 +536,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
         planId: entitlement.plan.id,
         planName: entitlement.plan.display_name,
         projectId: entitlement.projectId,
+        organizationId: entitlement.organizationId,
         featureFlags: flags,
         gatedRoutes: GATED_ROUTES.map((r) => ({
           ...r,

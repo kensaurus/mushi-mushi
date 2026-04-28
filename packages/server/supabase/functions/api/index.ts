@@ -13,6 +13,7 @@ import {
 import { registerEnterpriseIntegrationsRoutes } from './routes/enterprise-integrations.ts';
 import { registerFixDispatchRoutes } from './routes/fix-dispatch.ts';
 import { registerModernizationHealthSuperRoutes } from './routes/modernization-health-super.ts';
+import { registerOrganizationRoutes } from './routes/organizations.ts';
 import { registerPublicRoutes } from './routes/public.ts';
 import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
 import { registerReportsDashboardRoutes } from './routes/reports-dashboard.ts';
@@ -126,8 +127,26 @@ app.use(
   '/v1/admin/*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  }),
+);
+app.use(
+  '/v1/org/*',
+  cors({
+    origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Org-Id'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  }),
+);
+app.use(
+  '/v1/invitations/*',
+  cors({
+    origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['POST', 'OPTIONS'],
     credentials: true,
   }),
 );
@@ -164,6 +183,8 @@ registerBillingProjectsQueueGraphRoutes(app);
 registerAskMushiRoutes(app);
 
 registerQueryFixesRepoRoutes(app);
+
+registerOrganizationRoutes(app);
 
 registerEnterpriseIntegrationsRoutes(app);
 

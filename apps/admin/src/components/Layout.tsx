@@ -20,6 +20,7 @@ import { SidebarHealthDot } from './SidebarHealthDot'
 import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
 import { useEntitlements } from '../lib/useEntitlements'
 import { ProjectSwitcher } from './ProjectSwitcher'
+import { OrgSwitcher } from './OrgSwitcher'
 import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
@@ -170,6 +171,7 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
+      { label: 'Members',    path: '/organization/members', icon: IconProjects },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
       { label: 'SSO',        path: '/sso',        icon: IconSSO },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
@@ -883,6 +885,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-2">
             <SearchButton />
             <PlanBadge />
+            <OrgSwitcher />
             <ProjectSwitcher />
           </div>
         </header>
@@ -945,6 +948,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </button>
           </Tooltip>
           <PlanBadge />
+          <OrgSwitcher />
           <ProjectSwitcher />
         </header>}
 

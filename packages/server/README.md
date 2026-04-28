@@ -6,7 +6,7 @@ Backend for Mushi Mushi — Supabase Edge Functions powering the LLM pipeline, k
 
 ```
 supabase/functions/
-  api/                       Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins, SSO, integrations)
+  api/                       Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins, SSO, integrations, organizations + invitations under /v1/org and /v1/invitations)
   fast-filter/               Stage 1 — Haiku extracts key facts and a structured evidence object, blocks spam (prompt-cached). **Internal-only** — rejects callers without `MUSHI_INTERNAL_CALLER_SECRET` / `SUPABASE_SERVICE_ROLE_KEY` since 2026-04-21 (SEC-1)
   classify-report/           Stage 2 — Sonnet deep analysis with vision + RAG. AIR-GAPPED: only consumes Stage 1's structured evidence, never raw user strings (prompt-cached). **Internal-only + `airGap=true` required** — any caller omitting the flag gets `400 AIR_GAP_REQUIRED` (SEC-7, belt-and-braces around OWASP LLM01 prompt injection)
   judge-batch/               Nightly LLM quality scoring + prompt A/B auto-promotion
@@ -29,10 +29,12 @@ supabase/functions/
                              dropdowns and `project_settings.*_model` defaults read from here.
 
 supabase/templates/          Branded HTML email templates (confirmation, recovery)
-supabase/migrations/         PostgreSQL schema + RLS policies (latest: audit-remediation —
-                             20 FK indexes, Anthropic prompt-cache columns on llm_invocations,
-                             nightly prompt_versions reconciliation cron, O(1) early-exit
-                             guard on recover_stranded_pipeline)
+supabase/migrations/         PostgreSQL schema + RLS policies (latest: Teams v1 —
+                             organizations + organization_members above projects,
+                             invitations table with `accept_invitation(token)` RPC,
+                             plan-gate trigger that rejects invites on hobby/starter,
+                             last-owner guard, and the `private.*` SECURITY DEFINER
+                             helpers used by org-aware RLS to avoid recursion)
 ```
 
 ## Development

@@ -55,6 +55,8 @@ const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default:
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
+const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
+const AcceptInvitePage = lazy(() => import('./pages/AcceptInvitePage').then(m => ({ default: m.AcceptInvitePage })))
 // Wave T (2026-04-23) — new /inbox page, lazy-loaded like every other route so
 // the first-paint bundle isn't inflated for users who don't open it.
 const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m.InboxPage })))
@@ -120,6 +122,14 @@ export function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route
+          path="/invite/accept"
+          element={
+            <Suspense fallback={<Loading text="Loading invite..." />}>
+              <AcceptInvitePage />
+            </Suspense>
+          }
+        />
+        <Route
           path="/*"
           element={
             <ProtectedRoute>
@@ -155,6 +165,8 @@ export function App() {
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
+                  <Route path="/organization/members" element={<OrganizationSettingsPage />} />
+                  <Route path="/org/:slug/settings/*" element={<OrganizationSettingsPage />} />
                   <Route path="/inbox" element={<InboxPage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="*" element={<NotFoundPage />} />

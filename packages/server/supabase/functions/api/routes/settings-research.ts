@@ -1,44 +1,15 @@
-import type { Hono, Context } from 'npm:hono@4';
-import { streamSSE } from 'npm:hono@4/streaming';
+import type { Hono } from 'npm:hono@4';
 
-import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
-import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { reportError } from '../../_shared/sentry.ts';
-import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import {
-  requireFeature,
-  resolveActiveEntitlement,
-  GATED_ROUTES,
-  type FeatureFlag,
-} from '../../_shared/entitlements.ts';
-import { requireSuperAdmin } from '../../_shared/super-admin.ts';
-import { checkIngestQuota } from '../../_shared/quota.ts';
-import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
-import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
-import { reportSubmissionSchema } from '../../_shared/schemas.ts';
-import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
-import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
-import { awardPoints, getReputation } from '../../_shared/reputation.ts';
-import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
-import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
+import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
+import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { createExternalIssue } from '../../_shared/integrations.ts';
-import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
-import { getAvailableTags } from '../../_shared/ontology.ts';
-import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
-import { getPlan, listPlans } from '../../_shared/plans.ts';
-import { estimateCallCostUsd } from '../../_shared/pricing.ts';
-import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, resolveOwnedProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
-  ingestReport,
-  invokeFixWorker,
   normalizeSdkConfig,
-  triggerClassification,
   type SdkConfigRow,
 } from '../helpers.ts';
 
@@ -48,13 +19,11 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: {} });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: {} }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data } = await db
       .from('project_settings')
@@ -70,14 +39,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const body = await c.req.json();
     const db = getServiceClient();
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const allowed = [
       'slack_webhook_url',
@@ -183,13 +147,11 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { keys: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { keys: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data } = await db
       .from('project_settings')
@@ -262,13 +224,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     }
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const secretName = byokSecretName(project.id, provider);
     const { error: vaultErr } = await db.rpc('vault_store_secret', {
@@ -339,13 +297,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       return c.json({ ok: false, error: { code: 'BAD_PROVIDER' } }, 400);
     }
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const secretName = byokSecretName(project.id, provider);
     try {
@@ -404,13 +358,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     }
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     // Reuse the same resolver path the LLM pipeline takes. If this returns null
     // the user has no BYOK and no env fallback — surface that as 'untested'.
@@ -528,13 +478,11 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   app.get('/v1/admin/byok/firecrawl', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: null });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: null }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data } = await db
       .from('project_settings')
@@ -567,13 +515,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     };
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const update: Record<string, unknown> = { project_id: project.id };
 
@@ -649,13 +593,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   app.delete('/v1/admin/byok/firecrawl', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const secretName = firecrawlSecretName(project.id);
     try {
@@ -699,13 +639,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   app.post('/v1/admin/byok/firecrawl/test', jwtAuth, requireFeature('byok'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { probeFirecrawl } = await import('../_shared/firecrawl.ts');
     const probe = await probeFirecrawl(db, project.id);
@@ -773,13 +709,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     }
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { firecrawlSearch } = await import('../_shared/firecrawl.ts');
 
@@ -889,13 +821,11 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const limit = Math.min(parseInt(c.req.query('limit') ?? '20', 10), 100);
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { sessions: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { sessions: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data: sessions, error } = await db
       .from('research_sessions')
@@ -912,13 +842,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const sessionId = c.req.param('id');
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data: session, error: sErr } = await db
       .from('research_sessions')
@@ -951,13 +877,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     }
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data: report } = await db
       .from('reports')

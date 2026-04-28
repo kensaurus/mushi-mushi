@@ -47,7 +47,15 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id, name').eq('owner_id', userId);
+    const projectIdsForUser = await ownedProjectIds(db, userId);
+    const { data: projects } =
+      projectIdsForUser.length > 0
+        ? await db
+            .from('projects')
+            .select('id, name, organization_id')
+            .in('id', projectIdsForUser)
+            .order('created_at', { ascending: true })
+        : { data: [] };
 
     // Always send the plan catalog so the FE can render the upgrade modal
     // without a second round-trip — even when the user owns 0 projects.
@@ -67,12 +75,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         db
           .from('billing_subscriptions')
           .select(
-            'project_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
+            'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
           )
           .in('project_id', projectIds),
         db
           .from('billing_customers')
-          .select('project_id, stripe_customer_id, default_payment_ok, email')
+          .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email')
           .in('project_id', projectIds),
         db
           .from('usage_events')
@@ -142,6 +150,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         const limit = plan.included_reports_per_month;
         return {
           project_id: p.id,
+          organization_id: p.organization_id ?? null,
           project_name: p.name,
           // Both kept for FE backwards-compat: legacy `plan: 'free' | <price-id>` and the new tier object.
           plan: plan.id === 'hobby' ? 'free' : (sub?.stripe_price_id ?? plan.id),

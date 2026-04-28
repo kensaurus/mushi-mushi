@@ -818,6 +818,12 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(body.project_id))
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    const { data: projectRef } = await db
+      .from('projects')
+      .select('id, organization_id')
+      .eq('id', body.project_id)
+      .maybeSingle();
+    const organizationId = projectRef?.organization_id ?? null;
 
     const cfg = stripeFromEnv();
     if (!cfg.secretKey) {
@@ -908,6 +914,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
       customerId = customer.id;
       await db.from('billing_customers').upsert({
         project_id: body.project_id,
+        organization_id: organizationId,
         stripe_customer_id: customerId,
         email: body.email,
         default_payment_ok: false,
@@ -932,6 +939,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
         stripe_customer_id: customerId,
         session_id: session.id,
         plan_id: plan.id,
+        organization_id: organizationId,
         line_items: lineItems.length,
       },
     );

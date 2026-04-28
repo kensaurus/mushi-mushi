@@ -176,11 +176,22 @@ The sidebar (`src/components/Layout.tsx`) groups the 24 admin pages into the sam
 - **Do — dispatch fixes** — `Fixes`, `Repo`, `Prompt Lab`
 - **Check — verify quality** — `Judge`, `Health`, `Intelligence`, `Research`
 - **Act — integrate & scale** — `Integrations`, `MCP`, `Marketplace`, `Notifications` — standardise verified fixes back into the upstream tools your team already lives in (including the coding agents that actually write the patch)
-- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
+- **Workspace** (account / identity / admin — outside the bug-fix loop) — `Projects`, `Members`, `Settings`, `SSO`, `Billing`, `Audit Log`, `Compliance`, `Storage`, `Query`
 
 `SSO` and `Billing` deliberately sit in **Workspace**, not Act — they're one-time admin / account concerns that don't iterate every loop. Act is reserved for tabs that turn a verified fix into something the rest of the team's toolchain consumes.
 
-The global header (desktop + mobile) also mounts a **`PlanBadge`** next to the `ProjectSwitcher` — a tier-toned pill (Hobby / Starter / Pro / Enterprise) that shows the active project's subscription at a glance, surfaces a yellow `%` chip at ≥80% quota and a red `!` at 100%, and deep-links to `/billing`. Driven by `useActivePlan()` which reads from the already-cached `/v1/admin/billing` payload, so there's zero extra network cost. Gives paid members an always-visible "you're on Pro" signal and gives free users a proactive "you're 4% of the way to your quota" nudge — both research-backed fixes for the two biggest SaaS pricing UX anti-patterns (no plan recognition + hidden benefits).
+The global header (desktop + mobile) mounts an **`OrgSwitcher`**, **`ProjectSwitcher`**, and **`PlanBadge`**. `OrgSwitcher` persists `mushi:active_org_id` and sends `X-Mushi-Org-Id` through `apiFetch`; `ProjectSwitcher` keeps project focus with `X-Mushi-Project-Id`; `PlanBadge` deep-links to `/billing`. Together they make the team → project → plan context explicit before any page data loads.
+
+### Teams and members
+
+`/organization/members` is the self-serve roster for Pro and Enterprise organizations. Hobby and Starter render an upgrade prompt and the backend returns `402 feature_not_in_plan` for invite attempts. The page reads `/v1/org/:id/members`, creates invites through `/v1/org/:id/invitations`, and accepts invite links at `/invite/accept?token=...`.
+
+Roles:
+
+- `owner` — billing, plan changes, member management; protected by the last-owner database trigger.
+- `admin` — invite members and manage shared project settings.
+- `member` — work in shared projects and triage reports.
+- `viewer` — read-only shared project access.
 
 Each section header carries a stage badge (`P` / `D` / `C` / `A`) and a tooltip explaining the PDCA phase. The Dashboard page mirrors this with a `PdcaCockpit` strip — see [Dashboard composition](#dashboard-composition) below.
 

@@ -51,6 +51,7 @@ const HOBBY: PricingPlan = {
     sla_hours: null,
     audit_log: false,
     intelligence_reports: false,
+    teams: false,
   },
 }
 
@@ -74,6 +75,7 @@ const STARTER: PricingPlan = {
     sla_hours: 48,
     audit_log: true,
     intelligence_reports: false,
+    teams: false,
   },
 }
 
@@ -97,6 +99,7 @@ const PRO: PricingPlan = {
     sla_hours: 8,
     audit_log: true,
     intelligence_reports: true,
+    teams: true,
   },
 }
 
@@ -122,6 +125,7 @@ const ENTERPRISE: PricingPlan = {
     intelligence_reports: true,
     self_hosted: true,
     soc2: true,
+    teams: true,
   },
 }
 
@@ -214,7 +218,7 @@ function makeCtx(overrides: { userId?: string; projectId?: string; path?: string
 describe('GATED_ROUTES catalog', () => {
   it('covers every paid surface listed in the production-readiness plan', () => {
     const flags = new Set(GATED_ROUTES.map((r) => r.flag))
-    expect(flags).toEqual(new Set(['sso', 'byok', 'plugins', 'intelligence_reports']))
+    expect(flags).toEqual(new Set(['sso', 'byok', 'plugins', 'intelligence_reports', 'teams']))
   })
 
   it('uses route prefixes that exist in api/index.ts', () => {
@@ -224,6 +228,7 @@ describe('GATED_ROUTES catalog', () => {
       '/v1/admin/byok',
       '/v1/admin/plugins',
       '/v1/admin/intelligence',
+      '/v1/org',
     ])
   })
 })
@@ -235,6 +240,7 @@ describe('minimumPlanFor', () => {
     expect((await minimumPlanFor('audit_log'))?.id).toBe('starter')
     expect((await minimumPlanFor('sso'))?.id).toBe('pro')
     expect((await minimumPlanFor('intelligence_reports'))?.id).toBe('pro')
+    expect((await minimumPlanFor('teams'))?.id).toBe('pro')
     expect((await minimumPlanFor('soc2'))?.id).toBe('enterprise')
     expect((await minimumPlanFor('self_hosted'))?.id).toBe('enterprise')
   })
@@ -245,23 +251,23 @@ describe('requireFeature middleware (gated-route × plan-tier matrix)', () => {
   // test to be touched.
   const matrix: Array<{
     plan: PricingPlan
-    expectations: Record<'sso' | 'byok' | 'plugins' | 'intelligence_reports', boolean>
+    expectations: Record<'sso' | 'byok' | 'plugins' | 'intelligence_reports' | 'teams', boolean>
   }> = [
     {
       plan: HOBBY,
-      expectations: { sso: false, byok: false, plugins: false, intelligence_reports: false },
+      expectations: { sso: false, byok: false, plugins: false, intelligence_reports: false, teams: false },
     },
     {
       plan: STARTER,
-      expectations: { sso: false, byok: true, plugins: true, intelligence_reports: false },
+      expectations: { sso: false, byok: true, plugins: true, intelligence_reports: false, teams: false },
     },
     {
       plan: PRO,
-      expectations: { sso: true, byok: true, plugins: true, intelligence_reports: true },
+      expectations: { sso: true, byok: true, plugins: true, intelligence_reports: true, teams: true },
     },
     {
       plan: ENTERPRISE,
-      expectations: { sso: true, byok: true, plugins: true, intelligence_reports: true },
+      expectations: { sso: true, byok: true, plugins: true, intelligence_reports: true, teams: true },
     },
   ]
 
@@ -271,7 +277,7 @@ describe('requireFeature middleware (gated-route × plan-tier matrix)', () => {
 
   for (const row of matrix) {
     for (const [flag, expectedAllowed] of Object.entries(row.expectations) as Array<
-      ['sso' | 'byok' | 'plugins' | 'intelligence_reports', boolean]
+      ['sso' | 'byok' | 'plugins' | 'intelligence_reports' | 'teams', boolean]
     >) {
       it(
         `${row.plan.id} → ${flag}: ${expectedAllowed ? 'allowed (200)' : 'blocked (402)'}`,

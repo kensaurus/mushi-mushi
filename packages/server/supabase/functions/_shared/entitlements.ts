@@ -35,7 +35,7 @@
 // ============================================================
 import type { Context, Next } from 'npm:hono@4'
 import { getServiceClient } from './db.ts'
-import { listPlans, resolvePlanFromSubscription, type PricingPlan } from './plans.ts'
+import { getPlan, listPlans, resolvePlanFromSubscription, type PricingPlan } from './plans.ts'
 import { log } from './logger.ts'
 
 export type FeatureFlag =
@@ -46,9 +46,11 @@ export type FeatureFlag =
   | 'audit_log'
   | 'soc2'
   | 'self_hosted'
+  | 'teams'
 
 export interface ResolvedEntitlement {
   projectId: string
+  organizationId: string | null
   plan: PricingPlan
   /** true when `plan.feature_flags[flag]` is the literal boolean `true`. */
   hasFeature: (flag: FeatureFlag) => boolean
@@ -75,31 +77,63 @@ export async function resolveActiveEntitlement(
 
   const db = getServiceClient()
   let projectId = c.get('projectId') as string | undefined
+  let organizationId = c.get('organizationId') as string | undefined
 
   if (!projectId) {
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single()
+    const { data: memberships } = await db
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId)
+
+    const orgIds = (memberships ?? []).map((m) => m.organization_id).filter(Boolean)
+    let projectQuery = db.from('projects').select('id, organization_id').limit(1)
+    if (orgIds.length > 0) {
+      projectQuery = projectQuery.in('organization_id', orgIds)
+    } else {
+      projectQuery = projectQuery.eq('owner_id', userId)
+    }
+    const { data: project } = await projectQuery.single()
     if (!project) return null
     projectId = project.id as string
+    organizationId = (project.organization_id as string | null) ?? undefined
   }
 
-  const { data: sub } = await db
-    .from('billing_subscriptions')
-    .select('status, plan_id')
-    .eq('project_id', projectId)
-    .in('status', ['active', 'trialing', 'past_due'])
-    .order('current_period_end', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  if (!organizationId) {
+    const { data: project } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', projectId)
+      .maybeSingle()
+    organizationId = (project?.organization_id as string | null) ?? undefined
+  }
 
-  const plan = await resolvePlanFromSubscription(sub)
+  const { data: org } = organizationId
+    ? await db.from('organizations').select('plan_id').eq('id', organizationId).maybeSingle()
+    : { data: null }
+
+  const { data: sub } = organizationId
+    ? await db
+        .from('billing_subscriptions')
+        .select('status, plan_id')
+        .eq('organization_id', organizationId)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .order('current_period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : await db
+        .from('billing_subscriptions')
+        .select('status, plan_id')
+        .eq('project_id', projectId)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .order('current_period_end', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+  const plan = sub ? await resolvePlanFromSubscription(sub) : await getPlan(org?.plan_id ?? 'hobby')
 
   return {
     projectId,
+    organizationId: organizationId ?? null,
     plan,
     hasFeature: (flag) => plan.feature_flags?.[flag] === true,
   }
@@ -219,4 +253,5 @@ export const GATED_ROUTES: ReadonlyArray<{
   { prefix: '/v1/admin/byok', flag: 'byok' },
   { prefix: '/v1/admin/plugins', flag: 'plugins' },
   { prefix: '/v1/admin/intelligence', flag: 'intelligence_reports' },
+  { prefix: '/v1/org', flag: 'teams' },
 ]

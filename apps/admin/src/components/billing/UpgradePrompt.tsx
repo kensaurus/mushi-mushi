@@ -78,6 +78,15 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
     tagline: 'Run Mushi Mushi inside your VPC.',
     bullets: ['Helm chart + Terraform module.', 'Air-gapped install supported.', 'Annual contract.'],
   },
+  teams: {
+    title: 'Teams and shared projects',
+    tagline: 'Invite teammates into the same organization and collaborate on every project.',
+    bullets: [
+      'Shared project access with owner, admin, member, and viewer roles.',
+      'Email invitations with an auditable accept flow.',
+      'Available on Pro and Enterprise plans.',
+    ],
+  },
 }
 
 interface InlineProps {

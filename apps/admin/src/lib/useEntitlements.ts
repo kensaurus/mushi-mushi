@@ -24,6 +24,7 @@ export type FeatureFlag =
   | 'audit_log'
   | 'soc2'
   | 'self_hosted'
+  | 'teams'
 
 export interface UpgradeTarget {
   id: string
@@ -35,6 +36,7 @@ interface EntitlementResponse {
   planId: string
   planName: string
   projectId?: string
+  organizationId?: string | null
   featureFlags: Partial<Record<FeatureFlag, boolean>>
   gatedRoutes: Array<{ prefix: string; flag: FeatureFlag; allowed: boolean }>
   isSuperAdmin: boolean

@@ -11,6 +11,7 @@ import type { ZodType } from 'zod'
 import { debugLog, debugWarn, debugError } from './debug'
 import { RESOLVED_SUPABASE_URL, RESOLVED_SUPABASE_ANON_KEY, RESOLVED_API_URL } from './env'
 import { getActiveProjectIdSnapshot } from './activeProject'
+import { getActiveOrgIdSnapshot } from './activeOrg'
 
 const authOptions = {
   // Web defaults are true today, but making them explicit documents the
@@ -103,7 +104,7 @@ function coalesceKey(
 ): string | null {
   if (method !== 'GET' && method !== 'HEAD') return null
   if (body != null) return null
-  return `${method}:${getActiveProjectIdSnapshot() ?? 'no-project'}:${path}`
+  return `${method}:${getActiveOrgIdSnapshot() ?? 'no-org'}:${getActiveProjectIdSnapshot() ?? 'no-project'}:${path}`
 }
 
 export function invalidateApiCache(pathPrefix?: string): void {
@@ -179,6 +180,7 @@ async function doFetch<T>(
   try {
     const token = await getAccessToken()
     const activeProjectId = getActiveProjectIdSnapshot()
+    const activeOrgId = getActiveOrgIdSnapshot()
 
     const res = await fetch(url, {
       ...options,
@@ -186,6 +188,7 @@ async function doFetch<T>(
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
+        ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),
         ...options?.headers,
       },
     })
@@ -353,11 +356,13 @@ export async function apiFetchRaw(path: string, options?: RequestInit): Promise<
   try {
     const token = await getAccessToken()
     const activeProjectId = getActiveProjectIdSnapshot()
+    const activeOrgId = getActiveOrgIdSnapshot()
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(activeProjectId ? { 'X-Mushi-Project-Id': activeProjectId } : {}),
+        ...(activeOrgId ? { 'X-Mushi-Org-Id': activeOrgId } : {}),
         ...options?.headers,
       },
     })

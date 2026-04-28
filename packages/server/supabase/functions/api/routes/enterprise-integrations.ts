@@ -1,46 +1,15 @@
-import type { Hono, Context } from 'npm:hono@4';
-import { streamSSE } from 'npm:hono@4/streaming';
+import type { Hono } from 'npm:hono@4';
 
-import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.ts';
-import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { reportError } from '../../_shared/sentry.ts';
-import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import {
-  requireFeature,
-  resolveActiveEntitlement,
-  GATED_ROUTES,
-  type FeatureFlag,
-} from '../../_shared/entitlements.ts';
-import { requireSuperAdmin } from '../../_shared/super-admin.ts';
-import { checkIngestQuota } from '../../_shared/quota.ts';
-import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
-import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
-import { reportSubmissionSchema } from '../../_shared/schemas.ts';
-import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
-import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
-import { awardPoints, getReputation } from '../../_shared/reputation.ts';
-import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
-import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
+import { jwtAuth } from '../../_shared/auth.ts';
+import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
-import { getAvailableTags } from '../../_shared/ontology.ts';
-import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
-import { getPlan, listPlans } from '../../_shared/plans.ts';
+import { getActivePlugins } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
-import {
-  canManageProjectSdkConfig,
-  coerceSdkConfigUpdate,
-  ingestReport,
-  invokeFixWorker,
-  normalizeSdkConfig,
-  triggerClassification,
-  type SdkConfigRow,
-} from '../helpers.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
@@ -50,13 +19,11 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/sso', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { configs: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { configs: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
     const { data } = await db
       .from('enterprise_sso_configs')
       .select(
@@ -90,14 +57,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       domains?: string[];
     };
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     if (!['saml', 'oidc'].includes(body.providerType)) {
       return c.json(
@@ -275,13 +237,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const configId = c.req.param('id');
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data: config } = await db
       .from('enterprise_sso_configs')
@@ -397,14 +355,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const body = await c.req.json().catch(() => ({}));
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data: job, error } = await db
       .from('fine_tuning_jobs')
@@ -885,13 +838,11 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/integrations', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { integrations: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { integrations: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
     const { data } = await db
       .from('project_integrations')
       .select('id, project_id, integration_type, config, is_active, last_synced_at, created_at')
@@ -940,14 +891,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       isActive?: boolean;
     };
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     // Pull existing config so we can preserve secret fields the UI re-sent as
     // masked placeholders (e.g. "…abcd"). Without this, re-saving from the
@@ -991,14 +937,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const integrationType = c.req.param('type');
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { error } = await db
       .from('project_integrations')
@@ -1044,13 +985,11 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/integrations/platform', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { platform: null } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { platform: null } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const allFields = Object.values(PLATFORM_KIND_FIELDS).flat().join(', ');
     const { data: settings } = await db
@@ -1111,13 +1050,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const allowed = PLATFORM_KIND_FIELDS[kind];
     const vaulted = new Set(VAULTED_FIELDS_BY_KIND[kind] ?? []);
@@ -1218,13 +1153,11 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/plugins', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { plugins: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { plugins: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
     const plugins = await getActivePlugins(db, project.id);
     return c.json({ ok: true, data: { plugins } });
   });
@@ -1233,14 +1166,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const pluginName = body.pluginName ?? body.name;
     const pluginVersion = body.pluginVersion ?? body.version ?? '1.0.0';
@@ -1298,13 +1226,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const slug = c.req.param('slug');
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     try {
       await db.rpc('vault_delete_secret', { secret_name: `mushi/plugin/${project.id}/${slug}` });
@@ -1476,13 +1400,11 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/plugins/dispatch-log', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { entries: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { entries: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data, error } = await db
       .from('plugin_dispatch_log')
@@ -1501,14 +1423,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const count = Math.min(body.count ?? 10, 50);
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/generate-synthetic`, {
@@ -1546,14 +1463,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.post('/v1/admin/intelligence', jwtAuth, requireFeature('intelligence_reports'), async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     // Wave S (2026-04-23): Intelligence reports run a multi-LLM pipeline
     // (stage1 classify → stage2 synthesize → summary). Even with the queue
@@ -1789,14 +1701,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/graph-backend/status', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data: settings } = await db
       .from('project_settings')
@@ -1843,14 +1750,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.post('/v1/admin/graph-backend/snapshot', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { data, error } = await db.rpc('mushi_age_snapshot_drift', { p_project_id: project.id });
     if (error) return dbError(c, error);
@@ -1863,14 +1765,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const body = await c.req.json().catch(() => ({}));
     const optIn = body?.optIn === true;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { error } = await db
       .from('project_settings')
@@ -2217,12 +2114,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     }
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const res = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/${job}`, {
       method: 'POST',
@@ -2230,7 +2124,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
         Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ projectId: project?.id, trigger: 'manual' }),
+      body: JSON.stringify({ projectId: project.id, trigger: 'manual' }),
     });
     const result = await res.json().catch(() => ({}));
     return c.json({ ok: res.ok, data: result.data ?? result });

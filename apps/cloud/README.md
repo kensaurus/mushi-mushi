@@ -104,10 +104,10 @@ Four tiers, seeded in `pricing_plans` (see `packages/server/supabase/migrations/
 
 | Tier       | Base / month | Included reports | Overage / report | Retention | Notable feature flags                       |
 | ---------- | -----------: | ---------------: | ---------------: | --------: | ------------------------------------------- |
-| Hobby      |        $0.00 |            1,000 |          (none)  |    7 days | 3 seats max                                 |
-| Starter    |       $19.00 |           10,000 |         $0.0025  |   30 days | BYOK, plugins, audit log, 48h SLA           |
-| Pro        |       $99.00 |           50,000 |         $0.0020  |   90 days | + SSO, intelligence reports, 8h SLA         |
-| Enterprise |  Sales-led   |        Unlimited |   Custom         |  365 days | + self-hosted, SOC 2, 4h SLA                |
+| Hobby      |        $0.00 |            1,000 |          (none)  |    7 days | Solo workspace                              |
+| Starter    |       $19.00 |           10,000 |         $0.0025  |   30 days | Solo paid workspace, BYOK, plugins, audit log |
+| Pro        |       $99.00 |           50,000 |         $0.0020  |   90 days | Teams, SSO, intelligence reports, 8h SLA    |
+| Enterprise |  Sales-led   |        Unlimited |   Custom         |  365 days | Teams, self-hosted, SOC 2, 4h SLA           |
 
 Hourly `usage-aggregator` Edge Function pushes per-day report counts
 to Stripe Meter Events with idempotent identifiers. The admin
@@ -116,11 +116,15 @@ as an always-visible **"Plans at a glance"** comparison table (4 tiers
 side-by-side, feature-grouped, "Your plan" highlight), a per-project
 **`PlanBenefitsList`** (✓/— entitlements spelling out retention, seats,
 BYOK, plugins, audit log, intelligence reports, SSO, SOC 2, self-hosted,
-SLA hours), and a real **`LLM $X.XX`** cost chip from
+SLA hours, and Teams), and a real **`LLM $X.XX`** cost chip from
 `llm_invocations.cost_usd`. The admin shell header also mounts a
 **`PlanBadge`** (tier-toned pill next to the project switcher, deep-links
 to `/billing`) so paid members always see their tier and free users see
 quota usage without opening the billing page.
+
+Teams are gated at Pro and above. The marketing page says Hobby and Starter
+are solo workspaces; the admin console, edge gateway, and database trigger all
+enforce the same rule before an invitation can be created.
 
 ## Required environment variables
 

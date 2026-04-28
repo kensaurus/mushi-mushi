@@ -15,7 +15,7 @@ const pricingTiers = [
       'All 8 SDKs (web, mobile, desktop)',
       'Hosted admin console + dashboards',
       '7-day report retention',
-      'Up to 3 teammates',
+      'Solo workspace',
       'Community Discord support',
     ],
     cta: { label: 'Start free', href: '/signup' },
@@ -27,7 +27,7 @@ const pricingTiers = [
     headline: '10,000 reports + $0.0025/report after',
     points: [
       'Everything in Hobby',
-      'Unlimited teammates',
+      'Solo workspace, paid usage',
       '30-day report retention',
       'Plugin marketplace + webhooks',
       'BYOK (bring your own LLM keys)',
@@ -43,6 +43,7 @@ const pricingTiers = [
     headline: '50,000 reports + $0.002/report after',
     points: [
       'Everything in Starter',
+      'Teams & shared projects',
       '90-day report retention + audit log',
       'SSO (SAML / OIDC)',
       'Weekly intelligence reports (PDF)',
