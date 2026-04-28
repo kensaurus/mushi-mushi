@@ -43,13 +43,33 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
   const db = getServiceClient()
 
   if (!input.skipMembershipCheck && input.userId) {
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', input.userId)
-      .eq('project_id', input.projectId)
-      .single()
-    if (!membership) {
+    // Teams v1: dispatch is allowed for owner / org-member / project-member.
+    // Inlined here to avoid pulling the api/shared.ts barrel into _shared.
+    const { data: project } = await db
+      .from('projects')
+      .select('owner_id, organization_id')
+      .eq('id', input.projectId)
+      .maybeSingle()
+    let allowed = !!project && (project as { owner_id?: string }).owner_id === input.userId
+    if (!allowed && project && (project as { organization_id?: string | null }).organization_id) {
+      const { data: orgMember } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', (project as { organization_id: string }).organization_id)
+        .eq('user_id', input.userId)
+        .maybeSingle()
+      if (orgMember) allowed = true
+    }
+    if (!allowed) {
+      const { data: projMember } = await db
+        .from('project_members')
+        .select('role')
+        .eq('user_id', input.userId)
+        .eq('project_id', input.projectId)
+        .maybeSingle()
+      if (projMember) allowed = true
+    }
+    if (!allowed) {
       return { ok: false, code: 'FORBIDDEN', message: 'Not a member of this project' }
     }
   }

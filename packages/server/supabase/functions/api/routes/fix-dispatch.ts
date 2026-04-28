@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -66,37 +66,19 @@ export function registerFixDispatchRoutes(app: Hono): void {
 
       const db = getServiceClient();
 
-      // Authorisation chain:
-      //   1. Explicit `project_members` row (multi-collaborator projects).
-      //   2. Fall back to `projects.owner_id` when no member row exists
-      //      (seeded dogfood project + single-owner accounts created before
-      //      the members table was introduced).
-      // `.maybeSingle()` returns {data:null} on zero rows rather than logging
-      // a PGRST116 error — important because the previous `.single()` was
-      // setting `sentryHonoErrorHandler` off on projects without a matching
-      // member row, which 500'd the endpoint instead of 403'ing.
-      const { data: membership, error: membershipErr } = await db
-        .from('project_members')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('project_id', body.projectId)
-        .maybeSingle();
-      if (membershipErr) {
-        return dbError(c, membershipErr);
-      }
-      if (!membership) {
-        const { data: ownerRow, error: ownerErr } = await db
-          .from('projects')
-          .select('owner_id')
-          .eq('id', body.projectId)
-          .maybeSingle();
-        if (ownerErr) return dbError(c, ownerErr);
-        if (!ownerRow || ownerRow.owner_id !== userId) {
-          return c.json(
-            { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
-            403,
-          );
-        }
+      // Authorisation chain (Teams v1):
+      //   1. Direct project owner.
+      //   2. Org-scoped membership (any role can dispatch — same gate as
+      //      legacy project_members which didn't role-check either).
+      //   3. Per-project membership (legacy multi-collaborator projects).
+      // Centralised in userCanAccessProject so we don't drift from the
+      // other dispatch / read endpoints.
+      const access = await userCanAccessProject(db, userId, body.projectId);
+      if (!access.allowed) {
+        return c.json(
+          { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
+          403,
+        );
       }
 
       const { data: settings, error: settingsErr } = await db
@@ -195,11 +177,9 @@ export function registerFixDispatchRoutes(app: Hono): void {
   app.get('/v1/admin/fixes/dispatches', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: memberships } = await db
-      .from('project_members')
-      .select('project_id')
-      .eq('user_id', userId);
-    const projectIds = (memberships ?? []).map((m) => m.project_id);
+    // Teams v1: include org-member projects (the previous project_members-only
+    // filter showed "0 dispatches" to invited team members).
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { dispatches: [] } });
     const { data: dispatches } = await db
       .from('fix_dispatch_jobs')
@@ -220,13 +200,9 @@ export function registerFixDispatchRoutes(app: Hono): void {
       .eq('id', dispatchId)
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', job.project_id)
-      .single();
-    if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Teams v1: owner / org-member / project-member can all read & cancel.
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     return c.json({ ok: true, data: job });
   });
 
@@ -254,13 +230,9 @@ export function registerFixDispatchRoutes(app: Hono): void {
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', job.project_id)
-      .single();
-    if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Teams v1: owner / org-member / project-member can all read & cancel.
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     // Terminal states can't be cancelled — return 409 so the UI can show a
     // precise message instead of hiding the button state-dependently.
@@ -356,13 +328,9 @@ export function registerFixDispatchRoutes(app: Hono): void {
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', job.project_id)
-      .single();
-    if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Teams v1: owner / org-member / project-member can all read & cancel.
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     // V5.3.2 §2.14, B3: AG-UI streaming protocol envelope.
     // The legacy `event: status` frame is still emitted for back-compat; new

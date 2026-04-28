@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -121,8 +121,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   app.get('/v1/admin/groups', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const { data } = await db
       .from('report_groups')
@@ -139,8 +138,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     const { targetGroupId } = await c.req.json();
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const { data: sourceGroup } = await db
       .from('report_groups')
@@ -189,8 +187,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   app.get('/v1/admin/verifications', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { verifications: [] } });
 
     const { data } = await db
@@ -210,13 +207,12 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
   app.get('/v1/admin/fixes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    // Use project_members so collaborators (not just owner_id) see fixes for
-    // projects they belong to. Mirrors the membership pattern in dispatches.
-    const { data: memberships } = await db
-      .from('project_members')
-      .select('project_id')
-      .eq('user_id', userId);
-    const projectIds = (memberships ?? []).map((m) => m.project_id);
+    // Teams v1: use accessibleProjectIds() so collaborators reached via
+    // organization membership (the new normal) AND project_members rows
+    // (legacy / per-project shares) AND direct owner_id all see the same
+    // pipeline. The previous project_members-only filter showed "0 fixes"
+    // to invited org members.
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { fixes: [] } });
 
     // Optional `q` substring search — the admin command palette needs fast
@@ -251,8 +247,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     const body = await c.req.json();
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const { data: report } = await db
       .from('reports')
@@ -366,8 +361,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     const fixId = c.req.param('id');
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     const { data } = await db
       .from('fix_attempts')
       .select(
@@ -400,13 +394,8 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
       .maybeSingle();
     if (!attempt) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', attempt.project_id)
-      .maybeSingle();
-    if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    const access = await userCanAccessProject(db, userId, attempt.project_id);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const internalSecret =
@@ -674,21 +663,11 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
       );
     }
 
-    // Membership check: owner OR project_members. Keeps collaborators seeing
-    // the same repo overview without having to own the project.
-    const { data: membership } = await db
-      .from('project_members')
-      .select('project_id')
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    const { data: ownerRow } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('owner_id', userId)
-      .maybeSingle();
-    if (!membership && !ownerRow) {
+    // Authz: owner OR org-member OR project-member — single helper covers
+    // all three (Teams v1 collaborators don't always have project_members
+    // rows because membership is granted at the org level).
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
         403,
@@ -808,19 +787,9 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
         400,
       );
     }
-    const { data: membership } = await db
-      .from('project_members')
-      .select('project_id')
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .maybeSingle();
-    const { data: ownerRow } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('owner_id', userId)
-      .maybeSingle();
-    if (!membership && !ownerRow) {
+    // Authz: owner OR org-member OR project-member.
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
         403,
@@ -946,8 +915,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const allowed: Record<string, boolean> = {
       status: true,

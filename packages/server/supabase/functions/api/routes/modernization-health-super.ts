@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -58,11 +58,9 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
     const status = c.req.query('status') ?? 'pending';
     const db = getServiceClient();
 
-    const { data: memberships } = await db
-      .from('project_members')
-      .select('project_id')
-      .eq('user_id', userId);
-    const projectIds = (memberships ?? []).map((m) => m.project_id);
+    // Teams v1: include org-member projects so invited teammates see the
+    // workspace's modernization findings (was project_members-only before).
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { findings: [] } });
 
     let q = db
@@ -92,13 +90,9 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
       .maybeSingle();
     if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', finding.project_id)
-      .maybeSingle();
-    if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Teams v1: owner / org-member / project-member can act on findings.
+    const access = await userCanAccessProject(db, userId, finding.project_id);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     if (!finding.related_report_id) {
       return c.json(
@@ -199,13 +193,9 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
       .maybeSingle();
     if (!finding) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', finding.project_id)
-      .maybeSingle();
-    if (!membership) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Teams v1: owner / org-member / project-member can act on findings.
+    const access = await userCanAccessProject(db, userId, finding.project_id);
+    if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     const { error } = await db
       .from('modernization_findings')
@@ -250,13 +240,13 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
     }
 
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    // Teams v1: any member can probe an integration in an org they belong
+    // to. Pick the first accessible project (matches /v1/admin/health/history
+    // semantics; integrations are wired per-project but health probes are
+    // workspace-level so the precise pick doesn't matter).
+    const accessibleIds = await ownedProjectIds(db, userId);
+    if (accessibleIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
+    const project = { id: accessibleIds[0] };
 
     const { data: settings } = await db
       .from('project_settings')
@@ -445,18 +435,17 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
   app.get('/v1/admin/health/history', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { history: [] } });
+    // Teams v1: show health history for every accessible project in one
+    // stream — org members hitting Integrations → Health History should see
+    // the workspace's probe ticks regardless of which org member triggered
+    // them.
+    const accessibleIds = await ownedProjectIds(db, userId);
+    if (accessibleIds.length === 0) return c.json({ ok: true, data: { history: [] } });
 
     const { data } = await db
       .from('integration_health_history')
       .select('id, kind, status, latency_ms, message, source, checked_at')
-      .eq('project_id', project.id)
+      .in('project_id', accessibleIds)
       .order('checked_at', { ascending: false })
       .limit(200);
 
