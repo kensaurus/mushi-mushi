@@ -173,6 +173,38 @@ export function registerPublicRoutes(app: Hono): void {
     return Boolean(member);
   }
 
+  app.get('/v1/sdk/latest-version', async (c) => {
+    const packageName = c.req.query('package')?.trim();
+    if (!packageName) {
+      return c.json(
+        { ok: false, error: { code: 'MISSING_PACKAGE', message: 'package query parameter is required' } },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+    const { data, error } = await db
+      .from('sdk_versions')
+      .select('package, version, deprecated, deprecation_message, released_at')
+      .eq('package', packageName)
+      .order('released_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+    c.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+    return c.json({
+      ok: true,
+      data: {
+        package: packageName,
+        latest: data?.version ?? null,
+        deprecated: data?.deprecated ?? false,
+        deprecationMessage: data?.deprecation_message ?? null,
+        releasedAt: data?.released_at ?? null,
+      },
+    });
+  });
+
   app.get('/v1/sdk/config', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
     const db = getServiceClient();
@@ -791,6 +823,18 @@ export function registerPublicRoutes(app: Hono): void {
     const apiKey = c.req.header('X-Mushi-Api-Key') || c.req.header('X-Mushi-Project');
 
     if (headerHash && ts && sig && apiKey) {
+      // Belt-and-suspenders: even though the HMAC is computed over the lowercase
+      // hash and a tampered value would fail signature verification, we also
+      // refuse anything that doesn't look like a SHA-256 hex digest before it
+      // ever flows into PostgREST `or()` filter strings downstream.
+      if (!/^[0-9a-f]{64}$/i.test(headerHash)) {
+        return {
+          ok: false,
+          status: 400,
+          code: 'BAD_TOKEN_HASH',
+          message: 'X-Reporter-Token-Hash must be a 64-char hex SHA-256 digest',
+        };
+      }
       const parsedTs = Number(ts);
       if (!Number.isFinite(parsedTs)) {
         return {
@@ -860,6 +904,124 @@ export function registerPublicRoutes(app: Hono): void {
     for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
     return diff === 0;
   }
+
+  app.get('/v1/reporter/reports', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const auth = await resolveReporterTokenHash(c, projectId);
+    if (!auth.ok)
+      return c.json(
+        { ok: false, error: { code: auth.code, message: auth.message } },
+        auth.status as 400 | 401,
+      );
+
+    const db = getServiceClient();
+    const { data: reports, error } = await db
+      .from('reports')
+      .select('id, status, category, severity, summary, description, created_at, last_admin_reply_at, last_reporter_reply_at')
+      .eq('project_id', projectId)
+      .eq('reporter_token_hash', auth.tokenHash)
+      .order('created_at', { ascending: false })
+      .limit(25);
+    if (error) return dbError(c, error);
+
+    const reportIds = (reports ?? []).map((r) => r.id);
+    const unreadByReport = new Map<string, number>();
+    if (reportIds.length > 0) {
+      const { data: unread } = await db
+        .from('reporter_notifications')
+        .select('report_id')
+        .eq('project_id', projectId)
+        .eq('reporter_token_hash', auth.tokenHash)
+        .is('read_at', null)
+        .in('report_id', reportIds);
+      for (const row of unread ?? []) {
+        unreadByReport.set(row.report_id, (unreadByReport.get(row.report_id) ?? 0) + 1);
+      }
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        reports: (reports ?? []).map((r) => ({
+          ...r,
+          unread_count: unreadByReport.get(r.id) ?? 0,
+        })),
+      },
+    });
+  });
+
+  app.get('/v1/reporter/reports/:id/comments', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const reportId = c.req.param('id');
+    const auth = await resolveReporterTokenHash(c, projectId);
+    if (!auth.ok)
+      return c.json(
+        { ok: false, error: { code: auth.code, message: auth.message } },
+        auth.status as 400 | 401,
+      );
+
+    const db = getServiceClient();
+    const { data: report, error: reportError } = await db
+      .from('reports')
+      .select('id')
+      .eq('id', reportId)
+      .eq('project_id', projectId)
+      .eq('reporter_token_hash', auth.tokenHash)
+      .maybeSingle();
+    if (reportError) return dbError(c, reportError);
+    if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+
+    const { data: comments, error } = await db
+      .from('report_comments')
+      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
+      .eq('report_id', reportId)
+      .or(`visible_to_reporter.eq.true,reporter_token_hash.eq.${auth.tokenHash}`)
+      .order('created_at', { ascending: true });
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { comments: comments ?? [] } });
+  });
+
+  app.post('/v1/reporter/reports/:id/reply', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    const reportId = c.req.param('id');
+    const auth = await resolveReporterTokenHash(c, projectId);
+    if (!auth.ok)
+      return c.json(
+        { ok: false, error: { code: auth.code, message: auth.message } },
+        auth.status as 400 | 401,
+      );
+
+    const body = await c.req.json().catch(() => ({}));
+    const text = typeof body.body === 'string' ? body.body.trim() : '';
+    if (!text) return c.json({ ok: false, error: { code: 'EMPTY_REPLY', message: 'Reply body is required' } }, 400);
+
+    const db = getServiceClient();
+    const { data: report, error: reportError } = await db
+      .from('reports')
+      .select('id')
+      .eq('id', reportId)
+      .eq('project_id', projectId)
+      .eq('reporter_token_hash', auth.tokenHash)
+      .maybeSingle();
+    if (reportError) return dbError(c, reportError);
+    if (!report) return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+
+    const { data: comment, error } = await db
+      .from('report_comments')
+      .insert({
+        report_id: reportId,
+        project_id: projectId,
+        author_kind: 'reporter',
+        reporter_token_hash: auth.tokenHash,
+        author_name: 'Reporter',
+        body: text.slice(0, 10000),
+        visible_to_reporter: true,
+      })
+      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
+      .single();
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { comment } }, 201);
+  });
 
   app.get('/v1/notifications', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;

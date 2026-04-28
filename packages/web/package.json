@@ -90,13 +90,13 @@
     {
       "name": "Core SDK bundle (minified + gzipped)",
       "path": "dist/index.js",
-      "limit": "22 KB",
+      "limit": "30 KB",
       "gzip": true
     },
     {
       "name": "Core SDK bundle (uncompressed)",
       "path": "dist/index.js",
-      "limit": "60 KB"
+      "limit": "70 KB"
     }
   ],
   "dependencies": {

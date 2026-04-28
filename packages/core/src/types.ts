@@ -6,16 +6,19 @@ export interface MushiConfig {
   projectId: string;
   apiKey: string;
   apiEndpoint?: string;
+  /** Opinionated defaults for common environments. Explicit config wins. */
+  preset?: MushiPreset;
   /**
    * Fetch non-secret widget/capture settings from the Mushi project at
    * startup. Defaults to true so console changes apply without rebuilding
    * host apps. Set false for fully static/offline deployments.
    */
-  runtimeConfig?: boolean;
+  runtimeConfig?: boolean | 'auto';
 
   sentry?: MushiSentryConfig;
   widget?: MushiWidgetConfig;
   capture?: MushiCaptureConfig;
+  privacy?: MushiPrivacyConfig;
   proactive?: MushiProactiveConfig;
   preFilter?: MushiPreFilterConfig;
   integrations?: MushiIntegrationsConfig;
@@ -35,6 +38,11 @@ export interface MushiSentryConfig {
 
 export interface MushiWidgetConfig {
   position?: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+  /**
+   * Raw CSS anchors for app shells with bottom navs/chat composers/cookie
+   * banners. When set, these values win over `position` + numeric `inset`.
+   */
+  anchor?: MushiWidgetAnchor;
   theme?: 'auto' | 'light' | 'dark';
   triggerText?: string;
   expandedTitle?: string;
@@ -62,6 +70,10 @@ export interface MushiWidgetConfig {
   /** Opt-in smart trigger behavior; planned to become the default in a later minor. */
   smartHide?: boolean | MushiWidgetSmartHideConfig;
   draggable?: boolean;
+  /** Show the tiny "Powered by Mushi vX" footer inside the widget panel. */
+  brandFooter?: boolean;
+  /** How the widget should surface SDK freshness warnings. Defaults to auto. */
+  outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
 }
 
 export interface MushiWidgetInset {
@@ -70,6 +82,15 @@ export interface MushiWidgetInset {
   bottom?: number | 'auto';
   left?: number | 'auto';
 }
+
+export interface MushiWidgetAnchor {
+  top?: string;
+  right?: string;
+  bottom?: string;
+  left?: string;
+}
+
+export type MushiPreset = 'production-calm' | 'beta-loud' | 'internal-debug' | 'manual-only';
 
 export interface MushiWidgetSmartHideConfig {
   onMobile?: 'edge-tab' | 'hide' | false;
@@ -80,18 +101,44 @@ export interface MushiWidgetSmartHideConfig {
 export interface MushiCaptureConfig {
   console?: boolean;
   network?: boolean;
+  /**
+   * URLs that should never be captured as host-app traffic. Strings are
+   * substring matches; RegExp values are tested against the fully resolved URL.
+   */
+  ignoreUrls?: MushiUrlMatcher[];
   performance?: boolean;
   screenshot?: 'on-report' | 'auto' | 'off';
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
 }
 
+export interface MushiPrivacyConfig {
+  /** DOM nodes to visually mask in screenshots before upload. */
+  maskSelectors?: string[];
+  /** DOM subtrees to remove from screenshots before upload. */
+  blockSelectors?: string[];
+  /** Let reporters remove an attached screenshot before submitting. Defaults to true. */
+  allowUserRemoveScreenshot?: boolean;
+}
+
 export interface MushiProactiveConfig {
   rageClick?: boolean;
   errorBoundary?: boolean;
   longTask?: boolean;
-  apiCascade?: boolean;
+  apiCascade?: boolean | MushiApiCascadeConfig;
   cooldown?: MushiCooldownConfig;
+}
+
+export type MushiUrlMatcher = string | RegExp;
+
+export interface MushiApiCascadeConfig {
+  enabled?: boolean;
+  /**
+   * URLs ignored by the API cascade detector. The SDK always ignores its own
+   * gateway endpoints as well; this hook lets host apps exclude analytics,
+   * health probes, or third-party scripts that are noisy by design.
+   */
+  ignoreUrls?: MushiUrlMatcher[];
 }
 
 export interface MushiCooldownConfig {
@@ -198,6 +245,7 @@ export interface MushiReport {
   consoleLogs?: MushiConsoleEntry[];
   networkLogs?: MushiNetworkEntry[];
   performanceMetrics?: MushiPerformanceMetrics;
+  timeline?: MushiTimelineEntry[];
   screenshotDataUrl?: string;
   selectedElement?: MushiSelectedElement;
 
@@ -211,6 +259,10 @@ export interface MushiReport {
    */
   fingerprintHash?: string;
   appVersion?: string;
+  /** SDK package that submitted the report, e.g. `@mushi-mushi/web`. */
+  sdkPackage?: string;
+  /** npm package version that submitted the report, e.g. `0.8.0`. */
+  sdkVersion?: string;
   proactiveTrigger?: string;
 
   sentryEventId?: string;
@@ -285,6 +337,14 @@ export interface MushiSelectedElement {
   rect?: { x: number; y: number; width: number; height: number };
 }
 
+export type MushiTimelineKind = 'route' | 'click' | 'request' | 'log' | 'screen';
+
+export interface MushiTimelineEntry {
+  ts: number;
+  kind: MushiTimelineKind;
+  payload: Record<string, unknown>;
+}
+
 // ---------------------------------------------------------------------------
 // SDK Lifecycle
 // ---------------------------------------------------------------------------
@@ -301,11 +361,24 @@ export type MushiEventType =
 
 export type MushiEventHandler = (event: { type: MushiEventType; data?: unknown }) => void;
 
+export interface MushiDiagnosticsResult {
+  apiEndpointReachable: boolean;
+  cspAllowsEndpoint: boolean;
+  widgetMounted: boolean;
+  shadowDomAvailable: boolean;
+  dialogSupported: boolean;
+  runtimeConfigLoaded: boolean;
+  captureScreenshotAvailable: boolean;
+  captureNetworkIntercepting: boolean;
+  sdkVersion: string;
+}
+
 export interface MushiSDKInstance {
   report(options?: { category?: MushiReportCategory }): void;
   on(event: MushiEventType, handler: MushiEventHandler): () => void;
   setUser(user: { id: string; email?: string; name?: string }): void;
   setMetadata(key: string, value: unknown): void;
+  setScreen(screen: { name: string; route?: string; feature?: string }): void;
   isOpen(): boolean;
   open(): void;
   openWith(category: MushiReportCategory): void;
@@ -316,6 +389,7 @@ export interface MushiSDKInstance {
   close(): void;
   destroy(): void;
   updateConfig(config: MushiRuntimeSdkConfig): void;
+  diagnose(): Promise<MushiDiagnosticsResult>;
 
   /**
    * Wave G4 — unified `captureEvent` API. Submits a bug report
@@ -358,6 +432,17 @@ export interface MushiApiClient {
   submitReport(report: MushiReport): Promise<MushiApiResponse<{ reportId: string }>>;
   getReportStatus(reportId: string): Promise<MushiApiResponse<{ status: MushiReportStatus }>>;
   getSdkConfig(): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
+  getLatestSdkVersion(packageName: string): Promise<MushiApiResponse<MushiSdkVersionInfo>>;
+  listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
+  listReporterComments(
+    reportId: string,
+    reporterToken: string,
+  ): Promise<MushiApiResponse<{ comments: MushiReporterComment[] }>>;
+  replyToReporterReport(
+    reportId: string,
+    reporterToken: string,
+    body: string,
+  ): Promise<MushiApiResponse<{ comment: MushiReporterComment }>>;
 }
 
 export interface MushiApiResponse<T> {
@@ -375,4 +460,35 @@ export interface MushiRuntimeSdkConfig {
     triggerMode?: 'shake' | 'button' | 'both' | 'none';
     minDescriptionLength?: number;
   };
+}
+
+export interface MushiSdkVersionInfo {
+  package: string;
+  latest: string | null;
+  current?: string;
+  deprecated: boolean;
+  deprecationMessage?: string | null;
+  releasedAt?: string | null;
+}
+
+export interface MushiReporterReport {
+  id: string;
+  status: string;
+  category: string;
+  severity?: string | null;
+  summary?: string | null;
+  description?: string | null;
+  created_at: string;
+  last_admin_reply_at?: string | null;
+  last_reporter_reply_at?: string | null;
+  unread_count?: number;
+}
+
+export interface MushiReporterComment {
+  id: number;
+  author_kind: 'admin' | 'reporter';
+  author_name?: string | null;
+  body: string;
+  visible_to_reporter?: boolean;
+  created_at: string;
 }

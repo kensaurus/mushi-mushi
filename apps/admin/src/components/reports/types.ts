@@ -32,6 +32,8 @@ export interface ReportRow {
    *  when a single device opens the same bug across multiple sessions. */
   unique_sessions?: number
   report_group_id?: string | null
+  last_reporter_reply_at?: string | null
+  last_admin_reply_at?: string | null
 }
 
 export type SortField = 'created_at' | 'severity' | 'confidence' | 'status' | 'component'

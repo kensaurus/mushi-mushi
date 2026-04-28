@@ -22,6 +22,7 @@
 
 import { Mushi } from './mushi';
 import type {
+  MushiDiagnosticsResult,
   MushiReportCategory,
   MushiSDKInstance,
 } from '@mushi-mushi/core';
@@ -86,6 +87,63 @@ export function openReport(category?: MushiReportCategory): void {
   const sdk = Mushi.getInstance();
   if (!sdk) return;
   sdk.report(category ? { category } : undefined);
+}
+
+/** Alias with language that reads better in Playwright smoke tests. */
+export function openMushiWidget(category?: MushiReportCategory): void {
+  openReport(category);
+}
+
+/**
+ * Wait until the live SDK instance exists and reports a mounted widget.
+ * Throws with the diagnostics payload so CI failures point at CSP / Shadow DOM
+ * / capture setup instead of a generic timeout.
+ */
+export async function expectMushiReady(options: { timeoutMs?: number } = {}): Promise<MushiDiagnosticsResult> {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const started = Date.now();
+  let lastDiagnostics: MushiDiagnosticsResult | null = null;
+
+  while (Date.now() - started < timeoutMs) {
+    const sdk = Mushi.getInstance();
+    if (sdk) {
+      lastDiagnostics = await sdk.diagnose();
+      if (lastDiagnostics.widgetMounted && lastDiagnostics.shadowDomAvailable) {
+        return lastDiagnostics;
+      }
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+
+  throw new Error(`[mushi:test-utils] SDK not ready: ${JSON.stringify(lastDiagnostics)}`);
+}
+
+/**
+ * Run an optional action and fail if the SDK fires an api_cascade proactive
+ * prompt during the observation window. This catches the exact glot.it class
+ * of bug where Mushi reports on its own runtime-config/report endpoints.
+ */
+export async function expectNoMushiSelfCascade(options: {
+  timeoutMs?: number;
+  action?: () => void | Promise<void>;
+} = {}): Promise<void> {
+  const sdk = Mushi.getInstance();
+  if (!sdk) return;
+  const timeoutMs = options.timeoutMs ?? 1_000;
+  let cascade: unknown = null;
+  const unsubscribe = sdk.on('proactive:triggered', (event) => {
+    const payload = event.data as { type?: string } | undefined;
+    if (payload?.type === 'api_cascade') cascade = event.data ?? true;
+  });
+  try {
+    await options.action?.();
+    await new Promise((r) => setTimeout(r, timeoutMs));
+  } finally {
+    unsubscribe();
+  }
+  if (cascade) {
+    throw new Error(`[mushi:test-utils] unexpected api_cascade from SDK self-noise: ${JSON.stringify(cascade)}`);
+  }
 }
 
 /**

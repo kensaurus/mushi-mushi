@@ -142,7 +142,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     let query = db
       .from('reports')
       .select(
-        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id',
+        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at',
         { count: 'exact' },
       )
       .in('project_id', projectIds)

@@ -48,6 +48,7 @@ import {
   EnvironmentFields,
 } from '../components/report-detail/ReportEvidence'
 import { ReportComments } from '../components/report-detail/ReportComments'
+import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
@@ -327,6 +328,10 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
 
         <Section title="Network requests" icon={<IconNetwork />}>
           <NetworkLogs logs={report.network_logs} />
+        </Section>
+
+        <Section title="Repro timeline" icon={<IconTerminal />}>
+          <TimelineCard report={report} />
         </Section>
       </div>
 

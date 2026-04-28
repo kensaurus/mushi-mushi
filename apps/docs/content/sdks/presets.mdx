@@ -1,0 +1,38 @@
+---
+title: SDK presets
+---
+
+# SDK presets
+
+Presets are additive defaults. Any explicit `Mushi.init()` option wins.
+
+```ts
+Mushi.init({
+  projectId: '...',
+  apiKey: 'mush_pk_...',
+  preset: 'production-calm',
+})
+```
+
+| Preset | Use when | Behavior |
+| --- | --- | --- |
+| `production-calm` | Public production apps | Manual launcher, quiet console freshness warnings, no proactive prompts |
+| `manual-only` | Settings/help pages only | No floating launcher, no proactive prompts |
+| `beta-loud` | Beta/internal test cohorts | Rage click, long task, API cascade, screenshots, element selector |
+| `internal-debug` | Staff builds | Loud proactive prompts, long cooldown budget, full capture |
+
+For bottom navs or chat composers, pair a preset with `widget.anchor`:
+
+```ts
+Mushi.init({
+  projectId: '...',
+  apiKey: 'mush_pk_...',
+  preset: 'production-calm',
+  widget: {
+    anchor: {
+      bottom: 'calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px)',
+      right: 'calc(12px + env(safe-area-inset-right))',
+    },
+  },
+})
+```

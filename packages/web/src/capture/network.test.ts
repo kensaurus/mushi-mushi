@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { MUSHI_INTERNAL_HEADER, MUSHI_INTERNAL_INIT_MARKER } from '@mushi-mushi/core';
 import { createNetworkCapture } from './network';
 
 describe('createNetworkCapture', () => {
@@ -43,6 +44,30 @@ describe('createNetworkCapture', () => {
     expect(entries.length).toBe(1);
     expect(entries[0].status).toBe(0);
     expect(entries[0].error).toBe('Network failed');
+  });
+
+  it('ignores SDK-internal fetches by marker, header, and URL', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(new Response('ok', { status: 200 }));
+    globalThis.fetch = mockFetch;
+    capture = createNetworkCapture({
+      apiEndpoint: 'https://mushi.example.com/functions/v1/api',
+      ignoreUrls: ['analytics.example.com'],
+    });
+
+    await fetch('https://mushi.example.com/functions/v1/api/v1/sdk/config');
+    await fetch('https://mushi.example.com/functions/v1/api/v1/reports', {
+      method: 'POST',
+      [MUSHI_INTERNAL_INIT_MARKER]: 'report-submit',
+    } as RequestInit & { [MUSHI_INTERNAL_INIT_MARKER]?: string });
+    await fetch('https://api.example.com/marked', {
+      headers: { [MUSHI_INTERNAL_HEADER]: 'sdk-config' },
+    });
+    await fetch('https://analytics.example.com/noisy');
+    await fetch('https://api.example.com/host');
+
+    const entries = capture.getEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].url).toContain('api.example.com/host');
   });
 
   it('respects ring buffer limit (max 30)', async () => {
