@@ -1740,15 +1740,15 @@ function CompactEmptyState({ title, description, action, hints }: EmptyStateProp
     <Card className="p-6 text-center">
       <p className="text-fg-muted text-sm">{title}</p>
       {description && (
-        <p className="text-fg-faint text-xs mt-1 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
+        <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
           {description}
         </p>
       )}
       {hints && hints.length > 0 && (
-        <ul className="mt-2 inline-block text-left text-2xs text-fg-faint space-y-0.5">
+        <ul className="mt-3 inline-block text-left font-mono text-2xs text-fg-faint space-y-0.5">
           {hints.map((hint) => (
             <li key={hint} className="flex items-start gap-1.5">
-              <span aria-hidden="true" className="text-fg-faint">·</span>
+              <span aria-hidden="true" className="text-brand">/</span>
               <span>{hint}</span>
             </li>
           ))}
