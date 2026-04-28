@@ -57,8 +57,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const days = Math.min(Math.max(Number(c.req.query('days')) || 14, 1), 90);
     const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = (projects ?? []).map((p) => p.id);
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) {
       return c.json({
         ok: true,
@@ -116,8 +115,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { reports: [], total: 0 } });
 
     const status = c.req.query('status');
@@ -234,9 +232,10 @@ export function registerReportsDashboardRoutes(app: Hono): void {
 
     const db = getServiceClient();
 
-    // Scope: owned projects only. Optional projectId narrows further.
-    const { data: owned } = await db.from('projects').select('id').eq('owner_id', userId);
-    let projectIds = owned?.map((p) => p.id) ?? [];
+    // Scope: every project the caller can access (owner OR org member).
+    // Optional projectId narrows further; we still require it to be inside
+    // the accessible set so a member can't NL-query a project they don't see.
+    let projectIds = await ownedProjectIds(db, userId);
     if (body.projectId) {
       if (!projectIds.includes(body.projectId)) {
         return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
@@ -308,8 +307,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const { data, error } = await db
       .from('reports')
@@ -368,8 +366,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const body = await c.req.json();
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const allowedFields: Record<string, boolean> = {
       status: true,
@@ -495,11 +492,10 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     }
 
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = (projects ?? []).map((p) => p.id);
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) {
       return c.json(
-        { ok: false, error: { code: 'NO_PROJECTS', message: 'No projects owned by user' } },
+        { ok: false, error: { code: 'NO_PROJECTS', message: 'No accessible projects for this user' } },
         403,
       );
     }
@@ -729,13 +725,13 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       return patch;
     };
 
-    // Scope every write to projects this admin still owns so a stolen undo
-    // call can't rewrite history across account boundaries.
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = (projects ?? []).map((p) => p.id);
+    // Scope every write to projects this admin can still access so a stolen
+    // undo call can't rewrite history across account boundaries. Teams v1:
+    // org members with read access can also undo their own actions.
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) {
       return c.json(
-        { ok: false, error: { code: 'NO_PROJECTS', message: 'No projects owned by user' } },
+        { ok: false, error: { code: 'NO_PROJECTS', message: 'No accessible projects for this user' } },
         403,
       );
     }
@@ -781,8 +777,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0)
       return c.json({ ok: true, data: { total: 0, byStatus: {}, byCategory: {}, bySeverity: {} } });
 
@@ -823,11 +818,17 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id, name').eq('owner_id', userId);
-    const projectIds = (projects ?? []).map((p) => p.id);
+    // Teams v1: dashboard shows every project the caller can access (owner
+    // OR org member). The project name list is also returned to the FE so
+    // the dashboard can render per-project breakouts — fetch both shapes.
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) {
       return c.json({ ok: true, data: { empty: true } });
     }
+    const { data: projects } = await db
+      .from('projects')
+      .select('id, name')
+      .in('id', projectIds);
 
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - 13);

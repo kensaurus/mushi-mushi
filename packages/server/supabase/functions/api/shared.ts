@@ -41,21 +41,41 @@ export function dbError(
   );
 }
 
-// Resolve the set of project ids visible to the authenticated user. Teams v1
-// scopes new access through organizations; the legacy owner_id fallback stays
-// during migration so existing unbackfilled dev databases keep working.
+// Resolve the set of project ids visible to the authenticated user. There
+// are three concurrent sources of "I can see this project" the api has to
+// honour:
+//
+//   1. `projects.owner_id == userId` — legacy / pre-Teams-v1 ownership
+//      (also still the source of truth for projects created without an org).
+//   2. `organization_members.user_id == userId` — Teams v1 grants access to
+//      every project under the joined org. Pro+ feature.
+//   3. `project_members.user_id == userId` — per-project membership rows
+//      (predates Teams v1; still used by /v1/admin/fixes & dispatch gates,
+//      and seeded when a user creates a project).
+//
+// All three union together. Without this every team member would silently
+// see "0 projects" on the relevant page even though /v1/admin/projects
+// correctly enumerates the org-scoped set (the bug I fixed in PR #69 only
+// addressed the projects-list endpoint; this one fixes the rest).
 export async function accessibleProjectIds(
   db: ReturnType<typeof getServiceClient>,
   userId: string,
 ): Promise<string[]> {
-  const [{ data: memberships }, { data: owned }] = await Promise.all([
+  const [
+    { data: orgMemberships },
+    { data: projectMemberships },
+    { data: owned },
+  ] = await Promise.all([
     db.from('organization_members').select('organization_id').eq('user_id', userId),
+    db.from('project_members').select('project_id').eq('user_id', userId),
     db.from('projects').select('id').eq('owner_id', userId),
   ]);
 
-  const orgIds = (memberships ?? []).map((m) => m.organization_id).filter(Boolean);
-  const ids = new Set<string>((owned ?? []).map((p) => p.id));
+  const ids = new Set<string>();
+  for (const p of owned ?? []) ids.add(p.id);
+  for (const m of projectMemberships ?? []) ids.add(m.project_id);
 
+  const orgIds = (orgMemberships ?? []).map((m) => m.organization_id).filter(Boolean);
   if (orgIds.length > 0) {
     const { data: projects } = await db.from('projects').select('id').in('organization_id', orgIds);
     for (const p of projects ?? []) ids.add(p.id);
@@ -65,6 +85,70 @@ export async function accessibleProjectIds(
 }
 
 export const ownedProjectIds = accessibleProjectIds;
+
+/**
+ * Single-project authorization check used by detail/mutation endpoints.
+ *
+ * Returns whether the caller can act on a specific project plus the
+ * caller's effective role. Three paths to "allowed", in priority order:
+ *
+ *   1. `projects.owner_id == userId` — role is reported as 'owner'.
+ *   2. The project belongs to an organization the caller is a member of —
+ *      role is the org membership role ('owner' | 'admin' | 'member' |
+ *      'viewer'). This is the Teams v1 path.
+ *   3. The caller has an explicit `project_members` row — role is
+ *      whatever project_members.role says.
+ *
+ * Endpoints that need write semantics should additionally check that the
+ * returned role is in {'owner','admin'}; this helper deliberately does
+ * NOT enforce that so the same primitive serves read/list/dispatch/etc.
+ *
+ * Returns `{ allowed: false, role: null }` when the project doesn't exist
+ * or the caller has no relationship to it. Callers translate that to a
+ * 403 (or 404 if they want to hide existence — keep the shape consistent
+ * with the rest of the api).
+ */
+export async function userCanAccessProject(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  projectId: string,
+): Promise<{ allowed: boolean; role: 'owner' | 'admin' | 'member' | 'viewer' | null }> {
+  const { data: project } = await db
+    .from('projects')
+    .select('id, owner_id, organization_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (!project) return { allowed: false, role: null };
+
+  // 1. Direct ownership wins immediately — owner has full rights regardless
+  //    of org membership rows (legacy projects with no org still work).
+  if (project.owner_id === userId) return { allowed: true, role: 'owner' };
+
+  // 2. Org-scoped membership (Teams v1).
+  if (project.organization_id) {
+    const { data: orgMembership } = await db
+      .from('organization_members')
+      .select('role')
+      .eq('organization_id', project.organization_id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    const role = (orgMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
+    if (role) return { allowed: true, role };
+  }
+
+  // 3. Per-project membership (older system; still seeded for project
+  //    creators and used by some dispatch gates).
+  const { data: projectMembership } = await db
+    .from('project_members')
+    .select('role')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  const projRole = (projectMembership?.role as 'owner' | 'admin' | 'member' | 'viewer' | undefined) ?? null;
+  if (projRole) return { allowed: true, role: projRole };
+
+  return { allowed: false, role: null };
+}
 
 export interface OwnedProjectRef {
   id: string;

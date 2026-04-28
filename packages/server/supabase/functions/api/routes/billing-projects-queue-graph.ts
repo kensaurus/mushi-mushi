@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -205,11 +205,16 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db
-      .from('projects')
-      .select('id, name, slug, created_at')
-      .eq('owner_id', userId)
-      .order('created_at', { ascending: true });
+    // Setup wizard lists every accessible project so org members can see
+    // and resume an existing onboarding (Teams v1).
+    const accessibleIds = await ownedProjectIds(db, userId);
+    const { data: projects } = accessibleIds.length
+      ? await db
+          .from('projects')
+          .select('id, name, slug, created_at')
+          .in('id', accessibleIds)
+          .order('created_at', { ascending: true })
+      : { data: [] as Array<{ id: string; name: string; slug: string; created_at: string }> };
 
     if (!projects || projects.length === 0) {
       return c.json({
@@ -897,14 +902,18 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       return c.json({ ok: false, error: { code: 'INVALID_SCOPES', message: scopes.error } }, 400);
     }
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('owner_id', userId)
-      .single();
-    if (!project)
+    // Minting API keys is owner/admin-only (Teams v1: org owner/admin or
+    // legacy direct project owner; viewers and members can't issue tokens).
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        403,
+      );
+    }
 
     const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
     const prefix = rawKey.slice(0, 12);
@@ -957,11 +966,21 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
+    // Rotating an API key is owner/admin-only.
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        403,
+      );
+    }
     const { data: project } = await db
       .from('projects')
       .select('id, name')
       .eq('id', projectId)
-      .eq('owner_id', userId)
       .single();
     if (!project) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
@@ -1042,14 +1061,17 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('owner_id', userId)
-      .single();
-    if (!project)
+    // Revoking an API key is owner/admin-only.
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+    if (access.role !== 'owner' && access.role !== 'admin') {
+      return c.json(
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
+        403,
+      );
+    }
 
     await db
       .from('project_api_keys')
@@ -1075,11 +1097,16 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
+    // Test reports verify the ingest path — anyone with project access can
+    // do this (matches what an end-user reporter could do anyway).
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
     const { data: project } = await db
       .from('projects')
       .select('id, name')
       .eq('id', projectId)
-      .eq('owner_id', userId)
       .single();
     if (!project)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
@@ -1192,17 +1219,15 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', projectId)
-      .maybeSingle();
-    if (!membership)
+    // Enabling codebase indexing wires GitHub webhooks + secrets — restrict
+    // to owner/admin (Teams v1 includes org owner/admin).
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
       return c.json(
-        { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
+        { ok: false, error: { code: 'FORBIDDEN', message: 'Owner or admin access required' } },
         403,
       );
+    }
 
     let body: {
       repo_url?: string;
@@ -1320,17 +1345,15 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: membership } = await db
-      .from('project_members')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('project_id', projectId)
-      .maybeSingle();
-    if (!membership)
+    // Read-only stats — any role on the project (Teams v1 includes
+    // org-members) can view.
+    const access = await userCanAccessProject(db, userId, projectId);
+    if (!access.allowed) {
       return c.json(
         { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
         403,
       );
+    }
 
     const [{ data: settings }, { data: primaryRepo }, { count: indexedFiles }] = await Promise.all([
       db
@@ -1470,8 +1493,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const { data: item } = await db
       .from('processing_queue')
@@ -1641,8 +1663,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   app.get('/v1/admin/graph/nodes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { nodes: [] } });
 
     const nodeType = c.req.query('type');
@@ -1698,8 +1719,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   app.get('/v1/admin/graph/edges', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const edgeType = c.req.query('type');
     let query = db
@@ -1730,8 +1750,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       );
 
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     if (!projectIds.length) return c.json({ ok: true, data: { nodes: [], edges: [] } });
 
     const { data: seedNode } = await db
@@ -1783,8 +1802,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const nodeId = c.req.param('nodeId');
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     const { data: node } = await db
       .from('graph_nodes')
       .select('id')
@@ -1804,13 +1822,10 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   app.get('/v1/admin/ontology', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
-    if (!project) return c.json({ ok: true, data: { tags: [] } });
+    // Teams v1: any accessible project anchors the ontology read.
+    const accessibleIds = await ownedProjectIds(db, userId);
+    if (accessibleIds.length === 0) return c.json({ ok: true, data: { tags: [] } });
+    const project = { id: accessibleIds[0] };
 
     const tags = await getAvailableTags(db, project.id);
     return c.json({ ok: true, data: { tags } });
@@ -1820,12 +1835,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const body = await c.req.json();
     const db = getServiceClient();
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('owner_id', userId)
-      .limit(1)
-      .single();
+    // Teams v1: any accessible project anchors the ontology write.
+    const accessibleIds = await ownedProjectIds(db, userId);
+    const project = accessibleIds.length ? { id: accessibleIds[0] } : null;
     if (!project)
       return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project found' } }, 404);
 
@@ -1884,8 +1896,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       console.warn('[nl-query] rate limit RPC failed:', msg);
     }
 
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     if (!projectIds.length)
       return c.json({ ok: true, data: { results: [], summary: 'No projects found.' } });
 

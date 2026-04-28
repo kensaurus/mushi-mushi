@@ -13,7 +13,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ASSIST_MODEL, ASSIST_FALLBACK } from '../../_shared/models.ts';
 import { logLlmInvocation, extractAnthropicCacheUsage } from '../../_shared/telemetry.ts';
-import { dbError } from '../shared.ts';
+import { dbError, ownedProjectIds } from '../shared.ts';
 
 // ============================================================
 // ASK MUSHI — scoped chat sidebar (Cmd/Ctrl+J)
@@ -259,14 +259,18 @@ async function loadAskMushiContextData(
   recentReportsBlock: string;
 }> {
   // New admin builds send the ProjectSwitcher id in X-Mushi-Project-Id.
-  // Older builds omit it, so we keep the first-owned fallback. Mentions still
-  // span all owned project ids (RLS-safe), but the recent-reports RAG follows
-  // the active project so the assistant answers in the same context as the UI.
-  const { data: projects } = await db
-    .from('projects')
-    .select('id,name')
-    .eq('owner_id', userId)
-    .order('created_at', { ascending: true });
+  // Older builds omit it, so we keep the first-accessible fallback. Mentions
+  // still span every project the caller can access (Teams v1: owner OR
+  // org-member OR project-member), but the recent-reports RAG follows the
+  // active project so the assistant answers in the same context as the UI.
+  const accessibleIds = await ownedProjectIds(db, userId);
+  const { data: projects } = accessibleIds.length
+    ? await db
+        .from('projects')
+        .select('id,name')
+        .in('id', accessibleIds)
+        .order('created_at', { ascending: true })
+    : { data: [] as Array<{ id: string; name: string }> };
   const owned = projects ?? [];
   const activeProject =
     (requestedProjectId ? owned.find((p) => p.id === requestedProjectId) : null) ??
@@ -1027,9 +1031,9 @@ export function registerAskMushiRoutes(app: Hono): void {
     const q = (c.req.query('q') ?? '').trim();
     if (q.length < 1) return c.json({ ok: true, data: { mentions: [] } });
     const db = getServiceClient();
-    // Scope every search to the user's owned projects so RLS stays honest.
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = (projects ?? []).map((p) => p.id);
+    // Scope every search to the projects the user can access so RLS stays
+    // honest (Teams v1: owner OR org-member OR project-member).
+    const projectIds = await ownedProjectIds(db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { mentions: [] } });
 
     const out: Array<{ kind: string; id: string; label: string; sublabel?: string }> = [];
