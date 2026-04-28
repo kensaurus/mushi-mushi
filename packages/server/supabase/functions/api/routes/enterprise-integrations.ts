@@ -9,7 +9,7 @@ import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
@@ -285,8 +285,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/audit', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
 
     const action = c.req.query('action');
     const resourceType = c.req.query('resource_type');
@@ -337,8 +336,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/fine-tuning', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     const limit = Math.min(Number(c.req.query('limit') ?? 50), 200);
     const { data } = await db
       .from('fine_tuning_jobs')
@@ -394,13 +392,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       .single();
     if (loadErr || !job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     if (job.status !== 'pending' && job.status !== 'rejected' && job.status !== 'failed') {
       return c.json(
@@ -460,13 +457,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     if (job.status !== 'exported') {
       return c.json(
@@ -519,13 +515,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     if (job.status !== 'training') {
       return c.json(
@@ -655,13 +650,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     if (job.status !== 'trained' && job.status !== 'rejected') {
       return c.json(
@@ -727,13 +721,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const { data: job } = await db.from('fine_tuning_jobs').select('*').eq('id', jobId).single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     const body = await c.req.json().catch(() => ({}));
     const promoteToStage = body.promoteToStage ?? job.promote_to_stage;
@@ -778,13 +771,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     await db
       .from('fine_tuning_jobs')
@@ -814,13 +806,12 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       .single();
     if (!job) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
 
-    const { data: project } = await db
-      .from('projects')
-      .select('id')
-      .eq('id', job.project_id)
-      .eq('owner_id', userId)
-      .single();
-    if (!project) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    // Fine-tuning state transitions are mutations — require an
+    // owner/admin role on the project's org (or legacy direct ownership).
+    const access = await userCanAccessProject(db, userId, job.project_id);
+    if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
 
     const { error } = await db.from('fine_tuning_jobs').delete().eq('id', jobId);
     if (error) return dbError(c, error);
@@ -1124,8 +1115,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const reportId = c.req.param('reportId');
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     const { data: report } = await db
       .from('reports')
       .select('id, project_id, summary, description, category, severity, component')
@@ -1443,8 +1433,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/synthetic', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: projects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = projects?.map((p) => p.id) ?? [];
+    const projectIds = await ownedProjectIds(db, userId);
     const { data } = await db
       .from('synthetic_reports')
       .select(
@@ -1789,8 +1778,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const { data: ownedProjects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const projectIds = (ownedProjects ?? []).map((p) => p.id);
+    const projectIds = await ownedProjectIds(db, userId);
 
     const windowParam = c.req.query('window') ?? '24h';
     const windowMs: Record<string, number> = {
@@ -2036,13 +2024,13 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     // Authorization: scope strictly to projects this user owns. The service
     // client bypasses RLS, and `admin_chart_events` is `SECURITY INVOKER` so
     // RLS only protects callers who use the user JWT — which we do not. We
-    // therefore enforce ownership ourselves by computing the owned project
-    // ids and filtering with `.in('project_id', ...)`. Global rows (cron
-    // ticks with NULL project_id) are still surfaced because they don't
-    // belong to any specific tenant.
+    // therefore enforce ownership ourselves by computing the accessible
+    // project ids (Teams v1: owner OR org-member OR project-member) and
+    // filtering with `.in('project_id', ...)`. Global rows (cron ticks with
+    // NULL project_id) are still surfaced because they don't belong to any
+    // specific tenant.
     const db = getServiceClient();
-    const { data: ownedProjects } = await db.from('projects').select('id').eq('owner_id', userId);
-    const ownedIds = (ownedProjects ?? []).map((p) => p.id as string);
+    const ownedIds = await ownedProjectIds(db, userId);
 
     // Validate the optional caller-supplied `project_id` filter as a UUID
     // before threading it into the query — both to reject obvious garbage
