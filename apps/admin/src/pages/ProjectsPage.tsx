@@ -26,11 +26,17 @@ import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { ACTIVE_PROJECT_QUERY_PARAM, setActiveProjectIdSnapshot } from '../lib/activeProject'
+import {
+  ACTIVE_PROJECT_QUERY_PARAM,
+  ACTIVE_PROJECT_STORAGE_KEY,
+  setActiveProjectIdSnapshot,
+} from '../lib/activeProject'
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { DangerConfirm } from '../components/DangerConfirm'
 
 interface ApiKey {
   id: string
@@ -87,11 +93,22 @@ interface Member {
 
 type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
 
+/**
+ * Org role of the current user IN the project's organization. Returned by
+ * GET /v1/admin/projects so the FE can gate destructive actions (delete
+ * project) on role without a second round-trip per row. `null` is the
+ * legacy-fallback shape (project predates the orgs backfill); treat null as
+ * "owner" for back-compat.
+ */
+type OrgRole = 'owner' | 'admin' | 'member' | 'viewer' | null
+
 interface Project {
   id: string
   name: string
   slug: string
   created_at: string
+  organization_id: string | null
+  organization_role: OrgRole
   api_keys: ApiKey[]
   active_key_count: number
   member_count: number
@@ -100,6 +117,15 @@ interface Project {
   last_report_at: string | null
   pdca_bottleneck: PdcaStageId | null
   pdca_bottleneck_label: string | null
+}
+
+/**
+ * True iff the current user is allowed to delete this project. Backend
+ * mirrors this exact rule (org owner/admin OR legacy direct owner_id).
+ */
+function canDeleteProject(project: Project): boolean {
+  if (project.organization_role === null) return true // legacy: treated as owner
+  return project.organization_role === 'owner' || project.organization_role === 'admin'
 }
 
 const PDCA_BOTTLENECK_TONE: Record<PdcaStageId, string> = {
@@ -158,6 +184,25 @@ export function ProjectsPage() {
   // losing the user's last choice on rerender.
   const [keyScopePreset, setKeyScopePreset] = useState<Record<string, ScopePresetId>>({})
 
+  // Delete-project flow (type-the-slug to confirm). `pendingDelete` holds the
+  // project the user is currently confirming; `deleting` flips while the
+  // DELETE call is in flight so the modal locks and the row can show a
+  // spinner if we ever need it. Kept separate from `busyProject` because
+  // delete is destructive and must own the modal lifecycle independently
+  // of the per-row "Send test report" / "Generate key" busy state.
+  const [pendingDelete, setPendingDelete] = useState<Project | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // Key-revoke confirm (themed replacement for the old window.confirm()).
+  // `pendingRevoke` holds {projectId, keyId, prefix} of the key being
+  // confirmed for revocation. Kept lightweight on purpose — keys are easy
+  // to re-mint, so this is a single "Are you sure?" not a type-to-confirm.
+  const [pendingRevoke, setPendingRevoke] = useState<
+    | { projectId: string; keyId: string; keyPrefix: string }
+    | null
+  >(null)
+  const [revoking, setRevoking] = useState(false)
+
   const { data, loading, error, reload } = usePageData<{ projects: Project[] }>(
     '/v1/admin/projects',
   )
@@ -212,17 +257,80 @@ export function ProjectsPage() {
     }
   }
 
-  async function revokeKey(projectId: string, keyId: string) {
-    if (!confirm('Revoke this API key? Any client using it will start failing immediately.')) return
+  // Open the themed revoke modal. Kept as a thin wrapper so the row's
+  // Revoke button doesn't need to know about modal state.
+  function requestRevokeKey(projectId: string, keyId: string, keyPrefix: string) {
+    setPendingRevoke({ projectId, keyId, keyPrefix })
+  }
+
+  async function confirmRevokeKey() {
+    if (!pendingRevoke) return
+    const { projectId, keyId } = pendingRevoke
+    setRevoking(true)
     try {
       const res = await apiFetch(`/v1/admin/projects/${projectId}/keys/${keyId}`, {
         method: 'DELETE',
       })
       if (!res.ok) throw new Error(res.error?.message ?? 'Revoke failed')
-      toast.success('API key revoked')
+      toast.success('API key revoked', 'Any client using it will start failing immediately.')
       reload()
+      setPendingRevoke(null)
     } catch (err) {
       toast.error('Failed to revoke key', err instanceof Error ? err.message : String(err))
+    } finally {
+      setRevoking(false)
+    }
+  }
+
+  // Project deletion. Backend mirrors authorization (owner/admin only) and
+  // verifies confirm_slug, but we send it from the FE too so an attacker
+  // who tampers with the modal can't delete a different project than the
+  // one they actually typed.
+  async function confirmDeleteProject() {
+    if (!pendingDelete) return
+    const project = pendingDelete
+    setDeleting(true)
+    try {
+      const res = await apiFetch<{ id: string; slug: string; name: string }>(
+        `/v1/admin/projects/${project.id}`,
+        {
+          method: 'DELETE',
+          body: JSON.stringify({ confirm_slug: project.slug }),
+        },
+      )
+      if (!res.ok) throw new Error(res.error?.message ?? 'Delete failed')
+
+      // If the just-deleted project was the active one in the switcher,
+      // clear it so subsequent navigations don't keep filtering by a dead
+      // id. The SPA's project picker will fall back to whatever project
+      // appears first on the next list fetch.
+      try {
+        if (window.localStorage.getItem(ACTIVE_PROJECT_STORAGE_KEY) === project.id) {
+          window.localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY)
+        }
+      } catch {
+        // localStorage might be disabled in private browsing — non-fatal.
+      }
+      // Drop the URL-level active-project param if it points at the dead row.
+      const next = new URLSearchParams(searchParams)
+      if (next.get(ACTIVE_PROJECT_QUERY_PARAM) === project.id) {
+        next.delete(ACTIVE_PROJECT_QUERY_PARAM)
+        setSearchParams(next, { replace: true })
+      }
+
+      toast.success(
+        `Deleted ${project.name}`,
+        'All reports, comments, fixes, keys, and integrations for this project have been removed.',
+      )
+      setPendingDelete(null)
+      reload()
+    } catch (err) {
+      toast.error(
+        `Failed to delete ${project.name}`,
+        err instanceof Error ? err.message : String(err),
+      )
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -258,7 +366,14 @@ export function ProjectsPage() {
     <div className="space-y-4">
       <PageHeader
         title="Projects"
-        description={`${pluralizeWithCount(projects.length, 'project')} owned by you`}
+        description={
+          // Use neutral "in this workspace" wording — invited team members
+          // (org `member`/`admin` role) don't *own* the projects but they
+          // can still access them. Saying "owned by you" misleads them
+          // into thinking the empty state means they're missing access
+          // when in fact they're seeing the org's full project list.
+          `${pluralizeWithCount(projects.length, 'project')} in this workspace`
+        }
       />
 
       <PageHelp
@@ -418,6 +533,27 @@ export function ProjectsPage() {
                         Generate key
                       </Btn>
                     </div>
+                    {/* Destructive last in tab order on purpose. Gated to
+                        org owner/admin (or legacy direct owner). Members and
+                        viewers don't see the button at all so they can't
+                        even attempt the action — backend mirrors this with
+                        a 403, but hiding it is better UX than letting them
+                        click and bounce. */}
+                    {canDeleteProject(project) && (
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPendingDelete(project)}
+                        disabled={isBusy || deleting}
+                        data-testid={`delete-project-${project.id}`}
+                        // Inline danger tone — only flips on hover so the
+                        // row's neutral chrome stays calm at rest.
+                        className="text-fg-secondary hover:text-danger hover:bg-danger-muted/15 hover:border-danger/30"
+                        title={`Permanently delete ${project.name} and every report, key, and integration tied to it.`}
+                      >
+                        Delete
+                      </Btn>
+                    )}
                   </div>
                 </div>
 
@@ -470,7 +606,7 @@ export function ProjectsPage() {
                             <Btn
                               variant="danger"
                               size="sm"
-                              onClick={() => revokeKey(project.id, key.id)}
+                              onClick={() => requestRevokeKey(project.id, key.id, key.key_prefix)}
                             >
                               Revoke
                             </Btn>
@@ -551,6 +687,48 @@ export function ProjectsPage() {
             )
           })}
         </div>
+      )}
+
+      {/* Type-the-slug-to-confirm modal for project deletion. Cascades
+          take care of every dependent table (54 rows in the FK graph as
+          of 2026-04-28: reports, comments, fix_attempts, api_keys, etc.).
+          The list of consequences shows live counts so the user knows
+          how much is on the line — vague warnings underweight the
+          decision in dogfooding. */}
+      {pendingDelete && (
+        <DangerConfirm
+          open={true}
+          title={`Delete ${pendingDelete.name}?`}
+          body="This permanently removes the project and every piece of data attached to it. This cannot be undone."
+          consequences={[
+            `${pluralizeWithCount(pendingDelete.report_count, 'report')} (and every comment, attachment, and fix attempt on them)`,
+            `${pluralizeWithCount(pendingDelete.api_keys.length, 'API key')} (active and revoked)`,
+            `${pluralizeWithCount(pendingDelete.member_count, 'project member')} role mapping`,
+            'All integrations, settings, repo links, and per-project billing rows',
+          ]}
+          requiredText={pendingDelete.slug}
+          inputLabel={`To confirm, type the project slug "${pendingDelete.slug}" below`}
+          confirmLabel={`Delete ${pendingDelete.name}`}
+          loading={deleting}
+          onConfirm={confirmDeleteProject}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {/* Themed key-revoke confirm. Replaces window.confirm() so the
+          dialog matches the rest of the app and is reachable from
+          Playwright (the native dialog isn't part of the page DOM). */}
+      {pendingRevoke && (
+        <ConfirmDialog
+          title="Revoke this API key?"
+          body={`The key starting with ${pendingRevoke.keyPrefix}… will stop working immediately. Any client still using it will start getting 401s. You can mint a replacement from the Generate key button after revoking.`}
+          confirmLabel="Revoke key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={revoking}
+          onConfirm={confirmRevokeKey}
+          onCancel={() => setPendingRevoke(null)}
+        />
       )}
     </div>
   )
