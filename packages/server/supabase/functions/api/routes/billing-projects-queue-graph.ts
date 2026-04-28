@@ -431,6 +431,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     });
   });
 
+  // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
+  // shared.ts rejects seed/test rows like `a0000000-0000-0000-0000-000000000001`
+  // because the version nibble is `0`. We need to delete those, so be
+  // permissive at the boundary and let the DB enforce key shape.
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   app.get('/v1/admin/projects', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -640,6 +646,82 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       );
     }
 
+    // Teams v1 added a NOT NULL `organization_id` to `projects`, but this
+    // POST kept inserting with only `owner_id`. Result: every "Create
+    // project" call returned 500 in production (verified 2026-04-28: kept
+    // logging `code 23502 — null value in column "organization_id"`).
+    // Resolve the active org from the same `X-Mushi-Org-Id` header the FE
+    // already sends for every other org-scoped call. Fall back to the
+    // user's first org membership (oldest first, owner roles preferred)
+    // when no header is set so that legacy SDK calls keep working.
+    const orgIdHint = c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null;
+    if (orgIdHint && !UUID_RE.test(orgIdHint)) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'INVALID_ORGANIZATION_ID', message: 'X-Mushi-Org-Id must be a UUID' },
+        },
+        400,
+      );
+    }
+
+    const { data: memberships } = await db
+      .from('organization_members')
+      .select('organization_id, role, created_at')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true });
+
+    const memberOrgs = memberships ?? [];
+    let organizationId: string | null = null;
+    if (orgIdHint) {
+      const match = memberOrgs.find((m) => m.organization_id === orgIdHint);
+      if (!match) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'You are not a member of the requested organization',
+            },
+          },
+          403,
+        );
+      }
+      // Only owners and admins can create projects in an org. Members and
+      // viewers get a clear 403 instead of a confusing DB error.
+      if (match.role !== 'owner' && match.role !== 'admin') {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Only org owners or admins can create projects',
+            },
+          },
+          403,
+        );
+      }
+      organizationId = match.organization_id;
+    } else {
+      // No hint: pick the user's oldest org where they're owner/admin so
+      // the new project lands somewhere they can manage.
+      const writable = memberOrgs.find((m) => m.role === 'owner' || m.role === 'admin');
+      organizationId = writable?.organization_id ?? null;
+    }
+
+    if (!organizationId) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'NO_ORGANIZATION',
+            message: 'You need to be an owner or admin of an organization to create a project',
+          },
+        },
+        400,
+      );
+    }
+
     const slug = name
       .trim()
       .toLowerCase()
@@ -651,6 +733,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         name: name.trim(),
         slug,
         owner_id: userId,
+        organization_id: organizationId,
       })
       .select('id')
       .single();
@@ -670,12 +753,6 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
 
     return c.json({ ok: true, data: { id: data.id, slug } }, 201);
   });
-
-  // Lenient UUID matcher (any 8-4-4-4-12 hex). The strict v1–v5 form in
-  // shared.ts rejects seed/test rows like `a0000000-0000-0000-0000-000000000001`
-  // because the version nibble is `0`. We need to delete those, so be
-  // permissive at the boundary and let the DB enforce key shape.
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   // Permanently deletes a project. All FKs to `projects.id` use ON DELETE
   // CASCADE so this single statement removes reports, comments, fix_attempts,

@@ -17,6 +17,7 @@ import { useToast } from '../lib/toast'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 interface QueryResult {
   sql: string
@@ -198,6 +199,10 @@ export function QueryPage() {
   const [question, setQuestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [runs, setRuns] = useState<RunItem[]>([])
+  // Pending-delete row for the history-pane delete affordance. Replaces a
+  // silent destructive click that previously dropped the row immediately.
+  const [pendingDeleteHistory, setPendingDeleteHistory] = useState<HistoryRow | null>(null)
+  const [deletingHistory, setDeletingHistory] = useState(false)
 
   const {
     data: historyData,
@@ -235,8 +240,12 @@ export function QueryPage() {
     loadHistory()
   }
 
-  async function deleteHistory(id: string) {
-    const res = await apiFetch(`/v1/admin/query/history/${id}`, { method: 'DELETE' })
+  async function confirmDeleteHistory() {
+    if (!pendingDeleteHistory) return
+    setDeletingHistory(true)
+    const res = await apiFetch(`/v1/admin/query/history/${pendingDeleteHistory.id}`, { method: 'DELETE' })
+    setDeletingHistory(false)
+    setPendingDeleteHistory(null)
     if (res.ok) {
       toast.success('Query removed from history')
       loadHistory()
@@ -448,7 +457,7 @@ export function QueryPage() {
                     row={h}
                     onRerun={() => handleSubmit(h.prompt)}
                     onToggleSave={() => toggleSaved(h)}
-                    onDelete={() => deleteHistory(h.id)}
+                    onDelete={() => setPendingDeleteHistory(h)}
                   />
                 ))}
               </ul>
@@ -476,7 +485,7 @@ export function QueryPage() {
                     row={h}
                     onRerun={() => handleSubmit(h.prompt)}
                     onToggleSave={() => toggleSaved(h)}
-                    onDelete={() => deleteHistory(h.id)}
+                    onDelete={() => setPendingDeleteHistory(h)}
                   />
                 ))}
               </ul>
@@ -484,6 +493,25 @@ export function QueryPage() {
           </Section>
         </div>
       </div>
+
+      {pendingDeleteHistory && (
+        <ConfirmDialog
+          title="Remove this query from history?"
+          body={
+            pendingDeleteHistory.is_saved
+              ? 'This query is in your saved list. Removing it deletes both the saved bookmark and the run history. The original results are not stored — re-run to fetch them again.'
+              : 'The history entry and its results will be deleted. Saved queries are not affected. You can always paste the prompt back in to re-run it.'
+          }
+          confirmLabel="Remove"
+          cancelLabel="Keep"
+          tone="danger"
+          loading={deletingHistory}
+          onConfirm={() => void confirmDeleteHistory()}
+          onCancel={() => {
+            if (!deletingHistory) setPendingDeleteHistory(null)
+          }}
+        />
+      )}
     </div>
   )
 }

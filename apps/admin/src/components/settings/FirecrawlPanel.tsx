@@ -11,6 +11,7 @@ import { usePageData } from '../../lib/usePageData'
 import { Section, Input, Btn, ErrorAlert, ResultChip } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
+import { ConfirmDialog } from '../ConfirmDialog'
 
 interface FirecrawlConfig {
   configured: boolean
@@ -39,6 +40,7 @@ export function FirecrawlPanel() {
   const [domainsDraft, setDomainsDraft] = useState<string | null>(null)
   const [pagesDraft, setPagesDraft] = useState<number | null>(null)
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null)
+  const [confirmingClear, setConfirmingClear] = useState(false)
 
   // Lazy-init local drafts from server data the first time it loads.
   if (cfg && domainsDraft === null) setDomainsDraft(cfg.allowedDomains.join('\n'))
@@ -70,12 +72,12 @@ export function FirecrawlPanel() {
     }
   }
 
-  async function clearKey() {
-    if (!confirm('Remove the Firecrawl API key? Research, fix-augmentation, and library-modernizer will be disabled until a new key is added.')) return
+  async function confirmClearKey() {
     setPending(true)
     setFeedback(null)
     const res = await apiFetch('/v1/admin/byok/firecrawl', { method: 'DELETE' })
     setPending(false)
+    setConfirmingClear(false)
     if (res.ok) {
       setKeyDraft('')
       setFeedback({ ok: true, message: 'Key cleared.' })
@@ -198,7 +200,7 @@ export function FirecrawlPanel() {
                 <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
                   Test connection
                 </Btn>
-                <Btn size="sm" variant="ghost" onClick={clearKey} disabled={pending}>
+                <Btn size="sm" variant="ghost" onClick={() => setConfirmingClear(true)} disabled={pending}>
                   Clear
                 </Btn>
               </>
@@ -210,6 +212,21 @@ export function FirecrawlPanel() {
             ) : null}
           </div>
         </div>
+      )}
+
+      {confirmingClear && (
+        <ConfirmDialog
+          title="Clear the Firecrawl API key?"
+          body="Research, fix-augmentation, and the library modernizer will all stop functioning until a new key is added. Existing cached results stay; pending crawls will fail."
+          confirmLabel="Clear key"
+          cancelLabel="Keep key"
+          tone="danger"
+          loading={pending}
+          onConfirm={() => void confirmClearKey()}
+          onCancel={() => {
+            if (!pending) setConfirmingClear(false)
+          }}
+        />
       )}
     </Section>
   )
