@@ -7,21 +7,48 @@ title: Capacitor quickstart
 The Capacitor plugin delegates to the native iOS / Android SDKs at runtime
 and falls back to `@mushi-mushi/core` on the web.
 
+## 1. Install
+
 ```bash
 pnpm add @mushi-mushi/capacitor
 npx cap sync
 ```
 
-```ts filename="src/mushi.ts"
-import { MushiMushi } from '@mushi-mushi/capacitor'
+## 2. Configure
 
-await MushiMushi.configure({
+```ts filename="src/mushi.ts"
+import { Mushi } from '@mushi-mushi/capacitor'
+
+await Mushi.configure({
   projectId: 'YOUR_PROJECT_ID',
-  apiKey: 'YOUR_PUBLIC_API_KEY',
-  enableShakeToReport: true,
+  apiKey:    'YOUR_PUBLIC_API_KEY',
+  triggerMode: 'shake',          // 'shake' | 'button' | 'both' | 'none'
+  captureScreenshot: true,
 })
 ```
 
+## 3. Submit a report
+
 ```ts
-await MushiMushi.submitReport({ description: 'Date picker is in UTC, not local' })
+await Mushi.report({
+  description: 'Date picker is in UTC, not local',
+  category:    'bug',
+})
 ```
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  **Coming from Cordova?** Migrate in place to Capacitor first — the
+  [Cordova → Capacitor migration guide](/migrations/cordova-to-capacitor)
+  walks through the plugin map and the Mushi widget swap.
+</Callout>
+
+<Callout type="info">
+  Considering React Native? See the
+  [Capacitor → React Native migration guide](/migrations/capacitor-to-react-native)
+  for the full porting plan, plugin map, and CI/CD recipe.
+</Callout>
+
+See [`@mushi-mushi/capacitor`](/sdks/capacitor) for the full API surface
+(listeners, `setUser`, `setMetadata`, `triggerInset`, `useNativeWidget`).

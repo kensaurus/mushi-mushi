@@ -25,7 +25,15 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SDK_CONFIG, renderSnippet, type SdkPreviewConfig } from './sdkSnippets'
+import {
+  DEFAULT_SDK_CONFIG,
+  FRAMEWORKS,
+  installCommand,
+  isMobileFramework,
+  MOBILE_FRAMEWORKS,
+  renderSnippet,
+  type SdkPreviewConfig,
+} from './sdkSnippets'
 
 const PROJECT = 'proj_abc'
 const KEY = 'mushi_secret_xyz'
@@ -155,6 +163,128 @@ describe('renderSnippet — Vanilla', () => {
  * passes through `widgetLines` and the bug would have surfaced
  * identically in each.
  */
+/**
+ * Mobile / hybrid framework snippets.
+ *
+ * The Capacitor snippet had a regression where the CLI emitted `Mushi.init(...)`
+ * but the actual API has always been `Mushi.configure(...)` (see
+ * packages/capacitor/src/definitions.ts). Anyone copy-pasting the snippet
+ * landed on a `TypeError: Mushi.init is not a function`. Locking the right
+ * call site here so we never re-ship that bug from the admin console either.
+ *
+ * Same idea for React Native / Expo: pin that we use `<MushiProvider>` from
+ * `@mushi-mushi/react-native` with top-level `projectId`/`apiKey` props (NOT
+ * the imaginary `enableShakeToReport` from older docs), and that the install
+ * line for Expo routes through `npx expo install` so peer-dep ranges stay
+ * Expo-SDK-aligned.
+ */
+describe('renderSnippet — mobile / hybrid frameworks', () => {
+  it('react-native uses <MushiProvider> with top-level projectId + apiKey', () => {
+    const out = renderSnippet('react-native', PROJECT, KEY)
+    expect(out).toContain("import { MushiProvider } from '@mushi-mushi/react-native'")
+    expect(out).toMatch(/<MushiProvider[\s\S]*projectId="proj_abc"[\s\S]*apiKey="mushi_secret_xyz"/)
+    expect(out).not.toContain('enableShakeToReport')
+  })
+
+  it('expo emits the same provider but mentions expo-sensors / npx expo install', () => {
+    const out = renderSnippet('expo', PROJECT, KEY)
+    expect(out).toContain('@mushi-mushi/react-native')
+    expect(out).toMatch(/<MushiProvider[\s\S]*projectId="proj_abc"/)
+    expect(out).toContain('expo-sensors')
+    expect(installCommand('expo')).toContain('npx expo install')
+  })
+
+  it('capacitor calls Mushi.configure (NEVER Mushi.init) and reminds users to cap sync', () => {
+    const out = renderSnippet('capacitor', PROJECT, KEY)
+    expect(out).toContain("import { Mushi } from '@mushi-mushi/capacitor'")
+    expect(out).toMatch(/await\s+Mushi\.configure\(/)
+    expect(out).not.toMatch(/Mushi\.init\(/)
+    expect(installCommand('capacitor')).toContain('cap sync')
+  })
+
+  it('mobile snippets reflect the configurator native.triggerMode', () => {
+    const cfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'shake' },
+    }
+    expect(renderSnippet('react-native', PROJECT, KEY, cfg)).toContain("trigger: 'shake'")
+    expect(renderSnippet('capacitor', PROJECT, KEY, cfg)).not.toContain('triggerMode:')
+  })
+
+  /**
+   * `triggerMode: 'none'` round-trip — pin both fixes against regression.
+   *
+   * Bug 1 (RN/Expo): MushiRNConfig.widget.trigger does NOT include 'none'
+   *   (see packages/react-native/src/provider.tsx). Before the fix, the
+   *   snippet emitted `trigger: 'none'`, which TypeScript rejects against
+   *   the real SDK. The web SDK's mergeRuntimeConfig already canonicalises
+   *   'none' → 'manual' at packages/web/src/mushi.ts:619-621, so the
+   *   snippet must do the same. Asserting the SDK-valid 'manual' (and
+   *   explicitly NOT the SDK-invalid 'none') both ways round.
+   *
+   * Bug 2 (Capacitor): MushiTriggerMode IS a 4-member union including
+   *   'none' (packages/capacitor/src/definitions.ts:11). Before the fix,
+   *   the snippet coerced 'none' → null, dropped the line entirely, and
+   *   the runtime default 'shake' silently took over — the OPPOSITE of
+   *   what the user picked. Pin that 'none' is emitted verbatim AND that
+   *   the snippet does NOT silently fall back to shake (no missing line).
+   */
+  it("rn/expo: triggerMode 'none' becomes 'manual' (the SDK-valid equivalent)", () => {
+    const cfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'none' },
+    }
+    for (const fw of ['react-native', 'expo'] as const) {
+      const out = renderSnippet(fw, PROJECT, KEY, cfg)
+      expect(out).toContain("trigger: 'manual'")
+      expect(out).not.toContain("trigger: 'none'")
+    }
+  })
+
+  it("capacitor: triggerMode 'none' is emitted verbatim, NOT silently dropped to default 'shake'", () => {
+    const cfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'none' },
+    }
+    const out = renderSnippet('capacitor', PROJECT, KEY, cfg)
+    expect(out).toContain("triggerMode: 'none'")
+    /* Sanity: the line wasn't dropped. If a future refactor reintroduces
+     * the 'none' → null coercion, this assertion keeps biting. */
+    expect(out).toMatch(/triggerMode:\s*'none'/)
+  })
+
+  it("capacitor: every non-default triggerMode is emitted (button + both + none, but NOT shake)", () => {
+    /* Property-style sanity: the implicit-default optimisation only applies
+     * to 'shake'. Every other valid MushiTriggerMode value must round-trip
+     * into the snippet, otherwise users lose explicit configuration silently. */
+    for (const mode of ['button', 'both', 'none'] as const) {
+      const cfg: SdkPreviewConfig = {
+        ...DEFAULT_SDK_CONFIG,
+        native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: mode },
+      }
+      expect(renderSnippet('capacitor', PROJECT, KEY, cfg)).toContain(`triggerMode: '${mode}'`)
+    }
+    const shakeCfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'shake' },
+    }
+    expect(renderSnippet('capacitor', PROJECT, KEY, shakeCfg)).not.toContain('triggerMode:')
+  })
+
+  it('every declared framework has an install command and a non-empty snippet', () => {
+    for (const fw of FRAMEWORKS) {
+      expect(installCommand(fw).length).toBeGreaterThan(0)
+      expect(renderSnippet(fw, PROJECT, KEY).length).toBeGreaterThan(0)
+    }
+  })
+
+  it('isMobileFramework() agrees with the MOBILE_FRAMEWORKS set', () => {
+    for (const fw of FRAMEWORKS) {
+      expect(isMobileFramework(fw)).toBe((MOBILE_FRAMEWORKS as readonly string[]).includes(fw))
+    }
+  })
+})
+
 describe('renderSnippet — empty triggerText (WYSIWYG with the preview)', () => {
   for (const fw of ['react', 'vue', 'svelte', 'vanilla'] as const) {
     it(`omits triggerText entirely when the input is empty (${fw})`, () => {
