@@ -95,7 +95,11 @@ export function registerMigrationProgressRoutes(app: Hono): void {
     const slug = c.req.query('guide_slug');
     if (slug !== undefined && !isKnownGuideSlug(slug)) {
       return c.json(
-        { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a published migration guide' } },
+        /* "known" — not "published" — because KNOWN_GUIDE_SLUGS spans
+         * the entire docs catalog (drafts included), matching the
+         * cross-surface invariant enforced by
+         * scripts/check-migration-catalog-sync.mjs. */
+        { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a known migration guide' } },
         400,
       );
     }
@@ -109,8 +113,15 @@ export function registerMigrationProgressRoutes(app: Hono): void {
     //   * project_id explicit → must be a project the caller can access.
     //     scope=all returns everyone's rows (RLS already enforces project
     //     membership read), scope=mine returns only the caller's rows.
-    //   * project_id omitted → caller's own rows (account + every project
-    //     they're in). We never expose other users' rows in this branch.
+    //   * project_id omitted, scope=mine (default) → caller's own rows
+    //     only (account-scoped + every project they're in).
+    //   * project_id omitted, scope=all → caller's own account-scoped rows
+    //     PLUS any project-scoped row on a project they can access (which
+    //     INCLUDES other team members' progress). Used by the admin
+    //     ProjectsPage card to surface "what teammates are mid-migrating".
+    //     The OR clause below makes this surface explicit; RLS provides
+    //     the second line of defence (caller cannot see rows for projects
+    //     they aren't a member of, no matter what they pass).
     let query = db
       .from('migration_progress')
       .select(
@@ -180,12 +191,12 @@ export function registerMigrationProgressRoutes(app: Hono): void {
   // Always self-scoped to the caller (RLS enforces, but we also set
   // user_id = caller server-side so the body can never spoof it).
   // ─────────────────────────────────────────────────────────────────────
-  app.put('/v1/admin/migrations/progress/:guide_slug', jwtAuth, async (c) => {
+    app.put('/v1/admin/migrations/progress/:guide_slug', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const slug = c.req.param('guide_slug');
     if (!isKnownGuideSlug(slug)) {
       return c.json(
-        { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a published migration guide' } },
+        { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a known migration guide' } },
         400,
       );
     }
@@ -286,7 +297,7 @@ export function registerMigrationProgressRoutes(app: Hono): void {
     const slug = c.req.param('guide_slug');
     if (!isKnownGuideSlug(slug)) {
       return c.json(
-        { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a published migration guide' } },
+        { ok: false, error: { code: 'UNKNOWN_GUIDE_SLUG', message: 'guide_slug is not a known migration guide' } },
         400,
       );
     }

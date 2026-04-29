@@ -146,7 +146,12 @@ interface BridgeMessage {
   email: string | null
   projectId: string | null
   organizationId: string | null
-  apiUrl?: string
+  /* Intentionally NO `apiUrl` field. The docs site already knows the
+   * Supabase Functions URL at build time via NEXT_PUBLIC_MUSHI_API_URL
+   * (DEFAULT_API_URL below). Letting the bridge override it would make
+   * the fetch destination user-controlled (CodeQL js/request-forgery,
+   * via session.apiUrl in apiFetch). The bridge MAY send the field for
+   * forward-compat — we just don't read it. */
 }
 
 function isBridgeMessage(value: unknown): value is BridgeMessage {
@@ -254,7 +259,10 @@ export function openAdminAuthBridge(
         projectId: event.data.projectId,
         organizationId: event.data.organizationId,
         adminOrigin,
-        apiUrl: event.data.apiUrl ?? DEFAULT_API_URL,
+        /* Pinned to the build-time DEFAULT_API_URL — never read from the
+         * postMessage payload. See BridgeMessage typedef above for the
+         * security rationale (CodeQL js/request-forgery). */
+        apiUrl: DEFAULT_API_URL,
       }
       writeSession(session)
       resolve(session)

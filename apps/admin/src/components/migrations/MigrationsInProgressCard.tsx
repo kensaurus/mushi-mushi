@@ -68,24 +68,42 @@ function relativeTime(isoTimestamp: string | null): string {
   return `${months}mo ago`
 }
 
+/* Visual width of the segmented progress bar. Fixed at 6 so the card
+ * stays a constant width regardless of how many steps the underlying
+ * guide ships — the same number the file header advertises and the same
+ * number a user sees on the docs hub. The `done / total` fraction is
+ * scaled into the 6 segments at render time. */
+const PROGRESS_BAR_TRACKS = 6
+
 function ProgressBar({ done, total }: { done: number; total: number }) {
-  const tracks = Math.max(total, 1)
-  const filled = Math.min(Math.max(done, 0), tracks)
+  const safeTotal = Math.max(total, 1)
+  const safeDone = Math.min(Math.max(done, 0), safeTotal)
+  /* Round so a 1/8 progress shows 1 segment (not 0) — half-segment is
+   * the visual floor that signals "started". Any non-zero `done` lights
+   * at least one track. */
+  const filledTracks =
+    safeDone === 0
+      ? 0
+      : Math.min(
+          PROGRESS_BAR_TRACKS,
+          Math.max(1, Math.round((safeDone / safeTotal) * PROGRESS_BAR_TRACKS)),
+        )
+
   return (
     <div
       role="progressbar"
-      aria-valuenow={filled}
+      aria-valuenow={safeDone}
       aria-valuemin={0}
-      aria-valuemax={tracks}
-      aria-label={`${filled} of ${tracks} steps complete`}
+      aria-valuemax={safeTotal}
+      aria-label={`${safeDone} of ${safeTotal} steps complete`}
       className="flex items-center gap-0.5"
     >
-      {Array.from({ length: tracks }, (_, i) => (
+      {Array.from({ length: PROGRESS_BAR_TRACKS }, (_, i) => (
         <span
           key={i}
           aria-hidden
           className={`h-1.5 w-3 rounded-sm ${
-            i < filled ? 'bg-ok' : 'bg-surface-raised border border-border'
+            i < filledTracks ? 'bg-ok' : 'bg-surface-raised border border-border'
           }`}
         />
       ))}

@@ -7,8 +7,11 @@
  * so the card can render without making the admin import the docs package.
  *
  * Sync invariant (enforced by scripts/check-migration-catalog-sync.mjs):
- *   - Every published slug in the docs catalog MUST appear here.
- *   - Every slug here MUST exist in the docs catalog.
+ *   - ADMIN_SLUGS == DOCS_ALL — every entry in the docs catalog (INCLUDING
+ *     drafts) MUST appear here. The card renders any guide that could
+ *     possibly arrive in /v1/admin/migrations/progress, and the API allows
+ *     drafts so a draft author's progress survives a refresh.
+ *   - Every slug here MUST exist in the docs catalog (no admin-only slugs).
  *   - Titles are kept identical so deep-link cards match the docs hero.
  */
 

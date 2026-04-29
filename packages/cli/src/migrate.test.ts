@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
@@ -17,9 +17,11 @@ import {
 } from './migrate.js'
 
 function makeTmp(): string {
-  const dir = join(tmpdir(), `mushi-migrate-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-  mkdirSync(dir, { recursive: true })
-  return dir
+  /* mkdtempSync creates the directory atomically with mode 0700 from a
+   * suffix the OS appends — eliminates the predictable-name + race-window
+   * pair that `path.join(tmpdir(), Math.random())` + mkdirSync exposed
+   * (CodeQL js/insecure-temporary-file). */
+  return mkdtempSync(join(tmpdir(), 'mushi-migrate-'))
 }
 
 function writePkg(dir: string, deps: Record<string, string> = {}, devDeps: Record<string, string> = {}) {

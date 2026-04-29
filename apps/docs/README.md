@@ -90,8 +90,12 @@ interactive primitives. Adding a new guide is a 3-step contribution:
   via `packages/cli/src/migrate.ts` and only ever surfaces `status:
   'published'` entries (pinned by `migrate.test.ts`).
 
-**Status field** — `'published'` shows up everywhere; `'draft'` stays
-hidden from both the hub grid and the CLI suggestions until promoted.
+**Status field** — `'published'` shows up everywhere. `'draft'` still
+appears in the `<MigrationHub />` grid (rendered with a `draft` pill +
+dashed border so readers can preview WIP guides), but stays hidden from
+the CLI's `mushi migrate` suggestions until promoted (pinned by
+`migrate.test.ts` and enforced cross-surface by
+`scripts/check-migration-catalog-sync.mjs`).
 
 ### Cross-device checklist sync (Phase 2, opt-in)
 
