@@ -38,6 +38,13 @@
   display: none;
 }
 
+/* Default-quiet stage card. The previous treatment painted a 4px vermillion
+ * inset rail on EVERY card by default — five constant red bars per canvas
+ * fold, before the user has even hovered. Pushing the brand inset into the
+ * focus/selected path lets the card sit tonally and only "light up" when the
+ * user is actually looking at it; net effect on the squint test is one red
+ * bar (the active card) instead of five. The base shadow keeps a hairline
+ * dark rule so the card still reads as a paper plane lifted off the canvas. */
 .mushi-stage-node {
   width: 230px;
   border: 1px solid var(--mushi-rule);
@@ -47,8 +54,7 @@
     var(--mushi-paper);
   box-shadow:
     0 1px 0 var(--mushi-rule),
-    0 22px 48px -34px rgba(14, 13, 11, 0.55),
-    inset 0 -4px 0 var(--mushi-vermillion);
+    0 18px 42px -34px rgba(14, 13, 11, 0.45);
   padding: 1.05rem 1.1rem;
   text-align: left;
   transition:
@@ -57,16 +63,28 @@
     transform 220ms ease;
 }
 
-.mushi-stage-node:hover,
+.mushi-stage-node:hover {
+  border-color: color-mix(in oklch, var(--mushi-ink) 26%, var(--mushi-rule));
+  box-shadow:
+    0 1px 0 var(--mushi-rule),
+    0 24px 56px -34px rgba(14, 13, 11, 0.65);
+  transform: translateY(-1px);
+}
+
+/* Focused = "the canvas is auto-cycling on me", Selected = "the user opened
+ * my drawer". Both promote the card to brand: a 2px vermillion bottom rail
+ * (signals the active stage in a single zone, not five), a soft brand wash
+ * ring, and a slight lift. No `border-color` swap on hover-vs-active so the
+ * two states don't compete. */
 .mushi-stage-node:focus-visible,
 .mushi-stage-node.is-focused,
 .mushi-stage-node.is-selected {
-  border-color: color-mix(in oklch, var(--mushi-vermillion) 66%, var(--mushi-rule));
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 50%, var(--mushi-rule));
   box-shadow:
     0 1px 0 var(--mushi-rule),
-    0 30px 64px -34px rgba(14, 13, 11, 0.82),
-    0 0 0 4px var(--mushi-vermillion-wash),
-    inset 0 -4px 0 var(--mushi-vermillion);
+    0 30px 64px -34px rgba(14, 13, 11, 0.78),
+    0 0 0 3px var(--mushi-vermillion-wash),
+    inset 0 -2px 0 var(--mushi-vermillion);
   transform: translateY(-2px);
 }
 

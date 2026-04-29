@@ -141,7 +141,11 @@ export const stages: MushiStage[] = [
     bullets: ['A rubric score makes risk visible.', 'Thresholds stay configurable per project.'],
     stat: '0.91',
     tone: 'pass',
-    href: '/concepts/classification',
+    // The verify stage describes the second-model judge ("A second model
+    // checks the homework"), so it must link to the judge-loop concept,
+    // not /concepts/classification (which the classify stage above
+    // already owns). Both .mdx files live under apps/docs/content/concepts.
+    href: '/concepts/judge-loop',
     position: { x: 580, y: 320 },
   },
   {

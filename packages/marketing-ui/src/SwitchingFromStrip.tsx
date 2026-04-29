@@ -45,11 +45,17 @@ export function SwitchingFromStrip() {
     >
       <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="space-y-1">
+          {/* Eyebrow demoted to ink-muted; the Japanese kana still carries
+              brand voice via the typeface and the narrow tracking, but no
+              longer competes with the closing CTA below for the page's last
+              vermillion accent. */}
           <p
-            className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-vermillion)]"
+            className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]"
             lang="ja"
           >
-            のりかえ — switching?
+            <span className="text-[var(--mushi-ink)]">のりかえ</span>
+            <span className="mx-2 opacity-40">—</span>
+            switching?
           </p>
           <h2
             id="switching-from-heading"
@@ -62,11 +68,18 @@ export function SwitchingFromStrip() {
             checklist that saves your progress.
           </p>
         </div>
+        {/* Migration chips. Each links to a real, published migration guide
+            in the docs site (`apps/docs/content/migrations/<slug>.mdx`)
+            opened in a new tab — the chip is a discovery surface for
+            visitors who arrived with a competitor in mind, so we don't
+            want to bounce them off the landing on first click. */}
         <ul className="flex flex-wrap gap-1.5 sm:max-w-md sm:justify-end">
           {COMPETITORS.map((c) => (
             <li key={c.slug}>
               <Link
                 href={urls.docs(`/migrations/${c.slug}`)}
+                target="_blank"
+                rel="noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-vermillion)] hover:text-[var(--mushi-vermillion)]"
               >
                 {c.label}
