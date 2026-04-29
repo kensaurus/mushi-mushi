@@ -273,6 +273,30 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
 }
 
 /**
+ * PostgREST surfaces transient schema-cache misses as
+ * `column "<table>.<col>" does not exist` immediately after an `ALTER
+ * TABLE` migration runs (the schema cache is populated lazily over the
+ * first 1-30s after a structural change). Detecting them by message
+ * substring is brittle but cheap; falling back to a permanent error
+ * after one short retry is the right shape — if the column actually
+ * doesn't exist, the second call fails with the same string and we
+ * surface it for real.
+ *
+ * Sentry MUSHI-MUSHI-SERVER-N (2026-04-29 03:00 UTC): the daily
+ * retention sweep cron fired ~3 minutes after migration
+ * `20260429000000_sdk_versions.sql` added two columns to `reports`,
+ * caught a stale cache, and reported `column reports.created_at does
+ * not exist` even though the column has existed since day-one. One
+ * 500-ms retry would have fixed it transparently.
+ */
+function isSchemaCacheMiss(message: string | null | undefined): boolean {
+  if (!message) return false
+  return /column .* does not exist|relation .* does not exist|schema cache/i.test(message)
+}
+
+const SCHEMA_CACHE_RETRY_DELAY_MS = 500
+
+/**
  * Delete one retention batch using the Postgres-recommended shape:
  *
  *   DELETE FROM reports WHERE id IN (
@@ -291,14 +315,27 @@ export async function deleteOldReportsBatch(
   cutoff: string,
   batchSize = BATCH_SIZE,
 ): Promise<{ deleted: number; error: string | null }> {
-  const { data: candidates, error: selectErr } = await db
-    .from('reports')
-    .select('id')
-    .eq('project_id', projectId)
-    .lt('created_at', cutoff)
-    .order('created_at', { ascending: true })
-    .limit(batchSize)
-    .returns<ReportIdRow[]>()
+  const runSelect = () =>
+    db
+      .from('reports')
+      .select('id')
+      .eq('project_id', projectId)
+      .lt('created_at', cutoff)
+      .order('created_at', { ascending: true })
+      .limit(batchSize)
+      .returns<ReportIdRow[]>()
+
+  let { data: candidates, error: selectErr } = await runSelect()
+
+  if (selectErr && isSchemaCacheMiss(selectErr.message)) {
+    rlog.warn('reports_select_schema_cache_miss', {
+      project_id: projectId,
+      err: selectErr.message,
+      retrying_in_ms: SCHEMA_CACHE_RETRY_DELAY_MS,
+    })
+    await new Promise((resolve) => setTimeout(resolve, SCHEMA_CACHE_RETRY_DELAY_MS))
+    ;({ data: candidates, error: selectErr } = await runSelect())
+  }
 
   if (selectErr) return { deleted: 0, error: selectErr.message }
 
