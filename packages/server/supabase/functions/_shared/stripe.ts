@@ -264,6 +264,35 @@ export function readSubscriptionPeriod(
   return { start, end }
 }
 
+/**
+ * Resolve the Subscription id from an Invoice payload regardless of API
+ * version. The Basil 2025-03-31 release deprecated the top-level
+ * `invoice.subscription` field and moved it under `parent.subscription_details`;
+ * see https://docs.stripe.com/changelog/basil/2025-03-31/adds-new-parent-field-to-invoicing-objects.
+ *
+ * Reading only the legacy field silently breaks dunning on every account
+ * pinned to 2025-03-31.basil or later — `payment_failed` and
+ * `payment_succeeded` webhooks would no-op and customers with a declined
+ * card would keep their paid quota until manual remediation. We read both
+ * locations so test fixtures from either era continue to work.
+ */
+export function subscriptionIdFromInvoice(
+  invoice: Record<string, unknown>,
+): string | null {
+  const parent = invoice.parent as
+    | { type?: string; subscription_details?: { subscription?: string | null } }
+    | null
+    | undefined
+  if (parent?.type === 'subscription_details') {
+    const fromParent = parent.subscription_details?.subscription
+    if (typeof fromParent === 'string' && fromParent.length > 0) return fromParent
+  }
+  // Fallback for fixtures and any pre-Basil event still in flight.
+  const legacy = invoice.subscription
+  if (typeof legacy === 'string' && legacy.length > 0) return legacy
+  return null
+}
+
 // ----------------------------------------------------------------
 // Meter Events — Stripe's per-record usage reporting API
 // (https://docs.stripe.com/billing/subscriptions/usage-based/recording-usage)
