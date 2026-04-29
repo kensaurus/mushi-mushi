@@ -30,6 +30,7 @@ import {
   retrieveSubscription,
   readSubscriptionPeriod,
   stripeFromEnv,
+  subscriptionIdFromInvoice,
   verifyStripeSignature,
   type StripeSubscription,
 } from '../_shared/stripe.ts'
@@ -173,8 +174,18 @@ const linkCustomerOnCheckout = async (db: Db, session: Record<string, unknown>) 
 }
 
 const markPaymentDelinquent = async (db: Db, invoice: Record<string, unknown>) => {
-  const subId = invoice.subscription as string | undefined
-  if (!subId) return
+  const subId = subscriptionIdFromInvoice(invoice)
+  if (!subId) {
+    // 2025-03-31.basil moved this id to `parent.subscription_details.subscription`.
+    // If we hit this branch on a real production event the Stripe API version
+    // pinned in `_shared/stripe.ts` has drifted ahead of the resolver again —
+    // surface it loudly so dunning doesn't silently no-op.
+    wlog.warn('invoice_missing_subscription_id', {
+      invoice_id: invoice.id as string | undefined,
+      parent_type: (invoice.parent as { type?: string } | null | undefined)?.type ?? null,
+    })
+    return
+  }
   const { error } = await db
     .from('billing_subscriptions')
     .update({ status: 'past_due', updated_at: new Date().toISOString() })
@@ -188,7 +199,7 @@ const markPaymentDelinquent = async (db: Db, invoice: Record<string, unknown>) =
 // "payment recovered" operator notification — a routine successful invoice
 // on an already-active sub doesn't deserve a Slack ping.
 const recoverFromDelinquent = async (db: Db, invoice: Record<string, unknown>): Promise<boolean> => {
-  const subId = invoice.subscription as string | undefined
+  const subId = subscriptionIdFromInvoice(invoice)
   if (!subId) return false
   const { data, error } = await db
     .from('billing_subscriptions')
