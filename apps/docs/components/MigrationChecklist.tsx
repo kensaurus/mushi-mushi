@@ -23,13 +23,14 @@
  *   - Accessible: each row is a real `<label>` wrapping a checkbox so screen
  *     readers announce state changes correctly. Bulk actions live in a
  *     keyboard-reachable toolbar.
- *   - Forward-compatible: a `<SyncCta>` placeholder hangs off the bottom
- *     toolbar; Phase 2 swaps it for a real "Sign in to sync" button without
- *     touching the checklist itself.
+ *   - Opt-in cloud sync: the footer `<SyncCta>` opens an admin popup auth
+ *     bridge (apps/docs/lib/migrationProgress.ts → openAdminAuthBridge).
+ *     The popup hands back a short-lived JWT via postMessage; the docs
+ *     never store a refresh token. Sync NEVER blocks local checklist use
+ *     — every checkbox keeps working when the bridge is closed, expired,
+ *     or the user is offline.
  *
  * NOT in scope here:
- *   - Server sync. That's Phase 2 of the Migration Hub plan and lives in
- *     `useMigrationProgressSync()` (to be added).
  *   - Reordering steps. Steps are positional + ID'd so authors can rename a
  *     step's label without losing user progress, but reordering is a content
  *     decision — we don't try to merge old completion state into new
@@ -37,6 +38,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+
+import {
+  clearRemoteProgress,
+  fetchRemoteProgress,
+  getDocsAuthSession,
+  mergeProgress,
+  openAdminAuthBridge,
+  pushProgress,
+  signOutDocs,
+  type DocsAuthSession,
+} from '../lib/migrationProgress'
 
 export interface MigrationStep {
   /** Stable identifier — used as the localStorage key entry. Once shipped,
@@ -115,6 +127,7 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
   )
   const [hydrated, setHydrated] = useState(false)
   const initialReadDone = useRef(false)
+  const allStepIds = useMemo(() => steps.map((s) => s.id), [steps])
 
   // Hydrate from localStorage AFTER mount to keep SSR markup stable.
   useEffect(() => {
@@ -134,6 +147,25 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
   const total = requiredSteps.length
   const pct = total === 0 ? 0 : Math.round((requiredDone / total) * 100)
 
+  // ── opt-in cloud sync ─────────────────────────────────────────────────
+  const sync = useMigrationProgressSync({
+    guideSlug: id,
+    knownStepIds: allStepIds,
+    requiredStepCount: total,
+    completed,
+    requiredDone,
+    onMerged: useCallback(
+      (mergedIds: string[]) => {
+        // Apply the union of local + remote to local state AND localStorage,
+        // so the merge survives a refresh even before the next push.
+        const next = new Set(mergedIds)
+        setCompleted(next)
+        safeWrite(id, next)
+      },
+      [id],
+    ),
+  })
+
   const toggle = useCallback(
     (stepId: string) => {
       setCompleted((prev) => {
@@ -141,10 +173,11 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
         if (next.has(stepId)) next.delete(stepId)
         else next.add(stepId)
         safeWrite(id, next)
+        sync.scheduleSync(next)
         return next
       })
     },
-    [id],
+    [id, sync],
   )
 
   const toggleOpen = useCallback((stepId: string) => {
@@ -163,13 +196,15 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
     }
     setCompleted(new Set())
     safeWrite(id, new Set())
-  }, [id])
+    void sync.clearRemote()
+  }, [id, sync])
 
   const markAll = useCallback(() => {
     const all = new Set(steps.map((s) => s.id))
     setCompleted(all)
     safeWrite(id, all)
-  }, [id, steps])
+    sync.scheduleSync(all)
+  }, [id, steps, sync])
 
   const allDone = hydrated && total > 0 && requiredDone === total
 
@@ -311,27 +346,304 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
         })}
       </ol>
 
-      <SyncCta hydrated={hydrated} hasProgress={requiredDone > 0} />
+      <SyncCta
+        hydrated={hydrated}
+        hasProgress={requiredDone > 0}
+        sync={sync}
+      />
     </section>
   )
 }
 
-/* ── Sync placeholder ───────────────────────────────────────────────────
- * Phase 2 turns this into a real "Sign in to sync to your Mushi account"
- * button (popup OAuth back to the admin console + postMessage). For now
- * we only render a hint so authors don't have to update every guide later.
- *
- * Hidden when the user has zero progress, to avoid nagging anonymous
- * readers who are just skimming the doc. */
+/* ── Cloud-sync hook ────────────────────────────────────────────────────
+ * Quiet by design. Reasoning per NN/g #1 (visibility of system status):
+ *  - Idle / signed-out → footer reads "Saved in this browser. Sign in to
+ *    sync to your Mushi account."
+ *  - Syncing → footer reads "Syncing…" and the action is disabled.
+ *  - Synced → footer reads "Synced just now / 2m ago" with a discreet
+ *    Sign out link.
+ *  - Error → footer reads the failure plus a Retry; the checklist itself
+ *    keeps working off localStorage so the user is never blocked.
+ * Anonymous users with zero progress see no sync UI at all (NN/g #8). */
 
-function SyncCta({ hydrated, hasProgress }: { hydrated: boolean; hasProgress: boolean }) {
-  if (!hydrated || !hasProgress) return null
-  return (
-    <footer className="border-t border-neutral-200 bg-white/40 px-4 py-2 text-[11px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
-      Progress is saved in this browser only.{' '}
-      <span aria-hidden className="opacity-50">
-        Sync to your Mushi account — coming soon.
-      </span>
-    </footer>
+type SyncState =
+  | { status: 'idle'; session: null }
+  | { status: 'signing-in'; session: null }
+  | { status: 'syncing'; session: DocsAuthSession; lastSyncedAt: number | null }
+  | { status: 'synced'; session: DocsAuthSession; lastSyncedAt: number }
+  | { status: 'error'; session: DocsAuthSession | null; message: string; lastSyncedAt: number | null }
+
+interface SyncApi {
+  state: SyncState
+  signIn: () => void
+  signOut: () => void
+  scheduleSync: (next: Set<string>) => void
+  clearRemote: () => Promise<void>
+}
+
+interface UseMigrationProgressSyncArgs {
+  guideSlug: string
+  knownStepIds: readonly string[]
+  requiredStepCount: number
+  completed: Set<string>
+  requiredDone: number
+  onMerged: (mergedIds: string[]) => void
+}
+
+function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
+  const { guideSlug, knownStepIds, requiredStepCount, completed, requiredDone, onMerged } = args
+  // Read the persisted session once; keying initial UI off this lets a
+  // returning user see "Syncing…" instead of the misleading "Synced just
+  // now" the previous initial state produced (lastSyncedAt was null but
+  // the status was 'synced'). The initial-fetch effect below promotes
+  // state to 'synced' once the first round-trip actually completes.
+  const [state, setState] = useState<SyncState>(() => {
+    const initialSession = getDocsAuthSession()
+    if (initialSession) {
+      return { status: 'syncing', session: initialSession, lastSyncedAt: null }
+    }
+    return { status: 'idle', session: null }
+  })
+  const knownStepIdsRef = useRef(knownStepIds)
+  knownStepIdsRef.current = knownStepIds
+  const onMergedRef = useRef(onMerged)
+  onMergedRef.current = onMerged
+  const completedRef = useRef(completed)
+  completedRef.current = completed
+  const requiredDoneRef = useRef(requiredDone)
+  requiredDoneRef.current = requiredDone
+  const requiredStepCountRef = useRef(requiredStepCount)
+  requiredStepCountRef.current = requiredStepCount
+  const pendingSync = useRef<number | null>(null)
+
+  // React to auth changes (sign-in popup, sign-out, expiry).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handler = () => {
+      const session = getDocsAuthSession()
+      setState(
+        session
+          ? { status: 'synced', session, lastSyncedAt: Date.now() }
+          : { status: 'idle', session: null },
+      )
+    }
+    window.addEventListener('mushi:docs:auth-change', handler)
+    return () => window.removeEventListener('mushi:docs:auth-change', handler)
+  }, [])
+
+  // First fetch + merge on session ready.
+  const initialFetchedFor = useRef<string | null>(null)
+  useEffect(() => {
+    const session = state.session
+    if (!session) {
+      initialFetchedFor.current = null
+      return
+    }
+    const fetchKey = `${session.accessToken}:${guideSlug}`
+    if (initialFetchedFor.current === fetchKey) return
+    initialFetchedFor.current = fetchKey
+
+    void (async () => {
+      try {
+        // Build the syncing state explicitly. A `...prev` spread off an
+        // 'idle' or 'signing-in' variant would omit the required
+        // `lastSyncedAt` field; the `as SyncState` cast would silently
+        // hide the missing field at the type layer.
+        setState((prev) => ({
+          status: 'syncing',
+          session,
+          lastSyncedAt: prev.status === 'synced' ? prev.lastSyncedAt : null,
+        }))
+        const remote = await fetchRemoteProgress(session, guideSlug)
+        const merge = mergeProgress(
+          knownStepIdsRef.current,
+          Array.from(completedRef.current),
+          remote?.completedStepIds ?? null,
+        )
+        if (merge.localChanged) onMergedRef.current(merge.merged)
+        if (merge.remoteIsBehind) {
+          await pushProgress(session, {
+            guideSlug,
+            completedStepIds: merge.merged,
+            requiredStepCount: requiredStepCountRef.current,
+            completedRequiredCount: requiredDoneRef.current,
+          })
+        }
+        setState({ status: 'synced', session, lastSyncedAt: Date.now() })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Sync failed'
+        setState((prev) => ({
+          status: 'error',
+          session: prev.session,
+          message,
+          lastSyncedAt: prev.status === 'synced' ? prev.lastSyncedAt : null,
+        }))
+      }
+    })()
+  }, [guideSlug, state.session])
+
+  // Debounced push on subsequent toggles.
+  const scheduleSync = useCallback(
+    (next: Set<string>) => {
+      const session = getDocsAuthSession()
+      if (!session) return
+      if (pendingSync.current) window.clearTimeout(pendingSync.current)
+      pendingSync.current = window.setTimeout(() => {
+        pendingSync.current = null
+        void (async () => {
+          try {
+            setState((prev) => ({
+              status: 'syncing',
+              session,
+              lastSyncedAt: prev.status === 'synced' ? prev.lastSyncedAt : null,
+            }))
+            await pushProgress(session, {
+              guideSlug,
+              completedStepIds: Array.from(next).filter((id) =>
+                knownStepIdsRef.current.includes(id),
+              ),
+              requiredStepCount: requiredStepCountRef.current,
+              completedRequiredCount: requiredDoneRef.current,
+            })
+            setState({ status: 'synced', session, lastSyncedAt: Date.now() })
+          } catch (err) {
+            const message = err instanceof Error ? err.message : 'Sync failed'
+            setState((prev) => ({
+              status: 'error',
+              session: prev.session,
+              message,
+              lastSyncedAt: prev.status === 'synced' ? prev.lastSyncedAt : null,
+            }))
+          }
+        })()
+      }, 600)
+    },
+    [guideSlug],
   )
+
+  const signIn = useCallback(() => {
+    setState({ status: 'signing-in', session: null })
+    void openAdminAuthBridge()
+      .then((session) => {
+        setState({ status: 'synced', session, lastSyncedAt: Date.now() })
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'Sign-in cancelled'
+        setState({ status: 'error', session: null, message, lastSyncedAt: null })
+      })
+  }, [])
+
+  const signOut = useCallback(() => {
+    signOutDocs()
+    setState({ status: 'idle', session: null })
+  }, [])
+
+  const clearRemote = useCallback(async () => {
+    const session = getDocsAuthSession()
+    if (!session) return
+    try {
+      await clearRemoteProgress(session, guideSlug)
+    } catch {
+      /* clearing the local copy already happened; surfacing this is noisy */
+    }
+  }, [guideSlug])
+
+  return { state, signIn, signOut, scheduleSync, clearRemote }
+}
+
+function relativeTime(timestamp: number): string {
+  const diffMs = Date.now() - timestamp
+  if (diffMs < 0) return 'just now'
+  const seconds = Math.round(diffMs / 1000)
+  if (seconds < 5) return 'just now'
+  if (seconds < 60) return `${seconds}s ago`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  return `${Math.round(hours / 24)}d ago`
+}
+
+function SyncCta({
+  hydrated,
+  hasProgress,
+  sync,
+}: {
+  hydrated: boolean
+  hasProgress: boolean
+  sync: SyncApi
+}) {
+  // Re-render every minute so "synced 2m ago" stays accurate without
+  // needing a global ticker. Cheap and only runs when the row is mounted.
+  const [, force] = useState(0)
+  useEffect(() => {
+    if (sync.state.status !== 'synced') return
+    const t = window.setInterval(() => force((n) => n + 1), 60_000)
+    return () => window.clearInterval(t)
+  }, [sync.state.status])
+
+  if (!hydrated) return null
+  // Anonymous reader with zero progress → no chrome at all.
+  if (!hasProgress && sync.state.status === 'idle') return null
+
+  const baseRow =
+    'flex flex-wrap items-center justify-between gap-2 border-t border-neutral-200 bg-white/40 px-4 py-2 text-[11px] text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400'
+
+  const linkClass =
+    'font-medium text-emerald-700 hover:underline disabled:cursor-wait disabled:opacity-60 dark:text-emerald-400'
+
+  switch (sync.state.status) {
+    case 'idle':
+      return (
+        <footer className={baseRow}>
+          <span>Saved in this browser only.</span>
+          <button type="button" onClick={sync.signIn} className={linkClass}>
+            Sign in to sync
+          </button>
+        </footer>
+      )
+    case 'signing-in':
+      return (
+        <footer className={baseRow}>
+          <span>Opening Mushi sign-in…</span>
+          <button type="button" disabled className={linkClass}>
+            Sign in to sync
+          </button>
+        </footer>
+      )
+    case 'syncing':
+      return (
+        <footer className={baseRow}>
+          <span>Syncing…</span>
+          <span className="opacity-60">{sync.state.session.email ?? 'Mushi account'}</span>
+        </footer>
+      )
+    case 'synced': {
+      const when = sync.state.lastSyncedAt ? relativeTime(sync.state.lastSyncedAt) : 'just now'
+      return (
+        <footer className={baseRow}>
+          <span>
+            Synced {when}
+            {sync.state.session.email ? (
+              <>
+                {' '}as <span className="opacity-80">{sync.state.session.email}</span>
+              </>
+            ) : null}
+          </span>
+          <button type="button" onClick={sync.signOut} className={linkClass}>
+            Sign out
+          </button>
+        </footer>
+      )
+    }
+    case 'error':
+      return (
+        <footer className={baseRow}>
+          <span className="text-amber-700 dark:text-amber-400">{sync.state.message}</span>
+          <button type="button" onClick={sync.signIn} className={linkClass}>
+            {sync.state.session ? 'Retry' : 'Sign in to sync'}
+          </button>
+        </footer>
+      )
+  }
 }

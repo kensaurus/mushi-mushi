@@ -65,6 +65,11 @@ const InboxPage = lazy(() => import('./pages/InboxPage').then(m => ({ default: m
 // The page itself re-checks `isSuperAdmin` and renders an opaque "Page
 // not found" if a non-operator deep-links here.
 const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m.UsersPage })))
+// Migration Hub Phase 2 (2026-04-29) — popup target used by the docs site
+// (apps/docs/lib/migrationProgress.ts → openAdminAuthBridge) to forward a
+// short-lived access token via postMessage. Mounted INSIDE ProtectedRoute
+// so unauthenticated callers go through /login first, then come back here.
+const DocsBridgePage = lazy(() => import('./pages/DocsBridgePage').then(m => ({ default: m.DocsBridgePage })))
 
 function NotFoundPage() {
   const { pathname } = useLocation()
@@ -169,6 +174,7 @@ export function App() {
                   <Route path="/org/:slug/settings/*" element={<OrganizationSettingsPage />} />
                   <Route path="/inbox" element={<InboxPage />} />
                   <Route path="/users" element={<UsersPage />} />
+                  <Route path="/docs-bridge" element={<DocsBridgePage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </SentryRoutes>
                 </Suspense>

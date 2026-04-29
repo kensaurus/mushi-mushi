@@ -93,6 +93,39 @@ interactive primitives. Adding a new guide is a 3-step contribution:
 **Status field** — `'published'` shows up everywhere; `'draft'` stays
 hidden from both the hub grid and the CLI suggestions until promoted.
 
+### Cross-device checklist sync (Phase 2, opt-in)
+
+`MigrationChecklist` is **anonymous-first**: progress lives in
+`localStorage` under `mushi:migration:<slug>` and never blocks on the
+network. A logged-in user can opt into cross-device sync via the
+`SyncCta` footer (renders only after at least one step is checked, so
+empty pages stay calm).
+
+Sync flow:
+
+1. The footer's **Sign in to sync** button calls `openAdminAuthBridge()`
+   (`apps/docs/lib/migrationProgress.ts`) which `window.open()`s the
+   admin console at `/docs-bridge?nonce=<random>&returnOrigin=<docs>`.
+2. The admin's `DocsBridgePage` runs through `ProtectedRoute`, then
+   `postMessage`s `{ type: 'mushi:docs-bridge:token', nonce, accessToken,
+   apiUrl, projectId, expiresAt, ... }` back to the docs popup opener.
+   Docs verifies `event.origin` against an allowlist + matches the nonce
+   before trusting the token.
+3. Docs holds the JWT in `sessionStorage` only — **never** a refresh
+   token. From there, `mergeProgress()` runs a local-wins union against
+   `GET /v1/admin/migrations/progress?guide_slug=<slug>` and pushes
+   updates via `PUT /v1/admin/migrations/progress/:guide_slug`.
+
+Merge policy: **local wins for unsynced checked steps**; remote can only
+add missing completed steps. A local check is never silently undone by
+the server.
+
+The `apps/docs/lib/migrationProgress.ts` module exports `mergeProgress`,
+`openAdminAuthBridge`, `getProgress`, `putProgress`, `deleteProgress`,
+`readSession`, and `clearSession`. The `apiUrl` returned by the bridge
+points at the Edge Function origin so the docs don't need to know
+Supabase project URLs at build time.
+
 ## Editorial conventions
 
 - One `<Callout type="info">` "Coming from X?" banner near the top of any

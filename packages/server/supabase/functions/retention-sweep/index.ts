@@ -45,12 +45,26 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { listPlans, resolvePlanFromSubscription, type PricingPlan } from '../_shared/plans.ts'
 
+// Ambient `Deno` so the file type-checks under both Deno (real Edge Function
+// runtime) and Node/Vitest (the unit tests for `deleteOldReportsBatch`).
+// Declared at the top of the module so the `typeof Deno !== 'undefined'`
+// guard at the bottom doesn't read like it's referencing an unresolved
+// symbol.
+declare const Deno: {
+  serve(handler: (req: Request) => Response | Promise<Response>): void
+  env: { get(name: string): string | undefined }
+}
+
 const rlog = log.child('retention-sweep')
 
 const BATCH_SIZE = 1000
 const HOBBY_FALLBACK_DAYS = 7
 
 interface ProjectRow {
+  id: string
+}
+
+interface ReportIdRow {
   id: string
 }
 
@@ -207,22 +221,15 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
     // outer loop at 50 batches (50,000 rows / project / day) so a
     // pathological backlog can't burn a function execution budget.
     for (let i = 0; i < 50; i++) {
-      const { data: deleted, error: delErr } = await db
-        .from('reports')
-        .delete()
-        .eq('project_id', proj.id)
-        .lt('created_at', cutoff)
-        .order('created_at', { ascending: true })
-        .limit(BATCH_SIZE)
-        .select('id')
+      const { deleted, error: delErr } = await deleteOldReportsBatch(db, proj.id, cutoff)
       if (delErr) {
         rlog.error('delete_batch_failed', {
           project_id: proj.id,
-          err: delErr.message,
+          err: delErr,
         })
         break
       }
-      const batchSize = deleted?.length ?? 0
+      const batchSize = deleted
       totalDeleted += batchSize
       if (batchSize < BATCH_SIZE) break
     }
@@ -265,9 +272,51 @@ async function runSweep(db: ReturnType<typeof getServiceClient>): Promise<SweepS
   return stats
 }
 
-Deno.serve(withSentry('retention-sweep', handler))
+/**
+ * Delete one retention batch using the Postgres-recommended shape:
+ *
+ *   DELETE FROM reports WHERE id IN (
+ *     SELECT id FROM reports WHERE ... ORDER BY created_at LIMIT n
+ *   )
+ *
+ * PostgREST/supabase-js exposes that most safely as two requests:
+ * select candidate IDs, then delete by primary key. The previous one-shot
+ * chain (`delete().eq().lt().order().limit().select()`) looks natural but
+ * PostgREST does not model ordered/limited DELETE the same way it models
+ * ordered/limited SELECT, which surfaced as Sentry `delete_batch_failed`.
+ */
+export async function deleteOldReportsBatch(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  cutoff: string,
+  batchSize = BATCH_SIZE,
+): Promise<{ deleted: number; error: string | null }> {
+  const { data: candidates, error: selectErr } = await db
+    .from('reports')
+    .select('id')
+    .eq('project_id', projectId)
+    .lt('created_at', cutoff)
+    .order('created_at', { ascending: true })
+    .limit(batchSize)
+    .returns<ReportIdRow[]>()
 
-declare const Deno: {
-  serve(handler: (req: Request) => Response | Promise<Response>): void
-  env: { get(name: string): string | undefined }
+  if (selectErr) return { deleted: 0, error: selectErr.message }
+
+  const ids = (candidates ?? []).map((row) => row.id).filter(Boolean)
+  if (ids.length === 0) return { deleted: 0, error: null }
+
+  const { data: deletedRows, error: deleteErr } = await db
+    .from('reports')
+    .delete()
+    .in('id', ids)
+    .select('id')
+    .returns<ReportIdRow[]>()
+
+  if (deleteErr) return { deleted: 0, error: deleteErr.message }
+
+  return { deleted: deletedRows?.length ?? ids.length, error: null }
+}
+
+if (typeof Deno !== 'undefined') {
+  Deno.serve(withSentry('retention-sweep', handler))
 }

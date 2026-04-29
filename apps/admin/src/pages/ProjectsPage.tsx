@@ -37,6 +37,7 @@ import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
+import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 
 interface ApiKey {
   id: string
@@ -387,6 +388,17 @@ export function ProjectsPage() {
         ]}
         howToUse="Create a project, generate an API key, then drop it into the SDK or send it as the X-API-Key header. Use Switch to to change which project the admin console is showing, or use the project picker in the top-right header. Use the Test report action to verify ingest before wiring up production traffic."
       />
+
+      {/* Migration Hub progress for the active project. The card returns
+          null when nobody on the project has any in-flight migrations, so
+          quiet teams never see dead chrome here. Scoped to active project
+          so a team viewing Acme iOS sees Acme's progress, not Acme Web's. */}
+      {activeProjectId && (
+        <MigrationsInProgressCard
+          projectId={activeProjectId}
+          title="Migrations in this project"
+        />
+      )}
 
       <div className="flex gap-2 items-end">
         <div className="flex-1">

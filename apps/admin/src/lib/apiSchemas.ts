@@ -254,3 +254,38 @@ export const ChartEventsResponseSchema = z
 
 export type ChartEvent = z.infer<typeof ChartEventSchema>
 export type ChartEventKind = z.infer<typeof ChartEventKindSchema>
+
+// ─── /v1/admin/migrations/progress ──────────────────────────────────────────
+// Migration Hub Phase 2 — DB-backed checklist progress for the docs hub.
+// The card on OnboardingPage / ProjectsPage reads from this; the docs sync
+// hook writes to it through the same envelope.
+// completed_step_ids and knownGuideSlugs intentionally use plain arrays
+// (no `.default([])`) so Zod's input == output types — apiFetch infers the
+// generic from the schema and refuses to type-narrow when input differs
+// from output. Backend always returns arrays for both (DB column has NOT
+// NULL DEFAULT '{}'), so this is safe.
+export const MigrationProgressRowSchema = z
+  .object({
+    id: z.string().uuid(),
+    guide_slug: z.string().min(1).max(80),
+    project_id: z.string().uuid().nullable(),
+    completed_step_ids: z.array(z.string()),
+    required_step_count: z.number().int().nonnegative().nullable(),
+    completed_required_count: z.number().int().nonnegative(),
+    source: z.enum(['docs', 'admin', 'cli']),
+    client_updated_at: z.string().nullable(),
+    created_at: z.string(),
+    updated_at: z.string(),
+    is_self: z.boolean(),
+  })
+  .passthrough()
+
+export const MigrationProgressListSchema = z
+  .object({
+    progress: z.array(MigrationProgressRowSchema),
+    knownGuideSlugs: z.array(z.string()),
+  })
+  .passthrough()
+
+export type MigrationProgressRow = z.infer<typeof MigrationProgressRowSchema>
+export type MigrationProgressList = z.infer<typeof MigrationProgressListSchema>
