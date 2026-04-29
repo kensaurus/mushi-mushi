@@ -113,6 +113,9 @@ importers:
 
   apps/docs:
     dependencies:
+      '@mushi-mushi/brand':
+        specifier: workspace:*
+        version: link:../../packages/brand
       next:
         specifier: ^15.1.6
         version: 15.5.15(@playwright/test@1.59.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
