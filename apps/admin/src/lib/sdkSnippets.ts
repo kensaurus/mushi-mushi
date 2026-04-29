@@ -293,7 +293,15 @@ Mushi.init(${mushiInitBody})`
    * native screenshot path (tracked in the migration guide). */
 
   if (fw === 'react-native' || fw === 'expo') {
-    const trigger = cfg.native.triggerMode
+    /* `MushiRNConfig.widget.trigger` accepts 'shake' | 'button' | 'both' |
+     * 'manual' | 'auto' | 'edge-tab' | 'hidden' | 'attach' — but NOT 'none'.
+     * The web SDK canonicalises the same way in
+     * packages/web/src/mushi.ts:mergeRuntimeConfig (`nativeTrigger ===
+     * 'none' → widget.trigger = 'manual'`). Mirror that here so a user who
+     * picks "none" in the configurator gets a snippet that actually
+     * type-checks against @mushi-mushi/react-native instead of one TS
+     * silently rejects. */
+    const trigger = cfg.native.triggerMode === 'none' ? 'manual' : cfg.native.triggerMode
     const widgetExtras: string[] = []
     if (trigger !== 'both') widgetExtras.push(`        trigger: '${trigger}',`)
 
@@ -336,13 +344,20 @@ export default function App() {
   }
 
   // capacitor
-  const triggerMode = cfg.native.triggerMode === 'none' ? null : cfg.native.triggerMode
+  /* `MushiTriggerMode = 'shake' | 'button' | 'both' | 'none'` (see
+   * packages/capacitor/src/definitions.ts) — 'none' IS a valid value and
+   * means "don't auto-trigger anything". The plugin's runtime default is
+   * 'shake', so we omit the line for 'shake' (implicit default) but emit
+   * every other value explicitly — including 'none'. The previous version
+   * coerced 'none' → null and then dropped the line, which silently flipped
+   * the user's "no auto-trigger" choice into shake-to-report at runtime. */
+  const triggerMode = cfg.native.triggerMode
   const capScreenshot = cfg.capture.screenshot !== 'off'
   const capLines: string[] = [
     `  projectId: '${projectId}',`,
     `  apiKey: '${key}',`,
   ]
-  if (triggerMode && triggerMode !== 'shake') capLines.push(`  triggerMode: '${triggerMode}',`)
+  if (triggerMode !== 'shake') capLines.push(`  triggerMode: '${triggerMode}',`)
   if (!capScreenshot) capLines.push(`  captureScreenshot: false,`)
   if (cfg.native.minDescriptionLength !== DEFAULT_SDK_CONFIG.native.minDescriptionLength) {
     capLines.push(`  minDescriptionLength: ${cfg.native.minDescriptionLength},`)

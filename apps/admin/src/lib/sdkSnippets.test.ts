@@ -211,6 +211,66 @@ describe('renderSnippet — mobile / hybrid frameworks', () => {
     expect(renderSnippet('capacitor', PROJECT, KEY, cfg)).not.toContain('triggerMode:')
   })
 
+  /**
+   * `triggerMode: 'none'` round-trip — pin both fixes against regression.
+   *
+   * Bug 1 (RN/Expo): MushiRNConfig.widget.trigger does NOT include 'none'
+   *   (see packages/react-native/src/provider.tsx). Before the fix, the
+   *   snippet emitted `trigger: 'none'`, which TypeScript rejects against
+   *   the real SDK. The web SDK's mergeRuntimeConfig already canonicalises
+   *   'none' → 'manual' at packages/web/src/mushi.ts:619-621, so the
+   *   snippet must do the same. Asserting the SDK-valid 'manual' (and
+   *   explicitly NOT the SDK-invalid 'none') both ways round.
+   *
+   * Bug 2 (Capacitor): MushiTriggerMode IS a 4-member union including
+   *   'none' (packages/capacitor/src/definitions.ts:11). Before the fix,
+   *   the snippet coerced 'none' → null, dropped the line entirely, and
+   *   the runtime default 'shake' silently took over — the OPPOSITE of
+   *   what the user picked. Pin that 'none' is emitted verbatim AND that
+   *   the snippet does NOT silently fall back to shake (no missing line).
+   */
+  it("rn/expo: triggerMode 'none' becomes 'manual' (the SDK-valid equivalent)", () => {
+    const cfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'none' },
+    }
+    for (const fw of ['react-native', 'expo'] as const) {
+      const out = renderSnippet(fw, PROJECT, KEY, cfg)
+      expect(out).toContain("trigger: 'manual'")
+      expect(out).not.toContain("trigger: 'none'")
+    }
+  })
+
+  it("capacitor: triggerMode 'none' is emitted verbatim, NOT silently dropped to default 'shake'", () => {
+    const cfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'none' },
+    }
+    const out = renderSnippet('capacitor', PROJECT, KEY, cfg)
+    expect(out).toContain("triggerMode: 'none'")
+    /* Sanity: the line wasn't dropped. If a future refactor reintroduces
+     * the 'none' → null coercion, this assertion keeps biting. */
+    expect(out).toMatch(/triggerMode:\s*'none'/)
+  })
+
+  it("capacitor: every non-default triggerMode is emitted (button + both + none, but NOT shake)", () => {
+    /* Property-style sanity: the implicit-default optimisation only applies
+     * to 'shake'. Every other valid MushiTriggerMode value must round-trip
+     * into the snippet, otherwise users lose explicit configuration silently. */
+    for (const mode of ['button', 'both', 'none'] as const) {
+      const cfg: SdkPreviewConfig = {
+        ...DEFAULT_SDK_CONFIG,
+        native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: mode },
+      }
+      expect(renderSnippet('capacitor', PROJECT, KEY, cfg)).toContain(`triggerMode: '${mode}'`)
+    }
+    const shakeCfg: SdkPreviewConfig = {
+      ...DEFAULT_SDK_CONFIG,
+      native: { ...DEFAULT_SDK_CONFIG.native, triggerMode: 'shake' },
+    }
+    expect(renderSnippet('capacitor', PROJECT, KEY, shakeCfg)).not.toContain('triggerMode:')
+  })
+
   it('every declared framework has an install command and a non-empty snippet', () => {
     for (const fw of FRAMEWORKS) {
       expect(installCommand(fw).length).toBeGreaterThan(0)
