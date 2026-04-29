@@ -1,7 +1,19 @@
 // Sidebar layout for docs.mushimushi.dev. Top-down represents the journey
 // from "what is Mushi" → "install" → "operate".
 export default {
-  index: { title: 'Welcome', display: 'hidden', theme: { layout: 'full' } },
+  index: {
+    title: 'Welcome',
+    display: 'hidden',
+    /* `breadcrumb: false`  — the hero <h1> already names the page; the
+     *   "Welcome / Mushi Mushi" stack on top of "Mushi · 虫々 · little bug
+     *   helper" is chrome tautology (NN/g H2 hidden failure mode). Suppress.
+     * `timestamp: false`   — the landing isn't a docs article so the "Last
+     *   updated on …" footer is noise. Sub-pages keep the default.
+     * `toc: false`         — the page is short enough to scan without a
+     *   right-rail outline; freeing that column gives the hero room to
+     *   breathe at 1024-1280 widths. */
+    theme: { layout: 'full', breadcrumb: false, timestamp: false, toc: false },
+  },
 
   '-- Get started': { type: 'separator', title: 'Get started' },
   quickstart: 'Quickstart',
