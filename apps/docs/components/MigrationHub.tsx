@@ -25,6 +25,7 @@
  */
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import {
   CATEGORY_LABELS,
   CATEGORY_ORDER,
@@ -142,7 +143,13 @@ export function MigrationHub({ guides }: Props) {
         <ul className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           {filtered.map((g) => (
             <li key={g.slug}>
-              <a
+              {/* next/link prepends the configured `basePath` (set by
+                  MUSHI_BASE_PATH at build time, see apps/docs/next.config.mjs).
+                  A plain <a href="/migrations/..."> would resolve against the
+                  origin root and 404 on the kensaur.us/mushi-mushi/docs
+                  deployment because that prefix isn't applied to raw href
+                  attributes. */}
+              <Link
                 href={`/migrations/${g.slug}`}
                 className={`group block h-full rounded-xl border p-4 transition ${
                   g.status === 'draft'
@@ -173,7 +180,7 @@ export function MigrationHub({ guides }: Props) {
                     Read →
                   </span>
                 </div>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>

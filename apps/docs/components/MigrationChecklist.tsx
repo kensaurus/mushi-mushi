@@ -147,13 +147,15 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
   const total = requiredSteps.length
   const pct = total === 0 ? 0 : Math.round((requiredDone / total) * 100)
 
+  const requiredStepIds = useMemo(() => requiredSteps.map((s) => s.id), [requiredSteps])
+
   // ── opt-in cloud sync ─────────────────────────────────────────────────
   const sync = useMigrationProgressSync({
     guideSlug: id,
     knownStepIds: allStepIds,
+    requiredStepIds,
     requiredStepCount: total,
     completed,
-    requiredDone,
     onMerged: useCallback(
       (mergedIds: string[]) => {
         // Apply the union of local + remote to local state AND localStorage,
@@ -190,6 +192,13 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
   }, [])
 
   const reset = useCallback(() => {
+    /* Cancel BEFORE the confirm() blocks the event loop. If the user
+     * toggled a step within the last 600ms, scheduleSync queued a PUT that
+     * is timing-due during the modal block; once the modal returns the
+     * timer fires and lands AFTER our DELETE, silently re-creating the
+     * row with the pre-reset step set. Cancelling first removes that race
+     * window entirely. */
+    sync.cancelPendingSync()
     if (typeof window !== 'undefined') {
       const ok = window.confirm('Reset progress for this migration?')
       if (!ok) return
@@ -200,6 +209,10 @@ export function MigrationChecklist({ id, steps, defaultOpen = false }: Migration
   }, [id, sync])
 
   const markAll = useCallback(() => {
+    /* Same race as `reset` (a stale PUT for a partial set could land after
+     * our full-set PUT and walk back the user's "mark all" intent).
+     * Cancel any pending debounce before scheduling the fresh push. */
+    sync.cancelPendingSync()
     const all = new Set(steps.map((s) => s.id))
     setCompleted(all)
     safeWrite(id, all)
@@ -378,20 +391,55 @@ interface SyncApi {
   signIn: () => void
   signOut: () => void
   scheduleSync: (next: Set<string>) => void
+  /** Discard any debounced push that hasn't fired yet. The caller MUST
+   *  invoke this before doing a destructive remote write (Reset → DELETE,
+   *  Mark all → fresh PUT) — otherwise an in-flight 600ms timer can land
+   *  AFTER the destructive op and silently re-create / overwrite the row
+   *  with the pre-action checked-step set. */
+  cancelPendingSync: () => void
   clearRemote: () => Promise<void>
 }
 
 interface UseMigrationProgressSyncArgs {
   guideSlug: string
   knownStepIds: readonly string[]
+  /** Required (non-optional) step IDs. Used by `countRequiredDone` to
+   *  compute `completedRequiredCount` directly from a step-id set instead
+   *  of from the parent's `requiredDone` derived value — necessary for
+   *  the initial-sync push where `setCompleted` has fired but React
+   *  hasn't re-rendered yet, so the parent's count would still hold the
+   *  pre-merge total. Same reasoning applies to back-to-back toggles
+   *  inside the 600ms debounce window. */
+  requiredStepIds: readonly string[]
   requiredStepCount: number
   completed: Set<string>
-  requiredDone: number
   onMerged: (mergedIds: string[]) => void
 }
 
+/** Count how many of `mergedIds` are also in `requiredStepIds`. Pure
+ *  function so the initial-sync push and the debounced push can both read
+ *  from the SAME source of truth (the merged step-id list) instead of from
+ *  a stale React ref that hasn't caught up to the latest setCompleted. */
+function countRequiredDone(
+  mergedIds: readonly string[],
+  requiredStepIds: readonly string[],
+): number {
+  if (requiredStepIds.length === 0) return 0
+  const required = new Set(requiredStepIds)
+  let n = 0
+  for (const id of mergedIds) if (required.has(id)) n += 1
+  return n
+}
+
 function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
-  const { guideSlug, knownStepIds, requiredStepCount, completed, requiredDone, onMerged } = args
+  const {
+    guideSlug,
+    knownStepIds,
+    requiredStepIds,
+    requiredStepCount,
+    completed,
+    onMerged,
+  } = args
   // Read the persisted session once; keying initial UI off this lets a
   // returning user see "Syncing…" instead of the misleading "Synced just
   // now" the previous initial state produced (lastSyncedAt was null but
@@ -406,12 +454,12 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
   })
   const knownStepIdsRef = useRef(knownStepIds)
   knownStepIdsRef.current = knownStepIds
+  const requiredStepIdsRef = useRef(requiredStepIds)
+  requiredStepIdsRef.current = requiredStepIds
   const onMergedRef = useRef(onMerged)
   onMergedRef.current = onMerged
   const completedRef = useRef(completed)
   completedRef.current = completed
-  const requiredDoneRef = useRef(requiredDone)
-  requiredDoneRef.current = requiredDone
   const requiredStepCountRef = useRef(requiredStepCount)
   requiredStepCountRef.current = requiredStepCount
   const pendingSync = useRef<number | null>(null)
@@ -462,11 +510,23 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
         )
         if (merge.localChanged) onMergedRef.current(merge.merged)
         if (merge.remoteIsBehind) {
+          /* Derive the count from `merge.merged` directly. We CANNOT use
+           * the parent component's `requiredDone` (or a ref shadowing it)
+           * here: the onMerged callback above just queued a `setCompleted`,
+           * but React won't re-render (and therefore won't refresh the
+           * parent's derived `requiredDone`) until after this async block
+           * returns. Reading any ref tracking that value would send a
+           * count lower than the merged-step set actually warrants —
+           * leaving the admin in-progress card under-reporting until the
+           * user's next toggle triggers a fresh push. */
           await pushProgress(session, {
             guideSlug,
             completedStepIds: merge.merged,
             requiredStepCount: requiredStepCountRef.current,
-            completedRequiredCount: requiredDoneRef.current,
+            completedRequiredCount: countRequiredDone(
+              merge.merged,
+              requiredStepIdsRef.current,
+            ),
           })
         }
         setState({ status: 'synced', session, lastSyncedAt: Date.now() })
@@ -497,13 +557,26 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
               session,
               lastSyncedAt: prev.status === 'synced' ? prev.lastSyncedAt : null,
             }))
+            /* Filter to known steps and derive the required-done count from
+             * the SAME filtered list. This kills two bugs at once:
+             *   1. Stale value: a ref tracking the parent's `requiredDone`
+             *      would lag the latest toggle while React renders, so
+             *      back-to-back toggles could push a count for the wrong
+             *      revision of the step set.
+             *   2. Drift: if the user's local set has a stale step ID we
+             *      no longer know about, filtering it out here keeps the
+             *      pushed count consistent with what we actually send. */
+            const filteredCompleted = Array.from(next).filter((id) =>
+              knownStepIdsRef.current.includes(id),
+            )
             await pushProgress(session, {
               guideSlug,
-              completedStepIds: Array.from(next).filter((id) =>
-                knownStepIdsRef.current.includes(id),
-              ),
+              completedStepIds: filteredCompleted,
               requiredStepCount: requiredStepCountRef.current,
-              completedRequiredCount: requiredDoneRef.current,
+              completedRequiredCount: countRequiredDone(
+                filteredCompleted,
+                requiredStepIdsRef.current,
+              ),
             })
             setState({ status: 'synced', session, lastSyncedAt: Date.now() })
           } catch (err) {
@@ -520,6 +593,13 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
     },
     [guideSlug],
   )
+
+  const cancelPendingSync = useCallback(() => {
+    if (pendingSync.current !== null) {
+      window.clearTimeout(pendingSync.current)
+      pendingSync.current = null
+    }
+  }, [])
 
   const signIn = useCallback(() => {
     setState({ status: 'signing-in', session: null })
@@ -548,7 +628,7 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
     }
   }, [guideSlug])
 
-  return { state, signIn, signOut, scheduleSync, clearRemote }
+  return { state, signIn, signOut, scheduleSync, cancelPendingSync, clearRemote }
 }
 
 function relativeTime(timestamp: number): string {
