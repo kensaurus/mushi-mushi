@@ -37,8 +37,13 @@ const CONTACT_EMAIL = 'kensaurus@gmail.com'
 
 /**
  * Adapter — react-router's <Link> uses `to` instead of `href`, and we need
- * to fall back to a plain <a> for hash anchors (#loop, #pricing) and any
- * external/mailto link. Mirrors the cloud-side adapter in shape.
+ * to fall back to a plain <a> for hash anchors (#loop) and any
+ * external/mailto link. The MarketingLinkProps interface includes `target`
+ * and `rel` so the marketing components can request that outbound links
+ * (docs / GitHub / migration guides / pricing) open in a new tab without
+ * losing the landing context. The plain <a> branch already forwards them
+ * via `...rest`; the SPA <Link> branch ignores them since react-router
+ * never crosses origins, but `rest` is still spread so future props work.
  */
 const ReactRouterLinkAdapter: MarketingLink = ({
   href,
@@ -69,24 +74,47 @@ export function PublicHomePage() {
   const consoleHref = session ? '/dashboard' : '/login?next=%2Fdashboard'
 
   const theme = useMemo<MarketingTheme>(
-    () => ({
-      Link: ReactRouterLinkAdapter,
-      urls: {
-        // In the admin SPA we don't have a separate signup form; deep-link
-        // straight into the auth-gated dashboard so the existing login page
-        // collects credentials. The "next" param keeps the user-intent.
-        signup: consoleHref,
-        login: '/login',
-        loopAnchor: '#loop',
-        pricingAnchor: '#pricing',
-        docs: (path = '') => (path ? `${DOCS_BASE}${path.startsWith('/') ? '' : '/'}${path}` : DOCS_BASE),
-        repo: (path = '') => (path ? `${REPO_BASE}${path.startsWith('/') ? '' : '/'}${path}` : REPO_BASE),
-        contact: (subject) =>
-          subject
-            ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`
-            : `mailto:${CONTACT_EMAIL}`,
-      },
-    }),
+    () => {
+      // Trailing-slash quirk of the docs deploy:
+      //   - The site is `next build && next export` with `trailingSlash: false`.
+      //   - That emits `out/index.html` (so `/docs/` 200s and `/docs` 404s on
+      //     CloudFront) and per-page flat HTML for subpages (so
+      //     `/docs/concepts/judge-loop` 200s and the trailing-slash variant
+      //     404s). The previous helper returned a bare `/docs` URL for the
+      //     no-arg case, which is exactly the one path CloudFront rejects.
+      // Therefore: index URL gets an explicit trailing slash; subpage URLs
+      // must NOT. Hash-only inputs (e.g. `'#plans'`) are appended directly
+      // so callers can compose links like `urls.docs('/cloud#plans')` too.
+      const docs = (path = '') => {
+        if (!path) return `${DOCS_BASE}/`
+        if (path.startsWith('#')) return `${DOCS_BASE}/${path}`
+        return `${DOCS_BASE}${path.startsWith('/') ? '' : '/'}${path}`
+      }
+      const repo = (path = '') =>
+        path ? `${REPO_BASE}${path.startsWith('/') ? '' : '/'}${path}` : REPO_BASE
+      return {
+        Link: ReactRouterLinkAdapter,
+        urls: {
+          // In the admin SPA we don't have a separate signup form; deep-link
+          // straight into the auth-gated dashboard so the existing login page
+          // collects credentials. The "next" param keeps the user-intent.
+          signup: consoleHref,
+          login: '/login',
+          loopAnchor: '#loop',
+          // Pricing lives on the docs site at /cloud (Free + Cloud + Enterprise
+          // table). The previous `'#pricing'` anchor pointed at a section that
+          // does not exist on this landing — a dead footer link. The hash
+          // jumps the visitor to the "Plans" heading inside the cloud doc.
+          pricing: docs('/cloud#plans'),
+          docs,
+          repo,
+          contact: (subject) =>
+            subject
+              ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`
+              : `mailto:${CONTACT_EMAIL}`,
+        },
+      }
+    },
     [consoleHref],
   )
 
@@ -118,7 +146,12 @@ export function PublicHomePage() {
                 Loop
               </a>
               <a
-                href={DOCS_BASE}
+                /* Trailing slash matters: see the docs() helper below — the
+                 * static export's `out/index.html` is only reachable via
+                 * `/docs/`, never `/docs`. */
+                href={`${DOCS_BASE}/`}
+                target="_blank"
+                rel="noreferrer"
                 className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
               >
                 Docs

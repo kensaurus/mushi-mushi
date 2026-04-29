@@ -2,21 +2,18 @@
 title: Mushi Mushi — User-side bug intelligence
 ---
 
-# Mushi Mushi
+import { Cards, Callout } from 'nextra/components'
 
-<div style={{ border: '1px solid var(--mushi-rule, rgba(14,13,11,0.12))', borderRadius: 24, padding: '2rem', background: 'var(--mushi-paper, #f8f4ed)', color: 'var(--mushi-ink, #0e0d0b)' }}>
-  <p style={{ fontFamily: 'ui-monospace, SF Mono, Menlo, monospace', fontSize: 12, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'var(--mushi-vermillion, #e03c2c)' }}>
-    Mushi / 虫々 / little bug helper
-  </p>
-  <p style={{ marginTop: 12, fontFamily: 'Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif', fontSize: 'clamp(2.5rem, 7vw, 5.5rem)', lineHeight: 0.95, letterSpacing: '-0.06em' }}>
-    Bugs your users feel, walked into a fix.
-  </p>
-  <p style={{ marginTop: 20, maxWidth: 680, color: 'var(--mushi-ink-muted, #5c5852)', fontSize: 18, lineHeight: 1.7 }}>
-    Mushi turns a wobbly checkout, confusing screen, or tiny visual regression
-    into a report your team can understand, repair, and learn from. No heavy
-    ticket ceremony. Just a clear trail.
-  </p>
-</div>
+{/* The EditorialHero IS the page H1 — do NOT add a markdown `# Mushi Mushi`
+    above it or we ship two competing page titles (NN/g #4 + screen-reader
+    bug). The `_meta.ts` for the index also opts out of the auto-rendered
+    breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack. */}
+
+<EditorialHero
+  eyebrow="Mushi · 虫々 · little bug helper"
+  title={<>Bugs your users feel, walked into a <em>fix.</em></>}
+  lead={<>Mushi turns a wobbly checkout, confusing screen, or tiny visual regression into a report your team can understand, repair, and learn from. No heavy ticket ceremony — just a clear trail.</>}
+/>
 
 Mushi sits **upstream** of Sentry. Sentry sees what your code throws; Mushi
 sees what your users feel. The two are designed to compose: Mushi's
@@ -25,70 +22,38 @@ forwarded into Mushi via webhook.
 
 ## Try it in 60 seconds
 
-import { Cards } from 'nextra/components'
-
 <Cards>
   <Cards.Card title="React" href="/quickstart/react" arrow>
     Drop the provider into your app and ship a Shake-to-Report widget.
   </Cards.Card>
-  <Cards.Card title="Vue / Svelte / Angular" href="/sdks" arrow>
+  <Cards.Card title="Vue, Svelte, Angular" href="/sdks" arrow>
     First-class adapters for every major web framework.
   </Cards.Card>
-  <Cards.Card title="iOS / Android / Flutter" href="/quickstart/mobile" arrow>
+  <Cards.Card title="iOS, Android, Flutter" href="/quickstart/mobile" arrow>
     Native SDKs with shake detection, offline queue, and Sentry bridge.
   </Cards.Card>
   <Cards.Card title="MCP server" href="/sdks/mcp" arrow>
-    Let Claude / Cursor / Codex triage and propose fixes from your IDE.
+    Let Claude, Cursor, or Codex triage and propose fixes from the IDE.
   </Cards.Card>
 </Cards>
 
 ## Why Mushi (vs. Sentry alone)
 
-| Layer                    | Sentry              | Mushi                                         |
-| ------------------------ | ------------------- | --------------------------------------------- |
-| Source of bugs           | Stack traces & perf | Direct user reports + Sentry User Feedback    |
-| Triage                   | Manual              | Two-stage LLM classifier with judge feedback  |
-| Knowledge                | Issue list          | Knowledge graph (pgvector + Apache AGE)       |
-| Fix workflow             | Issue → ticket      | Agentic orchestrator → sandboxed PR           |
-| AI agent surface         | None                | A2A Agent Card + MCP server                   |
-| Self-host                | OSS edition         | OSS first; cloud optional                     |
+<ComparisonTable
+  foil="Sentry"
+  rows={[
+    { label: 'Source of bugs',     foil: 'Stack traces & perf',  mushi: 'Direct user reports + Sentry User Feedback' },
+    { label: 'Triage',             foil: 'Manual',                mushi: 'Two-stage LLM classifier with judge feedback' },
+    { label: 'Knowledge',          foil: 'Issue list',            mushi: 'Knowledge graph (pgvector + Apache AGE)' },
+    { label: 'Fix workflow',       foil: 'Issue → ticket',        mushi: 'Agentic orchestrator → sandboxed PR' },
+    { label: 'AI agent surface',   foil: 'None',                  mushi: 'A2A Agent Card + MCP server' },
+    { label: 'Self-host',          foil: 'OSS edition',           mushi: 'OSS first; cloud optional' },
+  ]}
+/>
 
-## Architecture at a glance
+## The Mushi loop, in four steps
 
-```mermaid
-sequenceDiagram
-  autonumber
-  actor U as User
-  participant W as Mushi widget
-  participant API as Mushi API (Hono)
-  participant FF as fast-filter
-  participant CR as classify-report
-  participant J as judge-batch
-  participant FX as fix-orchestrator
-  participant S as Sandbox (E2B)
-  participant GH as GitHub
-  U->>W: shakes phone / clicks "Report a bug"
-  W->>API: POST /v1/reports (HMAC-signed)
-  API->>FF: route eligible reports
-  FF->>CR: enqueue (Anthropic primary)
-  CR-->>API: classification + tags
-  J-->>CR: nightly judge feedback
-  API->>FX: dispatch approved fix
-  FX->>S: spawn ephemeral sandbox
-  S->>GH: open PR with proposed fix
-```
+<Pillars />
 
-See **[Concepts → Architecture](/concepts/architecture)** for the full picture.
-
-## What's new in v0.8.0
-
-import { Callout } from 'nextra/components'
-
-<Callout type="info" emoji="🚀">
-  **shipped.** Native iOS, Android, Flutter, and Capacitor SDKs are
-  now on their respective registries. The platform also gained A2A Agent
-  Card discovery, SOC 2 Type 1 readiness controls, US/EU/JP data residency,
-  BYO Storage (S3/R2/GCS/MinIO), and BYOK (Anthropic/OpenAI keys per project).
-
-  [Read the v0.8.0 changelog →](/changelog)
-</Callout>
+See **[Concepts → Architecture](/concepts/architecture)** for the wire-level
+sequence diagram and component-by-component spec.
