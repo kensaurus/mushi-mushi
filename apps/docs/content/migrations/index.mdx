@@ -23,7 +23,11 @@ the most-requested ones get scheduled into the next docs wave.
 import { Callout } from 'nextra/components'
 
 <Callout type="info">
-  **Already running `mushi-mushi` CLI?** Run
-  `npx mushi-mushi migrate` in your project root and we'll point you at the
-  most relevant guide based on what's in your `package.json`.
+  **Want a guide picked for you?** Run
+  `npx @mushi-mushi/cli migrate` in your project root (or `mushi migrate`
+  if you have `@mushi-mushi/cli` installed globally) and we'll point you at
+  the most relevant guide based on what's in your `package.json`.
+
+  The unscoped `mushi-mushi` launcher is a thin shim around the wizard and
+  only knows the `init` flow — `migrate` lives in `@mushi-mushi/cli`.
 </Callout>

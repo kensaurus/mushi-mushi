@@ -469,9 +469,16 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
     if (typeof window === 'undefined') return
     const handler = () => {
       const session = getDocsAuthSession()
+      /* Same reasoning as the signIn callback below: a fresh session is
+       * NOT a fresh sync. The `mushi:docs:auth-change` event fires from
+       * `persistDocsAuthSession` and `signOutDocs` in
+       * apps/docs/lib/migrationProgress.ts — both of which run BEFORE any
+       * data round-trip. Lighting up "Synced just now" here would lie to
+       * the user; the initial-fetch effect below will promote 'syncing'
+       * to 'synced' once a real round-trip lands. */
       setState(
         session
-          ? { status: 'synced', session, lastSyncedAt: Date.now() }
+          ? { status: 'syncing', session, lastSyncedAt: null }
           : { status: 'idle', session: null },
       )
     }
@@ -605,7 +612,16 @@ function useMigrationProgressSync(args: UseMigrationProgressSyncArgs): SyncApi {
     setState({ status: 'signing-in', session: null })
     void openAdminAuthBridge()
       .then((session) => {
-        setState({ status: 'synced', session, lastSyncedAt: Date.now() })
+        /* Land on 'syncing' (NOT 'synced') the moment the bridge resolves.
+         * We have a session but the initial fetch + merge + push round-trip
+         * hasn't happened yet — the effect at `useEffect([state.session])`
+         * below will run on the next tick and walk through 'syncing' →
+         * 'synced'. If we set 'synced' here the SyncCta footer briefly
+         * shows "Synced just now" with `Date.now()` BEFORE any data has
+         * actually been confirmed in sync, then flickers to "Syncing…"
+         * once the effect overrides it. Mirrors the initial-state branch
+         * at line ~451 which uses 'syncing' for the same reason. */
+        setState({ status: 'syncing', session, lastSyncedAt: null })
       })
       .catch((err) => {
         const message = err instanceof Error ? err.message : 'Sign-in cancelled'

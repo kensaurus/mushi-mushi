@@ -36,16 +36,40 @@ import { getActiveOrgIdSnapshot } from '../lib/activeOrg'
 
 type BridgeStatus = 'pending' | 'sent' | 'invalid_origin' | 'missing_opener' | 'no_session' | 'no_nonce'
 
+/* The server-side CORS allowlist for docs origins is env-extendable via
+ * `MUSHI_DOCS_ORIGIN_ALLOWLIST` (see packages/server/supabase/functions/api/index.ts).
+ * Without an equivalent here, ops can wire a new docs host into the API
+ * allowlist and still have this bridge reject the popup with
+ * `invalid_origin` — drift that is hard to spot in production. Mirror the
+ * same env knob on the admin (Vite-prefixed) so the two stay in lockstep:
+ *   VITE_DOCS_ORIGIN_ALLOWLIST="https://docs.example.com,https://staging.example.com"
+ * Defaults are unchanged so existing deployments keep working untouched. */
+const DEFAULT_DOCS_ORIGINS = [
+  'https://docs.mushimushi.dev',
+  'https://kensaur.us',
+  'https://www.kensaur.us',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3001',
+] as const
+
 const ALLOWED_DOCS_ORIGINS = new Set<string>(
-  [
-    'https://docs.mushimushi.dev',
-    'https://kensaur.us',
-    'https://www.kensaur.us',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3001',
-  ].map((s) => s.replace(/\/+$/, '')),
+  (() => {
+    /* `import.meta.env.VITE_*` is typed `any` in this app (no global Vite
+     * env d.ts narrows our custom keys), so coerce to `string` early to
+     * avoid the implicit-any cascade through `.split` / `.map`. */
+    const raw: string = String(import.meta.env.VITE_DOCS_ORIGIN_ALLOWLIST ?? '').trim()
+    const extras: string[] = raw
+      ? raw
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter((s: string) => s.length > 0)
+      : []
+    return [...DEFAULT_DOCS_ORIGINS, ...extras]
+      .map((s: string) => normalizeOrigin(s))
+      .filter((s): s is string => typeof s === 'string' && s.length > 0)
+  })(),
 )
 
 function normalizeOrigin(raw: string | null): string | null {
@@ -117,12 +141,45 @@ export function DocsBridgePage() {
     }
   }, [loading, nonce, returnOrigin, session])
 
-  // Keep the session fresh in case it was about to expire when the popup
-  // opened — refreshSession is a no-op when nothing is needed.
+  // Keep the access token fresh in case it was about to expire when the
+  // popup opened, so the docs side gets a token that survives at least the
+  // next PUT round-trip.
+  //
+  // CRITICAL — DO NOT remove the ref guard or the expiry threshold below.
+  // `supabase.auth.refreshSession()` is NOT a no-op: it always hits
+  // `/token?grant_type=refresh_token` and emits a TOKEN_REFRESHED event,
+  // which `useAuth()` translates into a brand-new `session` object. With
+  // a naive `[session]` dep, that new session re-runs this effect, which
+  // calls `refreshSession()` again, which emits another session, etc. —
+  // an unbounded loop against Supabase's auth endpoint.
+  //
+  // In the happy path (status === 'sent') the popup auto-closes after
+  // 500ms, masking the loop to 2–3 wasted /token calls. But in error
+  // states (`missing_opener`, `invalid_origin`, `no_nonce`, `no_session`)
+  // the popup stays open until the user notices, and the loop runs
+  // indefinitely — burning Supabase API quota and racking up rate-limit
+  // 429s on the user's project.
+  //
+  // Fix: pin the refresh to AT MOST ONCE per popup mount via
+  // `refreshedOnceRef`, and only fire it when the access token is within
+  // the refresh window. The bridge effect above already captures whatever
+  // session is current when it sends — if the refresh completes first,
+  // it sends the refreshed token; if it doesn't, it sends the original
+  // (still-valid for >5min); either way the docs side gets a usable
+  // token without any loop risk.
+  const refreshedOnceRef = useRef(false)
   useEffect(() => {
-    if (!session) return
+    if (refreshedOnceRef.current) return
+    if (loading || !session) return
+    refreshedOnceRef.current = true
+
+    const expiresAtSec = session.expires_at ?? 0
+    const nowSec = Math.floor(Date.now() / 1000)
+    const REFRESH_THRESHOLD_SEC = 5 * 60
+    if (expiresAtSec - nowSec > REFRESH_THRESHOLD_SEC) return
+
     void supabase.auth.refreshSession().catch(() => null)
-  }, [session])
+  }, [loading, session])
 
   return (
     <main className="grid min-h-screen place-items-center bg-surface p-6">
