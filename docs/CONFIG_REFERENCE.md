@@ -1534,5 +1534,5 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **Default** — `react`
 
-**When to change** — Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see `/docs/migrations/capacitor-to-react-native`.
+**When to change** — Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://docs.mushimushi.dev/migrations/capacitor-to-react-native.
 
