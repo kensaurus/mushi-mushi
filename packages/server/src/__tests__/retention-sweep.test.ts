@@ -123,4 +123,50 @@ describe('deleteOldReportsBatch', () => {
       deleteOldReportsBatch(makeDb([select, delErr]) as never, 'proj_1', '2026-04-01T00:00:00Z'),
     ).resolves.toEqual({ deleted: 0, error: 'delete failed' })
   })
+
+  // Sentry MUSHI-MUSHI-SERVER-N: PostgREST occasionally returns
+  // `column reports.created_at does not exist` for the few seconds after an
+  // ALTER TABLE migration ships, while its in-memory schema cache catches up.
+  // The sweep must absorb that one transient hit and retry, since
+  // `reports.created_at` clearly does exist (the table has carried it since
+  // the day-zero schema). A second permanent failure still surfaces as an
+  // error so genuine schema drift is not masked.
+  it('retries the candidate select once on a transient PostgREST schema-cache miss', async () => {
+    const cacheMiss = new QueryChain({
+      data: null,
+      error: { message: 'column reports.created_at does not exist' },
+    })
+    const retrySuccess = new QueryChain({ data: [{ id: 'r1' }], error: null })
+    const del = new QueryChain({ data: [{ id: 'r1' }], error: null })
+
+    await expect(
+      deleteOldReportsBatch(
+        makeDb([cacheMiss, retrySuccess, del]) as never,
+        'proj_1',
+        '2026-04-01T00:00:00Z',
+      ),
+    ).resolves.toEqual({ deleted: 1, error: null })
+  })
+
+  it('surfaces the error if the schema-cache miss persists across the retry', async () => {
+    const firstMiss = new QueryChain({
+      data: null,
+      error: { message: 'column reports.created_at does not exist' },
+    })
+    const secondMiss = new QueryChain({
+      data: null,
+      error: { message: 'column reports.created_at does not exist' },
+    })
+
+    await expect(
+      deleteOldReportsBatch(
+        makeDb([firstMiss, secondMiss]) as never,
+        'proj_1',
+        '2026-04-01T00:00:00Z',
+      ),
+    ).resolves.toEqual({
+      deleted: 0,
+      error: 'column reports.created_at does not exist',
+    })
+  })
 })

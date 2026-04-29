@@ -39,3 +39,13 @@ ON CONFLICT (package, version)
 DO UPDATE SET
   deprecated = EXCLUDED.deprecated,
   released_at = EXCLUDED.released_at;
+
+-- Force PostgREST to drop its in-memory schema cache so the new columns and
+-- the new table are visible to API callers within seconds, not minutes. The
+-- 03:00-UTC retention sweep cron (Sentry MUSHI-MUSHI-SERVER-N) caught a stale
+-- cache window after this migration shipped and reported
+-- `column reports.created_at does not exist` even though the column has
+-- existed since day one — PostgREST had simply not re-read the columns list
+-- yet. Both NOTIFYs are needed because PostgREST listens on each.
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

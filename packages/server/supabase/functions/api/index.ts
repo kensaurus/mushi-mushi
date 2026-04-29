@@ -1,7 +1,7 @@
 import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
 
-import { ensureSentry, reportError, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
+import { ensureSentry, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
@@ -302,37 +302,55 @@ function isStatusZeroRangeError(err: unknown): err is RangeError {
   );
 }
 
-function statusZeroFallback(): Response {
+function clientAbortFallback(): Response {
+  // 499 Client Closed Request (Nginx convention) — the connection is already
+  // closed so this body is never read by the original requester. We still
+  // return a well-formed Response so the Deno server doesn't surface a
+  // protocol error in upstream logs.
   return new Response(
     JSON.stringify({
       ok: false,
       error: {
-        code: 'UPSTREAM_FETCH_FAILED',
+        code: 'CLIENT_CLOSED_REQUEST',
         message:
-          'A downstream fetch produced no HTTP response (status 0). Retry the request; if it persists, check upstream network/DNS health.',
+          'The client disconnected before the response could be written. The connection is already closed.',
       },
     }),
     {
-      status: 502,
+      status: 499,
       headers: { 'Content-Type': 'application/json' },
     },
   );
 }
 
+/**
+ * Boundary guard for the Deno.serve handler.
+ *
+ * Twin of `sentryHonoErrorHandler` (see `_shared/sentry.ts`) — that one runs
+ * INSIDE Hono when compose throws; this one runs OUTSIDE Hono when the throw
+ * escaped Hono entirely or when Hono returned a Response with `status === 0`.
+ *
+ * Status-0 inbound is the documented Deno/Supabase Edge Runtime client-abort
+ * shape (see Sentry handler doc). It is NOT a server bug — log it as a
+ * warning so it shows up in Sentry's Issues list as a low-priority signal,
+ * but never as an exception (which would page on-call and burn error budget
+ * for behaviour the operator can do nothing about).
+ */
 async function fetchWithStatusZeroGuard(req: Request): Promise<Response> {
   try {
     const res = await app.fetch(req);
 
-    // Deno's `Response.error()` is a valid Web Fetch object but has status 0,
-    // which Hono/Deno cannot forward as an HTTP response. Normalize it at the
-    // function boundary so Sentry issue MUSHI-MUSHI-SERVER-H cannot recur as
-    // a native `RangeError` with no route context.
     if (res.status === 0) {
       const url = new URL(req.url);
-      reportMessage('status_zero_response_normalized', 'error', {
-        tags: { path: url.pathname, method: req.method },
+      reportMessage('client_aborted_response', 'warning', {
+        tags: {
+          path: url.pathname,
+          method: req.method,
+          client_abort: 'true',
+          boundary: 'api-fetch',
+        },
       });
-      return statusZeroFallback();
+      return clientAbortFallback();
     }
 
     return res;
@@ -340,16 +358,17 @@ async function fetchWithStatusZeroGuard(req: Request): Promise<Response> {
     if (!isStatusZeroRangeError(err)) throw err;
 
     const url = new URL(req.url);
-    reportError(err, {
+    reportMessage('client_aborted_response', 'warning', {
       tags: {
         path: url.pathname,
         method: req.method,
+        client_abort: 'true',
         range_error_status_0: 'true',
         boundary: 'api-fetch',
       },
       extra: { url: `${url.origin}${url.pathname}` },
     });
-    return statusZeroFallback();
+    return clientAbortFallback();
   }
 }
 
