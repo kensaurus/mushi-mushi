@@ -3,6 +3,9 @@ import { Playground } from './components/Playground'
 import { MigrationHub } from './components/MigrationHub'
 import { MigrationChecklist } from './components/MigrationChecklist'
 import { EffortBadge, RiskBadge } from './components/MigrationBadges'
+import { EditorialHero } from './components/EditorialHero'
+import { Pillars } from './components/Pillars'
+import { ComparisonTable } from './components/ComparisonTable'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ...getDocsComponents(),
@@ -11,5 +14,8 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   MigrationChecklist,
   EffortBadge,
   RiskBadge,
+  EditorialHero,
+  Pillars,
+  ComparisonTable,
   ...(components ?? {}),
 })
