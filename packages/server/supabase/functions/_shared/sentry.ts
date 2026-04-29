@@ -74,36 +74,75 @@ export function reportMessage(
 /**
  * Drop-in handler for `app.onError(sentryHonoErrorHandler)` on a Hono app.
  *
- * Sentry MUSHI-MUSHI-SERVER-H (regressed 2026-04-23): Hono's CORS middleware
- * crashed with `RangeError: status (0) is not equal to 101 and outside [200,
- * 599]` whenever a downstream handler returned `Response.error()` (status 0,
- * the default for failed `fetch()` outputs) or hit an `AbortError` mid-stream.
- * Hono then tried to clone that Response inside `Context.set res` and the
- * native `Response` constructor threw — which Hono's onError caught, but the
- * resulting Sentry event had ZERO app-frame stack so the operator couldn't
- * tell which route emitted the bad Response.
+ * Sentry MUSHI-MUSHI-SERVER-H story so far:
+ *   - 2026-04-23: First seen. RangeError "status (0) is not equal to 101 and
+ *     outside [200, 599]" thrown by Deno's `new Response()` when Hono's
+ *     `Context.set res` tried to clone a Response whose `status === 0`.
+ *     16 events across 6 days, all on long-running admin GETs
+ *     (/v1/admin/dashboard, /v1/admin/reports) and fire-and-forget POSTs
+ *     (/v1/admin/fixes/dispatch).
+ *   - 2026-04-24 (commit e218bbf): Added diagnostic tagging
+ *     (`range_error_status_0=true`) so we could see which routes were
+ *     affected, but kept reporting as a Sentry error.
+ *   - 2026-04-29 (this fix): With the diagnostic data in hand, we can confirm
+ *     there is NO app-code Response with status 0 anywhere in the codebase
+ *     (grep'd `c.json(.*,\s*0)`, `status:\s*0`, `Response.error()`). The
+ *     recurring path is the documented Deno/Supabase Edge Runtime quirk where
+ *     a client disconnect mid-response surfaces inside Hono as a status-0
+ *     Response on `c.res`. References:
+ *       - https://stackoverflow.com/questions/77097886 (Deno aborts)
+ *       - github.com/denoland/deno/issues/28632
+ *       - github.com/supabase/supabase/issues/39287
+ *     So this is a CLIENT-side disconnection event, not a server bug. Treat
+ *     it accordingly: tag it, count it via `reportMessage(... 'warning')` so
+ *     we still see the volume in Sentry's Issues list, but DON'T capture as
+ *     an exception (which spawns a recurring P-issue, pages on-call, and
+ *     skews error budgets). The user-facing response is still 499 Client
+ *     Closed Request — semantically accurate per Nginx convention; the
+ *     browser already disconnected so no one will see it anyway.
  *
- * The handler now tags every reported error with the underlying status code
- * (when discoverable), the route, the method, and a `range_error_status_0`
- * boolean so the next recurrence is immediately greppable in Sentry. We also
- * special-case the `RangeError` so the user-facing response is `502 upstream
- * fetch failed` instead of a plain `500 internal` — the route handler did
- * succeed at signalling a network failure; the `RangeError` was just our own
- * adapter's loss-of-fidelity bug.
+ * Anything else (real RangeErrors, TypeErrors, network failures from the
+ * server-side, etc.) is still reported as a normal Sentry exception.
  */
 export function sentryHonoErrorHandler(err: Error, c: Context): Response {
   const isRangeStatusZero =
     err instanceof RangeError && /status.*\(0\)|status.+not equal to 101/i.test(err.message)
+
+  if (isRangeStatusZero) {
+    // Client disconnect — log as warning (visible in Sentry's "Issues" tab as
+    // a low-priority warning, not a P-issue) and return 499. Keep the route
+    // tag so we can still spot a real upstream regression if the count
+    // suddenly spikes on a new path.
+    reportMessage('client_aborted_response', 'warning', {
+      tags: {
+        path: c.req.path,
+        method: c.req.method,
+        client_abort: 'true',
+        range_error_status_0: 'true',
+      },
+      extra: {
+        cause:
+          err.cause !== undefined
+            ? String((err.cause as { message?: string }).message ?? err.cause).slice(0, 500)
+            : null,
+        message: err.message,
+      },
+    })
+    return c.json(
+      {
+        error: 'client_closed_request',
+        detail:
+          'The client disconnected before the response could be written. This is informational; the connection is already closed.',
+      },
+      // 499 (Nginx) communicates "client closed connection". Hono accepts any
+      // numeric status code; only 1xx/0 are forbidden by `new Response()`.
+      499,
+    )
+  }
+
   reportError(err, {
-    tags: {
-      path: c.req.path,
-      method: c.req.method,
-      range_error_status_0: isRangeStatusZero ? 'true' : 'false',
-    },
+    tags: { path: c.req.path, method: c.req.method },
     extra: {
-      // The cause chain occasionally carries the original fetch failure
-      // (AbortError, "fetch failed", DNS failure) that produced the
-      // status-0 Response in the first place.
       cause:
         err.cause !== undefined
           ? String((err.cause as { message?: string }).message ?? err.cause).slice(0, 500)
@@ -111,16 +150,6 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
       message: err.message,
     },
   })
-  if (isRangeStatusZero) {
-    return c.json(
-      {
-        error: 'upstream_fetch_failed',
-        detail:
-          'A downstream fetch returned no response (status 0) — usually a network/DNS failure or an aborted request. See Sentry for the underlying cause.',
-      },
-      502,
-    )
-  }
   return c.json({ error: 'internal' }, 500)
 }
 

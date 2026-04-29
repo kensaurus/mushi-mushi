@@ -90,3 +90,10 @@ CREATE TRIGGER report_comments_fanout_to_reporter_trigger
 AFTER INSERT ON public.report_comments
 FOR EACH ROW
 EXECUTE FUNCTION public.report_comments_fanout_to_reporter();
+
+-- Force PostgREST to drop its in-memory schema cache so the new columns and
+-- the new trigger are visible to API callers immediately. Adding the columns
+-- to `reports` mid-day risks the same Sentry MUSHI-MUSHI-SERVER-N stale-cache
+-- window that bit the retention sweep on 2026-04-29.
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';
