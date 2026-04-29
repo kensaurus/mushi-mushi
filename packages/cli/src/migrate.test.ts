@@ -12,7 +12,6 @@ import { tmpdir } from 'node:os'
 import {
   detectMigrations,
   depsFromPackageJson,
-  MIGRATE_CATALOG,
   type MigrateGuide,
   runMigrate,
 } from './migrate.js'
