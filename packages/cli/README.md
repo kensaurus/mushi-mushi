@@ -59,8 +59,31 @@ mushi reports triage <id> --status acknowledged --severity high
 mushi deploy check                   # edge-function health probe
 mushi index <path>                   # walk a local repo and feed RAG
 mushi test                           # submit a test report end-to-end
+mushi migrate                        # suggest the most relevant migration guide
+mushi migrate --json                 # machine-readable JSON for CI
 mushi config endpoint https://...    # set API endpoint (https:// required outside localhost)
 ```
+
+### `mushi migrate`
+
+Reads `package.json` (deps + devDeps + peerDeps) and prints links to the
+matching guides on the docs site. Detects:
+
+- **In-transition shapes** — Capacitor + React Native side-by-side, Cordova
+  (or `cordova-ios`/`cordova-android`), Create React App.
+- **Competitor SDKs** — Instabug / Luciq, Shake, LogRocket Feedback,
+  BugHerd, Pendo Feedback.
+
+Exits non-zero when nothing matches, so it composes in shell scripts:
+
+```bash
+mushi migrate || echo "no migration suggestions for this project"
+```
+
+Only `published` guides ever surface — `draft` entries are filtered out so
+the CLI never points users at a 404. This safety property is unit-pinned in
+`packages/cli/src/migrate.test.ts` (positive control + negative control +
+real-catalog regression guard).
 
 ## Security notes
 

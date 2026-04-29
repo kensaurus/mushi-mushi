@@ -69,6 +69,7 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
 | `ClosingCta`       | Bottom-of-page deploy/source CTA with bilingual kicker           |
 | `MarketingFooter`  | Footer with `<StatusPill />` and standard nav                    |
 | `StatusPill`       | Standalone gateway-health probe                                  |
+| `SwitchingFromStrip` | "Switching from X?" row of 5 competitor chips, each linking to its docs migration guide (`/migrations/<competitor>-to-mushi`). Drop into a landing page between hero and CTA |
 
 Plus all stage / edge / log data and TypeScript types so consumers can
 extend the canvas without re-declaring them.

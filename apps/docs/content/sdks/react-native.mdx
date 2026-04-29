@@ -4,11 +4,98 @@ title: '@mushi-mushi/react-native'
 
 # `@mushi-mushi/react-native`
 
-React Native SDK with shake-to-report (via `react-native-shake`) and a
-bottom-sheet capture UI. Reports queue to AsyncStorage when offline.
+React Native SDK with a JS bottom-sheet capture UI, console + network capture,
+and an offline AsyncStorage queue. Works in both **bare React Native CLI**
+projects and **Expo** apps (managed-with-dev-client or bare).
 
 ```tsx
-import { MushiProvider, useMushi } from '@mushi-mushi/react-native'
+import { MushiProvider, useMushi, useMushiReport } from '@mushi-mushi/react-native'
 ```
 
-See [Quickstart → React Native](/quickstart/react-native).
+## Install
+
+```bash
+npm install @mushi-mushi/react-native
+```
+
+Optional peer dependencies — install the ones whose features you want:
+
+| Peer | Enables |
+|------|---------|
+| `@react-native-async-storage/async-storage` | Offline report queue (recommended for production) |
+| `@react-navigation/native` | Auto-captured navigation timeline via `useNavigationCapture()` |
+| `expo-sensors` | Shake-to-report trigger |
+
+For shake-to-report on a bare RN CLI project, install Expo modules first:
+
+```bash
+npx install-expo-modules@latest
+npm install expo-sensors
+cd ios && bundle exec pod install
+```
+
+## Mount the provider
+
+```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
+
+export default function App() {
+  return (
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },        // 'shake' | 'button' | 'both' | 'manual'
+        capture: { console: true, network: true },
+      }}
+    >
+      <RootNavigator />
+    </MushiProvider>
+  )
+}
+```
+
+A floating bug button is rendered automatically for `trigger: 'button' | 'both' | 'auto'`.
+Set `trigger: 'manual'` if you want to drive the widget yourself.
+
+## Submit a report from a screen
+
+```tsx
+import { useMushiReport, useMushiWidget } from '@mushi-mushi/react-native'
+
+function ChatScreen() {
+  const { open } = useMushiWidget()
+  const { submit, submitting } = useMushiReport()
+
+  return (
+    <Button
+      title={submitting ? 'Sending…' : 'Report bad response'}
+      onPress={() =>
+        submit({
+          description: 'AI returned an off-topic answer',
+          severity: 'medium',
+          metadata: { screen: 'chat' },
+        })
+      }
+    />
+  )
+}
+```
+
+## Offline queue
+
+Reports submitted while offline are buffered in `AsyncStorage` (key
+`@mushi:offline_queue`, default cap 50 items) and replayed on the next
+provider mount or whenever you call `useMushi().flush()`.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  For **pure-native** projects with no JS bundle, use the
+  [iOS](/quickstart/ios) or [Android](/quickstart/android) SDKs directly.
+  **Capacitor** users have a [dedicated plugin](/sdks/capacitor); see
+  [Capacitor → React Native migration](/migrations/capacitor-to-react-native)
+  if you're moving from one to the other.
+</Callout>
+
+See [Quickstart → React Native](/quickstart/react-native) for the end-to-end setup.

@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import { loadConfig, saveConfig } from './config.js'
 import type { CliConfig } from './config.js'
 import { runInit } from './init.js'
+import { runMigrate } from './migrate.js'
 import type { FrameworkId } from './detect.js'
 import { MUSHI_CLI_VERSION } from './version.js'
 import { assertEndpoint, DEFAULT_ENDPOINT } from './endpoint.js'
@@ -57,6 +58,21 @@ program
       endpoint: opts.endpoint,
       sendTestReport: opts.skipTestReport ? false : undefined,
     })
+  })
+
+program
+  .command('migrate')
+  .description(
+    'Suggest the most relevant Mushi Mushi migration guide based on your package.json',
+  )
+  .option('--cwd <path>', 'Run from a different directory')
+  .option('--json', 'Machine-readable JSON output')
+  .action((opts: { cwd?: string; json?: boolean }) => {
+    const { matches } = runMigrate({ cwd: opts.cwd, json: opts.json })
+    /* Non-zero exit when nothing matched so the command composes well in
+     * shell scripts (`mushi migrate || echo "no suggestions"`). The
+     * --json mode still respects this so CI gates can branch on it. */
+    if (matches.length === 0) process.exit(1)
   })
 
 program

@@ -69,22 +69,58 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   },
 }
 
-export const FRAMEWORKS = ['react', 'vue', 'svelte', 'vanilla'] as const
+/**
+ * Order matters — this is the tab strip order in `SdkInstallCard`. Web
+ * frameworks come first (most users), then mobile (RN / Expo / Capacitor),
+ * then the vanilla escape hatch last.
+ */
+export const FRAMEWORKS = [
+  'react',
+  'vue',
+  'svelte',
+  'react-native',
+  'expo',
+  'capacitor',
+  'vanilla',
+] as const
 export type Framework = (typeof FRAMEWORKS)[number]
+
+/**
+ * Frameworks that ship a native runtime (mobile / hybrid). Used by the
+ * configurator to (a) hide the web-only "screenshot" / "elementSelector"
+ * controls that don't apply, and (b) route the configured `native.triggerMode`
+ * into the snippet instead of the `widget.trigger` web mapping.
+ */
+export const MOBILE_FRAMEWORKS = ['react-native', 'expo', 'capacitor'] as const
+export type MobileFramework = (typeof MOBILE_FRAMEWORKS)[number]
+
+export function isMobileFramework(fw: Framework): fw is MobileFramework {
+  return (MOBILE_FRAMEWORKS as readonly string[]).includes(fw)
+}
 
 export const API_KEY_PLACEHOLDER = 'mushi_xxx'
 
 export function frameworkLabel(fw: Framework): string {
   if (fw === 'vanilla') return 'Vanilla JS'
+  if (fw === 'react-native') return 'React Native'
+  if (fw === 'capacitor') return 'Capacitor'
   return fw.charAt(0).toUpperCase() + fw.slice(1)
 }
 
-/** The `npm install` command for the chosen framework. Vue / Svelte ship as a
- *  thin adapter that depends on @mushi-mushi/web for the actual capture
- *  runtime, so they install both packages in one go; React bundles its own. */
+/** The `npm install` command for the chosen framework.
+ *  - Web adapters (Vue / Svelte) ship as a thin layer that depends on
+ *    @mushi-mushi/web for the actual capture runtime, so we install both.
+ *  - React bundles its own runtime in @mushi-mushi/react.
+ *  - Mobile (react-native / expo / capacitor) ships the native runtime in a
+ *    dedicated package — no @mushi-mushi/web on top, the web SDK doesn't run
+ *    in those environments. Capacitor users on the WebView can additionally
+ *    add @mushi-mushi/web (covered in the docs migration guide). */
 export function installCommand(fw: Framework): string {
   if (fw === 'react') return 'npm install @mushi-mushi/react'
   if (fw === 'vanilla') return 'npm install @mushi-mushi/web'
+  if (fw === 'react-native') return 'npm install @mushi-mushi/react-native'
+  if (fw === 'expo') return 'npx expo install @mushi-mushi/react-native expo-sensors'
+  if (fw === 'capacitor') return 'npm install @mushi-mushi/capacitor && npx cap sync'
   return `npm install @mushi-mushi/${fw} @mushi-mushi/web`
 }
 
@@ -228,8 +264,8 @@ app.use(MushiPlugin, credentials)
 Mushi.init(${mushiInitBody})`
   }
 
-  // svelte
-  return `import { initMushi } from '@mushi-mushi/svelte'
+  if (fw === 'svelte') {
+    return `import { initMushi } from '@mushi-mushi/svelte'
 import { Mushi } from '@mushi-mushi/web'
 
 const credentials = { projectId: '${projectId}', apiKey: '${key}' }
@@ -240,4 +276,83 @@ initMushi(credentials)
 // @mushi-mushi/web: mounts the visual bug-capture widget (floating button + modal).
 // All widget/capture options go here — the Svelte adapter doesn't render UI.
 Mushi.init(${mushiInitBody})`
+  }
+
+  /* ── Mobile / hybrid ─────────────────────────────────────────────────
+   * React Native, Expo (bare or managed-with-dev-client), and Capacitor
+   * ship through dedicated native runtimes. They use a different config
+   * shape than the web SDK — `widget.trigger` accepts the same `'shake'`
+   * vocabulary but the rest of the config lives under `widget` / `capture`
+   * in RN/Expo and under top-level keys (`triggerMode`, `captureScreenshot`)
+   * in Capacitor.
+   *
+   * We surface ONLY the options the configurator's `native` block exposes
+   * (trigger mode, min description length) plus the `console`/`network`
+   * capture toggles where they map cleanly. Screenshot/elementSelector are
+   * silently ignored on mobile because the RN package doesn't yet ship a
+   * native screenshot path (tracked in the migration guide). */
+
+  if (fw === 'react-native' || fw === 'expo') {
+    const trigger = cfg.native.triggerMode
+    const widgetExtras: string[] = []
+    if (trigger !== 'both') widgetExtras.push(`        trigger: '${trigger}',`)
+
+    const captureExtras: string[] = []
+    if (!cfg.capture.console) captureExtras.push(`        console: false,`)
+    if (!cfg.capture.network) captureExtras.push(`        network: false,`)
+
+    const blocks: string[] = []
+    if (widgetExtras.length > 0) {
+      blocks.push(`      widget: {\n${widgetExtras.join('\n')}\n      },`)
+    }
+    if (captureExtras.length > 0) {
+      blocks.push(`      capture: {\n${captureExtras.join('\n')}\n      },`)
+    }
+    const configProp = blocks.length > 0 ? `\n      config={{\n${blocks.join('\n')}\n      }}` : ''
+
+    const expoNote =
+      fw === 'expo'
+        ? `// Expo: works on bare workflow OR managed with a dev client.
+// 'shake' trigger uses expo-sensors (already added via 'npx expo install').
+
+`
+        : `// React Native CLI: 'shake' trigger needs expo-sensors:
+//   npx install-expo-modules@latest && npm install expo-sensors
+
+`
+
+    return `${expoNote}import { MushiProvider } from '@mushi-mushi/react-native'
+
+export default function App() {
+  return (
+    <MushiProvider
+      projectId="${projectId}"
+      apiKey="${key}"${configProp}
+    >
+      <YourApp />
+    </MushiProvider>
+  )
+}`
+  }
+
+  // capacitor
+  const triggerMode = cfg.native.triggerMode === 'none' ? null : cfg.native.triggerMode
+  const capScreenshot = cfg.capture.screenshot !== 'off'
+  const capLines: string[] = [
+    `  projectId: '${projectId}',`,
+    `  apiKey: '${key}',`,
+  ]
+  if (triggerMode && triggerMode !== 'shake') capLines.push(`  triggerMode: '${triggerMode}',`)
+  if (!capScreenshot) capLines.push(`  captureScreenshot: false,`)
+  if (cfg.native.minDescriptionLength !== DEFAULT_SDK_CONFIG.native.minDescriptionLength) {
+    capLines.push(`  minDescriptionLength: ${cfg.native.minDescriptionLength},`)
+  }
+
+  return `// In your Capacitor app's bootstrap (e.g. src/main.ts).
+// After install, run:  npx cap sync
+import { Mushi } from '@mushi-mushi/capacitor'
+
+await Mushi.configure({
+${capLines.join('\n')}
+})`
 }

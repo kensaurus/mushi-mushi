@@ -1,7 +1,10 @@
 import { Footer, Layout, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
-import 'nextra-theme-docs/style.css'
+/* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
+ * so we only import the one entry file to keep the cascade ordering stable
+ * (Tailwind base layer before Nextra theme styles). */
+import './globals.css'
 
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'

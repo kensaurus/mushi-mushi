@@ -1,0 +1,96 @@
+---
+title: '@mushi-mushi/* 0.x → 1.0'
+---
+
+# `@mushi-mushi/*` 0.x → 1.0
+
+<EffortBadge level="Hours" /> <RiskBadge level="Low" />
+
+import { Callout } from 'nextra/components'
+
+<Callout type="warning">
+  **Forward-looking placeholder.** Mushi is still on 0.x. This page tracks
+  the upgrade path so customers can plan ahead — no breaking changes have
+  shipped yet, and the 1.0 release date is not committed. Re-check this
+  page on each minor release; we'll mark `status: 'published'` in the
+  catalog (and remove the draft chip on the hub) when the upgrade becomes
+  real.
+</Callout>
+
+## Why we keep this page on the hub
+
+Customers ask about the upgrade path before they install — knowing there
+*is* a documented upgrade rail is a buying signal. So we ship the rail
+empty rather than have it appear out of nowhere on 1.0 release day.
+
+When 1.0 ships, this page will list:
+
+- The exact breaking changes per package (web, react, vue, svelte,
+  angular, react-native, capacitor, ios, android).
+- A codemod (`npx mushi-mushi upgrade@latest`) for the mechanical
+  rewrites.
+- A checklist for the things the codemod can't reach (CSP rules,
+  build-time env vars, your team's runbooks).
+
+## What 1.0 will / won't break (current intent)
+
+We expect 1.0 to **not** break:
+
+- The `Mushi.init({ projectId, apiKey })` shape — this is the public
+  contract every customer wires.
+- The `Mushi.report({ description, ... })` shape.
+- The `<MushiProvider>` component in React, Vue, Svelte, RN.
+- Wire-format API endpoints (`/v1/reports`, `/v1/admin/*`).
+- The MCP server protocol.
+
+We expect 1.0 to **possibly** break:
+
+- Internal capture types (currently exported via `@mushi-mushi/core`),
+  if you reach into them. Most customers don't.
+- The legacy `Mushi.captureException` shim — likely deprecated in
+  favour of `Mushi.report({ description: error.message })`.
+- The bundled-CSS export path — likely renamed for clearer intent.
+- Default privacy-redaction list — likely expanded.
+
+If you build only against the documented public API (everything under
+`/sdks/*` in these docs), the 1.0 upgrade should be a single bump in
+`package.json`.
+
+## Migration checklist (placeholder)
+
+<MigrationChecklist
+  id="mushi-sdk-upgrade"
+  steps={[
+    { id: 'read-changelog', label: 'Read the package changelog for every Mushi SDK you use', content: <>Each package ships its own CHANGELOG.md in the GitHub repo (e.g. <a href="https://github.com/kensaurus/mushi-mushi/blob/main/packages/web/CHANGELOG.md">@mushi-mushi/web</a>). Skim the 1.0.0 entry for breaking changes.</> },
+    { id: 'pin-current', label: 'Pin your current versions before upgrading', content: <>If you\'re on a range like <code>"@mushi-mushi/react": "^0.x.y"</code>, change to the exact pin first so your lockfile is clean.</> },
+    { id: 'codemod', label: 'Run the upgrade codemod (when 1.0 ships)', content: <pre className="text-xs">{`# Available on 1.0 release day
+npx mushi-mushi upgrade@latest`}</pre> },
+    { id: 'manual-review', label: 'Review codemod diff', content: <>The codemod handles mechanical rewrites; some changes (CSP rules, your custom widget styling) need manual attention. The codemod will print a list at the end.</> },
+    { id: 'rebuild', label: 'Rebuild + run your test suite', content: <>Type errors usually surface here. Most are easy to fix one-line changes.</> },
+    { id: 'smoke-test', label: 'Smoke-test on a real device / browser', content: <>Submit a test report. Confirm console + network + screenshot capture still work and the report lands in the admin console.</> },
+    { id: 'update-prod', label: 'Roll out to production behind a canary', content: <>Mushi is a passive SDK — it can only fail to capture (best case) or capture wrong things (worst case). Both are easy to roll back.</> },
+  ]}
+/>
+
+## Per-package upgrade tracker
+
+When 1.0 ships, this section will be a table:
+
+| Package | 0.x → 1.0 status | Codemod coverage |
+|---------|------------------|------------------|
+| `@mushi-mushi/web` | TBD | TBD |
+| `@mushi-mushi/react` | TBD | TBD |
+| `@mushi-mushi/vue` | TBD | TBD |
+| `@mushi-mushi/svelte` | TBD | TBD |
+| `@mushi-mushi/angular` | TBD | TBD |
+| `@mushi-mushi/react-native` | TBD | TBD |
+| `@mushi-mushi/capacitor` | TBD | TBD |
+| `@mushi-mushi/ios` | TBD | TBD |
+| `@mushi-mushi/android` | TBD | TBD |
+| `@mushi-mushi/cli` | TBD | TBD |
+| `@mushi-mushi/mcp` | TBD | TBD |
+
+## References
+
+- [Mushi Mushi GitHub repo](https://github.com/kensaurus/mushi-mushi) (per-package CHANGELOG.md)
+- [`/sdks/*` reference](/sdks/web) — the public API surface 1.0 commits to
