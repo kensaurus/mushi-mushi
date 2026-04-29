@@ -1441,7 +1441,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       'Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from `@mushi-mushi/web` via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.',
     default: { value: 'react' },
     whenToChange:
-      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see `/docs/migrations/capacitor-to-react-native`.',
+      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://docs.mushimushi.dev/migrations/capacitor-to-react-native.',
   },
 ]
 
