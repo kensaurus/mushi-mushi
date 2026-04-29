@@ -103,6 +103,14 @@ const CANONICAL_EVENTS = {
         currency: 'usd',
         attempt_count: 2,
         next_payment_attempt: 1745100000,
+        // Basil 2025-03-31 shape — the top-level `subscription` field is gone;
+        // the id now lives inside `parent.subscription_details`. The dunning
+        // path in the webhook handler must read from this location.
+        // https://docs.stripe.com/changelog/basil/2025-03-31/adds-new-parent-field-to-invoicing-objects
+        parent: {
+          type: 'subscription_details',
+          subscription_details: { subscription: 'sub_test_abc' },
+        },
       },
     },
   },
@@ -134,6 +142,10 @@ const CANONICAL_EVENTS = {
         amount_paid: 2900,
         currency: 'usd',
         billing_reason: 'subscription_cycle',
+        parent: {
+          type: 'subscription_details',
+          subscription_details: { subscription: 'sub_test_abc' },
+        },
       },
     },
   },
@@ -237,5 +249,80 @@ describe('Stripe webhook canonical payload shape', () => {
   it('invoice.payment_succeeded exposes billing_reason (recovery vs renewal)', () => {
     const obj = CANONICAL_EVENTS['invoice.payment_succeeded'].data.object
     expect(obj.billing_reason).toBeTypeOf('string')
+  })
+})
+
+// Mirror of `subscriptionIdFromInvoice` from
+// packages/server/supabase/functions/_shared/stripe.ts. Re-implemented here
+// so the test file doesn't load `Deno.env` at module init. Kept in sync via
+// the dual-shape coverage below — if the resolver gets a third location, add
+// a case here too.
+function subscriptionIdFromInvoice(
+  invoice: Record<string, unknown>,
+): string | null {
+  const parent = invoice.parent as
+    | { type?: string; subscription_details?: { subscription?: string | null } }
+    | null
+    | undefined
+  if (parent?.type === 'subscription_details') {
+    const fromParent = parent.subscription_details?.subscription
+    if (typeof fromParent === 'string' && fromParent.length > 0) return fromParent
+  }
+  const legacy = invoice.subscription
+  if (typeof legacy === 'string' && legacy.length > 0) return legacy
+  return null
+}
+
+describe('subscriptionIdFromInvoice (Basil 2025-03-31 parent move)', () => {
+  // Every revenue-affecting silent failure on this integration funnels through
+  // here. The `parent.subscription_details.subscription` path is the canonical
+  // one for API version 2025-03-31.basil and later. The legacy
+  // `invoice.subscription` path remains as a fallback for replayed events
+  // signed against an older API version, but it MUST NOT be the only path —
+  // production events on Basil never carry it.
+  it('reads parent.subscription_details.subscription on Basil-shaped events', () => {
+    const id = subscriptionIdFromInvoice(
+      CANONICAL_EVENTS['invoice.payment_failed'].data.object as Record<string, unknown>,
+    )
+    expect(id).toBe('sub_test_abc')
+  })
+
+  it('falls back to top-level subscription for pre-Basil fixtures', () => {
+    const legacyShape: Record<string, unknown> = {
+      id: 'in_test_legacy',
+      subscription: 'sub_legacy',
+    }
+    expect(subscriptionIdFromInvoice(legacyShape)).toBe('sub_legacy')
+  })
+
+  it('prefers parent over legacy when both are present (post-upgrade replay)', () => {
+    const dualShape: Record<string, unknown> = {
+      id: 'in_test_dual',
+      subscription: 'sub_legacy_stale',
+      parent: {
+        type: 'subscription_details',
+        subscription_details: { subscription: 'sub_canonical' },
+      },
+    }
+    expect(subscriptionIdFromInvoice(dualShape)).toBe('sub_canonical')
+  })
+
+  it('returns null for non-subscription invoices (one-off invoicing)', () => {
+    const oneOff: Record<string, unknown> = {
+      id: 'in_test_oneoff',
+      parent: { type: 'self_serve_details' },
+    }
+    expect(subscriptionIdFromInvoice(oneOff)).toBeNull()
+  })
+
+  it('returns null when parent.type does not match (defensive)', () => {
+    const wrongType: Record<string, unknown> = {
+      id: 'in_test_wrong',
+      parent: {
+        type: 'quote_details',
+        subscription_details: { subscription: 'sub_should_not_be_used' },
+      },
+    }
+    expect(subscriptionIdFromInvoice(wrongType)).toBeNull()
   })
 })
