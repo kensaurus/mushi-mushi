@@ -23,6 +23,14 @@ export interface MarketingLinkProps {
   children?: ReactNode
   'aria-label'?: string
   lang?: string
+  /**
+   * `target` and `rel` are forwarded to the underlying anchor by the host's
+   * adapter. Marketing components use `target="_blank" rel="noreferrer"` on
+   * outbound links (docs / GitHub / migration guides) so visitors don't
+   * lose the landing context. The adapter must spread these onto its <a>.
+   */
+  target?: string
+  rel?: string
   onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void
 }
 
@@ -40,8 +48,16 @@ export interface MarketingUrls {
   login: string
   /** Internal anchor — scrolls to the loop section on the same page */
   loopAnchor: string
-  /** Internal anchor — scrolls to pricing on the same page */
-  pricingAnchor: string
+  /**
+   * Pricing destination. May be an internal hash anchor (`#pricing`) when
+   * the host renders a pricing section on the marketing surface, OR an
+   * absolute URL (typically `urls.docs('/cloud#plans')`) when pricing
+   * lives in the docs site. The previous name (`pricingAnchor`) implied
+   * "must be a hash" — it was already pointing at a section that did not
+   * exist on the admin landing, which made the footer "Pricing" link a
+   * dead anchor. Renamed for honesty.
+   */
+  pricing: string
   /** External docs site, with optional sub-path */
   docs: (path?: string) => string
   /** GitHub repo, with optional sub-path */
