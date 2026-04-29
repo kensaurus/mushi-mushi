@@ -26,6 +26,7 @@ export { ClosingCta } from './ClosingCta'
 export { MarketingFooter } from './MarketingFooter'
 export { StatusPill } from './StatusPill'
 export type { StatusPillProps } from './StatusPill'
+export { SwitchingFromStrip } from './SwitchingFromStrip'
 
 export { MushiCanvas } from './canvas/MushiCanvas'
 export {

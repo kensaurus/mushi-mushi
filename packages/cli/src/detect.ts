@@ -204,10 +204,16 @@ export default function App() {
     label: 'Capacitor (Ionic)',
     packageName: '@mushi-mushi/capacitor',
     needsWebPackage: false,
-    snippet: (apiKey, projectId) => `// src/main.ts
+    /* The Capacitor plugin's public API is `Mushi.configure(...)`, not
+     * `Mushi.init(...)` — see packages/capacitor/src/definitions.ts. We
+     * shipped the wrong call here for two releases and users got a runtime
+     * `TypeError: Mushi.init is not a function`. The accompanying admin
+     * console snippet (apps/admin/src/lib/sdkSnippets.ts) emits the same
+     * `Mushi.configure(...)` shape; both are pinned by tests. */
+    snippet: (apiKey, projectId) => `// src/main.ts — after install, run \`npx cap sync\`
 import { Mushi } from '@mushi-mushi/capacitor'
 
-Mushi.init({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
+await Mushi.configure({ projectId: '${projectId}', apiKey: '${apiKey}' })`,
   },
   vanilla: {
     id: 'vanilla',

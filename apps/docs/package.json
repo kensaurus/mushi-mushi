@@ -22,10 +22,13 @@
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",
+    "@tailwindcss/postcss": "^4.2.4",
     "@types/node": "^22.10.7",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
     "eslint": "^10.2.0",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^4.2.2",
     "typescript": "^5.7.3"
   }
 }

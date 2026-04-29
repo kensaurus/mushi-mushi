@@ -2,9 +2,17 @@
 title: React quickstart
 ---
 
+import { Callout } from 'nextra/components'
+
 # React quickstart
 
 Get a Shake-to-Report widget into a React app in under five minutes.
+
+<Callout type="info">
+  **Coming from Create React App?** Migrate to Vite in an afternoon — see
+  the [CRA → Vite migration guide](/migrations/cra-to-vite). All Mushi React
+  examples below assume Vite + React 19.
+</Callout>
 
 ## Try it live
 
@@ -41,8 +49,6 @@ export function Root() {
   )
 }
 ```
-
-import { Callout } from 'nextra/components'
 
 <Callout type="info" emoji="🔐">
   The web SDK uses your **public** API key (safe to bundle). All sensitive

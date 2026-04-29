@@ -1435,11 +1435,13 @@ const SDK_INSTALL: ConfigDoc[] = [
   {
     id: 'sdk-install.framework',
     label: 'Framework tab',
-    summary: 'Picks which framework\'s install snippet you copy — React, Vue, Svelte, or Vanilla.',
+    summary:
+      'Picks which framework\'s install snippet you copy — React, Vue, Svelte, React Native, Expo, Capacitor, or Vanilla.',
     howItWorks:
-      'Pure UI toggle. The framework snippets all wire up the same `Mushi.init()` call but with the right adapter (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) so framework-specific error boundaries get hooked.',
+      'Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from `@mushi-mushi/web` via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.',
     default: { value: 'react' },
-    whenToChange: 'Pick whatever your app uses. The Vanilla tab is the right answer for non-framework apps.',
+    whenToChange:
+      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see `/docs/migrations/capacitor-to-react-native`.',
   },
 ]
 

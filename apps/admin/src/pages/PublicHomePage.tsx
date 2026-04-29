@@ -24,6 +24,7 @@ import {
   MarketingFooter,
   MarketingProvider,
   MushiCanvas,
+  SwitchingFromStrip,
   type MarketingLink,
   type MarketingLinkProps,
   type MarketingTheme,
@@ -139,6 +140,7 @@ export function PublicHomePage() {
 
           <Hero />
           <MushiCanvas />
+          <SwitchingFromStrip />
           <ClosingCta />
           {/* No public health endpoint reachable from the admin SPA, so the
               StatusPill stays in its muted "unknown" state — matches the

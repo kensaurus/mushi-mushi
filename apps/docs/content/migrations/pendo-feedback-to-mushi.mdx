@@ -1,0 +1,118 @@
+---
+title: 'Pendo Feedback → Mushi'
+---
+
+# Pendo Feedback → Mushi
+
+<EffortBadge level="Hours" /> <RiskBadge level="Low" />
+
+Pendo bundles **product analytics**, **in-app guides**, **NPS surveys**,
+and a **feedback module** in one suite. This guide swaps the **feedback
+module** to Mushi while you keep Pendo for everything else (analytics,
+guides, NPS) — the two tools share user identity via a single
+`identify` call.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  **You almost certainly want to keep Pendo.** Pendo's analytics + in-app
+  guides are best-in-class. Mushi just replaces the feedback inbox piece
+  — where Pendo is weakest.
+</Callout>
+
+## Why switch (the feedback piece)
+
+- **AI triage built-in.** Pendo Feedback requires manual review or
+  third-party tooling for triage. Mushi's two-stage classifier handles it.
+- **Reproduction context.** Mushi captures console + network +
+  screenshot + DOM snapshot per report. Pendo Feedback is form-based —
+  the user types what's wrong, you guess at the rest.
+- **Self-host + open source.** Pendo is enterprise SaaS; Mushi is MIT-licensed.
+- **Engineering-friendly inbox.** Mushi's admin console is built for devs
+  triaging issues; Pendo's is built for product managers ranking ideas.
+
+## API mapping
+
+| Pendo | Mushi |
+|-------|-------|
+| `pendo.initialize({ visitor: { id, email } })` | `Mushi.init({ projectId, apiKey })` + `Mushi.setUser({ id, email })` |
+| `pendo.identify(visitor, account)` | `Mushi.setUser({ id, ...visitor })` + metadata for account |
+| `pendo.track('event', props)` | `Mushi.setMetadata({ lastEvent: 'event', ...props })` |
+| `pendo.feedback.show()` | `Mushi.openWidget()` |
+| Pendo Feedback ideas board | Mushi Reports inbox (filter by category=`feature_request`) |
+
+## Recipe: keep Pendo for analytics + guides; use Mushi for feedback
+
+```ts
+import { Mushi } from '@mushi-mushi/web'
+
+// 1. Initialise both
+window.pendo.initialize({
+  visitor: { id: 'user-42', email: 'jane@example.com' },
+  account: { id: 'acme-corp' },
+})
+
+Mushi.init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey:    'YOUR_PUBLIC_KEY',
+  widget:    { trigger: 'button' },
+})
+
+// 2. Mirror identity
+Mushi.setUser({ id: 'user-42', email: 'jane@example.com' })
+Mushi.setMetadata({ accountId: 'acme-corp' })
+
+// 3. Hide Pendo's feedback button (you can keep its other UI)
+window.pendo.disableGuides?.({ category: 'feedback' })
+```
+
+Now Pendo handles analytics + product guides; Mushi handles feedback
+intake + triage.
+
+## Migration checklist
+
+<MigrationChecklist
+  id="pendo-feedback-to-mushi"
+  steps={[
+    { id: 'create-project', label: 'Create a Mushi project', content: <>Sign in to the Mushi admin console; copy <code>projectId</code> + <code>apiKey</code>.</> },
+    { id: 'install', label: 'Install Mushi alongside Pendo', content: <pre className="text-xs">{`npm install @mushi-mushi/web
+# Or @mushi-mushi/react if you're on React`}</pre> },
+    { id: 'mount-mushi', label: 'Initialise Mushi in your app entry', content: <pre className="text-xs">{`import { Mushi } from '@mushi-mushi/web'
+Mushi.init({ projectId: '...', apiKey: '...' })`}</pre> },
+    { id: 'mirror-identity', label: 'Mirror pendo.identify into Mushi.setUser', content: <pre className="text-xs">{`function identifyEverywhere(visitor, account) {
+  window.pendo.identify(visitor, account)
+  Mushi.setUser({ id: visitor.id, email: visitor.email, name: visitor.name })
+  Mushi.setMetadata({ accountId: account.id, plan: account.plan })
+}`}</pre> },
+    { id: 'mirror-track', label: 'Mirror critical pendo.track calls into Mushi metadata', content: <>You don't need to mirror every event — just the last few "what was the user doing" breadcrumbs that help reproduction. Mushi's auto-capture covers most of it.</> },
+    { id: 'disable-pendo-feedback', label: 'Hide the Pendo Feedback widget', content: <>Either via <code>{`window.pendo.disableGuides({ category: 'feedback' })`}</code> or by removing the Feedback module from your Pendo subscription.</> },
+    { id: 'export-old', label: 'Export historical Pendo Feedback ideas (optional)', content: <>If you want continuity, export your existing feedback as CSV from Pendo's UI and import into Mushi as one-off reports. Most teams skip this — historical feedback rarely gets re-triaged.</> },
+    { id: 'update-runbooks', label: 'Update internal runbooks', content: <>"Where do feedback requests live?" → Mushi admin console. Send a 1-line note to PMs / CS / engineering.</> },
+    { id: 'verify', label: 'Submit a test report and verify pipeline', content: <>Click the Mushi widget, submit a report, verify it appears in the admin console with the right user identity attached.</> },
+  ]}
+/>
+
+## Feature parity
+
+| Capability | Pendo Feedback | Mushi |
+|------------|---------------|-------|
+| User-triggered report widget | ✅ | ✅ |
+| Console + network capture | ❌ (form only) | ✅ |
+| Screenshot capture | ❌ | ✅ (web) |
+| AI triage | ❌ | ✅ |
+| Idea voting / merging | ✅ | ❌ — flat report inbox |
+| Customer-facing roadmap | ✅ | ❌ |
+| Product analytics | ✅ (Pendo core) | ❌ |
+| In-app guides / tooltips | ✅ (Pendo core) | ❌ |
+| NPS surveys | ✅ (Pendo core) | ❌ |
+| Self-host | ❌ | ✅ |
+| Open source | ❌ | ✅ |
+
+The takeaway: **keep Pendo for analytics, guides, and NPS; switch the
+feedback module to Mushi**. Most customers find this combination strictly
+better than running either tool alone.
+
+## References
+
+- [Mushi web SDK](/sdks/web)
+- [Pendo identify API](https://help.pendo.io/resources/support-library/api/index.html)
