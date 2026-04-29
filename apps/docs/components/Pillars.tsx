@@ -61,12 +61,25 @@ interface PillarsProps {
 
 export function Pillars({ items = DEFAULT_PILLARS }: PillarsProps) {
   return (
+    /* Native `<ol>` so iOS VoiceOver and other screen readers announce the
+     * stage count + ordering correctly — `role="list"` on a `<div>` is
+     * silently dropped on some assistive tech (Apple's VoiceOver list
+     * heuristic). The `not-prose` className opts out of Tailwind Typography
+     * defaults, and the `.docs-pillars` rules in globals.css strip
+     * `list-style`, marker, and indent so the list-semantics are auditory
+     * only — the rendering matches the tile grid. */
     <ol className="docs-pillars not-prose" aria-label="The Mushi loop">
-      {items.map((p) => (
+      {items.map((p, i) => (
         <li key={p.name} className="docs-pillar">
           <span className="docs-pillar__step">{p.step}</span>
           <span className="docs-pillar__name">{p.name}</span>
           <span className="docs-pillar__role">{p.role}</span>
+          {/* Subtle horizontal connector — only between pillars, only on
+           * wide enough containers where the 4-up actually fits in one row.
+           * Hidden on the last pillar and at narrow widths via CSS. */}
+          {i < items.length - 1 ? (
+            <span className="docs-pillar__connector" aria-hidden="true" />
+          ) : null}
         </li>
       ))}
     </ol>

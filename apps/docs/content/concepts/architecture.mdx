@@ -4,56 +4,37 @@ title: Architecture
 
 # Architecture
 
-```mermaid
-flowchart LR
-  subgraph SDKs["Mushi SDKs"]
-    Web["@mushi-mushi/web<br/>+ react/vue/svelte/angular"]
-    RN["@mushi-mushi/react-native"]
-    Native["MushiMushi (iOS)<br/>dev.mushimushi:sdk (Android)<br/>mushi_mushi (Flutter)"]
-    Cap["@mushi-mushi/capacitor"]
-    MCP["@mushi-mushi/mcp"]
-  end
-  subgraph Edge["Supabase Edge Functions"]
-    API["api (Hono)"]
-    FF["fast-filter"]
-    CR["classify-report"]
-    JB["judge-batch"]
-    FX["fix-orchestrator"]
-    INT["intelligence-report"]
-    SOC["soc2-evidence"]
-  end
-  subgraph Data
-    PG[("Postgres<br/>(reports, RLS)")]
-    Vec[("pgvector<br/>embeddings")]
-    AGE[("Apache AGE<br/>graph (parallel-write)")]
-    MV[("blast_radius_cache MV<br/>+ benchmarks MV")]
-    Vault[("Supabase Vault<br/>(BYOK + plugin secrets)")]
-  end
-  subgraph External
-    Sentry
-    Slack
-    GitHub
-    LF["Langfuse"]
-    Plugins["Marketplace plugins<br/>(PagerDuty, Linear, Zapier, …)"]
-  end
-  Web --> API
-  RN --> API
-  Native --> API
-  Cap --> API
-  MCP --> API
-  Sentry -- "User Feedback webhook" --> API
-  API --> FF --> CR
-  CR --> Vec
-  CR --> AGE
-  CR --> Plugins
-  JB --> CR
-  API --> FX --> GitHub
-  API --> Vault
-  CR --> LF
-  JB --> LF
-  FX --> LF
-  PG --> MV
-```
+The whole system is intentionally boring at the seams: a Hono gateway in
+front of Supabase, six small specialised functions behind it, and three
+data substrates (relational + vector + graph) that mirror each other for
+their respective query shapes. Everything an SDK does is one POST to the
+gateway; everything a contributor adds is either a route or a function.
+
+## Wire-level flow
+
+The four columns below correspond to the four "layers" of the stack —
+left-to-right is the path a single bug report takes from a user's
+device to a merged PR.
+
+| ⓵ SDKs (client) | ⓶ Edge gateway | ⓷ Data | ⓸ External |
+|---|---|---|---|
+| `@mushi-mushi/web` + framework adapters | `api` *(Hono router)* | Postgres + RLS | Sentry *(User-Feedback webhook)* |
+| `@mushi-mushi/react-native` | `fast-filter` *(spam triage)* | `pgvector` embeddings | Slack |
+| Native iOS / Android / Flutter | `classify-report` *(2-stage LLM)* | Apache AGE graph | GitHub *(scoped App)* |
+| `@mushi-mushi/capacitor` | `judge-batch` *(nightly cron)* | `blast_radius_cache` MV | Langfuse *(traces)* |
+| `@mushi-mushi/mcp` *(agent surface)* | `fix-orchestrator` *(sandbox PR)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
+|  | `intelligence-report` *(weekly digest)* |  |  |
+|  | `soc2-evidence` *(control snapshot)* |  |  |
+
+**Edges that matter** (everything else flows top-to-bottom inside a column):
+
+- Every SDK posts to `api` — there is no client-direct DB write.
+- `api → fast-filter → classify-report` is the canonical ingest path.
+- `classify-report → pgvector + Apache AGE + plugins` happens in parallel.
+- `judge-batch` reads from and writes back into `classify-report`'s prompts.
+- `fix-orchestrator → GitHub` only fires after a human approves the triage.
+- `api → Supabase Vault` resolves BYOK secrets per-request, never cached.
+- All three LLM-touching functions stream traces to Langfuse.
 
 ## Component summary
 
