@@ -1,0 +1,29 @@
+---
+title: Migration guides
+---
+
+import { CATALOG } from './_catalog'
+
+# Migration guides
+
+Long-form playbooks for moving an existing app onto Mushi Mushi — or between
+Mushi-supported runtimes — without losing your project, your API key, or
+your reports inbox. Every guide ships with an interactive checklist that
+saves your progress in this browser.
+
+<MigrationHub guides={CATALOG} />
+
+## Don't see your migration?
+
+We pick guides based on demand. If your stack isn't covered yet, open a
+[migration request issue](https://github.com/kensaurus/mushi-mushi/issues/new?labels=migration-request)
+with the source framework / vendor and a sentence about why you're moving —
+the most-requested ones get scheduled into the next docs wave.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  **Already running `mushi-mushi` CLI?** Run
+  `npx mushi-mushi migrate` in your project root and we'll point you at the
+  most relevant guide based on what's in your `package.json`.
+</Callout>

@@ -1,0 +1,141 @@
+---
+title: 'Next.js Pages → App Router'
+---
+
+# Next.js Pages → App Router
+
+<EffortBadge level="Days" /> <RiskBadge level="Med" />
+
+Move a Next.js Pages-Router app to the App Router incrementally. The two
+routers can coexist (the App Router takes precedence for matching routes),
+so you don't need a flag day.
+
+This guide focuses on the **Mushi-specific** bits — provider placement,
+CSP for static export, server-component vs client-component boundaries.
+For the framework-level migration mechanics see the
+[official Next.js migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/app-router-migration).
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  **Same Mushi project, same API key.** The provider import changes from
+  `pages/_app.tsx` to `app/providers.tsx`, but everything downstream of it
+  works the same.
+</Callout>
+
+## API mapping (Pages → App)
+
+| Pages Router | App Router |
+|--------------|------------|
+| `pages/_app.tsx` (`<MushiProvider>` mounted here) | `app/providers.tsx` (client component) imported in `app/layout.tsx` |
+| `pages/_document.tsx` | `app/layout.tsx` |
+| `getServerSideProps` | Server Component fetch |
+| `getStaticProps` / `getStaticPaths` | `generateStaticParams` + Server Component fetch |
+| `useRouter().query` | `useSearchParams()` + `useParams()` |
+| `next/head` | `metadata` export OR `<head>` in layout |
+
+## Migration checklist
+
+<MigrationChecklist
+  id="nextjs-pages-to-app-router"
+  steps={[
+    { id: 'audit', label: 'Audit dependencies for App Router compatibility', content: <>Most major libraries (Next-Auth, SWR, react-query, framer-motion) are App Router-ready in 2026. The exceptions are anything that monkey-patches Next's internals.</> },
+    { id: 'create-app-dir', label: 'Create the app/ directory alongside pages/', content: <>Both routers can run side-by-side. Routes in <code>app/</code> take precedence; routes only in <code>pages/</code> keep working.</> },
+    { id: 'layout', label: 'Create app/layout.tsx (the new root)', content: <pre className="text-xs">{`// app/layout.tsx
+import type { Metadata } from 'next'
+import { Providers } from './providers'
+
+export const metadata: Metadata = { title: 'Your App' }
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}`}</pre> },
+    { id: 'mushi-provider', label: 'Create app/providers.tsx with the Mushi provider', content: <pre className="text-xs">{`// app/providers.tsx
+'use client'   // <-- REQUIRED — MushiProvider uses React state
+
+import { MushiProvider } from '@mushi-mushi/react'
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <MushiProvider config={{
+      projectId: process.env.NEXT_PUBLIC_MUSHI_PROJECT_ID!,
+      apiKey:    process.env.NEXT_PUBLIC_MUSHI_API_KEY!,
+    }}>
+      {children}
+    </MushiProvider>
+  )
+}`}</pre> },
+    { id: 'remove-old-app', label: 'Delete pages/_app.tsx (only AFTER you have an app/layout.tsx)', content: <>Once <code>app/layout.tsx</code> exists, Next.js routes through it. Leaving <code>pages/_app.tsx</code> in place causes confusing dual-mounts of the Mushi provider.</> },
+    { id: 'port-routes', label: 'Port routes one at a time', content: <>For each route under <code>pages/</code>, create the equivalent under <code>app/</code> (e.g. <code>pages/about.tsx</code> → <code>app/about/page.tsx</code>). Delete the <code>pages/</code> file only after the <code>app/</code> version is verified.</> },
+    { id: 'data-fetching', label: 'Convert data fetching to Server Components', content: <>Most <code>getServerSideProps</code> calls become <code>async function Page()</code>. Mushi's web SDK still runs client-side, so <code>useMushi()</code> only works inside <code>'use client'</code> components — read user info on the server, pass via props, then call Mushi from the client child.</> },
+    { id: 'csp', label: 'Update CSP for App Router', content: <>If you ship a strict CSP, App Router uses different chunk URLs than Pages. See the <a href="/sdks/nextjs-app-router-csp">Next.js App Router CSP integration</a> for the Mushi-specific connect-src and script-src rules.</> },
+    { id: 'static-export', label: 'Re-test static export (if applicable)', content: <>App Router supports <code>output: 'export'</code> as of Next 14, but with constraints (no Server Actions, no dynamic routes without <code>generateStaticParams</code>). See <a href="/sdks/nextjs-static-export">Next.js static export</a>.</> },
+    { id: 'verify', label: 'Smoke-test on every primary route', content: <>Open the floating Mushi widget, submit a test report from each major page; confirm <code>metadata.url</code> on the report shows the correct App Router path.</> },
+  ]}
+/>
+
+## Where to put `<MushiProvider>` (the most asked question)
+
+**At the root of your tree, in a `'use client'` component, mounted by the
+root layout.** This means:
+
+- ✅ `app/providers.tsx` (client component) imported into `app/layout.tsx`
+- ❌ Inside an individual page (loses provider context across navigations)
+- ❌ As a Server Component (the SDK uses React state — must be client)
+
+The cost of one client boundary at the root is minimal (the rest of your
+tree can still be server-rendered) and it matches how Next-Auth's
+`SessionProvider`, react-query's `QueryClientProvider`, and similar libs
+are placed.
+
+## Server Components and `useMushi()`
+
+`useMushi()`, `useMushiReport()`, and the visual widget all require a
+client component. That's expected — Mushi captures user-side context
+(console, network, screenshot) which only exists in the browser.
+
+If you need user-facing context inside a Server Component (e.g. to
+pre-render a "Report a problem with this article" button with a
+contextual route), pass the data down as props and let the client child
+call Mushi:
+
+```tsx
+// app/articles/[slug]/page.tsx (Server Component)
+export default async function Page({ params }: { params: { slug: string } }) {
+  const article = await fetchArticle(params.slug)
+  return <ArticleReportButton articleId={article.id} />
+}
+
+// app/articles/[slug]/ArticleReportButton.tsx (Client Component)
+'use client'
+import { useMushiReport } from '@mushi-mushi/react'
+export function ArticleReportButton({ articleId }: { articleId: string }) {
+  const { submit } = useMushiReport()
+  return <button onClick={() => submit({ description: 'Article issue', metadata: { articleId } })}>Report</button>
+}
+```
+
+## Common gotchas
+
+- **Two providers mounted.** If you forget to delete `pages/_app.tsx` after
+  creating `app/layout.tsx`, both run, which double-fires events. Always
+  remove the old one in the same PR.
+- **`useMushi()` in a Server Component.** Build error. Add `'use client'`
+  to the file or move the hook into a child client component.
+- **Stale env vars after rename.** App Router enforces the
+  `NEXT_PUBLIC_*` prefix more strictly than Pages did; non-prefixed
+  vars are now strictly server-only. Rename if migrating from a Pages
+  app that relied on `process.env.MUSHI_*`.
+
+## References
+
+- [Official Next.js App Router migration guide](https://nextjs.org/docs/app/building-your-application/upgrading/app-router-migration)
+- [Next.js App Router + CSP integration](/sdks/nextjs-app-router-csp)
+- [Next.js static export integration](/sdks/nextjs-static-export)
+- [`@mushi-mushi/react` SDK reference](/sdks/react)

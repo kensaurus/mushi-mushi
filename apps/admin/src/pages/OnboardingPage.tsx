@@ -27,6 +27,7 @@ import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
+import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 
 interface ApiKey {
   key: string
@@ -160,27 +161,36 @@ export function OnboardingPage() {
       </div>
 
       {setupComplete && (
-        <Card className="p-4 border-ok/30 bg-ok/5">
-          <div className="flex items-start gap-3">
-            <div
-              aria-hidden="true"
-              className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok/15 text-ok text-xs font-bold"
-            >
-              ✓
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-sm font-semibold text-fg">Setup complete</h3>
-              <p className="text-xs text-fg-muted mt-0.5">
-                Bookmark this page — the SDK install snippet below stays handy when you wire Mushi into a new
-                framework, repo, or environment.
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-3">
-                <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
-                <Btn size="sm" variant="ghost" onClick={() => navigate('/projects')}>Manage projects</Btn>
+        <>
+          <Card className="p-4 border-ok/30 bg-ok/5">
+            <div className="flex items-start gap-3">
+              <div
+                aria-hidden="true"
+                className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-ok/15 text-ok text-xs font-bold"
+              >
+                ✓
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-sm font-semibold text-fg">Setup complete</h3>
+                <p className="text-xs text-fg-muted mt-0.5">
+                  Bookmark this page — the SDK install snippet below stays handy when you wire Mushi into a new
+                  framework, repo, or environment.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <Btn size="sm" variant="ghost" onClick={() => navigate('/dashboard')}>Open dashboard</Btn>
+                  <Btn size="sm" variant="ghost" onClick={() => navigate('/projects')}>Manage projects</Btn>
+                </div>
               </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+
+          {/* Migration Hub progress — only renders when the user has rows;
+              the card returns null otherwise so the post-setup hero stays
+              focused. Account-scoped here (no project_id) because a user
+              browsing the docs without an active project is the common
+              path for upgrade rails like @mushi-mushi/* 0.x → 1.0. */}
+          <MigrationsInProgressCard />
+        </>
       )}
 
       {project && (

@@ -107,6 +107,17 @@ jobs:
         # `pnpm gen:config-docs` and commit the result if this fails.
         run: pnpm check:config-docs
 
+      - name: Check Migration Hub catalog sync
+        # Regression guard for Migration Hub Phase 2: the docs catalog
+        # (apps/docs/content/migrations/_catalog.ts), CLI catalog
+        # (packages/cli/src/migrate.ts), backend slug allowlist
+        # (packages/server/supabase/functions/api/migration-progress-helpers.ts),
+        # and admin card catalog (apps/admin/src/lib/migrationsCatalog.ts)
+        # must stay in lockstep — adding a guide in one without updating
+        # the others used to ship as silent /v1/admin/migrations/progress
+        # 400s and bare-slug rendering on the in-progress card.
+        run: pnpm check:migration-catalog
+
       - name: Check JSX unicode escapes
         # Regression guard for the 2026-04-23 InboxPage bug: a `\uXXXX`
         # sequence inside a JSX attribute value or JSX text child renders

@@ -1,0 +1,147 @@
+---
+title: 'Cordova → React Native'
+---
+
+# Cordova → React Native
+
+<EffortBadge level="Weeks" /> <RiskBadge level="High" />
+
+A two-hop migration: stabilise on Capacitor first, then port screen-by-screen
+to React Native. This is the safest path if your Cordova app is non-trivial,
+because it lets you ship features the whole time instead of feature-freezing
+for a full rewrite.
+
+If your app is small (a handful of screens, no deep native plugin
+dependencies) you can skip the Capacitor stop and port directly to RN —
+see the **Direct path** section below.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  This guide composes two existing guides. Read them in order:
+  [Cordova → Capacitor](/migrations/cordova-to-capacitor) first, then
+  [Capacitor → React Native](/migrations/capacitor-to-react-native).
+  Mushi stays mounted on the same project the whole way through.
+</Callout>
+
+## Why migrate
+
+You're on Cordova and want to end up on React Native because:
+
+- **Performance.** WebView-based shells hit a ceiling on chat scrolls,
+  large lists, and animations. RN's JS-to-native bridge clears it.
+- **Native API access.** Modern iOS / Android APIs (App Intents,
+  WidgetKit, Health, etc.) ship to RN faster than to Cordova or Capacitor.
+- **Hiring.** RN engineers are easier to find in 2026 than Cordova ones.
+
+You should NOT migrate if:
+
+- You ship daily and cannot afford a feature freeze on the mobile surface.
+- Your differentiator is web-first SEO (RN Web is OK, but Next.js is better).
+- Your app is mostly a thin wrapper around a great mobile web experience.
+
+## Two paths
+
+### Path A: Cordova → Capacitor → React Native (recommended)
+
+Lower-risk because you stay shippable at every step.
+
+1. **Week 1-2.** Migrate Cordova → Capacitor following
+   [that guide](/migrations/cordova-to-capacitor). Ship to production. This
+   alone is a meaningful win (better debugging, modern WebView, modern
+   plugin ecosystem).
+2. **Week 3-8.** Migrate Capacitor → React Native following
+   [that guide](/migrations/capacitor-to-react-native). Dual-ship for a
+   couple of weeks before sunsetting the Capacitor build.
+
+This is what we recommend for any app with > ~10 screens or > 5 native
+plugins.
+
+### Path B: Direct Cordova → React Native
+
+Faster end-to-end, riskier mid-migration. Use only when:
+
+- Your app has a small surface area (≤ 10 screens, ≤ 5 native plugins).
+- You're comfortable feature-freezing the mobile surface for the full
+  migration window.
+- Your React/JS code is already well-isolated from Cordova plugin calls
+  (you can swap call sites to RN equivalents directly).
+
+## Mushi during the migration
+
+Identical to the [Capacitor → React Native § 7](/migrations/capacitor-to-react-native#7-mushi-mushi-during-the-migration)
+plan: same project, same `apiKey`, dual-ship Cordova/Capacitor and RN at the
+same time, sunset the legacy build only after the RN one has been stable for
+a week in beta.
+
+You'll touch the Mushi SDK exactly once per hop:
+
+- **Hop 1 (Cordova → Capacitor):** swap the legacy Cordova plugin for
+  [`@mushi-mushi/capacitor`](/sdks/capacitor) and call
+  `Mushi.configure({ projectId, apiKey })`.
+- **Hop 2 (Capacitor → React Native):** swap that for
+  [`@mushi-mushi/react-native`](/sdks/react-native) and mount
+  `<MushiProvider projectId apiKey>` at the app root.
+
+## Migration checklist (Path A)
+
+<MigrationChecklist
+  id="cordova-to-react-native"
+  steps={[
+    { id: 'audit', label: 'Audit Cordova plugins (per the Cap→RN plugin map)', content: <>Walk the plugin list once at the start. Anything without a Capacitor or RN equivalent is the long pole — budget time for a TurboModule wrapper.</> },
+    { id: 'hop1-cap', label: 'Hop 1: complete Cordova → Capacitor', content: <>Follow the <a href="/migrations/cordova-to-capacitor">Cordova → Capacitor checklist</a> end-to-end. Ship to production. <strong>Stop here for at least a week</strong> to let real users hit the new build before starting hop 2.</> },
+    { id: 'hop1-mushi', label: 'Verify Mushi reports flow on the Capacitor build', content: <>Open the Mushi admin console; confirm reports tagged <code>sdk:capacitor</code> are landing. Don't proceed to hop 2 until you have ≥ 1 day of clean Capacitor reports in production.</> },
+    { id: 'hop2-bootstrap', label: 'Hop 2: bootstrap the RN project (RN 0.83+, New Architecture)', content: <>Create a sibling RN project per <a href="/migrations/capacitor-to-react-native#5-path-b-react-native-cli--github-actions--fastlane-the-chosen-path">Path B § 5.1</a>. Don't try to port in place — keep the Capacitor app shippable.</> },
+    { id: 'hop2-screens', label: 'Port screens one at a time', content: <>Lift the screen's React/JSX, swap web components for RN primitives (View, Text, ScrollView, FlashList). Keep the same fetcher / state layer where possible.</> },
+    { id: 'hop2-mushi', label: 'Mount @mushi-mushi/react-native + smoke-test', content: <pre className="text-xs">{`import { MushiProvider } from '@mushi-mushi/react-native'
+
+export default function App() {
+  return (
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"  // same as before
+      apiKey="YOUR_PUBLIC_KEY"      // same as before
+      config={{ widget: { trigger: 'shake' } }}
+    >
+      <RootNavigator />
+    </MushiProvider>
+  )
+}`}</pre> },
+    { id: 'dual-ship', label: 'Dual-ship Capacitor + RN for ≥ 2 weeks', content: <>Both builds report to the same Mushi project. Use the SDK tag filter on the dashboard to compare incident rates between the two builds before sunsetting Capacitor.</> },
+    { id: 'sunset', label: 'Sunset the Cordova/Capacitor build', content: <>Once the RN build has been live for 2 weeks with no P0 reports, push the legacy build to deprecation in App Store Connect / Play Console.</> },
+  ]}
+/>
+
+## Migration checklist (Path B — direct)
+
+<MigrationChecklist
+  id="cordova-to-react-native-direct"
+  steps={[
+    { id: 'plugin-audit', label: 'Plugin audit (lower tolerance — every Cordova plugin needs an RN answer)', content: <>If even one plugin has no RN equivalent and you can't budget time for a TurboModule, fall back to Path A.</> },
+    { id: 'rn-bootstrap', label: 'Bootstrap RN 0.83 with the New Architecture', content: <>See <a href="/migrations/capacitor-to-react-native#51-project-bootstrap-with-the-new-architecture">Cap→RN § 5.1</a>.</> },
+    { id: 'design-system', label: 'Port your design system to RN primitives or a kit (NativeWind / Tamagui)', content: <>Plan for ~1 week of token / theme work before any screens move.</> },
+    { id: 'screen-port', label: 'Port screens — feature freeze the Cordova build', content: <>Keep a list of in-progress screens. Mark each as it lands.</> },
+    { id: 'mushi-rn', label: 'Mount @mushi-mushi/react-native (same projectId / apiKey)', content: <>Same code as Path A.</> },
+    { id: 'beta', label: 'Closed beta on TestFlight / Play Internal', content: <>Run for ≥ 1 week. Watch the Mushi inbox daily.</> },
+    { id: 'cutover', label: 'Cutover and sunset Cordova', content: <>Push to production once the beta is clean. Archive the Cordova repo.</> },
+  ]}
+/>
+
+## Verification
+
+- Mushi inbox shows reports tagged with the new SDK on a real device.
+- Cold-start time on a mid-tier Android device drops by ≥ 30 % vs the
+  Cordova baseline (rough sanity check; varies by app).
+- Crash rate is ≤ 0.5 % for the first 7 days of beta.
+
+## Rollback
+
+The strength of Path A is that **rollback is trivial at any step**: if the
+RN build hits a wall in week 5, you simply keep shipping the Capacitor build
+and pause RN work. The Cordova build is also still in your git history if
+hop 1 itself goes sideways (rare but possible).
+
+## References
+
+- [Cordova → Capacitor](/migrations/cordova-to-capacitor) (hop 1)
+- [Capacitor → React Native](/migrations/capacitor-to-react-native) (hop 2, full plan)
+- [`@mushi-mushi/react-native` SDK reference](/sdks/react-native)

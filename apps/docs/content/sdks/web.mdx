@@ -9,6 +9,19 @@ click capture, on-device pre-classifier (via `@mushi-mushi/wasm-classifier`),
 and the Shake-to-Report widget rendered in a Shadow DOM (so your CSS never
 leaks in or out).
 
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  **Migrating from another bug-capture tool?** We have step-by-step guides
+  for [Instabug / Luciq](/migrations/instabug-to-mushi),
+  [Shake](/migrations/shake-to-mushi),
+  [LogRocket Feedback](/migrations/logrocket-feedback-to-mushi),
+  [BugHerd](/migrations/bugherd-to-mushi), and
+  [Pendo Feedback](/migrations/pendo-feedback-to-mushi). Each maps the
+  competitor's API to the Mushi equivalent and includes an interactive
+  checklist.
+</Callout>
+
 See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 
 - **`onProactiveTrigger(({ context }) => …)`** — fires when the SDK detects

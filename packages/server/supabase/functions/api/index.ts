@@ -1,7 +1,7 @@
 import { Hono } from 'npm:hono@4';
 import { cors } from 'npm:hono@4/cors';
 
-import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
+import { ensureSentry, reportError, reportMessage, sentryHonoErrorHandler } from '../_shared/sentry.ts';
 import { registerAskMushiRoutes } from './routes/ask-mushi.ts';
 import { registerAdminOpsRoutes } from './routes/admin-ops.ts';
 import { registerBillingProjectsQueueGraphRoutes } from './routes/billing-projects-queue-graph.ts';
@@ -12,6 +12,7 @@ import {
 } from './routes/discovery.ts';
 import { registerEnterpriseIntegrationsRoutes } from './routes/enterprise-integrations.ts';
 import { registerFixDispatchRoutes } from './routes/fix-dispatch.ts';
+import { registerMigrationProgressRoutes } from './routes/migration-progress.ts';
 import { registerModernizationHealthSuperRoutes } from './routes/modernization-health-super.ts';
 import { registerOrganizationRoutes } from './routes/organizations.ts';
 import { registerPublicRoutes } from './routes/public.ts';
@@ -175,6 +176,52 @@ app.use('/health', cors({ origin: '*' }));
 // Admin paths: allowlist. Hono's cors() already reflects the request Origin
 // back as Access-Control-Allow-Origin when it matches; unknown origins get
 // no ACAO header so the browser blocks the response.
+//
+// Migration Hub docs sync exception: /v1/admin/migrations/* is also reachable
+// from the docs site (apps/docs) so logged-in users can sync their checklist
+// progress across devices. We keep this BEFORE the general /v1/admin/*
+// matcher (Hono evaluates middleware in registration order; first match
+// wins) and use a strictly wider-but-still-allowlisted origin set, so the
+// rest of the admin surface remains pinned to the admin allowlist.
+const DOCS_ORIGIN_ALLOWLIST = ((): string[] => {
+  const raw = (Deno.env.get('MUSHI_DOCS_ORIGIN_ALLOWLIST') ?? '').trim();
+  const defaults = [
+    'https://docs.mushimushi.dev',
+    // Public mirror that fronts the Nextra static export from GitHub Pages.
+    'https://kensaur.us',
+    'https://www.kensaur.us',
+    // Local dev for the docs Next.js server. Nextra dev defaults to :3000;
+    // operators sometimes pin to :3001 to coexist with the dogfood app.
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3001',
+  ];
+  const extra = raw
+    ? raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  return Array.from(new Set([...defaults, ...extra]));
+})();
+
+const MIGRATIONS_PROGRESS_ORIGINS = Array.from(
+  new Set([...ADMIN_ORIGIN_ALLOWLIST, ...DOCS_ORIGIN_ALLOWLIST]),
+);
+
+app.use(
+  '/v1/admin/migrations/*',
+  cors({
+    origin: (origin) => (MIGRATIONS_PROGRESS_ORIGINS.includes(origin) ? origin : null),
+    // The docs sync hook also sends X-Mushi-Project-Id when the user is
+    // syncing project-scoped progress. No org header on this surface.
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  }),
+);
+
 app.use(
   '/v1/admin/*',
   cors({
@@ -244,6 +291,66 @@ registerOrganizationRoutes(app);
 
 registerEnterpriseIntegrationsRoutes(app);
 
+registerMigrationProgressRoutes(app);
+
 registerAdminOpsRoutes(app);
 
-Deno.serve(app.fetch);
+function isStatusZeroRangeError(err: unknown): err is RangeError {
+  return (
+    err instanceof RangeError &&
+    /status.*\(0\)|status.+not equal to 101/i.test(err.message)
+  );
+}
+
+function statusZeroFallback(): Response {
+  return new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'UPSTREAM_FETCH_FAILED',
+        message:
+          'A downstream fetch produced no HTTP response (status 0). Retry the request; if it persists, check upstream network/DNS health.',
+      },
+    }),
+    {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    },
+  );
+}
+
+async function fetchWithStatusZeroGuard(req: Request): Promise<Response> {
+  try {
+    const res = await app.fetch(req);
+
+    // Deno's `Response.error()` is a valid Web Fetch object but has status 0,
+    // which Hono/Deno cannot forward as an HTTP response. Normalize it at the
+    // function boundary so Sentry issue MUSHI-MUSHI-SERVER-H cannot recur as
+    // a native `RangeError` with no route context.
+    if (res.status === 0) {
+      const url = new URL(req.url);
+      reportMessage('status_zero_response_normalized', 'error', {
+        tags: { path: url.pathname, method: req.method },
+      });
+      return statusZeroFallback();
+    }
+
+    return res;
+  } catch (err) {
+    if (!isStatusZeroRangeError(err)) throw err;
+
+    const url = new URL(req.url);
+    reportError(err, {
+      tags: {
+        path: url.pathname,
+        method: req.method,
+        range_error_status_0: 'true',
+        boundary: 'api-fetch',
+      },
+      extra: { url: `${url.origin}${url.pathname}` },
+    });
+    return statusZeroFallback();
+  }
+}
+
+Deno.serve(fetchWithStatusZeroGuard);

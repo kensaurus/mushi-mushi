@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_91 configuration knobs across 18 sections · last regenerated 2026-04-28._
+_91 configuration knobs across 18 sections · last regenerated 2026-04-29._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -1528,11 +1528,11 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `sdk-install.framework`
 
-**Summary** — Picks which framework's install snippet you copy — React, Vue, Svelte, or Vanilla.
+**Summary** — Picks which framework's install snippet you copy — React, Vue, Svelte, React Native, Expo, Capacitor, or Vanilla.
 
-**How it works** — Pure UI toggle. The framework snippets all wire up the same `Mushi.init()` call but with the right adapter (`@mushi-mushi/react`, `@mushi-mushi/vue`, etc.) so framework-specific error boundaries get hooked.
+**How it works** — Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from `@mushi-mushi/web` via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.
 
 **Default** — `react`
 
-**When to change** — Pick whatever your app uses. The Vanilla tab is the right answer for non-framework apps.
+**When to change** — Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see `/docs/migrations/capacitor-to-react-native`.
 

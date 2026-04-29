@@ -1,0 +1,116 @@
+---
+title: 'Create React App → Vite'
+---
+
+# Create React App → Vite
+
+<EffortBadge level="Hours" /> <RiskBadge level="Low" />
+
+`create-react-app` has been unmaintained since 2023 and the React team
+removed it from the official "Start a New React Project" page. Vite is the
+modern equivalent — faster dev server, native ESM, smaller production
+bundles, actively maintained.
+
+There's a community codemod that handles ~90 % of the work:
+
+```bash
+npx migrate-to-vite@latest cra
+```
+
+This guide walks the rest.
+
+import { Callout } from 'nextra/components'
+
+<Callout type="info">
+  **Mushi keeps working unchanged** through this migration. The web SDK
+  doesn't care which bundler ships your app — only the env-var prefix
+  changes (`REACT_APP_*` → `VITE_*`).
+</Callout>
+
+## Prerequisites
+
+- A working CRA app (`react-scripts` ≥ 5).
+- Node 18+.
+- Mushi web SDK or React adapter already installed.
+
+## Migration checklist
+
+<MigrationChecklist
+  id="cra-to-vite"
+  steps={[
+    { id: 'branch', label: 'Branch off main', content: <>The codemod rewrites <code>package.json</code>, the entry HTML, and config files. Branch first so you can diff.</> },
+    { id: 'codemod', label: 'Run the codemod', content: <pre className="text-xs">{`npx migrate-to-vite@latest cra`}</pre> },
+    { id: 'review-diff', label: 'Review the diff carefully', content: <>The codemod handles index.html relocation, package.json scripts, and most env-var rewrites. Read every changed file before committing.</> },
+    { id: 'env-prefix', label: 'Rename env vars: REACT_APP_* → VITE_*', content: <pre className="text-xs">{`# .env.local
+- REACT_APP_MUSHI_PROJECT_ID=proj_xxx
+- REACT_APP_MUSHI_API_KEY=mushi_pk_xxx
++ VITE_MUSHI_PROJECT_ID=proj_xxx
++ VITE_MUSHI_API_KEY=mushi_pk_xxx
+
+# In code
+- process.env.REACT_APP_MUSHI_PROJECT_ID
++ import.meta.env.VITE_MUSHI_PROJECT_ID`}</pre> },
+    { id: 'public', label: 'Move public assets', content: <>CRA: <code>public/</code> contents are referenced via <code>%PUBLIC_URL%</code>. Vite: same folder, but reference as <code>/asset.png</code> directly. The codemod handles common patterns — search for <code>%PUBLIC_URL%</code> to catch leftovers.</> },
+    { id: 'index-html', label: 'Verify index.html is at the project root', content: <>Vite expects <code>index.html</code> at the root, NOT in <code>public/</code>. Update <code>&lt;script type="module" src="/src/index.tsx"&gt;</code> to point at your actual entry file.</> },
+    { id: 'svg', label: 'Update SVG-as-React-component imports', content: <pre className="text-xs">{`// CRA
+- import { ReactComponent as Logo } from './logo.svg'
+// Vite — install vite-plugin-svgr, then:
++ import Logo from './logo.svg?react'`}</pre> },
+    { id: 'jest', label: 'Decide on testing framework', content: <>CRA used Jest. Vite ships with <strong>Vitest</strong>, which has a Jest-compatible API. The codemod sets up Vitest by default. If you want to keep Jest, you'll need babel-jest and ts-jest configured manually.</> },
+    { id: 'mushi-import', label: 'Re-verify Mushi mounts correctly', content: <pre className="text-xs">{`// src/main.tsx
+import { MushiProvider } from '@mushi-mushi/react'
+
+createRoot(document.getElementById('root')!).render(
+  <MushiProvider config={{
+    projectId: import.meta.env.VITE_MUSHI_PROJECT_ID,
+    apiKey:    import.meta.env.VITE_MUSHI_API_KEY,
+  }}>
+    <App />
+  </MushiProvider>,
+)`}</pre> },
+    { id: 'remove-cra', label: 'Remove CRA dependencies', content: <pre className="text-xs">{`npm uninstall react-scripts
+# Also remove any @craco/craco or react-app-rewired hold-overs`}</pre> },
+    { id: 'tsconfig', label: 'Update tsconfig.json types', content: <pre className="text-xs">{`// In src/react-app-env.d.ts (or vite-env.d.ts after the codemod)
+- /// <reference types="react-scripts" />
++ /// <reference types="vite/client" />`}</pre> },
+    { id: 'verify', label: 'Smoke-test dev + prod builds', content: <pre className="text-xs">{`npm run dev    # Vite dev server on :5173 by default
+npm run build  # Production build into dist/
+npm run preview`}</pre> },
+    { id: 'test-report', label: 'Submit a test Mushi report', content: <>Open the dev server, click the floating bug icon (or trigger your custom CTA), submit a report, and confirm it appears in <strong>Project → Reports</strong> within ~5s.</> },
+  ]}
+/>
+
+## Common gotchas
+
+- **`process.env`**. Vite doesn't inject `process.env` at build time. The
+  codemod rewrites the obvious cases; greps for `process.env.REACT_APP_`
+  catch the rest.
+- **Absolute imports without aliases**. CRA had implicit absolute imports
+  via `jsconfig.json` / `tsconfig.json` `baseUrl`. Vite respects
+  `tsconfig.json` paths but you must also configure the `vite-tsconfig-paths`
+  plugin (the codemod adds it).
+- **Worker imports**. CRA used a webpack-specific `Worker` loader; Vite
+  uses native `?worker` URL imports. The codemod won't migrate workers
+  for you.
+- **`@craco/craco` users.** If you used craco for custom webpack config,
+  port those overrides to `vite.config.ts` plugins manually.
+
+## Rollback
+
+Branched in step 1, so a `git checkout main` reverts cleanly. If you've
+already merged and discovered an issue post-deploy, revert the merge —
+CRA still builds (it's just unmaintained, not broken).
+
+## Mushi compatibility
+
+The Mushi web SDK and React adapter both work identically on CRA and Vite.
+The only post-migration change you should observe is faster dev refreshes
+(Vite HMR is roughly 10× faster than CRA's webpack dev server) — Mushi
+hot-reloads cleanly through both.
+
+## References
+
+- [migrate-to-vite codemod](https://github.com/deve-sh/Migrate-to-Vite)
+- [Vite docs — env variables](https://vitejs.dev/guide/env-and-mode)
+- [Vitest — drop-in Jest replacement](https://vitest.dev/)
+- [`@mushi-mushi/react` SDK reference](/sdks/react)

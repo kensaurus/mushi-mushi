@@ -109,6 +109,13 @@ jobs:
       - name: Check publish readiness
         run: node scripts/check-publish-readiness.mjs
 
+      - name: Check Migration Hub catalog sync
+        # Migration Hub Phase 2 release gate. Fails if the docs catalog,
+        # CLI catalog, backend slug allowlist, or admin card catalog
+        # disagree on the published guide set — every public surface that
+        # talks about migrations must agree before a release ships.
+        run: pnpm check:migration-catalog
+
       - name: Check license headers
         run: node scripts/check-license-headers.mjs
 
