@@ -46,16 +46,23 @@ export function PaperEdge({
         }
       `}</style>
 
+      {/* Idle edge opacity dropped 0.45 → 0.28. With four idle edges + one
+          active edge in the canvas at any moment, the previous treatment had
+          all five edges reading at "halfway-loud" — the active edge could not
+          claim its single-zone accent, and the user's eye saw a tangle of
+          diagonals rather than a clear progression. The active edge keeps
+          its full opacity, march animation, and bloom (below) so it remains
+          the obvious "this is the current step" signal. */}
       <path
         d={edgePath}
         stroke={`url(#${gradientId})`}
-        strokeWidth={active ? 3 : 1.8}
+        strokeWidth={active ? 3 : 1.6}
         fill="none"
         strokeLinecap="round"
         strokeDasharray={active ? dashArray : 'none'}
         markerEnd={markerEnd}
         style={{
-          opacity: active ? 0.96 : 0.45,
+          opacity: active ? 0.96 : 0.28,
           animation: active ? `${keyframeName} 760ms linear infinite` : 'none',
         }}
       />

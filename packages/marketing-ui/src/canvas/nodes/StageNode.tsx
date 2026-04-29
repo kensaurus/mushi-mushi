@@ -41,9 +41,18 @@ export function StageNode({ data }: NodeProps) {
       <Handle id="left-out" type="source" position={Position.Left} className="!h-1 !w-1 !border-0 !bg-transparent !opacity-0" />
 
       <div className="flex items-start justify-between gap-2">
-        <span className="rounded-sm border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-vermillion)]">
+        {/* "01" stage index demoted from vermillion → ink. Five cards in the
+            row used to render five vermillion-numbered chips even when none
+            were active — a constant red-dot grid of "look at me, look at me,
+            look at me". Now the index reads as a calm caption and the active
+            signal is carried entirely by the card's bottom rail + ring (set
+            by .is-focused / .is-selected in styles.css), which is the single
+            accent zone for the canvas. */}
+        <span className="rounded-sm border border-[var(--mushi-rule)] bg-[var(--mushi-paper-wash)] px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)]">
           {String(stage.index + 1).padStart(2, '0')}
         </span>
+        {/* Right stat keeps its semantic tone (alert=red, pass=green, etc.).
+            These tones *carry* meaning per stage and so they earn the colour. */}
         <span
           className="inline-flex items-center gap-1 rounded-sm px-2 py-1 font-mono text-[10px] uppercase tracking-[0.16em]"
           style={{ background: tone.bg, color: tone.fg, border: `1px solid ${tone.border}` }}
@@ -58,7 +67,11 @@ export function StageNode({ data }: NodeProps) {
         </span>
       </div>
 
-      <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-vermillion)]">
+      {/* Kicker (mushi.web · shake / triage.llm · 28 ms / …): demoted to
+          ink-faint. It's metadata, not a status — the title underneath is
+          what the reader scans. Vermillion here was decoration that pushed
+          the per-card brand-tinted-element count to 3+. */}
+      <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink-faint)]">
         {stage.kicker}
       </p>
       <h3 className="mt-1.5 font-serif text-[1.5rem] leading-[1.08] tracking-[-0.03em] text-[var(--mushi-ink)]">
@@ -67,6 +80,9 @@ export function StageNode({ data }: NodeProps) {
       <p className="mt-2.5 text-left text-[13px] leading-[1.55] text-[var(--mushi-ink-muted)]">
         {stage.oneLiner}
       </p>
+      {/* "Inspect →" — keep the brand colour on hover (it earns the affordance
+          tint for one card at a time, the one the cursor is on); idle state
+          stays neutral. */}
       <span className="mt-3.5 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)] transition group-hover:text-[var(--mushi-vermillion)]">
         Inspect
         <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>

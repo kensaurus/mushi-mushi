@@ -33,12 +33,20 @@ export function MarketingFooter({ apiBaseUrl }: MarketingFooterProps) {
           <StatusPill apiBaseUrl={apiBaseUrl} />
         </div>
 
+        {/* Footer nav. Reader is by definition past the loop section here, so
+            "Loop" (which scrolls back UP to #loop) was redundant with the
+            sticky header's own Loop link AND confusing as a primary footer
+            item — a footer answers "where do I go next?", not "let me show
+            you the section you just left". Removed for clarity.
+            Pricing routes to the real /docs/cloud#plans table (the earlier
+            `#pricing` anchor was a dead hash). All cross-site links open in
+            a new tab so a visitor reading the landing doesn't lose context;
+            mailto: stays default. */}
         <nav aria-label="Site" className="flex flex-wrap gap-x-8 gap-y-2 font-mono text-[11px] uppercase tracking-[0.18em]">
-          <Link href={urls.loopAnchor} className="hover:text-[var(--mushi-vermillion)]">Loop</Link>
-          <Link href={urls.pricingAnchor} className="hover:text-[var(--mushi-vermillion)]">Pricing</Link>
-          <Link href={urls.docs()} className="hover:text-[var(--mushi-vermillion)]">Docs</Link>
-          <Link href={urls.repo()} className="hover:text-[var(--mushi-vermillion)]">GitHub</Link>
-          <Link href={urls.repo('/blob/master/CHANGELOG.md')} className="hover:text-[var(--mushi-vermillion)]">Changelog</Link>
+          <Link href={urls.pricing} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">Pricing</Link>
+          <Link href={urls.docs()} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">Docs</Link>
+          <Link href={urls.repo()} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">GitHub</Link>
+          <Link href={urls.repo('/blob/master/CHANGELOG.md')} target="_blank" rel="noreferrer" className="hover:text-[var(--mushi-vermillion)]">Changelog</Link>
           <Link href={urls.contact('Mushi Mushi inquiry')} className="hover:text-[var(--mushi-vermillion)]">Contact</Link>
         </nav>
       </div>
