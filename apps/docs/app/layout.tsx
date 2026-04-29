@@ -27,14 +27,20 @@ export const metadata: Metadata = {
   },
 }
 
+/* Banner is the *single* release-note channel on the index page; we removed
+ * the duplicate "What's new in v0.8.0" callout from index.mdx because the
+ * same content rendered twice in one fold flattened hierarchy (NN/g H14
+ * information duplication). The mono eyebrow gives the banner the same
+ * editorial voice as `<EditorialHero>` so it reads as part of the same
+ * publication, not a generic toast. */
 const banner = (
   <Banner storageKey="v0-8-0-wave-c">
-    shipped — native iOS / Android / Flutter / Capacitor SDKs, A2A
-    discovery, SOC 2 readiness, residency, BYO storage, BYOK.{' '}
-    <a href="/changelog" className="underline">
-      See changelog
+    <span className="docs-banner-eyebrow">v0.8.0 · shipped</span>
+    Native iOS / Android / Flutter / Capacitor SDKs, A2A discovery, SOC 2
+    readiness, residency, BYO storage, BYOK.{' '}
+    <a href="/changelog" className="underline underline-offset-2">
+      Read the changelog →
     </a>
-    .
   </Banner>
 )
 

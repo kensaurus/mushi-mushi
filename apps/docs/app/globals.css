@@ -1,36 +1,509 @@
 /* =========================================================================
  * apps/docs/app/globals.css
  *
- * Tailwind v4 entry point for the docs site.
+ * Tailwind v4 entry + Nextra theme + editorial polish layer for the docs site.
  *
- * WHY THIS EXISTS
- * ---------------
- * Nextra v4 ships its own Tailwind v4 utilities under the `x:` prefix
- * (`x:flex`, `x:gap-2`, etc.) so it can theme the docs chrome without
- * polluting consumer projects. That means UNPREFIXED Tailwind classes used
- * inside our own MDX components (`<MigrationHub>`, `<MigrationChecklist>`,
- * `<EffortBadge>`, `<RiskBadge>`) are NOT compiled by Nextra's bundle —
- * they render as inert string class names with no visual effect.
+ * WHY THIS EXISTS (cascade order matters)
+ * ---------------------------------------
+ * 1. `tailwindcss`               → base reset + utility runtime
+ * 2. `nextra-theme-docs/style.css` → Nextra chrome (sidebar, navbar, content)
+ * 3. `@mushi-mushi/brand/editorial.css` → washi/sumi/vermillion design tokens
+ * 4. our scoped overrides        → re-tone Nextra to match the brand without
+ *    forking the theme. We touch:
+ *      - `--nextra-primary-hue/saturation/lightness`  (link & active accents)
+ *      - `--mushi-*`                                  (typography + paper feel)
+ *      - `.nextra-card` / `.nextra-cards`             (better hierarchy + arrow tone)
+ *      - `.nextra-content`                            (display heading typography)
+ *      - `.nextra-callout`, `pre`, `table`            (editorial rhythm)
  *
- * To make our component classes actually do something, we add a second
- * Tailwind v4 layer scoped to OUR components, then import Nextra's
- * stylesheet on top so its theme classes still win where they overlap.
+ * Tailwind v4's `x:` prefix scopes Nextra's own utilities so they never
+ * collide with ours. Our own `<MigrationHub>` / `<MigrationChecklist>` keep
+ * working because we still tell Tailwind to scan our component + content
+ * folders below.
  *
- * The `@variant dark` line wires up the `dark:` modifier to Nextra's
- * `.dark` class on <html> so dark-mode utilities work in our components.
+ * The `@variant dark` line wires the `dark:` modifier to Nextra's `.dark`
+ * class on <html> so dark-mode utilities work in our components.
  *
  * Source: https://nextra.site/docs/advanced/tailwind-css
  * ========================================================================= */
 
 @import 'tailwindcss';
 @import 'nextra-theme-docs/style.css';
+@import '@mushi-mushi/brand/editorial.css';
 
 @variant dark (&:where(.dark *));
 
-/* Tell Tailwind v4 to scan our MDX + component files for class names. The
- * default content detection handles app/ and components/ already, but we
- * spell it out so future folders (e.g. content/migrations/*.mdx) keep
- * having their inline className="..." attributes picked up. */
 @source "../components/**/*.{ts,tsx}";
 @source "../content/**/*.{md,mdx}";
 @source "../mdx-components.tsx";
+
+/* ---------------------------------------------------------------------------
+ * 1. Re-tint Nextra's primary scale to the Mushi vermillion (#e03c2c).
+ *    Nextra derives the entire `primary-50..900` HSL ramp from these three
+ *    custom properties (see node_modules/nextra-theme-docs/dist/style.css
+ *    lines 96-128). Setting them once flips active sidebar items, the TOC
+ *    indicator, link hover, search highlights, and selected callouts in a
+ *    single stroke — no per-component overrides needed.
+ * ------------------------------------------------------------------------- */
+:root {
+  --nextra-primary-hue: 5;
+  --nextra-primary-saturation: 75%;
+  --nextra-primary-lightness: 52%;
+}
+
+.dark {
+  /* In dark mode the brand uses #ff5a47 — same hue, brighter & slightly
+   * desaturated so links remain legible on the dark background. */
+  --nextra-primary-hue: 7;
+  --nextra-primary-saturation: 100%;
+  --nextra-primary-lightness: 64%;
+
+  /* Mirror the brand package's `[data-mushi-theme="dark"]` token flip onto
+   * Nextra's `.dark` class, so any `var(--mushi-paper)` / `var(--mushi-ink)`
+   * / `var(--mushi-rule)` reference inside this stylesheet (or in any
+   * `.docs-*` component class added later) automatically resolves to the
+   * dark-mode value. Without this mapping, a contributor adding a new
+   * `color: var(--mushi-ink)` rule must also remember to add a matching
+   * `.dark .selector { color: var(--mushi-dark-ink) }` override or ship
+   * dark-on-dark invisible text. The per-component `.dark` overrides
+   * already in this file remain (they win the cascade by specificity and
+   * resolve to the same value either way) — they're now belt-and-
+   * suspenders rather than load-bearing. */
+  --mushi-paper: var(--mushi-dark-paper);
+  --mushi-paper-wash: rgba(255, 255, 255, 0.04);
+  --mushi-ink: var(--mushi-dark-ink);
+  --mushi-ink-muted: var(--mushi-dark-ink-muted);
+  --mushi-rule: rgba(242, 235, 221, 0.12);
+}
+
+/* ---------------------------------------------------------------------------
+ * 2. Editorial typography ramp scoped to the docs body. We do NOT touch the
+ *    chrome (navbar/sidebar) — those keep Nextra's calm system-ui sans so
+ *    the wayfinding stays neutral and the *content* claims the eye.
+ *
+ *    The `.nextra-content` selector matches the article container Nextra
+ *    renders for every MDX page (full-layout AND default-layout). We scope
+ *    everything inside it to keep marketing-flavoured serif headings out of
+ *    sidebars and cards.
+ * ------------------------------------------------------------------------- */
+.nextra-content :is(h1, h2, h3, h4) {
+  font-family: var(--mushi-font-display);
+  letter-spacing: -0.025em;
+  font-weight: 600;
+}
+
+/* H1 only appears as the page title (when not suppressed). Keep it editorial-
+ * grade but never let it collide with itself: line-height 1.05 + a hard
+ * font-size cap stop the inline-styled hero collision we used to ship. */
+.nextra-content h1 {
+  font-size: clamp(2.25rem, 4.5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.nextra-content h2 {
+  font-size: clamp(1.65rem, 2.6vw, 2rem);
+  line-height: 1.15;
+  margin-top: 3rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.nextra-content h3 {
+  font-size: clamp(1.2rem, 1.7vw, 1.375rem);
+  line-height: 1.25;
+  margin-top: 2.25rem;
+}
+
+/* Body copy: keep Nextra's sans for legibility; just give it a touch more air
+ * so the editorial headings don't feel like they belong to a different page. */
+.nextra-content p,
+.nextra-content li {
+  font-feature-settings: 'kern', 'liga', 'ss01';
+}
+
+.nextra-content :is(p, li) > strong {
+  color: var(--mushi-ink);
+  font-weight: 600;
+}
+
+.dark .nextra-content :is(p, li) > strong {
+  color: var(--mushi-dark-ink);
+}
+
+/* ---------------------------------------------------------------------------
+ * 3. Polish the Nextra <Cards> primitive. Default Nextra cards have a thin
+ *    grey border and a subtle hover-shadow — works for a generic doc site,
+ *    but reads as "stock" next to the editorial typography. We keep the
+ *    layout untouched and only re-tone:
+ *      - paper-like background in light, neutral-900 in dark
+ *      - vermillion arrow on hover (the only brand colour per card)
+ *      - a leading vermillion rail that appears on hover/focus, the same
+ *        editorial "stamp" cue used on the marketing canvas stage cards.
+ *
+ *    NB: Nextra's bundled utilities are `x:`-prefixed so an unprefixed
+ *    `.nextra-card` selector here doesn't fight them — it adds on top.
+ * ------------------------------------------------------------------------- */
+.nextra-content .nextra-cards {
+  /* Two-column on mid-width and up — fixes the "3-up + orphan 4th" gap on
+   * the index page without touching the MDX. The CSS variable `--rows`
+   * Nextra sets per-instance (from the `num` prop) still wins on wider
+   * viewports because of the `repeat(min(...), ...)` fallback Nextra ships;
+   * we only force a sensible *minimum* card width. */
+  --nextra-cards-min: 16rem;
+  grid-template-columns: repeat(auto-fit, minmax(var(--nextra-cards-min), 1fr));
+}
+
+.nextra-content .nextra-card {
+  background: var(--mushi-paper);
+  border-color: var(--mushi-rule);
+  border-radius: 0.875rem;
+  position: relative;
+  overflow: hidden;
+  transition:
+    border-color 200ms var(--mushi-ease-stamp),
+    background 200ms var(--mushi-ease-stamp),
+    transform 200ms var(--mushi-ease-stamp);
+}
+
+.dark .nextra-content .nextra-card {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(242, 235, 221, 0.10);
+}
+
+.nextra-content .nextra-card:hover,
+.nextra-content .nextra-card:focus-visible {
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 35%, var(--mushi-rule));
+  background: color-mix(in oklch, var(--mushi-vermillion-wash) 60%, var(--mushi-paper));
+}
+
+.dark .nextra-content .nextra-card:hover,
+.dark .nextra-content .nextra-card:focus-visible {
+  background: color-mix(in oklch, var(--mushi-vermillion) 8%, transparent);
+  border-color: color-mix(in oklch, var(--mushi-vermillion) 40%, transparent);
+}
+
+/* Editorial leading rail — appears only on hover/focus so the resting state
+ * stays calm. The 2px width matches the marketing canvas stage-card focus
+ * rail so the language is consistent between docs and the landing page. */
+.nextra-content .nextra-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--mushi-vermillion);
+  opacity: 0;
+  transition: opacity 200ms var(--mushi-ease-stamp);
+  pointer-events: none;
+}
+
+.nextra-content .nextra-card:hover::before,
+.nextra-content .nextra-card:focus-visible::before {
+  opacity: 1;
+}
+
+/* The arrow appended via `arrow` prop should use the brand vermillion on
+ * hover instead of the default grey/blue tint that fights with the page. */
+.nextra-content .nextra-card[class*='after:content']:hover {
+  color: var(--mushi-vermillion);
+}
+
+/* ---------------------------------------------------------------------------
+ * 4. Tables: replace the default thin-grey grid with an editorial ledger.
+ *    Wider row spacing, a vermillion top-rule, sumi headers, no vertical
+ *    rules — all moves borrowed from the marketing-ui report card so the
+ *    docs feel like part of the same publication.
+ * ------------------------------------------------------------------------- */
+.nextra-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1.75rem 0;
+  border: none;
+}
+
+.nextra-content thead {
+  border-top: 2px solid var(--mushi-ink);
+  border-bottom: 1px solid var(--mushi-rule);
+}
+
+.dark .nextra-content thead {
+  border-top-color: var(--mushi-dark-ink);
+}
+
+.nextra-content thead th {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: transparent !important;
+  border: none !important;
+}
+
+.dark .nextra-content thead th {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.nextra-content tbody tr {
+  border-bottom: 1px solid var(--mushi-rule);
+}
+
+.nextra-content tbody td {
+  padding: 0.875rem 1rem;
+  border: none !important;
+  background: transparent !important;
+  vertical-align: top;
+}
+
+/* When a 3-column comparison table opposes columns (e.g. Sentry vs Mushi),
+ * we tint the right-most column with a faint vermillion wash so the eye
+ * lands on what *Mushi* uniquely does. Authors opt in by adding
+ * `data-compare="2"` to the `<table>` (see ComparisonTable component). */
+.nextra-content table[data-compare] tbody td:last-child,
+.nextra-content table[data-compare] thead th:last-child {
+  background: var(--mushi-vermillion-wash) !important;
+}
+
+.nextra-content table[data-compare] thead th:last-child {
+  color: var(--mushi-vermillion-ink) !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * 5. Inline code + fenced blocks: align the mono stack with the rest of the
+ *    brand and soften the default paper-on-paper card chrome that Nextra
+ *    ships. Fenced blocks already get scrolled syntax highlighting from
+ *    Shiki; we just wrap them in a quieter frame so the prose dominates.
+ * ------------------------------------------------------------------------- */
+.nextra-content :not(pre) > code {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.85em;
+  background: color-mix(in oklch, var(--mushi-paper-wash) 70%, transparent);
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.375rem;
+  padding: 0.1em 0.4em;
+}
+
+.dark .nextra-content :not(pre) > code {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(242, 235, 221, 0.10);
+}
+
+/* ---------------------------------------------------------------------------
+ * 6. Banner: trim the cramped one-liner. The default banner uses tight
+ *    Nextra padding; we add a small mono eyebrow so it reads like a release
+ *    note instead of an unstyled toast. The "shipped — …" copy lives in
+ *    layout.tsx and uses the `.docs-banner` class on the inner span.
+ * ------------------------------------------------------------------------- */
+.nextra-banner-container {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--mushi-vermillion) 18%, var(--mushi-paper)),
+    color-mix(in oklch, var(--mushi-vermillion) 8%, var(--mushi-paper))
+  );
+  color: var(--mushi-ink);
+  border-bottom: 1px solid color-mix(in oklch, var(--mushi-vermillion) 20%, var(--mushi-rule));
+}
+
+.dark .nextra-banner-container {
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--mushi-vermillion) 22%, var(--mushi-dark-paper)),
+    color-mix(in oklch, var(--mushi-vermillion) 10%, var(--mushi-dark-paper))
+  );
+  color: var(--mushi-dark-ink);
+  border-bottom-color: color-mix(in oklch, var(--mushi-vermillion) 30%, transparent);
+}
+
+.docs-banner-eyebrow {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion-ink);
+  margin-right: 0.75rem;
+  font-weight: 700;
+}
+
+.dark .docs-banner-eyebrow {
+  color: color-mix(in oklch, var(--mushi-vermillion) 60%, var(--mushi-dark-ink));
+}
+
+/* ---------------------------------------------------------------------------
+ * 7. Editorial Hero (used by <EditorialHero /> on the index). The component
+ *    is purely structural; all visual moves live here so the look stays in
+ *    one place and theme-toggles atomically.
+ * ------------------------------------------------------------------------- */
+.docs-editorial-hero {
+  margin-top: 0.5rem;
+  margin-bottom: 2.5rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  display: grid;
+  gap: 1.25rem;
+  /* The hero is the page's primary heading region — drop any leftover
+   * margin from the suppressed <h1>. */
+}
+
+.docs-editorial-hero__eyebrow {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.dark .docs-editorial-hero__eyebrow {
+  color: var(--mushi-dark-ink-muted);
+}
+
+.docs-editorial-hero__stamp {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--mushi-vermillion);
+}
+
+.docs-editorial-hero__title {
+  font-family: var(--mushi-font-display);
+  /* clamp ceiling is the *crucial* fix — the old inline style used 7vw
+   * which hit ~100px on a 1440 viewport while line-height: 0.95 caused
+   * lines to physically overlap. We cap at 3.5rem (56px) and use an honest
+   * 1.05 leading. */
+  font-size: clamp(2.25rem, 4.5vw, 3.5rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--mushi-ink);
+  margin: 0;
+  font-weight: 600;
+  max-width: 22ch;
+  text-wrap: balance;
+}
+
+.dark .docs-editorial-hero__title {
+  color: var(--mushi-dark-ink);
+}
+
+/* The single semantic vermillion accent — applied to the focal *word*
+ * (e.g. "fix") via <em> in the MDX. No background card required. */
+.docs-editorial-hero__title em {
+  color: var(--mushi-vermillion);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.docs-editorial-hero__lead {
+  max-width: 60ch;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--mushi-ink-muted);
+  margin: 0;
+}
+
+.dark .docs-editorial-hero__lead {
+  color: var(--mushi-dark-ink-muted);
+}
+
+/* Bottom rule — a single hairline that anchors the hero to the body without
+ * the card-on-card chrome the original inline-styled hero introduced. */
+.docs-editorial-hero::after {
+  content: '';
+  display: block;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    var(--mushi-vermillion) 0,
+    var(--mushi-vermillion) 3rem,
+    var(--mushi-rule) 3rem,
+    var(--mushi-rule) 100%
+  );
+  margin-top: 0.75rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * 8. Pillar list (used by <Pillars /> in MDX). A 4-column rhythmic strip
+ *    that replaces the dropped Mermaid sequence diagram on the index. Each
+ *    pillar carries a step number, a name, and a one-line role.
+ * ------------------------------------------------------------------------- */
+.docs-pillars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+  padding: 1.25rem;
+  border: 1px solid var(--mushi-rule);
+  border-radius: 0.875rem;
+  background: color-mix(in oklch, var(--mushi-paper-wash) 60%, transparent);
+}
+
+.dark .docs-pillars {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(242, 235, 221, 0.08);
+}
+
+.docs-pillar {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.5rem 0.25rem;
+  position: relative;
+}
+
+.docs-pillar__step {
+  font-family: var(--mushi-font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mushi-vermillion);
+  font-weight: 700;
+}
+
+.docs-pillar__name {
+  font-family: var(--mushi-font-display);
+  font-size: 1.125rem;
+  letter-spacing: -0.01em;
+  color: var(--mushi-ink);
+  font-weight: 600;
+}
+
+.dark .docs-pillar__name {
+  color: var(--mushi-dark-ink);
+}
+
+.docs-pillar__role {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--mushi-ink-muted);
+}
+
+.dark .docs-pillar__role {
+  color: var(--mushi-dark-ink-muted);
+}
+
+/* ---------------------------------------------------------------------------
+ * 9. Section eyebrows (used by <SectionEyebrow /> or plain class on H2).
+ *    A small mono kicker that accompanies key H2s and tells the reader
+ *    where they are in the editorial flow. Optional, keeps subpages calm.
+ * ------------------------------------------------------------------------- */
+.docs-eyebrow {
+  display: block;
+  font-family: var(--mushi-font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--mushi-ink-muted);
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+}
+
+.dark .docs-eyebrow {
+  color: var(--mushi-dark-ink-muted);
+}
