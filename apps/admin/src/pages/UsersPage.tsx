@@ -18,7 +18,6 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useEntitlements } from '../lib/useEntitlements'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -37,6 +36,7 @@ import {
   RelativeTime,
   IdField,
 } from '../components/ui'
+import { EditorialErrorState } from '../components/EditorialErrorState'
 
 interface SuperAdminUser {
   user_id: string
@@ -151,15 +151,26 @@ export function UsersPage() {
     return <Loading text="Checking access…" />
   }
   if (!isSuperAdmin) {
+    // Deliberate 404 obfuscation — see the file docstring. We don't want
+    // to advertise that a privileged surface exists here, so the copy
+    // matches what an unknown route would render. Visual treatment uses
+    // the same EditorialErrorState as App.tsx's NotFoundPage so the two
+    // surfaces are indistinguishable to a probing visitor.
     return (
-      <EmptyState
-        title="Page not found"
-        description="This page doesn't exist or you don't have access."
-        action={
-          <Link to="/dashboard" className="text-sm text-brand hover:text-brand-hover">
-            ← Back to Dashboard
-          </Link>
+      <EditorialErrorState
+        eyebrow="404 · 虫々"
+        headline={
+          <>
+            We can't find <em>that page</em>.
+          </>
         }
+        lead="The route you typed doesn't match any page in the console. It may have moved, been renamed, or never existed — head back to the dashboard or check the docs for the canonical name."
+        primary={{ href: '/dashboard', label: 'Back to dashboard' }}
+        secondary={{
+          href: 'https://kensaur.us/mushi-mushi/docs/',
+          label: 'Open docs',
+          external: true,
+        }}
       />
     )
   }

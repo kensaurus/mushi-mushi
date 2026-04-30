@@ -67,6 +67,35 @@ interface ActionProps {
   external?: boolean
 }
 
+/**
+ * Resolve a caller-provided href against the SPA's `BASE_URL` so internal
+ * recovery links keep working under a non-root deploy (e.g. the production
+ * build at `/mushi-mushi/admin/`).
+ *
+ * Why: this component intentionally renders `<a>` tags rather than
+ * react-router `<Link>`s so it can be used by the top-level error
+ * boundary even when the router itself failed to mount. Raw `<a>` tags,
+ * however, do NOT respect `BrowserRouter basename={BASE_URL}` — they
+ * resolve relative to the document origin. So a "Back to reports" with
+ * `href="/reports"` from `https://kensaur.us/mushi-mushi/admin/reports/x`
+ * was navigating the visitor to `https://kensaur.us/reports` — a 404 at
+ * the apex domain. Vite injects `BASE_URL` as a build-time string so we
+ * can prepend it without depending on any runtime React context.
+ *
+ * Absolute `https://…` URLs (and any caller marked `external`) are
+ * passed through untouched.
+ */
+function resolveHref(href: string, external?: boolean): string {
+  if (external) return href
+  if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return href
+  if (href.startsWith('//')) return href
+  if (!href.startsWith('/')) return href
+  const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '')
+  if (!base) return href
+  if (href === base || href.startsWith(`${base}/`)) return href
+  return `${base}${href}`
+}
+
 function Action({ href, label, external, kind }: ActionProps & { kind: 'primary' | 'secondary' }) {
   const base =
     'inline-flex items-center gap-2 rounded-md px-4 py-2.5 font-mono text-[11px] font-semibold uppercase tracking-[0.18em] transition motion-safe:hover:-translate-y-0.5'
@@ -76,7 +105,7 @@ function Action({ href, label, external, kind }: ActionProps & { kind: 'primary'
       : 'border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] text-[var(--mushi-ink)] hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]'
   return (
     <a
-      href={href}
+      href={resolveHref(href, external)}
       className={`${base} ${tone}`}
       {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}
     >
