@@ -40,17 +40,17 @@ the same `<Hero />`, `<MushiCanvas />`, `<ClosingCta />`, and
    const theme = {
      Link: ({ href, children, ...rest }) => <NextLink href={href} {...rest}>{children}</NextLink>,
      urls: {
-     signup: '/signup',
-     login: '/login',
-     loopAnchor: '#loop',
-     // Pricing destination: hash anchor when the host renders a pricing
-     // section on the same page, OR an absolute URL pointing at the docs
-     // pricing table (`/docs/cloud#plans`). Avoid `'#pricing'` unless the
-     // host actually mounts a section with that id.
-     pricing: 'https://kensaur.us/mushi-mushi/docs/cloud#plans',
-     docs: (path = '') => `https://kensaur.us/mushi-mushi/docs${path}`,
-     repo: (path = '') => `https://github.com/kensaurus/mushi-mushi${path}`,
-     contact: (subject) => subject ? `mailto:hi@kensaur.us?subject=${encodeURIComponent(subject)}` : 'mailto:hi@kensaur.us',
+       signup: '/signup',
+       login: '/login',
+       loopAnchor: '#loop',
+       // Pricing destination: hash anchor when the host renders a pricing
+       // section on the same page, OR an absolute URL pointing at the docs
+       // pricing table (`/docs/cloud#plans`). Avoid `'#pricing'` unless the
+       // host actually mounts a section with that id.
+       pricing: 'https://kensaur.us/mushi-mushi/docs/cloud#plans',
+       docs: (path = '') => `https://kensaur.us/mushi-mushi/docs${path}`,
+       repo: (path = '') => `https://github.com/kensaurus/mushi-mushi${path}`,
+       contact: (subject) => subject ? `mailto:hi@kensaur.us?subject=${encodeURIComponent(subject)}` : 'mailto:hi@kensaur.us',
      },
    }
 

@@ -60,13 +60,32 @@ export class ErrorBoundary extends Component<Props, State> {
 
       return (
         <EditorialErrorState
+          // The boundary may catch a crash BEFORE Layout has mounted (lazy
+          // chunk fail on first paint, env-checker explosion, AuthProvider
+          // throw). In that scenario the editorial fallback IS the page
+          // landmark — so we render `<main>`. Inner protected boundaries
+          // wrap their fallback inside Layout, which already renders a
+          // `<main id="main-content">`; in that case the default
+          // `<section>` from EditorialErrorState avoids nested mains.
+          // The outer "app-shell" boundary is always the page root, so
+          // claim `<main>` here.
+          as={this.props.source === 'app-shell' ? 'main' : 'section'}
           eyebrow="Error · 虫々"
           headline={
             <>
               Something <em>broke</em> on this page.
             </>
           }
-          lead="The console caught a render error and stopped before it could cascade. Reload to try again, or head back home — your last save is safe and we've already received the crash report."
+          // Copy MUST describe only the actions actually rendered below.
+          // The previous version said "Reload to try again, or head back
+          // home" but the UI only ships a "Back to home" + "Open docs"
+          // pair — no reload affordance. We did NOT add a reload button
+          // because the boundary already remounts the failing subtree on
+          // navigation; pressing the browser refresh button is the same
+          // action a user takes for any unexpected error and doesn't
+          // need its own affordance here. Aligning the copy with the
+          // available CTAs is the smallest, lowest-risk fix.
+          lead="The console caught a render error and stopped before it could cascade. Head back home or check the docs — your last save is safe and we've already received the crash report."
           detail={
             <code className="break-words">
               {this.state.error.message || 'Unknown error'}
