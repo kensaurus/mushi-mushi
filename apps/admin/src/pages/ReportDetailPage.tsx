@@ -16,6 +16,7 @@ import {
   InfoHint,
 } from '../components/ui'
 import { DetailSkeleton } from '../components/skeletons/DetailSkeleton'
+import { EditorialErrorState } from '../components/EditorialErrorState'
 import { statusLabel, severityLabel, CATEGORY_LABELS, CATEGORY_BADGE } from '../lib/tokens'
 import { useDispatchFix } from '../lib/dispatchFix'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -154,20 +155,35 @@ export function ReportDetailPage() {
   if (loading) return <DetailSkeleton label="Loading report" />
 
   if (error) {
-    const isNotFound = /not_?found|404/i.test(error)
+    // Distinguish "the resource genuinely does not exist" (404) from a
+    // transient failure (network blip, 500, RLS denial). Only the latter
+    // is recoverable by re-trying — re-trying a 404 just shows the same
+    // 404 again and the visible "Retry" button reads as a dev placeholder.
+    // The error message includes the HTTP status prefix from apiFetch
+    // (`${status}: ${body}`), so the regex matches both `404:` from the
+    // status line and any `not_found` / `not found` token in a JSON body.
+    const isNotFound = /\b404\b|not[\s_-]?found/i.test(error)
     if (isNotFound) {
       return (
-        <EmptyState
-          title="Report not found"
-          description="It may have been deleted, or you don't have access to it."
-          action={
-            <Link
-              to="/reports"
-              className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent-hover"
-            >
-              Back to reports
-            </Link>
+        <EditorialErrorState
+          eyebrow="404 · 虫々"
+          headline={
+            <>
+              We can't find <em>that report</em>.
+            </>
           }
+          lead="It may have been deleted, retention-swept, or it never existed under this id. You may also lack access if it belongs to a different organisation."
+          detail={
+            <code className="break-all rounded bg-[var(--mushi-paper-wash)] px-2 py-0.5">
+              {id}
+            </code>
+          }
+          primary={{ href: '/reports', label: 'Back to reports' }}
+          secondary={{
+            href: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop',
+            label: 'Open docs',
+            external: true,
+          }}
         />
       )
     }
