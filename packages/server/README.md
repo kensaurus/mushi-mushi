@@ -18,8 +18,12 @@ supabase/functions/
   sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
   fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
   _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
-                             telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit,
-                             models, fix-schema, ...). `_shared/models.ts` is the single source of truth for
+                             telemetry, plugins, sanitize, stripe, invoice, quota, byok, region, age-graph,
+                             audit, models, fix-schema, ...). `_shared/invoice.ts` exports the canonical
+                             `subscriptionIdFromInvoice` helper used by `stripe-webhooks` to walk the
+                             Stripe Basil 2025-03-31 `invoice.parent` shape; both production code and
+                             `stripe-webhooks.test.ts` import from here so the test can never silently
+                             diverge from the shipped resolution logic. `_shared/models.ts` is the single source of truth for
                              model IDs and stage → model defaults (Haiku 4.5 fast-filter, Sonnet 4.6
                              classify/judge/promoter). Opus 4.7 was briefly assigned to judge + promoter on
                              2026-04-22 then reverted on 2026-04-24 — Opus 4.7 dropped sampling knobs and
