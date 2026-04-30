@@ -36,22 +36,22 @@ const DEFAULT_PILLARS: readonly Pillar[] = [
   {
     step: 'Step 1',
     name: 'Capture',
-    role: 'Web, mobile, and AI-agent SDKs collect structured reports with screenshots, breadcrumbs, and device context.',
+    role: 'A frustrated user shakes their phone instead of writing a support email. Mushi grabs what they saw and what they were doing.',
   },
   {
     step: 'Step 2',
     name: 'Classify',
-    role: 'A two-stage LLM pipeline (fast-filter → classify-report) tags severity, category, and component — judged nightly.',
+    role: 'Severity, category, and a root-cause hint arrive in plain English — the same labels your team already uses on the bug tracker.',
   },
   {
     step: 'Step 3',
     name: 'Connect',
-    role: 'Reports embed into a knowledge graph (pgvector + Apache AGE) so duplicates collapse and component hot-spots emerge.',
+    role: 'Duplicates collapse against past reports. The same broken button reported twenty times shows up as one row, not twenty.',
   },
   {
     step: 'Step 4',
     name: 'Fix',
-    role: 'Approved triage hands off to an agentic orchestrator that runs in a sandbox (E2B) and opens a scoped GitHub PR.',
+    role: 'An optional agent drafts a PR. You review it like any other PR — and merge, change, or close it.',
   },
 ] as const
 

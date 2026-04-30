@@ -45,27 +45,26 @@ export function SwitchingFromStrip() {
     >
       <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="space-y-1">
-          {/* Eyebrow demoted to ink-muted; the Japanese kana still carries
-              brand voice via the typeface and the narrow tracking, but no
-              longer competes with the closing CTA below for the page's last
-              vermillion accent. */}
-          <p
-            className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]"
-            lang="ja"
-          >
-            <span className="text-[var(--mushi-ink)]">のりかえ</span>
-            <span className="mx-2 opacity-40">—</span>
-            switching?
+          {/* Eyebrow is plain English — the kana scaffold (`のりかえ — switching?`)
+              was loan-text decoration that asked the reader to translate before
+              they could read the section. The page's Japanese budget (one
+              phrase max, see docs/marketing/VOICE.md) is spent on the footer
+              wink, not here. */}
+          <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+            <span className="text-[var(--mushi-ink)]">Coming from</span>
+            <span className="mx-2 opacity-40">/</span>
+            another tool?
           </p>
           <h2
             id="switching-from-heading"
             className="max-w-md font-serif text-xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-2xl"
           >
-            Migrating from another bug-capture tool?
+            We&rsquo;ve already mapped the move.
           </h2>
           <p className="max-w-md text-sm text-[var(--mushi-ink-muted)]">
-            Step-by-step guides for each, with API mapping tables and a
-            checklist that saves your progress.
+            Each guide walks you through the rename, what to keep, and what
+            changes &mdash; your existing widget keeps working until you cut
+            over.
           </p>
         </div>
         {/* Migration chips. Each links to a real, published migration guide

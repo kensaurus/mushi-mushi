@@ -97,7 +97,7 @@ function NotFoundPage() {
   // landmark the Copilot review flagged.
   return (
     <EditorialErrorState
-      eyebrow="404 · 虫々"
+      eyebrow="404 · not found"
       headline={
         <>
           We can't find <em>that page</em>.

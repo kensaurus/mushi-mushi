@@ -11,29 +11,27 @@ export function Hero() {
       <div className="absolute inset-0 opacity-60 [background-image:radial-gradient(circle_at_18%_12%,var(--mushi-vermillion-wash),transparent_32%),radial-gradient(circle_at_84%_18%,rgba(14,13,11,0.05),transparent_34%)]" />
       <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.95fr] lg:items-center lg:gap-8">
         <div className="max-w-4xl">
-          {/* Editorial brand kicker. Demoted from vermillion → ink-muted because
-              the page already uses vermillion in three high-rank places below
-              (the H1 accent word, the primary CTA, and the live report card).
-              A red kicker over a red headline word is brand-color competition
-              (enhance-page-ui H4) — every red-tinted thing claims primacy and
-              the actual primary CTA loses scent. The serif "虫々" carries
-              brand identity here; colour is not needed. */}
+          {/* Editorial brand kicker. Plain English — the inline `虫々`
+              loan-text was dropped per the brand voice rule (one Japanese
+              phrase per page max, body copy only; see docs/marketing/VOICE.md).
+              The 虫 glyph in the sticky-nav badge above is enough brand
+              identity for fold 1; the eyebrow now reads as quiet metadata. */}
           <p className="font-mono text-[11px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
             <span className="text-[var(--mushi-ink)]">Mushi</span>
-            <span className="mx-2 opacity-40">/</span>
-            <span lang="ja" className="text-[var(--mushi-ink)]">虫々</span>
             <span className="mx-2 opacity-40">/</span>
             little bug helper
           </p>
           <h1 className="mt-3 max-w-3xl font-serif text-5xl font-semibold leading-[0.95] tracking-[-0.06em] text-[var(--mushi-ink)] sm:text-6xl lg:text-7xl">
-            Bugs your users feel,
+            Your users feel a bug.{' '}
             <br className="hidden sm:block" />
-            <span className="text-[var(--mushi-vermillion)]">walked into a fix.</span>
+            <span className="text-[var(--mushi-vermillion)]">You see a fix.</span>
           </h1>
           <p className="mt-4 max-w-xl text-base leading-7 text-[var(--mushi-ink-muted)] sm:text-lg sm:leading-7">
-            One SDK, one report, one repair loop. Mushi turns user-felt friction
-            into a triaged, drafted, judged, and remembered fix &mdash; without
-            inventing a new ticket ritual.
+            When the checkout button slips under the keyboard or a page
+            just sits there spinning, your user shakes their phone. Mushi
+            writes down what they were doing, what they saw, and what
+            broke &mdash; so the bug your monitoring missed lands in your
+            queue with a draft fix.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             <Link
@@ -51,7 +49,7 @@ export function Hero() {
               href={urls.loopAnchor}
               className="group inline-flex items-center gap-2 rounded-sm border border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]"
             >
-              Watch the loop
+              See one walk through
               <span aria-hidden="true" className="transition-transform group-hover:translate-y-0.5 motion-reduce:transition-none">↓</span>
             </Link>
           </div>
