@@ -112,7 +112,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).
 
-**Learn more** — [Architecture overview](README.md#architecture)
+**Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
 ### Stage 1 Confidence Threshold
 
@@ -130,7 +130,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Raise to 0.90+ if you suspect Stage 1 is dropping real reports (check Anti-Gaming for "fast-filter rejected" with low confidence margins). Lower to ~0.70 if a public-facing form is flooding the queue with obvious noise.
 
-**Learn more** — [Architecture overview](README.md#architecture)
+**Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
 ### Dedup Similarity Threshold
 
@@ -168,7 +168,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Set on day 1 if your plan is BYOK-only. Rotate when an engineer with key access leaves, or when Anthropic's usage console shows unfamiliar traffic.
 
-**Learn more** — [Connecting to a backend](README.md#connecting-to-a-backend)
+**Learn more** — [Self-hosting & BYOK setup](https://kensaur.us/mushi-mushi/docs/self-hosting)
 
 ### OpenAI / OpenRouter API Key
 
@@ -864,7 +864,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Set on day 1 if compliance demands it (HIPAA, GDPR, J-SOX). Don't set speculatively — the lock-out is real and reversal is manual.
 
-**Learn more** — [Configuration reference](README.md#configuration-reference-living)
+**Learn more** — [Configuration reference](docs/CONFIG_REFERENCE.md)
 
 ### Reports retention (days)
 
@@ -1066,7 +1066,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Start a new version at 5%, watch the eval scores for 24h, then ramp 25→50→100. Don't flip 0→100 — you lose the ability to A/B against the previous champion.
 
-**Learn more** — [Architecture overview](README.md#architecture)
+**Learn more** — [Architecture overview](https://kensaur.us/mushi-mushi/docs/concepts/architecture)
 
 ### Prompt body
 
