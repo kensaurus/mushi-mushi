@@ -89,9 +89,14 @@ function NotFoundPage() {
   const home = session
     ? { href: '/dashboard', label: 'Back to dashboard' }
     : { href: '/', label: 'Back to home' }
+  // NotFoundPage is mounted under the `/*` protected route, AFTER
+  // ProtectedRoute → Layout. Anonymous visitors are bounced to /login
+  // by ProtectedRoute and never reach this component, so it's ALWAYS
+  // rendering inside Layout's `<main id="main-content">`. Default
+  // EditorialErrorState wrapper (`<section>`) avoids the nested-main
+  // landmark the Copilot review flagged.
   return (
     <EditorialErrorState
-      as="main"
       eyebrow="404 · 虫々"
       headline={
         <>
