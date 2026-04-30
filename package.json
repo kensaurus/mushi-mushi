@@ -1,7 +1,7 @@
 {
   "name": "mushi-mushi",
   "private": true,
-  "description": "Mushi Mushi (虫虫) — Your users find bugs your monitoring can't. AI-powered bug intelligence that captures user friction, classifies it, and fixes it autonomously.",
+  "description": "Mushi Mushi — the bug your monitoring can't see, in your queue with a draft fix. Open source.",
   "license": "MIT",
   "homepage": "https://github.com/kensaurus/mushi-mushi",
   "repository": {

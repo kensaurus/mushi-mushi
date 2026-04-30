@@ -166,7 +166,7 @@ export function ReportDetailPage() {
     if (isNotFound) {
       return (
         <EditorialErrorState
-          eyebrow="404 · 虫々"
+          eyebrow="404 · report"
           headline={
             <>
               We can't find <em>that report</em>.

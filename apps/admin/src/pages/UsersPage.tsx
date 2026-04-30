@@ -158,7 +158,7 @@ export function UsersPage() {
     // surfaces are indistinguishable to a probing visitor.
     return (
       <EditorialErrorState
-        eyebrow="404 · 虫々"
+        eyebrow="404 · users"
         headline={
           <>
             We can't find <em>that page</em>.
