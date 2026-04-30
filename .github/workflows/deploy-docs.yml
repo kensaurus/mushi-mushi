@@ -202,6 +202,21 @@ jobs:
             --query 'ETag' --output text)
           aws cloudfront publish-function --name "$FUNC_NAME" --if-match "$ETAG" --region us-east-1
 
+      - name: Associate CloudFront docs functions with /docs/* behavior
+        # `publish-function` only puts the function in the LIVE stage of
+        # the Functions service — it does NOT attach the function to any
+        # distribution behavior. Each cache behavior has to opt in via
+        # `FunctionAssociations`. Without this step, the editorial 404
+        # body returned by mushi-mushi-docs-response is silently dropped
+        # and visitors see the raw S3 NoSuchKey XML for missing pages
+        # (regression observed in production after PR #77 deployed).
+        # The shell script is idempotent — if both functions are already
+        # attached on the right event types, it makes zero AWS mutating
+        # API calls (only a GetDistributionConfig + DescribeFunction).
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: bash scripts/associate-cloudfront-docs-functions.sh
+
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
