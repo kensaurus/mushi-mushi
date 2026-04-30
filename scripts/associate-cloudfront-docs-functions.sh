@@ -108,12 +108,32 @@ PATCHED="$(
 )"
 
 # Sanity check: did the pattern actually match a behavior?
+#
+# Soft-fail on miss because the kensaur.us distribution currently routes
+# /mushi-mushi/admin AND /mushi-mushi/docs through a single shared
+# `/mushi-mushi/*` cache behavior — there is no docs-specific behavior
+# yet, and adding the docs functions to the shared behavior would
+# clobber the admin's own viewer-request/viewer-response functions
+# (only one function per event-type per behavior). The right fix is a
+# one-time infrastructure step (create a `/mushi-mushi/docs/*` behavior
+# in the distribution, originate from S3, then re-run this workflow).
+# Until that lands, we WARN and exit 0 so the rest of the docs deploy
+# (cache invalidation + health check) still runs and the editorial 404
+# falls back to the previous S3 NoSuchKey body — visually unchanged
+# from before this workflow step existed.
 MATCHED="$(echo "$PATCHED" | jq --arg p "$PATH_PATTERN" '[.CacheBehaviors.Items[] | select(.PathPattern == $p)] | length')"
 if [ "$MATCHED" -eq 0 ]; then
-  echo "error: no cache behavior matches PathPattern=\"$PATH_PATTERN\"" >&2
-  echo "       available patterns:" >&2
-  jq -r '.CacheBehaviors.Items[].PathPattern' "$WORK/config.json" | sed 's/^/         - /' >&2
-  exit 1
+  echo "::warning::no cache behavior matches PathPattern=\"$PATH_PATTERN\" — docs synthetic 404 will keep showing the raw S3 body until a /docs-specific behavior is created in the distribution"
+  echo "  available patterns:"
+  jq -r '.CacheBehaviors.Items[].PathPattern' "$WORK/config.json" | sed 's/^/    - /'
+  echo "  to fix:"
+  echo "    1. open https://console.aws.amazon.com/cloudfront/v3/home"
+  echo "    2. select distribution \$CLOUDFRONT_DISTRIBUTION_ID"
+  echo "    3. behaviors → create behavior with path pattern \"$PATH_PATTERN\","
+  echo "       origin = the S3 origin currently serving \"/mushi-mushi/*\","
+  echo "       same cache policy as the parent behavior."
+  echo "    4. after AWS finishes deploying the change, re-run this workflow."
+  exit 0
 fi
 
 # Compare current vs. desired so we can skip the API call when nothing
