@@ -128,17 +128,19 @@ function handler(event) {
     return response;
   }
 
-  var fallbackHeaders = buildSecurityHeaders();
-  fallbackHeaders['content-type'] = { value: 'text/html; charset=utf-8' };
-  fallbackHeaders['cache-control'] = { value: 'public, max-age=60, must-revalidate' };
-
-  return {
-    statusCode: 404,
-    statusDescription: 'Not Found',
-    headers: fallbackHeaders,
-    body: {
-      encoding: 'text',
-      data: FALLBACK_404_HTML,
-    },
-  };
+  // CloudFront Functions: the documented response shape is `response.body`
+  // (string) + `response.bodyEncoding` ('text' | 'base64'), set on the
+  // mutated `event.response`. The previous shape (returning a fresh object
+  // with `body: { encoding, data }`) is the LAMBDA@EDGE shape — viewer
+  // functions silently drop the body in that form, which is why the live
+  // 404 was still leaking the raw S3 NoSuchKey XML on
+  // /mushi-mushi/docs/<missing> even after the function was published.
+  // See: https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/writing-function-code.html#writing-function-code-response
+  response.statusCode = 404;
+  response.statusDescription = 'Not Found';
+  response.headers['content-type'] = { value: 'text/html; charset=utf-8' };
+  response.headers['cache-control'] = { value: 'public, max-age=60, must-revalidate' };
+  response.body = FALLBACK_404_HTML;
+  response.bodyEncoding = 'text';
+  return response;
 }

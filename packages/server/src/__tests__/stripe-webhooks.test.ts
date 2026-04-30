@@ -25,6 +25,11 @@
 
 import { describe, expect, it } from 'vitest'
 import { createHmac } from 'node:crypto'
+// Pin against the REAL implementation (Copilot review on PR #77 caught
+// that the prior re-implementation in this file could drift silently).
+// `./invoice.ts` was extracted as a pure module precisely so vitest in
+// Node and the Deno Edge runtime both import the same source of truth.
+import { subscriptionIdFromInvoice } from '../../supabase/functions/_shared/invoice.ts'
 
 const TOLERANCE_SECONDS = 5 * 60
 
@@ -251,27 +256,6 @@ describe('Stripe webhook canonical payload shape', () => {
     expect(obj.billing_reason).toBeTypeOf('string')
   })
 })
-
-// Mirror of `subscriptionIdFromInvoice` from
-// packages/server/supabase/functions/_shared/stripe.ts. Re-implemented here
-// so the test file doesn't load `Deno.env` at module init. Kept in sync via
-// the dual-shape coverage below — if the resolver gets a third location, add
-// a case here too.
-function subscriptionIdFromInvoice(
-  invoice: Record<string, unknown>,
-): string | null {
-  const parent = invoice.parent as
-    | { type?: string; subscription_details?: { subscription?: string | null } }
-    | null
-    | undefined
-  if (parent?.type === 'subscription_details') {
-    const fromParent = parent.subscription_details?.subscription
-    if (typeof fromParent === 'string' && fromParent.length > 0) return fromParent
-  }
-  const legacy = invoice.subscription
-  if (typeof legacy === 'string' && legacy.length > 0) return legacy
-  return null
-}
 
 describe('subscriptionIdFromInvoice (Basil 2025-03-31 parent move)', () => {
   // Every revenue-affecting silent failure on this integration funnels through

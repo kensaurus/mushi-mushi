@@ -49,10 +49,10 @@ export function Hero() {
                 with the solid vermillion primary. */}
             <Link
               href={urls.loopAnchor}
-              className="inline-flex items-center gap-2 rounded-sm border border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]"
+              className="group inline-flex items-center gap-2 rounded-sm border border-[color-mix(in_oklch,var(--mushi-ink)_22%,var(--mushi-rule))] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] px-5 py-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-[var(--mushi-ink)] transition hover:-translate-y-0.5 hover:border-[var(--mushi-ink)] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_70%,white)]"
             >
               Watch the loop
-              <span aria-hidden="true" className="transition-transform group-hover:translate-y-0.5">↓</span>
+              <span aria-hidden="true" className="transition-transform group-hover:translate-y-0.5 motion-reduce:transition-none">↓</span>
             </Link>
           </div>
           {/* Trust facts. Bullet glyph swapped from vermillion dots → ink hairline
