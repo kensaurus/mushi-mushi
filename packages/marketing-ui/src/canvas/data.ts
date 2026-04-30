@@ -118,7 +118,7 @@ export const stages: MushiStage[] = [
     id: 'dispatch',
     index: 2,
     kicker: 'repair.agent · #42',
-    title: 'A draft PR opens, ready for review.',
+    title: 'A draft PR opens. You decide whether to merge.',
     oneLiner: 'Mushi tries the fix, shows the diff, and leaves the merge button with you.',
     drawerTitle: 'The agent does the first pass.',
     drawerBody:
@@ -157,7 +157,7 @@ export const stages: MushiStage[] = [
     drawerTitle: 'The next report starts smarter.',
     drawerBody:
       'Mushi remembers the pattern: where users stumble, which fixes worked, and what needs a product decision.',
-    bullets: ['Weekly PDFs focus on customer impact.', 'The knowledge graph keeps related bugs connected.'],
+    bullets: ['The weekly summary names the people who reported the bugs, not the codepaths that broke.', 'The knowledge graph keeps related bugs connected so the next report starts smarter.'],
     stat: '7 days',
     tone: 'memory',
     href: '/concepts/knowledge-graph',

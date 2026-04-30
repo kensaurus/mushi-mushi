@@ -32,14 +32,22 @@
  * -----
  * In MDX:
  *   <EditorialHero
- *     eyebrow="Mushi · 虫々 · little bug helper"
- *     title={<>Bugs your users feel, walked into a <em>fix</em>.</>}
- *     lead="Mushi turns a wobbly checkout, confusing screen…"
+ *     eyebrow="Mushi · little bug helper"
+ *     title={<>Your users feel a bug. <em>You see a fix.</em></>}
+ *     lead="When something's off — a slow screen, a button that doesn't…"
  *   />
  *
  * Wrapping the focal word in `<em>` tints it vermillion via the CSS — that
  * is the *only* brand-coloured atom in the hero, which keeps the colour
  * budget at ≤1 per fold (see enhance-page-ui H4).
+ *
+ * VOICE NOTE
+ * ----------
+ * Eyebrows stay in plain English. The `虫々` / `むしむし` kana scaffolds
+ * that earlier hero copy used were loan-text decoration; the project's
+ * Japanese budget per page (one phrase max, in body copy only) is
+ * documented in docs/marketing/VOICE.md. The `虫` glyph in the sticky
+ * nav badge carries brand identity; the eyebrow doesn't have to.
  */
 
 import type { ReactNode } from 'react'

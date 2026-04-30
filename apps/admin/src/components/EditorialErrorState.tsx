@@ -32,7 +32,12 @@
 import type { ReactNode } from 'react'
 
 interface EditorialErrorStateProps {
-  /** Mono caps eyebrow displayed above the headline (e.g. "404 · 虫々"). */
+  /**
+   * Mono caps eyebrow displayed above the headline. Use plain English
+   * context (e.g. `"404 · not found"`, `"Error · render"`, `"404 · users"`)
+   * — the project's Japanese budget per page is one phrase max in body
+   * copy, never in eyebrows or headlines (see docs/marketing/VOICE.md).
+   */
   eyebrow: string
   /**
    * Headline. The component renders any embedded `<em>` in the

@@ -27,8 +27,8 @@ export function MarketingFooter({ apiBaseUrl }: MarketingFooterProps) {
             Mushi Mushi
           </div>
           <p className="mt-2 leading-6">
-            Open source repair loop &mdash; hosted by us, or run it inside your
-            own VPC.
+            Small SDK, honest classifier, optional auto-fix. Run it yourself
+            or let us host.
           </p>
           <StatusPill apiBaseUrl={apiBaseUrl} />
         </div>

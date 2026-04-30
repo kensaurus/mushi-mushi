@@ -1,5 +1,5 @@
 ---
-title: Mushi Mushi — User-side bug intelligence
+title: Mushi Mushi — bugs your users feel
 ---
 
 import { Cards } from 'nextra/components'
@@ -10,48 +10,48 @@ import { Cards } from 'nextra/components'
     breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack. */}
 
 <EditorialHero
-  eyebrow="Mushi · 虫々 · little bug helper"
-  title={<>Bugs your users feel, walked into a <em>fix.</em></>}
-  lead={<>Mushi turns a wobbly checkout, confusing screen, or tiny visual regression into a report your team can understand, repair, and learn from. No heavy ticket ceremony — just a clear trail.</>}
+  eyebrow="Mushi · little bug helper"
+  title={<>Your users feel a bug. <em>You see a fix.</em></>}
+  lead={<>When something&rsquo;s off &mdash; a slow screen, a button that doesn&rsquo;t respond, a layout that breaks on one phone &mdash; your user wants to tell you. Mushi gives them a way that doesn&rsquo;t involve email, support tickets, or screenshots in Slack.</>}
 />
 
-Mushi sits **upstream** of Sentry. Sentry sees what your code throws; Mushi
-sees what your users feel. The two are designed to compose: Mushi's
-classifier ingests Sentry breadcrumbs, and Sentry User Feedback events can be
-forwarded into Mushi via webhook.
+Sentry sees what your code throws. Mushi sees what your users feel. The two
+are designed to compose: Mushi&rsquo;s classifier reads Sentry breadcrumbs,
+and Sentry User Feedback events forward into Mushi via webhook &mdash; so
+nothing about your existing setup has to change.
 
 ## Try it in 60 seconds
 
 <Cards>
   <Cards.Card title="React" href="/quickstart/react" arrow>
-    Drop the provider into your app and ship a Shake-to-Report widget.
+    Drop the provider in. Your users get a shake-to-report widget the same day.
   </Cards.Card>
   <Cards.Card title="Vue, Svelte, Angular" href="/sdks" arrow>
-    First-class adapters for every major web framework.
+    Same widget, same reports, in the framework you already ship.
   </Cards.Card>
   <Cards.Card title="iOS, Android, Flutter" href="/quickstart/mobile" arrow>
-    Native SDKs with shake detection, offline queue, and Sentry bridge.
+    Shake detection, offline queue, and a Sentry bridge already wired up.
   </Cards.Card>
   <Cards.Card title="MCP server" href="/sdks/mcp" arrow>
-    Let Claude, Cursor, or Codex triage and propose fixes from the IDE.
+    Triage from inside Claude, Cursor, or Codex without leaving your editor.
   </Cards.Card>
 </Cards>
 
-## Why Mushi (vs. Sentry alone)
+## Where Sentry stops, this picks up.
 
 <ComparisonTable
-  foil="Sentry"
+  foil="Sentry alone"
   rows={[
-    { label: 'Source of bugs',     foil: 'Stack traces & perf',  mushi: 'Direct user reports + Sentry User Feedback' },
-    { label: 'Triage',             foil: 'Manual',                mushi: 'Two-stage LLM classifier with judge feedback' },
-    { label: 'Knowledge',          foil: 'Issue list',            mushi: 'Knowledge graph (pgvector + Apache AGE)' },
-    { label: 'Fix workflow',       foil: 'Issue → ticket',        mushi: 'Agentic orchestrator → sandboxed PR' },
-    { label: 'AI agent surface',   foil: 'None',                  mushi: 'A2A Agent Card + MCP server' },
-    { label: 'Self-host',          foil: 'OSS edition',           mushi: 'OSS first; cloud optional' },
+    { label: 'What it sees',         foil: 'Errors your code throws',                mushi: 'Friction your users feel' },
+    { label: 'What lands in your queue', foil: 'A stack trace',                       mushi: 'A short user note plus the screenshot they were looking at' },
+    { label: 'Repeat bugs',          foil: 'Each one shows up as a new issue',        mushi: 'The same broken button collapses to one row' },
+    { label: 'Closing the loop',     foil: 'Assign a ticket and remember to update',  mushi: 'An optional draft PR you can merge or ignore' },
+    { label: 'From your IDE',        foil: 'Copy the issue ID into Cursor',           mushi: 'Cursor reads the report and proposes the diff' },
+    { label: 'Where it runs',        foil: 'Their cloud',                             mushi: 'Yours, ours, or both' },
   ]}
 />
 
-## The Mushi loop, in four steps
+## What happens after a user reports something
 
 <Pillars />
 

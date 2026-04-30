@@ -32,8 +32,8 @@ function StaticStageStrip() {
         A bug report with a tiny pair of boots.
       </h2>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--mushi-ink-muted)]">
-        Follow one user complaint as it walks from capture to a reviewed fix,
-        then becomes memory for the next release.
+        Follow one user&rsquo;s complaint from &ldquo;this is broken&rdquo; to a
+        reviewed fix you sign off on.
       </p>
 
       <ol className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
