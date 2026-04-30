@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route, Navigate, Link, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
 import { Layout } from './components/Layout'
@@ -11,6 +11,7 @@ import { checkEnv } from './lib/env'
 import type { ReactNode } from 'react'
 import { Loading } from './components/ui'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { EditorialErrorState } from './components/EditorialErrorState'
 import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
@@ -71,19 +72,48 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m
 // so unauthenticated callers go through /login first, then come back here.
 const DocsBridgePage = lazy(() => import('./pages/DocsBridgePage').then(m => ({ default: m.DocsBridgePage })))
 
+/**
+ * NotFoundPage — rendered for any unknown route the SPA's React Router
+ * matches. Uses the editorial fallback so the visitor's experience is
+ * consistent whether the page is missing or crashed. Echoes the path
+ * they typed back so they can see the typo without opening devtools.
+ *
+ * Auth-state aware: signed-in visitors are sent to `/dashboard` (their
+ * actual home); anon visitors are sent to `/` (the public landing). We
+ * deliberately do not redirect — the visitor stays on the wrong URL so
+ * the address bar reflects the truth and the back button works.
+ */
 function NotFoundPage() {
   const { pathname } = useLocation()
+  const { session } = useAuth()
+  const home = session
+    ? { href: '/dashboard', label: 'Back to dashboard' }
+    : { href: '/', label: 'Back to home' }
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <p className="text-5xl font-bold text-fg-faint mb-2">404</p>
-      <h2 className="text-lg font-semibold text-fg mb-1">Page not found</h2>
-      <p className="text-sm text-fg-muted mb-6">
-        <code className="text-2xs bg-surface-raised px-1.5 py-0.5 rounded">{pathname}</code> doesn't exist.
-      </p>
-      <Link to="/dashboard" className="text-sm text-brand hover:text-brand-hover transition-colors">
-        ← Back to Dashboard
-      </Link>
-    </div>
+    <EditorialErrorState
+      eyebrow="404 · 虫々"
+      headline={
+        <>
+          We can't find <em>that page</em>.
+        </>
+      }
+      lead={
+        session
+          ? "The route you typed doesn't match any page in the console. It may have moved, been renamed, or never existed — head back to the dashboard or check the docs for the canonical name."
+          : "The link you followed doesn't match any page on this site. It may have been moved or renamed — head home, or check the docs for what you're looking for."
+      }
+      detail={
+        <code className="break-all rounded bg-[var(--mushi-paper-wash)] px-2 py-0.5">
+          {pathname}
+        </code>
+      }
+      primary={home}
+      secondary={{
+        href: 'https://kensaur.us/mushi-mushi/docs/',
+        label: 'Open docs',
+        external: true,
+      }}
+    />
   )
 }
 
@@ -122,6 +152,15 @@ export function App() {
       <ResilienceLayer />
       <UpgradePromptHost />
       <PasswordRecoveryGate>
+      {/* Outer ErrorBoundary — catches render errors on PUBLIC pages too
+          (PublicHomePage, LoginPage, ResetPasswordPage, the invite-accept
+          flow). Without this, a crash in one of those routes would render
+          a blank screen to a visitor who hasn't even authenticated yet —
+          worst impression possible. The inner boundary inside
+          ProtectedRoute still catches lazy-chunk crashes per-page so the
+          editorial fallback can render inside the Layout chrome and offer
+          "back to dashboard" instead of "back to home". */}
+      <ErrorBoundary source="app-shell">
       <Routes>
         <Route path="/" element={<PublicHomePage />} />
         <Route path="/login" element={<LoginPage />} />
@@ -139,7 +178,7 @@ export function App() {
           element={
             <ProtectedRoute>
               <Layout>
-                <ErrorBoundary>
+                <ErrorBoundary source="protected-route">
                 <Suspense fallback={<Loading text="Loading..." />}>
                 <SentryRoutes>
                   <Route path="/dashboard" element={<DashboardPage />} />
@@ -184,6 +223,7 @@ export function App() {
           }
         />
       </Routes>
+      </ErrorBoundary>
       </PasswordRecoveryGate>
       </ToastProvider>
     </AuthProvider>
