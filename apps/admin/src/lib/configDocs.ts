@@ -186,7 +186,10 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     },
     whenToChange:
       'Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you\'re finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).',
-    learnMore: { label: 'Architecture overview', href: 'README.md#architecture' },
+    learnMore: {
+      label: 'Architecture overview',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
   },
   {
     id: 'settings.general.stage1_confidence_threshold',
@@ -203,7 +206,10 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
     },
     whenToChange:
       'Raise to 0.90+ if you suspect Stage 1 is dropping real reports (check Anti-Gaming for "fast-filter rejected" with low confidence margins). Lower to ~0.70 if a public-facing form is flooding the queue with obvious noise.',
-    learnMore: { label: 'Architecture overview', href: 'README.md#architecture' },
+    learnMore: {
+      label: 'Architecture overview',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
   },
   {
     id: 'settings.general.dedup_threshold',
@@ -239,7 +245,10 @@ const SETTINGS_BYOK: ConfigDoc[] = [
     },
     whenToChange:
       'Set on day 1 if your plan is BYOK-only. Rotate when an engineer with key access leaves, or when Anthropic\'s usage console shows unfamiliar traffic.',
-    learnMore: { label: 'Connecting to a backend', href: 'README.md#connecting-to-a-backend' },
+    learnMore: {
+      label: 'Self-hosting & BYOK setup',
+      href: 'https://kensaur.us/mushi-mushi/docs/self-hosting',
+    },
   },
   {
     id: 'settings.byok.openai_key',
@@ -887,7 +896,7 @@ const COMPLIANCE: ConfigDoc[] = [
       readBy: ['every storage write', 'compliance check'],
     },
     whenToChange: 'Set on day 1 if compliance demands it (HIPAA, GDPR, J-SOX). Don\'t set speculatively — the lock-out is real and reversal is manual.',
-    learnMore: { label: 'Configuration reference', href: 'README.md#configuration-reference-living' },
+    learnMore: { label: 'Configuration reference', href: 'docs/CONFIG_REFERENCE.md' },
   },
   {
     id: 'compliance.retention.reports_days',
@@ -1074,7 +1083,10 @@ const PROMPT_LAB: ConfigDoc[] = [
       readBy: ['_shared/prompt-ab helper'],
     },
     whenToChange: 'Start a new version at 5%, watch the eval scores for 24h, then ramp 25→50→100. Don\'t flip 0→100 — you lose the ability to A/B against the previous champion.',
-    learnMore: { label: 'Architecture overview', href: 'README.md#architecture' },
+    learnMore: {
+      label: 'Architecture overview',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+    },
   },
   {
     id: 'prompt-lab.prompt_body',
