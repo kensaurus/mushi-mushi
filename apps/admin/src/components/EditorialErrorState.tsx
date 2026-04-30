@@ -54,6 +54,19 @@ interface EditorialErrorStateProps {
    * for boundaries that should only show the primary recovery path.
    */
   secondary?: ActionProps | null
+  /**
+   * Wrapper element for the editorial layout. Defaults to `'section'`
+   * because the most common callers (UsersPage, ReportDetailPage) render
+   * this component INSIDE Layout's `<main id="main-content">` — a nested
+   * `<main>` would double the page landmark and confuse assistive tech.
+   *
+   * Pass `'main'` ONLY when the component is the *page-level* root, e.g.
+   * the top-level ErrorBoundary fallback (renders before Layout has
+   * mounted) or the App.tsx `NotFoundPage` (rendered above the Layout
+   * gate for unauthenticated 404s). Doing so makes EditorialErrorState
+   * itself the single page landmark in those cases.
+   */
+  as?: 'main' | 'section'
 }
 
 interface ActionProps {
@@ -121,9 +134,11 @@ export function EditorialErrorState({
   detail,
   primary,
   secondary,
+  as = 'section',
 }: EditorialErrorStateProps) {
+  const Wrapper = as
   return (
-    <main className="mushi-marketing-surface grid min-h-[70vh] place-items-center px-6 py-16">
+    <Wrapper className="mushi-marketing-surface grid min-h-[70vh] place-items-center px-6 py-16">
       <article className="mx-auto w-full max-w-[38rem]">
         <p
           aria-hidden="true"
@@ -156,6 +171,6 @@ export function EditorialErrorState({
           {secondary ? <Action {...secondary} kind="secondary" /> : null}
         </div>
       </article>
-    </main>
+    </Wrapper>
   )
 }

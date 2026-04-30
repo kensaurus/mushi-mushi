@@ -91,6 +91,7 @@ function NotFoundPage() {
     : { href: '/', label: 'Back to home' }
   return (
     <EditorialErrorState
+      as="main"
       eyebrow="404 · 虫々"
       headline={
         <>

@@ -148,10 +148,10 @@ export function StageDrawer({ stage, sample, onClose }: StageDrawerProps) {
                 href={urls.docs(stage.href)}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex w-fit items-center gap-2 rounded-sm bg-[var(--mushi-ink)] px-4 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-paper)] transition hover:-translate-y-0.5 hover:bg-[color-mix(in_oklch,var(--mushi-ink)_88%,var(--mushi-vermillion))]"
+                className="group inline-flex w-fit items-center gap-2 rounded-sm bg-[var(--mushi-ink)] px-4 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--mushi-paper)] transition hover:-translate-y-0.5 hover:bg-[color-mix(in_oklch,var(--mushi-ink)_88%,var(--mushi-vermillion))]"
               >
                 Learn the details
-                <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
+                <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none">→</span>
               </a>
             </div>
             <StageScreenshot stageId={stage.id} sample={sample} />
