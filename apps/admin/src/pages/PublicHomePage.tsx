@@ -163,6 +163,13 @@ export function PublicHomePage() {
               >
                 Sign in
               </Link>
+              {/* The sticky-nav CTA is small chrome, not a hero button —
+                  the longer "Start free, no card" label used by the Hero
+                  and ClosingCta wraps to three lines inside this pill-sized
+                  container at 360px. We keep "Get started" (anonymous) /
+                  "Open console" (authenticated) here for ergonomics; the
+                  Hero and ClosingCta below carry the longer, no-card
+                  promise where they have the room to render it cleanly. */}
               <Link
                 to={consoleHref}
                 className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"

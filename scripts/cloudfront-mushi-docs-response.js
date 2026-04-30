@@ -77,7 +77,7 @@ var FALLBACK_404_HTML = [
   '</head>',
   '<body>',
   '<main>',
-  '<p class="eyebrow">404 · 虫々</p>',
+  '<p class="eyebrow">404 · not found</p>',
   '<h1>This page <em>doesn\'t exist</em> in our docs.</h1>',
   '<div class="rule" aria-hidden="true"></div>',
   '<p>The link may be from an older version, a typo, or a page we have since moved. The docs index is the table of contents for everything Mushi — start there and search for what you need.</p>',

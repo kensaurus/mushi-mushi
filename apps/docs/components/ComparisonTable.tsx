@@ -24,12 +24,19 @@
  * USAGE
  * -----
  *   <ComparisonTable
- *     foil="Sentry"
+ *     foil="Sentry alone"
  *     rows={[
- *       { label: 'Source of bugs', foil: 'Stack traces & perf', mushi: 'Direct user reports + Sentry User Feedback' },
+ *       { label: 'What it sees', foil: 'Errors your code throws', mushi: 'Friction your users feel' },
  *       …
  *     ]}
  *   />
+ *
+ * VOICE NOTE
+ * ----------
+ * Row labels and foil/mushi cells should describe *user-visible impact*,
+ * not internal product features ("Source of bugs" / "Triage" → "What it
+ * sees" / "What lands in your queue"). The reader is here to figure out
+ * what changes for them, not to inventory architecture.
  */
 
 interface ComparisonRow {

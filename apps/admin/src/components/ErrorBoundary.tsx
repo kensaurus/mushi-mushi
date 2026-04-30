@@ -70,7 +70,7 @@ export class ErrorBoundary extends Component<Props, State> {
           // The outer "app-shell" boundary is always the page root, so
           // claim `<main>` here.
           as={this.props.source === 'app-shell' ? 'main' : 'section'}
-          eyebrow="Error · 虫々"
+          eyebrow="Error · render"
           headline={
             <>
               Something <em>broke</em> on this page.
