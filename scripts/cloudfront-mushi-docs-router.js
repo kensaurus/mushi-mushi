@@ -29,18 +29,35 @@ function handler(event) {
   var request = event.request;
   var uri = request.uri;
 
-  // 1. Trailing slash: serve the folder index (e.g. /mushi-mushi/docs/ -> /mushi-mushi/docs/index.html)
+  // 1. Bare docs root with no trailing slash: 301 to the canonical
+  //    trailing-slash form. The static export's docs root lives at
+  //    `docs/index.html` (folder index), not `docs.html`, so naively
+  //    appending `.html` would 404 in S3. Match either prefix in case
+  //    this function is attached to either the docs-only behavior or
+  //    the parent /mushi-mushi/* behavior.
+  if (uri === '/mushi-mushi/docs' || uri === '/docs') {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: uri + '/' },
+        'cache-control': { value: 'public, max-age=300' },
+      },
+    };
+  }
+
+  // 2. Trailing slash: serve the folder index (e.g. /mushi-mushi/docs/ -> /mushi-mushi/docs/index.html)
   if (uri.charAt(uri.length - 1) === '/') {
     request.uri = uri + 'index.html';
     return request;
   }
 
-  // 2. Has a file extension: pass through (assets, JSON, sitemap, etc.)
+  // 3. Has a file extension: pass through (assets, JSON, sitemap, etc.)
   if (/\.[a-zA-Z0-9]+$/.test(uri)) {
     return request;
   }
 
-  // 3. Clean URL with no extension: append `.html` so S3 finds the static export.
+  // 4. Clean URL with no extension: append `.html` so S3 finds the static export.
   request.uri = uri + '.html';
   return request;
 }

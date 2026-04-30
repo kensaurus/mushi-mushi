@@ -139,12 +139,13 @@ export function PublicHomePage() {
               <span>Mushi Mushi</span>
             </Link>
             <nav className="flex items-center gap-1 text-sm sm:gap-2">
-              <a
-                href="#loop"
-                className="hidden rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] sm:inline-block"
-              >
-                Loop
-              </a>
+              {/* "Loop" header link removed — it duplicated the Hero's
+                  "Watch the loop" secondary CTA (which scrolls to the same
+                  #loop anchor) and added a third semantic destination next
+                  to Docs / Sign in / Get started without telling the
+                  visitor anything new. The MushiCanvas section the anchor
+                  pointed at is in the natural reading flow below the Hero,
+                  so the redundant nav item was just chrome. */}
               <a
                 /* Trailing slash matters: see the docs() helper below — the
                  * static export's `out/index.html` is only reachable via

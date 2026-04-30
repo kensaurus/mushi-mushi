@@ -46,7 +46,27 @@ function handler(event) {
   // 3. /mushi-mushi/docs/* clean URLs -> Next.js static export layout.
   //    `next export` writes one HTML file per route; trailing slash means
   //    folder index, no extension means append `.html`.
-  if (uri === '/mushi-mushi/docs' || uri.indexOf('/mushi-mushi/docs/') === 0) {
+  //
+  //    NOTE on the bare `/mushi-mushi/docs` (no trailing slash) case:
+  //    Next.js with `trailingSlash: false` writes the docs root as
+  //    `docs/index.html` (folder index), NOT `docs.html`. If we naively
+  //    append `.html` here we get `/mushi-mushi/docs.html` which doesn't
+  //    exist in S3 (visitors saw raw `NoSuchKey` XML — see Sentry breadcrumb
+  //    for the originally-reported 404). 301 to the trailing-slash form is
+  //    the canonical fix and matches Next's link-rendering for the same
+  //    URL. Sub-pages (e.g. `/docs/quickstart`) keep the existing
+  //    extension-append since `quickstart.html` is real.
+  if (uri === '/mushi-mushi/docs') {
+    return {
+      statusCode: 301,
+      statusDescription: 'Moved Permanently',
+      headers: {
+        'location': { value: '/mushi-mushi/docs/' },
+        'cache-control': { value: 'public, max-age=300' },
+      },
+    };
+  }
+  if (uri.indexOf('/mushi-mushi/docs/') === 0) {
     if (uri.charAt(uri.length - 1) === '/') {
       request.uri = uri + 'index.html';
     } else {
