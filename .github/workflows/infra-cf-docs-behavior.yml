@@ -1,0 +1,92 @@
+##
+# FILE: .github/workflows/infra-cf-docs-behavior.yml
+# PURPOSE: One-shot, manually-dispatched workflow that creates the
+#          `/mushi-mushi/docs/*` cache behavior on the kensaur.us
+#          CloudFront distribution and attaches the docs router/response
+#          functions to it. Lives outside `deploy-docs.yml` because it's
+#          an infra mutation, not a content deploy — the script is
+#          idempotent so accidentally dispatching twice is safe.
+#
+# WHY A SEPARATE WORKFLOW
+# -----------------------
+# - `deploy-docs.yml` runs on every push to master and uses path filters.
+#   Embedding a one-time `update-distribution` call there would couple
+#   content deploys to a one-shot infra mutation and re-run AWS
+#   `update-distribution` (which always counts as a config change in the
+#   CloudFront deployment graph, even when the patch is byte-identical).
+# - Manual dispatch is the right shape: an operator runs this once,
+#   inspects the diff via DRY_RUN if they want, then re-runs without
+#   DRY_RUN to apply.
+##
+
+name: Infra — Create CF docs cache behavior
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print the patched config without calling UpdateDistribution'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-cf-docs-behavior
+  cancel-in-progress: false
+
+jobs:
+  create-behavior:
+    name: Create /mushi-mushi/docs/* cache behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      AWS_REGION: ap-northeast-1
+
+    steps:
+      - name: Pre Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Harden Runner
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40  # v2.19.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df  # v4.2.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install jq
+        run: sudo apt-get update -y && sudo apt-get install -y jq
+
+      - name: Create /mushi-mushi/docs/* cache behavior
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+          DRY_RUN: ${{ inputs.dry_run == 'true' && '1' || '0' }}
+        run: bash scripts/cloudfront-create-docs-behavior.sh
+
+      - name: Verify functions are now associated
+        if: ${{ inputs.dry_run != 'true' }}
+        env:
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}
+        run: |
+          # The clone-from-parent step in the create script already sets the
+          # FunctionAssociations, so this should report a no-op. Run it as a
+          # belt-and-suspenders check: if the create script ever drifts from
+          # the canonical association shape, this catches it before the
+          # next docs deploy does.
+          bash scripts/associate-cloudfront-docs-functions.sh
