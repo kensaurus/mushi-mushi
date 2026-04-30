@@ -116,7 +116,27 @@
      inheritance without prop drilling. */
   --row-py-comfy: 0.625rem;
   --row-py-compact: 0.375rem;
+
+  /* ── Card elevation tokens ────────────────────────────────────────────
+     `.card-elevated` (used by every KpiTile, Card elevated wrapper, and
+     the Graph "AGE drift audit" / "Bug ontology" panels) reads these
+     three vars so the gradient flips per theme. Without these tokens
+     the card was a hardcoded near-black ink-on-ink gradient that stayed
+     dark even when the user picked light mode in the sidebar — the
+     audit found the entire stat-tile strip on Dashboard / Reports /
+     Judge / Health rendering as a black band on a paper page. */
+  --card-elevated-bg-from: oklch(0.23 0.007 285);
+  --card-elevated-bg-to: oklch(0.20 0.006 285);
+  --card-elevated-inset-highlight: oklch(1 0 0 / 0.03);
 }
+
+/* Tailwind v4 — bind the `dark:` modifier to our explicit data-theme
+   attribute instead of OS `prefers-color-scheme`. This keeps every
+   `dark:bg-…` / `dark:text-…` Tailwind utility (e.g. UpgradePrompt) in
+   step with the user's explicit theme toggle in the sidebar, so a
+   visitor on a light-OS who picked dark in the app actually sees the
+   dark variant fire (and vice versa). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ---------------------------------------------------------------------------
    BASE RESETS
@@ -211,6 +231,18 @@ html[data-theme="light"] {
 
   --shadow-card:   0 1px 2px oklch(0.35 0.01 285 / 0.10);
   --shadow-raised: 0 2px 8px oklch(0.35 0.01 285 / 0.12);
+
+  /* Card elevation flips on paper. The "from" stop is full white so the
+     tile reads as a brighter wedge against the slightly-tinted page
+     surface (--color-surface = 0.965), and the "to" stop carries a
+     whisper of warmth (chroma 0.003 at 80°) to hint at the brand without
+     introducing visible amber on a quiet metric tile. The inset white
+     highlight is zero'd out — on a white card it's invisible, and the
+     hairline border + soft drop-shadow already provide all the lift the
+     eye needs in a light context. */
+  --card-elevated-bg-from: oklch(1 0 0);
+  --card-elevated-bg-to: oklch(0.985 0.003 80);
+  --card-elevated-inset-highlight: oklch(0 0 0 / 0);
 }
 html[data-theme="light"] body {
   color-scheme: light;
@@ -334,14 +366,14 @@ select, input, textarea {
   background:
     linear-gradient(
       180deg,
-      oklch(0.23 0.007 285) 0%,
-      oklch(0.20 0.006 285) 100%
+      var(--card-elevated-bg-from) 0%,
+      var(--card-elevated-bg-to) 100%
     );
   border: 1px solid var(--color-edge-subtle);
   border-radius: var(--radius-md);
   box-shadow:
     var(--shadow-card),
-    inset 0 1px 0 oklch(1 0 0 / 0.03);
+    inset 0 1px 0 var(--card-elevated-inset-highlight);
 }
 
 /* Stat card — number emphasis */
