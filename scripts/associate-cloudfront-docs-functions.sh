@@ -48,14 +48,25 @@ fi
 
 # CloudFront Functions ARNs are global. DescribeFunction returns the
 # canonical ARN so we don't have to assemble it from account ID.
+#
+# We swallow the AWS CLI exit code (and stderr) here so the explicit
+# "not in LIVE stage" validation below runs against a normalized empty
+# string. Without this, `set -e` would abort the whole script on a
+# missing-function error and the operator would see the raw AWS CLI
+# stack trace instead of our actionable message.
 get_fn_arn() {
   local name="$1"
-  aws cloudfront describe-function \
-    --name "$name" \
-    --stage LIVE \
-    --region us-east-1 \
-    --query 'FunctionSummary.FunctionMetadata.FunctionARN' \
-    --output text
+  local arn=""
+  if ! arn="$(aws cloudfront describe-function \
+      --name "$name" \
+      --stage LIVE \
+      --region us-east-1 \
+      --query 'FunctionSummary.FunctionMetadata.FunctionARN' \
+      --output text 2>/dev/null)"; then
+    printf '%s\n' ""
+    return 0
+  fi
+  printf '%s\n' "$arn"
 }
 
 ROUTER_ARN="$(get_fn_arn "$ROUTER_NAME")"
@@ -87,13 +98,21 @@ jq '.DistributionConfig' "$WORK/dist.json" > "$WORK/config.json"
 # Surgical jq patch: locate the cache behavior whose PathPattern matches,
 # replace its FunctionAssociations with the canonical 2-entry shape, and
 # leave every other field untouched.
+#
+# `.CacheBehaviors.Items` is OMITTED (not just empty) when the
+# distribution has zero ordered cache behaviors — i.e.
+# `.CacheBehaviors.Quantity == 0`. Without `// []` the `map(...)`
+# would crash with `Cannot iterate over null` and the script would
+# fail with an opaque jq error instead of the clean "no behavior
+# matches" warning we emit a few lines down. Defensive defaulting
+# preserves that intended fall-through.
 PATCHED="$(
   jq \
     --arg pattern "$PATH_PATTERN" \
     --arg router "$ROUTER_ARN" \
     --arg response "$RESPONSE_ARN" \
     '
-    .CacheBehaviors.Items |= map(
+    .CacheBehaviors.Items = ((.CacheBehaviors.Items // []) | map(
       if .PathPattern == $pattern then
         .FunctionAssociations = {
           Quantity: 2,
@@ -103,7 +122,7 @@ PATCHED="$(
           ]
         }
       else . end
-    )
+    ))
     ' "$WORK/config.json"
 )"
 
@@ -123,12 +142,12 @@ PATCHED="$(
 # from before this workflow step existed.
 MATCHED="$(echo "$PATCHED" | jq --arg p "$PATH_PATTERN" '[.CacheBehaviors.Items[] | select(.PathPattern == $p)] | length')"
 if [ "$MATCHED" -eq 0 ]; then
-  echo "::warning::no cache behavior matches PathPattern=\"$PATH_PATTERN\" — docs synthetic 404 will keep showing the raw S3 body until a /docs-specific behavior is created in the distribution"
+  echo "::warning::no cache behavior matches PathPattern=\"$PATH_PATTERN\" — docs synthetic 404 will keep showing the raw S3 body until a docs-specific behavior is created in the distribution"
   echo "  available patterns:"
-  jq -r '.CacheBehaviors.Items[].PathPattern' "$WORK/config.json" | sed 's/^/    - /'
+  jq -r '(.CacheBehaviors.Items // [])[].PathPattern' "$WORK/config.json" | sed 's/^/    - /'
   echo "  to fix:"
   echo "    1. open https://console.aws.amazon.com/cloudfront/v3/home"
-  echo "    2. select distribution \$CLOUDFRONT_DISTRIBUTION_ID"
+  echo "    2. select distribution $DIST_ID"
   echo "    3. behaviors → create behavior with path pattern \"$PATH_PATTERN\","
   echo "       origin = the S3 origin currently serving \"/mushi-mushi/*\","
   echo "       same cache policy as the parent behavior."

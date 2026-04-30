@@ -864,7 +864,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Set on day 1 if compliance demands it (HIPAA, GDPR, J-SOX). Don't set speculatively — the lock-out is real and reversal is manual.
 
-**Learn more** — [Configuration reference](docs/CONFIG_REFERENCE.md)
+**Learn more** — [Configuration reference](https://github.com/kensaurus/mushi-mushi/blob/master/docs/CONFIG_REFERENCE.md)
 
 ### Reports retention (days)
 
@@ -1406,7 +1406,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Use `attach` for mature production apps with a help menu. Use `edge-tab` when bottom nav or chat widgets compete with the default corner trigger. Use `manual` on regulated or fullscreen flows.
 
-**Learn more** — [Trigger modes](apps/docs/content/concepts/trigger-modes.mdx)
+**Learn more** — [Trigger modes](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes)
 
 ### Smart hide
 
@@ -1422,7 +1422,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 **When to change** — Enable on consumer apps where the report button competes with bottom navigation, media controls, chat bubbles, or primary checkout CTAs.
 
-**Learn more** — [Trigger modes](apps/docs/content/concepts/trigger-modes.mdx)
+**Learn more** — [Trigger modes](https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes)
 
 ### Widget theme
 

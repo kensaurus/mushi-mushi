@@ -89,12 +89,15 @@ function NotFoundPage() {
   const home = session
     ? { href: '/dashboard', label: 'Back to dashboard' }
     : { href: '/', label: 'Back to home' }
-  // NotFoundPage is mounted under the `/*` protected route, AFTER
-  // ProtectedRoute → Layout. Anonymous visitors are bounced to /login
-  // by ProtectedRoute and never reach this component, so it's ALWAYS
-  // rendering inside Layout's `<main id="main-content">`. Default
-  // EditorialErrorState wrapper (`<section>`) avoids the nested-main
-  // landmark the Copilot review flagged.
+  // In the current routing tree, NotFoundPage is mounted under the
+  // `/*` protected route (after ProtectedRoute → Layout), so anonymous
+  // visitors are typically bounced to /login before they ever reach
+  // this component. We still keep the `session`-aware copy/links as a
+  // defensive fallback in case the routing changes or auth state is
+  // transient on first paint. Either way, this renders INSIDE Layout's
+  // `<main id="main-content">`, so EditorialErrorState's default wrapper
+  // (`<section>`) is what we want — using `<main>` here would create
+  // the nested-main landmark the Copilot review flagged.
   return (
     <EditorialErrorState
       eyebrow="404 · not found"

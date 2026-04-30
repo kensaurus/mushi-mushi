@@ -896,7 +896,10 @@ const COMPLIANCE: ConfigDoc[] = [
       readBy: ['every storage write', 'compliance check'],
     },
     whenToChange: 'Set on day 1 if compliance demands it (HIPAA, GDPR, J-SOX). Don\'t set speculatively — the lock-out is real and reversal is manual.',
-    learnMore: { label: 'Configuration reference', href: 'docs/CONFIG_REFERENCE.md' },
+    learnMore: {
+      label: 'Configuration reference',
+      href: 'https://github.com/kensaurus/mushi-mushi/blob/master/docs/CONFIG_REFERENCE.md',
+    },
   },
   {
     id: 'compliance.retention.reports_days',
@@ -1369,7 +1372,10 @@ const SDK_INSTALL: ConfigDoc[] = [
       '`auto` keeps the default editorial stamp button. `edge-tab` makes the trigger less obstructive on dense apps. `attach` hides the default button and binds to `attachToSelector`, while `manual` / `hidden` render no launcher so host apps can call `Mushi.open()` themselves.',
     default: { value: 'auto' },
     whenToChange: 'Use `attach` for mature production apps with a help menu. Use `edge-tab` when bottom nav or chat widgets compete with the default corner trigger. Use `manual` on regulated or fullscreen flows.',
-    learnMore: { label: 'Trigger modes', href: 'apps/docs/content/concepts/trigger-modes.mdx' },
+    learnMore: {
+      label: 'Trigger modes',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes',
+    },
   },
   {
     id: 'sdk-install.smart_hide',
@@ -1379,7 +1385,10 @@ const SDK_INSTALL: ConfigDoc[] = [
       'The SDK listens for scroll and viewport changes inside the host app and adjusts only the launcher, not the capture pipeline. Reports can still be opened programmatically while the trigger is hidden or shrunk.',
     default: { value: 'off in 0.6; planned default after dogfood' },
     whenToChange: 'Enable on consumer apps where the report button competes with bottom navigation, media controls, chat bubbles, or primary checkout CTAs.',
-    learnMore: { label: 'Trigger modes', href: 'apps/docs/content/concepts/trigger-modes.mdx' },
+    learnMore: {
+      label: 'Trigger modes',
+      href: 'https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes',
+    },
   },
   {
     id: 'sdk-install.theme',
