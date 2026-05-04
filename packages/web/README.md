@@ -26,6 +26,7 @@ Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM 
 - **Privacy controls** (0.9.1+) — `privacy.maskSelectors`, `privacy.blockSelectors`, `privacy.allowUserRemoveScreenshot` for selector-level screenshot redaction and a one-tap "Remove screenshot" button in the panel
 - **Repro timeline** (0.10+) — auto-captures route changes, clicks, and SDK lifecycle into a normalised `MushiReport.timeline`; pair with `Mushi.setScreen({ name, route, feature })` for screen-level grouping in the admin
 - **Two-way replies** (0.11+) — the panel ships a "Your reports" view that polls comments authored by the dev team and lets the reporter reply, all signed with HMAC against the public API key (no auth user required)
+- **Passive inventory discovery** (0.12+) — opt-in `capture.discoverInventory` ships throttled, PII-free observations (route template, page title, `[data-testid]` values, recent fetch paths, query-param **keys** only, sha256 of user/session id) to `POST /v1/sdk/discovery`. The Mushi server aggregates them into a 30-day `discovery_observed_inventory` view and Claude Sonnet drafts a first-pass `inventory.yaml` proposal you can accept on `/inventory ▸ Discovery`. See `MushiDiscoverInventoryConfig` in [`@mushi-mushi/core`](../core)
 - **SDK identity & freshness** (0.8+) — every report ships `sdkPackage` + `sdkVersion`; the widget polls `/v1/sdk/latest-version` and surfaces an outdated banner (configurable via `widget.outdatedBanner`)
 - **Self-noise filters** (0.7.1+) — internal Mushi requests are tagged with `X-Mushi-Internal` and excluded from network capture + `apiCascade`; configurable `capture.ignoreUrls` and `proactive.apiCascade.ignoreUrls` for host-app endpoints you also don't want counted
 - **`Mushi.diagnose()`** (0.7.1+) — one-call CSP / runtime-config / capture / widget health check (also runs without an init for pre-install smoke tests)
@@ -282,6 +283,47 @@ Endpoints (Edge Function): `GET /v1/reporter/reports`,
 The DB-side `report_comments_fanout_to_reporter` trigger creates a
 `reporter_notifications` row whenever a `visible_to_reporter` admin comment
 lands, so the unread count stays in sync without polling.
+
+### Passive inventory discovery (v2.1)
+
+```typescript
+Mushi.init({
+  projectId: 'proj_xxx',
+  apiKey: 'mushi_xxx',
+  capture: {
+    // `true` enables defaults (60s per-route throttle, heuristic
+    // route normalisation). Pass an object for fine-grained control.
+    discoverInventory: {
+      enabled: true,
+      throttleMs: 60_000,
+      // Optional — your framework's known route templates so we don't
+      // have to guess `/practice/abc-123` → `/practice/[id]`.
+      routeTemplates: ['/practice/[id]', '/lessons/[slug]'],
+    },
+  },
+});
+```
+
+Each emission is one row on `POST /v1/sdk/discovery`:
+
+```jsonc
+{
+  "route": "/practice/[id]",
+  "page_title": "Practice — Glot.it",
+  "dom_summary": "…≤200 chars…",
+  "testids": ["practice-submit", "practice-hint"],
+  "network_paths": ["/api/practice/run", "/rest/v1/answers"],
+  "query_param_keys": ["lang"],
+  "user_id_hash": "sha256(…)",
+  "observed_at": "2026-05-04T12:00:00Z"
+}
+```
+
+Open `/inventory ▸ Discovery` in the admin to watch routes accumulate,
+hit **Generate proposal**, then **Accept** to write the LLM-drafted
+`inventory.yaml` into the project. Nothing else changes about the SDK —
+the discovery channel is independent of the bug-report widget and stays
+quiet under `prefers-reduced-motion` / when the tab is hidden.
 
 ## Test utilities (`./test-utils`)
 

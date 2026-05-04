@@ -110,6 +110,70 @@ export interface MushiCaptureConfig {
   screenshot?: 'on-report' | 'auto' | 'off';
   elementSelector?: boolean;
   replay?: 'sentry' | 'rrweb' | 'lite' | 'off';
+  /**
+   * Mushi Mushi v2.1 (whitepaper §6 hybrid mode): passive inventory
+   * discovery. When enabled the SDK observes navigations and emits a
+   * tiny payload — `(route, title, testids[], outbound api paths[],
+   * dom_summary[≤200 chars])` — back to `/v1/sdk/discovery`. The
+   * server aggregates this over a 30-day rolling window and the
+   * admin can ask Claude to propose an `inventory.yaml` from it.
+   *
+   * Default: off. Recommended: enable in dev/preview/staging from the
+   * day you install the SDK so the proposer has data when you go to
+   * generate your first inventory.
+   *
+   * What is sent (per navigation, throttled to ≤1/route/min):
+   *   - `location.pathname` template-normalized (`/practice/abc-123`
+   *     → `/practice/[id]` via uuid/numeric/hex heuristics + an
+   *     optional framework hint if the host app sets
+   *     `discoverInventory.routeTemplates`)
+   *   - `document.title`
+   *   - All `[data-testid]` values currently in the DOM
+   *   - Recent fetch/XHR paths the existing network capturer saw
+   *   - The first text run of `<h1>` / `<title>` / `<main>` truncated
+   *     to 200 chars (helps Claude name stories well)
+   *   - Sanitized query-param keys (key names only, never values)
+   *   - A SHA-256 of `userId || sessionId` so the server can dedupe
+   *     distinct users without ever seeing identity
+   *
+   * Nothing else. No DOM beyond the summary, no query values, no PII.
+   */
+  discoverInventory?: boolean | MushiDiscoverInventoryConfig;
+}
+
+/**
+ * Fine-grained controls for `discoverInventory`. Defaults are tuned
+ * to be quiet enough for production but dense enough for the proposer
+ * to produce useful drafts.
+ */
+export interface MushiDiscoverInventoryConfig {
+  enabled?: boolean;
+  /**
+   * Minimum gap between two emissions for the same route (ms). Defaults
+   * to 60_000. Set to a larger value for high-traffic SPAs to keep the
+   * ingest volume manageable.
+   */
+  throttleMs?: number;
+  /**
+   * Static route templates the host framework knows about. When set,
+   * a visit to `/practice/abc-123` matches `/practice/[id]` and gets
+   * normalized to that template. Without this we fall back to a
+   * heuristic (uuid / numeric / 24-char-hex segments collapse to
+   * `[id]`). Provide this when you have a static manifest — Next.js'
+   * `next.config` route export, React Router's route config, etc.
+   */
+  routeTemplates?: string[];
+  /**
+   * Override the SHA-256 user-id-hash input. Defaults to
+   * `mushi.userId || sessionId`. Set to `null` to opt out of distinct-
+   * user counting entirely.
+   */
+  userIdSource?: 'auto' | 'session-only' | 'none';
+  /**
+   * If false, the DOM summary (≤200 chars from h1/title/main) is not
+   * captured. Default true.
+   */
+  captureDomSummary?: boolean;
 }
 
 export interface MushiPrivacyConfig {
@@ -298,6 +362,23 @@ export interface MushiEnvironment {
   };
   deviceMemory?: number;
   hardwareConcurrency?: number;
+  /**
+   * v2 inventory hints (whitepaper §4.7).
+   *
+   * `route` — the bare pathname (no query / hash). Pinned to the
+   * inventory's `Page.path` so the Triage LLM can shortcut from a
+   * freeform "the streak counter is broken" report to the right page.
+   *
+   * `nearestTestid` — the closest ancestor of the active element with
+   * a `data-testid`, captured at widget-open time. This pins the
+   * report to one Action node when more than one page has the same
+   * page path (e.g. a shared "Buy Pro" CTA on landing + dashboard).
+   *
+   * Both are best-effort; freeform reports with no active element will
+   * have `route` only.
+   */
+  route?: string;
+  nearestTestid?: string;
 }
 
 export interface MushiConsoleEntry {
@@ -335,6 +416,18 @@ export interface MushiSelectedElement {
   textContent?: string;
   xpath?: string;
   rect?: { x: number; y: number; width: number; height: number };
+  /**
+   * `data-testid` of the closest ancestor that has one. Mushi v2 uses this
+   * to map a report → Action node in the bidirectional graph (whitepaper §4.7).
+   * Falls back to `undefined` when no ancestor declares a testid — the v2
+   * Triage LLM still classifies these reports, just without the inventory
+   * grounding shortcut.
+   */
+  nearestTestid?: string;
+  /** Path of the page the user reported from (`window.location.pathname`).
+   *  Combined with `nearestTestid` it pins a report to one Action even when
+   *  the same testid exists on multiple pages. */
+  route?: string;
 }
 
 export type MushiTimelineKind = 'route' | 'click' | 'request' | 'log' | 'screen';
@@ -433,6 +526,14 @@ export interface MushiApiClient {
   getReportStatus(reportId: string): Promise<MushiApiResponse<{ status: MushiReportStatus }>>;
   getSdkConfig(): Promise<MushiApiResponse<MushiRuntimeSdkConfig>>;
   getLatestSdkVersion(packageName: string): Promise<MushiApiResponse<MushiSdkVersionInfo>>;
+  /**
+   * Mushi v2.1: ship a single passive-discovery observation (route +
+   * testids + outbound APIs + DOM summary). Best-effort fire-and-forget;
+   * the caller should not block on the response. The server rate-limits
+   * per (project, route) to keep ingest cheap, so it's fine for clients
+   * to over-emit on the throttle window — the server picks the freshest.
+   */
+  postDiscoveryEvent(event: MushiDiscoveryEventPayload): Promise<MushiApiResponse<{ accepted: boolean }>>;
   listReporterReports(reporterToken: string): Promise<MushiApiResponse<{ reports: MushiReporterReport[] }>>;
   listReporterComments(
     reportId: string,
@@ -443,6 +544,23 @@ export interface MushiApiClient {
     reporterToken: string,
     body: string,
   ): Promise<MushiApiResponse<{ comment: MushiReporterComment }>>;
+}
+
+/**
+ * Wire shape of a single discovery event sent by the SDK to
+ * `POST /v1/sdk/discovery`. Mirrored server-side in
+ * `_shared/schemas.ts::discoveryEventSchema`.
+ */
+export interface MushiDiscoveryEventPayload {
+  route: string;
+  page_title?: string | null;
+  dom_summary?: string | null;
+  testids: string[];
+  network_paths: string[];
+  query_param_keys: string[];
+  user_id_hash?: string | null;
+  sdk_version?: string;
+  observed_at: string;
 }
 
 export interface MushiApiResponse<T> {

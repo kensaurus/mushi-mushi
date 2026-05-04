@@ -113,3 +113,44 @@ verify_jwt = false
 # function MUST NOT be reachable without the shared internal secret.
 [functions.retention-sweep]
 verify_jwt = false
+
+# stripe-webhooks receives signed POSTs from Stripe (HMAC-SHA256 via
+# `stripe-signature`). Stripe does NOT mint a Supabase JWT, so the platform
+# gateway's verify_jwt MUST be false — otherwise every webhook delivery is
+# rejected with 401 at the gateway and the function code never runs.
+# Signature verification happens inside the handler via verifyStripeSignature.
+[functions.stripe-webhooks]
+verify_jwt = false
+
+# slack-interactions receives signed POSTs from Slack (HMAC-SHA256 via
+# `x-slack-signature`, v0 spec). Same reasoning as stripe-webhooks — the
+# platform gateway's verify_jwt MUST be false because Slack doesn't carry a
+# Supabase JWT. Signature verification happens inside the handler.
+[functions.slack-interactions]
+verify_jwt = false
+
+# v2 inventory pipeline — invoked server-to-server from `api` (service-role)
+# or pg_cron (internal bearer). Handlers re-validate project/report ids.
+[functions.inventory-crawler]
+verify_jwt = false
+
+[functions.inventory-gates]
+verify_jwt = false
+
+[functions.sentinel-audit]
+verify_jwt = false
+
+[functions.status-reconciler]
+verify_jwt = false
+
+[functions.synthetic-monitor]
+verify_jwt = false
+
+[functions.test-gen-from-report]
+verify_jwt = false
+
+# v2.1 inventory proposer — invoked from `api` (service-role) when an admin
+# clicks "Generate draft inventory". Calls Claude with the observed-routes
+# aggregate and writes an inventory_proposals row.
+[functions.inventory-propose]
+verify_jwt = false

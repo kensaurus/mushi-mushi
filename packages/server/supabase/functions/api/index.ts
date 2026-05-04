@@ -19,6 +19,7 @@ import { registerPublicRoutes } from './routes/public.ts';
 import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
 import { registerReportsDashboardRoutes } from './routes/reports-dashboard.ts';
 import { registerSettingsResearchRoutes } from './routes/settings-research.ts';
+import { registerInventoryRoutes } from './routes/inventory.ts';
 
 ensureSentry('api');
 
@@ -294,6 +295,8 @@ registerEnterpriseIntegrationsRoutes(app);
 registerMigrationProgressRoutes(app);
 
 registerAdminOpsRoutes(app);
+
+registerInventoryRoutes(app);
 
 function isStatusZeroRangeError(err: unknown): err is RangeError {
   return (

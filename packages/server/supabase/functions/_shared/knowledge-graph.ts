@@ -1,8 +1,45 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { mirrorEdgeToAge, mirrorNodeToAge } from './age-graph.ts'
 
-export type NodeType = 'report_group' | 'component' | 'page' | 'version'
-export type EdgeType = 'causes' | 'related_to' | 'regression_of' | 'duplicate_of' | 'affects' | 'fix_attempted' | 'fix_applied' | 'fix_verified'
+// v1 node + edge types (negative side of the graph + legacy v1 nodes).
+export type NodeTypeV1 = 'report_group' | 'component' | 'page' | 'version'
+export type EdgeTypeV1 =
+  | 'causes'
+  | 'related_to'
+  | 'regression_of'
+  | 'duplicate_of'
+  | 'affects'
+  | 'fix_attempted'
+  | 'fix_applied'
+  | 'fix_verified'
+
+// v2 positive-side node + edge types (whitepaper §3.1, §3.2). Stored in
+// the same graph_nodes / graph_edges tables — the DB columns are TEXT,
+// so the union below is purely a type-level guardrail.
+export type NodeTypeV2 =
+  | 'app'
+  | 'page_v2'
+  | 'element'
+  | 'action'
+  | 'api_dep'
+  | 'db_dep'
+  | 'test'
+  | 'user_story'
+export type EdgeTypeV2 =
+  | 'contains'
+  | 'triggers'
+  | 'calls'
+  | 'writes'
+  | 'reads'
+  | 'verified_by'
+  | 'implements'
+  | 'reports_against'
+  | 'errors_on'
+  | 'similar_to'
+  | 'fixed_by'
+
+export type NodeType = NodeTypeV1 | NodeTypeV2
+export type EdgeType = EdgeTypeV1 | EdgeTypeV2
 
 export async function findOrCreateNode(
   db: SupabaseClient,

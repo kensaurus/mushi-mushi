@@ -27,7 +27,7 @@ export const DEFAULT_API_ENDPOINT = 'https://dxptnwrhwsqckaftyymj.supabase.co/fu
 export const MUSHI_INTERNAL_HEADER = 'X-Mushi-Internal';
 export const MUSHI_INTERNAL_INIT_MARKER = '__mushiInternal';
 
-export type MushiInternalRequestKind = 'sdk-config' | 'report-submit' | 'report-status' | 'reporter-poll' | 'diagnose';
+export type MushiInternalRequestKind = 'sdk-config' | 'report-submit' | 'report-status' | 'reporter-poll' | 'diagnose' | 'discovery';
 
 const DEFAULT_TIMEOUT = 10_000;
 const DEFAULT_MAX_RETRIES = 2;
@@ -181,6 +181,20 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
     async getLatestSdkVersion(packageName: string) {
       const query = new URLSearchParams({ package: packageName }).toString();
       return request<MushiSdkVersionInfo>('GET', `/v1/sdk/latest-version?${query}`, undefined, maxRetries, 'sdk-config');
+    },
+
+    async postDiscoveryEvent(event) {
+      // Discovery is best-effort — only one retry on transient failure
+      // and a tighter timeout than report submission. We don't queue
+      // these offline because a stale observation is more likely to
+      // misinform the proposer than it is to be useful.
+      return request<{ accepted: boolean }>(
+        'POST',
+        '/v1/sdk/discovery',
+        event,
+        1,
+        'discovery',
+      );
     },
 
     async listReporterReports(reporterToken: string) {

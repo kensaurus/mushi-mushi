@@ -1,0 +1,84 @@
+{
+  "name": "eslint-plugin-mushi-mushi",
+  "version": "0.1.0",
+  "description": "ESLint rules that catch the dominant agentic-coding failure modes — empty handlers (Gate 1) and mock-data leaks into production paths (Gate 2). Designed to slot into the Mushi Mushi v2 CI Gate pipeline.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./recommended": {
+      "import": {
+        "types": "./dist/recommended.d.ts",
+        "default": "./dist/recommended.js"
+      },
+      "require": {
+        "types": "./dist/recommended.d.cts",
+        "default": "./dist/recommended.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/eslint-plugin-mushi-mushi"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/eslint-plugin-mushi-mushi#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "keywords": [
+    "eslint",
+    "eslint-plugin",
+    "mushi-mushi",
+    "agentic-coding",
+    "vibe-coding",
+    "dead-code",
+    "mocks"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "eslint": ">=8.0.0"
+  },
+  "devDependencies": {
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "@types/eslint": "^9.6.1",
+    "@types/estree": "^1.0.8",
+    "@typescript-eslint/parser": "^8.46.0",
+    "@typescript-eslint/utils": "^8.46.0",
+    "eslint": "^10.2.0",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "author": "Kenji Sakuramoto",
+  "engines": {
+    "node": ">=20"
+  }
+}

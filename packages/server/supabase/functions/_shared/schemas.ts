@@ -26,6 +26,11 @@ export const reportSubmissionSchema = z.object({
     }).optional(),
     deviceMemory: z.number().optional(),
     hardwareConcurrency: z.number().optional(),
+    // v2 inventory hints (whitepaper §4.7) — both optional for back-compat
+    // with older SDKs. The Triage LLM v2 prompt grounds against these to
+    // map a freeform report to an Action node in the bidirectional graph.
+    route: z.string().max(500).optional(),
+    nearestTestid: z.string().max(120).optional(),
   }),
 
   consoleLogs: z.array(z.object({

@@ -1459,10 +1459,11 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   validate?: (value: string) => { message: string; severity?: 'error' | 'warn' } | null
 }
 
-export function Input({ label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, ...rest }: InputProps) {
+export function Input({ label, className = '', id, error, tooltip, helpId, validate, onBlur, onChange, type, ...rest }: InputProps) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-')
   const [touched, setTouched] = useState(false)
   const [localResult, setLocalResult] = useState<{ message: string; severity?: 'error' | 'warn' } | null>(null)
+  const [reveal, setReveal] = useState(false)
   const value = (rest.value ?? '') as string
 
   // Re-validate on `value` change AFTER the field has been blurred once,
@@ -1478,6 +1479,14 @@ export function Input({ label, className = '', id, error, tooltip, helpId, valid
   const visibleError = error ?? (localResult?.severity !== 'warn' ? localResult?.message : undefined)
   const visibleWarn = !visibleError && localResult?.severity === 'warn' ? localResult.message : undefined
 
+  // Reveal-toggle: only renders for password inputs. We swap the rendered
+  // `type` between 'password' and 'text' rather than touching the prop on
+  // the DOM node directly so React's controlled-input bookkeeping stays
+  // happy. Right-padded so the eye button never overlaps the value.
+  const isPassword = type === 'password'
+  const renderedType = isPassword && reveal ? 'text' : type
+  const inputClassName = `${FIELD_BASE} ${isPassword ? 'pr-9' : ''} ${className}`
+
   return (
     <label className="block">
       {label && (
@@ -1486,20 +1495,54 @@ export function Input({ label, className = '', id, error, tooltip, helpId, valid
           <LabelHelp helpId={helpId} tooltip={tooltip} />
         </span>
       )}
-      <input
-        id={inputId}
-        aria-invalid={visibleError ? true : undefined}
-        className={`${FIELD_BASE} ${className}`}
-        {...rest}
-        onBlur={(e) => {
-          if (!touched) setTouched(true)
-          if (validate) setLocalResult(validate(e.target.value))
-          onBlur?.(e)
-        }}
-        onChange={(e) => {
-          onChange?.(e)
-        }}
-      />
+      <span className={isPassword ? 'relative block' : undefined}>
+        <input
+          id={inputId}
+          type={renderedType}
+          aria-invalid={visibleError ? true : undefined}
+          className={inputClassName}
+          {...rest}
+          onBlur={(e) => {
+            if (!touched) setTouched(true)
+            if (validate) setLocalResult(validate(e.target.value))
+            onBlur?.(e)
+          }}
+          onChange={(e) => {
+            onChange?.(e)
+          }}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={(e) => {
+              // The Input is wrapped in a <label>, so an unhandled click on
+              // this button would bubble up and re-target the input (label
+              // semantics). preventDefault + stopPropagation keeps the
+              // toggle local to the eye button.
+              e.preventDefault()
+              e.stopPropagation()
+              setReveal((v) => !v)
+            }}
+            onMouseDown={(e) => e.preventDefault()}
+            tabIndex={-1}
+            aria-label={reveal ? 'Hide password' : 'Show password'}
+            aria-pressed={reveal}
+            className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-fg-faint hover:text-fg-muted focus-visible:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-sm motion-safe:transition-colors"
+          >
+            {reveal ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                <line x1="1" y1="1" x2="23" y2="23" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+          </button>
+        )}
+      </span>
       {visibleError && <p className={FIELD_ERROR}>{visibleError}</p>}
       {visibleWarn && <p className={FIELD_WARN}>{visibleWarn}</p>}
     </label>

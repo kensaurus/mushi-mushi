@@ -37,6 +37,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ defa
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })))
 const DLQPage = lazy(() => import('./pages/DLQPage').then(m => ({ default: m.DLQPage })))
 const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })))
+const InventoryPage = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })))
 const JudgePage = lazy(() => import('./pages/JudgePage').then(m => ({ default: m.JudgePage })))
 const QueryPage = lazy(() => import('./pages/QueryPage').then(m => ({ default: m.QueryPage })))
 const ResearchPage = lazy(() => import('./pages/ResearchPage').then(m => ({ default: m.ResearchPage })))
@@ -198,6 +199,7 @@ export function App() {
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/queue" element={<DLQPage />} />
                   <Route path="/graph" element={<GraphPage />} />
+                  <Route path="/inventory" element={<InventoryPage />} />
                   <Route path="/judge" element={<JudgePage />} />
                   <Route path="/query" element={<QueryPage />} />
                   <Route path="/research" element={<ResearchPage />} />

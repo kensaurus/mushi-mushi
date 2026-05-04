@@ -852,7 +852,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     // Sentry breadcrumb-style log. Real monitoring hook: filter by
     // `category:project.deleted` to spot accidental mass-deletions.
     try {
-      log('project.deleted', {
+      log.info('project.deleted', {
         project_id: project.id,
         project_slug: project.slug,
         project_name: project.name,
@@ -1768,22 +1768,22 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       node_type: seedNode.node_type,
       label: seedNode.label,
     });
-    const edges: Array<{ from_node_id: string; to_node_id: string; edge_type: string }> = [];
+    const edges: Array<{ source_node_id: string; target_node_id: string; edge_type: string }> = [];
     let frontier = [seedNode.id];
 
     for (let d = 0; d < depth && frontier.length && visitedNodes.size < 500; d++) {
       const { data: nextEdges } = await db
         .from('graph_edges')
-        .select('from_node_id, to_node_id, edge_type')
+        .select('source_node_id, target_node_id, edge_type')
         .in('project_id', projectIds)
-        .or(`from_node_id.in.(${frontier.join(',')}),to_node_id.in.(${frontier.join(',')})`)
+        .or(`source_node_id.in.(${frontier.join(',')}),target_node_id.in.(${frontier.join(',')})`)
         .limit(500);
 
       const nextIds = new Set<string>();
       for (const e of nextEdges ?? []) {
         edges.push(e);
-        if (!visitedNodes.has(e.from_node_id)) nextIds.add(e.from_node_id);
-        if (!visitedNodes.has(e.to_node_id)) nextIds.add(e.to_node_id);
+        if (!visitedNodes.has(e.source_node_id)) nextIds.add(e.source_node_id);
+        if (!visitedNodes.has(e.target_node_id)) nextIds.add(e.target_node_id);
       }
       if (nextIds.size === 0) break;
 
@@ -1796,6 +1796,28 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     }
 
     return c.json({ ok: true, data: { nodes: Array.from(visitedNodes.values()), edges } });
+  });
+
+  /**
+   * Single graph node (metadata includes v2 inventory `status` on Action nodes).
+   * Used by MCP `graph_node_status` and agents that need one row without listing 200.
+   */
+  app.get('/v1/admin/graph/node/:nodeId', adminOrApiKey(), async (c) => {
+    const nodeId = c.req.param('nodeId');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectIds = await ownedProjectIds(db, userId);
+    const { data: node, error } = await db
+      .from('graph_nodes')
+      .select('id, project_id, node_type, label, metadata, last_traversed_at, created_at')
+      .eq('id', nodeId)
+      .in('project_id', projectIds)
+      .maybeSingle();
+    if (error)
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500);
+    if (!node)
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Node not found' } }, 404);
+    return c.json({ ok: true, data: { node } });
   });
 
   app.get('/v1/admin/graph/blast-radius/:nodeId', adminOrApiKey(), async (c) => {

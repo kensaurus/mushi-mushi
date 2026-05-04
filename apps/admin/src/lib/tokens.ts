@@ -205,6 +205,14 @@ export const NODE_COLORS: Record<string, string> = {
   component:    'oklch(0.68 0.16 240)',
   page:         'oklch(0.72 0.19 155)',
   version:      'oklch(0.80 0.15 80)',
+  app:          'oklch(0.62 0.18 310)',
+  page_v2:      'oklch(0.72 0.14 190)',
+  element:      'oklch(0.68 0.15 50)',
+  action:       'oklch(0.72 0.2 25)',
+  api_dep:      'oklch(0.65 0.14 240)',
+  db_dep:       'oklch(0.7 0.12 300)',
+  test:         'oklch(0.75 0.16 145)',
+  user_story:   'oklch(0.78 0.12 85)',
 }
 
 export const SCORE_COLORS: Record<string, string> = {

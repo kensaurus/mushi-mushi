@@ -240,6 +240,108 @@ export function registerPublicRoutes(app: Hono): void {
     return c.json({ ok: true, data: normalizeSdkConfig(data as SdkConfigRow | null) });
   });
 
+  // ============================================================
+  // POST /v1/sdk/discovery — Mushi v2.1 passive inventory discovery
+  //
+  // SDK clients with `discoverInventory: true` POST one event per
+  // navigation (throttled per route to ≤1/min client-side). The
+  // server validates with a tight Zod schema, soft-throttles per
+  // (project, route) to ≤1/min, and inserts into discovery_events
+  // for the proposer to consume.
+  //
+  // No quota gating: discovery events are 1-2 KB each, the table
+  // self-prunes via pg_cron after 30 days, and gating them would
+  // bias the proposer toward customers who happen to be on the
+  // higher-priced plan.
+  //
+  // Privacy:
+  //   - Reject anything where `dom_summary` exceeds 240 chars
+  //   - Reject testid/api arrays larger than 200 entries each
+  //   - Strip query strings and fragments from `route` on the way in
+  // ============================================================
+  app.post('/v1/sdk/discovery', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    let body: Record<string, unknown>;
+    try {
+      body = (await c.req.json()) as Record<string, unknown>;
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'JSON body required' } }, 400);
+    }
+
+    const route = typeof body.route === 'string' ? body.route : '';
+    if (!route || route.length > 400 || !route.startsWith('/')) {
+      return c.json({ ok: false, error: { code: 'INVALID_ROUTE', message: 'route must start with / and be ≤400 chars' } }, 422);
+    }
+    // Defence-in-depth: even if the client misbehaves and sends a
+    // query/fragment, we drop it before persistence.
+    const cleanRoute = route.replace(/[?#].*$/, '');
+
+    const pageTitle = typeof body.page_title === 'string' ? body.page_title.slice(0, 300) : null;
+    const domSummary = typeof body.dom_summary === 'string' ? body.dom_summary.slice(0, 240) : null;
+    const testids = Array.isArray(body.testids)
+      ? (body.testids as unknown[])
+          .filter((t): t is string => typeof t === 'string' && t.length > 0 && t.length < 120)
+          .slice(0, 200)
+      : [];
+    const networkPaths = Array.isArray(body.network_paths)
+      ? (body.network_paths as unknown[])
+          .filter((p): p is string => typeof p === 'string' && p.length > 0 && p.length < 200)
+          .slice(0, 200)
+      : [];
+    const queryKeys = Array.isArray(body.query_param_keys)
+      ? (body.query_param_keys as unknown[])
+          .filter((q): q is string => typeof q === 'string' && q.length > 0 && q.length < 80)
+          .slice(0, 50)
+      : [];
+    const userIdHash = typeof body.user_id_hash === 'string' && body.user_id_hash.length === 64
+      ? body.user_id_hash
+      : null;
+    const sdkVersion = typeof body.sdk_version === 'string' ? body.sdk_version.slice(0, 40) : null;
+
+    const db = getServiceClient();
+
+    // Soft per-(project, route) throttle: drop if a row already exists
+    // for this minute. Cheap because we have an index on (project_id,
+    // observed_at desc) and we only fetch one column.
+    const minuteAgo = new Date(Date.now() - 60_000).toISOString();
+    const { data: recent, error: recentErr } = await db
+      .from('discovery_events')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('route', cleanRoute)
+      .gte('observed_at', minuteAgo)
+      .limit(1)
+      .maybeSingle();
+    if (recentErr) {
+      log.warn('discovery throttle check failed', { err: recentErr.message });
+    }
+    if (recent) {
+      // Idempotent acceptance — the client should not retry.
+      return c.json({ ok: true, data: { accepted: false, reason: 'throttled' } });
+    }
+
+    const insertPayload: Record<string, unknown> = {
+      project_id: projectId,
+      route: cleanRoute,
+      page_title: pageTitle,
+      dom_summary: domSummary,
+      testids,
+      network_paths: networkPaths,
+      query_param_keys: queryKeys,
+      user_id_hash: userIdHash,
+      sdk_version: sdkVersion,
+    };
+    const { error: insErr } = await db.from('discovery_events').insert(insertPayload);
+    if (insErr) {
+      // Route through dbError so the failure ships pg_code-tagged Sentry
+      // breadcrumbs + a canonical { code, ... } envelope, instead of echoing
+      // the raw pg message back to the SDK (which may leak row hints).
+      log.error('discovery insert failed', { err: insErr.message, projectId, route: cleanRoute });
+      return dbError(c, insErr);
+    }
+    return c.json({ ok: true, data: { accepted: true } });
+  });
+
   app.post('/v1/reports', apiKeyAuth, async (c) => {
     try {
       const projectId = c.get('projectId') as string;

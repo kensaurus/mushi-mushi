@@ -7,7 +7,7 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 ## What's Inside
 
 - **Types**: `MushiConfig`, `MushiReport`, `MushiEnvironment`, and all shared interfaces
-- **API Client**: Fetch-based HTTP client with retry and exponential backoff. Tags every internal request with `X-Mushi-Internal: <kind>` so framework SDKs can filter their own traffic out of network capture and `apiCascade`. Ships HMAC-signed reporter helpers (`getLatestSdkVersion`, `listReporterReports`, `listReporterComments`, `replyToReporterReport`) for the two-way reply pipeline
+- **API Client**: Fetch-based HTTP client with retry and exponential backoff. Tags every internal request with `X-Mushi-Internal: <kind>` so framework SDKs can filter their own traffic out of network capture and `apiCascade`. Ships HMAC-signed reporter helpers (`getLatestSdkVersion`, `listReporterReports`, `listReporterComments`, `replyToReporterReport`) for the two-way reply pipeline, plus `postDiscoveryEvent` (v2.1) for the passive inventory channel
 - **Pre-Filter**: On-device Stage 0 spam/gibberish filter (runs client-side, zero server cost)
 - **Offline Queue**: IndexedDB-backed queue with auto-sync on reconnect
 - **Environment Capture**: Browser/device snapshot (viewport, user agent, connection info)
@@ -29,6 +29,8 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 | `MushiTimelineEntry`       | `{ ts, kind: 'route' \| 'click' \| 'request' \| 'log' \| 'screen', payload }` repro entries. |
 | `MushiReporterReport`      | Reporter-facing report row (HMAC-authed) with `unread_count` for the widget badge.            |
 | `MushiReporterComment`     | Reporter-facing comment row (HMAC-authed) tagged `author_kind: 'admin' \| 'reporter'`.        |
+| `MushiDiscoverInventoryConfig` | Mushi v2.1 — fine-grained controls for `capture.discoverInventory` (throttle, route templates, sample rate). Pass `true` for defaults. |
+| `MushiDiscoveryEventPayload`   | Mushi v2.1 — wire shape for `POST /v1/sdk/discovery`. Mirrored server-side by `_shared/schemas.ts::discoveryEventSchema`; route + page title + testids + network paths + query-param **keys only** + sha256 user id hash. |
 
 Constants: `MUSHI_INTERNAL_HEADER` (`'X-Mushi-Internal'`),
 `MUSHI_INTERNAL_INIT_MARKER`, and the `MushiInternalRequestKind` literal union
