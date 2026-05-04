@@ -17,7 +17,7 @@ import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
-import { reportSubmissionSchema } from '../../_shared/schemas.ts';
+import { reportSubmissionSchema, discoveryEventSchema } from '../../_shared/schemas.ts';
 import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
 import { awardPoints, getReputation } from '../../_shared/reputation.ts';
@@ -261,42 +261,32 @@ export function registerPublicRoutes(app: Hono): void {
   // ============================================================
   app.post('/v1/sdk/discovery', apiKeyAuth, async (c) => {
     const projectId = c.get('projectId') as string;
-    let body: Record<string, unknown>;
+    let raw: unknown;
     try {
-      body = (await c.req.json()) as Record<string, unknown>;
+      raw = await c.req.json();
     } catch {
       return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'JSON body required' } }, 400);
     }
 
-    const route = typeof body.route === 'string' ? body.route : '';
-    if (!route || route.length > 400 || !route.startsWith('/')) {
-      return c.json({ ok: false, error: { code: 'INVALID_ROUTE', message: 'route must start with / and be ≤400 chars' } }, 422);
+    // Single Zod gate replaces the per-field manual coercion we used to do
+    // inline. The schema lives in `_shared/schemas.ts` so it can be unit-
+    // tested, kept greppable, and shared with any future MCP tool that
+    // wants to ingest discovery events.
+    const parsed = discoveryEventSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INVALID_DISCOVERY_EVENT',
+            message: parsed.error.issues[0]?.message ?? 'discovery event failed validation',
+            issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+          },
+        },
+        422,
+      );
     }
-    // Defence-in-depth: even if the client misbehaves and sends a
-    // query/fragment, we drop it before persistence.
-    const cleanRoute = route.replace(/[?#].*$/, '');
-
-    const pageTitle = typeof body.page_title === 'string' ? body.page_title.slice(0, 300) : null;
-    const domSummary = typeof body.dom_summary === 'string' ? body.dom_summary.slice(0, 240) : null;
-    const testids = Array.isArray(body.testids)
-      ? (body.testids as unknown[])
-          .filter((t): t is string => typeof t === 'string' && t.length > 0 && t.length < 120)
-          .slice(0, 200)
-      : [];
-    const networkPaths = Array.isArray(body.network_paths)
-      ? (body.network_paths as unknown[])
-          .filter((p): p is string => typeof p === 'string' && p.length > 0 && p.length < 200)
-          .slice(0, 200)
-      : [];
-    const queryKeys = Array.isArray(body.query_param_keys)
-      ? (body.query_param_keys as unknown[])
-          .filter((q): q is string => typeof q === 'string' && q.length > 0 && q.length < 80)
-          .slice(0, 50)
-      : [];
-    const userIdHash = typeof body.user_id_hash === 'string' && body.user_id_hash.length === 64
-      ? body.user_id_hash
-      : null;
-    const sdkVersion = typeof body.sdk_version === 'string' ? body.sdk_version.slice(0, 40) : null;
+    const event = parsed.data;
 
     const db = getServiceClient();
 
@@ -308,7 +298,7 @@ export function registerPublicRoutes(app: Hono): void {
       .from('discovery_events')
       .select('id')
       .eq('project_id', projectId)
-      .eq('route', cleanRoute)
+      .eq('route', event.route)
       .gte('observed_at', minuteAgo)
       .limit(1)
       .maybeSingle();
@@ -320,23 +310,22 @@ export function registerPublicRoutes(app: Hono): void {
       return c.json({ ok: true, data: { accepted: false, reason: 'throttled' } });
     }
 
-    const insertPayload: Record<string, unknown> = {
+    const { error: insErr } = await db.from('discovery_events').insert({
       project_id: projectId,
-      route: cleanRoute,
-      page_title: pageTitle,
-      dom_summary: domSummary,
-      testids,
-      network_paths: networkPaths,
-      query_param_keys: queryKeys,
-      user_id_hash: userIdHash,
-      sdk_version: sdkVersion,
-    };
-    const { error: insErr } = await db.from('discovery_events').insert(insertPayload);
+      route: event.route,
+      page_title: event.page_title,
+      dom_summary: event.dom_summary,
+      testids: event.testids,
+      network_paths: event.network_paths,
+      query_param_keys: event.query_param_keys,
+      user_id_hash: event.user_id_hash,
+      sdk_version: event.sdk_version,
+    });
     if (insErr) {
       // Route through dbError so the failure ships pg_code-tagged Sentry
       // breadcrumbs + a canonical { code, ... } envelope, instead of echoing
       // the raw pg message back to the SDK (which may leak row hints).
-      log.error('discovery insert failed', { err: insErr.message, projectId, route: cleanRoute });
+      log.error('discovery insert failed', { err: insErr.message, projectId, route: event.route });
       return dbError(c, insErr);
     }
     return c.json({ ok: true, data: { accepted: true } });

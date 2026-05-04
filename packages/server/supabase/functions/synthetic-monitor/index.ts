@@ -39,6 +39,12 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { startCronRun } from '../_shared/telemetry.ts'
+import {
+  inventoryAppAllowHosts,
+  safeFetch,
+  type SafeUrlOptions,
+} from '../_shared/inventory-guards.ts'
+import { parseInventoryYaml, type Inventory } from '../_shared/inventory.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -75,18 +81,69 @@ interface ProjectSetting {
   project_id: string
   synthetic_monitor_target_url: string | null
   crawler_auth_config: Record<string, unknown> | null
+  /**
+   * Per-whitepaper §4.4: when false (default), the probe ONLY exercises
+   * idempotent verbs (GET / HEAD / OPTIONS). The cron used to fire
+   * DELETE / PATCH / PUT against production with the customer's auth
+   * token attached because the schema flag was missing — see the
+   * 2026-05-04 audit. `synthetic_monitor_allow_mutations=true` is now
+   * the explicit opt-in, intended for projects pointing the monitor at
+   * a sandboxed test environment.
+   */
+  synthetic_monitor_allow_mutations: boolean | null
 }
 
 async function loadProbeProjects(db: SupabaseClient): Promise<ProjectSetting[]> {
   const { data, error } = await db
     .from('project_settings')
-    .select('project_id, synthetic_monitor_target_url, crawler_auth_config, synthetic_monitor_enabled')
+    .select(
+      'project_id, synthetic_monitor_target_url, crawler_auth_config, synthetic_monitor_enabled, synthetic_monitor_allow_mutations',
+    )
     .eq('synthetic_monitor_enabled', true)
   if (error) {
     rlog.warn('project_settings load failed', { error: error.message })
     return []
   }
   return (data ?? []) as ProjectSetting[]
+}
+
+/**
+ * Set of HTTP verbs the synthetic probe is allowed to fire. GETs, HEADs,
+ * and OPTIONS are universally safe. Mutating verbs require the operator
+ * to opt in via `synthetic_monitor_allow_mutations=true` AND point the
+ * monitor at a test environment.
+ */
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+function isMethodAllowed(method: string, allowMutations: boolean): boolean {
+  if (SAFE_METHODS.has(method.toUpperCase())) return true
+  return allowMutations
+}
+
+/**
+ * Load the project's current inventory snapshot — needed to derive the
+ * SSRF allowlist for the probe. The synthetic monitor is only ever
+ * supposed to talk to hosts the inventory declares plus the explicit
+ * `synthetic_monitor_target_url`, so the union of those forms the safe
+ * host set.
+ */
+async function loadProjectInventory(
+  db: SupabaseClient,
+  projectId: string,
+): Promise<Inventory | null> {
+  const { data: snapshot } = await db
+    .from('inventories')
+    .select('parsed, raw_yaml')
+    .eq('project_id', projectId)
+    .eq('is_current', true)
+    .maybeSingle()
+
+  if (snapshot?.parsed) return snapshot.parsed as Inventory
+  if (snapshot?.raw_yaml) {
+    const parsed = parseInventoryYaml(snapshot.raw_yaml as string)
+    return parsed.inventory ?? null
+  }
+  return null
 }
 
 async function loadActionsForProject(
@@ -150,33 +207,45 @@ async function probeAction(
   action: ActionNode,
   api: ApiDepNode | null,
   authHeaders: Record<string, string>,
+  options: { allowMutations: boolean; urlOptions?: SafeUrlOptions } = { allowMutations: false },
 ): Promise<ProbeResult> {
   if (!api) {
     return { status: 'skipped', latencyMs: 0, errorMessage: 'no api_dep declared' }
   }
-  const method = (api.metadata?.['method'] as string | undefined) ?? 'GET'
+  const method = ((api.metadata?.['method'] as string | undefined) ?? 'GET').toUpperCase()
   const path = (api.metadata?.['path'] as string | undefined) ?? '/'
+
+  if (!isMethodAllowed(method, options.allowMutations)) {
+    // Per whitepaper §4.4 + 2026-05-04 audit: never fire mutating verbs
+    // against the customer's app unless they explicitly opt in. Skipped
+    // probes show up in the timeline as a soft indicator so the operator
+    // sees coverage gaps without their prod data getting clobbered.
+    return {
+      status: 'skipped',
+      latencyMs: 0,
+      errorMessage: `method ${method} skipped: synthetic_monitor_allow_mutations=false`,
+      stepResults: { method, path, skipped_reason: 'mutation_not_allowed' },
+    }
+  }
+
   // Substitute path parameters with deterministic synthetic placeholders.
   const concretePath = path.replace(/\{[^}]+\}/g, '00000000-0000-0000-0000-000000000000')
   const url = new URL(concretePath, baseUrl).toString()
   const start = Date.now()
   try {
-    const res = await fetch(url, {
-      method,
-      headers: {
-        ...authHeaders,
-        'Content-Type': 'application/json',
-        'X-Mushi-Synthetic-Probe': '1',
+    const res = await safeFetch(
+      url,
+      {
+        method,
+        headers: {
+          ...authHeaders,
+          'Content-Type': 'application/json',
+          'X-Mushi-Synthetic-Probe': '1',
+        },
+        body: SAFE_METHODS.has(method) ? undefined : JSON.stringify({ synthetic: true }),
       },
-      // Probes only execute side-effect-free or test-mode methods. For
-      // the dogfood path we let GET / OPTIONS / HEAD through; mutating
-      // verbs (POST / PATCH / PUT / DELETE) are skipped unless the
-      // synthetic identity opted in via auth_config.allow_mutations.
-      body:
-        method === 'GET' || method === 'HEAD' || method === 'OPTIONS'
-          ? undefined
-          : JSON.stringify({ synthetic: true }),
-    })
+      { url: options.urlOptions ?? {}, timeoutMs: 10_000, maxRedirects: 2 },
+    )
     const latencyMs = Date.now() - start
     if (!res.ok) {
       const errorBody = await res.text().catch(() => '')
@@ -224,6 +293,25 @@ async function probeProject(
     headers['Cookie'] = `${auth.config.name}=${auth.config.value}`
   }
 
+  // SSRF allowlist: union of inventory.app.{base,preview,staging}_url
+  // hosts and the configured synthetic target host. Cron callers don't
+  // get the PATCH /settings SSRF check (the URL was vetted at write
+  // time), but this is still defence-in-depth — and catches the case
+  // where a project's settings predate the SSRF guard migration.
+  const inventory = await loadProjectInventory(db, setting.project_id)
+  const allowHosts = inventory ? inventoryAppAllowHosts(inventory.app) : []
+  try {
+    allowHosts.push(new URL(baseUrl).hostname.toLowerCase())
+  } catch {
+    rlog.warn('synthetic-monitor: target_url is not a valid URL; skipping', {
+      project_id: setting.project_id,
+    })
+    return { projectId: setting.project_id, probed: 0, failed: 0 }
+  }
+  const urlOptions: SafeUrlOptions = { allowHosts: Array.from(new Set(allowHosts)) }
+
+  const allowMutations = setting.synthetic_monitor_allow_mutations === true
+
   let failed = 0
   for (const item of items) {
     // Only probe actions whose claimed status is verified or wired —
@@ -231,7 +319,10 @@ async function probeProject(
     const claimed = (item.action.metadata?.['claimed_status'] as string | undefined) ?? 'unknown'
     if (claimed !== 'verified' && claimed !== 'wired') continue
 
-    const probe = await probeAction(baseUrl, item.action, item.api, headers)
+    const probe = await probeAction(baseUrl, item.action, item.api, headers, {
+      allowMutations,
+      urlOptions,
+    })
     const { error } = await db.from('synthetic_runs').insert({
       project_id: setting.project_id,
       action_node_id: item.action.id,

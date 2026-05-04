@@ -8,6 +8,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useEffect, useState } from 'react'
 import type { ReactNode, ComponentType } from 'react'
+import type { FeatureFlag } from '../lib/useEntitlements'
 import {
   IconDashboard, IconReports, IconStory, IconGraph, IconJudge, IconQuery,
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
@@ -65,7 +66,7 @@ interface NavItem {
    *  sidebar gate is just to avoid teasing it). */
   superAdmin?: boolean
   /** Plan feature flag — hidden until `useEntitlements().has(flag)` (unless super-admin). */
-  requiresFeature?: import('../lib/useEntitlements').FeatureFlag
+  requiresFeature?: FeatureFlag
 }
 
 interface NavSection {

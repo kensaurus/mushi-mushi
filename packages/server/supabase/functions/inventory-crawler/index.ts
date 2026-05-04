@@ -45,6 +45,11 @@ import { log } from '../_shared/logger.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { computeStats, parseInventoryYaml, type Inventory } from '../_shared/inventory.ts'
+import {
+  inventoryAppAllowHosts,
+  safeFetch,
+  type SafeUrlOptions,
+} from '../_shared/inventory-guards.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -145,11 +150,23 @@ async function crawlPage(
   page: { id: string; path: string },
   declaredTestids: string[],
   authHeaders: Record<string, string>,
+  urlOptions: SafeUrlOptions = {},
 ): Promise<PageDiff & { html: string | null; href_paths: string[]; api_paths: string[] }> {
   const url = new URL(page.path, baseUrl).toString()
   const start = Date.now()
   try {
-    const res = await fetch(url, { headers: authHeaders, redirect: 'follow' })
+    // safeFetch enforces the SSRF allowlist on the initial URL AND every
+    // redirect hop, plus strips Authorization on cross-host hops. The
+    // crawler used to call fetch() directly with `redirect: 'follow'`,
+    // which on Deno < 2.1.2 would leak Bearer tokens to any host the
+    // customer's app happened to redirect to (CVE-2025-21620). Defence
+    // in depth: we also do this on >= 2.1.2 because the host allowlist
+    // is the real security boundary, not the runtime version.
+    const res = await safeFetch(
+      url,
+      { headers: authHeaders, method: 'GET' },
+      { url: urlOptions, timeoutMs: 15_000, maxRedirects: 3 },
+    )
     const html = await res.text()
 
     const discovered = new Set<string>()
@@ -280,15 +297,35 @@ async function crawlAndPersist(db: SupabaseClient, projectId: string, triggeredB
 
   const headers = buildHeaders(project.authConfig)
 
-  const items = project.inventory.pages.map((p) => ({
+  interface CrawlItem {
+    id: string
+    path: string
+    declared: string[]
+  }
+  const items: CrawlItem[] = project.inventory.pages.map((p) => ({
     id: p.id,
     path: p.path,
     declared: p.elements.map((el) => el.testid ?? el.id),
   }))
 
+  // Build the SSRF allowlist from the inventory app shape. The crawler is
+  // only ever supposed to talk to the customer's own app, so the safe
+  // hosts are exactly {base_url, preview_url, staging_url} plus whatever
+  // crawler_base_url's host is (operator-supplied; we already SSRF-checked
+  // it at PATCH /settings time, but include it in the allowlist so a
+  // staging-only inventory doesn't reject a preview crawl).
+  const allowHosts = inventoryAppAllowHosts(project.inventory.app)
+  try {
+    allowHosts.push(new URL(project.baseUrl).hostname.toLowerCase())
+  } catch {
+    /* baseUrl already vetted in loadProject */
+  }
+  const urlOptions: SafeUrlOptions = { allowHosts: Array.from(new Set(allowHosts)) }
+
   const results = await runWithConcurrency(
     items,
-    (it) => crawlPage(project.baseUrl, { id: it.id, path: it.path }, it.declared, headers),
+    (it: CrawlItem) =>
+      crawlPage(project.baseUrl, { id: it.id, path: it.path }, it.declared, headers, urlOptions),
     project.concurrency,
   )
 

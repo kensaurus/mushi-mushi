@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Btn, Badge, ErrorAlert } from '../ui'
+import { Modal } from '../Modal'
 import { apiFetch } from '../../lib/supabase'
 import { useToast } from '../../lib/toast'
 import { usePageData } from '../../lib/usePageData'
@@ -107,19 +108,10 @@ export function ProposalReviewModal({
   const [busy, setBusy] = useState<'save' | 'accept' | 'discard' | null>(null)
   const [validationIssues, setValidationIssues] = useState<unknown[] | null>(null)
 
-  // Lock body scroll while open + escape-to-close.
-  useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => {
-      document.body.style.overflow = prev
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [onClose])
+  // Body scroll lock + Esc-close + focus trap + focus restore are now
+  // handled by the shared <Modal/> primitive (see components/Modal.tsx
+  // for the rationale — Drawer/Modal both ref-latch onClose so realtime
+  // re-renders don't kick focus out of the dialog).
 
   const yaml = editedYaml ?? q.data?.proposed_yaml ?? ''
   const isDraft = q.data?.status === 'draft'
@@ -175,133 +167,136 @@ export function ProposalReviewModal({
     }
   }
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-overlay backdrop-blur-sm p-3 sm:p-6 motion-safe:animate-mushi-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="proposal-review-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
-      <div className="w-full max-w-6xl max-h-[min(92dvh,52rem)] flex flex-col rounded-xl bg-surface-raised shadow-raised border border-edge overflow-hidden motion-safe:animate-mushi-modal-in"
-        onClick={(e) => e.stopPropagation()}
+  // Header — kept as a custom strip rendered via Modal's `title` slot so
+  // we get the multi-line title + meta layout while still inheriting
+  // focus management from the shared primitive. The accept/discard
+  // actions sit in `headerAction` so the close X stays in its
+  // standard position.
+  const titleStrip = (
+    <div className="min-w-0">
+      <p className="text-2xs uppercase tracking-wider text-fg-faint">
+        Inventory proposal · {q.data?.status ?? '—'}
+      </p>
+      <span className="block text-base font-semibold text-fg truncate">
+        {parsed?.app?.name ?? 'Draft inventory'}
+      </span>
+      <p className="text-2xs text-fg-faint mt-0.5">
+        {q.data?.llm_model ?? '—'} · {q.data?.observation_count ?? 0} observation
+        {q.data?.observation_count === 1 ? '' : 's'} ·{' '}
+        {q.data ? new Date(q.data.created_at).toLocaleString() : '—'}
+      </p>
+    </div>
+  )
+
+  const headerActions = isDraft ? (
+    <div className="flex flex-wrap items-center gap-2">
+      <Btn type="button" size="sm" variant="ghost" onClick={discard} disabled={busy != null}>
+        Discard
+      </Btn>
+      <Btn
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={save}
+        disabled={!editedYaml || busy != null}
       >
-        {/* Header */}
-        <header className="flex items-start justify-between gap-3 px-4 py-3 border-b border-edge-subtle bg-surface-overlay/30">
-          <div className="min-w-0">
-            <p className="text-2xs uppercase tracking-wider text-fg-faint">
-              Inventory proposal · {q.data?.status ?? '—'}
-            </p>
-            <h2
-              id="proposal-review-title"
-              className="text-base font-semibold text-fg truncate"
-            >
-              {parsed?.app?.name ?? 'Draft inventory'}
-            </h2>
-            <p className="text-2xs text-fg-faint mt-0.5">
-              {q.data?.llm_model ?? '—'} · {q.data?.observation_count ?? 0} observation{q.data?.observation_count === 1 ? '' : 's'} ·{' '}
-              {q.data ? new Date(q.data.created_at).toLocaleString() : '—'}
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {isDraft && (
-              <>
-                <Btn type="button" size="sm" variant="ghost" onClick={discard} disabled={busy != null}>
-                  Discard
-                </Btn>
-                <Btn type="button" size="sm" variant="ghost" onClick={save} disabled={!editedYaml || busy != null}>
-                  {busy === 'save' ? 'Saving…' : 'Save edits'}
-                </Btn>
-                <Btn
-                  type="button"
-                  size="sm"
-                  onClick={accept}
-                  disabled={busy != null}
-                  data-testid="mushi-proposal-accept"
-                >
-                  {busy === 'accept' ? 'Accepting…' : 'Accept & ingest'}
-                </Btn>
-              </>
-            )}
-            <Btn type="button" size="sm" variant="ghost" onClick={onClose} aria-label="Close proposal">
-              ×
-            </Btn>
-          </div>
-        </header>
+        {busy === 'save' ? 'Saving…' : 'Save edits'}
+      </Btn>
+      <Btn
+        type="button"
+        size="sm"
+        onClick={accept}
+        disabled={busy != null}
+        data-primary
+        data-testid="mushi-proposal-accept"
+      >
+        {busy === 'accept' ? 'Accepting…' : 'Accept & ingest'}
+      </Btn>
+    </div>
+  ) : null
 
-        {/* Summary strip — three big numbers so the reviewer can decide
-            "this looks like my app" at a squint */}
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 px-4 py-3 border-b border-edge-subtle bg-surface-raised">
-          <SummaryStat label="Stories" value={summary.storyCount} tone="brand" />
-          <SummaryStat label="Pages" value={summary.pageCount} tone="info" />
-          <SummaryStat label="Actions" value={summary.actionCount} tone="info" />
-          <SummaryStat
-            label="Untested"
-            value={summary.untestedActionCount}
-            tone={summary.untestedActionCount === 0 ? 'ok' : 'warn'}
-            detail={
-              summary.actionCount > 0
-                ? `${Math.round((summary.untestedActionCount / summary.actionCount) * 100)}%`
-                : undefined
-            }
-          />
-          <SummaryStat
-            label="Backend ops"
-            value={summary.backendCallCount}
-            tone="neutral"
-          />
-        </div>
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      size="xl"
+      ariaLabel={parsed?.app?.name ?? 'Draft inventory'}
+      dismissible={busy == null}
+      title={titleStrip}
+      headerAction={headerActions}
+      className="overflow-hidden"
+    >
+      {/* Summary strip — five numbers so the reviewer can decide
+          "this looks like my app" at a squint */}
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 -mx-4 px-4 py-3 border-y border-edge-subtle bg-surface-raised">
+        <SummaryStat label="Stories" value={summary.storyCount} tone="brand" />
+        <SummaryStat label="Pages" value={summary.pageCount} tone="info" />
+        <SummaryStat label="Actions" value={summary.actionCount} tone="info" />
+        <SummaryStat
+          label="Untested"
+          value={summary.untestedActionCount}
+          tone={summary.untestedActionCount === 0 ? 'ok' : 'warn'}
+          detail={
+            summary.actionCount > 0
+              ? `${Math.round((summary.untestedActionCount / summary.actionCount) * 100)}%`
+              : undefined
+          }
+        />
+        <SummaryStat label="Backend ops" value={summary.backendCallCount} tone="neutral" />
+      </div>
 
-        {/* Tabs */}
-        <div className="px-4 border-b border-edge-subtle bg-surface-raised flex gap-0">
-          <TabButton active={tab === 'stories'} onClick={() => setTab('stories')}>
-            Stories <span className="ml-1.5 text-fg-faint tabular-nums">{summary.storyCount}</span>
-          </TabButton>
-          <TabButton active={tab === 'rationale'} onClick={() => setTab('rationale')}>
-            Why these stories
-          </TabButton>
-          <TabButton active={tab === 'yaml'} onClick={() => setTab('yaml')}>
-            YAML <span className="ml-1.5 text-fg-faint">{isDraft ? 'editable' : 'read-only'}</span>
-          </TabButton>
-        </div>
+      {/* Tabs */}
+      <div className="-mx-4 px-4 border-b border-edge-subtle bg-surface-raised flex gap-0">
+        <TabButton active={tab === 'stories'} onClick={() => setTab('stories')}>
+          Stories <span className="ml-1.5 text-fg-faint tabular-nums">{summary.storyCount}</span>
+        </TabButton>
+        <TabButton active={tab === 'rationale'} onClick={() => setTab('rationale')}>
+          Why these stories
+        </TabButton>
+        <TabButton active={tab === 'yaml'} onClick={() => setTab('yaml')}>
+          YAML{' '}
+          <span className="ml-1.5 text-fg-faint">{isDraft ? 'editable' : 'read-only'}</span>
+        </TabButton>
+      </div>
 
-        {/* Validation banner */}
-        {validationIssues && (
-          <div className="px-4 py-2 border-b border-edge-subtle bg-danger-muted/40">
-            <p className="text-xs font-semibold text-danger">YAML rejected by validator</p>
-            <ul className="mt-1 text-2xs text-danger space-y-0.5 max-h-32 overflow-auto">
-              {(validationIssues as Array<{ path?: string; message?: string }>).slice(0, 12).map((i, idx) => (
+      {/* Validation banner */}
+      {validationIssues && (
+        <div className="-mx-4 px-4 py-2 border-b border-edge-subtle bg-danger-muted/40">
+          <p className="text-xs font-semibold text-danger">YAML rejected by validator</p>
+          <ul className="mt-1 text-2xs text-danger space-y-0.5 max-h-32 overflow-auto">
+            {(validationIssues as Array<{ path?: string; message?: string }>)
+              .slice(0, 12)
+              .map((i, idx) => (
                 <li key={idx}>
                   <span className="font-mono">{i.path ?? ''}</span> · {i.message}
                 </li>
               ))}
-            </ul>
-          </div>
-        )}
-
-        {/* Body */}
-        <div className="grow overflow-hidden">
-          {q.error && <ErrorAlert message={q.error} onRetry={q.reload} />}
-          {tab === 'stories' && (
-            <StoriesTab
-              stories={stories}
-              pages={pages}
-              rationale={q.data?.rationale_by_story ?? {}}
-            />
-          )}
-          {tab === 'rationale' && <RationaleTab stories={stories} rationale={q.data?.rationale_by_story ?? {}} />}
-          {tab === 'yaml' && (
-            <YamlEditorTab
-              yaml={yaml}
-              editable={isDraft}
-              onChange={(next) => isDraft && setEditedYaml(next)}
-            />
-          )}
+          </ul>
         </div>
+      )}
+
+      {/* Body — fills remaining space inside Modal's scroll container */}
+      <div className="pt-3">
+        {q.error && <ErrorAlert message={q.error} onRetry={q.reload} />}
+        {tab === 'stories' && (
+          <StoriesTab
+            stories={stories}
+            pages={pages}
+            rationale={q.data?.rationale_by_story ?? {}}
+          />
+        )}
+        {tab === 'rationale' && (
+          <RationaleTab stories={stories} rationale={q.data?.rationale_by_story ?? {}} />
+        )}
+        {tab === 'yaml' && (
+          <YamlEditorTab
+            yaml={yaml}
+            editable={isDraft}
+            onChange={(next) => isDraft && setEditedYaml(next)}
+          />
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -420,38 +415,36 @@ function StoriesTab({
   const orphanPages = pages.filter((p) => !linkedPageIds.has(p.id))
 
   return (
-    <div className="overflow-auto h-full">
-      <div className="p-4 space-y-3">
-        {stories.map((story) => (
-          <StoryCard
-            key={story.id}
-            story={story}
-            pages={(story.pages ?? []).map((id) => pageMap.get(id)).filter(Boolean) as ProposedPage[]}
-            rationale={rationale[story.id]}
-          />
-        ))}
-        {orphanPages.length > 0 && (
-          <details className="rounded-md border border-edge-subtle bg-warn-muted/10 p-3">
-            <summary className="cursor-pointer text-xs font-medium text-warn select-none">
-              {orphanPages.length} page{orphanPages.length === 1 ? '' : 's'} not linked to any story
-              <span className="ml-2 text-fg-faint font-normal">
-                (Claude saw these but didn't assign them)
-              </span>
-            </summary>
-            <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {orphanPages.map((p) => (
-                <li
-                  key={p.id}
-                  className="text-2xs px-2 py-1 rounded bg-surface-overlay/60 border border-edge-subtle"
-                >
-                  <code className="font-mono text-fg">{p.path}</code>
-                  {p.title && <span className="ml-2 text-fg-muted">{p.title}</span>}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
+    <div className="space-y-3 pb-2">
+      {stories.map((story) => (
+        <StoryCard
+          key={story.id}
+          story={story}
+          pages={(story.pages ?? []).map((id) => pageMap.get(id)).filter(Boolean) as ProposedPage[]}
+          rationale={rationale[story.id]}
+        />
+      ))}
+      {orphanPages.length > 0 && (
+        <details className="rounded-md border border-edge-subtle bg-warn-muted/10 p-3">
+          <summary className="cursor-pointer text-xs font-medium text-warn select-none">
+            {orphanPages.length} page{orphanPages.length === 1 ? '' : 's'} not linked to any story
+            <span className="ml-2 text-fg-faint font-normal">
+              (Claude saw these but didn't assign them)
+            </span>
+          </summary>
+          <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {orphanPages.map((p) => (
+              <li
+                key={p.id}
+                className="text-2xs px-2 py-1 rounded bg-surface-overlay/60 border border-edge-subtle"
+              >
+                <code className="font-mono text-fg">{p.path}</code>
+                {p.title && <span className="ml-2 text-fg-muted">{p.title}</span>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   )
 }
@@ -610,23 +603,21 @@ function RationaleTab({
     return <div className="p-8 text-center text-sm text-fg-muted">No stories in this proposal.</div>
   }
   return (
-    <div className="overflow-auto h-full">
-      <div className="p-4 space-y-2">
-        <p className="text-2xs text-fg-muted">
-          For each user story Claude drafted, here's the one-line reasoning grounded in what the SDK observed.
-        </p>
-        {stories.map((s) => (
-          <div
-            key={s.id}
-            className="rounded-md border border-edge-subtle bg-surface-overlay/40 p-3 space-y-1"
-          >
-            <p className="text-xs font-medium text-fg">{s.title ?? s.id}</p>
-            <p className="text-2xs text-fg-muted italic">
-              {rationale[s.id] ?? <span className="text-fg-faint">No rationale provided.</span>}
-            </p>
-          </div>
-        ))}
-      </div>
+    <div className="space-y-2 pb-2">
+      <p className="text-2xs text-fg-muted">
+        For each user story Claude drafted, here's the one-line reasoning grounded in what the SDK observed.
+      </p>
+      {stories.map((s) => (
+        <div
+          key={s.id}
+          className="rounded-md border border-edge-subtle bg-surface-overlay/40 p-3 space-y-1"
+        >
+          <p className="text-xs font-medium text-fg">{s.title ?? s.id}</p>
+          <p className="text-2xs text-fg-muted italic">
+            {rationale[s.id] ?? <span className="text-fg-faint">No rationale provided.</span>}
+          </p>
+        </div>
+      ))}
     </div>
   )
 }
@@ -642,15 +633,18 @@ function YamlEditorTab({
   editable: boolean
   onChange: (next: string) => void
 }) {
+  // Sized to fit comfortably inside the Modal scroll container without
+  // double scrollbars: ~30 lines visible, scroll inside the textarea
+  // itself when the YAML is longer.
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-4 py-1.5 text-2xs text-fg-muted bg-surface-overlay/40 border-b border-edge-subtle flex items-center gap-2">
+    <div className="rounded-md border border-edge-subtle overflow-hidden">
+      <div className="px-3 py-1.5 text-2xs text-fg-muted bg-surface-overlay/40 border-b border-edge-subtle flex items-center gap-2">
         <span className="text-fg-faint">{editable ? '✎ editable' : '◉ read-only'}</span>
         <span aria-hidden>·</span>
         <span className="tabular-nums">{yaml.split('\n').length} lines</span>
       </div>
       <textarea
-        className="grow w-full p-3 font-mono text-2xs bg-surface-raised text-fg outline-none resize-none focus:ring-0"
+        className="block w-full min-h-[24rem] max-h-[60vh] p-3 font-mono text-2xs bg-surface-raised text-fg outline-none resize-y focus:ring-0"
         value={yaml}
         onChange={(e) => onChange(e.target.value)}
         readOnly={!editable}
