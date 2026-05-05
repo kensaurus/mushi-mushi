@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-mushi-mushi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ESLint rules that catch the dominant agentic-coding failure modes — empty handlers (Gate 1) and mock-data leaks into production paths (Gate 2). Designed to slot into the Mushi Mushi v2 CI Gate pipeline.",
   "license": "MIT",
   "type": "module",
