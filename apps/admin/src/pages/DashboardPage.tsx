@@ -202,7 +202,12 @@ export function DashboardPage() {
       )}
 
       {setup.activeProject && (
-        <SetupChecklist project={setup.activeProject} mode="banner" onRefresh={setup.reload} />
+        <SetupChecklist
+          project={setup.activeProject}
+          mode="banner"
+          onRefresh={setup.reload}
+          adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
+        />
       )}
 
       {setupIncomplete && !showFullDashboard && (

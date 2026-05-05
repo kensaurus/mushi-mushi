@@ -23,6 +23,21 @@ export type SetupStepId =
   | 'byok_anthropic'
   | 'first_fix_dispatched'
 
+/**
+ * Optional diagnostic the backend emits alongside the `sdk_installed` step.
+ * Sourced from `project_api_keys.last_seen_*` on every authed SDK request
+ * (see packages/server/supabase/functions/_shared/auth.ts). Surfaced on
+ * the checklist row so operators can confirm which backend their SDK is
+ * actually reaching — the canonical fix for "checklist says SDK not
+ * installed but my app is clearly running the widget" cross-env mishaps.
+ */
+export interface SetupStepDiagnostic {
+  last_sdk_seen_at: string | null
+  last_sdk_origin: string | null
+  last_sdk_user_agent: string | null
+  last_sdk_endpoint_host: string | null
+}
+
 export interface SetupStep {
   id: SetupStepId
   label: string
@@ -31,6 +46,7 @@ export interface SetupStep {
   required: boolean
   cta_to: string
   cta_label: string
+  diagnostic?: SetupStepDiagnostic
 }
 
 export interface SetupProject {
@@ -56,6 +72,8 @@ export interface SetupProject {
 export interface SetupResponse {
   has_any_project: boolean
   projects: SetupProject[]
+  /** Host this admin is reading from; compared to per-step diagnostics. */
+  admin_endpoint_host?: string | null
 }
 
 interface SetupSelectors {

@@ -32,6 +32,21 @@ export const SetupStepIdSchema = z.enum([
   'byok_anthropic',
   'first_fix_dispatched',
 ])
+/**
+ * Optional diagnostic emitted alongside the `sdk_installed` step. The
+ * fields come from `project_api_keys.last_seen_*`, set by the API-key
+ * heartbeat in functions/_shared/auth.ts. Older deploys won't emit the
+ * envelope, hence the optional shape — the FE falls back to the legacy
+ * "did a non-admin report ever land" heuristic in that case.
+ */
+export const SetupStepDiagnosticSchema = z
+  .object({
+    last_sdk_seen_at: z.string().nullable(),
+    last_sdk_origin: z.string().nullable(),
+    last_sdk_user_agent: z.string().nullable(),
+    last_sdk_endpoint_host: z.string().nullable(),
+  })
+  .passthrough()
 export const SetupStepSchema = z
   .object({
     id: SetupStepIdSchema,
@@ -41,6 +56,7 @@ export const SetupStepSchema = z
     required: z.boolean(),
     cta_to: z.string(),
     cta_label: z.string(),
+    diagnostic: SetupStepDiagnosticSchema.optional(),
   })
   .passthrough()
 export const SetupProjectSchema = z
@@ -64,6 +80,14 @@ export const SetupResponseSchema = z
   .object({
     has_any_project: z.boolean(),
     projects: z.array(SetupProjectSchema),
+    /**
+     * Hostname of the edge function this admin is currently reading from.
+     * Compared against each project's `diagnostic.last_sdk_endpoint_host`
+     * to surface "your SDK is talking to a different backend" warnings on
+     * the setup checklist. Optional for backward compat with pre-heartbeat
+     * deploys.
+     */
+    admin_endpoint_host: z.string().nullable().optional(),
   })
   .passthrough()
 export type SetupResponse = z.infer<typeof SetupResponseSchema>
