@@ -39,7 +39,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/eslint-plugin-mushi-mushi"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/eslint-plugin-mushi-mushi#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/eslint-plugin-mushi-mushi#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },

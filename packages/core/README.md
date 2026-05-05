@@ -29,7 +29,7 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 | `MushiTimelineEntry`       | `{ ts, kind: 'route' \| 'click' \| 'request' \| 'log' \| 'screen', payload }` repro entries. |
 | `MushiReporterReport`      | Reporter-facing report row (HMAC-authed) with `unread_count` for the widget badge.            |
 | `MushiReporterComment`     | Reporter-facing comment row (HMAC-authed) tagged `author_kind: 'admin' \| 'reporter'`.        |
-| `MushiDiscoverInventoryConfig` | Mushi v2.1 — fine-grained controls for `capture.discoverInventory` (throttle, route templates, sample rate). Pass `true` for defaults. |
+| `MushiDiscoverInventoryConfig` | Mushi v2.1 — fine-grained controls for `capture.discoverInventory` (`enabled`, `throttleMs`, `routeTemplates`, `userIdSource`, `captureDomSummary`). Pass `true` for defaults. |
 | `MushiDiscoveryEventPayload`   | Mushi v2.1 — wire shape for `POST /v1/sdk/discovery`. Mirrored server-side by `_shared/schemas.ts::discoveryEventSchema`; route + page title + testids + network paths + query-param **keys only** + sha256 user id hash. |
 
 Constants: `MUSHI_INTERNAL_HEADER` (`'X-Mushi-Internal'`),

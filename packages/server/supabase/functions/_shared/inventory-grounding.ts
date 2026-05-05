@@ -126,13 +126,24 @@ export async function findInventoryCandidates(
     const status = (action.metadata?.['status'] as string | undefined) ?? 'unknown'
 
     // Match logic.
+    //
+    // `route` carries the **concrete** pathname captured in the browser
+    // (`window.location.pathname` — e.g. `/practice/abc-123`), but the
+    // inventory stores Page.path as a **template** (`/practice/[id]`,
+    // `/[lang]/posts/[slug]`, `/docs/[...slug]`). A naive `===` match
+    // (the previous behaviour) silently dropped grounding for every
+    // dynamic route — exactly the pages where Action mapping helps
+    // most. We compare via `pagePathMatchesRoute` which:
+    //   - accepts `[param]` and `[...catchall]` template segments
+    //   - normalises trailing slashes
+    //   - falls back to literal equality for fully-static paths
     let match = false
     if (testid && route) {
-      match = elementTestid === testid && pagePath === route
+      match = elementTestid === testid && pagePathMatchesRoute(pagePath, route)
     } else if (testid) {
       match = elementTestid === testid
     } else if (route) {
-      match = pagePath === route
+      match = pagePathMatchesRoute(pagePath, route)
     }
     if (!match) continue
 
@@ -149,6 +160,62 @@ export async function findInventoryCandidates(
   }
 
   return out
+}
+
+/**
+ * Test whether a concrete browser pathname (`/practice/abc-123`) belongs
+ * to an inventory page template (`/practice/[id]`).
+ *
+ * Rules:
+ *   - `[param]`        → matches any single non-slash segment.
+ *   - `[...catchall]`  → matches one or more segments greedily.
+ *   - Trailing slash on either side is ignored.
+ *   - Segment count must match exactly unless a catch-all is present.
+ *   - Static paths fall back to literal equality.
+ *
+ * Exported for unit testing.
+ */
+export function pagePathMatchesRoute(
+  template: string | null,
+  concrete: string | null,
+): boolean {
+  if (!template || !concrete) return false
+  const t = stripTrailingSlash(template)
+  const c = stripTrailingSlash(concrete)
+  if (t === c) return true
+  // Fast path: no template syntax, just literal compare.
+  if (!t.includes('[')) return false
+
+  const tSegs = t.split('/')
+  const cSegs = c.split('/')
+
+  for (let i = 0; i < tSegs.length; i++) {
+    const seg = tSegs[i]
+    // Catch-all: `[...slug]` consumes the rest of the path.
+    if (seg.startsWith('[...') && seg.endsWith(']')) {
+      // Need at least one concrete segment to consume.
+      return cSegs.length > i
+    }
+    // Optional catch-all: `[[...slug]]` — also matches zero segments.
+    if (seg.startsWith('[[...') && seg.endsWith(']]')) {
+      return true
+    }
+    if (i >= cSegs.length) return false
+    // Dynamic segment: `[id]` matches any single non-empty segment.
+    if (seg.startsWith('[') && seg.endsWith(']')) {
+      if (cSegs[i] === '') return false
+      continue
+    }
+    // Literal segment must match exactly (case-sensitive, like browsers).
+    if (seg !== cSegs[i]) return false
+  }
+  // No catch-all consumed the tail — segment counts must match.
+  return tSegs.length === cSegs.length
+}
+
+function stripTrailingSlash(p: string): string {
+  if (p.length > 1 && p.endsWith('/')) return p.slice(0, -1)
+  return p
 }
 
 /**

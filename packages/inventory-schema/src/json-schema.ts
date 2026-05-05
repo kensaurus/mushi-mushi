@@ -6,8 +6,9 @@
  *   surface that's bigger than the schema itself. The inventory shape is
  *   small (≈10 nested objects) and changes infrequently, so a hand-written
  *   companion ships with no extra dependency. The included unit test
- *   (json-schema.test.ts) round-trips a fixture against both validators
- *   to keep them honest.
+ *   (`json-schema.test.ts`) pins each enum, pattern, and required-field
+ *   list against the Zod side and round-trips a known-good fixture to
+ *   keep the two validators from drifting silently.
  *
  * Consumers:
  *   - VS Code yaml plugin (yaml.schemas) → editor autocomplete

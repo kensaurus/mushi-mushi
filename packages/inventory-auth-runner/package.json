@@ -1,26 +1,73 @@
 {
   "name": "@mushi-mushi/inventory-auth-runner",
   "version": "0.1.0",
-  "private": true,
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "description": "Runs the inventory.yaml auth.scripted block via Playwright and seeds the resulting cookies into project_settings so the Mushi crawler + synthetic monitor can hit auth-gated routes.",
   "type": "module",
-  "main": "src/index.ts",
-  "bin": {
-    "mushi-mushi-auth": "src/run.ts"
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
   },
+  "bin": {
+    "mushi-mushi-auth": "./dist/run.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/inventory-auth-runner"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/inventory-auth-runner#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "keywords": [
+    "mushi-mushi",
+    "inventory",
+    "auth",
+    "playwright",
+    "qa",
+    "cookie-refresh"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
   "scripts": {
     "auth": "tsx src/run.ts",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
     "typecheck": "tsc --noEmit",
-    "test": "echo 'no tests yet'",
-    "build": "echo 'inventory-auth-runner: no build step — runs via tsx'"
+    "test": "echo 'no tests yet'"
   },
   "dependencies": {
     "@playwright/test": "^1.52.0"
   },
   "devDependencies": {
+    "@mushi-mushi/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
+    "tsup": "^8.5.0",
     "tsx": "^4.19.0",
     "typescript": "^6.0.2"
+  },
+  "author": "Kenji Sakuramoto",
+  "engines": {
+    "node": ">=20"
   }
 }

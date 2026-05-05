@@ -1524,7 +1524,6 @@ export function Input({ label, className = '', id, error, tooltip, helpId, valid
               setReveal((v) => !v)
             }}
             onMouseDown={(e) => e.preventDefault()}
-            tabIndex={-1}
             aria-label={reveal ? 'Hide password' : 'Show password'}
             aria-pressed={reveal}
             className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-fg-faint hover:text-fg-muted focus-visible:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 rounded-sm motion-safe:transition-colors"

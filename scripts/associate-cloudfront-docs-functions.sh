@@ -49,24 +49,46 @@ fi
 # CloudFront Functions ARNs are global. DescribeFunction returns the
 # canonical ARN so we don't have to assemble it from account ID.
 #
-# We swallow the AWS CLI exit code (and stderr) here so the explicit
-# "not in LIVE stage" validation below runs against a normalized empty
-# string. Without this, `set -e` would abort the whole script on a
-# missing-function error and the operator would see the raw AWS CLI
-# stack trace instead of our actionable message.
+# Error handling: the previous implementation swallowed EVERY non-zero
+# exit code from `aws cloudfront describe-function`, which means
+# credential / region / network / API errors were silently misreported
+# as "function not in LIVE stage" by the validation a few lines down.
+# Operators chasing a real outage were sent debugging the wrong thing.
+#
+# We now capture stderr separately, recognize the specific
+# "NoSuchFunctionExists" / "no resource matches" cases as the soft-fail
+# we want to swallow (the calling block emits a clear "not in LIVE
+# stage" message in that case), and re-raise any other failure so
+# `set -e` aborts and the operator sees the real AWS CLI message.
 get_fn_arn() {
   local name="$1"
   local arn=""
-  if ! arn="$(aws cloudfront describe-function \
+  local err=""
+  local stderr_file
+  stderr_file="$(mktemp)"
+  if arn="$(aws cloudfront describe-function \
       --name "$name" \
       --stage LIVE \
       --region us-east-1 \
       --query 'FunctionSummary.FunctionMetadata.FunctionARN' \
-      --output text 2>/dev/null)"; then
+      --output text 2>"$stderr_file")"; then
+    rm -f "$stderr_file"
+    printf '%s\n' "$arn"
+    return 0
+  fi
+  err="$(cat "$stderr_file" 2>/dev/null || true)"
+  rm -f "$stderr_file"
+  # Known "function does not exist in this stage" errors — the only
+  # case the caller is prepared to handle by emitting a clean message.
+  if printf '%s' "$err" | grep -qE 'NoSuchFunctionExists|No function with name|cannot be found|not.*found'; then
     printf '%s\n' ""
     return 0
   fi
-  printf '%s\n' "$arn"
+  # Anything else (auth, network, throttling, IAM, region) — surface it
+  # so the operator/CI sees the real cause instead of the misleading
+  # "not in LIVE stage" message.
+  printf '%s\n' "$err" >&2
+  return 1
 }
 
 ROUTER_ARN="$(get_fn_arn "$ROUTER_NAME")"

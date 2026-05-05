@@ -18,13 +18,13 @@ Mushi now models the **positive** side of your app (user stories, pages, element
 
 **`@mushi-mushi/inventory-schema` (new package, 0.1.0)**
 - Zod + JSON-Schema source-of-truth for `inventory.yaml` v2 (`schema_version: 2.0`). Used by the admin ingester, the CI gate runner, the LLM proposer, and the GitHub Action.
-- Exports: `validateInventoryYaml`, `validateInventoryObject`, `inventorySchema`, `inventoryJsonSchema`, plus the per-node Zod schemas (`appSchema`, `pageSchema`, `actionSchema`, `userStorySchema`, `apiDepSchema`, `dbDepSchema`, `testRefSchema`).
+- Exports: `parseInventory` (yaml string → typed inventory), `validateInventory` (already-parsed object → typed inventory), `inventorySchema`, `inventoryJsonSchema`, `computeStats`, plus the per-node Zod schemas (`appSchema`, `pageSchema`, `elementSchema`, `userStorySchema`, `apiDepSchema`, `dbDepSchema`, `testRefSchema`, `authConfigSchema`).
 
 **`eslint-plugin-mushi-mushi` (new package, 0.1.0)**
-- Two rules wired into the v2 gate suite:
-  - `mushi-mushi/no-dead-handler` — flags onClick / form submit handlers that never call any inventory `backend` API.
-  - `mushi-mushi/no-mock-leak` — flags `mockReturnValue` / `vi.fn()` shapes left in production code paths.
-- Ships a `recommended` config preset.
+- Two rules wired into the v2 gate suite (Gates 1 + 2):
+  - `mushi-mushi/no-dead-handler` — flags JSX props matching `/^on[A-Z]/` (and same-named object properties) whose handler body is empty (`() => {}`), returns only `null` / `undefined`, contains only `console.log` / `console.warn` calls, or `throw new Error('not implemented')`. Unwraps `useCallback` / `useMemo`, ignores `*.stories.*` / `*.test.*` / `*.spec.*` by default, and accepts a `// mushi-mushi-allowlist: <reason>` opt-out comment.
+  - `mushi-mushi/no-mock-leak` — flags imports of `@faker-js/faker` / `faker` / `msw` / `nock` / `axios-mock-adapter` from non-test paths, arrays of placeholder objects with names like `John Doe` / `Jane Doe` (≥2 entries, ≥50% of array), and stringly-typed `lorem ipsum` / `placeholder@example.com` content. Test paths (`__tests__/`, `tests/`, `*.test.*`, `*.spec.*`, `*.mock.*`, etc.) are ignored entirely.
+- Ships a `recommended` config preset that turns both rules on at `error`.
 
 **`@mushi-mushi/mcp-ci` (0.2.2 → 0.3.0)**
 - Five new commands (also exposed via the `mushi-mushi-gates` GitHub Action):

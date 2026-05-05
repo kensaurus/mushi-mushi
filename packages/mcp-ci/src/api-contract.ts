@@ -41,8 +41,24 @@ export async function walkNextAppRouter(rootDir: string): Promise<DiscoveredRout
       if (!/^route\.(ts|tsx|js|jsx)$/.test(base)) return
       const content = await fs.readFile(filePath, 'utf-8').catch(() => '')
       const relative = path.relative(appDir, path.dirname(filePath)).split(path.sep).join('/')
-      // Convert `[id]` → `{id}` and prefix with `/`.
-      const routePath = '/' + relative.replace(/\[(\.{3})?([^\]]+)\]/g, '{$2}')
+      // Strip Next.js App Router URL-invisible segments before deriving
+      // the route. Without this filter the discovery output leaks
+      // file-system organisation into the API contract:
+      //   - `(group)`            → route groups (URL-invisible bucket)
+      //   - `@slot`              → parallel-route slots (rendered into a slot, no URL)
+      //   - `_private`           → private/co-located files (never routable)
+      // Leaving these in produces phony entries like `GET:/(marketing)/api/foo`
+      // that never exist as real URLs and create false API-contract failures
+      // for repos that use these standard conventions.
+      const segments = relative === '' ? [] : relative.split('/').filter((seg) => {
+        if (!seg) return false
+        if (seg.startsWith('(') && seg.endsWith(')')) return false
+        if (seg.startsWith('@')) return false
+        if (seg.startsWith('_')) return false
+        return true
+      })
+      // Convert `[id]` and `[...slug]` → `{id}` / `{slug}` and prefix with `/`.
+      const routePath = '/' + segments.join('/').replace(/\[(\.{3})?([^\]]+)\]/g, '{$2}')
       for (const method of HTTP_METHODS) {
         const re = new RegExp(`export\\s+(?:async\\s+)?function\\s+${method}\\b`)
         if (re.test(content)) out.add(`${method}:${routePath || '/'}`)

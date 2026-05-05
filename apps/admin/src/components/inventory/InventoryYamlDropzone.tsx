@@ -27,12 +27,18 @@ export function InventoryYamlDropzone({ onParsed, disabled }: Props) {
             setErr('File exceeds 1 MB limit.')
             return
           }
-          const firstContentLine = text
-            .split(/\r?\n/)
-            .map((l) => l.trim())
-            .find((l) => l.length > 0 && !l.startsWith('#'))
-          if (!firstContentLine?.startsWith('schema_version')) {
-            setErr('Expected schema_version on the first non-comment line of inventory.yaml')
+          // Light precheck only — the server validator is the source of
+          // truth and accepts any YAML key order, document separators
+          // (`---`), and BOM/whitespace prefaces. We previously gated on
+          // "first non-comment line must start with schema_version",
+          // which incorrectly rejected valid files written in any other
+          // top-level key order or starting with `---`. Now we just look
+          // for the token anywhere as a hint that this is plausibly an
+          // inventory file before we hand it to the server.
+          if (!/(^|\n)\s*schema_version\s*:/.test(text)) {
+            setErr(
+              'No `schema_version:` key found — this does not look like an inventory.yaml. The server validator will give a precise error if you proceed anyway.',
+            )
             return
           }
           onParsed?.(text)

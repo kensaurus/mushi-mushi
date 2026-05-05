@@ -25,7 +25,8 @@
  *     via the existing settings PATCH endpoint, which RLS-gates on
  *     project membership.
  *   - The runner refuses to run if `MUSHI_API_KEY` doesn't have the
- *     `inventory:write` scope.
+ *     `mcp:write` scope (server allowlist: `report:write`, `mcp:read`,
+ *     `mcp:write`).
  *   - The cookie has a soft TTL via `last_refreshed_at`; the user
  *     should re-run this on a daily cron or after every CI deploy.
  *

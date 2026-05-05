@@ -39,7 +39,7 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/inventory-schema"
   },
-  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/main/packages/inventory-schema#readme",
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/inventory-schema#readme",
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
   },
