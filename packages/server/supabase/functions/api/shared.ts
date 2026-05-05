@@ -1,5 +1,10 @@
 import type { Context } from 'npm:hono@4';
-import { getServiceClient } from '../_shared/db.ts';
+// `getServiceClient` is only referenced in `ReturnType<typeof
+// getServiceClient>` annotations on `userCanAccessProject` /
+// `resolveOwnedProject` — pull it in as a type-only import so `db.ts`
+// stays out of the module graph until a caller actually needs the
+// live client.
+import type { getServiceClient } from '../_shared/db.ts';
 import { reportError } from '../_shared/sentry.ts';
 import {
   accessibleProjectIds as _accessibleProjectIds,
