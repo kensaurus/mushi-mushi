@@ -64,9 +64,9 @@
  *   and accidentally publish under a different name.
  */
 
-import { readFileSync, writeFileSync, unlinkSync, existsSync, renameSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { homedir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { dirname, resolve, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -111,11 +111,11 @@ async function npmRegistryHas(name, version) {
   // single-line output. Hit the registry directly via Node's native
   // fetch (Node 22+). The npm registry encodes scoped names by
   // percent-encoding the slash (`%40scope%2Fpkg`) — `encodeURIComponent`
-  // produces exactly that, so we use it as-is. HEAD is enough; we only
-  // care about the status code. (Same pattern as
-  // scripts/verify-published-tarballs.mjs.)
+  // produces exactly that, so we use it as-is. We use GET (matching
+  // scripts/verify-published-tarballs.mjs); only the status code
+  // matters here, so the response body is discarded.
   const url = `https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`
-  const res = await fetch(url, { method: 'HEAD' })
+  const res = await fetch(url, { method: 'GET' })
   if (res.status === 200) return true
   if (res.status === 404) return false
   throw new Error(`unexpected registry response for ${name}@${version}: HTTP ${res.status}`)
@@ -193,62 +193,56 @@ async function main() {
   console.log('Building workspace…')
   run('pnpm', ['-w', 'build'], { cwd: ROOT, shell: process.platform === 'win32' })
 
-  // Stage a temporary `.npmrc` with the auth line, back up any existing
-  // user `.npmrc`, restore on the way out. We deliberately use a
-  // user-level npmrc (not project-level) so we don't accidentally
-  // commit the auth line if the script is interrupted between publish
-  // and cleanup. The token never gets written to a tracked file.
+  // Stage a per-process npmrc inside a fresh temp directory and pass
+  // it to `npm publish` via `NPM_CONFIG_USERCONFIG`. We deliberately
+  // do NOT touch the user's real `~/.npmrc`:
   //
-  // The backup filename is suffixed with the current PID + a high-res
-  // timestamp so a previous interrupted run that left a stale
-  // `.npmrc.mushi-bootstrap.<pid>.<ts>.bak` lying around can't make
-  // `renameSync` throw on the next invocation, and so two parallel
-  // invocations (rare but possible in CI fan-outs) don't clobber each
-  // other's backups. Cleanup of any stale backups is best-effort and
-  // logged but never fatal.
-  const homeNpmrc = join(homedir(), '.npmrc')
-  const backupSuffix = `.mushi-bootstrap.${process.pid}.${Date.now()}.bak`
-  const backupPath = `${homeNpmrc}${backupSuffix}`
-  let restoredHome = false
-  const restoreNpmrc = () => {
-    if (restoredHome) return
-    restoredHome = true
+  //   - No backup/restore dance — there's nothing to roll back.
+  //   - Two overlapping invocations can't clobber each other (each
+  //     gets its own `mkdtempSync`-allocated directory).
+  //   - SIGTERM / SIGHUP / unexpected aborts all leave the user's
+  //     real npmrc untouched. The cleanup hooks below remove the
+  //     temp dir as a best-effort housekeeping step; even if they
+  //     don't fire (`SIGKILL`), the OS reaps `tmpdir()` eventually.
+  //   - The auth-token file lives in `tmpdir()` with mode 0o600, never
+  //     in $HOME and never in the workspace.
+  const tempDir = mkdtempSync(join(tmpdir(), 'mushi-bootstrap-'))
+  const tempNpmrc = join(tempDir, '.npmrc')
+  let cleaned = false
+  const cleanupTempDir = () => {
+    if (cleaned) return
     try {
-      if (existsSync(backupPath)) {
-        // Restore — atomically overwrites whatever we wrote during the run.
-        renameSync(backupPath, homeNpmrc)
-      } else if (existsSync(homeNpmrc)) {
-        // No backup means there was no original npmrc to keep.
-        unlinkSync(homeNpmrc)
-      }
+      rmSync(tempDir, { recursive: true, force: true })
+      cleaned = true
     } catch (err) {
+      // Don't mark as cleaned — a later exit hook may succeed.
       console.warn(
-        `warn: failed to restore ${homeNpmrc} (${err.message}). ` +
-          `Inspect ${backupPath} manually if it still exists.`,
+        `warn: failed to remove temp dir ${tempDir} (${err.message}). ` +
+          `Delete it manually if it persists.`,
       )
     }
   }
-  process.on('exit', restoreNpmrc)
-  process.on('SIGINT', () => {
-    restoreNpmrc()
-    process.exit(130)
-  })
-
-  // Two-step write so the auth token is never visible in a partially-
-  // written file: write the new contents to a sibling temp path then
-  // rename atomically. If an existing npmrc is present, move it to our
-  // unique backup path first; the unique suffix means we never collide
-  // with a leftover from an interrupted earlier run.
-  if (existsSync(homeNpmrc)) {
-    renameSync(homeNpmrc, backupPath)
+  process.on('exit', cleanupTempDir)
+  for (const sig of /** @type {const} */ (['SIGINT', 'SIGTERM', 'SIGHUP'])) {
+    process.on(sig, () => {
+      cleanupTempDir()
+      // Conventional 128 + signal number for the common signals;
+      // operators recognising 130/143/129 grep their CI logs faster.
+      const code = sig === 'SIGINT' ? 130 : sig === 'SIGTERM' ? 143 : 129
+      process.exit(code)
+    })
   }
-  const stagingPath = `${homeNpmrc}.mushi-bootstrap.${process.pid}.${Date.now()}.tmp`
+
   writeFileSync(
-    stagingPath,
+    tempNpmrc,
     `//registry.npmjs.org/:_authToken=${token}\nregistry=https://registry.npmjs.org/\n`,
     { mode: 0o600 },
   )
-  renameSync(stagingPath, homeNpmrc)
+
+  // `npm publish` honours `NPM_CONFIG_USERCONFIG` and treats the file
+  // it points at as the user-level npmrc, fully overriding ~/.npmrc
+  // for the duration of this child process.
+  const publishEnv = { ...process.env, NPM_CONFIG_USERCONFIG: tempNpmrc }
 
   try {
     for (const p of todo) {
@@ -261,12 +255,13 @@ async function main() {
       const cwd = resolve(ROOT, p.rel)
       run('npm', ['publish', '--access', 'public', '--provenance=false'], {
         cwd,
+        env: publishEnv,
         shell: process.platform === 'win32',
       })
       console.log(`✓ Published ${p.name}@${p.version}`)
     }
   } finally {
-    restoreNpmrc()
+    cleanupTempDir()
   }
 
   console.log('')
