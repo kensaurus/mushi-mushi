@@ -1,5 +1,12 @@
 # @mushi-mushi/svelte
 
+## 0.8.1
+
+### Patch Changes
+
+- Updated dependencies [5e04203]
+  - @mushi-mushi/core@0.9.0
+
 ## 0.8.0
 
 ### Minor Changes
