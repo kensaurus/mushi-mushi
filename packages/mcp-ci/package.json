@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/mcp-ci",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "GitHub Action entrypoint for running Mushi Mushi MCP tools in CI — trigger judge, dispatch fixes, gate merges on classification coverage.",
   "license": "MIT",
   "type": "module",
