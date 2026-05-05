@@ -1,24 +1,40 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "0.9",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.9.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "0.9.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "0.9.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "0.9.0"
+      }
+    ]
   },
   {
     "majorMinor": "0.8",
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.1",
       "0.8.0"
     ],
     "highlights": [],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.8.0"
+        "version": "0.8.1"
       },
       {
         "name": "@mushi-mushi/core",
@@ -30,15 +46,15 @@
       },
       {
         "name": "@mushi-mushi/react-native",
-        "version": "0.8.0"
+        "version": "0.8.1"
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.8.0"
+        "version": "0.8.1"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.8.0"
+        "version": "0.8.1"
       },
       {
         "name": "@mushi-mushi/web",
@@ -191,7 +207,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/capacitor",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       {
         "name": "@mushi-mushi/cli",
@@ -317,6 +333,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.3.8",
       "0.3.7",
       "0.3.6",
       "0.3.5",
@@ -391,11 +408,15 @@
       },
       {
         "name": "@mushi-mushi/mcp",
-        "version": "0.3.7"
+        "version": "0.3.8"
+      },
+      {
+        "name": "@mushi-mushi/mcp-ci",
+        "version": "0.3.0"
       },
       {
         "name": "@mushi-mushi/node",
-        "version": "0.3.4"
+        "version": "0.3.5"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -428,6 +449,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.2.7",
       "0.2.6",
       "0.2.5",
       "0.2.4",
@@ -489,7 +511,7 @@
     "packages": [
       {
         "name": "@mushi-mushi/adapters",
-        "version": "0.2.6"
+        "version": "0.2.7"
       },
       {
         "name": "@mushi-mushi/angular",
@@ -502,6 +524,10 @@
       {
         "name": "@mushi-mushi/core",
         "version": "0.2.1"
+      },
+      {
+        "name": "@mushi-mushi/inventory-schema",
+        "version": "0.2.0"
       },
       {
         "name": "@mushi-mushi/mcp",
@@ -566,6 +592,10 @@
       {
         "name": "@mushi-mushi/web",
         "version": "0.2.1"
+      },
+      {
+        "name": "eslint-plugin-mushi-mushi",
+        "version": "0.2.0"
       }
     ]
   },
