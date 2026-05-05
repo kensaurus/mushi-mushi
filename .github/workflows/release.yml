@@ -116,6 +116,15 @@ jobs:
         # talks about migrations must agree before a release ships.
         run: pnpm check:migration-catalog
 
+      - name: Check Edge Function import boundaries
+        # Release gate for the Supabase deploy bundle. See ci.yml for the
+        # full rationale; in short: any `_shared/` → sibling-function
+        # relative import (or any cross-function import) leaves the
+        # Supabase deploy with an unresolved module specifier and the
+        # platform rejects the deploy with HTTP 400. We catch it here
+        # so a release can never queue a broken Edge Function deploy.
+        run: pnpm check:edge-fn-imports
+
       - name: Check license headers
         run: node scripts/check-license-headers.mjs
 

@@ -1,6 +1,10 @@
 import type { Context } from 'npm:hono@4';
 import { getServiceClient } from '../_shared/db.ts';
 import { reportError } from '../_shared/sentry.ts';
+import {
+  accessibleProjectIds as _accessibleProjectIds,
+  ownedProjectIds as _ownedProjectIds,
+} from '../_shared/project-access.ts';
 
 /**
  * capture a Supabase / Postgres error to Sentry AND return the
@@ -41,50 +45,14 @@ export function dbError(
   );
 }
 
-// Resolve the set of project ids visible to the authenticated user. There
-// are three concurrent sources of "I can see this project" the api has to
-// honour:
-//
-//   1. `projects.owner_id == userId` — legacy / pre-Teams-v1 ownership
-//      (also still the source of truth for projects created without an org).
-//   2. `organization_members.user_id == userId` — Teams v1 grants access to
-//      every project under the joined org. Pro+ feature.
-//   3. `project_members.user_id == userId` — per-project membership rows
-//      (predates Teams v1; still used by /v1/admin/fixes & dispatch gates,
-//      and seeded when a user creates a project).
-//
-// All three union together. Without this every team member would silently
-// see "0 projects" on the relevant page even though /v1/admin/projects
-// correctly enumerates the org-scoped set (the bug I fixed in PR #69 only
-// addressed the projects-list endpoint; this one fixes the rest).
-export async function accessibleProjectIds(
-  db: ReturnType<typeof getServiceClient>,
-  userId: string,
-): Promise<string[]> {
-  const [
-    { data: orgMemberships },
-    { data: projectMemberships },
-    { data: owned },
-  ] = await Promise.all([
-    db.from('organization_members').select('organization_id').eq('user_id', userId),
-    db.from('project_members').select('project_id').eq('user_id', userId),
-    db.from('projects').select('id').eq('owner_id', userId),
-  ]);
-
-  const ids = new Set<string>();
-  for (const p of owned ?? []) ids.add(p.id);
-  for (const m of projectMemberships ?? []) ids.add(m.project_id);
-
-  const orgIds = (orgMemberships ?? []).map((m) => m.organization_id).filter(Boolean);
-  if (orgIds.length > 0) {
-    const { data: projects } = await db.from('projects').select('id').in('organization_id', orgIds);
-    for (const p of projects ?? []) ids.add(p.id);
-  }
-
-  return Array.from(ids);
-}
-
-export const ownedProjectIds = accessibleProjectIds;
+// `accessibleProjectIds` lives in `_shared/project-access.ts` so Edge
+// Functions outside `api/` (e.g. `inventory-crawler`) can reuse it
+// without forcing the deploy bundler to reach into `../api/` (it can't —
+// see scripts/deploy-edge-function.mjs and the 2026-05-05 inventory-
+// crawler / synthetic-monitor deploy regression). The aliases here keep
+// existing callers in `api/routes/*` working without churn.
+export const accessibleProjectIds = _accessibleProjectIds;
+export const ownedProjectIds = _ownedProjectIds;
 
 /**
  * Single-project authorization check used by detail/mutation endpoints.

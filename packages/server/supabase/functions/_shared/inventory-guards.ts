@@ -40,7 +40,13 @@
  */
 
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
-import { accessibleProjectIds } from '../api/shared.ts'
+// Imported from `_shared/` (not `../api/shared.ts`) because the deploy
+// bundler (`scripts/deploy-edge-function.mjs`) only ships
+// `<function>/` plus `_shared/`. Reaching into `../api/` from `_shared/`
+// produces an unresolved import for any non-`api` function that pulls
+// in this module — which is what crashed `inventory-crawler` and
+// `synthetic-monitor` deploys with HTTP 400 on 2026-05-05.
+import { accessibleProjectIds } from './project-access.ts'
 
 // ────────────────────────────────────────────────────────────────────────
 // 1. Project-scope assertion
