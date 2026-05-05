@@ -1,13 +1,5 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
-    "highlights": [],
-    "packages": []
-  },
-  {
     "majorMinor": "0.9",
     "headline": null,
     "pending": false,
@@ -114,6 +106,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.4",
       "0.6.3",
       "0.6.2",
       "0.6.1",
@@ -148,7 +141,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.6.3"
+        "version": "0.6.4"
       }
     ]
   },
