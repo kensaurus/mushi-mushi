@@ -46,9 +46,11 @@
  *
  *   3. The script will, for every target package whose current version
  *      is NOT yet present on the registry, run `npm publish --access
- *      public --provenance=false` from that package's dist directory.
- *      It builds the workspace first to ensure the dist artefacts are
- *      fresh.
+ *      public --provenance=false` from that package's directory (the
+ *      one containing its `package.json` — npm picks up the build
+ *      output via the package's own `files` / `main` / `exports`
+ *      fields). The script builds the workspace first to ensure the
+ *      dist artefacts are fresh.
  *
  * Safety rails
  * ────────────
@@ -56,8 +58,10 @@
  * - Skips any target whose current `package.json` version IS already
  *   present on the registry — i.e. re-running the script is a no-op
  *   once the package is bootstrapped.
- * - Refuses to publish anything outside the four allowlisted targets
- *   below. Add new entries deliberately.
+ * - Refuses to publish anything outside the explicit `(path, name)`
+ *   allowlist below. Both the path AND the package.json name must
+ *   match — a renamed `package.json` will not silently slip through
+ *   and accidentally publish under a different name.
  */
 
 import { readFileSync, writeFileSync, unlinkSync, existsSync, renameSync } from 'node:fs'
@@ -70,15 +74,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(__dirname, '..')
 
 // EXACTLY the set of packages that need the TP-bootstrap one-shot.
-// Re-runs are safe — entries that have already been published are
-// skipped silently.
+// Both the workspace path AND the package.json `name` are pinned so a
+// renamed `package.json` can't sneak past the allowlist and end up
+// publishing under a wrong name. Re-runs are safe — entries already
+// on the registry are skipped silently.
+//
+// `mcp-ci` is NOT listed here: it already exists on npm, so the regular
+// `release.yml` + a TP rule on its existing package settings page is
+// the right path. Bootstrap is only for never-published packages.
 const TARGETS = [
-  'packages/inventory-schema',
-  'packages/inventory-auth-runner',
-  'packages/eslint-plugin-mushi-mushi',
-  // mcp-ci is NOT listed: it already exists on npm, so the regular
-  // release.yml + a TP rule on its existing package settings page is
-  // the right path. Bootstrap is only for never-published packages.
+  { path: 'packages/inventory-schema', name: '@mushi-mushi/inventory-schema' },
+  { path: 'packages/inventory-auth-runner', name: '@mushi-mushi/inventory-auth-runner' },
+  { path: 'packages/eslint-plugin-mushi-mushi', name: 'eslint-plugin-mushi-mushi' },
 ]
 
 function readPkg(rel) {
@@ -89,10 +96,13 @@ function readPkg(rel) {
 async function npmRegistryHas(name, version) {
   // Avoid `npm view` because pnpm injects warning lines that mangle the
   // single-line output. Hit the registry directly via Node's native
-  // fetch (Node 22+). HEAD on the version-specific URL returns 200 if
-  // it exists, 404 otherwise — both are valid signals.
-  const url = `https://registry.npmjs.org/${encodeURIComponent(name).replace(/%2F/g, '/')}/${encodeURIComponent(version)}`
-  const res = await fetch(url, { method: 'GET' })
+  // fetch (Node 22+). The npm registry encodes scoped names by
+  // percent-encoding the slash (`%40scope%2Fpkg`) — `encodeURIComponent`
+  // produces exactly that, so we use it as-is. HEAD is enough; we only
+  // care about the status code. (Same pattern as
+  // scripts/verify-published-tarballs.mjs.)
+  const url = `https://registry.npmjs.org/${encodeURIComponent(name)}/${encodeURIComponent(version)}`
+  const res = await fetch(url, { method: 'HEAD' })
   if (res.status === 200) return true
   if (res.status === 404) return false
   throw new Error(`unexpected registry response for ${name}@${version}: HTTP ${res.status}`)
@@ -100,6 +110,17 @@ async function npmRegistryHas(name, version) {
 
 function run(cmd, args, opts = {}) {
   const r = spawnSync(cmd, args, { stdio: 'inherit', shell: false, ...opts })
+  // `spawnSync` failures fall into three buckets that we render distinctly
+  // so an operator gets an actionable message instead of "exit null":
+  //   1. `r.error` — process couldn't start (ENOENT etc.)
+  //   2. `r.signal` — child was killed by a signal (SIGINT, SIGTERM)
+  //   3. `r.status !== 0` — child exited with a non-zero code
+  if (r.error) {
+    throw new Error(`${cmd}: failed to start (${r.error.message})`)
+  }
+  if (r.signal) {
+    throw new Error(`${cmd} ${args.join(' ')}: terminated by signal ${r.signal}`)
+  }
   if (r.status !== 0) {
     throw new Error(`${cmd} ${args.join(' ')} failed (exit ${r.status})`)
   }
@@ -116,12 +137,22 @@ async function main() {
   console.log(`bootstrap mode: ${forReal ? 'PUBLISH FOR REAL' : 'dry-run (pass --for-real to publish)'}`)
   console.log('')
 
-  // Pre-flight: confirm every target has a build script and dist/.
+  // Pre-flight: read each target's package.json AND verify the
+  // declared name matches the allowlist. Mismatch is a fatal error —
+  // we'd rather refuse to publish anything than silently publish a
+  // renamed package under a name the operator didn't expect.
   const plan = []
-  for (const rel of TARGETS) {
-    const { name, version } = readPkg(rel)
+  for (const target of TARGETS) {
+    const { name, version } = readPkg(target.path)
+    if (name !== target.name) {
+      throw new Error(
+        `allowlist mismatch: ${target.path}/package.json declares name "${name}" ` +
+          `but the bootstrap allowlist expects "${target.name}". ` +
+          `Update TARGETS deliberately if this is intentional.`,
+      )
+    }
     const onRegistry = await npmRegistryHas(name, version)
-    plan.push({ rel, name, version, onRegistry })
+    plan.push({ rel: target.path, name, version, onRegistry })
     console.log(`  ${name}@${version}  ${onRegistry ? 'already on registry — SKIP' : 'NOT on registry — will publish'}`)
   }
 
@@ -147,21 +178,35 @@ async function main() {
   // user-level npmrc (not project-level) so we don't accidentally
   // commit the auth line if the script is interrupted between publish
   // and cleanup. The token never gets written to a tracked file.
+  //
+  // The backup filename is suffixed with the current PID + a high-res
+  // timestamp so a previous interrupted run that left a stale
+  // `.npmrc.mushi-bootstrap.<pid>.<ts>.bak` lying around can't make
+  // `renameSync` throw on the next invocation, and so two parallel
+  // invocations (rare but possible in CI fan-outs) don't clobber each
+  // other's backups. Cleanup of any stale backups is best-effort and
+  // logged but never fatal.
   const homeNpmrc = join(homedir(), '.npmrc')
-  const backupPath = `${homeNpmrc}.mushi-bootstrap.bak`
+  const backupSuffix = `.mushi-bootstrap.${process.pid}.${Date.now()}.bak`
+  const backupPath = `${homeNpmrc}${backupSuffix}`
   let restoredHome = false
   const restoreNpmrc = () => {
     if (restoredHome) return
+    restoredHome = true
     try {
       if (existsSync(backupPath)) {
+        // Restore — atomically overwrites whatever we wrote during the run.
         renameSync(backupPath, homeNpmrc)
       } else if (existsSync(homeNpmrc)) {
+        // No backup means there was no original npmrc to keep.
         unlinkSync(homeNpmrc)
       }
-    } catch {
-      /* best effort — instructions in handover doc cover manual cleanup */
+    } catch (err) {
+      console.warn(
+        `warn: failed to restore ${homeNpmrc} (${err.message}). ` +
+          `Inspect ${backupPath} manually if it still exists.`,
+      )
     }
-    restoredHome = true
   }
   process.on('exit', restoreNpmrc)
   process.on('SIGINT', () => {
@@ -169,14 +214,21 @@ async function main() {
     process.exit(130)
   })
 
+  // Two-step write so the auth token is never visible in a partially-
+  // written file: write the new contents to a sibling temp path then
+  // rename atomically. If an existing npmrc is present, move it to our
+  // unique backup path first; the unique suffix means we never collide
+  // with a leftover from an interrupted earlier run.
   if (existsSync(homeNpmrc)) {
     renameSync(homeNpmrc, backupPath)
   }
+  const stagingPath = `${homeNpmrc}.mushi-bootstrap.${process.pid}.${Date.now()}.tmp`
   writeFileSync(
-    homeNpmrc,
+    stagingPath,
     `//registry.npmjs.org/:_authToken=${token}\nregistry=https://registry.npmjs.org/\n`,
     { mode: 0o600 },
   )
+  renameSync(stagingPath, homeNpmrc)
 
   try {
     for (const p of todo) {
