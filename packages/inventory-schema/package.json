@@ -1,0 +1,79 @@
+{
+  "name": "@mushi-mushi/inventory-schema",
+  "version": "0.1.0",
+  "description": "Mushi Mushi v2 inventory.yaml Zod schema + JSON Schema export. Single source of truth for the bidirectional graph's positive nodes (App / Page / Element / Action / ApiDep / DbDep / Test / UserStory).",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./json-schema": {
+      "import": {
+        "types": "./dist/json-schema.d.ts",
+        "default": "./dist/json-schema.js"
+      },
+      "require": {
+        "types": "./dist/json-schema.d.cts",
+        "default": "./dist/json-schema.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/inventory-schema"
+  },
+  "homepage": "https://github.com/kensaurus/mushi-mushi/tree/master/packages/inventory-schema#readme",
+  "bugs": {
+    "url": "https://github.com/kensaurus/mushi-mushi/issues"
+  },
+  "keywords": [
+    "mushi-mushi",
+    "inventory",
+    "user-story",
+    "qa",
+    "agentic-coding",
+    "knowledge-graph"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "clean": "rm -rf dist .turbo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "yaml": "^2.5.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@mushi-mushi/tsconfig": "workspace:*",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "author": "Kenji Sakuramoto",
+  "engines": {
+    "node": ">=20"
+  }
+}

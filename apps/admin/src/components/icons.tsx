@@ -52,6 +52,16 @@ export function IconReports(p: IconProps) {
   </>)
 }
 
+export function IconStory(p: IconProps) {
+  return wrap(p, <>
+    <rect x="2.5" y="2" width="9" height="6" rx="0.8" />
+    <rect x="3.5" y="4" width="9" height="6" rx="0.8" />
+    <rect x="4.5" y="6" width="9" height="6" rx="0.8" />
+    <line x1="6.5" y1="8.5" x2="11" y2="8.5" />
+    <line x1="6.5" y1="10" x2="9.5" y2="10" />
+  </>)
+}
+
 export function IconGraph(p: IconProps) {
   return wrap(p, <>
     <circle cx="5" cy="5" r="1.5" />

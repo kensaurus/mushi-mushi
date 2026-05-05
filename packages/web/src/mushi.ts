@@ -31,6 +31,8 @@ import {
   createPerformanceCapture,
   createElementSelector,
   createTimelineCapture,
+  createDiscoveryCapture,
+  type DiscoveryCapture,
 } from './capture';
 import { captureSentryContext } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
@@ -102,6 +104,7 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let perfCap: ReturnType<typeof createPerformanceCapture> | null = null;
   let screenshotCap: ReturnType<typeof createScreenshotCapture> | null = null;
   let elementSelector: ReturnType<typeof createElementSelector> | null = null;
+  let discoveryCap: DiscoveryCapture | null = null;
   const timelineCap = createTimelineCapture();
   let widget!: MushiWidget;
 
@@ -154,6 +157,59 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       elementSelector?.deactivate();
       elementSelector = null;
       pendingElement = null;
+    }
+
+    // Mushi v2.1: passive inventory discovery. Default OFF — only stand
+    // up when the host explicitly opts in. We deliberately re-create the
+    // capturer when the config changes (rather than mutating it) so the
+    // route-template list and throttle window are picked up cleanly.
+    const discoveryRaw = activeConfig.capture?.discoverInventory;
+    const discoveryConfig =
+      discoveryRaw === true
+        ? {}
+        : discoveryRaw && typeof discoveryRaw === 'object'
+          ? discoveryRaw
+          : null;
+    const discoveryEnabled =
+      discoveryConfig != null && discoveryConfig.enabled !== false;
+    if (discoveryEnabled) {
+      discoveryCap?.destroy();
+      discoveryCap = createDiscoveryCapture({
+        config: discoveryConfig!,
+        getRecentNetworkPaths: () => {
+          if (!networkCap) return [];
+          return networkCap
+            .getEntries()
+            .map((e) => {
+              try {
+                const u = new URL(e.url, typeof window !== 'undefined' ? window.location.href : 'http://localhost');
+                // Only same-origin or otherwise meaningful paths — skip
+                // tracking pixels and the Mushi ingest endpoint itself.
+                if (u.host && typeof window !== 'undefined' && u.host !== window.location.host) return null;
+                return u.pathname;
+              } catch {
+                return null;
+              }
+            })
+            .filter((p): p is string => p != null && p.length > 0 && p.length < 200);
+        },
+        getUserId: () => userInfo?.id ?? null,
+        getSessionId,
+        onEvent: (event) => {
+          // Best-effort; never throw, never block.
+          void apiClient
+            .postDiscoveryEvent({
+              ...event,
+              sdk_version: MUSHI_SDK_VERSION,
+            })
+            .catch((err) => {
+              log.debug('discovery emit failed', { err: String(err) });
+            });
+        },
+      });
+    } else {
+      discoveryCap?.destroy();
+      discoveryCap = null;
     }
   }
 
@@ -548,6 +604,8 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       perfCap?.destroy();
       elementSelector?.deactivate();
       timelineCap.destroy();
+      discoveryCap?.destroy();
+      discoveryCap = null;
       offlineQueue.stopAutoSync();
       listeners.clear();
       instance = null;

@@ -8,8 +8,9 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useEffect, useState } from 'react'
 import type { ReactNode, ComponentType } from 'react'
+import type { FeatureFlag } from '../lib/useEntitlements'
 import {
-  IconDashboard, IconReports, IconGraph, IconJudge, IconQuery,
+  IconDashboard, IconReports, IconStory, IconGraph, IconJudge, IconQuery,
   IconFixes, IconProjects, IconIntegrations, IconQueue, IconSSO,
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
   IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
@@ -64,6 +65,8 @@ interface NavItem {
    *  non-operators (the route itself ALSO refuses to render — the
    *  sidebar gate is just to avoid teasing it). */
   superAdmin?: boolean
+  /** Plan feature flag — hidden until `useEntitlements().has(flag)` (unless super-admin). */
+  requiresFeature?: FeatureFlag
 }
 
 interface NavSection {
@@ -124,6 +127,14 @@ const NAV: NavSection[] = [
     hint: 'Inbound user-felt bugs land here, get classified, deduped, and prioritised.',
     items: [
       { label: 'Reports',     path: '/reports',     icon: IconReports, beginner: true, quickstartLabel: 'Bugs to fix' },
+      {
+        label: 'User stories',
+        path: '/inventory',
+        icon: IconStory,
+        beginner: true,
+        quickstartLabel: 'User stories',
+        requiresFeature: 'inventory_v2',
+      },
       { label: 'Graph',       path: '/graph',       icon: IconGraph,   beginner: true },
       { label: 'Anti-Gaming', path: '/anti-gaming', icon: IconShield },
       { label: 'Queue',       path: '/queue',       icon: IconQueue },
@@ -223,6 +234,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Report evidence',
       detail: 'Open a report to review screenshots, console logs, network traces, and user context.',
+    },
+  },
+  '/inventory': {
+    title: 'User stories',
+    kicker: 'Plan',
+    scope: 'inventory',
+    decide: {
+      label: 'Truth layer',
+      summary: 'Stories, elements, and actions tied to gate + synthetic signals — the positive half of the graph.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Evidence',
+      detail: 'Gate runs, drift reconciles, and synthetic timelines anchor status claims.',
     },
   },
   '/fixes': {
@@ -508,7 +533,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const [aiOpen, setAiOpen] = useState(false)
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
-  const { isSuperAdmin } = useEntitlements()
+  const { isSuperAdmin, has } = useEntitlements()
   const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
   const [focusMode, setFocusMode] = useFocusMode()
 
@@ -637,12 +662,15 @@ export function Layout({ children }: { children: ReactNode }) {
   // of mode. The gateway also enforces this — UI hiding is purely so
   // we don't tease a feature non-operators can't access.
   const visibleByRole = (i: NavItem) => !i.superAdmin || isSuperAdmin
+  const visibleByFeature = (i: NavItem) =>
+    !i.requiresFeature || has(i.requiresFeature) || isSuperAdmin
 
   let visibleNav: NavSection[]
   if (isQuickstart) {
-    const quickItems: NavItem[] = NAV.flatMap(s =>
+    const quickItems: NavItem[] = NAV.flatMap((s) =>
       s.items
         .filter(visibleByRole)
+        .filter(visibleByFeature)
         .filter(i => i.quickstartLabel !== undefined)
         .map(i => ({ ...i, label: i.quickstartLabel ?? i.label })),
     )
@@ -662,13 +690,13 @@ export function Layout({ children }: { children: ReactNode }) {
       .map(s => ({
         ...s,
         defaultCollapsed: s.id === 'start' ? false : s.defaultCollapsed,
-        items: s.items.filter(visibleByRole).filter(i => i.beginner),
+        items: s.items.filter(visibleByRole).filter(visibleByFeature).filter(i => i.beginner),
       }))
       .filter(s => s.items.length > 0)
   } else {
     visibleNav = NAV.map(s => ({
       ...s,
-      items: s.items.filter(visibleByRole),
+      items: s.items.filter(visibleByRole).filter(visibleByFeature),
     }))
   }
 
@@ -763,6 +791,18 @@ export function Layout({ children }: { children: ReactNode }) {
                         <Icon className="nav-link-icon" />
                         <span>{label}</span>
                         {path === '/integrations' && <IntegrationHealthDot />}
+                        {path === '/inventory' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.regressedActions > 0 ? 'danger' : 'ok'}
+                            count={navCounts.regressedActions}
+                            label={
+                              navCounts.regressedActions > 0
+                                ? `${navCounts.regressedActions} regressed inventory actions`
+                                : 'No regressed inventory actions'
+                            }
+                            hideWhenZero
+                          />
+                        )}
                         {path === '/reports' && navCounts.ready && (
                           <SidebarHealthDot
                             tone={navCounts.ready ? toneForBacklog(navCounts.untriagedBacklog) : 'loading'}
@@ -1073,10 +1113,15 @@ function computeStaleness(
   switch (sectionId) {
     case 'plan': {
       const backlog = navCounts.untriagedBacklog
-      if (backlog === 0) return null
-      // `toneForBacklog` returns 'ok' only when n === 0; we've already
-      // returned above in that case, so the remaining tones are a subset
-      // of SectionStaleness['tone'].
+      const reg = navCounts.regressedActions
+      if (backlog === 0 && reg === 0) return null
+      if (reg > 0) {
+        return {
+          count: reg,
+          tone: 'danger',
+          label: `${reg} regressed inventory action${reg === 1 ? '' : 's'} — check User stories`,
+        }
+      }
       const tone = toneForBacklog(backlog) as SectionStaleness['tone']
       return {
         count: backlog,

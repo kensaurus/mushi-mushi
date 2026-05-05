@@ -228,7 +228,13 @@ export function OnboardingPage() {
         <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
       </section>
 
-      {project && <SetupChecklist project={project} mode="wizard" />}
+      {project && (
+        <SetupChecklist
+          project={project}
+          mode="wizard"
+          adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
+        />
+      )}
 
       {/* Card 1: Create Project (only when no project yet) */}
       {!setup.hasAnyProject && (

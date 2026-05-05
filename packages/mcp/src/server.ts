@@ -310,6 +310,136 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     },
   )
 
+  server.registerTool(
+    'graph_neighborhood',
+    {
+      title: titleOf('graph_neighborhood'),
+      description: descOf('graph_neighborhood'),
+      annotations: annotationsFor('graph_neighborhood'),
+      inputSchema: {
+        seed: z.string().describe('Starting node id or label'),
+        depth: z.number().optional().describe('Traversal depth (default 2, max 4)'),
+      },
+    },
+    async (args) => {
+      const params = new URLSearchParams({
+        seed: args.seed,
+        depth: String(Math.min(args.depth ?? 2, 4)),
+      })
+      return jsonText(await apiCall(`/v1/admin/graph/traverse?${params}`))
+    },
+  )
+
+  server.registerTool(
+    'graph_node_status',
+    {
+      title: titleOf('graph_node_status'),
+      description: descOf('graph_node_status'),
+      annotations: annotationsFor('graph_node_status'),
+      inputSchema: { nodeId: z.string().describe('graph_nodes.id') },
+    },
+    async (args) => jsonText(await apiCall(`/v1/admin/graph/node/${args.nodeId}`)),
+  )
+
+  server.registerTool(
+    'inventory_get',
+    {
+      title: titleOf('inventory_get'),
+      description: descOf('inventory_get'),
+      annotations: annotationsFor('inventory_get'),
+      inputSchema: {
+        projectId: z.string().optional().describe('Project UUID — defaults to the server-configured project when omitted'),
+      },
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required for inventory_get')
+      return jsonText(await apiCall(`/v1/admin/inventory/${pid}`))
+    },
+  )
+
+  server.registerTool(
+    'inventory_diff',
+    {
+      title: titleOf('inventory_diff'),
+      description: descOf('inventory_diff'),
+      annotations: annotationsFor('inventory_diff'),
+      inputSchema: {
+        projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
+        fromSha: z.string().describe('Older commit SHA (baseline)'),
+        toSha: z.string().describe('Newer commit SHA (candidate)'),
+      },
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required for inventory_diff')
+      const q = new URLSearchParams({ from: args.fromSha, to: args.toSha })
+      return jsonText(await apiCall(`/v1/admin/inventory/${pid}/diff?${q}`))
+    },
+  )
+
+  server.registerTool(
+    'inventory_findings',
+    {
+      title: titleOf('inventory_findings'),
+      description: descOf('inventory_findings'),
+      annotations: annotationsFor('inventory_findings'),
+      inputSchema: {
+        projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
+        gate: z.string().optional().describe('Filter by gate id (e.g. dead_handler, status_claim)'),
+        severity: z.string().optional().describe('Filter findings by severity'),
+      },
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required for inventory_findings')
+      const q = new URLSearchParams()
+      if (args.gate) q.set('gate', args.gate)
+      if (args.severity) q.set('severity', args.severity)
+      const suffix = q.toString() ? `?${q}` : ''
+      return jsonText(await apiCall(`/v1/admin/inventory/${pid}/findings${suffix}`))
+    },
+  )
+
+  server.registerTool(
+    'fix_suggest',
+    {
+      title: titleOf('fix_suggest'),
+      description: descOf('fix_suggest'),
+      annotations: annotationsFor('fix_suggest'),
+      inputSchema: { reportId: z.string().describe('Report UUID') },
+    },
+    async (args) => {
+      const report = await apiCall<Record<string, unknown>>(`/v1/admin/reports/${args.reportId}`)
+      const s2 = report.stage2_analysis as Record<string, unknown> | null | undefined
+      return jsonText({
+        reportId: args.reportId,
+        rootCause: s2?.rootCause ?? null,
+        suggestedFix: s2?.suggestedFix ?? null,
+        reproductionSteps: report.reproduction_steps ?? [],
+        summary: report.summary ?? null,
+        component: report.component ?? null,
+      })
+    },
+  )
+
+  server.registerTool(
+    'run_nl_query',
+    {
+      title: titleOf('run_nl_query'),
+      description: descOf('run_nl_query'),
+      annotations: annotationsFor('run_nl_query'),
+      inputSchema: { question: z.string().describe('Question in plain English, e.g. "Which components had the most critical bugs this week?"') },
+    },
+    async (args) => {
+      const data = await apiCall('/v1/admin/query', {
+        method: 'POST',
+        body: JSON.stringify({ question: args.question }),
+      })
+      return jsonText(data)
+    },
+  )
+
   // --- Write / agentic tools -------------------------------------------
 
   server.registerTool(
@@ -412,6 +542,28 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
   )
 
   server.registerTool(
+    'test_gen_from_report',
+    {
+      title: titleOf('test_gen_from_report'),
+      description: descOf('test_gen_from_report'),
+      annotations: annotationsFor('test_gen_from_report'),
+      inputSchema: {
+        reportId: z.string().describe('Report UUID to turn into a Playwright PR'),
+        projectId: z.string().optional().describe('Project UUID — defaults to configured project'),
+      },
+    },
+    async (args) => {
+      const pid = args.projectId ?? projectId
+      if (!pid) throw new MushiApiError(400, 'MISSING_PROJECT', 'projectId is required for test_gen_from_report')
+      const data = await apiCall(`/v1/admin/inventory/${pid}/test-gen/from-report/${args.reportId}`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })
+      return jsonText(data)
+    },
+  )
+
+  server.registerTool(
     'transition_status',
     {
       title: titleOf('transition_status'),
@@ -427,23 +579,6 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       const data = await apiCall(`/v1/admin/reports/${args.reportId}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: args.status, reason: args.reason }),
-      })
-      return jsonText(data)
-    },
-  )
-
-  server.registerTool(
-    'run_nl_query',
-    {
-      title: titleOf('run_nl_query'),
-      description: descOf('run_nl_query'),
-      annotations: annotationsFor('run_nl_query'),
-      inputSchema: { question: z.string().describe('Question in plain English, e.g. "Which components had the most critical bugs this week?"') },
-    },
-    async (args) => {
-      const data = await apiCall('/v1/admin/query', {
-        method: 'POST',
-        body: JSON.stringify({ question: args.question }),
       })
       return jsonText(data)
     },

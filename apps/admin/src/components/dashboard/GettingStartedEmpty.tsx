@@ -86,7 +86,12 @@ export function GettingStartedEmpty() {
         description="Run your first user-felt-bug PDCA loop. Four stages, one closed loop."
       />
 
-      <SetupChecklist project={project} mode="banner" onRefresh={setup.reload} />
+      <SetupChecklist
+        project={project}
+        mode="banner"
+        onRefresh={setup.reload}
+        adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
+      />
 
       <FirstLoopPanel stages={stages} project={project} />
 

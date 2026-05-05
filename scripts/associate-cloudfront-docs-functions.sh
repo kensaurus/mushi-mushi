@@ -48,14 +48,47 @@ fi
 
 # CloudFront Functions ARNs are global. DescribeFunction returns the
 # canonical ARN so we don't have to assemble it from account ID.
+#
+# Error handling: the previous implementation swallowed EVERY non-zero
+# exit code from `aws cloudfront describe-function`, which means
+# credential / region / network / API errors were silently misreported
+# as "function not in LIVE stage" by the validation a few lines down.
+# Operators chasing a real outage were sent debugging the wrong thing.
+#
+# We now capture stderr separately, recognize the specific
+# "NoSuchFunctionExists" / "no resource matches" cases as the soft-fail
+# we want to swallow (the calling block emits a clear "not in LIVE
+# stage" message in that case), and re-raise any other failure so
+# `set -e` aborts and the operator sees the real AWS CLI message.
 get_fn_arn() {
   local name="$1"
-  aws cloudfront describe-function \
-    --name "$name" \
-    --stage LIVE \
-    --region us-east-1 \
-    --query 'FunctionSummary.FunctionMetadata.FunctionARN' \
-    --output text
+  local arn=""
+  local err=""
+  local stderr_file
+  stderr_file="$(mktemp)"
+  if arn="$(aws cloudfront describe-function \
+      --name "$name" \
+      --stage LIVE \
+      --region us-east-1 \
+      --query 'FunctionSummary.FunctionMetadata.FunctionARN' \
+      --output text 2>"$stderr_file")"; then
+    rm -f "$stderr_file"
+    printf '%s\n' "$arn"
+    return 0
+  fi
+  err="$(cat "$stderr_file" 2>/dev/null || true)"
+  rm -f "$stderr_file"
+  # Known "function does not exist in this stage" errors — the only
+  # case the caller is prepared to handle by emitting a clean message.
+  if printf '%s' "$err" | grep -qE 'NoSuchFunctionExists|No function with name|cannot be found|not.*found'; then
+    printf '%s\n' ""
+    return 0
+  fi
+  # Anything else (auth, network, throttling, IAM, region) — surface it
+  # so the operator/CI sees the real cause instead of the misleading
+  # "not in LIVE stage" message.
+  printf '%s\n' "$err" >&2
+  return 1
 }
 
 ROUTER_ARN="$(get_fn_arn "$ROUTER_NAME")"
@@ -87,13 +120,21 @@ jq '.DistributionConfig' "$WORK/dist.json" > "$WORK/config.json"
 # Surgical jq patch: locate the cache behavior whose PathPattern matches,
 # replace its FunctionAssociations with the canonical 2-entry shape, and
 # leave every other field untouched.
+#
+# `.CacheBehaviors.Items` is OMITTED (not just empty) when the
+# distribution has zero ordered cache behaviors — i.e.
+# `.CacheBehaviors.Quantity == 0`. Without `// []` the `map(...)`
+# would crash with `Cannot iterate over null` and the script would
+# fail with an opaque jq error instead of the clean "no behavior
+# matches" warning we emit a few lines down. Defensive defaulting
+# preserves that intended fall-through.
 PATCHED="$(
   jq \
     --arg pattern "$PATH_PATTERN" \
     --arg router "$ROUTER_ARN" \
     --arg response "$RESPONSE_ARN" \
     '
-    .CacheBehaviors.Items |= map(
+    .CacheBehaviors.Items = ((.CacheBehaviors.Items // []) | map(
       if .PathPattern == $pattern then
         .FunctionAssociations = {
           Quantity: 2,
@@ -103,7 +144,7 @@ PATCHED="$(
           ]
         }
       else . end
-    )
+    ))
     ' "$WORK/config.json"
 )"
 
@@ -123,12 +164,12 @@ PATCHED="$(
 # from before this workflow step existed.
 MATCHED="$(echo "$PATCHED" | jq --arg p "$PATH_PATTERN" '[.CacheBehaviors.Items[] | select(.PathPattern == $p)] | length')"
 if [ "$MATCHED" -eq 0 ]; then
-  echo "::warning::no cache behavior matches PathPattern=\"$PATH_PATTERN\" — docs synthetic 404 will keep showing the raw S3 body until a /docs-specific behavior is created in the distribution"
+  echo "::warning::no cache behavior matches PathPattern=\"$PATH_PATTERN\" — docs synthetic 404 will keep showing the raw S3 body until a docs-specific behavior is created in the distribution"
   echo "  available patterns:"
-  jq -r '.CacheBehaviors.Items[].PathPattern' "$WORK/config.json" | sed 's/^/    - /'
+  jq -r '(.CacheBehaviors.Items // [])[].PathPattern' "$WORK/config.json" | sed 's/^/    - /'
   echo "  to fix:"
   echo "    1. open https://console.aws.amazon.com/cloudfront/v3/home"
-  echo "    2. select distribution \$CLOUDFRONT_DISTRIBUTION_ID"
+  echo "    2. select distribution $DIST_ID"
   echo "    3. behaviors → create behavior with path pattern \"$PATH_PATTERN\","
   echo "       origin = the S3 origin currently serving \"/mushi-mushi/*\","
   echo "       same cache policy as the parent behavior."

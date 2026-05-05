@@ -109,6 +109,7 @@ describe('MCP protocol handshake', () => {
     const names = tools.map(t => t.name).sort()
     expect(names).toEqual([
       'dispatch_fix',
+      'fix_suggest',
       'get_blast_radius',
       'get_fix_context',
       'get_fix_timeline',
@@ -116,9 +117,15 @@ describe('MCP protocol handshake', () => {
       'get_recent_reports',
       'get_report_detail',
       'get_similar_bugs',
+      'graph_neighborhood',
+      'graph_node_status',
+      'inventory_diff',
+      'inventory_findings',
+      'inventory_get',
       'run_nl_query',
       'search_reports',
       'submit_fix_result',
+      'test_gen_from_report',
       'transition_status',
       'trigger_judge',
     ])
@@ -134,6 +141,7 @@ describe('MCP protocol handshake', () => {
       'submit_fix_result',
       'dispatch_fix',
       'trigger_judge',
+      'test_gen_from_report',
       'transition_status',
     ])
     for (const t of tools) {
@@ -308,6 +316,34 @@ describe('tool → REST contract', () => {
     expect(call.method).toBe('POST')
     expect(call.url).toBe(`${API_ENDPOINT}/v1/admin/query`)
     expect(call.body).toEqual({ question: 'top 5 components with critical bugs this week' })
+  })
+
+  it('inventory_get calls GET /v1/admin/inventory/:projectId', async () => {
+    fetchStub.enqueue({ ok: true, data: { snapshot: null, summary: {} } })
+    await client.callTool({ name: 'inventory_get', arguments: {} })
+    expect(fetchStub.calls[0].method).toBe('GET')
+    expect(fetchStub.calls[0].url).toBe(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`)
+  })
+
+  it('test_gen_from_report POSTs to inventory test-gen route', async () => {
+    fetchStub.enqueue({
+      ok: true,
+      data: {
+        prUrl: 'https://github.com/x/y/pull/99',
+        prNumber: 99,
+        branch: 'b',
+        path: 'e2e/t.spec.ts',
+      },
+    })
+    await client.callTool({
+      name: 'test_gen_from_report',
+      arguments: { reportId: '11111111-1111-1111-1111-111111111111' },
+    })
+    const call = fetchStub.calls[0]
+    expect(call.method).toBe('POST')
+    expect(call.url).toBe(
+      `${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}/test-gen/from-report/11111111-1111-1111-1111-111111111111`,
+    )
   })
 })
 

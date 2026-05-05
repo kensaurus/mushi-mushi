@@ -11,6 +11,29 @@ export function createElementSelector(): ElementSelector {
   let overlay: HTMLDivElement | null = null;
   let resolvePromise: ((el: MushiSelectedElement | null) => void) | null = null;
 
+  /**
+   * Walk up the DOM until we find an ancestor with `data-testid`.
+   *
+   * Why ascending and not descending: testids in modern apps are placed
+   * on the OUTER interactive container ("BuyProButton") rather than on
+   * the deepest leaf the click event hit (the SVG inside the icon).
+   * Walking up matches authoring intent.
+   *
+   * Bounded at 20 hops so a misbehaving page can't pin the SDK in a
+   * pathological tree.
+   */
+  function findNearestTestid(el: Element | null): string | null {
+    let cur: Element | null = el;
+    let hops = 0;
+    while (cur && hops < 20) {
+      const tid = cur.getAttribute?.('data-testid');
+      if (tid) return tid;
+      cur = cur.parentElement;
+      hops++;
+    }
+    return null;
+  }
+
   function getXPath(el: Element): string {
     const parts: string[] = [];
     let current: Element | null = el;
@@ -42,6 +65,12 @@ export function createElementSelector(): ElementSelector {
         width: Math.round(rect.width),
         height: Math.round(rect.height),
       },
+      // v2 (whitepaper §4.7): the closest ancestor's `data-testid` lets the
+      // server map this report → an Action node in the inventory graph
+      // without a fuzzy NLP guess. We walk to the body so a deeply nested
+      // span inside a button-with-testid still resolves correctly.
+      nearestTestid: findNearestTestid(el) || undefined,
+      route: typeof window !== 'undefined' ? window.location.pathname : undefined,
     };
   }
 

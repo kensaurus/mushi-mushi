@@ -67,13 +67,24 @@ for (const root of PUBLISH_ROOTS) {
     if (pkg.private === true) continue // opt-out
 
     // ------- name
-    //   `@mushi-mushi/*` for the SDK/server/plugin constellation, plus two
-    //   unscoped exceptions for the public-facing CLI entry points that
-    //   users actually type on the command line (`mushi-mushi`,
-    //   `create-mushi-mushi`). Those two names are owned by the org and
-    //   have been the launch-day brand since v0.1.0 — re-scoping them would
-    //   break every documented install line.
-    const UNSCOPED_ALLOWED = new Set(['mushi-mushi', 'create-mushi-mushi'])
+    //   `@mushi-mushi/*` for the SDK/server/plugin constellation, plus a
+    //   small set of unscoped exceptions:
+    //     - `mushi-mushi` / `create-mushi-mushi` — public-facing CLI
+    //       entry points users type on the command line. Owned by the
+    //       org since v0.1.0; re-scoping would break every documented
+    //       install line.
+    //     - `eslint-plugin-mushi-mushi` — ESLint convention requires
+    //       community plugins to be either `eslint-plugin-*` (unscoped)
+    //       or `@<scope>/eslint-plugin*` (scoped). We chose the unscoped
+    //       form because it auto-discovers via `extends: ['plugin:mushi-mushi/recommended']`
+    //       without users having to remember the @-prefix in their
+    //       eslintrc — matches eslint-plugin-react, eslint-plugin-import,
+    //       eslint-plugin-jsx-a11y, etc.
+    const UNSCOPED_ALLOWED = new Set([
+      'mushi-mushi',
+      'create-mushi-mushi',
+      'eslint-plugin-mushi-mushi',
+    ])
     if (
       typeof pkg.name !== 'string' ||
       (!pkg.name.startsWith('@mushi-mushi/') && !UNSCOPED_ALLOWED.has(pkg.name))

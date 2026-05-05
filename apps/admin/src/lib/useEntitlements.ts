@@ -25,6 +25,7 @@ export type FeatureFlag =
   | 'soc2'
   | 'self_hosted'
   | 'teams'
+  | 'inventory_v2'
 
 export interface UpgradeTarget {
   id: string

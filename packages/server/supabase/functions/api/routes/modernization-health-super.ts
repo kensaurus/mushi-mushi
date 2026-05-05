@@ -11,6 +11,7 @@ import {
   requireFeature,
   resolveActiveEntitlement,
   GATED_ROUTES,
+  INVENTORY_V2_DOGFOOD_EMAILS,
   type FeatureFlag,
 } from '../../_shared/entitlements.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
@@ -517,7 +518,11 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
       });
     }
 
-    const flags = (entitlement.plan.feature_flags ?? {}) as Record<string, unknown>;
+    const flags = { ...(entitlement.plan.feature_flags ?? {}) } as Record<string, unknown>;
+    const em = (userEmail ?? '').toLowerCase();
+    if (em && INVENTORY_V2_DOGFOOD_EMAILS.has(em)) {
+      flags.inventory_v2 = true;
+    }
 
     return c.json({
       ok: true,

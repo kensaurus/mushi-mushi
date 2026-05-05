@@ -13,6 +13,9 @@ export type AuditAction = 'report.created' | 'report.classified' | 'report.triag
   | 'compliance.retention.updated'
   | 'compliance.dsar.created' | 'compliance.dsar.updated'
   | 'compliance.soc2.evidence_refreshed'
+  // v2 inventory + gates audit actions (whitepaper §4.1, §5)
+  | 'inventory.ingest' | 'inventory.reconcile' | 'inventory.gates_run'
+  | 'inventory.test_gen' | 'inventory.status_changed'
 
 export async function logAudit(
   db: SupabaseClient,

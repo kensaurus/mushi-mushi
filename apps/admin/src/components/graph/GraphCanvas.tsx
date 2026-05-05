@@ -17,9 +17,31 @@ import {
   type NodeMouseHandler,
 } from '@xyflow/react'
 import { NODE_COLORS } from '../../lib/tokens'
+import { useTheme } from '../../lib/useTheme'
 import { GraphLegend } from './GraphLegend'
 import { ReactFlowChip } from './NodeChip'
 import type { GraphNode } from './types'
+
+// Minimap + dot-grid colours are passed straight to SVG attrs by xyflow,
+// which strips `var(--…)` references — so we resolve them per-theme here
+// instead of trying to live inside CSS custom properties.
+const MINIMAP_COLORS = {
+  dark: {
+    background: 'oklch(0.215 0.007 285)',
+    mask: 'oklch(0.10 0 0 / 0.55)',
+    border: 'oklch(0.30 0.005 285)',
+  },
+  light: {
+    background: 'oklch(0.97 0.003 285)',
+    mask: 'oklch(0.55 0.005 285 / 0.18)',
+    border: 'oklch(0.85 0.004 285)',
+  },
+} as const
+
+const DOT_GRID_COLORS = {
+  dark: 'oklch(0.30 0 0)',
+  light: 'oklch(0.86 0.004 285)',
+} as const
 
 interface Props {
   flowNodes: Node[]
@@ -49,6 +71,9 @@ export function GraphCanvas({
   showMinimap = true,
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false)
+  const { resolved } = useTheme()
+  const minimap = MINIMAP_COLORS[resolved]
+  const dotGrid = DOT_GRID_COLORS[resolved]
 
   // Auto-fade the pan/zoom hint after 6s. Stored in localStorage so it doesn't
   // re-appear every refresh once the user has seen it.
@@ -102,7 +127,7 @@ export function GraphCanvas({
         nodeTypes={{ default: ReactFlowChip }}
         aria-label="Knowledge graph nodes and edges. Use Tab to focus, Enter or Space to select a node and load its blast radius."
       >
-        <Background gap={24} color="oklch(0.30 0 0)" />
+        <Background gap={24} color={dotGrid} />
         <Controls position="bottom-right" showInteractive={false} />
         {showMinimap && (
           <MiniMap
@@ -110,10 +135,16 @@ export function GraphCanvas({
             zoomable
             nodeColor={(n) => {
               const data = n.data as { node?: GraphNode } | undefined
-              return NODE_COLORS[data?.node?.node_type ?? ''] ?? 'oklch(0.45 0 0)'
+              return NODE_COLORS[data?.node?.node_type ?? ''] ?? 'oklch(0.55 0.005 285)'
             }}
-            maskColor="oklch(0.10 0 0 / 0.6)"
-            style={{ background: 'oklch(0.14 0 0)' }}
+            nodeStrokeColor={minimap.border}
+            nodeStrokeWidth={1.5}
+            maskColor={minimap.mask}
+            style={{
+              background: minimap.background,
+              border: `1px solid ${minimap.border}`,
+              borderRadius: 6,
+            }}
           />
         )}
         {!hintDismissed && (
