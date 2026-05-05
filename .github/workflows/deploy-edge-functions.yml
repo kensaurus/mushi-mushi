@@ -78,6 +78,16 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Pre-flight — Edge Function import boundaries
+        # Fail fast with an actionable error instead of letting Supabase
+        # reject the deploy with a misleading HTTP 400. The script flags
+        # any `_shared/` → sibling-function relative import (or any
+        # cross-function relative import) — those leave unresolved module
+        # specifiers in the deploy bundle because we only ship
+        # `<function>/` plus `_shared/`. See the 2026-05-05 inventory-
+        # crawler / synthetic-monitor regression for the failure mode.
+        run: node scripts/check-edge-fn-imports.mjs
+
       - name: Discover functions
         id: discover
         working-directory: packages/server/supabase

@@ -58,6 +58,7 @@
     "check:dead-buttons": "node scripts/check-dead-buttons.mjs",
     "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
     "check:license-headers": "node scripts/check-license-headers.mjs",
+    "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"
   },
   "pnpm": {
