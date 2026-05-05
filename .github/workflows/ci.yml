@@ -118,6 +118,17 @@ jobs:
         # 400s and bare-slug rendering on the in-progress card.
         run: pnpm check:migration-catalog
 
+      - name: Check Edge Function import boundaries
+        # Regression guard for the 2026-05-05 inventory-crawler / synthetic-
+        # monitor deploy failure: `_shared/inventory-guards.ts` reached
+        # into `../api/shared.ts` for `accessibleProjectIds`, but the
+        # deploy bundler (scripts/deploy-edge-function.mjs) only ships
+        # `<function>/` plus `_shared/`. The unresolved import made
+        # Supabase reject the deploy with a misleading HTTP 400. This
+        # guard fails the PR if any `_shared/` file or any function dir
+        # imports across function boundaries via a relative path.
+        run: pnpm check:edge-fn-imports
+
       - name: Check JSX unicode escapes
         # Regression guard for the 2026-04-23 InboxPage bug: a `\uXXXX`
         # sequence inside a JSX attribute value or JSX text child renders
