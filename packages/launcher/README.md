@@ -53,6 +53,8 @@ That's it. Your users now have a shake-to-report button (or a floating widget). 
 - **🐛 Shake-to-report widget** — Shadow-DOM, zero CSS conflicts. Ships with screenshot, console ring, network ring, route + intent capture, and an offline queue.
 - **🧠 AI-classified reports** — 2-stage pipeline (Haiku fast-filter → Sonnet deep + vision + RAG) tags each report with category, severity, confidence, and the component path.
 - **🪞 Dedup by meaning, not by string** — pgvector knowledge graph collapses duplicate reports across users, routes, and deploys so your queue isn't a noise storm.
+- **🌱 Bidirectional inventory (v2)** — opt in to `capture: { discoverInventory: true }` and the SDK quietly observes routes, `data-testid`s, and outbound API paths in production. Claude drafts an `inventory.yaml` of user stories + pages + actions for you to accept — most teams will never hand-author one.
+- **🚦 Five pre-release gates (v2)** — `mushi-mushi/no-dead-handler`, `mushi-mushi/no-mock-leak`, inventory drift, agentic-failure detection, synthetic walk health. One composite GitHub status check via the [Mushi Mushi CI Gate Action](https://github.com/kensaurus/mushi-mushi/tree/master/packages/mcp-ci).
 - **🤖 One-click "Dispatch fix"** — agentic orchestrator opens a GitHub PR with a screenshot diff and a Playwright replay. Sandbox-pluggable (`e2b`, `modal`, `cloudflare`, or your own).
 - **📬 Wires into your existing stack** — Sentry breadcrumbs, Slack Block Kit, Jira OAuth sync, Linear issues, PagerDuty escalations, Langfuse traces, GitHub PRs.
 - **🧑‍💻 Agent-native via MCP** — Cursor, Claude Code, Copilot, and any MCP client can read, triage, and dispatch fixes through the same JSON-RPC surface.
@@ -236,6 +238,19 @@ mushi reports triage <id> --status acknowledged --severity high
 mushi deploy check          # post-deploy smoke check
 mushi status                # live pipeline health
 ```
+
+For the **v2 inventory + gates** loop the actionable surface is the GitHub Action — drop one job into your repo and it runs Claude's proposer / the gate suite / the discovery digest on every PR:
+
+```yaml
+# .github/workflows/mushi-gates.yml
+- uses: kensaurus/mushi-mushi/packages/mcp-ci@master
+  with:
+    api-key: ${{ secrets.MUSHI_API_KEY }}
+    project-id: ${{ secrets.MUSHI_PROJECT_ID }}
+    command: gates                       # also: propose · discover-api · discovery-status · auth-bootstrap
+```
+
+The same commands are exposed as MCP tools through [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp), so Cursor / Claude Code / Copilot can drive the v2 loop without you ever opening a terminal.
 
 Or skip the CLI entirely and drive it from your AI agent via [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp):
 

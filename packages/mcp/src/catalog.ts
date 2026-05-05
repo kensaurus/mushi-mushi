@@ -132,6 +132,61 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: true, idempotent: true, openWorld: true },
     useCase: 'Which components had the most critical bugs this week?',
   },
+  // --- Inventory v2 (whitepaper §6.8) -------------------------------------
+  {
+    name: 'inventory_get',
+    title: 'Inventory snapshot',
+    description:
+      'Current inventory.yaml snapshot for a project (latest ingest, validation errors, per-action status summary). Requires inventory_v2 on the project plan.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What does the live inventory claim for this repo right now?',
+  },
+  {
+    name: 'inventory_diff',
+    title: 'Inventory diff',
+    description:
+      'Diff two ingested inventory commits (fromSha → toSha) — added/removed nodes and edges. Use before merging a PR that touches inventory.yaml.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What changed in inventory between these two SHAs?',
+  },
+  {
+    name: 'inventory_findings',
+    title: 'Gate findings',
+    description:
+      'Latest gate runs + findings (dead-handler, mock-leak, crawl, status-claim, …). Filter by gate name or severity.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Show me what CI gates failed on the last run.',
+  },
+  {
+    name: 'graph_neighborhood',
+    title: 'Graph neighborhood',
+    description:
+      'BFS neighborhood around a graph node id or label — nodes + edges within a depth budget (max 4). Same backend as knowledge-graph traversal, tuned for "what touches this action?".',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What nodes connect to this inventory Action within 2 hops?',
+  },
+  {
+    name: 'graph_node_status',
+    title: 'Graph node detail',
+    description:
+      'Fetch a single graph node row (label, type, metadata — includes v2 derived status on Action nodes).',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What status does the graph store on this node id?',
+  },
+  {
+    name: 'fix_suggest',
+    title: 'Suggested fix (from triage)',
+    description:
+      'Read-only slice of a report focused on Stage 2 suggested fix + root cause + reproduction — faster than pulling the full blob when you only need the human-readable hint.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'What did Stage 2 say we should try for this report?',
+  },
   // --- Write / agentic ----------------------------------------------------
   {
     name: 'submit_fix_result',
@@ -160,6 +215,15 @@ export const TOOL_CATALOG: ToolSpec[] = [
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
     useCase: 'Grade the latest batch of fixes before I ship.',
+  },
+  {
+    name: 'test_gen_from_report',
+    title: 'Generate Playwright test from report',
+    description:
+      'POST to inventory test-gen: uses the project BYOK LLM to author a Playwright spec from a classified report and opens a draft PR (internal service orchestration). Requires inventory_v2 + GitHub + LLM keys.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Turn this regression report into an E2E test PR.',
   },
   {
     name: 'transition_status',

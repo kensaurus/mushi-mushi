@@ -17,7 +17,7 @@ inputs:
     required: false
     default: 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
   command:
-    description: 'Which MCP tool to run: trigger-judge | dispatch-fix | check-coverage | query'
+    description: 'Which MCP tool to run: trigger-judge | dispatch-fix | check-coverage | query | gates | discover-api'
     required: true
   report-id:
     description: 'Report UUID — required for dispatch-fix.'
@@ -33,6 +33,28 @@ inputs:
     description: 'Whether to fail the action when Mushi returns 402 QUOTA_EXCEEDED.'
     required: false
     default: 'true'
+  commit-sha:
+    description: 'For command=gates: commit SHA the gates run against. Defaults to GITHUB_SHA.'
+    required: false
+  pr-number:
+    description: 'For command=gates: pull-request number, used to scope findings on the admin UI.'
+    required: false
+  gates:
+    description: 'For command=gates: comma-separated subset to run. Defaults to "all".'
+    required: false
+    default: 'all'
+  repo-root:
+    description: 'For command=discover-api: directory to walk for Next.js route handlers + OpenAPI files. Defaults to GitHub workspace.'
+    required: false
+  openapi-file:
+    description: 'For command=discover-api: explicit OpenAPI file path. Defaults to <repo-root>/openapi.yaml.'
+    required: false
+  supabase-url:
+    description: 'For command=discover-api: Supabase project URL to introspect via /rest/v1/.'
+    required: false
+  supabase-anon-key:
+    description: 'For command=discover-api: Supabase anon key for introspection.'
+    required: false
 
 outputs:
   result:

@@ -35,6 +35,7 @@ type Scope =
   | 'notifications'
   | 'marketplace'
   | 'integrations'
+  | 'inventory'
 
 type Input =
   | { scope: 'audit'; warnCount: number; failCount: number }
@@ -55,6 +56,7 @@ type Input =
   | { scope: 'notifications'; unreadCritical: number; totalUnread: number }
   | { scope: 'marketplace'; installableUpdates: number; disabledPlugins: number }
   | { scope: 'integrations'; disconnectedCount: number; expiringCount: number }
+  | { scope: 'inventory'; fragileComponents: number; untestedComponents: number }
 
 /**
  * Pure function — returns the action for a page scope given live input.
@@ -170,6 +172,26 @@ export function computeNextBestAction(input: Input): PageAction | null {
           title: `${input.untestedComponents} ${input.untestedComponents === 1 ? 'component' : 'components'} have no test coverage`,
           reason: 'Adding even 1 regression test makes verification deterministic.',
           primary: { kind: 'link', to: '/graph?layer=components&filter=untested', label: 'Open untested nodes' },
+        }
+      }
+      return null
+
+    case 'inventory':
+      if (input.fragileComponents > 0) {
+        return {
+          tone: 'do',
+          title: `${input.fragileComponents} regressed ${input.fragileComponents === 1 ? 'action' : 'actions'} in inventory`,
+          reason: 'Regressions flip when CI, synthetics, or volume signals disagree with verified claims.',
+          primary: { kind: 'link', to: '/inventory', label: 'Open inventory' },
+          secondary: [{ kind: 'link', to: '/inventory', label: 'Run gates' }],
+        }
+      }
+      if (input.untestedComponents > 0) {
+        return {
+          tone: 'check',
+          title: `${input.untestedComponents} action${input.untestedComponents === 1 ? '' : 's'} still unknown or unwired`,
+          reason: 'Promote the riskiest flows from unknown → wired → verified with a ground-truth test.',
+          primary: { kind: 'link', to: '/inventory', label: 'Review tree' },
         }
       }
       return null

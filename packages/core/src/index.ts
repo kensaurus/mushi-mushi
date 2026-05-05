@@ -5,6 +5,8 @@ export type {
   MushiWidgetConfig,
   MushiWidgetAnchor,
   MushiCaptureConfig,
+  MushiDiscoverInventoryConfig,
+  MushiDiscoveryEventPayload,
   MushiPrivacyConfig,
   MushiProactiveConfig,
   MushiApiCascadeConfig,

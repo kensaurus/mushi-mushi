@@ -121,8 +121,88 @@ async function hashApiKey(raw: string): Promise<string> {
 }
 
 /**
+ * SDK heartbeat: how recent must `last_seen_at` be for a key before we skip
+ * a redundant heartbeat write. 30s gives operators near-real-time feedback
+ * on the dashboard ("we just saw your SDK") without making every
+ * report-batch submission contend on the same row.
+ */
+const SDK_HEARTBEAT_THROTTLE_MS = 30_000
+
+/**
+ * Truncate User-Agent values before they hit the DB. Some SDKs append
+ * verbose plugin lists; cap at a sensible width to keep rows small.
+ */
+const MAX_HEARTBEAT_UA_LEN = 512
+
+/**
+ * Record an SDK heartbeat on `project_api_keys` after a successful API-key
+ * auth. The heartbeat is the canonical "is the SDK reaching this backend"
+ * signal that drives the `sdk_installed` step in /v1/admin/setup. It
+ * replaces the old "wait for a non-admin report" heuristic which falsely
+ * flagged correctly-installed SDKs as missing whenever (a) no real bug had
+ * been triggered yet or (b) the SDK was talking to a different backend
+ * than the admin (cross-env mismatches like local vs cloud Supabase).
+ *
+ * Three guarantees:
+ *   1. Fire-and-forget. Auth has already succeeded; any heartbeat write
+ *      failure is swallowed so the SDK request still completes.
+ *   2. Throttled. We only update when `last_seen_at` is null or older
+ *      than the throttle window. The conditional WHERE clause runs
+ *      server-side so even concurrent SDK calls converge cheaply.
+ *   3. Bounded payload. UA is truncated; origin/host come straight from
+ *      headers we already trust. None of these fields contain user data.
+ */
+function recordSdkHeartbeat(opts: {
+  db: ReturnType<typeof getServiceClient>
+  keyHash: string
+  origin: string | null
+  userAgent: string | null
+  endpointHost: string | null
+}): void {
+  const { db, keyHash, origin, userAgent, endpointHost } = opts
+  const cutoffIso = new Date(Date.now() - SDK_HEARTBEAT_THROTTLE_MS).toISOString()
+  const truncatedUa =
+    userAgent && userAgent.length > MAX_HEARTBEAT_UA_LEN
+      ? userAgent.slice(0, MAX_HEARTBEAT_UA_LEN)
+      : userAgent
+
+  // Two-layer race guard: the .or() filter lets concurrent first-time
+  // requests both update (no row gets stuck), and the throttle filter
+  // collapses subsequent in-window writes into the first one.
+  void db
+    .from('project_api_keys')
+    .update({
+      last_seen_at: new Date().toISOString(),
+      last_seen_origin: origin,
+      last_seen_user_agent: truncatedUa,
+      last_seen_endpoint_host: endpointHost,
+    })
+    .eq('key_hash', keyHash)
+    .or(`last_seen_at.is.null,last_seen_at.lt.${cutoffIso}`)
+    .then(() => {
+      // Intentional no-op: the heartbeat is best-effort metadata.
+    }, () => {
+      // Swallow — never fail the auth path on a heartbeat write.
+    })
+}
+
+/**
+ * Best-effort host extraction from a request URL. Hono guarantees
+ * `c.req.url` is well-formed, but Edge Functions can be invoked with a
+ * malformed URL during local dev, so we fail closed to null.
+ */
+function extractEndpointHost(url: string): string | null {
+  try {
+    return new URL(url).host || null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Middleware: validate API key from X-Mushi-Api-Key header.
- * Sets projectId and projectName on the Hono context.
+ * Sets projectId and projectName on the Hono context. Records an SDK
+ * heartbeat on the matched key (see {@link recordSdkHeartbeat}).
  *
  * Used for SDK ingestion paths (report submission, notifications). Callers
  * that need admin semantics should use {@link adminOrApiKey} instead — it
@@ -149,6 +229,14 @@ export async function apiKeyAuth(c: Context, next: Next) {
   if (error || !keyRow) {
     return c.json({ error: { code: 'INVALID_API_KEY', message: 'Invalid or revoked API key' } }, 401)
   }
+
+  recordSdkHeartbeat({
+    db,
+    keyHash,
+    origin: c.req.header('Origin') ?? c.req.header('Referer') ?? null,
+    userAgent: c.req.header('User-Agent') ?? null,
+    endpointHost: extractEndpointHost(c.req.url),
+  })
 
   c.set('projectId', keyRow.project_id)
   c.set('projectName', keyRow.projects?.name ?? 'Unknown')

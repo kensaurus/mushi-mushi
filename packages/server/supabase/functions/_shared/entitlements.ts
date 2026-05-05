@@ -47,6 +47,10 @@ export type FeatureFlag =
   | 'soc2'
   | 'self_hosted'
   | 'teams'
+  // Mushi Mushi v2 — bidirectional inventory + agentic-failure gates.
+  // Pro tier and above. The flag gates the /inventory admin page,
+  // crawler / synthetic monitor crons, and the five CI gates.
+  | 'inventory_v2'
 
 export interface ResolvedEntitlement {
   projectId: string
@@ -205,6 +209,18 @@ export function requireFeature(flag: FeatureFlag) {
       return
     }
 
+    // v2 dogfood: unlock inventory routes for named accounts without waiting
+    // for Stripe plan rows to refresh in every dev DB snapshot.
+    if (flag === 'inventory_v2') {
+      const email = (c.get('userEmail') as string | undefined)?.toLowerCase?.() ?? ''
+      if (email && INVENTORY_V2_DOGFOOD_EMAILS.has(email)) {
+        c.set('entitlement', entitlement)
+        c.set('projectId', entitlement.projectId)
+        await next()
+        return
+      }
+    }
+
     const upgradePlan = await minimumPlanFor(flag)
     log.info('entitlement_blocked', {
       path: c.req.path,
@@ -254,4 +270,8 @@ export const GATED_ROUTES: ReadonlyArray<{
   { prefix: '/v1/admin/plugins', flag: 'plugins' },
   { prefix: '/v1/admin/intelligence', flag: 'intelligence_reports' },
   { prefix: '/v1/org', flag: 'teams' },
+  { prefix: '/v1/admin/inventory', flag: 'inventory_v2' },
 ]
+
+/** Primary dogfood account — Pro-shaped inventory API before tier rollout. */
+export const INVENTORY_V2_DOGFOOD_EMAILS = new Set(['kensaurus@gmail.com'])

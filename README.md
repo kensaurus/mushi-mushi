@@ -19,7 +19,47 @@ Sentry catches what your code throws. Mushi catches what your users *feel* — t
 
 <sub>↑ a logged-in 4-stop walk through the Plan → Do → Check → Act loop</sub>
 
+<br><br>
+
+<a href="https://kensaur.us/mushi-mushi/admin/dashboard" title="Open the live admin dashboard">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/dashboard-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="./docs/screenshots/dashboard-light.png">
+    <img alt="Mushi admin dashboard — the new v2 PDCA cockpit. Plan / Do / Check / Act pills along the top, Workspace snapshot, the bug-fix loop summary, the next action callout, and the project setup checklist down the right." src="./docs/screenshots/dashboard-dark.png" width="100%">
+  </picture>
+</a>
+
+<sub>↑ the v2 admin · click to open the live demo · the image swaps with your system theme</sub>
+
 </div>
+
+---
+
+## What's new in v2 — bidirectional inventory + agentic-failure gates
+
+Mushi v1 was the negative side: catch what your users *felt* break and triage it.
+**v2 adds the positive side**: a declarative `inventory.yaml` of user stories, pages, and actions — with five pre-release **gates** that fail the build when the agent's drafts diverge from the contract, and a **synthetic monitor** that re-walks the same surface against staging on a schedule.
+
+- 🌱 **Sketch your app, not just its bugs.** A `User stories · Inventory` page (sidebar → User stories) groups every user-facing action under the story it serves and shows verified / unwired / regressed counts at a glance.
+- 🤖 **The SDK proposes the inventory.** Turn on `capture.discoverInventory` and the SDK quietly observes routes, `data-testid`s, and outbound API paths in production — Claude drafts an `inventory.yaml` from the stream, you accept or edit. Most teams will never hand-author one.
+- 🚦 **Five gates, one composite GitHub check.** `mushi-mushi/no-dead-handler` (empty `onClick`s), `mushi-mushi/no-mock-leak` (faker / "John Doe" arrays in non-test paths), inventory drift (added / removed / renamed actions), agentic-failure detection (handler regressions across deploys), and synthetic walk health.
+- 🛰️ **Synthetic monitor** runs the inventory's `expected_outcome` checks against your staging URL on a cron — fail-closed by default, with explicit `synthetic_monitor_allow_mutations` opt-in for write paths.
+- 🕸️ **Graph gets a Surface mode** — the same `Bug graph` toggles to a `Surface` view that overlays the positive inventory on the live knowledge graph so you can see the dead corners.
+
+Get started in any project that already has Mushi installed:
+
+```yaml
+# .github/workflows/mushi-gates.yml
+- uses: kensaurus/mushi-mushi/packages/mcp-ci@master
+  with:
+    api-key: ${{ secrets.MUSHI_API_KEY }}
+    project-id: ${{ secrets.MUSHI_PROJECT_ID }}
+    command: gates                       # also: propose · discover-api · discovery-status · auth-bootstrap
+```
+
+Inside your IDE the same commands are exposed as MCP tools via [`@mushi-mushi/mcp`](./packages/mcp/), so Cursor / Claude Code / Copilot can run them on your behalf. From the admin UI you click *Run gates* / *Run crawler* directly on each row of the User stories page.
+
+Full schema in [`@mushi-mushi/inventory-schema`](./packages/inventory-schema/), ESLint rules in [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi/), the auth-bootstrap helper in [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner/).
 
 ---
 
@@ -61,14 +101,23 @@ import { MushiProvider } from '@mushi-mushi/react'
 
 function App() {
   return (
-    <MushiProvider config={{ projectId: 'proj_xxx', apiKey: 'mushi_xxx' }}>
+    <MushiProvider
+      config={{
+        projectId: 'proj_xxx',
+        apiKey: 'mushi_xxx',
+        // v2.1 — opt in to passive inventory discovery (off by default).
+        // Routes, testids, and outbound API paths flow into the proposer
+        // so Claude can draft an inventory.yaml for you to accept.
+        capture: { discoverInventory: true },
+      }}
+    >
       <YourApp />
     </MushiProvider>
   )
 }
 ```
 
-Your users now have a shake-to-report widget. Reports land in your admin console, classified within seconds.
+Your users now have a shake-to-report widget. Reports land in your admin console, classified within seconds — and (with `discoverInventory`) your inventory drafts itself from the same stream.
 
 <details>
 <summary><b>Other frameworks</b> — Vue, Svelte, Angular, React Native, Vanilla JS, iOS, Android</summary>
@@ -125,6 +174,49 @@ Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey =
 </details>
 
 > Want a runnable example? [`examples/react-demo`](./examples/react-demo) is a minimal Vite + React app with test buttons for dead clicks, thrown errors, failed API calls, and console errors.
+
+---
+
+## Tour the rooms
+
+A quick look at where you'll spend your time. Every panel is a click-through to the live demo.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/dashboard" title="Open the live dashboard">
+        <img alt="Dashboard — PDCA cockpit with PLAN / DO / CHECK / ACT pills along the top, the bug-fix loop summary, the next action callout, and the project setup checklist." src="./docs/screenshots/dashboard-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Dashboard</b> · the PDCA cockpit — PLAN / DO / CHECK / ACT in one row, the next action explained in plain English, and the setup checklist that moves itself off-screen once you finish</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/inventory" title="Open the live inventory">
+        <img alt="User stories · Inventory — the new v2 positive-side surface. Truth layer summary across the top, then per-story cards with verified / unwired / regressed counts and a Run gates button." src="./docs/screenshots/inventory-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>User stories · Inventory</b> · the new v2 positive surface — every user-facing action grouped under its story, with verified / unwired / regressed counts and one-click <i>Run gates</i> / <i>Run crawler</i> from the row</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/graph" title="Open the live knowledge graph">
+        <img alt="Knowledge graph — Bug graph view with quick-view filters (All / Regressions / Fragile components / Fix coverage), 12 node types, 19 edge types, and Graph / Surface / Table tabs in the upper-right." src="./docs/screenshots/graph-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Knowledge graph</b> · component / page / release adjacency weighted by bug incidence — toggle <i>Surface</i> to overlay the positive inventory and see the dead corners</sub>
+    </td>
+    <td width="50%" align="center">
+      <a href="https://kensaur.us/mushi-mushi/admin/graph" title="Open graph in Surface mode">
+        <img alt="Graph in Surface mode — the same knowledge graph with the positive inventory (Page (inventory), User story, Element, Action node types) overlaid; subtitle reads SURFACE - INVENTORY OVERLAY · 83/119 nodes · 110/114 edges." src="./docs/screenshots/graph-surface-dark.png" width="100%">
+      </a>
+      <br>
+      <sub><b>Graph · Surface mode</b> · v2 — the same canvas, but every Page / Element / Action from <code>inventory.yaml</code> overlaid on the live knowledge graph so the dead corners light up</sub>
+    </td>
+  </tr>
+</table>
+
+For the full screenshot tour (28 surfaces, every page in the console) see [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).
 
 ---
 
@@ -192,6 +284,7 @@ Mushi is honest about what's still partial. Skim before you commit:
 | Verify | Playwright screenshot diff + step interpreter (`navigate` / `click` / `type` / `press` / `select` / `assertText` / `waitFor` / `observe`) | — |
 | Enterprise | Plugin marketplace + HMAC, audit ingest, region pinning, retention CRUD, Stripe metering, **SAML SSO via Supabase Auth Admin API** | **OIDC SSO returns `501 Not Implemented`** — Supabase GoTrue does not yet expose admin endpoints for OIDC. The admin form still saves so the round-trip is tested; tracking the GoTrue changelog. |
 | Graph backend | SQL adjacency over `graph_nodes` / `graph_edges` ships in every deployment | Apache AGE is a hosted-tier enhancement when the extension is installed (self-hosted Postgres 16 or Supabase Enterprise). Managed Supabase stays on SQL adjacency. |
+| Inventory v2 | Hand-written `inventory.yaml`, SDK-driven discovery (`capture.discoverInventory`), Claude proposer, ESLint rules `no-dead-handler` + `no-mock-leak`, 5-gate composite GitHub check, synthetic monitor with explicit mutation opt-in, **Surface** mode in the graph | Inventory routes are gated behind *Advanced* mode in the sidebar (sidebar → User stories) — promote when the team is ready. Synthetic mutations stay fail-closed unless `synthetic_monitor_allow_mutations = true` is set per-project. |
 
 The orchestrator **refuses to run `local-noop` in production** unless you explicitly set `MUSHI_ALLOW_LOCAL_SANDBOX=1`. Pick `e2b` (or implement `SandboxProvider` yourself) before exposing autofix to production traffic.
 
@@ -252,10 +345,13 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 
 | Package | Purpose |
 | ------- | ------- |
-| [`@mushi-mushi/core`](./packages/core) | Shared engine — types, API client, PII scrubber, offline queue, rate limiter |
+| [`@mushi-mushi/core`](./packages/core) | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, **v2.1 `discoverInventory` types** |
 | [`@mushi-mushi/cli`](./packages/cli) | CLI for project setup, report listing, triage |
 | [`@mushi-mushi/mcp`](./packages/mcp) | MCP server — Cursor / Copilot / Claude read, triage, classify, dispatch fixes |
-| [`@mushi-mushi/mcp-ci`](./packages/mcp-ci) | GitHub Action that calls the MCP tools from CI |
+| [`@mushi-mushi/mcp-ci`](./packages/mcp-ci) | GitHub Action — `gates`, `discover-api`, `discovery-status`, `propose`, `auth-bootstrap` (the v2 pre-release suite + new MCP CLI) |
+| [`@mushi-mushi/inventory-schema`](./packages/inventory-schema) | **v2 source of truth** — Zod + JSON Schema for `inventory.yaml`, used by the admin ingester, gate runner, LLM proposer, and GitHub Action |
+| [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi) | **v2 gate rules** — `no-dead-handler` (empty `onClick` etc.) and `no-mock-leak` (faker / "John Doe" arrays in non-test paths). Ships a `recommended` preset |
+| [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner) | **v2 helper** — `npx mushi-mushi-auth refresh` runs the `inventory.yaml` `auth.scripted` Playwright block and seeds the resulting cookies into `project_settings` so the crawler + synthetic monitor can hit auth-gated routes |
 | [`@mushi-mushi/plugin-sdk`](./packages/plugin-sdk) | Build third-party plugins — signed webhook verification, REST callback |
 | [`@mushi-mushi/plugin-jira`](./packages/plugin-jira) | Bidirectional Mushi ↔ Jira Cloud sync |
 | [`@mushi-mushi/plugin-slack-app`](./packages/plugin-slack-app) | First-class Slack app — `/mushi` slash command |

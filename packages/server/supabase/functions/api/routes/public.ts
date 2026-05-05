@@ -17,7 +17,7 @@ import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
-import { reportSubmissionSchema } from '../../_shared/schemas.ts';
+import { reportSubmissionSchema, discoveryEventSchema } from '../../_shared/schemas.ts';
 import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
 import { awardPoints, getReputation } from '../../_shared/reputation.ts';
@@ -238,6 +238,97 @@ export function registerPublicRoutes(app: Hono): void {
     c.header('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
     c.header('Vary', 'Origin, X-Mushi-Project, X-Mushi-Api-Key');
     return c.json({ ok: true, data: normalizeSdkConfig(data as SdkConfigRow | null) });
+  });
+
+  // ============================================================
+  // POST /v1/sdk/discovery — Mushi v2.1 passive inventory discovery
+  //
+  // SDK clients with `discoverInventory: true` POST one event per
+  // navigation (throttled per route to ≤1/min client-side). The
+  // server validates with a tight Zod schema, soft-throttles per
+  // (project, route) to ≤1/min, and inserts into discovery_events
+  // for the proposer to consume.
+  //
+  // No quota gating: discovery events are 1-2 KB each, the table
+  // self-prunes via pg_cron after 30 days, and gating them would
+  // bias the proposer toward customers who happen to be on the
+  // higher-priced plan.
+  //
+  // Privacy:
+  //   - Reject anything where `dom_summary` exceeds 240 chars
+  //   - Reject testid/api arrays larger than 200 entries each
+  //   - Strip query strings and fragments from `route` on the way in
+  // ============================================================
+  app.post('/v1/sdk/discovery', apiKeyAuth, async (c) => {
+    const projectId = c.get('projectId') as string;
+    let raw: unknown;
+    try {
+      raw = await c.req.json();
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'JSON body required' } }, 400);
+    }
+
+    // Single Zod gate replaces the per-field manual coercion we used to do
+    // inline. The schema lives in `_shared/schemas.ts` so it can be unit-
+    // tested, kept greppable, and shared with any future MCP tool that
+    // wants to ingest discovery events.
+    const parsed = discoveryEventSchema.safeParse(raw);
+    if (!parsed.success) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INVALID_DISCOVERY_EVENT',
+            message: parsed.error.issues[0]?.message ?? 'discovery event failed validation',
+            issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+          },
+        },
+        422,
+      );
+    }
+    const event = parsed.data;
+
+    const db = getServiceClient();
+
+    // Soft per-(project, route) throttle: drop if a row already exists
+    // for this minute. Cheap because we have an index on (project_id,
+    // observed_at desc) and we only fetch one column.
+    const minuteAgo = new Date(Date.now() - 60_000).toISOString();
+    const { data: recent, error: recentErr } = await db
+      .from('discovery_events')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('route', event.route)
+      .gte('observed_at', minuteAgo)
+      .limit(1)
+      .maybeSingle();
+    if (recentErr) {
+      log.warn('discovery throttle check failed', { err: recentErr.message });
+    }
+    if (recent) {
+      // Idempotent acceptance — the client should not retry.
+      return c.json({ ok: true, data: { accepted: false, reason: 'throttled' } });
+    }
+
+    const { error: insErr } = await db.from('discovery_events').insert({
+      project_id: projectId,
+      route: event.route,
+      page_title: event.page_title,
+      dom_summary: event.dom_summary,
+      testids: event.testids,
+      network_paths: event.network_paths,
+      query_param_keys: event.query_param_keys,
+      user_id_hash: event.user_id_hash,
+      sdk_version: event.sdk_version,
+    });
+    if (insErr) {
+      // Route through dbError so the failure ships pg_code-tagged Sentry
+      // breadcrumbs + a canonical { code, ... } envelope, instead of echoing
+      // the raw pg message back to the SDK (which may leak row hints).
+      log.error('discovery insert failed', { err: insErr.message, projectId, route: event.route });
+      return dbError(c, insErr);
+    }
+    return c.json({ ok: true, data: { accepted: true } });
   });
 
   app.post('/v1/reports', apiKeyAuth, async (c) => {

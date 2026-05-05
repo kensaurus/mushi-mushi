@@ -19,6 +19,7 @@ import { registerPublicRoutes } from './routes/public.ts';
 import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
 import { registerReportsDashboardRoutes } from './routes/reports-dashboard.ts';
 import { registerSettingsResearchRoutes } from './routes/settings-research.ts';
+import { registerInventoryRoutes } from './routes/inventory.ts';
 
 ensureSentry('api');
 
@@ -215,8 +216,15 @@ app.use(
   cors({
     origin: (origin) => (MIGRATIONS_PROGRESS_ORIGINS.includes(origin) ? origin : null),
     // The docs sync hook also sends X-Mushi-Project-Id when the user is
-    // syncing project-scoped progress. No org header on this surface.
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id'],
+    // syncing project-scoped progress. The admin's apiFetch unconditionally
+    // appends X-Mushi-Org-Id whenever an org is active (see
+    // apps/admin/src/lib/supabase.ts) — without it on the allowlist the
+    // browser drops every preflight from /projects (which mounts the
+    // migration progress widget) and the page renders with a stale
+    // "fetch-rejected" state. Adding it here is safe: the docs site never
+    // sends this header, so the only callers exercising this entry are the
+    // admin and the docs Migration Hub.
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -250,6 +258,22 @@ app.use(
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
     allowMethods: ['POST', 'OPTIONS'],
+    credentials: true,
+  }),
+);
+// /v1/marketplace/* is admin-surfaced (apps/admin renders it on /marketplace)
+// so the FE's apiFetch sends X-Mushi-Project-Id + X-Mushi-Org-Id. Without
+// this dedicated entry the route falls through to the wildcard catch-all
+// at the bottom, which only allows the SDK headers — every preflight from
+// the admin then fails and /marketplace renders with a stale fetch-rejected
+// state. Submissions endpoint is JWT-authed, listing endpoint is public read
+// but still goes through the same preflight, so both share this CORS gate.
+app.use(
+  '/v1/marketplace/*',
+  cors({
+    origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   }),
 );
@@ -294,6 +318,8 @@ registerEnterpriseIntegrationsRoutes(app);
 registerMigrationProgressRoutes(app);
 
 registerAdminOpsRoutes(app);
+
+registerInventoryRoutes(app);
 
 function isStatusZeroRangeError(err: unknown): err is RangeError {
   return (

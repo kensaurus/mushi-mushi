@@ -17,9 +17,20 @@ supabase/functions/
   webhooks-github-indexer/   GitHub App webhook → codebase RAG indexer; `?mode=sweep` reindexes all installed repos for cron use
   sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
   fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
+  inventory-crawler/         Mushi v2 — Playwright (and `crawler_auth_config`-aware) crawler that walks the customer's `app.base_url`, snapshots discovered pages / elements / actions, and writes the rolling diff into `inventory_crawl_summaries`. Powers Gate 4 (`crawl`)
+  inventory-gates/           Mushi v2 — server-side runner for Gates 3 (`api_contract`), 4 (`crawl`), 5 (`status_claim`). Consumes `discovered_apis` from `mushi-mushi-gates discover-api`, runs the crawl + status reconciler, and persists `gate_runs` / `gate_findings` for `/inventory ▸ Gates`
+  inventory-propose/         Mushi v2.1 — LLM proposer. Reads `discovery_observed_inventory` (rolling 30-day SDK observations) + the current `inventory.yaml`, asks Claude Sonnet 4.6 to draft a `user_stories` + `pages` proposal, validates with `@mushi-mushi/inventory-schema`, and persists into `inventory_proposals` for review on `/inventory ▸ Discovery`. **Internal-only**
+  status-reconciler/         Mushi v2 — derives every action's status (`stub` / `mocked` / `wired` / `verified` / `regressed`) from observable signals (lint, contract diff, CI test results, synthetic monitor, user reports) and writes the result back onto the inventory tree
+  synthetic-monitor/         Mushi v2 — periodic health-check runner. Hits each declared user-story's happy-path route via Playwright (using the crawler cookie when set) and writes results into `synthetic_runs` for the `/inventory` timeline
+  sentinel-audit/            Periodic audit sweep that compares the SDK-observed inventory against the accepted inventory and surfaces drift findings on `/inventory`
+  test-gen-from-report/      Generates a Playwright spec stub from a report so the next dispatch has a regression test to lean on
   _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
-                             telemetry, plugins, sanitize, stripe, quota, byok, region, age-graph, audit,
-                             models, fix-schema, ...). `_shared/models.ts` is the single source of truth for
+                             telemetry, plugins, sanitize, stripe, invoice, quota, byok, region, age-graph,
+                             audit, models, fix-schema, ...). `_shared/invoice.ts` exports the canonical
+                             `subscriptionIdFromInvoice` helper used by `stripe-webhooks` to walk the
+                             Stripe Basil 2025-03-31 `invoice.parent` shape; both production code and
+                             `stripe-webhooks.test.ts` import from here so the test can never silently
+                             diverge from the shipped resolution logic. `_shared/models.ts` is the single source of truth for
                              model IDs and stage → model defaults (Haiku 4.5 fast-filter, Sonnet 4.6
                              classify/judge/promoter). Opus 4.7 was briefly assigned to judge + promoter on
                              2026-04-22 then reverted on 2026-04-24 — Opus 4.7 dropped sampling knobs and
@@ -49,6 +60,32 @@ supabase/migrations/         PostgreSQL schema + RLS policies. Recent migrations
                                 partial indexes for reporter history, and the
                                 `report_comments_fanout_to_reporter` trigger that
                                 emits `reporter_notifications` on visible admin replies.
+                              - **`20260504000000_v2_bidirectional_graph`** — Mushi v2.
+                                Adds the positive-side inventory tables
+                                (`inventory_apps`, `inventory_user_stories`,
+                                `inventory_pages`, `inventory_elements`,
+                                `inventory_actions`, `inventory_api_deps`,
+                                `inventory_db_deps`, `inventory_tests`),
+                                `inventory_crawl_summaries`, `gate_runs`,
+                                `gate_findings`, `synthetic_runs`,
+                                `inventory_drift_findings`, plus the
+                                `project_settings.crawler_*` columns the
+                                inventory-crawler + auth-runner write into.
+                              - **`20260504120000_inventory_v2_plan_flags`** —
+                                feature-flag the v2 surface per project
+                                (`project_settings.inventory_v2_enabled`,
+                                `synthetic_monitor_enabled`).
+                              - **`20260504130000_inventory_discovery`** — Mushi v2.1.
+                                Adds the SDK passive-discovery channel:
+                                append-only `discovery_events` (one row per
+                                throttled SDK observation),
+                                `discovery_observed_inventory` view (30-day
+                                rolling aggregate by route template),
+                                `inventory_proposals` table (LLM-drafted
+                                `inventory.yaml` candidates with
+                                `status: 'draft' | 'accepted' | 'discarded'`),
+                                and the partial covering indexes the proposer
+                                + `/inventory ▸ Discovery` page query against.
                               - **`20260430010000_migration_progress` (+ `20260430010001`
                                 hardening)** — Migration Hub Phase 2. New
                                 `public.migration_progress(user_id, project_id NULL,
@@ -66,6 +103,20 @@ supabase/migrations/         PostgreSQL schema + RLS policies. Recent migrations
                                 close `pg_graphql_*_table_exposed` advisor warnings —
                                 the only intended caller is the Hono Edge Function
                                 running as `service_role`.
+                              - **`20260505000000_project_api_keys_last_seen`** — SDK
+                                heartbeat columns on `project_api_keys` (`last_seen_at`,
+                                `last_seen_origin`, `last_seen_user_agent`,
+                                `last_seen_endpoint_host`) plus a partial covering index
+                                on `(project_id, last_seen_at DESC) WHERE last_seen_at
+                                IS NOT NULL`. `apiKeyAuth` updates these fire-and-forget
+                                on every successful SDK auth (throttled to one write /
+                                30s / key) so the dashboard's `sdk_installed` checklist
+                                step ticks green the moment the SDK reaches the backend
+                                — no need to wait for a real user-triggered report — and
+                                `/v1/admin/setup` surfaces the heartbeat metadata so
+                                operators can spot cross-environment mismatches (e.g.
+                                SDK pointed at local Supabase while the admin reads
+                                cloud) instead of staring at a stuck red checkmark.
 ```
 
 ## Development
@@ -135,6 +186,7 @@ All routes are served from the `api` function under `/v1/`:
 - `GET/PATCH /v1/admin/reports` — Report management. `GET` accepts `status`, `category`, `severity`, `component`, and `reporter` (reporter token hash) query params for filtered/cross-linked views in the admin console. Each returned row carries a `dedup_count` (number of reports sharing the same `report_group_id`) so the admin UI can collapse duplicates into a `+N similar` badge without an N+1 fetch
 - `GET /v1/admin/stats` — Dashboard statistics
 - `GET /v1/admin/dashboard` — Single-call payload for the admin dashboard. Includes a `pdcaStages` block (one entry per Plan / Do / Check / Act stage with `count`, `tone`, `bottleneck` caption, a `cta` deep-link, **and a 7-day `series: number[]` for sparkline rendering**) plus a `focusStage` field indicating the current bottleneck. Powers the `PdcaCockpit` strip
+- `GET /v1/admin/setup` — Single source of truth for the onboarding checklist. Aggregates eight signals per accessible project (`project_created`, `api_key_generated`, `sdk_installed`, `first_report_received`, `github_connected`, `sentry_connected`, `byok_anthropic`, `first_fix_dispatched`) into a `{ has_any_project, projects: SetupProject[], admin_endpoint_host }` envelope. The `sdk_installed` step's primary signal is the per-key SDK heartbeat (`project_api_keys.last_seen_at IS NOT NULL`); the legacy "any non-`mushi-admin` report seen" check is kept as a fallback for projects whose SDKs predate the heartbeat migration. Each step optionally carries a `diagnostic` object — for `sdk_installed` it surfaces `last_sdk_seen_at`, `last_sdk_origin`, `last_sdk_user_agent`, and `last_sdk_endpoint_host` so the admin's `<SetupChecklist>` can render an inline strip explaining whether the SDK has been seen, when, and from which backend (cross-env mismatches surface as a `BACKEND MISMATCH` warning when the heartbeat host differs from the top-level `admin_endpoint_host`). Drives the dashboard banner-mode checklist, the full `/onboarding` wizard, and per-page `EmptyState` nudges
 - `GET /v1/admin/reports/severity-stats` — 14-day severity rollup. Also returns a `byDay: Array<{ day, critical, high, medium, low, total }>` matrix so the FE can render per-tile sparklines without a second round-trip
 - `GET /v1/admin/query/history` — Returns `{ ok: true, history: [], degraded: 'schema_pending' }` instead of 500 when the `is_saved` column is missing (`pg_code='42703'`) so the Query page keeps rendering during partial schema deploys
 - `GET /v1/admin/judge/evaluations` — Hydrates each row with the underlying report's `summary`, `severity`, and `status` so judge UIs can show human-readable summaries instead of opaque `report_id` hashes
@@ -162,8 +214,31 @@ All routes are served from the `api` function under `/v1/`:
 - `GET /v1/admin/auth/manifest` — RFC 8414-style discovery doc for A2A clients. Lists every advertised endpoint + supported `grant_types`. contract test (`src/__tests__/manifest-contract.test.ts`) asserts every URL listed here is registered as a Hono route, so the manifest can never advertise a 404 again
 - `POST /v1/admin/auth/token`— OAuth-style endpoint with two modes: (1) `grant_type=refresh_token` + `refresh_token` body → calls `auth.refreshSession` and returns a fresh access token + expiry, (2) `Authorization: Bearer <jwt>` only → returns RFC 7662-shape `{ active, sub, email }` introspection for an A2A client to validate a token. Without these the manifest was lying to clients
 - `POST /v1/admin/projects/:id/keys/rotate`— atomic API key rotation. Revokes every active key for the project (audit-logged with the revoked prefixes), generates a new one, and returns it in the same response (`mushi_<32hex>`, 201). The plaintext is shown exactly once — clients store it immediately or rotate again. Project ownership is enforced via `jwtAuth` + `owner_id` check, so cross-project rotation is impossible
-- `GET | PUT | DELETE /v1/admin/migrations/progress[/:guide_slug]` — Migration Hub Phase 2 sync endpoints (`supabase/functions/api/routes/migration-progress.ts`). `GET` returns the caller's account-scoped rows plus any project-scoped rows they can read via `userCanAccessProject`, in one envelope, alongside the catalog's `knownGuideSlugs` so the docs sync hook can locally validate. `PUT /:guide_slug` accepts `{ completed_step_ids[], required_step_count?, completed_required_count?, source?, project_id?, client_updated_at? }`, runs through `migration-progress-helpers.ts > normalizeProgressUpsert` (sort + dedupe step ids, slug + UUID + source validation), and upserts via the partial-unique indexes on `(user_id, guide_slug) WHERE project_id IS NULL` / `(user_id, project_id, guide_slug) WHERE project_id IS NOT NULL`. `DELETE` clears one slug's remote row without touching the docs `localStorage` cache. **CORS exception:** these routes are the only `/v1/admin/*` surface that also accept the docs origin (`apps/docs` → `kensaur.us` / `docs.mushimushi.dev` / `localhost:3000-3001`); the per-route `app.use('/v1/admin/migrations/*', cors({ origin: MIGRATIONS_PROGRESS_ORIGINS, ... }))` block in `index.ts` is registered BEFORE the general `/v1/admin/*` block so Hono's first-match-wins ordering keeps the rest of the admin surface pinned to the admin allowlist. Pure helper logic is unit-tested in `src/__tests__/migration-progress-helpers.test.ts`; the live RLS contract is pinned by `supabase/tests/rls_migration_progress.test.sql`
+- `GET | PUT | DELETE /v1/admin/migrations/progress[/:guide_slug]` — Migration Hub Phase 2 sync endpoints (`supabase/functions/api/routes/migration-progress.ts`). `GET` returns the caller's account-scoped rows plus any project-scoped rows they can read via `userCanAccessProject`, in one envelope, alongside the catalog's `knownGuideSlugs` so the docs sync hook can locally validate. `PUT /:guide_slug` accepts `{ completed_step_ids[], required_step_count?, completed_required_count?, source?, project_id?, client_updated_at? }`, runs through `migration-progress-helpers.ts > normalizeProgressUpsert` (sort + dedupe step ids, slug + UUID + source validation), and upserts via the partial-unique indexes on `(user_id, guide_slug) WHERE project_id IS NULL` / `(user_id, project_id, guide_slug) WHERE project_id IS NOT NULL`. `DELETE` clears one slug's remote row without touching the docs `localStorage` cache. **CORS exception:** these routes are the only `/v1/admin/*` surface that also accept the docs origin (`apps/docs` → `kensaur.us` / `docs.mushimushi.dev` / `localhost:3000-3001`); the per-route `app.use('/v1/admin/migrations/*', cors({ origin: MIGRATIONS_PROGRESS_ORIGINS, allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'], ... }))` block in `index.ts` is registered BEFORE the general `/v1/admin/*` block so Hono's first-match-wins ordering keeps the rest of the admin surface pinned to the admin allowlist. Both `X-Mushi-Project-Id` and `X-Mushi-Org-Id` are in the allowlist because the admin's `apiFetch` (`apps/admin/src/lib/supabase.ts`) appends both whenever a project / org is active — omitting either header from the allowlist made every preflight from the admin's `/projects` page fail until 2026-05-05. Pure helper logic is unit-tested in `src/__tests__/migration-progress-helpers.test.ts`; the live RLS contract is pinned by `supabase/tests/rls_migration_progress.test.sql`
+- `POST /v1/sdk/discovery` — Mushi v2.1 SDK passive-discovery ingest. Public-API-key authed, accepts a `MushiDiscoveryEventPayload` (route template, page title, `[data-testid]` values, recent fetch paths, query-param **keys only**, sha256 user/session hash). Tagged `X-Mushi-Internal: discovery` so the SDK's own emissions don't trip the self-cascade detector. Validated by `_shared/schemas.ts::discoveryEventSchema` and inserted into `discovery_events`; the `discovery_observed_inventory` view aggregates 30 days into the per-route summary the proposer reads
+- `POST | GET | PATCH /v1/admin/inventory/:projectId` — ingest, read, partial-update the project's `inventory.yaml`. `POST` accepts the raw YAML string, validates it through `@mushi-mushi/inventory-schema`, and replaces the active inventory in one transaction. Read returns the parsed object plus stats (`pages`, `actions`, `coverage`)
+- `GET /v1/admin/inventory/:projectId/user-stories` — flat user-story list with derived status (`stub` / `mocked` / `wired` / `verified` / `regressed`) per action, used by the `UserStoryMap` panel
+- `GET /v1/admin/inventory/:projectId/diff` — drift between the accepted inventory and the most recent crawl/SDK observations. Powers the `DriftDiffPanel`
+- `GET /v1/admin/inventory/:projectId/findings` — gate findings filtered by `?gate=` / `?status=`. Each row carries the `GateFindingCard` payload (locator, suggested fix, deep-link)
+- `POST /v1/admin/inventory/:projectId/reconcile` — kicks the `status-reconciler` Edge Function for the project; returns the new derived statuses inline
+- `POST /v1/admin/inventory/:projectId/gates/run` — runs Gates 3 + 4 + 5 server-side and persists `gate_runs` / `gate_findings`. Body accepts `{ commit_sha?, pr_number?, gates?: string[] }`; called by `mushi-mushi-gates gates`
+- `GET /v1/admin/inventory/:projectId/discovery` — Mushi v2.1. Aggregates `discovery_observed_inventory` into `{ routes, total_events, ready_to_propose }` for the `/inventory ▸ Discovery` lifecycle stepper + observed-route cards. `ready_to_propose` flips true once the project has a defensible-sized sample
+- `POST /v1/admin/inventory/:projectId/propose` — Mushi v2.1. Forwards to the `inventory-propose` Edge Function (Claude Sonnet 4.6). Returns `{ proposalId, storyCount, pageCount }` so a CI step can chain `mushi-mushi-gates propose` into a PR-comment job
+- `GET /v1/admin/inventory/:projectId/proposals[/:id]` — list / read LLM-drafted `inventory.yaml` proposals (`status: 'draft' | 'accepted' | 'discarded'`) for the `ProposalReviewModal`. Includes `proposed_yaml`, `proposed_parsed`, and `rationale_by_story` so the modal's Stories / Why these stories / YAML tabs render from one round-trip
+- `PATCH /v1/admin/inventory/:projectId/proposals/:id` — edit a draft proposal's YAML in-place before accepting (re-validates through `@mushi-mushi/inventory-schema`)
+- `POST /v1/admin/inventory/:projectId/proposals/:id/accept` — replaces the project's active inventory with the proposal's parsed YAML and marks the proposal `accepted`. Idempotent; returns the new inventory snapshot
+- `POST /v1/admin/inventory/:projectId/proposals/:id/discard` — marks the proposal `discarded` (used for malformed LLM outputs or stale drafts)
+- `GET | PATCH /v1/admin/inventory/:projectId/settings` — Mushi v2.1. Project-scoped crawler / synthetic-monitor configuration: `crawler_base_url`, `crawler_auth_config` (cookie blob, `crawler_auth_runner` writes here), `synthetic_monitor_enabled`, `synthetic_monitor_target_url`, `synthetic_monitor_allow_mutations` (false by default — opt-in to allow non-safe HTTP verbs against the configured target; whitepaper §4.4). `PATCH` SSRF-validates `crawler_base_url` and `synthetic_monitor_target_url` at write time so misconfigured hosts (private IPs, cloud-metadata endpoints, embedded credentials) are rejected before the cron picks them up. Same endpoint `@mushi-mushi/inventory-auth-runner` POSTs the freshly-captured cookie back to
 - See `supabase/functions/api/index.ts` and `supabase/functions/api/routes/*.ts` for the full route table
+
+### Inventory-route security guards (`_shared/inventory-guards.ts`)
+
+The bidirectional-inventory routes share four hardening primitives consolidated in `supabase/functions/_shared/inventory-guards.ts` (added in the 2026-05-04 follow-up audit). Every guard has direct unit-test coverage in `src/__tests__/inventory-guards.test.ts`:
+
+- `assertProjectScope(c, projectId, db)` — single source of truth for the API-key-vs-JWT scope branch. API-key callers must present a key minted for the exact `:projectId` (no fallback to "any project the human owner can see"); JWT callers fall through to the existing `accessibleProjectIds` membership check
+- `adminOrApiKey({ scope: 'mcp:write' })` — every mutation route (`POST/PATCH/DELETE` on inventories, proposals, settings, reconcile, gates, propose, test-gen) now requires `mcp:write`. Read endpoints accept the default `mcp:read`. Mints from the admin console pick the correct scope automatically
+- `assertSafeOutboundUrl(url, options)` + `safeFetch(...)` — OWASP-aligned SSRF gate for every outbound request the crawler / synthetic-monitor / settings PATCH issues. Rejects non-https schemes, embedded credentials, blocked ports (SSH, SMTP, Postgres, Redis, …), and every private/loopback/link-local IP family — including the cloud-metadata IPs (169.254.169.254 for AWS/Azure/DigitalOcean, `metadata.google.internal` for GCE). `safeFetch` opens with `redirect: 'manual'`, re-validates every hop against the allowlist, and strips `Authorization` / `Cookie` / `Proxy-Authorization` on cross-origin redirects (CVE-2025-21620 — Deno does NOT do this for us). Hosts are allowlisted from `inventory.app.{base,preview,staging}_url` so the crawler can only ever reach the customer's declared app
+- `proposeRateLimiter` / `reconcileRateLimiter` / `gatesRunRateLimiter` — in-memory per-`(projectId, route)` token buckets. Defaults: 5/min for `/propose` (Sonnet 4.6 with 8K output × 3 retries — bounds spend at ~$1.50/min/project), 12/min for `/reconcile` and `/gates/run`. Tunable via `MUSHI_INVENTORY_PROPOSE_RPM` / `MUSHI_INVENTORY_RECONCILE_RPM` / `MUSHI_INVENTORY_GATES_RPM`. Returns 429 with `Retry-After` headers
 
 ## Manifest contract test
 

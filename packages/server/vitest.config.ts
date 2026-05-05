@@ -25,6 +25,7 @@ const npmStubResolver = {
   resolveId(id: string) {
     if (!id.startsWith('npm:')) return null
     if (id === 'npm:zod@3') return null // handled by alias below
+    if (id === 'npm:yaml@2') return null // handled by alias below
     return STUB
   },
 }
@@ -37,6 +38,10 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     alias: {
       'npm:zod@3': 'zod',
+      // The inventory v2 helper uses `npm:yaml@2` to parse customer
+      // inventory.yaml. The Node-side test runs against the actually
+      // installed `yaml` package so the parser behaves identically.
+      'npm:yaml@2': 'yaml',
     },
   },
 })
