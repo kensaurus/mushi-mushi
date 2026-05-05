@@ -59,6 +59,7 @@
     "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
     "check:license-headers": "node scripts/check-license-headers.mjs",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
+    "bootstrap:new-npm-packages": "node scripts/bootstrap-publish-new-packages.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"
   },
   "pnpm": {
