@@ -19,6 +19,11 @@ import { dispatchPluginEvent } from '../_shared/plugins.ts'
 import { buildReportGraph } from '../_shared/knowledge-graph.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
+import {
+  findInventoryCandidates,
+  formatCandidatesForPrompt,
+  linkReportToAction,
+} from '../_shared/inventory-grounding.ts'
 
 const stage2Schema = z.object({
   category: z.enum(['bug', 'slow', 'visual', 'confusing', 'other']).describe('Refined bug category'),
@@ -30,6 +35,11 @@ const stage2Schema = z.object({
   suggestedFix: z.string().optional().describe('Suggested fix or investigation direction'),
   confidence: z.number().min(0).max(1).describe('Analysis confidence'),
   bugOntologyTags: z.array(z.string()).optional().describe('Applicable bug ontology tags from the provided taxonomy'),
+  // Mushi v2: when the prompt presents Inventory candidates the LLM
+  // either picks one (returns its nodeId) or returns "none". We never
+  // *force* a pick — a candidate-set of zero is the natural signal that
+  // no inventory match exists and the report is purely freeform.
+  inventoryNodeId: z.string().optional().describe('Best-matching inventory Action node id, or "none"'),
 })
 
 /**
@@ -194,13 +204,21 @@ Deno.serve(withSentry('classify-report', async (req) => {
     // ontology read is a single `select * from bug_ontology`. Running them
     // sequentially cost ~1.2s per report; Promise.all shaves ~500ms off.
     const ragSpan = trace.span('stage2.rag')
-    const [codeFiles, ontologyTags] = await Promise.all([
+    const [codeFiles, ontologyTags, inventoryCandidates] = await Promise.all([
       getRelevantCode(db, projectId, extraction ?? {}),
       getAvailableTags(db, projectId),
+      // v2 inventory grounding (whitepaper §4.7). Reads SDK hints from
+      // the scrubbed environment — both fields are optional so older
+      // SDKs continue to work; the candidate list is just empty.
+      findInventoryCandidates(db, projectId, {
+        route: (env as { route?: string | null }).route ?? null,
+        nearestTestid: (env as { nearestTestid?: string | null }).nearestTestid ?? null,
+      }).catch(() => []),
     ])
     const codeContext = formatCodeContext(codeFiles)
     ragSpan.end({ fileCount: codeFiles.length })
     const ontologyContext = ontologyTags.length > 0 ? `\n## ${formatTagsForPrompt(ontologyTags)}` : ''
+    const inventoryContext = formatCandidatesForPrompt(inventoryCandidates)
 
     const evidenceSection = evidence
       ? `\n## Sanitized Evidence (Stage 1 air-gap output)
@@ -230,7 +248,7 @@ Deno.serve(withSentry('classify-report', async (req) => {
 ${evidenceSection}
 ${sentryContext}
 ${codeContext ? `\n## Relevant Code Files\n${codeContext}` : ''}
-${ontologyContext}`
+${ontologyContext}${inventoryContext}`
 
     const startTime = Date.now()
     const modelId = settings?.stage2_model ?? STAGE2_MODEL
@@ -412,6 +430,23 @@ ${ontologyContext}`
         report.url ?? undefined,
         report.report_group_id ?? undefined,
       ).catch((err) => log.warn('Knowledge graph (stage 2) build failed', { err: String(err) }))
+    }
+
+    // Mushi v2: link the report to its Action node (whitepaper §3.2) when
+    // the LLM picked one from the inventory candidates. The pick is
+    // validated against the candidate list to refuse hallucinations —
+    // the LLM occasionally returns made-up node ids when the prompt is
+    // long, and a `reports_against` edge to a nonexistent node would
+    // break the bidirectional graph invariants.
+    const picked = classification.inventoryNodeId
+    if (
+      picked &&
+      picked !== 'none' &&
+      inventoryCandidates.some((c) => c.actionNodeId === picked)
+    ) {
+      void linkReportToAction(db, projectId, reportId, picked).catch((err) =>
+        log.warn('inventory link failed', { err: String(err) }),
+      )
     }
 
     // D1: notify webhook plugins. Async + tolerant: plugins must not

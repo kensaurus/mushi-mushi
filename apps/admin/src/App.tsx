@@ -37,6 +37,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ defa
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(m => ({ default: m.ProjectsPage })))
 const DLQPage = lazy(() => import('./pages/DLQPage').then(m => ({ default: m.DLQPage })))
 const GraphPage = lazy(() => import('./pages/GraphPage').then(m => ({ default: m.GraphPage })))
+const InventoryPage = lazy(() => import('./pages/InventoryPage').then(m => ({ default: m.InventoryPage })))
 const JudgePage = lazy(() => import('./pages/JudgePage').then(m => ({ default: m.JudgePage })))
 const QueryPage = lazy(() => import('./pages/QueryPage').then(m => ({ default: m.QueryPage })))
 const ResearchPage = lazy(() => import('./pages/ResearchPage').then(m => ({ default: m.ResearchPage })))
@@ -89,12 +90,15 @@ function NotFoundPage() {
   const home = session
     ? { href: '/dashboard', label: 'Back to dashboard' }
     : { href: '/', label: 'Back to home' }
-  // NotFoundPage is mounted under the `/*` protected route, AFTER
-  // ProtectedRoute → Layout. Anonymous visitors are bounced to /login
-  // by ProtectedRoute and never reach this component, so it's ALWAYS
-  // rendering inside Layout's `<main id="main-content">`. Default
-  // EditorialErrorState wrapper (`<section>`) avoids the nested-main
-  // landmark the Copilot review flagged.
+  // In the current routing tree, NotFoundPage is mounted under the
+  // `/*` protected route (after ProtectedRoute → Layout), so anonymous
+  // visitors are typically bounced to /login before they ever reach
+  // this component. We still keep the `session`-aware copy/links as a
+  // defensive fallback in case the routing changes or auth state is
+  // transient on first paint. Either way, this renders INSIDE Layout's
+  // `<main id="main-content">`, so EditorialErrorState's default wrapper
+  // (`<section>`) is what we want — using `<main>` here would create
+  // the nested-main landmark the Copilot review flagged.
   return (
     <EditorialErrorState
       eyebrow="404 · not found"
@@ -195,6 +199,7 @@ export function App() {
                   <Route path="/settings" element={<SettingsPage />} />
                   <Route path="/queue" element={<DLQPage />} />
                   <Route path="/graph" element={<GraphPage />} />
+                  <Route path="/inventory" element={<InventoryPage />} />
                   <Route path="/judge" element={<JudgePage />} />
                   <Route path="/query" element={<QueryPage />} />
                   <Route path="/research" element={<ResearchPage />} />

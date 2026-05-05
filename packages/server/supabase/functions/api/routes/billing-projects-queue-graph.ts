@@ -220,6 +220,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       return c.json({
         ok: true,
         data: {
+          admin_endpoint_host: (() => {
+            try {
+              return new URL(c.req.url).host || null;
+            } catch {
+              return null;
+            }
+          })(),
           has_any_project: false,
           projects: [],
         },
@@ -229,11 +236,16 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const projectIds = projects.map((p) => p.id);
 
     // Pull every signal in parallel; we project narrow column lists to keep this
-    // cheap even when the user owns dozens of projects.
+    // cheap even when the user owns dozens of projects. We also pull each key's
+    // SDK heartbeat (`last_seen_*`) so the dashboard can prove the SDK has
+    // reached THIS backend without waiting for a real user-triggered report —
+    // see migration 20260505000000_project_api_keys_last_seen.sql for rationale.
     const [keysRes, settingsRes, reportsRes, fixesRes, reposRes] = await Promise.all([
       db
         .from('project_api_keys')
-        .select('project_id, is_active')
+        .select(
+          'project_id, is_active, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
+        )
         .in('project_id', projectIds)
         .eq('is_active', true),
       db
@@ -255,7 +267,29 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     ]);
 
     const keyByProject = new Set<string>();
-    for (const k of keysRes.data ?? []) keyByProject.add(k.project_id);
+    interface SdkHeartbeat {
+      last_seen_at: string;
+      last_seen_origin: string | null;
+      last_seen_user_agent: string | null;
+      last_seen_endpoint_host: string | null;
+    }
+    const heartbeatByProject = new Map<string, SdkHeartbeat>();
+    for (const k of keysRes.data ?? []) {
+      keyByProject.add(k.project_id);
+      const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null;
+      if (!seenAt) continue;
+      const existing = heartbeatByProject.get(k.project_id);
+      // Multiple keys per project are common (rotation, scoped keys); keep the
+      // freshest heartbeat so the UI shows the most recent SDK activity.
+      if (existing && existing.last_seen_at >= seenAt) continue;
+      heartbeatByProject.set(k.project_id, {
+        last_seen_at: seenAt,
+        last_seen_origin: (k as { last_seen_origin?: string | null }).last_seen_origin ?? null,
+        last_seen_user_agent: (k as { last_seen_user_agent?: string | null }).last_seen_user_agent ?? null,
+        last_seen_endpoint_host:
+          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
+      });
+    }
 
     const settingsByProject = new Map<
       string,
@@ -270,10 +304,15 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const reposByProject = new Set<string>();
     for (const r of reposRes.data ?? []) reposByProject.add(r.project_id);
 
-    // SDK installed = at least one report whose `environment.userAgent` is a real
-    // browser (not the admin-only `mushi-admin` synthetic), and whose `environment`
-    // contains the `viewport` key the SDK always emits.
-    const sdkByProject = new Set<string>();
+    // Legacy fallback signal: at least one report whose `environment.platform`
+    // is a real platform (not the admin-only `mushi-admin` synthetic the
+    // "send test report" button emits). This used to be the SOLE check, but
+    // it falsely flagged correctly-installed SDKs as missing whenever no real
+    // user had triggered a bug yet, AND it gave operators no diagnostic when
+    // the SDK was talking to a different backend than the admin. The
+    // heartbeat above is now the primary signal; we keep this as a fallback
+    // so projects whose SDKs predate the heartbeat migration stay green.
+    const sdkReportSignalByProject = new Set<string>();
     const reportsByProject = new Map<string, { count: number; firstAt: string | null }>();
     for (const r of reportsRes.data ?? []) {
       const cur = reportsByProject.get(r.project_id) ?? { count: 0, firstAt: null };
@@ -282,7 +321,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       reportsByProject.set(r.project_id, cur);
       const env = (r.environment ?? {}) as Record<string, unknown>;
       const platform = typeof env.platform === 'string' ? env.platform : '';
-      if (platform && platform !== 'mushi-admin') sdkByProject.add(r.project_id);
+      if (platform && platform !== 'mushi-admin') sdkReportSignalByProject.add(r.project_id);
     }
 
     // Track BOTH "any fix dispatched" (drives the Check stage transition into
@@ -318,12 +357,41 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       /** Admin-console link the wizard / nudge should jump to. */
       cta_to: string;
       cta_label: string;
+      /**
+       * Optional diagnostic the FE renders inline on the row. Populated for
+       * `sdk_installed` so operators can debug "installed but checklist still
+       * red" without grepping logs (e.g. when the SDK and admin point at
+       * different backends — the host this admin is reading from is shown
+       * next to where the SDK was last seen, making the mismatch obvious).
+       */
+      diagnostic?: {
+        last_sdk_seen_at: string | null;
+        last_sdk_origin: string | null;
+        last_sdk_user_agent: string | null;
+        last_sdk_endpoint_host: string | null;
+      };
     }
+
+    // The hostname of THIS admin's edge function, captured once per request,
+    // so the FE can compare it to last_sdk_endpoint_host on each project and
+    // show "your SDK is talking to a different backend" when they diverge.
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null;
+      } catch {
+        return null;
+      }
+    })();
 
     const enriched = projects.map((p) => {
       const hasKey = keyByProject.has(p.id);
       const settings = settingsByProject.get(p.id);
-      const hasSdk = sdkByProject.has(p.id);
+      const heartbeat = heartbeatByProject.get(p.id) ?? null;
+      // Heartbeat (SDK reached this backend) is the canonical signal.
+      // Legacy report-based fallback covers projects whose SDKs predate the
+      // heartbeat columns or where keys were rotated and only old reports
+      // remain — keeps already-green checklists green after the migration.
+      const hasSdk = Boolean(heartbeat) || sdkReportSignalByProject.has(p.id);
       const reportInfo = reportsByProject.get(p.id) ?? { count: 0, firstAt: null };
       const hasGithub = Boolean(settings?.github_repo_url) || reposByProject.has(p.id);
       const hasSentry = Boolean(settings?.sentry_org_slug);
@@ -358,6 +426,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           required: true,
           cta_to: '/onboarding',
           cta_label: 'View setup guide',
+          diagnostic: {
+            last_sdk_seen_at: heartbeat?.last_seen_at ?? null,
+            last_sdk_origin: heartbeat?.last_seen_origin ?? null,
+            last_sdk_user_agent: heartbeat?.last_seen_user_agent ?? null,
+            last_sdk_endpoint_host: heartbeat?.last_seen_endpoint_host ?? null,
+          },
         },
         {
           id: 'first_report_received',
@@ -430,6 +504,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return c.json({
       ok: true,
       data: {
+        // Surfaced so the FE can compare each project's last SDK endpoint host
+        // against the host the admin is actually reading from. When they
+        // differ the dashboard renders an explicit "your SDK is talking to a
+        // different backend" warning instead of leaving the user wondering
+        // why a working SDK never ticks the checklist green.
+        admin_endpoint_host: adminHost,
         has_any_project: true,
         projects: enriched,
       },
@@ -852,7 +932,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     // Sentry breadcrumb-style log. Real monitoring hook: filter by
     // `category:project.deleted` to spot accidental mass-deletions.
     try {
-      log('project.deleted', {
+      log.info('project.deleted', {
         project_id: project.id,
         project_slug: project.slug,
         project_name: project.name,
@@ -1768,22 +1848,22 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       node_type: seedNode.node_type,
       label: seedNode.label,
     });
-    const edges: Array<{ from_node_id: string; to_node_id: string; edge_type: string }> = [];
+    const edges: Array<{ source_node_id: string; target_node_id: string; edge_type: string }> = [];
     let frontier = [seedNode.id];
 
     for (let d = 0; d < depth && frontier.length && visitedNodes.size < 500; d++) {
       const { data: nextEdges } = await db
         .from('graph_edges')
-        .select('from_node_id, to_node_id, edge_type')
+        .select('source_node_id, target_node_id, edge_type')
         .in('project_id', projectIds)
-        .or(`from_node_id.in.(${frontier.join(',')}),to_node_id.in.(${frontier.join(',')})`)
+        .or(`source_node_id.in.(${frontier.join(',')}),target_node_id.in.(${frontier.join(',')})`)
         .limit(500);
 
       const nextIds = new Set<string>();
       for (const e of nextEdges ?? []) {
         edges.push(e);
-        if (!visitedNodes.has(e.from_node_id)) nextIds.add(e.from_node_id);
-        if (!visitedNodes.has(e.to_node_id)) nextIds.add(e.to_node_id);
+        if (!visitedNodes.has(e.source_node_id)) nextIds.add(e.source_node_id);
+        if (!visitedNodes.has(e.target_node_id)) nextIds.add(e.target_node_id);
       }
       if (nextIds.size === 0) break;
 
@@ -1796,6 +1876,28 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     }
 
     return c.json({ ok: true, data: { nodes: Array.from(visitedNodes.values()), edges } });
+  });
+
+  /**
+   * Single graph node (metadata includes v2 inventory `status` on Action nodes).
+   * Used by MCP `graph_node_status` and agents that need one row without listing 200.
+   */
+  app.get('/v1/admin/graph/node/:nodeId', adminOrApiKey(), async (c) => {
+    const nodeId = c.req.param('nodeId');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectIds = await ownedProjectIds(db, userId);
+    const { data: node, error } = await db
+      .from('graph_nodes')
+      .select('id, project_id, node_type, label, metadata, last_traversed_at, created_at')
+      .eq('id', nodeId)
+      .in('project_id', projectIds)
+      .maybeSingle();
+    if (error)
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500);
+    if (!node)
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Node not found' } }, 404);
+    return c.json({ ok: true, data: { node } });
   });
 
   app.get('/v1/admin/graph/blast-radius/:nodeId', adminOrApiKey(), async (c) => {

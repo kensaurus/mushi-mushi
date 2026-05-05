@@ -162,6 +162,7 @@ export const PDCA_STAGE_OUTCOMES: Record<PdcaStageId, {
  */
 const STAGE_ROUTES: Array<{ prefix: string; stage: PdcaStageId }> = [
   { prefix: '/reports',       stage: 'plan' },
+  { prefix: '/inventory',     stage: 'plan' },
   { prefix: '/graph',         stage: 'plan' },
   { prefix: '/anti-gaming',   stage: 'plan' },
   { prefix: '/queue',         stage: 'plan' },

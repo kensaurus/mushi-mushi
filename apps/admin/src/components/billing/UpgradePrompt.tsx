@@ -87,6 +87,16 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
       'Available on Pro and Enterprise plans.',
     ],
   },
+  inventory_v2: {
+    title: 'Bidirectional inventory (truth layer)',
+    tagline:
+      'Map user stories to actions, run CI gates for agentic failure modes, and correlate reports with the same graph nodes.',
+    bullets: [
+      'inventory.yaml → positive graph (pages, elements, actions, API deps).',
+      'Five gates: dead handler, mock leak, API contract, crawl drift, status claims.',
+      'Synthetic probes and status reconciler keep verified actions honest in prod.',
+    ],
+  },
 }
 
 interface InlineProps {

@@ -143,6 +143,23 @@ Supabase project URLs at build time.
   `title`, `href`, and `theme` keys are accepted. `newWindow` is **not** a
   supported key and will trip a Zod validation error at build time.
 
+## Deployment
+
+The docs site is deployed to **S3 + CloudFront** at `kensaur.us/mushi-mushi/docs/`, sharing the same distribution as the admin console (`kensaur.us-mushi-mushi`, `ap-northeast-1`). The static export from `pnpm build` is synced into the bucket under the `mushi-mushi/docs/` prefix.
+
+- **CI/CD**: `.github/workflows/deploy-docs.yml` triggers on push to `master` when `apps/docs/**` changes. Builds with `MUSHI_BASE_PATH=/mushi-mushi/docs`, syncs `out/` to S3, publishes both CloudFront Functions to the LIVE stage, then runs `scripts/associate-cloudfront-docs-functions.sh` to make sure the published functions are still attached to the docs cache behavior.
+- **CloudFront Functions** (live in `scripts/`):
+  - `cloudfront-mushi-docs-router.js` (viewer-request) — rewrites `/mushi-mushi/docs/foo` → `/mushi-mushi/docs/foo/index.html` so Nextra's static export resolves cleanly.
+  - `cloudfront-mushi-docs-response.js` (viewer-response) — synthesises a branded HTML body when the origin returns 403/404 from S3, so visitors never see the raw `NoSuchKey` XML.
+- **Infrastructure scripts** (idempotent — safe to re-run):
+  - `scripts/cloudfront-create-docs-behavior.sh` — clones the parent `/mushi-mushi/*` behavior into a dedicated `/mushi-mushi/docs/*` behavior and attaches the docs functions. One-shot; only needed when the behavior doesn't exist yet.
+  - `scripts/associate-cloudfront-docs-functions.sh` — re-asserts the function-association on every docs deploy. Soft-warns and exits 0 if the docs cache behavior is missing, so a missing infra step never blocks a content deploy.
+- **Manual infra workflow**: `.github/workflows/infra-cf-docs-behavior.yml` is a `workflow_dispatch` shim around `cloudfront-create-docs-behavior.sh`, with a `dry_run` input so an operator can preview the patched config before mutating the distribution. Lives outside `deploy-docs.yml` because it's a one-shot infra mutation, not a content deploy. Requires `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `CLOUDFRONT_DISTRIBUTION_ID` repo secrets.
+
+### Editorial 404 caveat
+
+`mushi-mushi-docs-response` synthesises a branded 404 body for any path the docs origin can't serve. CloudFront's distribution-level `CustomErrorResponses` config currently maps 404 to a generic `/404.html` served from the kensaur.us umbrella site, and **viewer-response functions don't run when CloudFront serves a `CustomErrorResponse` from a different origin path**, so today a missing docs page falls back to the kensaur.us-branded 404 instead of the Mushi editorial one. That's a known architectural limitation — fixing it requires either dropping the distribution-level error mapping or splitting docs into its own distribution. The viewer-response function still runs for non-404 responses, so the security headers and other body rewrites it carries are unaffected.
+
 ## Build gotchas
 
 - The catch-all `app/[[...mdxPath]]/page.tsx` is required for Nextra v4

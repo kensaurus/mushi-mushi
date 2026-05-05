@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type Edge,
   type Node,
@@ -41,6 +41,9 @@ import {
   EDGE_LABELS,
   EDGE_TYPES,
   NODE_TYPES,
+  NODE_TYPE_LABELS,
+  SURFACE_DEFAULT_EDGE_TYPES,
+  SURFACE_DEFAULT_NODE_TYPES,
   type BlastRadiusItem,
   type EdgeType,
   type GraphEdge,
@@ -48,7 +51,7 @@ import {
   type NodeType,
 } from '../components/graph/types'
 
-type ViewMode = 'graph' | 'table'
+type ViewMode = 'graph' | 'table' | 'surface'
 
 /**
  * Below this node count we auto-flip to the storyboard layout because the
@@ -84,6 +87,7 @@ export function GraphPage() {
   const [enabledNodeTypes, setEnabledNodeTypes] = useState<Set<NodeType>>(new Set(NODE_TYPES))
   const [enabledEdgeTypes, setEnabledEdgeTypes] = useState<Set<EdgeType>>(new Set(EDGE_TYPES))
   const [view, setView] = useState<ViewMode>('graph')
+  const surfaceFiltersApplied = useRef(false)
   const [hideSingletons, setHideSingletons] = useState(true)
   const [layoutSeed, setLayoutSeed] = useState(0)
   // Lets users override the auto-storyboard heuristic — useful when they
@@ -93,6 +97,19 @@ export function GraphPage() {
   // Pre-baked filter views — flip filter sets to highlight a specific story.
   // Reset selection so the side-panel doesn't show a stale node from a
   // different filter context.
+  useEffect(() => {
+    if (view !== 'surface') {
+      surfaceFiltersApplied.current = false
+      return
+    }
+    if (surfaceFiltersApplied.current) return
+    surfaceFiltersApplied.current = true
+    setEnabledNodeTypes(new Set(SURFACE_DEFAULT_NODE_TYPES))
+    setEnabledEdgeTypes(new Set(SURFACE_DEFAULT_EDGE_TYPES))
+    setSelectedNode(null)
+    setBlastRadius([])
+  }, [view])
+
   const applyView = useCallback((preset: QuickView) => {
     setSelectedNode(null)
     setBlastRadius([])
@@ -201,11 +218,15 @@ export function GraphPage() {
         animated: e.edge_type === 'fix_attempted',
         style: {
           stroke:
-            e.edge_type === 'regression_of'
-              ? 'oklch(0.65 0.22 25)'
-              : e.edge_type === 'fix_verified'
-                ? 'oklch(0.72 0.19 155)'
-                : 'oklch(0.50 0 0)',
+            e.edge_type === 'reports_against'
+              ? 'oklch(0.72 0.18 290)'
+              : e.edge_type === 'errors_on'
+                ? 'oklch(0.62 0.22 25)'
+                : e.edge_type === 'regression_of'
+                  ? 'oklch(0.65 0.22 25)'
+                  : e.edge_type === 'fix_verified'
+                    ? 'oklch(0.72 0.19 155)'
+                    : 'oklch(0.50 0 0)',
           strokeWidth: Math.max(1, Math.min(3, e.weight)),
           opacity: dimmed ? 0.18 : 0.7,
         },
@@ -282,8 +303,22 @@ export function GraphPage() {
     })
   }, [])
 
+  const hasInventoryNodes = useMemo(
+    () =>
+      rawNodes.some((n) =>
+        ['app', 'page_v2', 'element', 'action', 'api_dep', 'db_dep', 'test', 'user_story'].includes(
+          n.node_type,
+        ),
+      ),
+    [rawNodes],
+  )
+
   const useStoryboard =
-    view === 'graph' && !forceCanvas && filteredNodes.length > 0 && filteredNodes.length < STORYBOARD_THRESHOLD
+    view === 'graph' &&
+    !forceCanvas &&
+    !hasInventoryNodes &&
+    filteredNodes.length > 0 &&
+    filteredNodes.length < STORYBOARD_THRESHOLD
 
   // Hero + NBA derivations. Kept here (above the early returns) so the
   // hook order stays stable across loading/error/success renders. Also
@@ -328,6 +363,11 @@ export function GraphPage() {
         description={copy?.description ?? 'See how reports cluster into components, pages, and releases. Click any node for its blast radius.'}
       >
         <div className="flex items-center gap-2">
+          {view === 'surface' && (
+            <span className="rounded-sm bg-brand/12 text-brand text-2xs px-1.5 py-0.5 font-medium uppercase tracking-wide">
+              Surface · inventory overlay
+            </span>
+          )}
           <span className="text-2xs text-fg-faint font-mono">
             {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
             {filteredEdges.length}/{rawEdges.length} edges
@@ -464,7 +504,7 @@ export function GraphPage() {
                   onNodeClick={onNodeClick}
                   onPaneClick={clearSelection}
                   onResetView={() => applyView('all')}
-                  hidden={view !== 'graph'}
+                  hidden={view === 'table'}
                   showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
                 />
               </>
@@ -505,6 +545,7 @@ export function GraphPage() {
 
 const VIEW_MODE_OPTIONS = [
   { id: 'graph' as const, label: 'Graph' },
+  { id: 'surface' as const, label: 'Surface' },
   { id: 'table' as const, label: 'Table' },
 ]
 
@@ -520,26 +561,18 @@ interface StoryboardNarrativeProps {
  */
 function StoryboardNarrative({ nodes, onSwitchToCanvas }: StoryboardNarrativeProps) {
   const sentence = useMemo(() => {
-    const counts: Record<NodeType, number> = {
-      report_group: 0,
-      component: 0,
-      page: 0,
-      version: 0,
-    }
+    const counts = new Map<string, number>()
     for (const n of nodes) {
-      const t = n.node_type as NodeType
-      if (t in counts) counts[t] += 1
+      counts.set(n.node_type, (counts.get(n.node_type) ?? 0) + 1)
     }
-    const phrase = (n: number, singular: string, plural: string) =>
-      `${n} ${n === 1 ? singular : plural}`
-    if (nodes.length === 0) return 'No nodes match the current filters yet.'
+    const label = (t: string) => NODE_TYPE_LABELS[t] ?? t.replace(/_/g, ' ')
     const parts: string[] = []
-    if (counts.report_group > 0) parts.push(phrase(counts.report_group, 'report cluster', 'report clusters'))
-    if (counts.component > 0) parts.push(phrase(counts.component, 'component', 'components'))
-    if (counts.page > 0) parts.push(phrase(counts.page, 'page', 'pages'))
-    if (counts.version > 0) parts.push(phrase(counts.version, 'release version', 'release versions'))
-    if (parts.length === 0) return `${nodes.length} nodes flow left → right by stage.`
-    return `${parts.join(' → ')}. Click any card to highlight its blast radius.`
+    for (const [t, n] of [...counts.entries()].sort((a, b) => b[1] - a[1])) {
+      if (n <= 0) continue
+      parts.push(`${n} ${label(t)}${n === 1 ? '' : 's'}`)
+    }
+    if (parts.length === 0) return 'No nodes match the current filters yet.'
+    return `${parts.slice(0, 6).join(' · ')}${parts.length > 6 ? '…' : ''}. Click any card to highlight its blast radius.`
   }, [nodes])
 
   return (

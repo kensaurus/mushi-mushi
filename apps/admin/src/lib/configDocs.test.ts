@@ -186,6 +186,25 @@ describe('configDocs dictionary', () => {
     expect(offenders, offenders.join('\n')).toEqual([])
   })
 
+  // Bare relative paths like `docs/CONFIG_REFERENCE.md` or
+  // `apps/docs/content/concepts/trigger-modes.mdx` are even more dangerous
+  // than leading-slash paths: ConfigHelp renders them as raw <a href>, so
+  // inside the SPA the browser resolves them against the *current route*
+  // (e.g. `/admin/compliance/docs/CONFIG_REFERENCE.md`) and 404s. The same
+  // string is then mirrored verbatim into the regenerated
+  // `docs/CONFIG_REFERENCE.md`, where it resolves against `docs/` and
+  // 404s a second time (`docs/docs/...`). Every learnMore.href must be
+  // either an absolute URL (`http(s)://`), a mailto, or a pure in-page
+  // anchor (`#…`).
+  it('every learnMore.href is an absolute URL, mailto, or pure anchor', () => {
+    const offenders = ALL_CONFIG_DOCS
+      .map((doc) => ({ id: doc.id, href: doc.learnMore?.href ?? '' }))
+      .filter(({ href }) => href.length > 0)
+      .filter(({ href }) => !/^(?:https?:\/\/|mailto:|#)/i.test(href))
+      .map(({ id, href }) => `${id}: ${href}`)
+    expect(offenders, offenders.join('\n')).toEqual([])
+  })
+
   it('exposes every entry through getConfigDoc(id)', () => {
     for (const doc of ALL_CONFIG_DOCS) {
       expect(getConfigDoc(doc.id)?.id).toBe(doc.id)

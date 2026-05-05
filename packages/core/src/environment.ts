@@ -28,7 +28,32 @@ export function captureEnvironment(): MushiEnvironment {
       : undefined,
     deviceMemory: (nav as NavigatorWithDeviceMemory)?.deviceMemory,
     hardwareConcurrency: nav?.hardwareConcurrency,
+    route: win?.location?.pathname,
+    nearestTestid: findNearestTestidFromActive(doc),
   };
+}
+
+/**
+ * Best-effort `data-testid` resolver for freeform reports — when the user
+ * opens the widget without first using the element selector we still want
+ * to map the report to an Action. We start from `document.activeElement`
+ * (which is the most-recently-focused interactive element on most browsers)
+ * and walk up. Falls back to undefined when no testid is in scope.
+ *
+ * Mirrors the walk in `packages/web/src/capture/element-selector.ts` so
+ * both code paths produce the same value for the same DOM state.
+ */
+function findNearestTestidFromActive(doc?: Document): string | undefined {
+  if (!doc) return undefined;
+  let cur: Element | null = doc.activeElement ?? null;
+  let hops = 0;
+  while (cur && hops < 20) {
+    const tid = cur.getAttribute?.('data-testid');
+    if (tid) return tid;
+    cur = cur.parentElement;
+    hops++;
+  }
+  return undefined;
 }
 
 interface NetworkInformation {

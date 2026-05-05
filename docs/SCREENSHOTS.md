@@ -90,8 +90,18 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
 </tr>
 <tr>
   <td width="50%" valign="top">
-    <a href="https://kensaur.us/mushi-mushi/admin/graph"><img src="./screenshots/graph-dark.png" alt="Knowledge graph in Sankey storyboard mode — two columns labelled COMPONENT and PAGE with bezier links." /></a>
-    <p align="center"><b>Knowledge graph</b> · <sub>auto-switches to Sankey storyboard under 12 nodes; full React Flow canvas above. Apache AGE backed when installed, falls back to plain SQL adjacency otherwise.</sub></p>
+    <a href="https://kensaur.us/mushi-mushi/admin/graph"><img src="./screenshots/graph-dark.png" alt="Knowledge graph — Bug graph view with PLAN/DO/CHECK/ACT pills along the top, quick-view filters (All / Regressions / Fragile components / Fix coverage), 12 node types and 19 edge types listed below the search, and Graph / Surface / Table tabs in the upper-right." /></a>
+    <p align="center"><b>Knowledge graph (v2)</b> · <sub>component / page / release adjacency weighted by bug incidence. <b>Graph</b> tab is the React Flow canvas; <b>Surface</b> overlays the positive inventory; <b>Table</b> is for grepping. Apache AGE backed when installed, falls back to plain SQL adjacency otherwise.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/graph"><img src="./screenshots/graph-surface-dark.png" alt="Graph in Surface mode — same canvas but the orange Surface pill is selected and the subtitle reads SURFACE - INVENTORY OVERLAY · 83/119 nodes · 110/114 edges. The node-type legend now includes Page (inventory), Element, Action, User story, App." /></a>
+    <p align="center"><b>Graph · Surface mode (v2)</b> · <sub>flips the same canvas to overlay <code>inventory.yaml</code> on the live knowledge graph. Pages, Elements, Actions, and User stories from the inventory render alongside the bug-incidence weights — the dead corners (unwired actions, regressed elements) light up against the working ones.</sub></p>
+  </td>
+</tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/inventory"><img src="./screenshots/inventory-dark.png" alt="User stories · Inventory — the new v2 positive-side surface. Truth-layer hero across the top with three cards (Decide: stories/elements/actions tied to gates, Act: 25 actions still unknown or unwired, Verify: latest ingest snapshot). Below: per-story cards each with verified / regressed counts, action rows, and Run gates / Run crawler buttons." /></a>
+    <p align="center"><b>User stories · Inventory (v2)</b> · <sub>the headline new surface. Every user-facing action grouped under its story, with verified / unwired / regressed counts and one-click <code>Run gates</code> / <code>Run crawler</code> from the row. Ships with a YAML drop-zone, an SDK-driven Discovery feed, and an LLM proposer that writes the first <code>inventory.yaml</code> for you.</sub></p>
   </td>
   <td width="50%" valign="top">
     <a href="https://kensaur.us/mushi-mushi/admin/compliance"><img src="./screenshots/compliance-dark.png" alt="Compliance dashboard — Latest control evidence table with PASS / WARN pills, Data residency table." /></a>

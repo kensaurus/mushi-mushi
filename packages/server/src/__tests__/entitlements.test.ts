@@ -218,7 +218,9 @@ function makeCtx(overrides: { userId?: string; projectId?: string; path?: string
 describe('GATED_ROUTES catalog', () => {
   it('covers every paid surface listed in the production-readiness plan', () => {
     const flags = new Set(GATED_ROUTES.map((r) => r.flag))
-    expect(flags).toEqual(new Set(['sso', 'byok', 'plugins', 'intelligence_reports', 'teams']))
+    expect(flags).toEqual(
+      new Set(['sso', 'byok', 'plugins', 'intelligence_reports', 'teams', 'inventory_v2']),
+    )
   })
 
   it('uses route prefixes that exist in api/index.ts', () => {
@@ -229,6 +231,7 @@ describe('GATED_ROUTES catalog', () => {
       '/v1/admin/plugins',
       '/v1/admin/intelligence',
       '/v1/org',
+      '/v1/admin/inventory',
     ])
   })
 })
