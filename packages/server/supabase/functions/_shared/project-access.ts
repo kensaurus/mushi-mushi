@@ -17,7 +17,12 @@
  * (everything under `api/routes/*`) working without churn.
  */
 
-import { getServiceClient } from './db.ts'
+// `getServiceClient` is only referenced in `ReturnType<typeof
+// getServiceClient>` annotations below — pull it in as a type-only
+// import so `db.ts` (and its `npm:@supabase/supabase-js` dependency)
+// stays out of the runtime module graph for any function whose
+// import path doesn't otherwise need the live client.
+import type { getServiceClient } from './db.ts'
 
 /**
  * Resolve the set of project ids visible to the authenticated user.
