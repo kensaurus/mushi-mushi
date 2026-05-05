@@ -88,9 +88,22 @@ const TARGETS = [
   { path: 'packages/eslint-plugin-mushi-mushi', name: 'eslint-plugin-mushi-mushi' },
 ]
 
+// Strict semver-ish shape. Matches MAJOR.MINOR.PATCH plus optional
+// prerelease (`-rc.1`) and build (`+sha.deadbeef`) tags. We use it to
+// validate the version string read from package.json before letting it
+// flow into a registry URL — anything outside this shape is rejected
+// up front so an attacker who managed to plant a hostile package.json
+// in the workspace can't smuggle path traversal or query injection
+// through the version field.
+const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
+
 function readPkg(rel) {
   const json = JSON.parse(readFileSync(resolve(ROOT, rel, 'package.json'), 'utf8'))
-  return { name: json.name, version: json.version }
+  const { name, version } = json
+  if (typeof version !== 'string' || !SEMVER_RE.test(version)) {
+    throw new Error(`${rel}/package.json: invalid version "${version}"`)
+  }
+  return { name, version }
 }
 
 async function npmRegistryHas(name, version) {
@@ -141,6 +154,13 @@ async function main() {
   // declared name matches the allowlist. Mismatch is a fatal error —
   // we'd rather refuse to publish anything than silently publish a
   // renamed package under a name the operator didn't expect.
+  //
+  // After the equality check passes, we deliberately use the static
+  // `target.name` literal (not the file-derived `name` value) when
+  // building the registry URL. The two are provably equal at this
+  // point, but using the literal makes the data flow explicit to
+  // static analysis: the network call's host+path are sourced from
+  // compile-time constants, not from untrusted file contents.
   const plan = []
   for (const target of TARGETS) {
     const { name, version } = readPkg(target.path)
@@ -151,9 +171,9 @@ async function main() {
           `Update TARGETS deliberately if this is intentional.`,
       )
     }
-    const onRegistry = await npmRegistryHas(name, version)
-    plan.push({ rel: target.path, name, version, onRegistry })
-    console.log(`  ${name}@${version}  ${onRegistry ? 'already on registry — SKIP' : 'NOT on registry — will publish'}`)
+    const onRegistry = await npmRegistryHas(target.name, version)
+    plan.push({ rel: target.path, name: target.name, version, onRegistry })
+    console.log(`  ${target.name}@${version}  ${onRegistry ? 'already on registry — SKIP' : 'NOT on registry — will publish'}`)
   }
 
   const todo = plan.filter((p) => !p.onRegistry)
