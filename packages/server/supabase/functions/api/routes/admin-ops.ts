@@ -146,12 +146,32 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { notifications: [] } });
-
     const type = c.req.query('type');
     const onlyUnread = c.req.query('unread') === '1';
-    const limit = Math.min(Number(c.req.query('limit') ?? 200), 500);
+    // Sidebar count badge mode — server runs `count: 'exact'` against an empty
+    // row select so we get just `{ unread_count: N }` back, not 200 row payloads
+    // every time the user navigates. The full list mode below is unchanged.
+    const countOnly = c.req.query('count_only') === '1';
+    if (projectIds.length === 0) {
+      return c.json({
+        ok: true,
+        data: countOnly ? { unread_count: 0 } : { notifications: [] },
+      });
+    }
 
+    if (countOnly) {
+      let countQuery = db
+        .from('reporter_notifications')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds);
+      if (type) countQuery = countQuery.eq('notification_type', type);
+      if (onlyUnread) countQuery = countQuery.is('read_at', null);
+      const { count, error } = await countQuery;
+      if (error) return dbError(c, error);
+      return c.json({ ok: true, data: { unread_count: count ?? 0 } });
+    }
+
+    const limit = Math.min(Number(c.req.query('limit') ?? 200), 500);
     let query = db
       .from('reporter_notifications')
       .select('*')

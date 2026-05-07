@@ -937,6 +937,42 @@ export function Layout({ children }: { children: ReactNode }) {
                             hideWhenZero
                           />
                         )}
+                        {path === '/notifications' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.notificationsUnread > 0 ? 'warn' : 'ok'}
+                            count={navCounts.notificationsUnread}
+                            label={
+                              navCounts.notificationsUnread > 0
+                                ? `${navCounts.notificationsUnread} unread notification${navCounts.notificationsUnread === 1 ? '' : 's'}`
+                                : 'All notifications read'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/queue' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.queueFailed)}
+                            count={navCounts.queueFailed}
+                            label={
+                              navCounts.queueFailed > 0
+                                ? `${navCounts.queueFailed} dead-letter / failed queue ${navCounts.queueFailed === 1 ? 'item' : 'items'}`
+                                : 'Queue clear — no stuck items'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/health' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.healthIssues)}
+                            count={navCounts.healthIssues}
+                            label={
+                              navCounts.healthIssues > 0
+                                ? `${navCounts.healthIssues} integration${navCounts.healthIssues === 1 ? '' : 's'} reporting issues`
+                                : 'All integrations healthy'
+                            }
+                            hideWhenZero
+                          />
+                        )}
                       </Link>
                     )
                   })}
