@@ -51,6 +51,7 @@ import {
 import { ReportComments } from '../components/report-detail/ReportComments'
 import { TimelineCard } from '../components/report-detail/TimelineCard'
 import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFooter'
+import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
 
@@ -349,6 +350,20 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
         <Section title="Repro timeline" icon={<IconTerminal />}>
           <TimelineCard report={report} />
         </Section>
+      </div>
+
+      <div className="mt-3">
+        <SentryContextPanel
+          mushiBreadcrumbs={report.breadcrumbs}
+          sentryContext={report.custom_metadata?.sentry}
+          sentryEventId={report.sentry_event_id}
+          sentryReplayId={report.sentry_replay_id}
+          sentryTraceId={report.sentry_trace_id}
+          sentryRelease={report.sentry_release}
+          sentryEnvironment={report.sentry_environment}
+          sentryIssueUrl={report.sentry_issue_url}
+          tags={report.tags}
+        />
       </div>
 
       <div className="mt-3">

@@ -255,6 +255,45 @@ export async function ingestReport(
   const sanitizeText = (s: string | undefined | null): string | null =>
     typeof s === 'string' ? s.replace(/\u0000/g, '') : (s ?? null);
 
+  // 2026-05-07 SDK boost: breadcrumbs / tags / sentryContext arrived as
+  // top-level fields on the report shape. As of migration
+  // `20260507120000_sdk_observability_columns` they get promoted to
+  // first-class jsonb / text columns so the admin /reports UI can
+  // filter "tags @> '{feature: checkout-v2}'" via the GIN index and
+  // correlate to Sentry distributed traces by `sentry_trace_id`.
+  //
+  // We ALSO keep them inside `custom_metadata` for ~1 release cycle so
+  // older API consumers (scripts, MCP tools) that haven't been updated
+  // to read the dedicated columns don't suddenly stop seeing the data.
+  // After GA we'll drop the duplicate write.
+  const richSentryContext = (report as { sentryContext?: Record<string, unknown> }).sentryContext;
+  const sentryEventId =
+    sanitizeText(report.sentryEventId) ??
+    (typeof richSentryContext?.eventId === 'string' ? richSentryContext.eventId : null);
+  const sentryReplayId =
+    sanitizeText(report.sentryReplayId) ??
+    (typeof richSentryContext?.replayId === 'string' ? richSentryContext.replayId : null);
+  const sentryTraceId =
+    typeof richSentryContext?.traceId === 'string' ? richSentryContext.traceId : null;
+  const sentryRelease =
+    typeof richSentryContext?.release === 'string' ? richSentryContext.release : null;
+  const sentryEnvironment =
+    typeof richSentryContext?.environment === 'string' ? richSentryContext.environment : null;
+
+  const rawBreadcrumbs = (report as { breadcrumbs?: unknown }).breadcrumbs;
+  const rawTags = (report as { tags?: unknown }).tags;
+  const breadcrumbsCol = Array.isArray(rawBreadcrumbs) ? rawBreadcrumbs : null;
+  const tagsCol =
+    rawTags && typeof rawTags === 'object' && !Array.isArray(rawTags)
+      ? (rawTags as Record<string, unknown>)
+      : null;
+  const enrichedMetadata: Record<string, unknown> = {
+    ...(report.metadata ?? {}),
+    ...(breadcrumbsCol ? { breadcrumbs: breadcrumbsCol } : {}),
+    ...(tagsCol ? { tags: tagsCol } : {}),
+    ...(richSentryContext ? { sentry: richSentryContext } : {}),
+  };
+
   const { error: insertError } = await db.from('reports').insert({
     id: reportId,
     project_id: projectId,
@@ -269,16 +308,25 @@ export async function ingestReport(
     performance_metrics: report.performanceMetrics,
     repro_timeline: report.timeline,
     selected_element: report.selectedElement,
-    custom_metadata: report.metadata,
+    custom_metadata: Object.keys(enrichedMetadata).length > 0 ? enrichedMetadata : null,
+    breadcrumbs: breadcrumbsCol,
+    tags: tagsCol,
+    sentry_trace_id: sentryTraceId,
+    sentry_release: sentryRelease,
+    sentry_environment: sentryEnvironment,
     proactive_trigger: sanitizeText(report.proactiveTrigger),
     category: report.category ?? 'other',
     status: 'new',
     reporter_token_hash: tokenHash,
-    reporter_user_id: (report.metadata as any)?.user?.id,
+    reporter_user_id:
+      (report.metadata as any)?.user?.id ??
+      (richSentryContext?.user as { id?: string } | undefined)?.id,
     session_id: sanitizeText(report.sessionId),
     app_version: sanitizeText(report.appVersion),
     sdk_package: sanitizeText(report.sdkPackage),
     sdk_version: sanitizeText(report.sdkVersion),
+    sentry_event_id: sentryEventId,
+    sentry_replay_id: sentryReplayId,
     queued_at: report.queuedAt,
     synced_at: new Date().toISOString(),
     created_at: report.createdAt,

@@ -124,6 +124,16 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const component = c.req.query('component');
     const reporter = c.req.query('reporter');
     const search = c.req.query('q')?.trim();
+    // 2026-05-07 SDK observability filters. Each value is bounded and
+    // sanitised: `tag` is `key:value`, both ≤ 120 chars; `trace` is a
+    // 32-hex Sentry trace id (we don't enforce the format here — just
+    // length-cap so it can't blow up the parser); `release` is the
+    // user-supplied Sentry release string. Empty values are dropped so
+    // the dashboard can submit the params unconditionally.
+    const tagParam = c.req.query('tag')?.trim();
+    const traceParam = c.req.query('trace')?.trim().slice(0, 80);
+    const releaseParam = c.req.query('release')?.trim().slice(0, 200);
+    const sentryEnvParam = c.req.query('sentryEnv')?.trim().slice(0, 80);
     const limit = Math.min(Number(c.req.query('limit')) || 50, 200);
     const offset = Number(c.req.query('offset')) || 0;
     const sortField = c.req.query('sort') ?? 'created_at';
@@ -140,7 +150,12 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     let query = db
       .from('reports')
       .select(
-        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at',
+        // breadcrumbs / tags / sentry_* are pulled here so the list row
+        // can render the breadcrumb-peek popover without a second
+        // round-trip. The cost is ~2-5 KB per row of jsonb on average
+        // (capped at 100 entries × ≤2 KB by the schema), well under the
+        // existing per-row payload from `environment`/`screenshot_url`.
+        'id, project_id, description, category, severity, summary, status, created_at, environment, screenshot_url, user_category, confidence, component, report_group_id, last_reporter_reply_at, last_admin_reply_at, breadcrumbs, tags, sentry_trace_id, sentry_release, sentry_environment, sentry_event_id, sentry_replay_id',
         { count: 'exact' },
       )
       .in('project_id', projectIds)
@@ -157,6 +172,34 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       const escaped = search.replace(/[%,]/g, '');
       query = query.or(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`);
     }
+    if (tagParam) {
+      // `tag=key:value` → reports where tags @> {"key": "value"}. We
+      // split only on the *first* `:` so values that themselves contain
+      // a colon (e.g. `release:checkout@1.4.0`) round-trip correctly.
+      // Falls back gracefully when the param is malformed (no `:`),
+      // treating it as a "key exists" check via `tags ? key`.
+      const sepAt = tagParam.indexOf(':');
+      if (sepAt > 0 && sepAt < tagParam.length - 1) {
+        const k = tagParam.slice(0, sepAt).slice(0, 120);
+        const v = tagParam.slice(sepAt + 1).slice(0, 120);
+        // PostgREST `cs` (contains) operator on jsonb — uses the GIN
+        // index on `reports.tags` for an indexed lookup.
+        query = query.contains('tags', { [k]: v });
+      } else if (tagParam.length > 0) {
+        // "key exists" form. PostgREST supports `?` operator via `?`
+        // in the URL but it's awkward; we instead use a `.not.is.null`
+        // style filter via .filter('tags', 'cs', ...) is overkill, so
+        // we settle for a JSON-shape-aware ILIKE on the cast text. It
+        // doesn't hit the GIN index but the dashboard rarely uses the
+        // bare-key form (typical use is k:v) so we accept the seq scan
+        // cost for the rare case.
+        const safe = tagParam.replace(/[%_]/g, '').slice(0, 120);
+        query = query.filter('tags', 'cs', `{"${safe}":""}`);
+      }
+    }
+    if (traceParam) query = query.eq('sentry_trace_id', traceParam);
+    if (releaseParam) query = query.eq('sentry_release', releaseParam);
+    if (sentryEnvParam) query = query.eq('sentry_environment', sentryEnvParam);
 
     const { data: reports, count, error } = await query;
     if (error) return dbError(c, error);

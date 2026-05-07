@@ -680,7 +680,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const [{ data: projectRows }, { data: memberships }] = await Promise.all([
       db
         .from('projects')
-        .select('id, name, slug, created_at, organization_id')
+        // `plan_tier` and `data_residency_region` are surfaced so the FE
+        // can render plan / region badges next to each project — both are
+        // already stored on the row but were never plumbed through, so
+        // ProjectsPage had no way to show "this project is on Pro, EU".
+        // Boost shipped 2026-05-07 along with the repo + codebase joins
+        // below.
+        .select('id, name, slug, created_at, organization_id, plan_tier, data_residency_region')
         .in('id', accessibleIds)
         .order('created_at', { ascending: false }),
       db
@@ -698,6 +704,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       slug: p.slug,
       created_at: p.created_at,
       organization_id: p.organization_id,
+      plan_tier: (p as { plan_tier?: string | null }).plan_tier ?? null,
+      data_residency_region:
+        (p as { data_residency_region?: string | null }).data_residency_region ?? null,
       // null for legacy owned-but-not-in-org rows; FE treats that as 'owner'.
       organization_role: p.organization_id ? roleByOrg.get(p.organization_id) ?? null : null,
     }));
@@ -718,8 +727,26 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
     const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000).toISOString();
 
-    const [reportCounts, allKeys, members, latestReports, planBacklogs, doFlights, checkPending] =
-      await Promise.all([
+    // 30-day rollup window for the severity breakdown surfaced on the
+    // projects list. A month is enough to outweigh a single
+    // late-night spike but short enough to reflect "the current state of
+    // this project". Reusing this constant rather than re-deriving it
+    // inline so the FE help-copy ("last 30 days") and the SQL filter
+    // can never drift.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+    const [
+      reportCounts,
+      allKeys,
+      members,
+      latestReports,
+      planBacklogs,
+      doFlights,
+      checkPending,
+      repos,
+      codebaseFileRows,
+      severityRows,
+    ] = await Promise.all([
         db
           .from('reports')
           .select('project_id', { count: 'exact', head: false })
@@ -782,6 +809,45 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           .select('report_id, project_id, classification_agreed, created_at')
           .in('project_id', projectIds)
           .gte('created_at', fourteenDaysAgo),
+        // Repo connections for the "About this project" surface on
+        // ProjectsPage. We pull every connected repo (a project can
+        // legitimately wire up multiple) but the FE picks the primary
+        // one for the row chip and shows the full list in the
+        // configurator. `last_index_*` columns drive the freshness
+        // badge so users notice when their codebase index has gone
+        // stale (e.g. the OpenAI rate-limit case observed on glot-it
+        // 2026-05-07: indexing failed and there was no surface that
+        // told them).
+        db
+          .from('project_repos')
+          .select(
+            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at',
+          )
+          .in('project_id', projectIds)
+          .order('is_primary', { ascending: false })
+          .order('created_at', { ascending: true }),
+        // Codebase index footprint per project. Counts of indexed files
+        // are a real "is this thing wired up" signal — a project with
+        // an attached repo but zero indexed files is a project where
+        // codebase-aware features (RAG-augmented triage, fix
+        // suggestions, ontology mapping) silently degrade. We pull only
+        // the project_id column so the row count stays cheap; the
+        // aggregation happens in JS below.
+        db
+          .from('project_codebase_files')
+          .select('project_id')
+          .in('project_id', projectIds),
+        // Severity breakdown over the last 30 days, plus signal data
+        // for the new ProjectsPage chips: 7-day report trend (this
+        // 7d vs prior 7d) and "Sentry connected" detection (≥1
+        // report in 30d carries a Sentry trace id). All bucketed in
+        // JS — Postgres-side `group by` would need a fresh RPC and
+        // these series are tiny (≤ project_count × 30d × few KB).
+        db
+          .from('reports')
+          .select('project_id, severity, created_at, sentry_trace_id')
+          .in('project_id', projectIds)
+          .gte('created_at', thirtyDaysAgo),
       ]);
 
     const countMap: Record<string, number> = {};
@@ -895,6 +961,77 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       }
     }
 
+    // Repo rollups. The first row per project is the "primary" repo
+    // (Postgres ordering guarantees `is_primary DESC, created_at ASC`).
+    // Everything else is exposed as the `repos[]` list so the FE can
+    // surface "+2 more" without a second round-trip when a project has
+    // a monorepo + sister repos.
+    interface RepoRow {
+      id: string;
+      project_id: string;
+      repo_url: string | null;
+      role: string | null;
+      default_branch: string | null;
+      is_primary: boolean | null;
+      indexing_enabled: boolean | null;
+      last_indexed_at: string | null;
+      last_index_attempt_at: string | null;
+      last_index_error: string | null;
+      github_app_installation_id: number | null;
+      created_at: string;
+    }
+    const reposByProject: Record<string, RepoRow[]> = {};
+    for (const r of (repos.data ?? []) as RepoRow[]) {
+      if (!reposByProject[r.project_id]) reposByProject[r.project_id] = [];
+      reposByProject[r.project_id].push(r);
+    }
+
+    const codebaseFileCount: Record<string, number> = {};
+    for (const row of codebaseFileRows.data ?? []) {
+      codebaseFileCount[row.project_id] = (codebaseFileCount[row.project_id] ?? 0) + 1;
+    }
+
+    // Severity breakdown over `thirtyDaysAgo`. We accept any string for
+    // `severity` since the column is plain text — the FE collapses
+    // unknown values into an "other" bucket so a misclassified report
+    // never breaks the chip row.
+    //
+    // Same loop folds in two adjacent signals so we don't pay for
+    // re-iteration on a list that can carry 5–10K rows on a busy
+    // project: (a) Sentry-connected detection — true when ≥1 report
+    // in 30d carries a `sentry_trace_id`; (b) 7-day vs prior-7-day
+    // count for the trend arrow on the project row.
+    interface SeverityRow {
+      project_id: string;
+      severity: string | null;
+      created_at?: string | null;
+      sentry_trace_id?: string | null;
+    }
+    const severityByProject: Record<string, Record<string, number>> = {};
+    const sentryConnectedCount: Record<string, number> = {};
+    const last7Count: Record<string, number> = {};
+    const prev7Count: Record<string, number> = {};
+    const sevenDaysAgoMs = Date.now() - 7 * 86_400_000;
+    const fourteenDaysAgoMs = Date.now() - 14 * 86_400_000;
+    for (const r of (severityRows.data ?? []) as SeverityRow[]) {
+      const sev = (r.severity ?? 'unknown').toLowerCase();
+      if (!severityByProject[r.project_id]) severityByProject[r.project_id] = {};
+      severityByProject[r.project_id][sev] =
+        (severityByProject[r.project_id][sev] ?? 0) + 1;
+      if (r.sentry_trace_id) {
+        sentryConnectedCount[r.project_id] =
+          (sentryConnectedCount[r.project_id] ?? 0) + 1;
+      }
+      if (r.created_at) {
+        const tsMs = new Date(r.created_at).getTime();
+        if (tsMs >= sevenDaysAgoMs) {
+          last7Count[r.project_id] = (last7Count[r.project_id] ?? 0) + 1;
+        } else if (tsMs >= fourteenDaysAgoMs) {
+          prev7Count[r.project_id] = (prev7Count[r.project_id] ?? 0) + 1;
+        }
+      }
+    }
+
     const enriched = (projects ?? []).map((p) => {
       const keys = keyMap[p.id] ?? [];
       const planCount = planBacklogMap[p.id] ?? 0;
@@ -940,6 +1077,62 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           sdkStatus = 'outdated';
         }
       }
+      // Repos for "About this project" surface. Primary first, others
+      // trailing. We expose `github_app_connected` as a boolean rather
+      // than the installation id so the FE can render a "Connected via
+      // GitHub App" badge without leaking the integer (which is mostly
+      // identifying for the install but not useful in the row chip).
+      const projectRepos = reposByProject[p.id] ?? [];
+      const repos = projectRepos.map((r) => ({
+        id: r.id,
+        repo_url: r.repo_url,
+        role: r.role,
+        default_branch: r.default_branch,
+        is_primary: !!r.is_primary,
+        indexing_enabled: !!r.indexing_enabled,
+        last_indexed_at: r.last_indexed_at,
+        last_index_attempt_at: r.last_index_attempt_at,
+        last_index_error: r.last_index_error,
+        github_app_connected: r.github_app_installation_id != null,
+      }));
+      const primaryRepo = repos[0] ?? null;
+
+      const indexedFileCount = codebaseFileCount[p.id] ?? 0;
+
+      // Severity buckets — rolled up to the four canonical buckets
+      // we use everywhere else (critical / major / minor / trivial)
+      // plus an `other` catch-all so misclassified rows don't get
+      // dropped silently.
+      const sevRaw = severityByProject[p.id] ?? {};
+      const severity_breakdown_30d = {
+        critical: sevRaw['critical'] ?? 0,
+        major: sevRaw['major'] ?? 0,
+        minor: sevRaw['minor'] ?? 0,
+        trivial: sevRaw['trivial'] ?? 0,
+        other:
+          Object.entries(sevRaw)
+            .filter(([k]) => !['critical', 'major', 'minor', 'trivial'].includes(k))
+            .reduce((acc, [, v]) => acc + v, 0),
+        total: Object.values(sevRaw).reduce((acc, v) => acc + v, 0),
+      };
+
+      const last7d = last7Count[p.id] ?? 0;
+      const prev7d = prev7Count[p.id] ?? 0;
+      // Trend: relative delta in count from last 7d vs the prior 7d.
+      // We expose direction + magnitude separately so the FE can pick
+      // a chip style without re-deriving thresholds. `flat` covers the
+      // small-noise case where both counts are tiny (≤1 each) — the
+      // signal isn't meaningful below that floor.
+      const trendDelta = last7d - prev7d;
+      let trendDirection: 'up' | 'down' | 'flat' = 'flat';
+      if (last7d <= 1 && prev7d <= 1) {
+        trendDirection = 'flat';
+      } else if (trendDelta > 0) {
+        trendDirection = 'up';
+      } else if (trendDelta < 0) {
+        trendDirection = 'down';
+      }
+      const sentryReports = sentryConnectedCount[p.id] ?? 0;
       return {
         ...p,
         report_count: countMap[p.id] ?? 0,
@@ -955,6 +1148,21 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         sdk_latest_version: latestForPackage?.version ?? null,
         sdk_deprecation_message: latestForPackage?.deprecation_message ?? null,
         sdk_status: sdkStatus,
+        primary_repo: primaryRepo,
+        repos,
+        indexed_file_count: indexedFileCount,
+        severity_breakdown_30d,
+        // 2026-05-07 SDK observability boost — surfaced on the projects
+        // list so the user can see "Sentry is wired up" + "trend is
+        // accelerating" without opening a single project.
+        sentry_connected: sentryReports > 0,
+        sentry_connected_reports_30d: sentryReports,
+        trend_7d: {
+          last7d,
+          prev7d,
+          delta: trendDelta,
+          direction: trendDirection,
+        },
       };
     });
 

@@ -321,6 +321,63 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             copied={snippetCopied}
             maxHeight="max-h-72"
           />
+
+          {/* Power-user APIs added in the 2026-05-07 SDK boost.
+              Hidden by default so the install card stays scannable for
+              first-timers, but a one-click expand for hosts that want
+              identity/tags/breadcrumbs/Sentry-grade context. We only
+              show this disclosure for the web frameworks because the
+              mobile bridges (React Native / Expo / Capacitor) don't
+              ship these methods yet — they'll get a per-platform
+              equivalent once their wave lands. */}
+          {framework !== 'react-native' && framework !== 'expo' && framework !== 'capacitor' && (
+            <details className="rounded-md border border-edge-subtle bg-surface-raised/50">
+              <summary className="cursor-pointer select-none list-none flex items-center justify-between gap-2 px-3 py-2 text-xs text-fg hover:bg-surface-overlay rounded-md">
+                <span className="font-medium">Power-user APIs (identity, tags, breadcrumbs, Sentry)</span>
+                <span aria-hidden className="text-2xs text-fg-faint">›</span>
+              </summary>
+              <div className="px-3 pb-3 pt-1 space-y-3 text-2xs text-fg-secondary">
+                <p className="leading-relaxed">
+                  Every report carries the breadcrumb buffer, sticky tags, and (when
+                  Sentry is installed) the active trace + replay + user. After a
+                  successful submit the SDK also tags Sentry's scope with
+                  <code className="mx-1 px-1 py-0.5 rounded-sm bg-surface-overlay font-mono">mushi.report_id</code>
+                  so subsequent Sentry events backlink — the admin can pivot via
+                  Sentry MCP without a manual paste.
+                </p>
+                <pre className="px-2 py-2 rounded-sm bg-surface-overlay text-fg overflow-x-auto whitespace-pre-wrap font-mono">{`// Identity — sticky across every subsequent report
+Mushi.getInstance()?.identify(user.id, { email: user.email, name: user.name })
+
+// Tags — short scalar key/values, surfaced to the Triage LLM
+Mushi.getInstance()?.setTag('feature', 'checkout-v2')
+Mushi.getInstance()?.setTags({ tenant: org.slug, plan: 'pro' })
+
+// Breadcrumbs — auto-captured for routes / clicks / console.error,
+// add your own for domain events the SDK can't infer
+Mushi.getInstance()?.addBreadcrumb({
+  category: 'custom',
+  level: 'info',
+  message: 'Checkout flow: payment intent created',
+  data: { intentId: pi.id, amountCents: 4999 },
+})
+
+// Programmatic capture — try/catch friendly, normalises any thrown
+// value (Error / string / plain object). Pairs with Sentry: same
+// call-site can flush to both and the reports are auto-linked via
+// sentryContext.eventId.
+try {
+  await checkout(cart)
+} catch (err) {
+  await Mushi.getInstance()?.captureException(err, {
+    severity: 'high',
+    component: 'CheckoutPage',
+    tags: { step: 'submit-payment' },
+  })
+  throw err
+}`}</pre>
+              </div>
+            </details>
+          )}
         </div>
       </div>
     </Card>

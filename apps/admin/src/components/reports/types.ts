@@ -34,6 +34,27 @@ export interface ReportRow {
   report_group_id?: string | null
   last_reporter_reply_at?: string | null
   last_admin_reply_at?: string | null
+  // 2026-05-07 SDK observability boost — surfaced on the row so the
+  // hover popover ("breadcrumb peek") and the inline tag chips can
+  // render without a second round-trip when the user mouses over a row.
+  breadcrumbs?: ReportBreadcrumbLite[] | null
+  tags?: Record<string, string | number | boolean> | null
+  sentry_trace_id?: string | null
+  sentry_release?: string | null
+  sentry_environment?: string | null
+}
+
+/**
+ * Minimal breadcrumb shape the row hover popover needs. Mirrors the
+ * ReportBreadcrumb in `report-detail/types.ts` — kept loose-typed so
+ * we don't bloat the table row state with the full report shape.
+ */
+export interface ReportBreadcrumbLite {
+  timestamp: number
+  category: string
+  level: string
+  message: string
+  data?: Record<string, unknown>
 }
 
 export type SortField = 'created_at' | 'severity' | 'confidence' | 'status' | 'component'

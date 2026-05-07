@@ -41,7 +41,16 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
 import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
-import { IconCheck, IconClose, IconPencil, IconTrash } from '../components/icons'
+import {
+  IconCheck,
+  IconClose,
+  IconPencil,
+  IconTrash,
+  IconGit,
+  IconExternalLink,
+  IconAlertTriangle,
+  IconStorage,
+} from '../components/icons'
 
 // Undo window for soft-delete operations on this page (project delete,
 // API key revoke). Long enough for the "wait, that wasn't who I meant"
@@ -122,6 +131,28 @@ type PdcaStageId = 'plan' | 'do' | 'check' | 'act'
  */
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer' | null
 
+interface ProjectRepoLite {
+  id: string
+  repo_url: string | null
+  role: string | null
+  default_branch: string | null
+  is_primary: boolean
+  indexing_enabled: boolean
+  last_indexed_at: string | null
+  last_index_attempt_at: string | null
+  last_index_error: string | null
+  github_app_connected: boolean
+}
+
+interface SeverityBreakdown {
+  critical: number
+  major: number
+  minor: number
+  trivial: number
+  other: number
+  total: number
+}
+
 interface Project {
   id: string
   name: string
@@ -149,6 +180,30 @@ interface Project {
   sdk_latest_version?: string | null
   sdk_deprecation_message?: string | null
   sdk_status?: SdkStatus
+  /** Project-level metadata threaded through 2026-05-07 to give the FE
+   *  enough context to render an "About this project" surface without
+   *  any second round-trips. Each block is optional because legacy
+   *  responses (and projects with nothing connected) won't include it. */
+  plan_tier?: string | null
+  data_residency_region?: string | null
+  primary_repo?: ProjectRepoLite | null
+  repos?: ProjectRepoLite[]
+  indexed_file_count?: number
+  severity_breakdown_30d?: SeverityBreakdown
+  /** True when ≥1 report in the last 30 days carried a Sentry trace id.
+   *  Drives the "Sentry connected" badge on the row. Backend computes
+   *  this from `reports.sentry_trace_id IS NOT NULL` over the same
+   *  30-day window as the severity breakdown. */
+  sentry_connected?: boolean
+  sentry_connected_reports_30d?: number
+  /** 7-day vs prior-7-day report count. Powers the trend arrow chip
+   *  on each project row — "is this project getting noisier?". */
+  trend_7d?: {
+    last7d: number
+    prev7d: number
+    delta: number
+    direction: 'up' | 'down' | 'flat'
+  }
 }
 
 /**
@@ -188,6 +243,65 @@ function relativeTime(iso: string | null): string {
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`
   if (ms < 30 * 86_400_000) return `${Math.floor(ms / 86_400_000)}d ago`
   return new Date(iso).toLocaleDateString()
+}
+
+/**
+ * Strip a `https://github.com/owner/repo` URL down to `owner/repo` so
+ * the project row can render the repo without eating half the line.
+ * Falls back to the raw URL when the host isn't GitHub-shaped, so
+ * self-hosted GitLab / Gitea installs are still readable.
+ */
+function shortRepoLabel(url: string | null | undefined): string | null {
+  if (!url) return null
+  try {
+    const u = new URL(url)
+    const trimmed = u.pathname.replace(/^\/+/, '').replace(/\.git$/, '')
+    return trimmed || u.host
+  } catch {
+    return url
+  }
+}
+
+/**
+ * Per-repo indexing freshness. The backend writes `last_indexed_at` on
+ * every successful index pass and `last_index_error` on a failed one,
+ * so we infer "ok / stale / failed / off / never" entirely from those.
+ *
+ * - `off` — indexing explicitly disabled (`indexing_enabled = false`).
+ * - `failed` — last attempt errored (`last_index_error` set, no
+ *   subsequent success).
+ * - `stale` — no successful index in > 7 days.
+ * - `ok` — indexed in the last 7 days.
+ * - `never` — repo connected but never indexed (initial state).
+ */
+type IndexHealth = 'ok' | 'stale' | 'failed' | 'off' | 'never'
+
+function indexHealth(repo: ProjectRepoLite): IndexHealth {
+  if (!repo.indexing_enabled) return 'off'
+  if (repo.last_index_error && (!repo.last_indexed_at ||
+      (repo.last_index_attempt_at && new Date(repo.last_index_attempt_at) > new Date(repo.last_indexed_at)))) {
+    return 'failed'
+  }
+  if (!repo.last_indexed_at) return 'never'
+  const ageMs = Date.now() - new Date(repo.last_indexed_at).getTime()
+  if (ageMs > 7 * 86_400_000) return 'stale'
+  return 'ok'
+}
+
+const INDEX_HEALTH_LABEL: Record<IndexHealth, string> = {
+  ok: 'Indexed',
+  stale: 'Stale',
+  failed: 'Index failed',
+  off: 'Indexing off',
+  never: 'Not indexed',
+}
+
+const INDEX_HEALTH_TONE: Record<IndexHealth, string> = {
+  ok: 'bg-ok-muted text-ok border border-ok/30',
+  stale: 'bg-warn-muted text-warn border border-warn/30',
+  failed: 'bg-danger-muted text-danger border border-danger/30',
+  off: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  never: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
 }
 
 export function ProjectsPage() {
@@ -736,6 +850,7 @@ export function ProjectsPage() {
                         </Link>
                       )}
                     </div>
+                    <ProjectContextStrip project={project} />
                   </div>
                   <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     {!isActive && (
@@ -1052,6 +1167,230 @@ export function ProjectsPage() {
           onConfirm={scheduleRevokeKey}
           onCancel={() => setPendingRevoke(null)}
         />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Per-project "About this project" strip — a single horizontally-laid-out
+ * row of chips showing the connected repo (with default branch + a live
+ * indexing-health pill), the codebase index footprint, the plan tier,
+ * the data residency region, and a 30-day severity rollup. We render
+ * the chips inline rather than as a side panel so the strip stays
+ * scannable next to the existing metadata row above it — eyes flow
+ * left-to-right, top-to-bottom and read both lines as one block.
+ *
+ * Every section is conditional: a project with no repo and no reports
+ * yet renders nothing, so quiet projects don't pick up cosmetic chrome.
+ * The whole strip only appears when at least one of (repo, indexed
+ * files, plan, region, severity rollup) has a value worth showing.
+ */
+function ProjectContextStrip({ project }: { project: Project }) {
+  const repo = project.primary_repo
+  const repoLabel = shortRepoLabel(repo?.repo_url ?? null)
+  const sev = project.severity_breakdown_30d
+  const sevTotal = sev?.total ?? 0
+  const planTier = (project.plan_tier ?? '').trim()
+  const region = (project.data_residency_region ?? '').trim()
+  const indexedFiles = project.indexed_file_count ?? 0
+  const extraRepos = (project.repos?.length ?? 0) - (repo ? 1 : 0)
+  const trend = project.trend_7d
+  const sentryConnected = !!project.sentry_connected
+  const sentryReports = project.sentry_connected_reports_30d ?? 0
+  // Trend chip is meaningful when there's been any meaningful traffic
+  // — we hide it for the typical "no reports yet" case rather than
+  // rendering a `flat 0 vs 0` chip that adds noise without signal.
+  const showTrend =
+    trend && (trend.last7d > 0 || trend.prev7d > 0) && trend.direction !== 'flat'
+
+  const hasAnything =
+    !!repo ||
+    indexedFiles > 0 ||
+    sevTotal > 0 ||
+    planTier.length > 0 ||
+    region.length > 0 ||
+    showTrend ||
+    sentryConnected
+  if (!hasAnything) return null
+
+  const health = repo ? indexHealth(repo) : null
+  const indexHint = (() => {
+    if (!repo) return undefined
+    const lastIso = repo.last_indexed_at
+    const attemptIso = repo.last_index_attempt_at
+    if (health === 'failed') {
+      const trimmed = (repo.last_index_error ?? '').slice(0, 220)
+      return `Last index attempt failed${attemptIso ? ` (${relativeTime(attemptIso)})` : ''}.${
+        trimmed ? `\n\n${trimmed}` : ''
+      }`
+    }
+    if (health === 'off') return 'Indexing is disabled for this repo. Enable it in Settings to power codebase-aware triage and fix suggestions.'
+    if (health === 'never') return 'Repo connected but no successful index pass yet. The first index runs in the background.'
+    if (health === 'stale') return `Last successful index ${relativeTime(lastIso)}. Codebase-aware features may be using stale context.`
+    return `Indexed ${relativeTime(lastIso)}.`
+  })()
+
+  return (
+    <div className="flex items-center gap-2 mt-1.5 text-2xs text-fg-secondary flex-wrap">
+      {repo && repoLabel && (
+        <span className="inline-flex items-center gap-1.5">
+          <IconGit className="w-3.5 h-3.5 text-fg-faint" />
+          {repo.repo_url ? (
+            <a
+              href={repo.repo_url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="font-mono text-fg hover:underline inline-flex items-center gap-1"
+              title={`Open ${repoLabel} on GitHub`}
+            >
+              {repoLabel}
+              <IconExternalLink className="w-3 h-3 text-fg-faint" />
+            </a>
+          ) : (
+            <span className="font-mono text-fg">{repoLabel}</span>
+          )}
+          {repo.default_branch && (
+            <code
+              className="font-mono text-fg-faint px-1 rounded-sm bg-surface-overlay"
+              title="Default branch"
+            >
+              {repo.default_branch}
+            </code>
+          )}
+          {health && (
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-2xs font-medium ${INDEX_HEALTH_TONE[health]}`}
+              title={indexHint}
+            >
+              {health === 'failed' && <IconAlertTriangle className="w-3 h-3" />}
+              {INDEX_HEALTH_LABEL[health]}
+              {health === 'ok' && repo.last_indexed_at && (
+                <span className="text-fg-faint font-normal">
+                  · {relativeTime(repo.last_indexed_at)}
+                </span>
+              )}
+            </span>
+          )}
+          {extraRepos > 0 && (
+            <span
+              className="text-fg-faint"
+              title="This project has additional connected repos. Open the SDK / repo settings to see all of them."
+            >
+              +{extraRepos} {extraRepos === 1 ? 'repo' : 'repos'}
+            </span>
+          )}
+          {repo.github_app_connected && (
+            <Badge
+              className="bg-info-muted text-info border border-info/20"
+              title="The Mushi GitHub App is installed on this repo, so the Fix worker can open PRs without a personal token."
+            >
+              GitHub App
+            </Badge>
+          )}
+        </span>
+      )}
+
+      {indexedFiles > 0 && (
+        <span
+          className="inline-flex items-center gap-1"
+          title={`${indexedFiles.toLocaleString()} indexed source files. The codebase index powers RAG-augmented triage and fix suggestions.`}
+        >
+          <IconStorage className="w-3.5 h-3.5 text-fg-faint" />
+          <span className="font-mono text-fg">{indexedFiles.toLocaleString()}</span>{' '}
+          {pluralize(indexedFiles, 'file')}
+        </span>
+      )}
+
+      {showTrend && trend && (
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border text-2xs font-mono ${
+            trend.direction === 'up'
+              ? 'bg-warn-muted text-warn border-warn/30'
+              : 'bg-ok-muted text-ok border-ok/30'
+          }`}
+          title={
+            trend.direction === 'up'
+              ? `Reports trending up: ${trend.last7d} in the last 7d vs ${trend.prev7d} in the prior 7d. Worth investigating.`
+              : `Reports trending down: ${trend.last7d} in the last 7d vs ${trend.prev7d} in the prior 7d. Looks like a fix is sticking.`
+          }
+        >
+          <span aria-hidden>{trend.direction === 'up' ? '↑' : '↓'}</span>
+          {trend.direction === 'up' ? '+' : ''}
+          {trend.delta} 7d
+        </span>
+      )}
+
+      {sevTotal > 0 && sev && (
+        <span
+          className="inline-flex items-center gap-1"
+          title="Severity breakdown over the last 30 days. Click 'Reports' to filter by severity."
+        >
+          <span className="text-fg-faint">last 30d</span>
+          {sev.critical > 0 && (
+            <Badge className="bg-danger-muted text-danger border border-danger/30">
+              {sev.critical} critical
+            </Badge>
+          )}
+          {sev.major > 0 && (
+            <Badge className="bg-warn-muted text-warn border border-warn/30">
+              {sev.major} major
+            </Badge>
+          )}
+          {sev.minor > 0 && (
+            <Badge className="bg-info-muted text-info border border-info/20">
+              {sev.minor} minor
+            </Badge>
+          )}
+          {sev.trivial > 0 && (
+            <Badge className="bg-surface-overlay text-fg-muted border border-edge-subtle">
+              {sev.trivial} trivial
+            </Badge>
+          )}
+        </span>
+      )}
+
+      {planTier && planTier !== 'free' && (
+        <Badge
+          className="bg-brand/10 text-brand border border-brand/20 capitalize"
+          title="Project-level plan tier (separate from the org plan, used for legacy per-project billing)."
+        >
+          {planTier}
+        </Badge>
+      )}
+
+      {region && (
+        <Badge
+          className="bg-surface-overlay text-fg-muted border border-edge-subtle uppercase"
+          title="Data residency region. Reports for this project are stored in this region."
+        >
+          {region}
+        </Badge>
+      )}
+
+      {sentryConnected && (
+        <Badge
+          className="bg-[#7553ff]/10 text-[#7553ff] border border-[#7553ff]/30 inline-flex items-center gap-1"
+          title={
+            sentryReports > 0
+              ? `Sentry is wired up — ${sentryReports} report${sentryReports === 1 ? '' : 's'} in the last 30 days carried a Sentry trace id. Open any of them to jump to the same trace in Sentry.`
+              : 'Sentry SDK is detected on the host app.'
+          }
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden
+          >
+            <path d="M8 1l6 11H2L8 1z" strokeLinejoin="round" />
+            <path d="M8 5l3 5.5H5L8 5z" strokeLinejoin="round" fill="currentColor" />
+          </svg>
+          Sentry
+        </Badge>
       )}
     </div>
   )
