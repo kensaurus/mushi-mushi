@@ -4,7 +4,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, RelativeTime, SelectField, Tooltip } from '../components/ui'
-import { IconCheck, IconClock, IconTrash, IconUndo } from '../components/icons'
+import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
@@ -32,16 +32,31 @@ interface Invitation {
   id: string
   email: string
   role: Exclude<OrgRole, 'owner'>
+  // Sensitive token — returned only to owner/admin actors (server-side
+  // gated). Used to build the /invite/accept?token=… URL for the
+  // "Copy invite link" fallback when email delivery is unreliable.
+  // Null for non-manage-capable roles (defensive — the UI also gates
+  // the affordance on `canManage`).
+  token: string | null
   // Server-resolved email of the inviter so we can render
   // "Invited 3h ago by alice@example.com" without a second fetch.
   // Nullable: legacy rows or deleted users surface as "by an admin".
   invited_by: string | null
   invited_by_email: string | null
   expires_at: string
-  // Stamped by the API after Supabase auth.admin.inviteUserByEmail
-  // is retried. Surfaces as "Resent · 1h ago" once we ship a Resend
-  // affordance; rendered today only when the value is non-null.
+  // Resend metadata. resend_count is NOT NULL on the backend (defaults
+  // to 0); the optional ?: keeps backwards compat with cached responses
+  // from before the v1.2 migration deployed.
   last_resent_at?: string | null
+  resend_count?: number
+  // Stamped on first preview-page open. NULL means "never opened" —
+  // surfaces as a softer "Sent" label so the operator can decide
+  // whether the issue is deliverability vs ghosting.
+  last_seen_at?: string | null
+  // Optional 280-char personal note from the inviter. Echoed in both
+  // the Members card metadata strip (truncated) and the preview screen
+  // (full quote).
+  note?: string | null
   created_at: string
 }
 
@@ -59,6 +74,11 @@ const ROLE_TONE: Record<OrgRole, string> = {
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
+// Cap mirrors the CHECK constraint on invitations.note. We mirror it
+// in the input so the user gets immediate feedback when typing past
+// the limit, instead of bouncing off a 400 from the API.
+const NOTE_MAX_LEN = 280
+
 export function OrganizationSettingsPage() {
   const activeOrgId = useActiveOrgId()
   const toast = useToast()
@@ -66,6 +86,22 @@ export function OrganizationSettingsPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Invitation['role']>('member')
   const [submitting, setSubmitting] = useState(false)
+  // Personal note is collapsed by default — invitees scan invitation
+  // emails fast and most invites genuinely don't need a note. Surfacing
+  // a textarea unprompted dilutes the form's hierarchy. The "+ Add a
+  // note" toggle keeps the surface clean while making the affordance
+  // discoverable on the first invite an operator sends.
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [note, setNote] = useState('')
+  // Track which invites are currently being resent so the Resend button
+  // shows a spinner without forcing a full page reload between clicks.
+  // A Set so two admins triaging the page concurrently don't trample
+  // each other's optimistic state.
+  const [resendingIds, setResendingIds] = useState<Set<string>>(new Set())
+  // Per-invite "just copied the link" flash, keyed by id. Cleared via
+  // a setTimeout so the affordance feels like a momentary success
+  // signal rather than a sticky state.
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null)
   // Local draft for the org rename input. Initialised lazily once the
   // server returns the org's current name (see effect below) so admins
   // can edit in-place without losing the field on background refetch.
@@ -152,18 +188,91 @@ export function OrganizationSettingsPage() {
   async function invite() {
     if (!activeOrgId) return
     setSubmitting(true)
-    const res = await apiFetch<{ invitation: Invitation }>(`/v1/org/${activeOrgId}/invitations`, {
-      method: 'POST',
-      body: JSON.stringify({ email, role }),
-    })
+    const trimmedNote = note.trim()
+    const res = await apiFetch<{ invitation: Invitation; acceptUrl: string }>(
+      `/v1/org/${activeOrgId}/invitations`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          role,
+          note: trimmedNote ? trimmedNote : undefined,
+        }),
+      },
+    )
     setSubmitting(false)
     if (!res.ok) {
-      toast.error('Invite failed', res.error?.message)
+      // Targeted error UX for the two new structured failure paths the
+      // backend exposes. Generic toast for everything else.
+      const code = res.error?.code
+      if (code === 'SEAT_CAP_REACHED') {
+        toast.error('Seat cap reached', res.error?.message ?? 'Upgrade to add more teammates.')
+      } else if (code === 'RATE_LIMITED') {
+        toast.error('Too many invites', res.error?.message ?? 'Slow down — try again in a bit.')
+      } else {
+        toast.error('Invite failed', res.error?.message)
+      }
       return
     }
     toast.success('Invite sent', `${email} can now join this organization.`)
     setEmail('')
+    setNote('')
+    setNoteOpen(false)
     reload()
+  }
+
+  async function resendInvite(inviteRow: Invitation) {
+    if (!activeOrgId) return
+    if (resendingIds.has(inviteRow.id)) return
+    setResendingIds((prev) => new Set(prev).add(inviteRow.id))
+    const res = await apiFetch<{ invitationId: string; lastResentAt: string; resendCount: number }>(
+      `/v1/org/${activeOrgId}/invitations/${inviteRow.id}/resend`,
+      { method: 'POST' },
+    )
+    setResendingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(inviteRow.id)
+      return next
+    })
+    if (!res.ok) {
+      const code = res.error?.code
+      if (code === 'RATE_LIMITED') {
+        toast.error('Resend cooldown', res.error?.message ?? 'Wait before resending this invite again.')
+      } else if (code === 'EXPIRED') {
+        toast.error('Invitation expired', res.error?.message ?? 'Cancel and send a fresh invite.')
+      } else if (code === 'ALREADY_ACCEPTED') {
+        toast.error('Already accepted', 'This invite has already been used.')
+      } else if (code === 'ALREADY_REVOKED') {
+        toast.error('Cancelled invite', 'This invitation was cancelled. Send a new one instead.')
+      } else {
+        toast.error('Could not resend invite', res.error?.message)
+      }
+      return
+    }
+    toast.success('Invite resent', `${inviteRow.email} will receive a fresh email.`)
+    reload()
+  }
+
+  async function copyInviteLink(inviteRow: Invitation) {
+    if (!inviteRow.token) {
+      toast.error('Invite link unavailable', 'Reload the page and try again.')
+      return
+    }
+    // Build the same accept URL the auth email points at, so a forwarded
+    // copy lands the invitee on the exact preview screen they would have
+    // reached via the email. Useful when the email is in spam, the
+    // invitee's domain blocks Supabase's mailer, or a manager wants to
+    // DM the link in Slack.
+    const link = `${window.location.origin}/invite/accept?token=${encodeURIComponent(inviteRow.token)}`
+    try {
+      await navigator.clipboard.writeText(link)
+      setCopiedInviteId(inviteRow.id)
+      window.setTimeout(() => {
+        setCopiedInviteId((current) => (current === inviteRow.id ? null : current))
+      }, 2000)
+    } catch {
+      toast.error('Could not copy link', 'Your browser blocked clipboard access.')
+    }
   }
 
   async function changeRole(userId: string, nextRole: OrgRole) {
@@ -481,6 +590,61 @@ export function OrganizationSettingsPage() {
               )}
             </div>
           </div>
+          {/* Optional personal note. Collapsed by default — most invites
+              don't need one, and keeping the textarea hidden until the
+              operator opts in preserves the form's hierarchy. The note
+              flows through to both the Supabase invite email body
+              ({{ .Data.note }} in the template) and the preview screen
+              the invitee sees before clicking Accept, so a one-line
+              "we're shipping the audit-log work next week — come help"
+              gives the invitee real context the generic email can't. */}
+          {teamsEnabled && canManage && (
+            <div className="mt-3">
+              {!noteOpen ? (
+                <button
+                  type="button"
+                  onClick={() => setNoteOpen(true)}
+                  className="text-xs text-brand hover:text-brand-hover focus:outline-none focus:ring-2 focus:ring-brand/40 rounded"
+                >
+                  + Add a personal note
+                </button>
+              ) : (
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between gap-2">
+                    <label htmlFor="invite-note" className="text-xs font-medium text-fg">
+                      Personal note <span className="text-fg-faint">(optional)</span>
+                    </label>
+                    <span
+                      className={`text-2xs ${note.length > NOTE_MAX_LEN - 20 ? 'text-warn' : 'text-fg-faint'}`}
+                    >
+                      {note.length}/{NOTE_MAX_LEN}
+                    </span>
+                  </div>
+                  <textarea
+                    id="invite-note"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX_LEN))}
+                    rows={2}
+                    placeholder="Hey — we're shipping the audit work next week, would love your eyes on it."
+                    className="w-full rounded border border-edge-subtle bg-surface-raised px-2 py-1.5 text-sm text-fg placeholder:text-fg-faint focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand/40"
+                  />
+                  <p className="mt-1 text-2xs text-fg-faint">
+                    Shown in the invite email and the preview screen the recipient sees before accepting.{' '}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNote('')
+                        setNoteOpen(false)
+                      }}
+                      className="text-brand hover:text-brand-hover"
+                    >
+                      Skip
+                    </button>
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </UpgradeLockOverlay>
       </Card>
 
@@ -555,6 +719,9 @@ export function OrganizationSettingsPage() {
               const expiresSoon = expiresMs > 0 && expiresMs < 24 * 60 * 60 * 1000
               const expired = expiresMs <= 0
               const inviterLabel = invite.invited_by_email ?? (invite.invited_by ? 'an admin' : null)
+              const resendCount = invite.resend_count ?? 0
+              const isResending = resendingIds.has(invite.id)
+              const justCopied = copiedInviteId === invite.id
               return (
                 <li
                   key={invite.id}
@@ -562,15 +729,28 @@ export function OrganizationSettingsPage() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-fg" title={invite.email}>
-                        {invite.email}
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate font-medium text-fg" title={invite.email}>
+                          {invite.email}
+                        </span>
+                        {invite.note && (
+                          <Tooltip content={invite.note}>
+                            <span className="inline-flex items-center text-fg-faint hover:text-fg-muted">
+                              <IconNote className="size-3" />
+                            </span>
+                          </Tooltip>
+                        )}
                       </div>
-                      {/* Metadata strip — when invited, by whom, and when it
-                          expires. Each piece links to a tooltip with the
-                          absolute timestamp so admins can audit a row
-                          without leaving the page. Inviter falls back to
-                          "an admin" if the user_id couldn't be resolved
-                          (deleted account, legacy row pre-migration). */}
+                      {/* Metadata strip — when invited, by whom, when it
+                          expires, deliverability signals (last_seen_at,
+                          resend_count). Inviter falls back to "an admin"
+                          if the user_id couldn't be resolved (deleted
+                          account, legacy row pre-migration). The
+                          last_seen_at signal is the highest-leverage
+                          new datum: it lets the operator distinguish
+                          "ignored / spam-filtered" (never opened) from
+                          "opened but did not accept" (engagement issue,
+                          not deliverability). */}
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-faint">
                         <span className="inline-flex items-center gap-1">
                           Invited <RelativeTime value={invite.created_at} className="text-fg-muted" />
@@ -587,15 +767,58 @@ export function OrganizationSettingsPage() {
                           <IconClock className="size-3" />
                           {expired ? 'expired' : 'expires'} <RelativeTime value={invite.expires_at} className={expired ? 'text-danger' : expiresSoon ? 'text-warn' : 'text-fg-muted'} />
                         </span>
-                        {invite.last_resent_at && (
-                          <span className="text-fg-faint">
-                            · resent <RelativeTime value={invite.last_resent_at} className="text-fg-muted" />
+                        {invite.last_seen_at ? (
+                          <span className="text-fg-faint" title={`Opened ${new Date(invite.last_seen_at).toLocaleString()}`}>
+                            · opened <RelativeTime value={invite.last_seen_at} className="text-fg-muted" />
+                          </span>
+                        ) : (
+                          <span className="text-warn" title="The invitee hasn't opened the link yet — could be a spam filter. Try Resend or Copy link.">
+                            · not opened
+                          </span>
+                        )}
+                        {resendCount > 0 && invite.last_resent_at && (
+                          <span className="text-fg-faint" title={`Last resent ${new Date(invite.last_resent_at).toLocaleString()}`}>
+                            · resent {resendCount}× (last <RelativeTime value={invite.last_resent_at} className="text-fg-muted" />)
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1">
                       <Badge className={ROLE_TONE[invite.role]}>{invite.role}</Badge>
+                      {canManage && invite.token && (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void copyInviteLink(invite)}
+                          aria-label={`Copy invite link for ${invite.email}`}
+                          title={
+                            justCopied
+                              ? 'Copied!'
+                              : 'Copy invite link to share manually (Slack, DM) when email is unreliable'
+                          }
+                          className={`px-2 ${justCopied ? 'text-ok' : 'text-fg-secondary hover:text-fg'}`}
+                        >
+                          {justCopied ? <IconCheck /> : <IconCopy />}
+                        </Btn>
+                      )}
+                      {canManage ? (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => void resendInvite(invite)}
+                          disabled={isResending || expired}
+                          loading={isResending}
+                          aria-label={`Resend invitation to ${invite.email}`}
+                          title={
+                            expired
+                              ? 'Invite expired — cancel and send a new one'
+                              : `Resend invitation email to ${invite.email}`
+                          }
+                          className="px-2 text-fg-secondary hover:text-brand"
+                        >
+                          <IconResend />
+                        </Btn>
+                      ) : null}
                       {canManage ? (
                         <Btn
                           size="sm"

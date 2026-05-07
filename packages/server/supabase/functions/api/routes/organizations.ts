@@ -57,6 +57,148 @@ async function userEmailById(db: ReturnType<typeof getServiceClient>, userId: st
   }
 }
 
+// Resolve a "human-friendly" name for an inviter. Supabase doesn't model
+// display names natively, so the canonical sources in priority order are:
+//   1. raw_user_meta_data.full_name (set by social logins like Google/GitHub)
+//   2. raw_user_meta_data.name (some providers use this key instead)
+//   3. raw_user_meta_data.display_name (older / custom flows)
+//   4. the email's local-part as a last-resort title-cased label
+// The fallback keeps the invite email and preview screen looking
+// intentional even for invitees who joined with a magic link and never
+// filled in a profile.
+async function userDisplayInfoById(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<{ email: string | null; name: string | null }> {
+  try {
+    const { data } = await db.auth.admin.getUserById(userId);
+    const user = data.user;
+    if (!user) return { email: null, name: null };
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const pick = (key: string): string | null => {
+      const v = meta[key];
+      return typeof v === 'string' && v.trim() ? v.trim() : null;
+    };
+    let name = pick('full_name') ?? pick('name') ?? pick('display_name');
+    if (!name && user.email) {
+      const local = user.email.split('@')[0] ?? '';
+      // Title-case the local-part so "alice.dev" → "Alice Dev". Cosmetic
+      // only — the email itself is shown alongside, so a perfect humanise
+      // isn't required, just better than the literal email twice.
+      name = local
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+        .join(' ') || null;
+    }
+    return { email: user.email ?? null, name };
+  } catch {
+    return { email: null, name: null };
+  }
+}
+
+// Atomic per-actor rate limit using the existing scoped_rate_limit_claim
+// RPC. Returns null on success, or a 429-shaped JSON error on miss so the
+// caller can `return c.json(err.body, err.status)` directly. We bury the
+// throw/catch here because the RPC raises a Postgres error with a magic
+// `rate_limit_exceeded` token — every call site shouldn't have to know
+// that wire format.
+async function claimRateLimit(
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+  scope: string,
+  maxPerWindow: number,
+  windowInterval: string,
+): Promise<{ status: number; body: { ok: false; error: { code: string; message: string } } } | null> {
+  const { error } = await db.rpc('scoped_rate_limit_claim', {
+    p_user_id: userId,
+    p_scope: scope,
+    p_max_per_window: maxPerWindow,
+    p_window: windowInterval,
+  });
+  if (!error) return null;
+  if ((error.message ?? '').includes('rate_limit_exceeded')) {
+    return {
+      status: 429,
+      body: {
+        ok: false,
+        error: {
+          code: 'RATE_LIMITED',
+          message: `Limit reached: ${maxPerWindow} per ${windowInterval}. Try again later.`,
+        },
+      },
+    };
+  }
+  // Unknown RPC failure — surface as a generic 500 so we don't silently
+  // bypass the rate limit when the table is unavailable.
+  return {
+    status: 500,
+    body: { ok: false, error: { code: 'RATE_LIMIT_BACKEND', message: error.message } },
+  };
+}
+
+// Seat-cap pre-check. Counts active members + still-pending invites
+// against `pricing_plans.seat_limit`. Returns null when there's room (or
+// when the plan has no cap, NULL = unlimited), or a 402-shaped error so
+// the route can short-circuit. Done as a single round-trip with two
+// counts so a high-volume invite-storming admin doesn't get N queries.
+async function checkSeatCap(
+  db: ReturnType<typeof getServiceClient>,
+  orgId: string,
+): Promise<{ status: number; body: { ok: false; error: { code: string; message: string; details?: Record<string, unknown> } } } | null> {
+  const { data: org } = await db
+    .from('organizations')
+    .select('plan_id')
+    .eq('id', orgId)
+    .maybeSingle();
+  if (!org?.plan_id) return null;
+
+  const { data: plan } = await db
+    .from('pricing_plans')
+    .select('seat_limit, display_name')
+    .eq('id', org.plan_id)
+    .maybeSingle();
+  if (!plan?.seat_limit) return null; // NULL = unlimited
+
+  const [{ count: memberCount }, { count: pendingCount }] = await Promise.all([
+    db.from('organization_members').select('user_id', { count: 'exact', head: true }).eq('organization_id', orgId),
+    db
+      .from('invitations')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .is('accepted_at', null)
+      .is('revoked_at', null)
+      .gt('expires_at', new Date().toISOString()),
+  ]);
+
+  const used = (memberCount ?? 0) + (pendingCount ?? 0);
+  if (used < plan.seat_limit) return null;
+
+  return {
+    status: 402,
+    body: {
+      ok: false,
+      error: {
+        code: 'SEAT_CAP_REACHED',
+        message: `${plan.display_name ?? plan.seat_limit} plan is at its ${plan.seat_limit}-seat cap. Upgrade or remove a member to invite more.`,
+        details: { used, cap: plan.seat_limit, members: memberCount ?? 0, pending: pendingCount ?? 0 },
+      },
+    },
+  };
+}
+
+// Sanitise an inviter's personal note. Plain-text only — strip control
+// characters, collapse whitespace, hard-cap at 280 chars (matches the
+// CHECK constraint on invitations.note). Returns null for empty input
+// so the caller can pass it straight through to the INSERT.
+function sanitiseNote(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').replace(/\r\n?/g, '\n').trim();
+  if (!cleaned) return null;
+  return cleaned.length > 280 ? cleaned.slice(0, 280) : cleaned;
+}
+
 async function rosterWithEmails(
   db: ReturnType<typeof getServiceClient>,
   rows: Array<{ user_id: string; role: OrgRole; invited_by: string | null; created_at: string }>,
@@ -265,14 +407,28 @@ export function registerOrganizationRoutes(app: Hono): void {
         .eq('organization_id', orgId)
         .order('created_at', { ascending: true }),
       db
+        // The token is sensitive but only goes to org owner/admins (this
+        // route already gates on `loadMembership`), and they need it to
+        // surface "Copy invite link" as a deliverability fallback when
+        // the auth email lands in the invitee's spam folder. Same trust
+        // boundary as the email + role columns we already return.
         .from('invitations')
-        .select('id, email, role, invited_by, expires_at, accepted_at, revoked_at, last_resent_at, created_at')
+        .select('id, email, role, token, invited_by, expires_at, accepted_at, revoked_at, last_resent_at, resend_count, last_seen_at, note, created_at')
         .eq('organization_id', orgId)
         .is('accepted_at', null)
         .is('revoked_at', null)
         .order('created_at', { ascending: false }),
     ]);
     if (error) return dbError(c, error);
+    // Owner/admin gate enforced above; viewers and members never see this
+    // route. Restrict the token field to the manage-capable roles as a
+    // belt-and-braces guard so a future RLS regression can't accidentally
+    // leak tokens to read-only roles.
+    if (role !== 'owner' && role !== 'admin') {
+      for (const i of (invitations ?? []) as Array<{ token?: string | null }>) {
+        i.token = null;
+      }
+    }
 
     // Resolve the inviter's email for each pending invitation so the
     // Members UI can render "Invited 3h ago by alice@example.com"
@@ -292,11 +448,15 @@ export function registerOrganizationRoutes(app: Hono): void {
       id: string;
       email: string;
       role: InviteRole;
+      token: string | null;
       invited_by: string | null;
       expires_at: string;
       accepted_at: string | null;
       revoked_at: string | null;
       last_resent_at: string | null;
+      resend_count: number;
+      last_seen_at: string | null;
+      note: string | null;
       created_at: string;
     }>).map((i) => ({
       ...i,
@@ -374,6 +534,7 @@ export function registerOrganizationRoutes(app: Hono): void {
     const body = await c.req.json().catch(() => ({}));
     const email = normalizeEmail(body.email);
     const role = isInviteRole(body.role) ? body.role : 'member';
+    const note = sanitiseNote(body.note);
     if (!UUID_RE.test(orgId) || !email) {
       return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'Valid email required' } }, 400);
     }
@@ -383,18 +544,52 @@ export function registerOrganizationRoutes(app: Hono): void {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
 
+    // Per-inviter rate limit BEFORE the seat-cap check, so a single bad
+    // actor can't burn the project's Supabase SMTP quota with rapid 402s.
+    // 20/hour comfortably covers a power admin onboarding a new team in
+    // one sitting; anything beyond that should batch via a CSV importer.
+    const rateMiss = await claimRateLimit(db, actorId, 'invite_send', 20, '1 hour');
+    if (rateMiss) return c.json(rateMiss.body, rateMiss.status as 429 | 500);
+
+    // Seat-cap pre-check. Reject before we INSERT/email so the operator
+    // sees a clean "you're at the cap" message instead of an opaque
+    // foreign-key or trigger violation deeper in the stack.
+    const seatMiss = await checkSeatCap(db, orgId);
+    if (seatMiss) return c.json(seatMiss.body, seatMiss.status as 402);
+
     const { data: invite, error } = await db
       .from('invitations')
-      .insert({ organization_id: orgId, email, role, invited_by: actorId })
-      .select('id, email, role, token, expires_at, created_at')
+      .insert({ organization_id: orgId, email, role, invited_by: actorId, note })
+      .select('id, email, role, token, expires_at, created_at, note')
       .single();
     if (error || !invite) {
       return c.json({ ok: false, error: { code: 'INVITE_FAILED', message: error?.message ?? 'Invite failed' } }, 400);
     }
 
     const acceptPath = `/invite/accept?token=${encodeURIComponent(invite.token)}`;
+    // Resolve org name + inviter info so the auth email template can
+    // render "Alice invited you to join Acme" via {{ .Data.org_name }} /
+    // {{ .Data.inviter_name }}. We do this BEFORE the auth call so a
+    // failure here doesn't strand a half-sent invite (the catch on the
+    // auth call below intentionally swallows transport errors so the
+    // invitation row still ships — operators can Resend if needed).
+    const [{ data: org }, inviter] = await Promise.all([
+      db.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+      userDisplayInfoById(db, actorId),
+    ]);
     await db.auth.admin
-      .inviteUserByEmail(email, { redirectTo: adminUrl(acceptPath) })
+      .inviteUserByEmail(email, {
+        redirectTo: adminUrl(acceptPath),
+        data: {
+          org_name: org?.name ?? 'your team',
+          org_id: orgId,
+          inviter_name: inviter.name,
+          inviter_email: inviter.email,
+          role,
+          note,
+          accept_url: adminUrl(acceptPath),
+        },
+      })
       .catch(() => null);
 
     const projectId = await firstProjectId(db, orgId);
@@ -403,6 +598,7 @@ export function registerOrganizationRoutes(app: Hono): void {
         organizationId: orgId,
         email,
         role,
+        hasNote: Boolean(note),
       }).catch(() => {});
     }
     return c.json({ ok: true, data: { invitation: invite, acceptUrl: adminUrl(acceptPath) } }, 201);
@@ -475,6 +671,183 @@ export function registerOrganizationRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
+  // Resend an existing invitation. Re-issues the Supabase auth email
+  // (so the recipient gets a fresh "click here to join" message even if
+  // the original was lost to spam filters) and bumps `last_resent_at` +
+  // `resend_count` for the operator audit trail. The token itself is
+  // unchanged — accepting via the original email still works as long as
+  // the invite hasn't expired.
+  app.post('/v1/org/:id/invitations/:invitationId/resend', jwtAuth, async (c) => {
+    const actorId = c.get('userId') as string;
+    const orgId = c.req.param('id');
+    const invitationId = c.req.param('invitationId');
+    if (!UUID_RE.test(orgId) || !UUID_RE.test(invitationId)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
+    }
+    const db = getServiceClient();
+    const actorRole = await loadMembership(db, orgId, actorId);
+    if (actorRole !== 'owner' && actorRole !== 'admin') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
+
+    // Per-invite cooldown: cap at 3 resends per 24h on a single invite
+    // so a frustrated admin can't spam the same recipient hourly. Caps
+    // at 30 resends/hour across all invites per actor for the same
+    // reason scaled up to a busy onboarding session. Both must pass.
+    const perInvite = await claimRateLimit(db, actorId, `invite_resend:${invitationId}`, 3, '24 hours');
+    if (perInvite) return c.json(perInvite.body, perInvite.status as 429 | 500);
+    const perActor = await claimRateLimit(db, actorId, 'invite_resend', 30, '1 hour');
+    if (perActor) return c.json(perActor.body, perActor.status as 429 | 500);
+
+    const { data: existing } = await db
+      .from('invitations')
+      .select('id, email, role, token, expires_at, accepted_at, revoked_at, resend_count, note')
+      .eq('organization_id', orgId)
+      .eq('id', invitationId)
+      .maybeSingle();
+    if (!existing) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (existing.accepted_at) {
+      return c.json({
+        ok: false,
+        error: { code: 'ALREADY_ACCEPTED', message: 'This invitation was already accepted.' },
+      }, 409);
+    }
+    if (existing.revoked_at) {
+      return c.json({
+        ok: false,
+        error: { code: 'ALREADY_REVOKED', message: 'This invitation was cancelled. Send a new invite instead.' },
+      }, 409);
+    }
+    if (new Date(existing.expires_at).getTime() <= Date.now()) {
+      return c.json({
+        ok: false,
+        error: { code: 'EXPIRED', message: 'This invitation has expired. Send a new invite to refresh the 7-day window.' },
+      }, 409);
+    }
+
+    const acceptPath = `/invite/accept?token=${encodeURIComponent(existing.token)}`;
+    const [{ data: org }, inviter] = await Promise.all([
+      db.from('organizations').select('name').eq('id', orgId).maybeSingle(),
+      userDisplayInfoById(db, actorId),
+    ]);
+    await db.auth.admin
+      .inviteUserByEmail(existing.email, {
+        redirectTo: adminUrl(acceptPath),
+        data: {
+          org_name: org?.name ?? 'your team',
+          org_id: orgId,
+          inviter_name: inviter.name,
+          inviter_email: inviter.email,
+          role: existing.role,
+          note: existing.note ?? null,
+          accept_url: adminUrl(acceptPath),
+          resend: true,
+        },
+      })
+      .catch(() => null);
+
+    const nowIso = new Date().toISOString();
+    const { error: updErr } = await db
+      .from('invitations')
+      .update({
+        last_resent_at: nowIso,
+        resend_count: (existing.resend_count ?? 0) + 1,
+      })
+      .eq('organization_id', orgId)
+      .eq('id', invitationId);
+    if (updErr) return dbError(c, updErr);
+
+    const projectId = await firstProjectId(db, orgId);
+    if (projectId) {
+      await logAudit(db, projectId, actorId, 'settings.updated', 'organization_invitation', invitationId, {
+        organizationId: orgId,
+        action: 'resent',
+        email: existing.email,
+        role: existing.role,
+        resendCount: (existing.resend_count ?? 0) + 1,
+      }).catch(() => {});
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        invitationId,
+        lastResentAt: nowIso,
+        resendCount: (existing.resend_count ?? 0) + 1,
+      },
+    });
+  });
+
+  // Preview-before-accept. Resolves a token (the bearer secret in the
+  // emailed link) into the public-ish facts the invitee needs to make
+  // an informed Accept decision: which org, what role, who invited
+  // them, when the link expires, what the optional personal note says.
+  // Critically returns a `status` discriminator so the FE can render
+  // the right branch (expired / revoked / accepted-already / wrong-
+  // signed-in-account) without parsing error strings. No JWT required —
+  // the token IS the auth, exactly as the original auth email asserted.
+  // Stamps `last_seen_at` on the first preview call so operators can
+  // tell "ignored / spam-filtered" from "opened but did not accept".
+  app.get('/v1/invitations/preview', async (c) => {
+    const token = c.req.query('token')?.trim() ?? '';
+    if (!token || token.length < 16 || token.length > 200) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST', message: 'token required' } }, 400);
+    }
+    const db = getServiceClient();
+    const { data: invite } = await db
+      .from('invitations')
+      .select('id, organization_id, email, role, invited_by, expires_at, accepted_at, revoked_at, last_seen_at, note, created_at')
+      .eq('token', token)
+      .maybeSingle();
+    if (!invite) {
+      // Don't leak whether the token ever existed — uniform 404 for
+      // garbage and for revoked tokens whose row has been hard-deleted.
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Invitation not found.' } }, 404);
+    }
+
+    let status: 'pending' | 'accepted' | 'revoked' | 'expired' = 'pending';
+    if (invite.accepted_at) status = 'accepted';
+    else if (invite.revoked_at) status = 'revoked';
+    else if (new Date(invite.expires_at).getTime() <= Date.now()) status = 'expired';
+
+    const [{ data: org }, inviter] = await Promise.all([
+      db.from('organizations').select('id, name, slug').eq('id', invite.organization_id).maybeSingle(),
+      invite.invited_by
+        ? userDisplayInfoById(db, invite.invited_by)
+        : Promise.resolve({ email: null, name: null }),
+    ]);
+
+    // Stamp last_seen_at exactly once — first preview wins. Subsequent
+    // previews don't overwrite so operators get a stable "first opened"
+    // signal rather than a noisy "most recent" one. Best-effort: a
+    // failure here doesn't block the response.
+    if (status === 'pending' && !invite.last_seen_at) {
+      await db
+        .from('invitations')
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq('id', invite.id)
+        .is('last_seen_at', null)
+        .catch(() => {});
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        status,
+        invitation: {
+          id: invite.id,
+          email: invite.email,
+          role: invite.role,
+          note: invite.note,
+          expires_at: invite.expires_at,
+          created_at: invite.created_at,
+        },
+        organization: org ? { id: org.id, name: org.name, slug: org.slug } : null,
+        inviter: { email: inviter.email, name: inviter.name },
+      },
+    });
+  });
+
   app.post('/v1/invitations/accept', jwtAuth, async (c) => {
     const authHeader = c.req.header('Authorization');
     const body = await c.req.json().catch(() => ({}));
@@ -485,7 +858,16 @@ export function registerOrganizationRoutes(app: Hono): void {
     const userDb = getUserClient(authHeader);
     const { data, error } = await userDb.rpc('accept_invitation', { p_token: token });
     if (error) {
-      return c.json({ ok: false, error: { code: 'INVITE_ACCEPT_FAILED', message: error.message } }, 400);
+      // Map the Postgres-level errors raised by accept_invitation() to
+      // structured codes so the FE can show targeted UX (e.g. a clear
+      // "you're signed in as the wrong account" branch on email
+      // mismatch) instead of a generic toast on every failure path.
+      const msg = error.message ?? '';
+      let code = 'INVITE_ACCEPT_FAILED';
+      if (msg.includes('invitation_invalid_or_expired')) code = 'EXPIRED_OR_REVOKED';
+      else if (msg.includes('invitation_email_mismatch')) code = 'EMAIL_MISMATCH';
+      else if (msg.includes('unauthenticated')) code = 'UNAUTHENTICATED';
+      return c.json({ ok: false, error: { code, message: msg } }, 400);
     }
     return c.json({ ok: true, data: { organizationId: data } });
   });

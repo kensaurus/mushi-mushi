@@ -468,3 +468,26 @@ export function IconShieldCheck(p: IconProps) {
   </>)
 }
 
+// Refresh arrow — "resend / retry". Used on the Members page next to
+// each pending invitation so admins can re-trigger the auth email
+// without revoking + re-creating. Distinct from IconUndo (which is a
+// straight back-arrow) so the two never get confused side-by-side.
+export function IconResend(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2.5 8a5.5 5.5 0 0 1 9.4-3.9" />
+    <polyline points="11.5,1.5 12,4.1 9.4,4.6" />
+    <path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9" />
+    <polyline points="4.5,14.5 4,11.9 6.6,11.4" />
+  </>)
+}
+
+// Speech-bubble glyph — "personal note". Used as a tiny inline marker
+// on pending invitations whose inviter included a 280-char message,
+// so admins triaging the list can spot which invites are personalised
+// at a glance without opening each row.
+export function IconNote(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7l-3 3v-3H3a1 1 0 0 1-1-1z" />
+  </>)
+}
+

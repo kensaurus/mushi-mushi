@@ -287,7 +287,12 @@ app.use(
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
     allowHeaders: ADMIN_ALLOWED_HEADERS,
-    allowMethods: ['POST', 'OPTIONS'],
+    // GET is for /v1/invitations/preview which resolves a token into the
+    // org/inviter/role panel rendered before the user clicks Accept. The
+    // route is unauthenticated (the token IS the bearer), but we still
+    // gate CORS on the admin allowlist because the preview is only ever
+    // rendered from the admin app.
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   }),
 );
