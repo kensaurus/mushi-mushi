@@ -154,3 +154,12 @@ verify_jwt = false
 # aggregate and writes an inventory_proposals row.
 [functions.inventory-propose]
 verify_jwt = false
+
+# invitation-reminders is invoked hourly by pg_cron (`dispatch_invitation_reminders`)
+# with the internal-caller bearer. It scans pending invitations and re-sends
+# the auth email for any that hit the day-3 nudge or day-6 final windows.
+# Auth is enforced inside the handler via requireServiceRoleAuth — the
+# function MUST NOT be reachable without the shared internal secret because
+# its work product is a real outbound email through the auth provider.
+[functions.invitation-reminders]
+verify_jwt = false

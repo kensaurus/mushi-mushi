@@ -201,7 +201,14 @@ function sanitiseNote(value: unknown): string | null {
 
 async function rosterWithEmails(
   db: ReturnType<typeof getServiceClient>,
-  rows: Array<{ user_id: string; role: OrgRole; invited_by: string | null; created_at: string }>,
+  rows: Array<{
+    user_id: string;
+    role: OrgRole;
+    invited_by: string | null;
+    created_at: string;
+    last_active_at: string | null;
+    joined_via: string | null;
+  }>,
 ) {
   return Promise.all(
     rows.map(async (row) => ({
@@ -210,6 +217,12 @@ async function rosterWithEmails(
       role: row.role,
       invited_by: row.invited_by,
       created_at: row.created_at,
+      // Activity & provenance fields drive the "Active 3d ago" and
+      // "Founder" / "Invited" labels in the roster UI. Both can legitimately
+      // be null on legacy rows — the FE handles that as "Never active" /
+      // "Direct".
+      last_active_at: row.last_active_at,
+      joined_via: row.joined_via,
     })),
   );
 }
@@ -321,12 +334,21 @@ export function registerOrganizationRoutes(app: Hono): void {
     // Membership: caller is the founding owner. The org gets no project
     // implicitly — the FE prompts the user to create one inside the new
     // workspace, mirroring how Vercel/Linear onboard a fresh team.
+    //
+    // joined_via='founding_owner' explicitly tags the founding row so
+    // the roster UI can render a "Founder" badge and the audit log can
+    // distinguish "this user created the org" from "this user accepted
+    // an invite". last_active_at is stamped now() because creating the
+    // org is itself meaningful activity — without it, the founder would
+    // appear "Never active" in the new roster until their next request.
     const { error: memberErr } = await db
       .from('organization_members')
       .insert({
         organization_id: org.id,
         user_id: userId,
         role: 'owner',
+        joined_via: 'founding_owner',
+        last_active_at: new Date().toISOString(),
       });
     if (memberErr) {
       // Roll back the org so the user isn't stranded with an org they
@@ -403,8 +425,16 @@ export function registerOrganizationRoutes(app: Hono): void {
       db.from('organizations').select('id, slug, name, plan_id, is_personal').eq('id', orgId).maybeSingle(),
       db
         .from('organization_members')
-        .select('user_id, role, invited_by, created_at')
+        // last_active_at + joined_via feed the new "Active 3d ago" column
+        // and the "Founder / Invited / Direct" provenance pill in the
+        // roster. Sort by activity (most-recent first, NULLs last) so the
+        // most-engaged members surface above coasting seats — the FE can
+        // re-sort to suit, but this is the right default for the question
+        // an admin most often asks of this page ("who's actually using
+        // their seat?").
+        .select('user_id, role, invited_by, created_at, last_active_at, joined_via')
         .eq('organization_id', orgId)
+        .order('last_active_at', { ascending: false, nullsFirst: false })
         .order('created_at', { ascending: true }),
       db
         // The token is sensitive but only goes to org owner/admins (this
@@ -468,7 +498,17 @@ export function registerOrganizationRoutes(app: Hono): void {
       data: {
         organization: org,
         currentUserRole: role,
-        members: await rosterWithEmails(db, (members ?? []) as Array<{ user_id: string; role: OrgRole; invited_by: string | null; created_at: string }>),
+        members: await rosterWithEmails(
+          db,
+          (members ?? []) as Array<{
+            user_id: string;
+            role: OrgRole;
+            invited_by: string | null;
+            created_at: string;
+            last_active_at: string | null;
+            joined_via: string | null;
+          }>,
+        ),
         invitations: decoratedInvitations,
       },
     });

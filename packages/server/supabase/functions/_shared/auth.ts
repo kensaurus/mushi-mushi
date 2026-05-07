@@ -200,6 +200,71 @@ function extractEndpointHost(url: string): string | null {
 }
 
 /**
+ * RFC 4122 UUID format check — used to reject obviously bogus
+ * `X-Mushi-Org-Id` values *before* we hand them to Postgres. Without
+ * this guard a bad header turns into a `22P02 invalid input syntax for
+ * type uuid` error in pg, which (a) wastes a round-trip and (b)
+ * pollutes error telemetry with noise that's clearly client-side.
+ *
+ * Loose hex-quad pattern; we don't validate version/variant bits because
+ * the database CHECK constraints already do.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Fire-and-forget activity heartbeat for `(org_id, user_id)` pairs.
+ *
+ * Why this exists: every annual seat audit and every "who's actually
+ * using their paid seat" question needs to walk back from the API's
+ * authenticated request stream to a per-member timestamp. Without it,
+ * admins guessing at activity from `created_at` end up paying for
+ * dormant seats and underestimating power users — both of which
+ * surface as bad calls in support tickets.
+ *
+ * Three properties this implementation guarantees:
+ *
+ *   1. Coalesced. The actual UPDATE only fires when the row is stale
+ *      by ≥ 5 minutes (enforced inside `private.touch_org_member_activity`).
+ *      A user firing 100 requests in an hour generates ~12 row writes,
+ *      not 100 — so MVCC bloat, replication lag, and the
+ *      `(organization_id, last_active_at DESC)` index stay bounded
+ *      regardless of org size or chattiness.
+ *
+ *   2. Fire-and-forget. The heartbeat runs after auth has already
+ *      succeeded; any failure (DB unavailable, RPC missing, network
+ *      blip) is swallowed so the user's request still completes.
+ *      The cost of a missed heartbeat is "the next request reconciles
+ *      it" — never a user-visible failure.
+ *
+ *   3. Validated. The org-id header is shape-checked before reaching
+ *      Postgres so bad clients can't generate noisy 22P02 errors that
+ *      drown signal in error telemetry.
+ *
+ * Called from {@link jwtAuth} once per authenticated admin request,
+ * which already has both `userId` (from the JWT) and `X-Mushi-Org-Id`
+ * (set by the admin SPA's `apiFetch` for every org-scoped call).
+ */
+function recordOrgMemberActivity(opts: {
+  db: ReturnType<typeof getServiceClient>
+  orgId: string
+  userId: string
+}): void {
+  const { db, orgId, userId } = opts
+  if (!UUID_RE.test(orgId) || !UUID_RE.test(userId)) return
+
+  void db
+    .schema('private')
+    .rpc('touch_org_member_activity', { p_org_id: orgId, p_user_id: userId })
+    .then(() => {
+      // Coalesced UPDATE — no return value needed.
+    }, () => {
+      // Best-effort: never fail an authenticated request because a
+      // metadata heartbeat couldn't write. Sentry already breadcrumbs
+      // the underlying RPC failure separately.
+    })
+}
+
+/**
  * Middleware: validate API key from X-Mushi-Api-Key header.
  * Sets projectId and projectName on the Hono context. Records an SDK
  * heartbeat on the matched key (see {@link recordSdkHeartbeat}).
@@ -278,6 +343,18 @@ export async function jwtAuth(c: Context, next: Next) {
   c.set('userId', user.id)
   c.set('userEmail', user.email)
   c.set('authMethod', 'jwt')
+
+  // Membership activity heartbeat. The admin SPA stamps every API call
+  // with `X-Mushi-Org-Id` for the active workspace; pairing that with
+  // the just-verified user gives us a coalesced touch on the right
+  // organization_members row. Anonymous routes, project-scoped SDK
+  // routes, and management-API calls all skip this naturally because
+  // they don't run through jwtAuth.
+  const activeOrgId = c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null
+  if (activeOrgId) {
+    recordOrgMemberActivity({ db, orgId: activeOrgId, userId: user.id })
+  }
+
   await next()
 }
 

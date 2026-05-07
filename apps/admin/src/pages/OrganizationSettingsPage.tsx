@@ -20,12 +20,35 @@ const UNDO_WINDOW_MS = 8000
 
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
 
+// How a teammate originally got into the workspace. Drives the
+// "Founder / Invited / Direct" pill in the roster — useful at audit
+// time and when an admin needs to distinguish a hand-onboarded user
+// from one who clicked through an email invite.
+//
+// Aligned with the Postgres CHECK constraint on
+// organization_members.joined_via — keep these in lockstep, or the
+// FE will get cached responses with values it doesn't render.
+type JoinedVia =
+  | 'invitation'
+  | 'sso'
+  | 'personal_backfill'
+  | 'founding_owner'
+  | 'direct_admin'
+
 interface Member {
   user_id: string
   email: string | null
   role: OrgRole
   invited_by: string | null
   created_at: string
+  // Most recent timestamp at which this member made an authenticated
+  // request to the API while having this org in context. NULL = the
+  // member has never been seen in this org under the new tracking
+  // (legacy rows with NULL last_active_at render as "Never active").
+  last_active_at: string | null
+  // Provenance — see JoinedVia. Null on legacy rows that the v1.1
+  // backfill didn't classify (extremely rare; dropped by the migration).
+  joined_via: JoinedVia | null
 }
 
 interface Invitation {
@@ -72,6 +95,42 @@ const ROLE_TONE: Record<OrgRole, string> = {
   admin: 'bg-brand-subtle text-brand',
   member: 'bg-ok-muted text-ok',
   viewer: 'bg-surface-overlay text-fg-muted',
+}
+
+// Provenance pill metadata. Two design choices that warrant a comment:
+//
+//   1. We render *short* labels in the pill ("Founder", "Invited") and
+//      put the longer, audit-ready phrasing in the tooltip. Pills compete
+//      for horizontal space with the email + role; verbose pill text
+//      pushes the role select off the row on narrow viewports.
+//
+//   2. `personal_backfill` is intentionally hidden from the UI. It
+//      signals "this user's personal-org membership row" — useful for
+//      the data layer, but rendering "Personal" or "Self" in a team
+//      roster is just confusing. Personal orgs have exactly one member
+//      (the owner) so the pill would always say the same thing.
+const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone: string } | null> = {
+  founding_owner: {
+    label: 'Founder',
+    tooltip: 'Created this organization. Has been here since day one.',
+    tone: 'bg-warn/10 text-warn border border-warn/30',
+  },
+  invitation: {
+    label: 'Invited',
+    tooltip: 'Joined by accepting an email invitation.',
+    tone: 'bg-brand-subtle text-brand',
+  },
+  sso: {
+    label: 'SSO',
+    tooltip: 'Provisioned through your identity provider (SCIM/OIDC).',
+    tone: 'bg-ok-muted text-ok',
+  },
+  direct_admin: {
+    label: 'Direct',
+    tooltip: 'Added directly by an admin tool — no email invite was used.',
+    tone: 'bg-surface-overlay text-fg-muted',
+  },
+  personal_backfill: null,
 }
 
 // Cap mirrors the CHECK constraint on invitations.note. We mirror it
@@ -162,19 +221,53 @@ export function OrganizationSettingsPage() {
     ? data?.organization?.plan_id === 'pro' || data?.organization?.plan_id === 'enterprise'
     : entitlements.has('teams')
 
-  const sortedMembers = useMemo(
-    () =>
-      [...(data?.members ?? [])]
-        // Hide rows that the user is currently undoing — they're already
-        // pretending to be deleted from the user's POV. If the timer fires
-        // and the DELETE succeeds, the next reload will drop them for real;
-        // if Undo runs, we restore them in `cancelScheduledRemove`.
-        .filter((m) => !pendingRemovalIds.has(m.user_id))
-        .sort(
-          (a, b) =>
-            a.role.localeCompare(b.role) ||
-            (a.email ?? '').localeCompare(b.email ?? ''),
-        ),
+  // "Show only inactive members" filter for paid-seat hygiene work.
+  // 30-day threshold is the Vercel/Linear seat-audit default — long
+  // enough that a vacationing teammate doesn't flag, short enough that
+  // a quarterly review surfaces real coasters. Off by default; admins
+  // toggling it are signalling "I'm here to clean house".
+  const [showInactiveOnly, setShowInactiveOnly] = useState(false)
+  const INACTIVE_THRESHOLD_MS = 30 * 24 * 60 * 60 * 1000
+
+  // Roster sort & filter. The default sort is "most recently active
+  // first, with never-active rows sinking to the bottom" because the
+  // primary question this page answers — "is this person still using
+  // their seat?" — is monotonic in last_active_at. Within an activity
+  // bucket we tiebreak by role weight (owners up top), then by email
+  // for a stable, human-scannable order.
+  const ROLE_WEIGHT: Record<OrgRole, number> = { owner: 0, admin: 1, member: 2, viewer: 3 }
+  const sortedMembers = useMemo(() => {
+    const now = Date.now()
+    return [...(data?.members ?? [])]
+      // Hide rows that the user is currently undoing — they're already
+      // pretending to be deleted from the user's POV. If the timer fires
+      // and the DELETE succeeds, the next reload will drop them for real;
+      // if Undo runs, we restore them in `cancelScheduledRemove`.
+      .filter((m) => !pendingRemovalIds.has(m.user_id))
+      .filter((m) => {
+        if (!showInactiveOnly) return true
+        // "Inactive" = no activity in 30d, OR never seen at all.
+        if (!m.last_active_at) return true
+        return now - new Date(m.last_active_at).getTime() > INACTIVE_THRESHOLD_MS
+      })
+      .sort((a, b) => {
+        const aMs = a.last_active_at ? new Date(a.last_active_at).getTime() : null
+        const bMs = b.last_active_at ? new Date(b.last_active_at).getTime() : null
+        if (aMs !== null && bMs !== null && aMs !== bMs) return bMs - aMs
+        if (aMs !== null && bMs === null) return -1
+        if (aMs === null && bMs !== null) return 1
+        const roleDelta = ROLE_WEIGHT[a.role] - ROLE_WEIGHT[b.role]
+        if (roleDelta !== 0) return roleDelta
+        return (a.email ?? '').localeCompare(b.email ?? '')
+      })
+  }, [data?.members, pendingRemovalIds, showInactiveOnly, INACTIVE_THRESHOLD_MS])
+
+  // Total count of members the org has *visible to this admin* before
+  // the inactive filter narrows them down. Used for the "Showing 3 of
+  // 14 members" line so toggling the filter feels reversible — the
+  // user always knows how many rows the toggle is hiding.
+  const totalVisibleMembers = useMemo(
+    () => (data?.members ?? []).filter((m) => !pendingRemovalIds.has(m.user_id)).length,
     [data?.members, pendingRemovalIds],
   )
 
@@ -649,56 +742,139 @@ export function OrganizationSettingsPage() {
       </Card>
 
       <Card className="overflow-hidden">
+        {/* Header strip: count summary + "show inactive only" toggle.
+            Mounted *outside* the <table> so the table can stay focused
+            on roster data and the toggle stays accessible to keyboard
+            users in tab order before any row interactions. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
+          <span>
+            {showInactiveOnly
+              ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
+              : `${totalVisibleMembers} member${totalVisibleMembers === 1 ? '' : 's'}`}
+          </span>
+          {/* Hide the toggle entirely on tiny rosters — for a 1- or 2-
+              person org there's nothing to filter, and the affordance
+              just steals visual weight from the actual table. The
+              breakpoint of 3 mirrors the smallest team where seat-
+              audit becomes a real concern. */}
+          {totalVisibleMembers >= 3 && (
+            <label className="inline-flex cursor-pointer items-center gap-1.5 normal-case tracking-normal">
+              <input
+                type="checkbox"
+                checked={showInactiveOnly}
+                onChange={(e) => setShowInactiveOnly(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-edge-subtle bg-surface-raised text-brand focus:ring-1 focus:ring-brand/40"
+              />
+              <span className="text-2xs text-fg-muted">Show inactive only</span>
+              <Tooltip content="Hides anyone seen in the last 30 days. Pairs with sort-by-activity so coasting paid seats surface fast.">
+                <span className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-edge-subtle text-[9px] font-medium text-fg-faint">
+                  ?
+                </span>
+              </Tooltip>
+            </label>
+          )}
+        </div>
         <table className="w-full text-sm">
-          <thead className="border-b border-edge-subtle bg-surface-overlay/30 text-left text-2xs uppercase tracking-wider text-fg-faint">
+          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
             <tr>
               <th className="px-3 py-2">Member</th>
               <th className="px-3 py-2">Role</th>
+              <th className="hidden px-3 py-2 sm:table-cell">Active</th>
               <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-edge-subtle">
-            {sortedMembers.map((member) => (
-              <tr key={member.user_id}>
-                <td className="px-3 py-2">
-                  <div className="font-medium text-fg">{member.email ?? member.user_id}</div>
-                  <div className="font-mono text-3xs text-fg-faint">{member.user_id}</div>
-                </td>
-                <td className="px-3 py-2">
-                  {canManage ? (
-                    <select
-                      value={member.role}
-                      onChange={(e) => void changeRole(member.user_id, e.target.value as OrgRole)}
-                      className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
-                    >
-                      <option value="owner">Owner</option>
-                      <option value="admin">Admin</option>
-                      <option value="member">Member</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                  ) : (
-                    <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setPendingRemove(member)}
-                    disabled={!canManage || member.role === 'owner'}
-                    aria-label={`Remove ${member.email ?? member.user_id}`}
-                    title={
-                      member.role === 'owner'
-                        ? 'Owners cannot be removed from the org'
-                        : `Remove ${member.email ?? member.user_id}`
-                    }
-                    className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
-                  >
-                    <IconTrash />
-                  </Btn>
+            {sortedMembers.length === 0 && showInactiveOnly && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-xs text-fg-muted">
+                  No inactive members in the last 30 days. Healthy roster.
                 </td>
               </tr>
-            ))}
+            )}
+            {sortedMembers.map((member) => {
+              // Activity & provenance derivations live next to the row
+              // so the JSX stays declarative. `joinedMeta` may be null
+              // for `personal_backfill` (intentionally hidden) — see
+              // JOINED_VIA_META above.
+              const joinedMeta = member.joined_via ? JOINED_VIA_META[member.joined_via] : null
+              const lastActiveMs = member.last_active_at
+                ? Date.now() - new Date(member.last_active_at).getTime()
+                : null
+              const isInactive = lastActiveMs !== null && lastActiveMs > INACTIVE_THRESHOLD_MS
+              const isNeverActive = member.last_active_at === null
+              return (
+                <tr key={member.user_id}>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium text-fg">{member.email ?? member.user_id}</span>
+                      {joinedMeta && (
+                        <Tooltip content={joinedMeta.tooltip}>
+                          <Badge className={`${joinedMeta.tone} text-2xs`}>{joinedMeta.label}</Badge>
+                        </Tooltip>
+                      )}
+                    </div>
+                    <div className="font-mono text-3xs text-fg-faint">{member.user_id}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    {canManage ? (
+                      <select
+                        value={member.role}
+                        onChange={(e) => void changeRole(member.user_id, e.target.value as OrgRole)}
+                        className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
+                      >
+                        <option value="owner">Owner</option>
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    ) : (
+                      <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
+                    )}
+                  </td>
+                  {/* Activity column. Three states with deliberately
+                      different visual weight:
+                        - Never active   → "Never seen" (warn tone) so
+                          it reads as a thing-to-look-at, not a neutral
+                          fact.
+                        - Inactive >30d  → muted timestamp, signalling
+                          "this is the cohort the toggle filters to".
+                        - Recently active → normal text, RelativeTime
+                          handles "Just now / 3m ago / 2d ago".
+                      Hidden on `<sm` to keep the row scannable on
+                      mobile-width admin sessions; the 30-day cohort is
+                      a power-user task that mostly happens at desktop.
+                  */}
+                  <td className="hidden px-3 py-2 text-xs sm:table-cell">
+                    {isNeverActive ? (
+                      <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
+                        <span className="text-warn">Never seen</span>
+                      </Tooltip>
+                    ) : (
+                      <span className={isInactive ? 'text-fg-faint' : 'text-fg-muted'}>
+                        <RelativeTime value={member.last_active_at!} />
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPendingRemove(member)}
+                      disabled={!canManage || member.role === 'owner'}
+                      aria-label={`Remove ${member.email ?? member.user_id}`}
+                      title={
+                        member.role === 'owner'
+                          ? 'Owners cannot be removed from the org'
+                          : `Remove ${member.email ?? member.user_id}`
+                      }
+                      className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
+                    >
+                      <IconTrash />
+                    </Btn>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </Card>
