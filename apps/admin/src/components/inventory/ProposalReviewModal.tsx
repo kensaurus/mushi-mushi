@@ -190,7 +190,7 @@ export function ProposalReviewModal({
 
   const headerActions = isDraft ? (
     <div className="flex flex-wrap items-center gap-2">
-      <Btn type="button" size="sm" variant="ghost" onClick={discard} disabled={busy != null}>
+      <Btn type="button" size="sm" variant="danger" onClick={discard} disabled={busy != null}>
         Discard
       </Btn>
       <Btn

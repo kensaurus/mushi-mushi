@@ -20,6 +20,7 @@ import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
 import { Modal } from '../components/Modal'
 import { PromptDialog } from '../components/ConfirmDialog'
+import { IconEye } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -580,8 +581,15 @@ export function CompliancePage() {
                           </td>
                           <td className="opacity-70">{new Date(ev.generated_at).toLocaleString()}</td>
                           <td className="text-right">
-                            <Btn size="sm" variant="ghost" onClick={() => setPayloadModalEvidence(ev)}>
-                              View
+                            <Btn
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPayloadModalEvidence(ev)}
+                              aria-label={`View ${ev.control} payload`}
+                              title="View full evidence payload"
+                              className="!px-1.5"
+                            >
+                              <IconEye />
                             </Btn>
                           </td>
                         </tr>
@@ -865,16 +873,20 @@ export function CompliancePage() {
                                   {d.status === 'pending' && (
                                     <Btn
                                       size="sm"
-                                      variant="ghost"
+                                      variant="success"
                                       onClick={() => setDsarStatus(d.id, 'in_progress')}
                                     >
                                       Start triage
                                     </Btn>
                                   )}
-                                  <Btn size="sm" onClick={() => setDsarStatus(d.id, 'completed')}>
+                                  <Btn
+                                    size="sm"
+                                    variant="success"
+                                    onClick={() => setDsarStatus(d.id, 'completed')}
+                                  >
                                     Complete
                                   </Btn>
-                                  <Btn size="sm" variant="ghost" onClick={() => setRejectingDsar(d)}>
+                                  <Btn size="sm" variant="danger" onClick={() => setRejectingDsar(d)}>
                                     Reject…
                                   </Btn>
                                 </div>

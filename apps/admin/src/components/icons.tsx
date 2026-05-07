@@ -369,3 +369,14 @@ export function IconGit(p: IconProps) {
     <path d="M4 7 C 7 7, 9 8, 10.4 8" />
   </>)
 }
+
+// Eye glyph for "View ..." action buttons. Pair with `title` /
+// `aria-label` for screen readers — the icon-only Btn drops the verbose
+// label so dense action columns (compliance evidence, queue items,
+// reports) breathe.
+export function IconEye(p: IconProps) {
+  return wrap(p, <>
+    <path d="M1.75 8C3.5 4.5 5.5 3 8 3s4.5 1.5 6.25 5C12.5 11.5 10.5 13 8 13s-4.5-1.5-6.25-5z" />
+    <circle cx="8" cy="8" r="2" />
+  </>)
+}

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -8,6 +8,7 @@ import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
 import { useEntitlements } from '../lib/useEntitlements'
+import { useUpdateOrganization } from '../lib/useUpdateOrganization'
 
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -48,6 +49,10 @@ export function OrganizationSettingsPage() {
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Invitation['role']>('member')
   const [submitting, setSubmitting] = useState(false)
+  // Local draft for the org rename input. Initialised lazily once the
+  // server returns the org's current name (see effect below) so admins
+  // can edit in-place without losing the field on background refetch.
+  const [orgNameDraft, setOrgNameDraft] = useState('')
   // Pending-remove holds the member targeted by the Remove button. Replaces
   // the previous one-click DELETE which fired without any confirmation —
   // a single misclick could evict a teammate from every project in the org.
@@ -57,6 +62,31 @@ export function OrganizationSettingsPage() {
   const { data, loading, error, reload } = usePageData<MembersResponse>(path)
 
   const canManage = data?.currentUserRole === 'owner' || data?.currentUserRole === 'admin'
+  // Renames are owner/admin-only on the backend; mirror it on the client so
+  // members and viewers see a read-only chip instead of a disabled input
+  // (the latter reads as broken UX rather than gating).
+  const canRename = canManage
+  const orgName = data?.organization?.name ?? ''
+
+  // Hydrate / re-hydrate the rename draft whenever the server's name
+  // changes. This handles two cases: the very first response after mount,
+  // and any background refetch (StrictMode, focus, signal change). We
+  // intentionally don't sync mid-edit — overwriting the user's keystrokes
+  // every time the server echoes a stale value is the worst kind of
+  // "controlled input fights the typing" bug.
+  useEffect(() => {
+    setOrgNameDraft(orgName)
+  }, [orgName])
+
+  const { update: updateOrg, updating: renamingOrg } = useUpdateOrganization({
+    onUpdated: () => {
+      // Reload local view so the page header / "current name" reflects
+      // the new value immediately. The header pill (OrgSwitcher) refetches
+      // on next mount/navigation; rename is rare enough that we don't need
+      // a global cache-busting event for it.
+      reload()
+    },
+  })
   // Source of truth: server-resolved entitlements (reflects all gating
   // including legacy grandfathered plans). Falls back to the org's
   // declared plan_id only while entitlements are still loading so the
@@ -69,6 +99,13 @@ export function OrganizationSettingsPage() {
     () => [...(data?.members ?? [])].sort((a, b) => a.role.localeCompare(b.role) || (a.email ?? '').localeCompare(b.email ?? '')),
     [data?.members],
   )
+
+  async function submitRenameOrg() {
+    if (!activeOrgId) return
+    const next = orgNameDraft.trim()
+    if (!next || next === orgName) return
+    await updateOrg(activeOrgId, next)
+  }
 
   async function invite() {
     if (!activeOrgId) return
@@ -129,6 +166,72 @@ export function OrganizationSettingsPage() {
           {data?.organization?.plan_id ?? 'hobby'} plan
         </Badge>
       </PageHeader>
+
+      {/* Team identity — rename the organization. Owner and admin only;
+          everyone else sees a read-only chip so the UI doesn't lie about
+          who can edit. Slug is shown for context but is intentionally not
+          editable here: it's embedded in shareable URLs and Stripe
+          metadata, so a cosmetic rename should never invalidate links. */}
+      <Card className="p-4">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-fg">Team identity</h2>
+            <p className="text-xs text-fg-muted">
+              {canRename
+                ? 'Rename the team. Visible in the header pill, invitations, and billing receipts.'
+                : 'Only owners and admins can rename the team.'}
+            </p>
+          </div>
+          {data?.organization?.slug && (
+            <code className="text-2xs font-mono text-fg-faint" title="Team handle (immutable)">
+              {data.organization.slug}
+            </code>
+          )}
+        </div>
+        {canRename ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              void submitRenameOrg()
+            }}
+            className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end"
+          >
+            <Input
+              label="Team name"
+              value={orgNameDraft}
+              maxLength={120}
+              placeholder={orgName}
+              onChange={(e) => setOrgNameDraft(e.target.value)}
+              disabled={renamingOrg}
+            />
+            <div className="flex items-end gap-2">
+              <Btn
+                type="submit"
+                disabled={
+                  renamingOrg || !orgNameDraft.trim() || orgNameDraft.trim() === orgName
+                }
+                loading={renamingOrg}
+              >
+                Save name
+              </Btn>
+              {orgNameDraft !== orgName && !renamingOrg && (
+                <Btn
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setOrgNameDraft(orgName)}
+                >
+                  Reset
+                </Btn>
+              )}
+            </div>
+          </form>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-fg">
+            <span className="font-medium">{orgName || '—'}</span>
+          </div>
+        )}
+      </Card>
 
       {/* Plan-aware nudge: when the user lacks the `teams` entitlement
           (Hobby/Free org), surface a single editorial banner with a
@@ -231,7 +334,7 @@ export function OrganizationSettingsPage() {
                 <td className="px-3 py-2 text-right">
                   <Btn
                     size="sm"
-                    variant="ghost"
+                    variant="danger"
                     onClick={() => setPendingRemove(member)}
                     disabled={!canManage || member.role === 'owner'}
                     title={member.role === 'owner' ? 'Owners cannot be removed from the org' : undefined}

@@ -239,7 +239,7 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
                         </Btn>
                       )}
                       {actions.canReject && (
-                        <Btn size="sm" variant="ghost" disabled={busy === job.id} onClick={() => setRejectTarget(job)}>
+                        <Btn size="sm" variant="danger" disabled={busy === job.id} onClick={() => setRejectTarget(job)}>
                           Reject
                         </Btn>
                       )}

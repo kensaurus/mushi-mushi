@@ -1409,10 +1409,22 @@ export function SegmentedControl<T extends string>({
   )
 }
 
-/* ── Btn (primary / ghost / danger variants) ────────────────────────────── */
+/* ── Btn (primary / ghost / danger / success variants) ──────────────────── */
 
 interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'ghost' | 'danger'
+  /**
+   * Visual intent.
+   *  - `primary`: default brand action.
+   *  - `ghost`:   neutral / cancel / read-only.
+   *  - `danger`:  destructive / irreversible (Delete, Reject, Revoke,
+   *               Disconnect, Uninstall, Flag, Cancel-subscription).
+   *  - `success`: forward / un-blocking action (Start triage, Complete,
+   *               Approve, Retry — anything that progresses the user
+   *               through their workflow). Mirrors the `ok` semantic
+   *               token so tone is consistent with PageHero severity
+   *               and SidebarHealthDot.
+   */
+  variant?: 'primary' | 'ghost' | 'danger' | 'success'
   size?: 'sm' | 'md'
   children: ReactNode
   /** When true, swaps the leading area for a spinner and disables the
@@ -1438,6 +1450,7 @@ const BTN_VARIANTS = {
   primary: 'bg-brand text-brand-fg hover:bg-brand-hover shadow-card hover:shadow-raised',
   ghost: 'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge',
   danger: 'bg-danger-muted text-danger hover:bg-danger-muted/80 border border-danger/30 hover:border-danger/40',
+  success: 'bg-ok-muted text-ok hover:bg-ok-muted/80 border border-ok/30 hover:border-ok/40',
 } as const
 
 export function Btn({

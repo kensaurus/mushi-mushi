@@ -231,7 +231,7 @@ export function DLQPage() {
           />
         )}
         {items.length > 0 && (
-          <Btn size="sm" onClick={retryAll}>
+          <Btn size="sm" variant="success" onClick={retryAll}>
             Retry page ({items.length})
           </Btn>
         )}

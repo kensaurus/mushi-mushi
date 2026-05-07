@@ -725,7 +725,7 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
                 Unflag
               </Btn>
             ) : (
-              <Btn variant="ghost" size="sm" onClick={onFlag} disabled={isBusy} loading={isBusy}>
+              <Btn variant="danger" size="sm" onClick={onFlag} disabled={isBusy} loading={isBusy}>
                 Flag
               </Btn>
             )}
