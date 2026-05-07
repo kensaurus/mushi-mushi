@@ -266,20 +266,50 @@ export function registerOrganizationRoutes(app: Hono): void {
         .order('created_at', { ascending: true }),
       db
         .from('invitations')
-        .select('id, email, role, invited_by, expires_at, accepted_at, revoked_at, created_at')
+        .select('id, email, role, invited_by, expires_at, accepted_at, revoked_at, last_resent_at, created_at')
         .eq('organization_id', orgId)
         .is('accepted_at', null)
         .is('revoked_at', null)
         .order('created_at', { ascending: false }),
     ]);
     if (error) return dbError(c, error);
+
+    // Resolve the inviter's email for each pending invitation so the
+    // Members UI can render "Invited 3h ago by alice@example.com"
+    // without a second round-trip. We dedupe by user id first because
+    // a busy admin frequently sends 5+ invites in a row and we don't
+    // want N admin.getUserById calls when 1 would do.
+    const inviterIds = Array.from(
+      new Set(((invitations ?? []) as Array<{ invited_by: string | null }>).map((i) => i.invited_by).filter((id): id is string => Boolean(id))),
+    );
+    const inviterEmailById = new Map<string, string | null>();
+    await Promise.all(
+      inviterIds.map(async (id) => {
+        inviterEmailById.set(id, await userEmailById(db, id));
+      }),
+    );
+    const decoratedInvitations = ((invitations ?? []) as Array<{
+      id: string;
+      email: string;
+      role: InviteRole;
+      invited_by: string | null;
+      expires_at: string;
+      accepted_at: string | null;
+      revoked_at: string | null;
+      last_resent_at: string | null;
+      created_at: string;
+    }>).map((i) => ({
+      ...i,
+      invited_by_email: i.invited_by ? inviterEmailById.get(i.invited_by) ?? null : null,
+    }));
+
     return c.json({
       ok: true,
       data: {
         organization: org,
         currentUserRole: role,
         members: await rosterWithEmails(db, (members ?? []) as Array<{ user_id: string; role: OrgRole; invited_by: string | null; created_at: string }>),
-        invitations: invitations ?? [],
+        invitations: decoratedInvitations,
       },
     });
   });
@@ -382,17 +412,66 @@ export function registerOrganizationRoutes(app: Hono): void {
     const actorId = c.get('userId') as string;
     const orgId = c.req.param('id');
     const invitationId = c.req.param('invitationId');
+    if (!UUID_RE.test(orgId) || !UUID_RE.test(invitationId)) {
+      return c.json({ ok: false, error: { code: 'BAD_REQUEST' } }, 400);
+    }
     const db = getServiceClient();
     const actorRole = await loadMembership(db, orgId, actorId);
     if (actorRole !== 'owner' && actorRole !== 'admin') {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     }
+    // Idempotent guard: pull the row first so a double-click on the
+    // Cancel button (or a retry of an already-revoked invite) returns
+    // the same shape instead of stamping `revoked_by` twice or
+    // overwriting the original revoker's audit record.
+    const { data: existing } = await db
+      .from('invitations')
+      .select('id, email, role, accepted_at, revoked_at')
+      .eq('organization_id', orgId)
+      .eq('id', invitationId)
+      .maybeSingle();
+    if (!existing) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    }
+    if (existing.accepted_at) {
+      // Once accepted, the invite has already minted a membership row.
+      // Cancelling it here would silently "lose" that audit trail; the
+      // operator wants `DELETE /members/:userId` instead.
+      return c.json({
+        ok: false,
+        error: {
+          code: 'ALREADY_ACCEPTED',
+          message: 'This invitation was already accepted. Remove the member instead.',
+        },
+      }, 409);
+    }
+    if (existing.revoked_at) {
+      // No-op success — the invite is already cancelled. UI sometimes
+      // re-fires this on optimistic-update reconciliation; returning ok
+      // keeps the member list in sync without a fake error toast.
+      return c.json({ ok: true, data: { alreadyRevoked: true } });
+    }
+
+    const nowIso = new Date().toISOString();
     const { error } = await db
       .from('invitations')
-      .update({ revoked_at: new Date().toISOString() })
+      .update({ revoked_at: nowIso, revoked_by: actorId })
       .eq('organization_id', orgId)
       .eq('id', invitationId);
     if (error) return dbError(c, error);
+
+    // Audit the revocation against the org's first project so it shows
+    // up in the same audit feed as the corresponding invite send. Best
+    // effort — failing audit must not strand a successful revocation.
+    const projectId = await firstProjectId(db, orgId);
+    if (projectId) {
+      await logAudit(db, projectId, actorId, 'settings.updated', 'organization_invitation', invitationId, {
+        organizationId: orgId,
+        action: 'revoked',
+        email: existing.email,
+        role: existing.role,
+      }).catch(() => {});
+    }
     return c.json({ ok: true });
   });
 

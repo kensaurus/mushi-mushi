@@ -3,8 +3,8 @@ import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
-import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, SelectField, Tooltip } from '../components/ui'
-import { IconCheck, IconTrash, IconUndo } from '../components/icons'
+import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, RelativeTime, SelectField, Tooltip } from '../components/ui'
+import { IconCheck, IconClock, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
@@ -32,7 +32,16 @@ interface Invitation {
   id: string
   email: string
   role: Exclude<OrgRole, 'owner'>
+  // Server-resolved email of the inviter so we can render
+  // "Invited 3h ago by alice@example.com" without a second fetch.
+  // Nullable: legacy rows or deleted users surface as "by an admin".
+  invited_by: string | null
+  invited_by_email: string | null
   expires_at: string
+  // Stamped by the API after Supabase auth.admin.inviteUserByEmail
+  // is retried. Surfaces as "Resent · 1h ago" once we ship a Resend
+  // affordance; rendered today only when the value is non-null.
+  last_resent_at?: string | null
   created_at: string
 }
 
@@ -73,6 +82,13 @@ export function OrganizationSettingsPage() {
   // filtering, the Map keeps each scheduled timeout addressable by id.
   const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set())
   const removeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  // Same soft-delete pattern as members: cancelling an invite optimistically
+  // hides the row, the DELETE call is deferred for `UNDO_WINDOW_MS`, and the
+  // toast is the user's only affordance for backing out. Distinct from the
+  // member structures so a "cancel invite" toast can't undo a "remove
+  // teammate" action and vice versa.
+  const [pendingCancelIds, setPendingCancelIds] = useState<Set<string>>(new Set())
+  const cancelTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const path = activeOrgId ? `/v1/org/${activeOrgId}/members` : null
   const { data, loading, error, reload } = usePageData<MembersResponse>(path)
 
@@ -167,14 +183,24 @@ export function OrganizationSettingsPage() {
   // Cancel any in-flight remove timers when the page unmounts so the DELETE
   // never lands after the user has navigated away (otherwise a user who
   // hits Remove and then immediately leaves would still evict a teammate
-  // they meant to keep, with no toast left to undo from).
+  // they meant to keep, with no toast left to undo from). Same logic applies
+  // to in-flight invite cancellations — we don't want a stranded timer to
+  // revoke an invitation seconds after the admin closes the tab.
   useEffect(() => {
-    const timers = removeTimers.current
+    const memberTimers = removeTimers.current
+    const inviteTimers = cancelTimers.current
     return () => {
-      timers.forEach((t) => clearTimeout(t))
-      timers.clear()
+      memberTimers.forEach((t) => clearTimeout(t))
+      memberTimers.clear()
+      inviteTimers.forEach((t) => clearTimeout(t))
+      inviteTimers.clear()
     }
   }, [])
+
+  const visibleInvitations = useMemo(
+    () => (data?.invitations ?? []).filter((i) => !pendingCancelIds.has(i.id)),
+    [data?.invitations, pendingCancelIds],
+  )
 
   function cancelScheduledRemove(userId: string) {
     const timer = removeTimers.current.get(userId)
@@ -236,6 +262,71 @@ export function OrganizationSettingsPage() {
       action: {
         label: 'Undo',
         onClick: () => cancelScheduledRemove(id),
+      },
+    })
+  }
+
+  function cancelScheduledInviteCancel(invitationId: string) {
+    const timer = cancelTimers.current.get(invitationId)
+    if (timer) clearTimeout(timer)
+    cancelTimers.current.delete(invitationId)
+    setPendingCancelIds((prev) => {
+      if (!prev.has(invitationId)) return prev
+      const next = new Set(prev)
+      next.delete(invitationId)
+      return next
+    })
+  }
+
+  function scheduleCancelInvite(invite: Invitation) {
+    if (!activeOrgId) return
+    const orgId = activeOrgId
+    const id = invite.id
+    const label = invite.email
+
+    // Optimistically hide the invite row. The toast is the user's only
+    // affordance for the next 8 s — they can back out with Undo, otherwise
+    // the timer fires and we issue the DELETE for real.
+    setPendingCancelIds((prev) => new Set(prev).add(id))
+
+    const timer = setTimeout(async () => {
+      cancelTimers.current.delete(id)
+      const res = await apiFetch(`/v1/org/${orgId}/invitations/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // Restore the row so the admin can see the invite still exists
+        // and retry. The 'ALREADY_ACCEPTED' branch is benign — surface a
+        // gentle nudge so the operator knows why nothing happened.
+        setPendingCancelIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+        const code = res.error?.code
+        if (code === 'ALREADY_ACCEPTED') {
+          toast.error('Invitation already accepted', `${label} is now a member — remove them from the roster instead.`)
+        } else {
+          toast.error('Could not cancel invitation', res.error?.message)
+        }
+        return
+      }
+      setPendingCancelIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      reload()
+    }, UNDO_WINDOW_MS)
+
+    cancelTimers.current.set(id, timer)
+
+    toast.push({
+      tone: 'success',
+      title: 'Invitation cancelled',
+      description: `${label} won't be able to join.`,
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => cancelScheduledInviteCancel(id),
       },
     })
   }
@@ -448,17 +539,89 @@ export function OrganizationSettingsPage() {
         </table>
       </Card>
 
-      {(data?.invitations?.length ?? 0) > 0 && (
+      {visibleInvitations.length > 0 && (
         <Card className="p-4">
-          <h2 className="mb-2 text-sm font-semibold text-fg">Pending invitations</h2>
-          <div className="space-y-2">
-            {data!.invitations.map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between rounded border border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-xs">
-                <span className="text-fg">{invite.email}</span>
-                <Badge className={ROLE_TONE[invite.role]}>{invite.role}</Badge>
-              </div>
-            ))}
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-fg">Pending invitations</h2>
+            <span className="text-2xs text-fg-faint">{visibleInvitations.length} open</span>
           </div>
+          <ul className="space-y-2">
+            {visibleInvitations.map((invite) => {
+              // Pre-compute expiry signal so a near-expiry invite reads as
+              // "decaying soon" rather than just another row. We treat
+              // anything in the next 24h as a warn tone — past that, the
+              // server already hides expired invites from the response.
+              const expiresMs = new Date(invite.expires_at).getTime() - Date.now()
+              const expiresSoon = expiresMs > 0 && expiresMs < 24 * 60 * 60 * 1000
+              const expired = expiresMs <= 0
+              const inviterLabel = invite.invited_by_email ?? (invite.invited_by ? 'an admin' : null)
+              return (
+                <li
+                  key={invite.id}
+                  className="rounded border border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-fg" title={invite.email}>
+                        {invite.email}
+                      </div>
+                      {/* Metadata strip — when invited, by whom, and when it
+                          expires. Each piece links to a tooltip with the
+                          absolute timestamp so admins can audit a row
+                          without leaving the page. Inviter falls back to
+                          "an admin" if the user_id couldn't be resolved
+                          (deleted account, legacy row pre-migration). */}
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-faint">
+                        <span className="inline-flex items-center gap-1">
+                          Invited <RelativeTime value={invite.created_at} className="text-fg-muted" />
+                        </span>
+                        {inviterLabel && (
+                          <span className="text-fg-faint">
+                            by <span className="text-fg-muted">{inviterLabel}</span>
+                          </span>
+                        )}
+                        <span
+                          className={`inline-flex items-center gap-1 ${expired ? 'text-danger' : expiresSoon ? 'text-warn' : 'text-fg-faint'}`}
+                          title={`Expires ${new Date(invite.expires_at).toLocaleString()}`}
+                        >
+                          <IconClock className="size-3" />
+                          {expired ? 'expired' : 'expires'} <RelativeTime value={invite.expires_at} className={expired ? 'text-danger' : expiresSoon ? 'text-warn' : 'text-fg-muted'} />
+                        </span>
+                        {invite.last_resent_at && (
+                          <span className="text-fg-faint">
+                            · resent <RelativeTime value={invite.last_resent_at} className="text-fg-muted" />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Badge className={ROLE_TONE[invite.role]}>{invite.role}</Badge>
+                      {canManage ? (
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => scheduleCancelInvite(invite)}
+                          aria-label={`Cancel invitation for ${invite.email}`}
+                          title={`Cancel invitation for ${invite.email}`}
+                          className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
+                        >
+                          <IconTrash />
+                        </Btn>
+                      ) : (
+                        <Tooltip content="Only owners and admins can cancel invitations.">
+                          <span className="inline-flex">
+                            <Btn size="sm" variant="ghost" disabled className="px-2 text-fg-faint">
+                              <IconTrash />
+                            </Btn>
+                          </span>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
         </Card>
       )}
 
