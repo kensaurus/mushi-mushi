@@ -1,0 +1,98 @@
+---
+title: 'Inventory and gates (v2)'
+---
+
+# Inventory and gates
+
+Mushi v1 was the **negative side** of the loop: catch what your users
+*felt* break, classify it, dedupe it, optionally draft a fix. v2 adds
+the **positive side**: a declarative `inventory.yaml` that names every
+user-facing story, page, and action — and five composite gates that
+fail the build when the agent's drafts diverge from the contract.
+
+## The model
+
+```
+project ──► story ──► page ──► element ──► action
+                                              │
+                                              └─► expected_outcome
+```
+
+Each `action` has a trigger (click, type, submit) and an
+`expected_outcome` block — the assertions a healthy session would still
+make. The synthetic monitor re-walks those expectations on a cron, the
+crawler discovers candidate routes the SDK has observed in production,
+and the gates fail when reality diverges from the file.
+
+## Five gates
+
+The composite GitHub status `mushi-mushi/gates` rolls up:
+
+1. **`mushi-mushi/no-dead-handler`** — empty `onClick` / `onSubmit` etc.
+   surfaced by [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin).
+2. **`mushi-mushi/no-mock-leak`** — faker / `John Doe` arrays in
+   non-test paths.
+3. **Inventory drift** — actions added, removed, or renamed since the
+   last push. Drift requires a changeset entry; the run will fail if
+   the diff is uncommitted.
+4. **Agentic-failure detection** — handlers that *used* to satisfy
+   `expected_outcome` and no longer do (regression across deploys).
+5. **Synthetic walk health** — the synthetic monitor's last walk
+   against staging.
+
+The composite check is what your branch protection should require —
+gates 1 + 2 are static, gates 3 + 4 + 5 talk to the Mushi gateway.
+
+## Discovery — the SDK proposes the inventory
+
+Most teams will never hand-author `inventory.yaml`. Turn on the new
+v2.1 SDK option:
+
+```ts
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
+```
+
+The SDK quietly observes routes, `data-testid`s, and outbound API paths
+in production. Claude reads the stream and drafts an `inventory.yaml`
+in the **Discovery** tab on the User stories surface. You accept,
+edit, or skip — the production payload itself never carries user data.
+
+## Synthetic monitor
+
+The monitor re-walks every action's `expected_outcome` against your
+staging URL (or any explicit `synthetic_target_url`). Defaults are
+**fail-closed**: write paths (POST / PUT / DELETE actions) are skipped
+unless you opt in per-project:
+
+```yaml filename="inventory.yaml"
+synthetic_monitor_allow_mutations: true
+```
+
+The opt-in is meant for staging environments that are isolated from
+production data and have either an idempotency key or a clean rollback.
+
+## Surface mode in the graph
+
+The same inventory powers a **Surface** toggle on the
+[knowledge graph](/concepts/knowledge-graph) — every Page, Element,
+and Action node from `inventory.yaml` overlaid on the live bug graph.
+Dead corners (high-traffic pages with no `expected_outcome`) light up.
+
+## Related packages
+
+- [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — Zod +
+  JSON Schema for `inventory.yaml`.
+- [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner)
+  — bootstrap an authenticated session so the crawler / monitor can
+  reach pages behind a login wall.
+- [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action that runs
+  all five gates, plus `propose`, `discover-api`, `discovery-status`,
+  and `auth-bootstrap` sub-commands.
+- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — `no-dead-handler`
+  and `no-mock-leak`.
+- [Admin → User stories · Inventory](/admin/inventory) — the in-app
+  surface where you accept proposals and trigger one-off gate runs.
