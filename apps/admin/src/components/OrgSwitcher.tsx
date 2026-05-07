@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import {
   ACTIVE_ORG_QUERY_PARAM,
@@ -166,6 +166,18 @@ export function OrgSwitcher() {
             ))}
           </ul>
           <div className="border-t border-edge-subtle bg-surface-raised/60">
+            {/* "View team page" — shortcut into the org's members/settings
+                surface so users don't have to hunt through the sidebar after
+                opening this switcher. Closes the dropdown on click so the
+                navigation feels intentional. */}
+            <Link
+              to="/organization/members"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+            >
+              <span>View team page</span>
+              <span aria-hidden className="text-fg-faint">→</span>
+            </Link>
             {creating ? (
               <form
                 onSubmit={(e) => {

@@ -199,6 +199,56 @@ export function registerOrganizationRoutes(app: Hono): void {
     });
   });
 
+  // Rename an organization (team). Owner and admin can change the display
+  // name; slug is intentionally NOT mutable here because it's embedded in
+  // shared URLs and Stripe customer metadata — a cosmetic rename should
+  // never invalidate links coworkers have already bookmarked. If we ever
+  // need slug edits, make them a separate, explicit "Change handle" flow
+  // gated on `owner` and aware of the URL implications.
+  app.patch('/v1/org/:id', jwtAuth, async (c) => {
+    const actorId = c.get('userId') as string;
+    const orgId = c.req.param('id');
+    if (!UUID_RE.test(orgId)) {
+      return c.json({ ok: false, error: { code: 'BAD_ORG' } }, 400);
+    }
+    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const rawName = typeof body.name === 'string' ? body.name.trim() : '';
+    if (rawName.length < 1 || rawName.length > 120) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_NAME', message: 'Name must be 1-120 characters.' } },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+    const role = await loadMembership(db, orgId, actorId);
+    if (!role) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    if (role !== 'owner' && role !== 'admin') {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
+
+    const { data: updated, error } = await db
+      .from('organizations')
+      .update({ name: rawName, updated_at: new Date().toISOString() })
+      .eq('id', orgId)
+      .select('id, slug, name, plan_id, billing_mode, is_personal, created_at')
+      .single();
+    if (error || !updated) return dbError(c, error ?? { message: 'organization_update_failed' });
+
+    // Best-effort audit trail. Anchored to the org's first project (matches
+    // how membership/invite changes are logged) so the org rename is
+    // discoverable from any project's audit feed inside the org.
+    const projectId = await firstProjectId(db, orgId);
+    if (projectId) {
+      await logAudit(db, projectId, actorId, 'settings.updated', 'organization', orgId, {
+        organizationId: orgId,
+        name: rawName,
+      }).catch(() => {});
+    }
+
+    return c.json({ ok: true, data: { organization: { ...updated, role } } });
+  });
+
   app.get('/v1/org/:id/members', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const orgId = c.req.param('id');

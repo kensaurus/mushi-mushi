@@ -18,7 +18,7 @@ import {
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
-import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
+import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight, toneForOpen } from '../lib/useNavCounts'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher } from './ProjectSwitcher'
@@ -896,6 +896,45 @@ export function Layout({ children }: { children: ReactNode }) {
                             hideWhenZero
                           />
                         )}
+                        {/* Graph + Inventory share the same underlying
+                            inventory data — the graph is just the visual
+                            view of those nodes — so a regressed action
+                            should fire on BOTH rails. Operators who land
+                            on /graph from a deep link still see the same
+                            "needs attention" signal they'd see if they
+                            entered through /inventory. Mirrors the
+                            inventory tone exactly. */}
+                        {path === '/graph' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.regressedActions > 0 ? 'danger' : 'ok'}
+                            count={navCounts.regressedActions}
+                            label={
+                              navCounts.regressedActions > 0
+                                ? `${navCounts.regressedActions} regressed actions in the graph`
+                                : 'Graph healthy — no regressions'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {/* Anti-gaming flagged-device count. Any flag is
+                            critical (someone tried to abuse the report
+                            firehose), so we use toneForFailed which
+                            steps ok → warn (≤2) → danger (>2) — even a
+                            single flag is amber, three or more is red.
+                            Sourced via the cheap count_only=1 mode of
+                            /v1/admin/anti-gaming/devices?flagged=true. */}
+                        {path === '/anti-gaming' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.flaggedDevices)}
+                            count={navCounts.flaggedDevices}
+                            label={
+                              navCounts.flaggedDevices > 0
+                                ? `${navCounts.flaggedDevices} flagged ${navCounts.flaggedDevices === 1 ? 'device' : 'devices'} — review for abuse`
+                                : 'No flagged devices'
+                            }
+                            hideWhenZero
+                          />
+                        )}
                         {path === '/reports' && navCounts.ready && (
                           <SidebarHealthDot
                             tone={navCounts.ready ? toneForBacklog(navCounts.untriagedBacklog) : 'loading'}
@@ -926,8 +965,16 @@ export function Layout({ children }: { children: ReactNode }) {
                           />
                         )}
                         {path === '/inbox' && navCounts.ready && (
+                          // Escalates to danger (red) once the open-action
+                          // backlog hits 6 — six is roughly "more than a
+                          // single working session can clear", which is
+                          // exactly when the sidebar should stop reading
+                          // as amber-warn and switch to a red squint
+                          // signal. Symmetric with toneForFailed (≤2 warn,
+                          // >2 danger) and toneForBacklog (≤5 warn, >5
+                          // danger). 0 stays hidden via hideWhenZero.
                           <SidebarHealthDot
-                            tone={navCounts.inboxOpenActions > 0 ? 'warn' : 'ok'}
+                            tone={toneForOpen(navCounts.inboxOpenActions, 6)}
                             count={navCounts.inboxOpenActions}
                             label={
                               navCounts.inboxOpenActions > 0
@@ -938,8 +985,13 @@ export function Layout({ children }: { children: ReactNode }) {
                           />
                         )}
                         {path === '/notifications' && navCounts.ready && (
+                          // Notifications escalate at 11 — under 10 unread
+                          // is a normal day's worth of fix / judge / CI
+                          // pings; >10 means the user is missing their
+                          // own alerts and the sidebar should shout in
+                          // red instead of staying amber.
                           <SidebarHealthDot
-                            tone={navCounts.notificationsUnread > 0 ? 'warn' : 'ok'}
+                            tone={toneForOpen(navCounts.notificationsUnread, 11)}
                             count={navCounts.notificationsUnread}
                             label={
                               navCounts.notificationsUnread > 0

@@ -1103,6 +1103,89 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return c.json({ ok: true, data: { id: data.id, slug } }, 201);
   });
 
+  // Rename a project. Owner and admin in the project's org can change the
+  // display name; legacy ownerless-org projects fall back to `owner_id`.
+  // Slug is NOT mutable here on purpose — it shows up in shareable Reports
+  // / Settings deep-links, in the X-API-Key auth flow's audit trail, and
+  // in the type-the-slug delete confirmation. A cosmetic rename should
+  // never break those. If we ever need slug edits, ship a separate
+  // explicit "Change project handle" flow that owners only can use.
+  app.patch('/v1/admin/projects/:id', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (name.length < 1 || name.length > 120) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_NAME', message: 'Name must be 1-120 characters.' } },
+        400,
+      );
+    }
+
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('id, name, slug, organization_id, owner_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectErr) return dbError(c, projectErr);
+    if (!project) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Same authz tiers as DELETE: org owner/admin OR legacy direct owner.
+    let allowed = false;
+    if (project.organization_id) {
+      const { data: membership } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', project.organization_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const role = membership?.role ?? null;
+      allowed = role === 'owner' || role === 'admin';
+    } else if (project.owner_id === userId) {
+      allowed = true;
+    }
+    if (!allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only org owners or admins can rename a project',
+          },
+        },
+        403,
+      );
+    }
+
+    const { data: updated, error: updateErr } = await db
+      .from('projects')
+      .update({ name, updated_at: new Date().toISOString() })
+      .eq('id', projectId)
+      .select('id, name, slug')
+      .single();
+    if (updateErr || !updated) {
+      return dbError(c, updateErr ?? { message: 'project_update_failed' });
+    }
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'project', projectId, {
+      previousName: project.name,
+      name,
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { project: updated } });
+  });
+
   // Permanently deletes a project. All FKs to `projects.id` use ON DELETE
   // CASCADE so this single statement removes reports, comments, fix_attempts,
   // api_keys, settings, members, integrations, billing_subscriptions, etc.

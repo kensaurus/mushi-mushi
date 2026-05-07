@@ -40,6 +40,10 @@ export interface NavCounts {
   queueFailed: number
   /** Integrations whose last status is not `ok` (red + amber). */
   healthIssues: number
+  /** reporter_devices flagged as suspicious — drives the /anti-gaming
+   *  sidebar dot. Sourced via the cheap `count_only=1` mode of
+   *  /v1/admin/anti-gaming/devices?flagged=true. */
+  flaggedDevices: number
   /** Whether the hook has loaded once; consumers can skip rendering
    *  dots in the undefined state. */
   ready: boolean
@@ -55,6 +59,7 @@ const INITIAL: NavCounts = {
   notificationsUnread: 0,
   queueFailed: 0,
   healthIssues: 0,
+  flaggedDevices: 0,
   ready: false,
 }
 
@@ -80,6 +85,10 @@ interface QueueSummaryResp {
   byStatus?: Record<string, number>
 }
 
+interface DeviceCountResp {
+  count?: number
+}
+
 function countHealthIssues(dashboard: DashboardData | undefined): number {
   const integrations = dashboard?.integrations
   if (!Array.isArray(integrations)) return 0
@@ -97,7 +106,15 @@ export function useNavCounts(): NavCounts {
 
   const load = useCallback(async () => {
     const projectId = getActiveProjectIdSnapshot()
-    const [summaryRes, reportsRes, invRes, dashRes, notifRes, queueRes] = await Promise.all([
+    const [
+      summaryRes,
+      reportsRes,
+      invRes,
+      dashRes,
+      notifRes,
+      queueRes,
+      flaggedRes,
+    ] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
       projectId
@@ -106,6 +123,10 @@ export function useNavCounts(): NavCounts {
       apiFetch<DashboardData>('/v1/admin/dashboard'),
       apiFetch<NotificationCountResp>('/v1/admin/notifications?unread=1&count_only=1'),
       apiFetch<QueueSummaryResp>('/v1/admin/queue/summary'),
+      // Flagged-device count powers the /anti-gaming sidebar dot. Uses
+      // the cheap count-only mode so we don't pull 200 device rows on
+      // every page navigation just to render a 1-character badge.
+      apiFetch<DeviceCountResp>('/v1/admin/anti-gaming/devices?flagged=true&count_only=1'),
     ])
     const summary = summaryRes.ok ? summaryRes.data : null
     const reports = reportsRes.ok ? reportsRes.data : null
@@ -117,6 +138,7 @@ export function useNavCounts(): NavCounts {
     const notifUnread = notifRes.ok ? (notifRes.data?.unread_count ?? 0) : 0
     const queueByStatus = queueRes.ok ? (queueRes.data?.byStatus ?? {}) : {}
     const queueFailed = (queueByStatus.dead_letter ?? 0) + (queueByStatus.failed ?? 0)
+    const flaggedDevices = flaggedRes.ok ? (flaggedRes.data?.count ?? 0) : 0
     setCounts({
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
@@ -127,6 +149,7 @@ export function useNavCounts(): NavCounts {
       notificationsUnread: notifUnread,
       queueFailed,
       healthIssues: countHealthIssues(dashboard),
+      flaggedDevices,
       ready: true,
     })
   }, [])
@@ -145,6 +168,10 @@ export function useNavCounts(): NavCounts {
       'inventories',
       'reporter_notifications',
       'processing_queue',
+      // Flagged-device flips drive the /anti-gaming sidebar dot — keep
+      // it live so an operator who flags a device on /anti-gaming sees
+      // the rail update without a manual reload.
+      'reporter_devices',
     ],
     () => { void load() },
     { debounceMs: 1500 },
@@ -168,4 +195,21 @@ export function toneForFailed(n: number): HealthTone {
 export function toneForInFlight(n: number): HealthTone {
   if (n === 0) return 'idle'
   return 'ok'
+}
+
+/**
+ * Generic open-action escalator. Stays warn (amber) until the queue
+ * crosses `dangerAt`, then switches to danger (red) so the sidebar
+ * fires a visceral "this is getting away from you" signal.
+ *
+ * Used by the inbox + notifications dots, both of which previously
+ * sat on a flat `warn` tone regardless of magnitude. Keeps the visual
+ * language symmetric with `toneForFailed` (which steps ok → warn →
+ * danger at 0/2) and `toneForBacklog` (0/5) — every sidebar tone now
+ * obeys the same shape, just with domain-tuned thresholds.
+ */
+export function toneForOpen(n: number, dangerAt: number): HealthTone {
+  if (n === 0) return 'ok'
+  if (n >= dangerAt) return 'danger'
+  return 'warn'
 }

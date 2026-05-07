@@ -84,7 +84,7 @@ const GROUPS: ShortcutGroup[] = [
     hint: 'Reshape the chrome around the page so you can focus on the task.',
     items: [
       { keys: [MOD, '.'], desc: 'Toggle focus mode', hint: 'Hides the sidebar, top bar chrome, and pipeline pulse. Esc also exits.', tags: ['view', 'focus'] },
-      { keys: ['['], desc: 'Toggle sidebar collapse', hint: 'Mirrors Linear: collapses the left sidebar to a 48px icon rail.', tags: ['view', 'sidebar'] },
+      { keys: ['['], desc: 'Toggle sidebar collapse', hint: 'Mirrors Linear: collapses the left sidebar to a 48px icon rail. On /reports the queue claims this key while engaged (j/k/x/Enter or a click inside the table) — pagination wins until you click out.', tags: ['view', 'sidebar'] },
       { keys: ['Esc'], desc: 'Close modal, drawer, or exit focus mode', tags: ['close', 'view'] },
     ],
   },
@@ -101,8 +101,8 @@ const GROUPS: ShortcutGroup[] = [
       { keys: ['X'], desc: 'Toggle selection on focused row', tags: ['reports', 'selection'] },
       { keys: ['A'], desc: 'Select all reports on this page', tags: ['reports', 'selection'] },
       { keys: ['/'], desc: 'Focus the search box', tags: ['reports', 'search'] },
-      { keys: ['['], desc: 'Previous page (within the queue)', hint: 'Same key as sidebar collapse — only paginates while the queue has focus.', tags: ['reports', 'navigation'] },
-      { keys: [']'], desc: 'Next page (within the queue)', tags: ['reports', 'navigation'] },
+      { keys: ['['], desc: 'Previous page (within the queue)', hint: 'Same key as sidebar collapse — only paginates after you engage the queue (j/k/x/Enter, or a click inside the table). Click outside the table to release the key back to the sidebar toggle.', tags: ['reports', 'navigation'] },
+      { keys: [']'], desc: 'Next page (within the queue)', hint: 'Engagement-gated like [ — see above.', tags: ['reports', 'navigation'] },
     ],
   },
   {

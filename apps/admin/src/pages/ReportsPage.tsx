@@ -107,6 +107,38 @@ export function ReportsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [cursor, setCursor] = useState(0)
 
+  // Queue-engagement tracking. The HotkeysModal documents `[`/`]` as
+  // "only paginates while the queue has focus", but the queue cursor is
+  // a state index — no DOM element actually receives focus on j/k — so
+  // we synthesise the same semantic with a ref.
+  //
+  // `queueEngagedRef.current === true` means the user's most recent
+  // intentional action targeted the queue (a queue keyboard shortcut
+  // fired, or they clicked into the queue container). It flips back to
+  // false on any click outside `[data-mushi-reports-queue]` or when the
+  // page unmounts. While engaged, `[` paginates and preempts the global
+  // sidebar-collapse binding; while not engaged, `[` falls through to
+  // the global handler and collapses the sidebar exactly as on every
+  // other page. This honours the docstring promise without forcing a
+  // visible focus ring on every list row.
+  const queueEngagedRef = useRef(false)
+  const markQueueEngaged = useCallback(() => {
+    queueEngagedRef.current = true
+  }, [])
+  useEffect(() => {
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target instanceof Element ? e.target : null
+      queueEngagedRef.current = Boolean(
+        target?.closest('[data-mushi-reports-queue]'),
+      )
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      queueEngagedRef.current = false
+    }
+  }, [])
+
   // Wave T.3.6: stage realtime INSERTs on `reports` when the triager is
   // mid-review (has selection / cursor below top / scrolled down). Auto-
   // apply when the triager is clearly idle at the top. `fix_attempts` is
@@ -370,22 +402,45 @@ export function ReportsPage() {
 
   useHotkeys(
     [
-      { key: 'j', description: 'Next report', handler: () => moveCursor(1) },
-      { key: 'k', description: 'Previous report', handler: () => moveCursor(-1) },
+      {
+        key: 'j',
+        description: 'Next report',
+        handler: () => {
+          markQueueEngaged()
+          moveCursor(1)
+        },
+      },
+      {
+        key: 'k',
+        description: 'Previous report',
+        handler: () => {
+          markQueueEngaged()
+          moveCursor(-1)
+        },
+      },
       {
         key: 'x',
         description: 'Toggle selection',
         handler: () => {
+          markQueueEngaged()
           const r = reports[cursor]
           if (r) toggleSelect(r.id)
         },
       },
-      { key: 'Enter', description: 'Open report', handler: openCursor },
+      {
+        key: 'Enter',
+        description: 'Open report',
+        handler: () => {
+          markQueueEngaged()
+          openCursor()
+        },
+      },
       {
         key: ' ',
         description: 'Preview report (keeps list scroll)',
         handler: (e) => {
           e.preventDefault()
+          markQueueEngaged()
           const r = reports[cursor]
           if (!r) return
           const next = new URLSearchParams(searchParams)
@@ -401,6 +456,7 @@ export function ReportsPage() {
         handler: () => {
           setShowHelp(false)
           clearSelection()
+          queueEngagedRef.current = false
           ;(document.activeElement as HTMLElement | null)?.blur?.()
         },
       },
@@ -409,27 +465,54 @@ export function ReportsPage() {
         description: 'Focus search',
         handler: (e) => {
           e.preventDefault()
+          markQueueEngaged()
           searchInputRef.current?.focus()
         },
       },
       { key: '?', description: 'Show shortcuts', handler: () => setShowHelp((v) => !v) },
-      { key: 'a', description: 'Select all on page', handler: toggleSelectAll },
+      {
+        key: 'a',
+        description: 'Select all on page',
+        handler: () => {
+          markQueueEngaged()
+          toggleSelectAll()
+        },
+      },
+      // `[` and `]` collide with the global sidebar-collapse binding in
+      // `Layout.tsx`. We honour the HotkeysModal docstring ("only paginates
+      // while the queue has focus") by gating both on `queueEngagedRef`.
+      // When engaged we paginate AND call `e.stopImmediatePropagation()`
+      // so the global `[` doesn't also fire — the page hook is registered
+      // with `capture: true` below so its listener runs *before* the
+      // bubble-phase global one. When NOT engaged we no-op without
+      // stopping propagation, so the global `[` keeps collapsing the
+      // sidebar exactly as on every other page. We do this in the
+      // handler (not via the binding's `preempt` flag) because the
+      // suppress-or-fall-through choice is per-keystroke, not static.
       {
         key: ']',
-        description: 'Next page',
-        handler: () => {
-          if (page < totalPages - 1) setPage(page + 1)
+        description: 'Next page (queue)',
+        handler: (e) => {
+          if (!queueEngagedRef.current) return
+          if (page < totalPages - 1) {
+            e.stopImmediatePropagation()
+            setPage(page + 1)
+          }
         },
       },
       {
         key: '[',
-        description: 'Previous page',
-        handler: () => {
-          if (page > 0) setPage(page - 1)
+        description: 'Previous page (queue)',
+        handler: (e) => {
+          if (!queueEngagedRef.current) return
+          if (page > 0) {
+            e.stopImmediatePropagation()
+            setPage(page - 1)
+          }
         },
       },
     ],
-    !loading,
+    { enabled: !loading, capture: true },
   )
 
   const contextChips: ContextChip[] = []
@@ -684,31 +767,38 @@ export function ReportsPage() {
           />
         ) : null
       ) : (
-        <ReportsTable
-          reports={reports}
-          total={total}
-          page={page}
-          totalPages={totalPages}
-          sort={sort}
-          dir={dir}
-          selected={selected}
-          cursor={cursor}
-          allSelected={allSelected}
-          someSelected={someSelected}
-          dispatching={dispatching}
-          groupCollapse={groupCollapse}
-          expandedGroups={expandedGroups}
-          onToggleGroup={toggleGroup}
-          onToggleSelectAll={toggleSelectAll}
-          onToggleSelect={toggleSelect}
-          onSetSort={setSort}
-          onSetCursor={setCursor}
-          onSetPage={setPage}
-          onOpen={handleOpen}
-          onCopyLink={handleCopyLink}
-          onDismiss={handleDismiss}
-          onDispatchFix={handleDispatchFix}
-        />
+        // `data-mushi-reports-queue` is the engagement sentinel. The
+        // pointerdown listener installed alongside `queueEngagedRef`
+        // promotes any click inside this container to "queue is engaged"
+        // so subsequent `[` / `]` paginate; a click anywhere else
+        // disengages so the global sidebar-collapse hotkey wins again.
+        <div data-mushi-reports-queue>
+          <ReportsTable
+            reports={reports}
+            total={total}
+            page={page}
+            totalPages={totalPages}
+            sort={sort}
+            dir={dir}
+            selected={selected}
+            cursor={cursor}
+            allSelected={allSelected}
+            someSelected={someSelected}
+            dispatching={dispatching}
+            groupCollapse={groupCollapse}
+            expandedGroups={expandedGroups}
+            onToggleGroup={toggleGroup}
+            onToggleSelectAll={toggleSelectAll}
+            onToggleSelect={toggleSelect}
+            onSetSort={setSort}
+            onSetCursor={setCursor}
+            onSetPage={setPage}
+            onOpen={handleOpen}
+            onCopyLink={handleCopyLink}
+            onDismiss={handleDismiss}
+            onDispatchFix={handleDispatchFix}
+          />
+        </div>
       )}
 
       <ReportPreviewDrawer

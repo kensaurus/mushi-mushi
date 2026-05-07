@@ -354,8 +354,15 @@ export function RepoPage() {
           a thin rule + the count chips below, with action buttons pinned
           on the right of the *meta* row only (Linear "structure should be
           felt, not seen" — chrome that frames content rather than fighting
-          it). */}
-      <Card>
+          it).
+
+          2026-05-07: explicit p-3 because the base <Card> primitive is
+          padding-less by design (so consumers can compose dense tables
+          inside without a double inset). Without this, the repo header
+          rendered flush to the card border — content kissed the edge,
+          which read as "no padding on /repo" in the field bug. Same fix
+          applied to the BranchRow and Activity cards below. */}
+      <Card className="p-3">
         <div className="space-y-2">
           {/* Identity row — kicker + URL flow left-to-right with no
               right-anchored sibling, so the eye reads them as a single
@@ -471,7 +478,7 @@ export function RepoPage() {
 
           {/* Activity log */}
           <div className="min-w-0">
-            <Card>
+            <Card className="p-3">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Repo activity</h3>
                 {activity && (
@@ -528,7 +535,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
     meta.push({ label: 'Category', value: branch.report_category })
   }
   return (
-    <Card>
+    <Card className="p-3">
       {/* Two-column inner grid: identity column (badge + summary + report
           link) on the left, fix mini-graph on the right at sm+. Earlier
           revision used `flex flex-wrap justify-between` which left a

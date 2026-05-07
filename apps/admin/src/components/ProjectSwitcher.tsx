@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
@@ -168,6 +168,18 @@ export function ProjectSwitcher() {
             })}
           </ul>
           <div className="border-t border-edge-subtle bg-surface-raised/60">
+            {/* "View project page" — shortcut into the project list/settings
+                surface so users can manage the project they just selected
+                without round-tripping through the sidebar. Closes the
+                dropdown on click so the navigation feels intentional. */}
+            <Link
+              to="/projects"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+            >
+              <span>View project page</span>
+              <span aria-hidden className="text-fg-faint">→</span>
+            </Link>
             {creating ? (
               <form
                 onSubmit={(e) => {

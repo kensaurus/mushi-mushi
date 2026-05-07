@@ -37,9 +37,30 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { devices: [] } });
-
     const flagged = c.req.query('flagged') === 'true';
+    // count_only=1 powers the sidebar badge — the Layout only needs the
+    // number of flagged devices, not the full row payload. Skipping the
+    // 200-row select trims sidebar refresh cost from ~30 KB to a single
+    // count() round-trip per project group.
+    const countOnly = c.req.query('count_only') === '1';
+
+    if (projectIds.length === 0) {
+      return countOnly
+        ? c.json({ ok: true, data: { count: 0 } })
+        : c.json({ ok: true, data: { devices: [] } });
+    }
+
+    if (countOnly) {
+      let cq = db
+        .from('reporter_devices')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds);
+      if (flagged) cq = cq.eq('flagged_as_suspicious', true);
+      const { count, error: countErr } = await cq;
+      if (countErr) return dbError(c, countErr);
+      return c.json({ ok: true, data: { count: count ?? 0 } });
+    }
+
     let q = db
       .from('reporter_devices')
       .select('*')

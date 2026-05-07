@@ -1,14 +1,22 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, SelectField, Tooltip } from '../components/ui'
+import { IconCheck, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useUpdateOrganization } from '../lib/useUpdateOrganization'
+
+// Undo window for soft-delete operations on this page. Long enough for the
+// "wait, that wasn't who I meant" reaction (Nielsen reports ~5-10 s for
+// recognition errors), short enough that the user doesn't think the action
+// silently failed. Mirrors the project / key revoke windows so the rest of
+// the admin reads as one cohesive system.
+const UNDO_WINDOW_MS = 8000
 
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -57,7 +65,14 @@ export function OrganizationSettingsPage() {
   // the previous one-click DELETE which fired without any confirmation —
   // a single misclick could evict a teammate from every project in the org.
   const [pendingRemove, setPendingRemove] = useState<Member | null>(null)
-  const [removing, setRemoving] = useState(false)
+  // Soft-delete state. The DELETE call is deferred for `UNDO_WINDOW_MS` so
+  // the user has a chance to back out from the toast. We optimistically
+  // hide the row in the meantime so the page reads as if the action
+  // already succeeded — matches Gmail's "Message sent / Undo" pattern.
+  // Two stores so concurrent removes don't race: the Set drives render
+  // filtering, the Map keeps each scheduled timeout addressable by id.
+  const [pendingRemovalIds, setPendingRemovalIds] = useState<Set<string>>(new Set())
+  const removeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const path = activeOrgId ? `/v1/org/${activeOrgId}/members` : null
   const { data, loading, error, reload } = usePageData<MembersResponse>(path)
 
@@ -96,8 +111,19 @@ export function OrganizationSettingsPage() {
     : entitlements.has('teams')
 
   const sortedMembers = useMemo(
-    () => [...(data?.members ?? [])].sort((a, b) => a.role.localeCompare(b.role) || (a.email ?? '').localeCompare(b.email ?? '')),
-    [data?.members],
+    () =>
+      [...(data?.members ?? [])]
+        // Hide rows that the user is currently undoing — they're already
+        // pretending to be deleted from the user's POV. If the timer fires
+        // and the DELETE succeeds, the next reload will drop them for real;
+        // if Undo runs, we restore them in `cancelScheduledRemove`.
+        .filter((m) => !pendingRemovalIds.has(m.user_id))
+        .sort(
+          (a, b) =>
+            a.role.localeCompare(b.role) ||
+            (a.email ?? '').localeCompare(b.email ?? ''),
+        ),
+    [data?.members, pendingRemovalIds],
   )
 
   async function submitRenameOrg() {
@@ -138,18 +164,80 @@ export function OrganizationSettingsPage() {
     reload()
   }
 
-  async function confirmRemoveMember() {
-    if (!activeOrgId || !pendingRemove) return
-    setRemoving(true)
-    const res = await apiFetch(`/v1/org/${activeOrgId}/members/${pendingRemove.user_id}`, { method: 'DELETE' })
-    setRemoving(false)
-    if (!res.ok) {
-      toast.error('Could not remove member', res.error?.message)
-      return
+  // Cancel any in-flight remove timers when the page unmounts so the DELETE
+  // never lands after the user has navigated away (otherwise a user who
+  // hits Remove and then immediately leaves would still evict a teammate
+  // they meant to keep, with no toast left to undo from).
+  useEffect(() => {
+    const timers = removeTimers.current
+    return () => {
+      timers.forEach((t) => clearTimeout(t))
+      timers.clear()
     }
-    toast.success('Member removed', `${pendingRemove.email ?? pendingRemove.user_id} no longer has access to this organization.`)
+  }, [])
+
+  function cancelScheduledRemove(userId: string) {
+    const timer = removeTimers.current.get(userId)
+    if (timer) clearTimeout(timer)
+    removeTimers.current.delete(userId)
+    setPendingRemovalIds((prev) => {
+      if (!prev.has(userId)) return prev
+      const next = new Set(prev)
+      next.delete(userId)
+      return next
+    })
+  }
+
+  function scheduleRemoveMember(member: Member) {
+    if (!activeOrgId) return
+    const orgId = activeOrgId
+    const id = member.user_id
+    const label = member.email ?? id
+
+    // Optimistically hide the row. The toast becomes the user's only
+    // affordance for the next 8 s — if they want this back, they have to
+    // use the Undo action.
+    setPendingRemovalIds((prev) => new Set(prev).add(id))
     setPendingRemove(null)
-    reload()
+
+    const timer = setTimeout(async () => {
+      removeTimers.current.delete(id)
+      const res = await apiFetch(`/v1/org/${orgId}/members/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        // Restore the row so the user can retry. Surface the server's
+        // message verbatim — most failures here are auth-shaped ("only
+        // owners can remove other admins") and benefit from the literal
+        // wording.
+        setPendingRemovalIds((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+        toast.error('Could not remove member', res.error?.message)
+        return
+      }
+      // Successful DELETE — stop hiding the row optimistically and let the
+      // server-side reload truth-up the list.
+      setPendingRemovalIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
+      reload()
+    }, UNDO_WINDOW_MS)
+
+    removeTimers.current.set(id, timer)
+
+    toast.push({
+      tone: 'success',
+      title: 'Member removed',
+      description: `${label} will lose access in a few seconds.`,
+      duration: UNDO_WINDOW_MS,
+      action: {
+        label: 'Undo',
+        onClick: () => cancelScheduledRemove(id),
+      },
+    })
   }
 
   if (!activeOrgId) return <EmptyState title="No team selected" description="Create a project first, then invite teammates from here." />
@@ -204,15 +292,18 @@ export function OrganizationSettingsPage() {
               onChange={(e) => setOrgNameDraft(e.target.value)}
               disabled={renamingOrg}
             />
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-1">
               <Btn
                 type="submit"
                 disabled={
                   renamingOrg || !orgNameDraft.trim() || orgNameDraft.trim() === orgName
                 }
                 loading={renamingOrg}
+                aria-label="Save team name"
+                title="Save team name"
+                className="px-2"
               >
-                Save name
+                <IconCheck />
               </Btn>
               {orgNameDraft !== orgName && !renamingOrg && (
                 <Btn
@@ -220,8 +311,11 @@ export function OrganizationSettingsPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setOrgNameDraft(orgName)}
+                  aria-label="Reset to current name"
+                  title="Reset to current name"
+                  className="px-2"
                 >
-                  Reset
+                  <IconUndo />
                 </Btn>
               )}
             </div>
@@ -334,12 +428,18 @@ export function OrganizationSettingsPage() {
                 <td className="px-3 py-2 text-right">
                   <Btn
                     size="sm"
-                    variant="danger"
+                    variant="ghost"
                     onClick={() => setPendingRemove(member)}
                     disabled={!canManage || member.role === 'owner'}
-                    title={member.role === 'owner' ? 'Owners cannot be removed from the org' : undefined}
+                    aria-label={`Remove ${member.email ?? member.user_id}`}
+                    title={
+                      member.role === 'owner'
+                        ? 'Owners cannot be removed from the org'
+                        : `Remove ${member.email ?? member.user_id}`
+                    }
+                    className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
                   >
-                    Remove
+                    <IconTrash />
                   </Btn>
                 </td>
               </tr>
@@ -365,15 +465,12 @@ export function OrganizationSettingsPage() {
       {pendingRemove && (
         <ConfirmDialog
           title="Remove this teammate?"
-          body={`${pendingRemove.email ?? pendingRemove.user_id} will lose access to every project in ${data?.organization?.name ?? 'this organization'}. They can be re-invited later, but anything they had drafted in their own session will be gone.`}
+          body={`${pendingRemove.email ?? pendingRemove.user_id} will lose access to every project in ${data?.organization?.name ?? 'this organization'} after a short undo window. They can be re-invited later, but anything they had drafted in their own session will be gone.`}
           confirmLabel="Remove member"
           cancelLabel="Keep member"
           tone="danger"
-          loading={removing}
-          onConfirm={() => void confirmRemoveMember()}
-          onCancel={() => {
-            if (!removing) setPendingRemove(null)
-          }}
+          onConfirm={() => scheduleRemoveMember(pendingRemove)}
+          onCancel={() => setPendingRemove(null)}
         />
       )}
     </div>

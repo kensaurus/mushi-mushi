@@ -251,9 +251,31 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
   // ─── Derived view state ────────────────────────────────────────────────
   // Three KPIs operators ask for first when the drawer opens: total events,
   // failures (anything in `failed` kind or `fail` status), and PRs opened
-  // today. Computed in one pass to keep render cheap on long feeds.
+  // today. Computed in one pass over the server-capped 50-row feed.
+  //
+  // **No time-window cutoff.** A previous version of this reducer broke
+  // out of the loop once `ts < now - 7 days` to bound the scan, but the
+  // input is already capped at 50 by the server-side `.limit(limit)` in
+  // `query-fixes-repo.ts`, so the optimisation isn't worth the cost: it
+  // (a) made the `Failed` filter chip's count diverge from the actual
+  // filtered row count whenever the 50-event feed spanned more than a
+  // week (low-volume projects), and (b) silently under-counted
+  // `activeFixes` for any fix whose most recent event landed >7 days ago.
+  // The KPI tile's hint reads "Last 50 events", which is now what we
+  // actually compute.
+  //
+  // `activeFixes` is "fix_attempt_ids whose most-recent event is non-terminal".
+  // The server returns events newest-first
+  // (`packages/server/supabase/functions/api/routes/query-fixes-repo.ts`,
+  // `events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())`),
+  // so we walk the array in array order and treat the FIRST event we
+  // encounter for a given fix_attempt_id as authoritative — every later
+  // event for the same fix is by definition older. A naive add/delete
+  // scan in this order would over-count: the terminal `completed`/`failed`
+  // event arrives first, finds an empty set so `delete` is a no-op, then
+  // older lifecycle events (`branch`, `commit`, `pr_opened`) `add` the
+  // fix back as "active" even though it's actually finished.
   const kpis = useMemo(() => {
-    const now = Date.now()
     const dayStart = (() => {
       const d = new Date()
       d.setHours(0, 0, 0, 0)
@@ -261,21 +283,18 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
     })()
     let failed = 0
     let prsToday = 0
-    let fixesActive = new Set<string>()
+    const seenLatest = new Set<string>()
+    const fixesActive = new Set<string>()
     for (const e of events) {
       const ts = new Date(e.at).getTime()
       if (e.kind === 'failed' || e.status === 'fail') failed++
       if (e.kind === 'pr_opened' && ts >= dayStart) prsToday++
-      // Any non-terminal event is evidence the fix attempt is still active.
-      if (e.kind !== 'completed' && e.kind !== 'failed') {
-        fixesActive.add(e.fix_attempt_id)
+      if (!seenLatest.has(e.fix_attempt_id)) {
+        seenLatest.add(e.fix_attempt_id)
+        if (e.kind !== 'completed' && e.kind !== 'failed') {
+          fixesActive.add(e.fix_attempt_id)
+        }
       }
-      // Stale stuck-in-flight cleanup: if we're actively rendering a
-      // completed/failed event for a fix, drop it from the active set.
-      if (e.kind === 'completed' || e.kind === 'failed') {
-        fixesActive.delete(e.fix_attempt_id)
-      }
-      if (ts < now - 7 * 24 * 60 * 60 * 1000) break
     }
     return {
       total: events.length,
