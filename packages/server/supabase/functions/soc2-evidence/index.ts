@@ -159,13 +159,54 @@ async function collectControlsForProject(
     payload: { overdue_dsars: (stalDsars ?? []).length, ids: (stalDsars ?? []).map((d) => d.id) },
   })
 
-  // A1.2 — availability. Track p95 latency and error rate against the latest
-  // health snapshot if telemetry is wired up; otherwise mark as warn.
+  // A1.2 — availability. Compute the 7-day uptime ratio across the
+  // integration_health_history probe ticks for this project. SOC 2 doesn't
+  // mandate a specific SLA but >=99% is the convention auditors expect to
+  // see; <90% is a hard fail. When we have no probe data at all we mark
+  // `warn` so the auditor knows to follow up rather than reading silence as
+  // green.
+  const probeSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const { data: probeRows } = await db
+    .from('integration_health_history')
+    .select('status, latency_ms, kind')
+    .eq('project_id', projectId)
+    .gte('checked_at', probeSince)
+    .limit(2000)
+  const total = probeRows?.length ?? 0
+  const okCount = (probeRows ?? []).filter((r: { status: string }) => r.status === 'ok').length
+  const uptime = total > 0 ? okCount / total : null
+  const latencies = (probeRows ?? [])
+    .map((r: { latency_ms: number | null }) => r.latency_ms)
+    .filter((v: number | null): v is number => typeof v === 'number' && Number.isFinite(v))
+    .sort((a: number, b: number) => a - b)
+  const p95 = latencies.length > 0 ? latencies[Math.floor(latencies.length * 0.95)] ?? null : null
+  // Group probe counts by integration kind so the auditor sees coverage
+  // breadth, not just a single number. e.g. `{sentry: 168, supabase: 168}`.
+  const byKind: Record<string, number> = {}
+  for (const r of probeRows ?? []) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1
+  let availabilityStatus: 'pass' | 'warn' | 'fail'
+  if (total === 0) availabilityStatus = 'warn'
+  else if (uptime !== null && uptime >= 0.99) availabilityStatus = 'pass'
+  else if (uptime !== null && uptime < 0.9) availabilityStatus = 'fail'
+  else availabilityStatus = 'warn'
   results.push({
     control: 'A1.2',
-    control_label: 'Availability snapshot',
-    status: 'warn',
-    payload: { note: 'Wire to telemetry/uptime once integrated; placeholder until telemetry provider chosen.' },
+    control_label: 'Availability — 7d probe uptime',
+    status: availabilityStatus,
+    payload: {
+      uptime_ratio: uptime,
+      uptime_pct: uptime !== null ? Math.round(uptime * 10000) / 100 : null,
+      probe_count_7d: total,
+      ok_count_7d: okCount,
+      p95_latency_ms: p95,
+      probes_by_kind: byKind,
+      window_days: 7,
+      threshold_pass: 0.99,
+      threshold_fail: 0.9,
+      ...(total === 0
+        ? { note: 'No probe ticks in the last 7 days — connect an integration to start collecting evidence.' }
+        : {}),
+    },
   })
 
   return results
