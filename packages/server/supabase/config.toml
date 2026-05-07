@@ -28,12 +28,20 @@ enable_confirmations = true
 max_frequency = "60s"
 
 [auth.email.template.confirmation]
-subject = "Confirm your email — mushimushi"
+subject = "Confirm your Mushi Mushi account"
 content_path = "./supabase/templates/confirmation.html"
 
 [auth.email.template.recovery]
 subject = "Reset your password — mushimushi"
 content_path = "./supabase/templates/recovery.html"
+
+# Team invitations. Body uses {{ .Data.inviter_name }},
+# {{ .Data.org_name }}, {{ .Data.role }}, {{ .Data.note }}, and
+# {{ .Data.reminder }} (1 = day-3 nudge, 2 = day-6 final) — set
+# server-side by the api function and the invitation-reminders cron.
+[auth.email.template.invite]
+subject = "You've been invited to a Mushi Mushi workspace"
+content_path = "./supabase/templates/invite-user.html"
 
 [storage]
 enabled = true
