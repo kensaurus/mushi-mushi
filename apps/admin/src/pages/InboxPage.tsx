@@ -8,45 +8,64 @@
  *          inbox's headline numbers consistent with the cards on the
  *          dashboard itself.
  *
+ *          Wave U (2026-05-07) — operator feedback rebuild:
+ *            - **Hero KPI strip at the top** — open count, clear count,
+ *              and a freshness pill replace the old all-text page header.
+ *              The first thing the eye lands on is "do I have anything
+ *              to act on?" rather than five sub-headers titled "All
+ *              clear".
+ *            - **Filter chips** — quick toggles for All / Open / each
+ *              PDCA stage so the page works as a focused worklist when
+ *              the inbox grows beyond a single screen.
+ *            - **Open actions list** — every card with an action gets
+ *              promoted out of its PDCA section into a single priority
+ *              list, severity-tinted, with a "stage" eyebrow so the
+ *              operator never loses the PDCA mapping. This is the
+ *              single biggest win — open work is now front and centre
+ *              regardless of which stage it belongs to.
+ *            - **Cleared stages strip** — pages with `null` action
+ *              collapse from full-width "All clear" cards into a chip
+ *              row with a check + page link. Saves ~60% vertical space
+ *              on a fully-clean inbox while still keeping every page
+ *              one click away.
+ *
  *          Design principles:
  *            - No dead buttons — every card has a primary CTA that links
  *              to the page where the action actually happens.
  *            - `computeNextBestAction` returns `null` for "nothing to do"
- *              which we render as an "All clear" affordance so the inbox
- *              visually distinguishes "3 criticals waiting" from "nothing
- *              is broken right now".
+ *              which we render as a calm "All clear" affordance so the
+ *              inbox visually distinguishes "3 criticals waiting" from
+ *              "nothing is broken right now".
  *            - `data-inbox-card` hooks on every card so the Wave T
  *              dead-button Playwright sweep can assert every CTA is
  *              reachable without relying on fragile text selectors.
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  PageHeader,
-  PageHelp,
   ErrorAlert,
   Loading,
   Btn,
+  FreshnessPill,
 } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { computeNextBestAction } from '../lib/useNextBestAction'
 import type { PageAction } from '../components/PageActionBar'
 import type { DashboardData } from '../components/dashboard/types'
+import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 
-type Group = 'plan' | 'do' | 'check' | 'act' | 'ops'
-
-interface InboxCard {
-  id: string
-  scope: string
-  group: Group
-  pageLabel: string
-  pageTo: string
-  action: PageAction | null
-}
+type Group = InboxCardGroup
 
 const GROUP_LABEL: Record<Group, string> = {
+  plan: 'Plan',
+  do: 'Do',
+  check: 'Check',
+  act: 'Act',
+  ops: 'Ops',
+}
+
+const GROUP_LONG_LABEL: Record<Group, string> = {
   plan: 'Plan — classify + triage',
   do: 'Do — dispatch + land fixes',
   check: 'Check — verify quality',
@@ -54,96 +73,16 @@ const GROUP_LABEL: Record<Group, string> = {
   ops: 'Ops — health + compliance',
 }
 
-const GROUP_DESCRIPTION: Record<Group, string> = {
-  plan: 'What\u2019s coming in off the ingestion pipeline that needs a human call.',
-  do: 'Fixes in flight or stalled — dispatch, merge, or retry.',
-  check: 'Quality signals that tell you whether the loop is actually working.',
-  act: 'Integrations and secrets that keep the pipeline wired to reality.',
-  ops: 'Cron jobs, SOC 2 evidence, queues, and storage — the unglamorous glue.',
-}
-
-function buildCards(data: DashboardData | undefined): InboxCard[] {
-  // When the dashboard aggregate is empty (new project / no ingest yet) we
-  // still show the stable set of cards with `null` action so the user sees
-  // the PDCA surface they will interact with once reports start landing.
-  const reportsByDay = data?.reportsByDay ?? []
-  const critical14d = reportsByDay.reduce((n, d) => n + (d.critical ?? 0), 0)
-  const openBacklog = data?.counts?.openBacklog ?? 0
-  const fixSummary = data?.fixSummary
-  const failedFixes = fixSummary?.failed ?? 0
-  const integrations = data?.integrations ?? []
-  const redIntegrations = integrations.filter((i) => i.lastStatus === 'red' || i.lastStatus === 'fail').length
-  const amberIntegrations = integrations.filter((i) => i.lastStatus === 'amber' || i.lastStatus === 'degraded').length
-
-  return [
-    {
-      id: 'reports-plan',
-      scope: 'intelligence',
-      group: 'plan',
-      pageLabel: 'Reports queue',
-      pageTo: '/reports',
-      action: critical14d > 0
-        ? {
-            tone: 'do',
-            title: `${critical14d} critical report${critical14d === 1 ? '' : 's'} in the last 14 days`,
-            reason: openBacklog > 0 ? `${openBacklog} still open.` : 'All resolved; double-check the rollup.',
-            primary: { kind: 'link', to: '/reports?severity=critical', label: 'Open critical queue' },
-          }
-        : null,
-    },
-    {
-      id: 'judge-check',
-      scope: 'judge',
-      group: 'check',
-      pageLabel: 'Judge',
-      pageTo: '/judge',
-      action: computeNextBestAction({
-        scope: 'judge',
-        disagreementRate: null,
-        sampledCount: 0,
-        staleHoursAgo: 49,
-      }),
-    },
-    {
-      id: 'fixes-do',
-      scope: 'fixes',
-      group: 'do',
-      pageLabel: 'Fixes in flight',
-      pageTo: '/fixes',
-      action: failedFixes > 0
-        ? {
-            tone: 'do',
-            title: `${failedFixes} fix attempt${failedFixes === 1 ? '' : 's'} failed`,
-            reason: 'Review the failure, fix the agent prompt, or retry manually.',
-            primary: { kind: 'link', to: '/fixes?status=failed', label: 'Open failed fixes' },
-          }
-        : null,
-    },
-    {
-      id: 'health-ops',
-      scope: 'health',
-      group: 'ops',
-      pageLabel: 'Integration health',
-      pageTo: '/health',
-      action: computeNextBestAction({
-        scope: 'health',
-        redCount: redIntegrations,
-        amberCount: amberIntegrations,
-      }),
-    },
-    {
-      id: 'integrations-act',
-      scope: 'integrations',
-      group: 'act',
-      pageLabel: 'Integrations',
-      pageTo: '/integrations',
-      action: computeNextBestAction({
-        scope: 'integrations',
-        disconnectedCount: redIntegrations,
-        expiringCount: 0,
-      }),
-    },
-  ]
+// Tone tokens per PDCA group — used for the eyebrow chip on open cards
+// so operators can tell at a glance which stage of the loop a card
+// belongs to even after the cards have been promoted out of their
+// per-stage sections.
+const GROUP_TONE: Record<Group, { chip: string; chipText: string; ring: string }> = {
+  plan: { chip: 'bg-info-muted',      chipText: 'text-info',  ring: 'border-info/30' },
+  do:   { chip: 'bg-brand/15',        chipText: 'text-brand', ring: 'border-brand/30' },
+  check:{ chip: 'bg-warn-muted',      chipText: 'text-warn',  ring: 'border-warn/30' },
+  act:  { chip: 'bg-ok-muted',        chipText: 'text-ok',    ring: 'border-ok/30' },
+  ops:  { chip: 'bg-surface-overlay', chipText: 'text-fg-muted', ring: 'border-edge' },
 }
 
 const TONE_RING: Record<PageAction['tone'], string> = {
@@ -154,11 +93,30 @@ const TONE_RING: Record<PageAction['tone'], string> = {
   idle: 'border-edge bg-surface-raised/40',
 }
 
+type FilterValue = 'all' | 'open' | 'clear' | Group
+
 export function InboxPage() {
-  const { data, loading, error } = usePageData<DashboardData>('/v1/admin/dashboard')
-  const cards = useMemo(() => buildCards(data ?? undefined), [data])
-  const actionable = cards.filter((c) => c.action !== null)
-  const unreadCritical = actionable.length
+  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
+  const cards = useMemo(() => buildInboxCards(data ?? undefined), [data])
+  const [filter, setFilter] = useState<FilterValue>('all')
+
+  const openCards = cards.filter((c) => c.action !== null)
+  const clearCards = cards.filter((c) => c.action === null)
+  const unreadCritical = openCards.length
+
+  // Filter the rendered card list. `clear` is its own bucket so a user can
+  // confirm "yes, every stage is genuinely settled" without scanning a
+  // mostly-empty inbox.
+  const visibleOpen = filter === 'clear'
+    ? []
+    : filter === 'open' || filter === 'all'
+      ? openCards
+      : openCards.filter((c) => c.group === filter)
+  const visibleClear = filter === 'open'
+    ? []
+    : filter === 'clear' || filter === 'all'
+      ? clearCards
+      : clearCards.filter((c) => c.group === filter)
 
   usePublishPageContext({
     route: '/inbox',
@@ -175,86 +133,297 @@ export function InboxPage() {
           'Is there anything that should be on this inbox but isn\u2019t?',
           'What changed in the last 24h to clear the inbox?',
         ],
+    actions: [
+      { id: 'inbox-refresh', label: 'Refresh', hint: 'Re-run the dashboard aggregate', run: reload },
+    ],
   })
 
   if (loading) return <Loading text="Loading inbox…" />
   if (error) return <ErrorAlert message={error} />
 
-  const grouped: Record<Group, InboxCard[]> = { plan: [], do: [], check: [], act: [], ops: [] }
-  for (const card of cards) grouped[card.group].push(card)
-
   return (
     <div data-inbox-root>
-      <PageHeader
-        title="Action inbox"
-        description={unreadCritical > 0
-          ? `${unreadCritical} open action${unreadCritical === 1 ? '' : 's'} across the PDCA loop.`
-          : 'Nothing to triage right now. Check back after the next ingest.'}
-      />
-      <PageHelp
-        title="How to read this inbox"
-        whatIsIt="Every card here maps one-to-one with the next-best-action strip on the corresponding PDCA page — it's the single place to see every actionable item across the loop."
-        howToUse="Bookmark this page as your first stop each morning — work through the cards top-to-bottom, then jump into the owning PDCA page for detail."
-      />
+      {/* Hero strip — replaces the wordy PageHeader. The first thing the eye
+          lands on is the open/clear ratio and a refresh affordance, not a
+          paragraph of explanatory copy. */}
+      <header className="mb-4 flex items-end justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-fg leading-tight">Action inbox</h1>
+          <p className="text-xs text-fg-muted mt-0.5">
+            {unreadCritical > 0
+              ? `${unreadCritical} open action${unreadCritical === 1 ? '' : 's'} across the PDCA loop · ${clearCards.length} stage${clearCards.length === 1 ? '' : 's'} clear`
+              : 'No open actions. The loop is settled — check back after the next ingest.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+          <Btn size="sm" variant="ghost" onClick={reload}>
+            Refresh
+          </Btn>
+        </div>
+      </header>
 
-      <div className="mt-6 space-y-8">
-        {(Object.keys(grouped) as Group[]).map((group) => {
-          const groupCards = grouped[group]
-          if (groupCards.length === 0) return null
+      {/* KPI tile strip — three glanceable numbers. Severity-coloured ring
+          on the OPEN tile so a non-zero count visually shouts. */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        <KpiTile
+          label="Open"
+          value={unreadCritical}
+          tone={unreadCritical > 0 ? 'do' : 'act'}
+          hint={unreadCritical > 0 ? 'Awaiting action' : 'Inbox zero'}
+        />
+        <KpiTile
+          label="Clear"
+          value={clearCards.length}
+          tone="act"
+          hint={`Stage${clearCards.length === 1 ? '' : 's'} settled`}
+        />
+        <KpiTile
+          label="Coverage"
+          value={cards.length}
+          tone="idle"
+          hint="PDCA surfaces watched"
+        />
+      </div>
+
+      {/* Filter pills — 'All' / 'Open' / 'Clear' / per-stage. Echoes the
+          filter strip on /reports and /fixes so the muscle memory carries. */}
+      <div
+        role="toolbar"
+        aria-label="Filter inbox"
+        className="mb-4 flex flex-wrap items-center gap-1.5"
+      >
+        <FilterChip
+          active={filter === 'all'}
+          onClick={() => setFilter('all')}
+          count={cards.length}
+        >
+          All
+        </FilterChip>
+        <FilterChip
+          active={filter === 'open'}
+          onClick={() => setFilter('open')}
+          count={openCards.length}
+          tone={openCards.length > 0 ? 'do' : 'idle'}
+        >
+          Open
+        </FilterChip>
+        <FilterChip
+          active={filter === 'clear'}
+          onClick={() => setFilter('clear')}
+          count={clearCards.length}
+          tone="act"
+        >
+          Clear
+        </FilterChip>
+        <span aria-hidden className="mx-1 text-fg-faint">·</span>
+        {(['plan', 'do', 'check', 'act', 'ops'] as Group[]).map((g) => {
+          const groupOpen = openCards.filter((c) => c.group === g).length
+          const groupTotal = cards.filter((c) => c.group === g).length
+          if (groupTotal === 0) return null
           return (
-            <section key={group} aria-labelledby={`inbox-${group}`}>
-              <header className="mb-3">
-                <h2 id={`inbox-${group}`} className="text-sm font-semibold text-fg">
-                  {GROUP_LABEL[group]}
-                </h2>
-                <p className="text-xs text-fg-muted mt-0.5">{GROUP_DESCRIPTION[group]}</p>
-              </header>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {groupCards.map((card) => (
-                  <InboxCardView key={card.id} card={card} />
-                ))}
-              </div>
-            </section>
+            <FilterChip
+              key={g}
+              active={filter === g}
+              onClick={() => setFilter(g)}
+              count={groupTotal}
+              tone={groupOpen > 0 ? 'do' : 'idle'}
+            >
+              {GROUP_LABEL[g]}
+            </FilterChip>
           )
         })}
       </div>
+
+      {/* Open actions — promoted into one priority list (regardless of PDCA
+          group) so the operator sees the full work surface in one scan. The
+          stage eyebrow on each card preserves the PDCA mapping. */}
+      {visibleOpen.length > 0 ? (
+        <section aria-labelledby="inbox-open" className="mb-6">
+          <header className="mb-2 flex items-center gap-2">
+            <h2 id="inbox-open" className="text-sm font-semibold text-fg">
+              Awaiting action
+            </h2>
+            <span className="text-2xs text-fg-faint">·</span>
+            <span className="text-2xs text-fg-muted">{visibleOpen.length} card{visibleOpen.length === 1 ? '' : 's'}</span>
+          </header>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {visibleOpen.map((card) => (
+              <OpenInboxCard key={card.id} card={card} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Cleared stages — chip strip. Each chip is a real link so the
+          operator can still jump to a settled page (e.g. to confirm or to
+          go look at the metrics underlying the "all clear" status). */}
+      {visibleClear.length > 0 ? (
+        <section aria-labelledby="inbox-clear" className="mb-6">
+          <header className="mb-2 flex items-center gap-2">
+            <h2 id="inbox-clear" className="text-sm font-semibold text-fg-secondary">
+              Clear stages
+            </h2>
+            <span className="text-2xs text-fg-faint">·</span>
+            <span className="text-2xs text-fg-muted">
+              {visibleClear.length} stage{visibleClear.length === 1 ? '' : 's'} settled
+            </span>
+          </header>
+          <ul className="flex flex-wrap gap-1.5">
+            {visibleClear.map((card) => (
+              <li key={card.id}>
+                <ClearChip card={card} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {/* Empty-state when the active filter has nothing to show. Different
+          copy for "no open work" vs "filtered down to zero" so the user
+          knows whether to relax (inbox zero) or relax their filter. */}
+      {visibleOpen.length === 0 && visibleClear.length === 0 ? (
+        <section
+          aria-label="Empty inbox"
+          className="rounded-lg border border-dashed border-edge bg-surface-raised/30 p-6 text-center"
+        >
+          <p className="text-sm font-medium text-fg">Nothing matches this filter.</p>
+          <p className="text-xs text-fg-muted mt-1 leading-snug">
+            {filter === 'all'
+              ? 'The PDCA loop is settled. Reports will refresh this view as they land.'
+              : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now. Try the All filter to see everything Mushi watches.`}
+          </p>
+          {filter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setFilter('all')}
+              className="mt-3 inline-flex items-center gap-1 text-xs text-brand hover:text-brand-hover motion-safe:transition-colors"
+            >
+              Show all <span aria-hidden>→</span>
+            </button>
+          )}
+        </section>
+      ) : null}
+
+      <details className="mt-8 group rounded-md border border-edge-subtle bg-surface-raised/30">
+        <summary className="cursor-pointer list-none px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-2 hover:text-fg-muted motion-safe:transition-colors">
+          <span aria-hidden className="motion-safe:transition-transform group-open:rotate-90">›</span>
+          How to read this inbox
+        </summary>
+        <div className="px-3 py-2 border-t border-edge-subtle/50 space-y-1.5 text-xs text-fg-muted leading-relaxed">
+          <p>
+            Every card here maps one-to-one with the next-best-action strip
+            on the corresponding PDCA page — it's the single place to see
+            every actionable item across the loop.
+          </p>
+          <p>
+            Bookmark this page as your first stop each morning — work
+            through the Awaiting cards top-to-bottom, then jump into the
+            owning PDCA page for detail.
+          </p>
+        </div>
+      </details>
     </div>
   )
 }
 
-function InboxCardView({ card }: { card: InboxCard }) {
-  if (!card.action) {
-    return (
-      <article
-        data-inbox-card={card.id}
-        data-inbox-state="clear"
-        className="rounded-lg border border-edge bg-surface-raised/40 p-4"
-      >
-        <header className="flex items-center justify-between gap-2 mb-1">
-          <h3 className="text-xs uppercase tracking-wider text-fg-faint font-semibold">{card.pageLabel}</h3>
-          <span className="text-ok text-xs" aria-hidden="true">✓</span>
-        </header>
-        <p className="text-xs text-fg-muted">All clear. Nothing actionable here right now.</p>
-        <div className="mt-3">
-          <Link
-            to={card.pageTo}
-            className="text-xs text-fg-muted hover:text-fg underline underline-offset-2"
-          >
-            Open {card.pageLabel.toLowerCase()} →
-          </Link>
-        </div>
-      </article>
-    )
-  }
-  const { action } = card
+// ─── Small subcomponents ──────────────────────────────────────────────────
+
+function KpiTile({
+  label,
+  value,
+  tone,
+  hint,
+}: {
+  label: string
+  value: number | string
+  tone: PageAction['tone']
+  hint: string
+}) {
+  return (
+    <div
+      className={`rounded-md border ${TONE_RING[tone]} px-3 py-2`}
+    >
+      <p className="text-3xs uppercase tracking-wider text-fg-faint font-semibold">{label}</p>
+      <p className="mt-0.5 text-xl font-semibold tabular-nums text-fg leading-none">{value}</p>
+      <p className="mt-1 text-2xs text-fg-muted leading-snug truncate">{hint}</p>
+    </div>
+  )
+}
+
+function FilterChip({
+  children,
+  active,
+  onClick,
+  count,
+  tone = 'idle',
+}: {
+  children: React.ReactNode
+  active: boolean
+  onClick: () => void
+  count?: number
+  tone?: PageAction['tone']
+}) {
+  // Two visual states: active (filled brand) and inactive (ghost). The
+  // count is the same colour as the chip text so it doesn't fight for
+  // attention with the label.
+  const groupTone = tone === 'do' ? 'text-brand' : tone === 'act' ? 'text-ok' : 'text-fg-muted'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
+        active
+          ? 'border-brand/40 bg-brand/15 text-brand'
+          : 'border-edge-subtle bg-surface-raised/40 text-fg-muted hover:text-fg hover:bg-surface-overlay'
+      }`}
+    >
+      <span>{children}</span>
+      {typeof count === 'number' && (
+        <span className={`tabular-nums ${active ? 'text-brand' : groupTone}`}>{count}</span>
+      )}
+    </button>
+  )
+}
+
+function ClearChip({ card }: { card: InboxCard }) {
+  return (
+    <Link
+      data-inbox-card={card.id}
+      data-inbox-state="clear"
+      to={card.pageTo}
+      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      title={`${card.pageLabel} — all clear. Click to open.`}
+    >
+      <span aria-hidden className="text-ok">✓</span>
+      <span className={`text-3xs uppercase tracking-wider ${GROUP_TONE[card.group].chipText}`}>
+        {GROUP_LABEL[card.group]}
+      </span>
+      <span className="text-fg-secondary group-hover:text-fg">{card.pageLabel}</span>
+    </Link>
+  )
+}
+
+function OpenInboxCard({ card }: { card: InboxCard }) {
+  const action = card.action
+  if (!action) return null
+  const groupTone = GROUP_TONE[card.group]
   return (
     <article
       data-inbox-card={card.id}
       data-inbox-state="open"
       className={`rounded-lg border p-4 ${TONE_RING[action.tone]}`}
     >
-      <header className="flex items-center justify-between gap-2 mb-1">
-        <h3 className="text-xs uppercase tracking-wider text-fg-faint font-semibold">{card.pageLabel}</h3>
+      <header className="flex items-center gap-2 mb-1.5">
+        {/* Stage eyebrow chip — preserves the PDCA mapping even though
+            the cards are no longer rendered inside per-stage sections. */}
+        <span
+          className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
+        >
+          {GROUP_LABEL[card.group]}
+        </span>
+        <span className="text-2xs text-fg-faint truncate">{card.pageLabel}</span>
       </header>
       <p className="text-sm font-medium text-fg leading-snug">{action.title}</p>
       {action.reason && (

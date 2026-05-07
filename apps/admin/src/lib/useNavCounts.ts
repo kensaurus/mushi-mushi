@@ -1,16 +1,18 @@
 /**
  * FILE: apps/admin/src/lib/useNavCounts.ts
  * PURPOSE: Lightweight cross-page counters that power the coloured dots on
- *          sidebar nav items (Reports / Fixes / Repo / Inventory). Fetches a small,
- *          cacheable summary pair and subscribes to realtime so the dots
- *          reflect server-truth seconds after something changes — no
- *          page reload needed.
+ *          sidebar nav items (Reports / Fixes / Repo / Inventory / Inbox).
+ *          Fetches summaries plus `/v1/admin/dashboard` for the Action Inbox
+ *          open-count, and subscribes to realtime so the dots reflect server
+ *          truth shortly after something changes — no page reload needed.
  */
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from './supabase'
 import { useRealtimeReload } from './realtime'
 import { getActiveProjectIdSnapshot } from './activeProject'
+import type { DashboardData } from '../components/dashboard/types'
+import { inboxOpenActionCount } from './actionInboxFromDashboard'
 
 export type HealthTone = 'idle' | 'ok' | 'warn' | 'danger'
 
@@ -25,6 +27,11 @@ export interface NavCounts {
   prsOpen: number
   /** Action nodes in inventory with status regressed (v2). */
   regressedActions: number
+  /**
+   * Cards on /inbox with a non-null action — same derivation as
+   * `buildInboxCards` on `/v1/admin/dashboard`.
+   */
+  inboxOpenActions: number
   /** Whether the hook has loaded once; consumers can skip rendering
    *  dots in the undefined state. */
   ready: boolean
@@ -36,6 +43,7 @@ const INITIAL: NavCounts = {
   fixesFailed: 0,
   prsOpen: 0,
   regressedActions: 0,
+  inboxOpenActions: 0,
   ready: false,
 }
 
@@ -58,12 +66,13 @@ export function useNavCounts(): NavCounts {
 
   const load = useCallback(async () => {
     const projectId = getActiveProjectIdSnapshot()
-    const [summaryRes, reportsRes, invRes] = await Promise.all([
+    const [summaryRes, reportsRes, invRes, dashRes] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
       projectId
         ? apiFetch<{ summary: InventorySummary | null }>(`/v1/admin/inventory/${projectId}`)
         : Promise.resolve({ ok: false as const, error: { code: 'SKIP', message: '' } }),
+      apiFetch<DashboardData>('/v1/admin/dashboard'),
     ])
     const summary = summaryRes.ok ? summaryRes.data : null
     const reports = reportsRes.ok ? reportsRes.data : null
@@ -71,12 +80,14 @@ export function useNavCounts(): NavCounts {
     if (invRes.ok && invRes.data?.summary && typeof invRes.data.summary.regressed === 'number') {
       regressed = invRes.data.summary.regressed
     }
+    const dashboard = dashRes.ok ? dashRes.data : undefined
     setCounts({
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
       fixesFailed: summary?.failed ?? 0,
       prsOpen: summary?.prsOpen ?? 0,
       regressedActions: regressed,
+      inboxOpenActions: inboxOpenActionCount(dashboard),
       ready: true,
     })
   }, [])

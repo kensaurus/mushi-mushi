@@ -468,28 +468,93 @@ export function InfoHint({ content }: { content: string }) {
 
 /* ── CopyButton ─────────────────────────────────────────────────────────── */
 
-export function CopyButton({ value, className = '' }: { value: string; className?: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // clipboard write can fail in insecure contexts (http://) or when the user
-      // denies permission — silently no-op rather than throw, matching CommandPalette
-      // pattern. The user will see the unchanged icon and try again.
+/**
+ * Two modes for one icon-only copy primitive:
+ *
+ *   - `value` mode (default): we own the clipboard write + the 1.5s
+ *     "✓ Copied" pulse. Used wherever the surrounding code doesn't
+ *     need to show its own feedback (most inline code values).
+ *
+ *   - `onCopy + copied` mode: the parent already manages a copied
+ *     boolean (because it pairs the button with a toast / banner /
+ *     parent-controlled affordance) and just wants the visual chip.
+ *     Replaces the dozens of bespoke "Copy / Copied!" text buttons
+ *     scattered across SDK install / onboarding / setup gate, so the
+ *     glyph-only language is consistent app-wide.
+ *
+ * The button is purely 16×16 chrome with a tooltip — no text label,
+ * no `<Btn>` wrapper — to keep tight inline density next to code
+ * blocks and key-reveal cards.
+ */
+type CopyButtonProps = {
+  className?: string
+  /** Override the default tooltip ("Copy to clipboard"). Use when the
+   *  thing being copied has a name ("Copy snippet", "Copy API key"). */
+  label?: string
+  /** Override the post-copy tooltip ("Copied"). */
+  copiedLabel?: string
+  /** Optional sizing knob for callers in tight rows; defaults to "sm"
+   *  (16x16 hit target, 11x11 glyph) which matches the original icon. */
+  size?: 'sm' | 'md'
+  /** Forwarded onto the underlying <button>. Several legacy callsites
+   *  asserted on a Playwright `data-testid` (e.g. `mcp-snippet-copy`) so
+   *  we forward it explicitly rather than spreading the rest of the
+   *  HTMLButton props (which would force a noisy union). */
+  'data-testid'?: string
+} & (
+  | { value: string; onCopy?: undefined; copied?: undefined }
+  | { onCopy: () => void; copied: boolean; value?: undefined }
+)
+
+export function CopyButton(props: CopyButtonProps) {
+  const { className = '', label = 'Copy to clipboard', copiedLabel = 'Copied', size = 'sm' } = props
+  const [internalCopied, setInternalCopied] = useState(false)
+  // Branch on the discriminator: in `value` mode we own the timer; in
+  // `onCopy` mode we trust the parent's `copied` boolean and just render.
+  const copied = 'value' in props && props.value !== undefined ? internalCopied : props.copied!
+  const handle = async () => {
+    if ('value' in props && props.value !== undefined) {
+      try {
+        await navigator.clipboard.writeText(props.value)
+        setInternalCopied(true)
+        setTimeout(() => setInternalCopied(false), 1500)
+      } catch {
+        // Clipboard write can fail in insecure contexts (http://) or when
+        // the user denies permission — silently no-op rather than throw,
+        // matching CommandPalette pattern. The user will see the unchanged
+        // icon and try again.
+      }
+    } else {
+      props.onCopy()
     }
   }
+  const dims = size === 'md' ? { box: 'h-7 w-7', glyph: 14 } : { box: 'h-5 w-5', glyph: 11 }
   return (
-    <Tooltip content={copied ? 'Copied' : 'Copy to clipboard'}>
+    <Tooltip content={copied ? copiedLabel : label}>
       <button
         type="button"
-        onClick={copy}
-        aria-label={copied ? 'Copied' : 'Copy to clipboard'}
-        className={`inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-colors ${className}`}
+        onClick={handle}
+        aria-label={copied ? copiedLabel : label}
+        data-testid={props['data-testid']}
+        // The post-copy state nudges the colour to `text-ok` so the
+        // confirmation reads as success without forcing the user to
+        // hover for the tooltip — important on long forms where the
+        // button can be far below the focus point.
+        className={`inline-flex ${dims.box} items-center justify-center rounded-sm ${
+          copied
+            ? 'text-ok hover:text-ok'
+            : 'text-fg-faint hover:text-fg-muted hover:bg-surface-overlay'
+        } focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 motion-safe:transition-colors ${className}`}
       >
-        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
+        <svg
+          width={dims.glyph}
+          height={dims.glyph}
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          aria-hidden="true"
+        >
           {copied ? (
             <polyline points="3,8.5 6.5,12 13,4.5" strokeLinecap="round" strokeLinejoin="round" />
           ) : (
@@ -2128,9 +2193,11 @@ interface TooltipProps {
   content: string
   children: ReactNode
   side?: 'top' | 'bottom' | 'left' | 'right'
+  /** When false, wraps are allowed — use under narrow headers where long tips would clip. */
+  nowrap?: boolean
 }
 
-export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
+export function Tooltip({ content, children, side = 'top', nowrap = true }: TooltipProps) {
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -2167,7 +2234,7 @@ export function Tooltip({ content, children, side = 'top' }: TooltipProps) {
       {visible && (
         <span
           role="tooltip"
-          className={`absolute ${positions[side]} z-50 px-2 py-1 text-2xs font-medium text-fg bg-surface-overlay border border-edge-subtle rounded-sm shadow-raised whitespace-nowrap pointer-events-none tooltip-enter`}
+          className={`absolute ${positions[side]} z-[100] max-w-[min(18rem,calc(100vw-2rem))] px-2 py-1 text-2xs font-medium text-fg bg-surface-overlay border border-edge-subtle rounded-sm shadow-raised pointer-events-none tooltip-enter ${nowrap ? 'whitespace-nowrap' : 'whitespace-normal text-left leading-snug'}`}
         >
           {content}
         </span>

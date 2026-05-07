@@ -56,84 +56,91 @@ export function GeneralPanel() {
   if (error) return <ErrorAlert message={`Failed to load settings: ${error}`} onRetry={reload} />
 
   return (
-    <div className="space-y-4 max-w-2xl">
-      <div id="slack" className="scroll-mt-6">
-        <Section title="Notifications" className="space-y-3">
+    // Width policy: panel fills the page container (max-w-6xl in Layout) so it
+    // matches the LLM keys / Firecrawl tabs. Sections themselves are paired
+    // 2-up on lg+ viewports — keeps each form readable (~500 px) instead of
+    // stretching a single Slack URL across the whole viewport. Below lg the
+    // grid collapses to a single column.
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+        <div id="slack" className="scroll-mt-6">
+          <Section title="Notifications" className="space-y-3">
+            <Input
+              label="Slack Webhook URL"
+              helpId="settings.general.slack_webhook_url"
+              type="url"
+              value={settings.slack_webhook_url ?? ''}
+              onChange={(e) => update({ slack_webhook_url: e.target.value })}
+              placeholder="https://hooks.slack.com/services/..."
+              validate={slackWebhookUrl()}
+            />
+          </Section>
+        </div>
+
+        <Section title="Sentry Integration" className="space-y-3">
           <Input
-            label="Slack Webhook URL"
-            helpId="settings.general.slack_webhook_url"
-            type="url"
-            value={settings.slack_webhook_url ?? ''}
-            onChange={(e) => update({ slack_webhook_url: e.target.value })}
-            placeholder="https://hooks.slack.com/services/..."
-            validate={slackWebhookUrl()}
+            label="Sentry DSN"
+            helpId="settings.general.sentry_dsn"
+            type="text"
+            value={settings.sentry_dsn ?? ''}
+            onChange={(e) => update({ sentry_dsn: e.target.value })}
+            placeholder="https://abc@o0.ingest.sentry.io/4511023875"
+            validate={sentryDsn()}
+          />
+          <Input
+            label="Webhook Secret"
+            helpId="settings.general.sentry_webhook_secret"
+            type="password"
+            value={settings.sentry_webhook_secret ?? ''}
+            onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
+            validate={token({ minLength: 16 })}
+          />
+          <Checkbox
+            label="Consume Sentry User Feedback as Mushi reports"
+            helpId="settings.general.sentry_consume_user_feedback"
+            checked={settings.sentry_consume_user_feedback ?? true}
+            onChange={(v) => update({ sentry_consume_user_feedback: v })}
+          />
+        </Section>
+
+        <Section title="LLM Pipeline" className="space-y-3">
+          <SelectField
+            label="Stage 2 Model"
+            helpId="settings.general.stage2_model"
+            value={settings.stage2_model ?? 'claude-sonnet-4-6'}
+            onChange={(e) => update({ stage2_model: e.target.value })}
+          >
+            <optgroup label="Anthropic (current generation)">
+              <option value="claude-opus-4-7">Claude Opus 4.7 — frontier reasoning (2026-Q2)</option>
+              <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — recommended default</option>
+              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast / cheap</option>
+            </optgroup>
+            <optgroup label="OpenAI fallback">
+              <option value="gpt-5.4">GPT-5.4</option>
+              <option value="gpt-5.4-mini">GPT-5.4 mini</option>
+            </optgroup>
+            <optgroup label="Legacy (cost review only)">
+              <option value="claude-opus-4-6">Claude Opus 4.6</option>
+              <option value="gpt-4.1">GPT-4.1</option>
+            </optgroup>
+          </SelectField>
+          <Slider
+            label="Stage 1 Confidence Threshold"
+            helpId="settings.general.stage1_confidence_threshold"
+            value={settings.stage1_confidence_threshold ?? 0.85}
+            onChange={(v) => update({ stage1_confidence_threshold: v })}
+          />
+        </Section>
+
+        <Section title="Deduplication" className="space-y-3">
+          <Slider
+            label="Similarity Threshold"
+            helpId="settings.general.dedup_threshold"
+            value={settings.dedup_threshold ?? 0.82}
+            onChange={(v) => update({ dedup_threshold: v })}
           />
         </Section>
       </div>
-
-      <Section title="Sentry Integration" className="space-y-3">
-        <Input
-          label="Sentry DSN"
-          helpId="settings.general.sentry_dsn"
-          type="text"
-          value={settings.sentry_dsn ?? ''}
-          onChange={(e) => update({ sentry_dsn: e.target.value })}
-          placeholder="https://abc@o0.ingest.sentry.io/4511023875"
-          validate={sentryDsn()}
-        />
-        <Input
-          label="Webhook Secret"
-          helpId="settings.general.sentry_webhook_secret"
-          type="password"
-          value={settings.sentry_webhook_secret ?? ''}
-          onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
-          validate={token({ minLength: 16 })}
-        />
-        <Checkbox
-          label="Consume Sentry User Feedback as Mushi reports"
-          helpId="settings.general.sentry_consume_user_feedback"
-          checked={settings.sentry_consume_user_feedback ?? true}
-          onChange={(v) => update({ sentry_consume_user_feedback: v })}
-        />
-      </Section>
-
-      <Section title="LLM Pipeline" className="space-y-3">
-        <SelectField
-          label="Stage 2 Model"
-          helpId="settings.general.stage2_model"
-          value={settings.stage2_model ?? 'claude-sonnet-4-6'}
-          onChange={(e) => update({ stage2_model: e.target.value })}
-        >
-          <optgroup label="Anthropic (current generation)">
-            <option value="claude-opus-4-7">Claude Opus 4.7 — frontier reasoning (2026-Q2)</option>
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 — recommended default</option>
-            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fast / cheap</option>
-          </optgroup>
-          <optgroup label="OpenAI fallback">
-            <option value="gpt-5.4">GPT-5.4</option>
-            <option value="gpt-5.4-mini">GPT-5.4 mini</option>
-          </optgroup>
-          <optgroup label="Legacy (cost review only)">
-            <option value="claude-opus-4-6">Claude Opus 4.6</option>
-            <option value="gpt-4.1">GPT-4.1</option>
-          </optgroup>
-        </SelectField>
-        <Slider
-          label="Stage 1 Confidence Threshold"
-          helpId="settings.general.stage1_confidence_threshold"
-          value={settings.stage1_confidence_threshold ?? 0.85}
-          onChange={(v) => update({ stage1_confidence_threshold: v })}
-        />
-      </Section>
-
-      <Section title="Deduplication" className="space-y-3">
-        <Slider
-          label="Similarity Threshold"
-          helpId="settings.general.dedup_threshold"
-          value={settings.dedup_threshold ?? 0.82}
-          onChange={(v) => update({ dedup_threshold: v })}
-        />
-      </Section>
 
       <div className="flex items-center gap-3">
         <Btn onClick={save} disabled={saving || !draft} loading={saving}>

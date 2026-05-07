@@ -20,9 +20,9 @@ import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
 import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
 import { useEntitlements } from '../lib/useEntitlements'
+import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
-import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { Tooltip } from './ui'
@@ -37,7 +37,9 @@ import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
+import { SidebarUserCard } from './SidebarUserCard'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
+import { VersionBadge } from './VersionBadge'
 import { AskMushiSidebar } from './AskMushiSidebar'
 import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
@@ -112,13 +114,19 @@ const NAV: NavSection[] = [
     // because the mode-specific NAV projection (see below) overrides this.
     defaultCollapsed: true,
     items: [
+      // 2026-05-07 reorder — Get started is the entry point for any operator
+      // who hasn't fully wired the SDK + repo + judge. Until that's done the
+      // dashboard / inbox both just stare back with empty PDCA tiles, so we
+      // pin Get started at the top of the rail. Once setup is complete the
+      // checklist itself collapses to a "Setup complete" hero, and Dashboard
+      // / Inbox become the obvious next stops.
+      { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
       { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
       // "what should I do next?" across the whole PDCA surface. Pinned above
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconBell,      beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
     ],
   },
   {
@@ -183,12 +191,12 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
-      { label: 'Members',    path: '/organization/members', icon: IconProjects },
+      { label: 'Members',    path: '/organization/members', icon: IconProjects, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
-      { label: 'SSO',        path: '/sso',        icon: IconSSO },
+      { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
-      { label: 'Audit Log',  path: '/audit',      icon: IconAudit },
-      { label: 'Compliance', path: '/compliance', icon: IconCompliance },
+      { label: 'Audit Log',  path: '/audit',      icon: IconAudit, requiresFeature: 'audit_log' },
+      { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
       { label: 'Storage',    path: '/storage',    icon: IconStorage },
       { label: 'Query',      path: '/query',      icon: IconQuery },
       // Phase 2c (2026-04-27) — operator-only directory. Hidden from
@@ -691,6 +699,14 @@ export function Layout({ children }: { children: ReactNode }) {
   // of mode. The gateway also enforces this — UI hiding is purely so
   // we don't tease a feature non-operators can't access.
   const visibleByRole = (i: NavItem) => !i.superAdmin || isSuperAdmin
+  // Nudge-not-hide: feature-gated items used to be filtered out for
+  // unentitled users. That hid the upsell (the user couldn't *see* what
+  // their plan was missing). Now we surface the item alongside an
+  // `UpgradePill` so the click goes to the feature page (which renders
+  // its own UpgradePrompt) and the plan signal is visible right in the
+  // sidebar. We still hide them in beginner/quickstart modes — those
+  // flows already trim the surface aggressively, and a Pro pill in
+  // quickstart would be more confusing than helpful.
   const visibleByFeature = (i: NavItem) =>
     !i.requiresFeature || has(i.requiresFeature) || isSuperAdmin
 
@@ -723,9 +739,14 @@ export function Layout({ children }: { children: ReactNode }) {
       }))
       .filter(s => s.items.length > 0)
   } else {
+    // Advanced mode: render every item including gated ones, so the
+    // sidebar's upsell pill replaces the "hidden until you pay" UX.
+    // The actual page still shows its own UpgradePrompt for users
+    // without the feature, so this is purely a visibility-without-
+    // unlocking change.
     visibleNav = NAV.map(s => ({
       ...s,
-      items: s.items.filter(visibleByRole).filter(visibleByFeature),
+      items: s.items.filter(visibleByRole),
     }))
   }
 
@@ -829,8 +850,15 @@ export function Layout({ children }: { children: ReactNode }) {
               )}
               {itemsVisible && (
                 <div className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}>
-                  {section.items.map(({ label, path, icon: Icon }) => {
+                  {section.items.map(({ label, path, icon: Icon, requiresFeature }) => {
                     const active = isActive(pathname, path)
+                    // Treat the item as gated when it declares a feature
+                    // flag, the user's plan does NOT have it, and the user
+                    // isn't a super-admin (super-admins see everything).
+                    // The pill links to /billing with the feature focused
+                    // — clicking the row itself still goes to the page,
+                    // which renders its own UpgradePrompt.
+                    const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
                     return (
                       <Link
                         key={path}
@@ -843,12 +871,18 @@ export function Layout({ children }: { children: ReactNode }) {
                         // base `.nav-link` styles still drive the active
                         // indicator + hover bg + focus ring so we don't
                         // double-define them here.
-                        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''}`}
+                        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
                         title={compact ? label : undefined}
                         aria-label={compact ? label : undefined}
                       >
                         <Icon className="nav-link-icon" />
                         {!compact && <span>{label}</span>}
+                        {!compact && gated && requiresFeature && (
+                          <UpgradePill
+                            flag={requiresFeature}
+                            className="ml-auto"
+                          />
+                        )}
                         {path === '/integrations' && <IntegrationHealthDot />}
                         {path === '/inventory' && navCounts.ready && (
                           <SidebarHealthDot
@@ -891,6 +925,18 @@ export function Layout({ children }: { children: ReactNode }) {
                             label={`${navCounts.prsOpen} PRs open awaiting review`}
                           />
                         )}
+                        {path === '/inbox' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.inboxOpenActions > 0 ? 'warn' : 'ok'}
+                            count={navCounts.inboxOpenActions}
+                            label={
+                              navCounts.inboxOpenActions > 0
+                                ? `${navCounts.inboxOpenActions} open action${navCounts.inboxOpenActions === 1 ? '' : 's'} in Action Inbox`
+                                : 'Action Inbox — all clear'
+                            }
+                            hideWhenZero
+                          />
+                        )}
                       </Link>
                     )
                   })}
@@ -901,37 +947,48 @@ export function Layout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      {/* User footer — Density / Theme toggles are 3-way segmented controls
-          that don't fit in a 48px rail, so we hide them in compact mode.
-          Focus mode + sign-out collapse to icon-only buttons with `title`
-          tooltips so the user can still get out of either state from the
-          collapsed rail. */}
-      <div className={`${compact ? 'px-1 py-2' : 'px-3 py-2.5'} border-t border-edge/60 space-y-2`}>
+      {/* User footer.
+          Expanded rail (compact === false): density toggle on top, then
+          a single combined Theme + Focus row (3 icon buttons in one
+          bordered strip — see ThemeSidebarToggle.tsx for the rationale
+          behind dropping the standalone Auto/system option), then the
+          user identity card with provider info + the rose sign-out
+          icon (which opens a confirm dialog so the 3am-on-call
+          accidental sign-out is caught).
+          Collapsed rail (compact === true): density + theme controls
+          don't fit a 48px rail, so we hide them. Focus mode + sign-out
+          stay as icon-only buttons (always-needed escape hatches). */}
+      <div className={`${compact ? 'px-1 py-2 space-y-2' : 'px-3 py-2.5 space-y-2'} border-t border-edge/60`}>
         {!compact && <DensitySidebarToggle />}
-        {!compact && <ThemeSidebarToggle />}
-        <button
-          type="button"
-          onClick={() => setFocusMode((value) => !value)}
-          className={`nav-link ${compact ? 'justify-center px-2 py-2' : 'w-full text-xs'}`}
-          aria-pressed={focusMode}
-          title={compact ? (focusMode ? 'Exit focus mode' : 'Focus mode') : undefined}
-          aria-label={compact ? (focusMode ? 'Exit focus mode' : 'Focus mode') : undefined}
-        >
-          <IconSparkle className="nav-link-icon" />
-          {!compact && <span>{focusMode ? 'Exit focus mode' : 'Focus mode'}</span>}
-        </button>
         {!compact && (
-          <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
+          <ThemeSidebarToggle
+            focusMode={focusMode}
+            onToggleFocus={() => setFocusMode((value) => !value)}
+          />
         )}
-        <button
-          onClick={signOut}
-          className={`nav-link ${compact ? 'justify-center px-2 py-2' : 'w-full text-xs'}`}
-          title={compact ? `Sign out (${user?.email ?? ''})` : undefined}
-          aria-label={compact ? 'Sign out' : undefined}
-        >
-          <IconSignOut className="nav-link-icon" />
-          {!compact && <span>Sign out</span>}
-        </button>
+        {compact && (
+          <button
+            type="button"
+            onClick={() => setFocusMode((value) => !value)}
+            className="nav-link justify-center px-2 py-2"
+            aria-pressed={focusMode}
+            title={focusMode ? 'Exit focus mode' : 'Focus mode'}
+            aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
+          >
+            <IconSparkle className="nav-link-icon" />
+          </button>
+        )}
+        {!compact && <SidebarUserCard user={user} signOut={signOut} />}
+        {compact && (
+          <button
+            onClick={signOut}
+            className="nav-link justify-center px-2 py-2 text-rose hover:text-rose hover:bg-rose-muted/40"
+            title={`Sign out (${user?.email ?? ''})`}
+            aria-label="Sign out"
+          >
+            <IconSignOut className="nav-link-icon" />
+          </button>
+        )}
       </div>
     </>
   )
@@ -962,20 +1019,26 @@ export function Layout({ children }: { children: ReactNode }) {
               affordance is always findable in either state. Renders as a
               chevron button with `[` hint when expanded; just a chevron
               in compact mode. The `[` hotkey mirrors Linear's. */}
+          {/* Collapse toggle — chevron-only at the bottom of the rail.
+              Earlier revision included a `[` kbd hint inline; pulled
+              into the title tooltip instead so the chrome stays calm
+              (Linear refresh: "structure should be felt, not seen") —
+              power users who want the hotkey hover for it; everyone
+              else just sees a quiet chevron. */}
           <button
             type="button"
             onClick={() => setSidebarCollapsed((value) => !value)}
             aria-pressed={sidebarCollapsed}
-            aria-label={sidebarCollapsed ? 'Expand sidebar (press [ )' : 'Collapse sidebar (press [ )'}
-            title={sidebarCollapsed ? 'Expand sidebar — press [' : 'Collapse to icon rail — press ['}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['}
             className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
           >
             <span aria-hidden className="font-mono leading-none text-base">
               {sidebarCollapsed ? '›' : '‹'}
             </span>
             {!sidebarCollapsed && (
-              <span className="font-mono text-3xs uppercase tracking-wider">
-                Collapse <kbd className="ml-1 px-1 py-0.5 rounded-xs border border-edge-subtle text-fg-faint">[</kbd>
+              <span className="font-mono text-3xs uppercase tracking-wider text-fg-faint">
+                Collapse
               </span>
             )}
           </button>
@@ -1030,86 +1093,80 @@ export function Layout({ children }: { children: ReactNode }) {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
-        <header className="md:hidden flex items-center gap-3 px-4 py-2.5 border-b border-edge/60 bg-surface-root">
+        <header className="md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 bg-surface-root overflow-visible relative z-20">
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="shrink-0 p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           >
             <IconMenu size={18} />
           </button>
-          <span className="text-sm font-bold tracking-tight">
+          <div className="min-w-0 flex-1">
+            <SearchButton />
+          </div>
+          <span className="shrink-0 text-sm font-bold tracking-tight">
             <span className="text-brand">mushi</span>
             <span className="text-fg-secondary">mushi</span>
           </span>
-          <div className="ml-auto flex items-center gap-2">
-            <SearchButton />
-            <PlanBadge />
+          <div className="shrink-0 flex items-center gap-2">
             <OrgSwitcher />
             <ProjectSwitcher />
           </div>
         </header>
 
-        {/* Desktop sub-header — project switcher pinned to the right */}
-        {!focusMode && <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
-          <SearchButton />
-          <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'}>
-            <button
-              type="button"
-              onClick={() => setActivityOpen(true)}
-              aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
-              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        {/* Desktop sub-header — search left; controls + switchers right */}
+        {!focusMode && <header className="hidden md:flex items-center gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60 overflow-visible relative z-20">
+          <div className="min-w-0 shrink-0">
+            <SearchButton />
+          </div>
+          <div className="ml-auto flex items-center gap-2 min-w-0 overflow-visible">
+            <div
+              className="flex items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5 overflow-visible shrink-0"
+              aria-label="Toolbar"
             >
-              <IconBell className="h-3.5 w-3.5" />
-              {activityUnread > 0 && (
-                <span
-                  aria-hidden
-                  className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-[0.55rem] font-semibold leading-none motion-safe:animate-pulse"
+              <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setActivityOpen(true)}
+                  aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
+                  className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
-                  {activityUnread > 9 ? '9+' : activityUnread}
-                </span>
-              )}
-            </button>
-          </Tooltip>
-          <Tooltip content="Keyboard shortcuts (press ?)">
-            <button
-              type="button"
-              onClick={() => setHotkeysOpen(true)}
-              aria-label="Open keyboard shortcuts"
-              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <span aria-hidden className="font-mono text-xs leading-none">?</span>
-            </button>
-          </Tooltip>
-          <Tooltip content={whatsNew.hasUnread ? 'What\'s new — new release notes' : 'What\'s new'}>
-            <button
-              type="button"
-              onClick={whatsNew.openPanel}
-              aria-label={whatsNew.hasUnread ? 'Open what\'s new (unread updates)' : 'Open what\'s new'}
-              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <span aria-hidden className="font-mono text-xs leading-none">✦</span>
-              {whatsNew.hasUnread && (
-                <span
-                  aria-hidden
-                  className="absolute -right-0.5 -top-0.5 inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse"
-                />
-              )}
-            </button>
-          </Tooltip>
-          <Tooltip content="Ask Mushi (Cmd/Ctrl+J)">
-            <button
-              type="button"
-              onClick={() => setAiOpen(true)}
-              aria-label="Open Ask Mushi"
-              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <span aria-hidden className="font-mono text-xs leading-none">✨</span>
-            </button>
-          </Tooltip>
-          <PlanBadge />
-          <OrgSwitcher />
-          <ProjectSwitcher />
+                  <IconBell className="h-3.5 w-3.5" />
+                  {activityUnread > 0 && (
+                    <span
+                      aria-hidden
+                      className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-[0.55rem] font-semibold leading-none motion-safe:animate-pulse"
+                    >
+                      {activityUnread > 9 ? '9+' : activityUnread}
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip content="Keyboard shortcuts (press ?)" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setHotkeysOpen(true)}
+                  aria-label="Open keyboard shortcuts"
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  <span aria-hidden className="font-mono text-xs leading-none">?</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Ask Mushi (Cmd/Ctrl+J)" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setAiOpen(true)}
+                  aria-label="Open Ask Mushi"
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  <span aria-hidden className="font-mono text-xs leading-none">✨</span>
+                </button>
+              </Tooltip>
+            </div>
+            <VersionBadge whatsNew={whatsNew} />
+            <OrgSwitcher />
+            <ProjectSwitcher />
+          </div>
         </header>}
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">

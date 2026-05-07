@@ -39,6 +39,7 @@ import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
+import { SdkVersionBadge, type SdkStatus } from '../components/SdkVersionBadge'
 
 interface ApiKey {
   id: string
@@ -127,6 +128,18 @@ interface Project {
   last_report_at: string | null
   pdca_bottleneck: PdcaStageId | null
   pdca_bottleneck_label: string | null
+  /** SDK identity columns and freshness verdict, plumbed by
+   *  GET /v1/admin/projects (see billing-projects-queue-graph.ts). The
+   *  backend joins `reports.sdk_package`/`reports.sdk_version` for the
+   *  most recent report against the `sdk_versions` catalogue and emits
+   *  `sdk_status` so the FE doesn't need a second round-trip to render
+   *  the badge. `unknown` = no reports landed yet, in which case the
+   *  badge silently renders nothing. */
+  sdk_package?: string | null
+  sdk_version?: string | null
+  sdk_latest_version?: string | null
+  sdk_deprecation_message?: string | null
+  sdk_status?: SdkStatus
 }
 
 /**
@@ -476,6 +489,21 @@ export function ProjectsPage() {
                         <span className="font-mono text-fg">{project.member_count}</span>{' '}
                         {pluralize(project.member_count, 'member')}
                       </span>
+                      {/* SDK freshness — silently absent when the project
+                          has never ingested a report (status === 'unknown'),
+                          so quiet projects don't pick up cosmetic chrome
+                          before they have a real signal. The badge itself
+                          is hover-rich (versions, deprecation message) so
+                          the row stays scannable. */}
+                      {project.sdk_status && project.sdk_status !== 'unknown' && (
+                        <SdkVersionBadge
+                          status={project.sdk_status}
+                          package_={project.sdk_package ?? null}
+                          observedVersion={project.sdk_version ?? null}
+                          latestVersion={project.sdk_latest_version ?? null}
+                          deprecationMessage={project.sdk_deprecation_message ?? null}
+                        />
+                      )}
                       {project.pdca_bottleneck && project.pdca_bottleneck_label && (
                         <Link
                           to={`${PDCA_BOTTLENECK_DEEP_LINK[project.pdca_bottleneck]}&project=${project.id}`}

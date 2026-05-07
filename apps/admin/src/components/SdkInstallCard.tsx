@@ -30,7 +30,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Card } from './ui'
+import { Card, CopyButton } from './ui'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
 import {
@@ -270,8 +270,18 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
         </div>
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
-        <div className="space-y-3">
-          <div role="tablist" aria-label="Framework" className="flex items-center gap-1 border-b border-edge-subtle pb-2">
+        <div className="space-y-3 min-w-0">
+          {/* Framework tabs.
+              `flex-wrap` is non-negotiable: there are 7 frameworks today
+              (React / Vue / Svelte / React Native / Expo / Capacitor /
+              Vanilla JS) which already overflow the right-column track at
+              ≤ 1024 px viewports. Without wrap the rightmost button (Vanilla
+              JS) gets *clipped outside* the card border — verified at
+              1440 / 1024 / 800 before this fix. `whitespace-nowrap` keeps
+              "React Native" on a single line when wrapping kicks in
+              (otherwise it splits into "React" / "Native" on adjacent
+              lines, which the eye reads as two separate tabs). */}
+          <div role="tablist" aria-label="Framework" className="flex flex-wrap items-center gap-1 border-b border-edge-subtle pb-2">
             <ConfigHelp helpId="sdk-install.framework" />
             {FRAMEWORKS.map((fw) => (
               <button
@@ -284,7 +294,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
                   setSnippetCopied(false)
                   setInstallCopied(false)
                 }}
-                className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
+                className={`px-2.5 py-1 rounded-sm text-xs whitespace-nowrap transition-colors ${
                   framework === fw
                     ? 'bg-brand text-brand-fg font-medium'
                     : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
@@ -295,40 +305,108 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             ))}
           </div>
 
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Install</span>
-              <button
-                type="button"
-                onClick={() => copy(install, setInstallCopied)}
-                className="text-2xs text-brand hover:text-brand-hover"
-              >
-                {installCopied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
-              {install}
-            </pre>
-          </div>
+          <CodeBlock
+            label="Install"
+            language="bash"
+            code={install}
+            onCopy={() => copy(install, setInstallCopied)}
+            copied={installCopied}
+          />
 
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Code</span>
-              <button
-                type="button"
-                onClick={() => copy(code, setSnippetCopied)}
-                className="text-2xs text-brand hover:text-brand-hover"
-              >
-                {snippetCopied ? 'Copied!' : 'Copy'}
-              </button>
-            </div>
-            <pre className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap max-h-72 overflow-y-auto">
-              {code}
-            </pre>
-          </div>
+          <CodeBlock
+            label="Code"
+            language={CODE_LANG_BY_FRAMEWORK[framework]}
+            code={code}
+            onCopy={() => copy(code, setSnippetCopied)}
+            copied={snippetCopied}
+            maxHeight="max-h-72"
+          />
         </div>
       </div>
     </Card>
+  )
+}
+
+/* ── Code block primitive ─────────────────────────────────────────────── */
+
+/**
+ * Maps each framework tab to the language label printed on the code-block
+ * chrome. The label is purely informational — we don't ship a syntax
+ * highlighter (would balloon the bundle and the existing monospace render
+ * is already legible against the editorial-paper surface), but stamping
+ * "tsx" / "vue" / "svelte" / "html" on the header tells users at a glance
+ * which file the snippet belongs in.
+ */
+const CODE_LANG_BY_FRAMEWORK: Record<Framework, string> = {
+  react: 'tsx',
+  'react-native': 'tsx',
+  expo: 'tsx',
+  capacitor: 'ts',
+  vue: 'vue',
+  svelte: 'svelte',
+  vanilla: 'html',
+}
+
+interface CodeBlockProps {
+  /** Section heading rendered on the left of the toolbar (e.g. "Install"). */
+  label: string
+  /** Short language token shown on the right of the toolbar — purely a
+   *  comprehension aid so users can see at a glance whether they're looking
+   *  at a shell command, a `.tsx` snippet, or an `.html` paste. */
+  language: string
+  code: string
+  onCopy: () => void
+  copied: boolean
+  /** Optional max-height so long snippets stay scrollable inside the card.
+   *  Tailwind class string (e.g. `max-h-72`) — we deliberately avoid inline
+   *  pixel heights so the rhythm matches the rest of the admin's
+   *  `text-2xs / max-h-72` density. */
+  maxHeight?: string
+}
+
+/**
+ * Reusable framed code surface. Earlier revisions inlined `<pre>` tags with
+ * a copy button positioned via `flex justify-between` above them — at
+ * narrow widths the "Install / Copy" header and the code body felt
+ * disconnected (the user reported "code area could be code blocked").
+ *
+ * This primitive wraps both into a single bordered surface with a tinted
+ * toolbar:  ┌── Install · bash ───── Copy ──┐
+ *           │ npm install @mushi-mushi/web  │
+ *           └───────────────────────────────┘
+ * so the eye reads the snippet as one contiguous code block, not "label +
+ * mystery rectangle". The `<>` glyph reinforces the affordance for
+ * scanners. We keep `whitespace-pre-wrap` so long lines wrap rather than
+ * triggering a horizontal scrollbar inside the card (most install commands
+ * + init code are short enough that wrapping is preferable to scrolling).
+ */
+function CodeBlock({ label, language, code, onCopy, copied, maxHeight }: CodeBlockProps) {
+  return (
+    <div className="rounded-md border border-edge-subtle bg-surface-raised overflow-hidden">
+      <div className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle bg-surface-overlay/50">
+        <div className="flex items-center gap-2 min-w-0">
+          <span aria-hidden="true" className="text-fg-faint font-mono text-2xs leading-none select-none">{'</>'}</span>
+          <span className="text-2xs uppercase tracking-wider font-medium text-fg-secondary truncate">
+            {label}
+          </span>
+          <span className="text-3xs font-mono text-fg-faint uppercase tracking-wider px-1 rounded-sm bg-surface-overlay border border-edge-subtle/60">
+            {language}
+          </span>
+        </div>
+        <CopyButton
+          onCopy={onCopy}
+          copied={copied}
+          label={`Copy ${label.toLowerCase()} snippet`}
+          copiedLabel={`${label} snippet copied`}
+          className="shrink-0"
+        />
+      </div>
+      <pre
+        className={`px-3 py-2 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap ${maxHeight ? `${maxHeight} overflow-y-auto` : ''}`.trim()}
+      >
+        {code}
+      </pre>
+    </div>
   )
 }
 

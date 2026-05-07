@@ -272,6 +272,12 @@ export function ByokPanel() {
         </p>
       </div>
 
+      {/* Provider cards live in a 2-up grid on xl viewports (1280+) — each
+          card carries setup steps, base URL, key input, and three buttons,
+          so the lg breakpoint is too tight. Below xl the cards stack
+          full-width, matching the original behaviour. `items-start` keeps
+          the cards top-aligned even when one is taller than the other. */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
       {keys?.map((k) => {
         const meta = BYOK_PROVIDER_LABELS[k.provider]
         const fb = feedback?.provider === k.provider ? feedback : null
@@ -437,6 +443,7 @@ export function ByokPanel() {
           </div>
         )
       })}
+      </div>
 
       {clearTarget && (
         <ConfirmDialog

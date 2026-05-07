@@ -14,6 +14,7 @@
  *          MCP felt "confusing" per the dogfood feedback.
  */
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Btn, Badge } from './ui'
 import { useToast } from '../lib/toast'
 
@@ -144,13 +145,13 @@ export function RevealedKeyCard({ projectId, projectName, apiKey, scopes, onDism
         <Btn variant="ghost" size="sm" onClick={onDismiss}>
           I've stored it — hide
         </Btn>
-        <a
-          href="/mcp"
+        <Link
+          to="/mcp"
           className="text-2xs text-accent hover:underline ml-auto"
           data-testid="revealed-key-learn-more"
         >
           What can I do with this key? →
-        </a>
+        </Link>
       </div>
     </div>
   )

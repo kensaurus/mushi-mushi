@@ -344,20 +344,42 @@ export function RepoPage() {
         howToUse="Filter by CI bucket to focus on what matters. Each card is one fix attempt — click through to the report to see the full PDCA story. The right column is a chronological log of branch, PR and CI events across all fixes."
       />
 
-      {/* Repo header */}
+      {/* Repo header.
+          Earlier revision used `flex flex-wrap items-start justify-between`
+          which left a huge horizontal void between the repo URL (anchored
+          left) and the action buttons (anchored right) — at 1024 / 1440
+          there were 600+ px of empty space in the middle, which the user
+          read as "stuck at the corners". The new layout reads as one
+          coherent identity block: icon + URL + meta flow inline-left, then
+          a thin rule + the count chips below, with action buttons pinned
+          on the right of the *meta* row only (Linear "structure should be
+          felt, not seen" — chrome that frames content rather than fighting
+          it). */}
       <Card>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex items-center gap-1.5 text-xs text-fg-muted">
+        <div className="space-y-2">
+          {/* Identity row — kicker + URL flow left-to-right with no
+              right-anchored sibling, so the eye reads them as a single
+              piece of metadata, not as left/right tension. */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 text-3xs uppercase tracking-wider text-fg-muted font-semibold shrink-0">
               <IconGit />
-              <span className="font-semibold tracking-wide uppercase text-3xs">Repository</span>
-            </div>
+              Repository
+            </span>
             {hasRepo ? (
-              <CodeValue value={repo.repo_url!} tone="url" />
+              <div className="min-w-0 flex-1">
+                <CodeValue value={repo.repo_url!} tone="url" />
+              </div>
             ) : (
               <p className="text-sm text-fg-faint italic">No GitHub repo is connected yet.</p>
             )}
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-2xs text-fg-muted">
+          </div>
+
+          {/* Meta + actions row — meta chips left, actions right, with
+              a tight gap so the buttons feel attached to the meta they
+              command (default branch / app status / last indexed) rather
+              than floating in space. */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 justify-between">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
               {repo.default_branch && (
                 <span className="inline-flex items-center gap-1">
                   <span className="text-fg-faint">default:</span>
@@ -370,34 +392,38 @@ export function RepoPage() {
                 <Badge className="bg-warn-subtle text-warn">No GitHub App installation</Badge>
               ) : null}
               {repo.last_indexed_at && (
-                <span>
+                <span className="whitespace-nowrap">
                   Indexed <RelativeTime value={repo.last_indexed_at} />
                 </span>
               )}
             </div>
-          </div>
-          <div className="shrink-0 flex flex-wrap items-center gap-2">
-            {hasRepo && (
-              <a
-                href={repo.repo_url!}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors"
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              {hasRepo && (
+                <a
+                  href={repo.repo_url!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors"
+                >
+                  Open on GitHub ↗
+                </a>
+              )}
+              <Link
+                to="/integrations"
+                className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors inline-flex items-center gap-1"
               >
-                Open on GitHub ↗
-              </a>
-            )}
-            <Link
-              to="/integrations"
-              className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors inline-flex items-center gap-1"
-            >
-              <IconIntegrations />
-              Manage
-            </Link>
+                <IconIntegrations />
+                Manage
+              </Link>
+            </div>
           </div>
-        </div>
-        <div className="mt-3">
-          <DefinitionChips items={headerChips} columns="auto" dense />
+
+          {/* Counts band — dense, left-aligned, separated from identity
+              row by a hairline so the chips read as a *summary stripe*
+              attached to the repo, not a third floating row. */}
+          <div className="pt-2 border-t border-edge-subtle/60">
+            <DefinitionChips items={headerChips} columns="auto" dense />
+          </div>
         </div>
       </Card>
 
@@ -503,8 +529,15 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
   }
   return (
     <Card>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="flex-1 min-w-0 space-y-1">
+      {/* Two-column inner grid: identity column (badge + summary + report
+          link) on the left, fix mini-graph on the right at sm+. Earlier
+          revision used `flex flex-wrap justify-between` which left a
+          ~200 px void between the report summary and the FixGitGraph at
+          1024 px — the same "corner-stuck" pattern as the repo header
+          card above. A 1fr / 16rem grid keeps both children reading as
+          attached siblings instead of corner-anchored islands. */}
+      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge className={ci.className}>{ci.label}</Badge>
             {branch.branch && <CodeValue value={branch.branch} tone="hash" copyable={false} />}
@@ -532,7 +565,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
             <RelativeTime value={branch.created_at} />
           </div>
         </div>
-        <div className="w-full sm:w-64 shrink-0">
+        <div className="min-w-0">
           <FixGitGraph
             events={events}
             prUrl={branch.pr_url}
@@ -547,7 +580,7 @@ function BranchRow({ branch }: { branch: RepoBranch }) {
         </div>
       </div>
       {meta.length > 0 && (
-        <div className="mt-2">
+        <div className="mt-2 pt-2 border-t border-edge-subtle/60">
           <DefinitionChips items={meta} columns="auto" dense />
         </div>
       )}

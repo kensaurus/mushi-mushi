@@ -3,9 +3,11 @@ import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
-import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, SelectField } from '../components/ui'
+import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, SelectField, Tooltip } from '../components/ui'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
+import { useEntitlements } from '../lib/useEntitlements'
 
 type OrgRole = 'owner' | 'admin' | 'member' | 'viewer'
 
@@ -39,11 +41,10 @@ const ROLE_TONE: Record<OrgRole, string> = {
   viewer: 'bg-surface-overlay text-fg-muted',
 }
 
-const PAID_TEAM_PLANS = new Set(['pro', 'enterprise'])
-
 export function OrganizationSettingsPage() {
   const activeOrgId = useActiveOrgId()
   const toast = useToast()
+  const entitlements = useEntitlements()
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Invitation['role']>('member')
   const [submitting, setSubmitting] = useState(false)
@@ -56,7 +57,13 @@ export function OrganizationSettingsPage() {
   const { data, loading, error, reload } = usePageData<MembersResponse>(path)
 
   const canManage = data?.currentUserRole === 'owner' || data?.currentUserRole === 'admin'
-  const teamsEnabled = PAID_TEAM_PLANS.has(data?.organization?.plan_id ?? 'hobby')
+  // Source of truth: server-resolved entitlements (reflects all gating
+  // including legacy grandfathered plans). Falls back to the org's
+  // declared plan_id only while entitlements are still loading so the
+  // page never reads as "locked" mid-fetch on a paid org.
+  const teamsEnabled = entitlements.loading
+    ? data?.organization?.plan_id === 'pro' || data?.organization?.plan_id === 'enterprise'
+    : entitlements.has('teams')
 
   const sortedMembers = useMemo(
     () => [...(data?.members ?? [])].sort((a, b) => a.role.localeCompare(b.role) || (a.email ?? '').localeCompare(b.email ?? '')),
@@ -123,51 +130,70 @@ export function OrganizationSettingsPage() {
         </Badge>
       </PageHeader>
 
-      {!teamsEnabled && (
-        <Card className="border-warn/30 bg-warn/5 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-fg">Teams require Pro or Enterprise</p>
-              <p className="mt-1 text-xs text-fg-muted">
-                Starter remains a solo workspace. Upgrade to Pro to invite teammates and share projects.
-              </p>
-            </div>
-            <a
-              href="/billing"
-              className="inline-flex items-center justify-center rounded-sm bg-brand px-2 py-1 text-xs font-medium text-brand-fg shadow-card hover:bg-brand-hover"
-            >
-              Upgrade
-            </a>
-          </div>
-        </Card>
-      )}
+      {/* Plan-aware nudge: when the user lacks the `teams` entitlement
+          (Hobby/Free org), surface a single editorial banner with a
+          targeted "Upgrade to Pro" CTA. The banner self-removes once
+          the user upgrades — see UpgradeBanner's internal gating. */}
+      <UpgradeBanner
+        flag="teams"
+        density="comfy"
+        taglineOverride="Teams ship with Pro and Enterprise. Upgrade to invite teammates, assign roles, and share every project."
+      />
 
-      <Card className="p-4">
+      {/* Invite teammate. The form stays mounted (so users see the
+          shape they'd interact with after upgrading) but is wrapped in
+          UpgradeLockOverlay when teams is locked. The overlay dims the
+          form, blocks pointer events, and centers an Upgrade CTA — much
+          stronger nudge than the previous "disabled inputs" affordance,
+          which read as broken UX rather than gating. */}
+      <Card className="p-4 relative">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold text-fg">Invite teammate</h2>
-            <p className="text-xs text-fg-muted">Owner and admin roles can invite members on Pro+ plans.</p>
+            <p className="text-xs text-fg-muted">
+              {teamsEnabled
+                ? 'Owner and admin roles can invite members on Pro+ plans.'
+                : 'Preview — invite teammates after upgrading.'}
+            </p>
           </div>
         </div>
-        <div className="grid gap-3 md:grid-cols-[1fr_12rem_auto]">
-          <Input
-            label="Email"
-            value={email}
-            placeholder="kensaurus@gmail.com"
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={!teamsEnabled || !canManage}
-          />
-          <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as Invitation['role'])} disabled={!teamsEnabled || !canManage}>
-            <option value="admin">Admin</option>
-            <option value="member">Member</option>
-            <option value="viewer">Viewer</option>
-          </SelectField>
-          <div className="flex items-end">
-            <Btn onClick={invite} disabled={!email || !teamsEnabled || !canManage || submitting} loading={submitting}>
-              Invite
-            </Btn>
+        <UpgradeLockOverlay
+          flag="teams"
+          headline="Teams require Pro"
+          taglineOverride="Invite teammates, set their role per project, and share every project in this org."
+        >
+          <div className="grid gap-3 md:grid-cols-[1fr_12rem_auto]">
+            <Input
+              label="Email"
+              value={email}
+              placeholder="kensaurus@gmail.com"
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={!teamsEnabled || !canManage}
+            />
+            <SelectField label="Role" value={role} onChange={(e) => setRole(e.target.value as Invitation['role'])} disabled={!teamsEnabled || !canManage}>
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
+            </SelectField>
+            <div className="flex items-end">
+              {!canManage && teamsEnabled ? (
+                <Tooltip content="Only owners and admins can invite new teammates. Ask your org owner to invite, or have them promote you to admin from this page.">
+                  <span className="inline-flex">
+                    <Btn disabled>Invite</Btn>
+                  </span>
+                </Tooltip>
+              ) : (
+                <Btn
+                  onClick={invite}
+                  disabled={!email || !teamsEnabled || !canManage || submitting}
+                  loading={submitting}
+                >
+                  Invite
+                </Btn>
+              )}
+            </div>
           </div>
-        </div>
+        </UpgradeLockOverlay>
       </Card>
 
       <Card className="overflow-hidden">

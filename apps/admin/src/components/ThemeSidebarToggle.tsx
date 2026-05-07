@@ -1,24 +1,33 @@
 /**
  * FILE: apps/admin/src/components/ThemeSidebarToggle.tsx
- * PURPOSE: Dark / light / system theme toggle in the sidebar footer.
- *          Renders the same three-segment control as the density toggle
- *          so the two sit flush and read as a matched pair.
+ * PURPOSE: Three-button strip in the sidebar footer combining theme
+ *          (dark / light) with the focus-mode toggle. Earlier revisions
+ *          kept theme as a pure 3-way radio (dark / light / auto) and
+ *          rendered Focus mode as its own full-width row beneath. That
+ *          burned a whole row on a binary toggle while the "Auto"
+ *          option was rarely picked — most users want explicit control.
  *
- *          Earlier revision used "Dark / Light / Auto" text labels —
- *          three near-identical 4-letter strings the user reported as
- *          indistinguishable at a glance. Replaced with the universally-
- *          recognised moon / sun / split-disc trio (macOS Sonoma,
- *          Linear, GitHub, Vercel all converged on this triplet for
- *          the same reason). Text labels survive in `title` + `aria-label`
- *          for screen readers and tooltip discoverability.
+ *          2026-05-07 reshape: drop Auto, demote theme to a binary
+ *          radio (moon / sun), and reclaim the third slot for the
+ *          Focus mode toggle. The user's `system` theme preference
+ *          (if previously stored) still resolves correctly via
+ *          `useTheme().resolved` — we just don't expose it as an
+ *          explicit option anymore. To pick system theme again, the
+ *          user toggles their OS appearance and matches it manually
+ *          here, or clears localStorage.
+ *
+ *          The mixed semantics (radio + toggle) are handled cleanly:
+ *          the two theme buttons live inside their own
+ *          `role="radiogroup"`; the focus toggle is a sibling
+ *          `aria-pressed` button outside the group, so screen readers
+ *          announce them with the correct affordance.
  */
 
 import type { SVGProps } from 'react'
-import { useTheme, type Theme } from '../lib/useTheme'
+import { useTheme, type ResolvedTheme } from '../lib/useTheme'
 
 type IconProps = SVGProps<SVGSVGElement>
 
-/** Shared SVG chrome for the three glyphs. */
 function GlyphFrame({ children, ...rest }: IconProps) {
   return (
     <svg
@@ -38,12 +47,6 @@ function GlyphFrame({ children, ...rest }: IconProps) {
   )
 }
 
-/**
- * Crescent moon — drawn as a single subtraction path so the unfilled
- * region between the two arcs reads as the moon's lit edge. Filled
- * with currentColor so the active-state colour swap (text-brand)
- * paints the moon directly. Same shape every modern dashboard ships.
- */
 function MoonGlyph(props: IconProps) {
   return (
     <GlyphFrame {...props}>
@@ -56,11 +59,6 @@ function MoonGlyph(props: IconProps) {
   )
 }
 
-/**
- * Sun — solid disc + 8 stroked rays. Rays stop short of the disc to
- * keep the icon legible at 14px (overlapping rays would smear). Disc
- * is filled with currentColor for the same active-state colour swap.
- */
 function SunGlyph(props: IconProps) {
   return (
     <GlyphFrame {...props}>
@@ -78,62 +76,93 @@ function SunGlyph(props: IconProps) {
 }
 
 /**
- * Auto / system — half-filled disc. The right hemisphere is filled,
- * the left is outlined: a visual metaphor for "switches between dark
- * and light". macOS, GitHub, and Linear all converged on this exact
- * shape for the system-follows option.
+ * Focus mode = "hide chrome, see only content". The four corner
+ * brackets pointing inward to a center square is the universal
+ * fullscreen / focus glyph (image apps, video players, design tools).
  */
-function AutoGlyph(props: IconProps) {
+function FocusGlyph(props: IconProps) {
   return (
-    <GlyphFrame {...props}>
-      <circle cx="8" cy="8" r="5" stroke="currentColor" />
-      <path d="M8 3a5 5 0 0 1 0 10z" fill="currentColor" stroke="currentColor" />
+    <GlyphFrame {...props} strokeWidth={1.6}>
+      <path d="M2.5 5V3.5a1 1 0 0 1 1-1H5" />
+      <path d="M11 2.5h1.5a1 1 0 0 1 1 1V5" />
+      <path d="M13.5 11v1.5a1 1 0 0 1-1 1H11" />
+      <path d="M5 13.5H3.5a1 1 0 0 1-1-1V11" />
+      <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="currentColor" />
     </GlyphFrame>
   )
 }
 
-interface Option {
-  value: Theme
-  label: string
-  hint: string
-  Icon: (p: IconProps) => JSX.Element
+interface Props {
+  focusMode: boolean
+  onToggleFocus: () => void
 }
 
-const OPTIONS: Option[] = [
-  { value: 'dark',   label: 'Dark theme',   hint: 'Dark theme — designed for low-light triage', Icon: MoonGlyph },
-  { value: 'light',  label: 'Light theme',  hint: 'Light theme — high ambient light / printing', Icon: SunGlyph },
-  { value: 'system', label: 'System theme', hint: 'Follow OS appearance', Icon: AutoGlyph },
-]
-
-export function ThemeSidebarToggle() {
-  const { theme, setTheme } = useTheme()
+export function ThemeSidebarToggle({ focusMode, onToggleFocus }: Props) {
+  const { resolved, setTheme } = useTheme()
   return (
     <div
-      role="radiogroup"
-      aria-label="Theme"
+      role="group"
+      aria-label="Theme and focus controls"
       className="flex items-stretch gap-0.5 rounded-sm border border-edge/60 p-0.5"
     >
-      {OPTIONS.map(({ value, label, hint, Icon }) => {
-        const active = theme === value
-        return (
-          <button
-            key={value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            aria-label={label}
-            onClick={() => setTheme(value)}
-            title={hint}
-            className={`flex-1 flex items-center justify-center rounded-sm px-1 py-1 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${
-              active
-                ? 'bg-surface-overlay text-brand'
-                : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60'
-            }`}
-          >
-            <Icon />
-          </button>
-        )
-      })}
+      <ThemeRadioGroup resolved={resolved} setTheme={setTheme} />
+      <button
+        type="button"
+        onClick={onToggleFocus}
+        aria-pressed={focusMode}
+        aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
+        title={focusMode ? 'Exit focus mode (Esc or Cmd/Ctrl+.)' : 'Focus mode — hide sidebar + chrome (Cmd/Ctrl+.)'}
+        className={`flex-1 flex items-center justify-center rounded-sm px-1 py-1 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${
+          focusMode
+            ? 'bg-surface-overlay text-brand'
+            : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60'
+        }`}
+      >
+        <FocusGlyph />
+      </button>
+    </div>
+  )
+}
+
+function ThemeRadioGroup({
+  resolved,
+  setTheme,
+}: {
+  resolved: ResolvedTheme
+  setTheme: (t: 'dark' | 'light') => void
+}) {
+  return (
+    <div role="radiogroup" aria-label="Theme" className="contents">
+      <button
+        type="button"
+        role="radio"
+        aria-checked={resolved === 'dark'}
+        aria-label="Dark theme"
+        onClick={() => setTheme('dark')}
+        title="Dark theme — designed for low-light triage"
+        className={`flex-1 flex items-center justify-center rounded-sm px-1 py-1 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${
+          resolved === 'dark'
+            ? 'bg-surface-overlay text-brand'
+            : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60'
+        }`}
+      >
+        <MoonGlyph />
+      </button>
+      <button
+        type="button"
+        role="radio"
+        aria-checked={resolved === 'light'}
+        aria-label="Light theme"
+        onClick={() => setTheme('light')}
+        title="Light theme — high ambient light / printing"
+        className={`flex-1 flex items-center justify-center rounded-sm px-1 py-1 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 ${
+          resolved === 'light'
+            ? 'bg-surface-overlay text-brand'
+            : 'text-fg-muted hover:text-fg hover:bg-surface-overlay/60'
+        }`}
+      >
+        <SunGlyph />
+      </button>
     </div>
   )
 }

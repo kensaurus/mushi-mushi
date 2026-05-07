@@ -745,12 +745,25 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           projectIds.map((pid) =>
             db
               .from('reports')
-              .select('created_at')
+              // Pull the SDK identity columns alongside `created_at` so the FE
+              // can compare the project's most-recently-observed SDK version
+              // against the latest published version (joined below) and
+              // surface "outdated" / "deprecated" badges per row. Without
+              // this the ProjectsPage SDK install card had no way to tell
+              // a project was running 0.7 against a 0.9 catalog except by
+              // making the operator open the report and read the metadata
+              // by hand.
+              .select('created_at, sdk_package, sdk_version')
               .eq('project_id', pid)
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle()
-              .then((r) => ({ project_id: pid, created_at: r.data?.created_at ?? null })),
+              .then((r) => ({
+                project_id: pid,
+                created_at: r.data?.created_at ?? null,
+                sdk_package: (r.data as { sdk_package?: string | null } | null)?.sdk_package ?? null,
+                sdk_version: (r.data as { sdk_version?: string | null } | null)?.sdk_version ?? null,
+              })),
           ),
         ),
         db
@@ -807,8 +820,57 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     }
 
     const lastReportMap: Record<string, string> = {};
+    // Per-project most-recently-observed SDK identity, drawn from the same
+    // single-row `latestReports` query as `lastReportMap`. We keep these as
+    // sibling maps (instead of nesting them on a single tuple) because the
+    // FE consumes them independently — `last_report_at` is a freshness
+    // signal, while `(sdk_package, sdk_version)` drives the outdated-SDK
+    // badge below.
+    const lastSdkPackageMap: Record<string, string | null> = {};
+    const lastSdkVersionMap: Record<string, string | null> = {};
     for (const r of latestReports) {
       if (r.created_at) lastReportMap[r.project_id] = r.created_at;
+      if (r.sdk_package) lastSdkPackageMap[r.project_id] = r.sdk_package;
+      if (r.sdk_version) lastSdkVersionMap[r.project_id] = r.sdk_version;
+    }
+
+    // Latest published version per @mushi-mushi/* package. Sourced from the
+    // `sdk_versions` catalogue (populated by the publish workflow — see
+    // `20260429000000_sdk_versions.sql`). One row per package, picking the
+    // most recently released version. The FE compares each project's
+    // last-seen `sdk_version` against this map to render "Up to date /
+    // Outdated / Deprecated" feedback in the project row.
+    //
+    // Done as a single query (not per-project) because the catalogue is
+    // tiny (one row per package) and shared across every row — a project
+    // running @mushi-mushi/web@0.7 is "outdated" the same way regardless of
+    // which org owns it.
+    const { data: sdkCatalogRows } = await db
+      .from('sdk_versions')
+      .select('package, version, deprecated, deprecation_message, released_at')
+      .order('released_at', { ascending: false });
+
+    interface LatestSdk {
+      version: string;
+      deprecated: boolean;
+      deprecation_message: string | null;
+      released_at: string;
+    }
+    const latestSdkVersions: Record<string, LatestSdk> = {};
+    for (const row of sdkCatalogRows ?? []) {
+      // First row per package wins (we ordered DESC by released_at). A
+      // newer release of the same package displaces the older entry only
+      // implicitly via this guard, so we never need a separate "is latest"
+      // flag in the catalogue.
+      if (!latestSdkVersions[row.package]) {
+        latestSdkVersions[row.package] = {
+          version: row.version,
+          deprecated: !!row.deprecated,
+          deprecation_message:
+            (row as { deprecation_message?: string | null }).deprecation_message ?? null,
+          released_at: row.released_at,
+        };
+      }
     }
 
     const planBacklogMap: Record<string, number> = {};
@@ -860,6 +922,24 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         bottleneckStage = 'plan';
         bottleneckLabel = `${planCount} ${planCount === 1 ? 'report waiting' : 'reports waiting'} > 1h`;
       }
+      // SDK freshness — only meaningful when at least one report has
+      // landed (otherwise we have no version to compare against). The FE
+      // treats `sdk_status: 'unknown'` as "no data yet, don't paint a
+      // badge" so projects in their first 60 seconds don't blink red
+      // before the first ingest arrives.
+      const sdkPackage = lastSdkPackageMap[p.id] ?? null;
+      const sdkVersion = lastSdkVersionMap[p.id] ?? null;
+      const latestForPackage = sdkPackage ? latestSdkVersions[sdkPackage] ?? null : null;
+      let sdkStatus: 'up-to-date' | 'outdated' | 'deprecated' | 'unknown' = 'unknown';
+      if (sdkPackage && sdkVersion && latestForPackage) {
+        if (latestForPackage.deprecated) {
+          sdkStatus = 'deprecated';
+        } else if (sdkVersion === latestForPackage.version) {
+          sdkStatus = 'up-to-date';
+        } else {
+          sdkStatus = 'outdated';
+        }
+      }
       return {
         ...p,
         report_count: countMap[p.id] ?? 0,
@@ -870,6 +950,11 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         last_report_at: lastReportMap[p.id] ?? null,
         pdca_bottleneck: bottleneckStage,
         pdca_bottleneck_label: bottleneckLabel,
+        sdk_package: sdkPackage,
+        sdk_version: sdkVersion,
+        sdk_latest_version: latestForPackage?.version ?? null,
+        sdk_deprecation_message: latestForPackage?.deprecation_message ?? null,
+        sdk_status: sdkStatus,
       };
     });
 
@@ -887,7 +972,15 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       }
     })();
 
-    return c.json({ ok: true, data: { projects: enriched, admin_host: adminHost } });
+    // Surface the latest-known SDK version per package alongside the
+    // enriched projects so the FE can render outdated-SDK feedback even
+    // for project rows that haven't ingested a report yet (the "install
+    // snippet" already shows a version — let the badge agree with the
+    // catalog instead of the SDK's own bundled metadata).
+    return c.json({
+      ok: true,
+      data: { projects: enriched, admin_host: adminHost, latest_sdk_versions: latestSdkVersions },
+    });
   });
 
   app.post('/v1/admin/projects', jwtAuth, async (c) => {

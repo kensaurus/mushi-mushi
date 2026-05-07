@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, CopyButton } from '../ui'
 import { useToast } from '../../lib/toast'
 
 interface CodebaseStats {
@@ -208,9 +208,15 @@ export function CodebaseIndexCard({ projectId }: Props) {
 
 function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss: () => void }) {
   const toast = useToast()
+  const [copied, setCopied] = useState(false)
+  // Controlled mode lets us show our own toast with the "paste into
+  // GitHub → Settings → Webhooks → Secret" follow-up while still
+  // borrowing the shared CopyButton visual (icon + green-check).
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(secret)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
       toast.success('Webhook secret copied', 'Paste into GitHub → Settings → Webhooks → Secret')
     } catch {
       toast.error('Clipboard blocked', 'Select the text and copy manually.')
@@ -225,7 +231,17 @@ function WebhookSecretReveal({ secret, onDismiss }: { secret: string; onDismiss:
         {secret}
       </pre>
       <div className="mt-2 flex items-center gap-2">
-        <Btn size="sm" onClick={() => void copy()}>Copy secret</Btn>
+        {/* Icon-only copy primitive — paired with the explanatory
+            "One-time webhook secret" header above so users still know
+            what they're copying without a verbose label. The visual
+            language now matches every other copy affordance in the
+            admin (Onboarding, SDK install, MCP). */}
+        <CopyButton
+          onCopy={copy}
+          copied={copied}
+          label="Copy webhook secret"
+          copiedLabel="Webhook secret copied"
+        />
         <Btn variant="ghost" size="sm" onClick={onDismiss}>I've stored it — hide</Btn>
         <a
           href="https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries"
