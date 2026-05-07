@@ -11,6 +11,7 @@ import {
   getActiveOrgIdSnapshot,
   setActiveOrgIdSnapshot,
 } from '../lib/activeOrg'
+import { useCreateOrganization } from '../lib/useCreateOrganization'
 
 export interface OrganizationSummary {
   id: string
@@ -19,12 +20,43 @@ export interface OrganizationSummary {
   plan_id: string
   role: string
   is_personal?: boolean
+  /**
+   * Org-level billing posture from `organizations.billing_mode`.
+   * When `'complimentary'` the team pill renders "admin" instead of the
+   * underlying `plan_id` so internal staff / sponsored orgs don't read as
+   * paying customers in the global header.
+   */
+  billing_mode?: 'stripe' | 'complimentary'
+}
+
+/**
+ * Render the right-hand chip on each org row. Complimentary orgs get a
+ * distinct "admin" label that overrides the raw `plan_id` so a comp Pro org
+ * never reads as "Pro" in the header. Returned as a plain string so the
+ * caller stays in control of layout / wrapping.
+ */
+function orgPillLabel(org: OrganizationSummary): string {
+  return org.billing_mode === 'complimentary' ? 'admin' : org.plan_id
 }
 
 export function OrgSwitcher() {
-  const { data, loading } = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org')
+  const orgsQuery = usePageData<{ organizations: OrganizationSummary[] }>('/v1/org')
+  const { data, loading } = orgsQuery
   const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
+  // Inline "create new team" affordance — same pattern as ProjectSwitcher
+  // so users discover it in the same shape across the header.
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const newNameInputRef = useRef<HTMLInputElement | null>(null)
+  const { create: createOrg, creating: submitting } = useCreateOrganization({
+    onCreated: () => {
+      setNewName('')
+      setCreating(false)
+      setOpen(false)
+      orgsQuery.reload()
+    },
+  })
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -48,6 +80,16 @@ export function OrgSwitcher() {
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
+
+  // Auto-focus inline name input when "+ New team" is clicked. Defer to
+  // next tick because the input only renders after `creating` flips true.
+  useEffect(() => {
+    if (creating) {
+      requestAnimationFrame(() => newNameInputRef.current?.focus())
+    } else {
+      setNewName('')
+    }
+  }, [creating])
 
   if (loading) {
     return (
@@ -81,37 +123,94 @@ export function OrgSwitcher() {
       >
         <span className="text-3xs uppercase tracking-wider text-fg-faint">Team</span>
         <span className="max-w-[12rem] truncate font-medium">{active.name}</span>
-        <span className="rounded bg-surface-overlay px-1 text-3xs uppercase text-fg-faint">
-          {active.plan_id}
+        <span
+          className={`rounded px-1 text-3xs uppercase ${
+            active.billing_mode === 'complimentary'
+              ? 'bg-brand-subtle text-brand'
+              : 'bg-surface-overlay text-fg-faint'
+          }`}
+          title={
+            active.billing_mode === 'complimentary'
+              ? `Admin / complimentary org — feature set tracks the ${active.plan_id} tier`
+              : undefined
+          }
+        >
+          {orgPillLabel(active)}
         </span>
       </button>
       {open && (
-        <ul
-          role="listbox"
-          className="absolute right-0 top-full z-50 mt-1 max-h-72 w-72 overflow-y-auto rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
+        <div
+          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
         >
-          {orgs.map((org) => (
-            <li key={org.id}>
+          <ul role="listbox" className="max-h-72 overflow-y-auto">
+            {orgs.map((org) => (
+              <li key={org.id}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={org.id === active.id}
+                  onClick={() => pick(org.id)}
+                  className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
+                    org.id === active.id ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate">{org.name}</span>
+                    <span className="block truncate text-3xs font-mono text-fg-faint">
+                      {org.role} · {orgPillLabel(org)}
+                    </span>
+                  </span>
+                  {org.id === active.id && <span className="text-2xs text-brand">✓</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="border-t border-edge-subtle bg-surface-raised/60">
+            {creating ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!newName.trim() || submitting) return
+                  void createOrg(newName)
+                }}
+                className="flex items-center gap-1.5 p-1.5"
+              >
+                <input
+                  ref={newNameInputRef}
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation()
+                      setCreating(false)
+                    }
+                  }}
+                  placeholder="New team name"
+                  maxLength={120}
+                  className="flex-1 min-w-0 rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                  aria-label="New team name"
+                />
+                <button
+                  type="submit"
+                  disabled={!newName.trim() || submitting}
+                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+                >
+                  {submitting ? '…' : 'Create'}
+                </button>
+              </form>
+            ) : (
               <button
                 type="button"
-                role="option"
-                aria-selected={org.id === active.id}
-                onClick={() => pick(org.id)}
-                className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
-                  org.id === active.id ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
-                }`}
+                onClick={() => setCreating(true)}
+                className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
               >
-                <span className="min-w-0">
-                  <span className="block truncate">{org.name}</span>
-                  <span className="block truncate text-3xs font-mono text-fg-faint">
-                    {org.role} · {org.plan_id}
-                  </span>
-                </span>
-                {org.id === active.id && <span className="text-2xs text-brand">✓</span>}
+                <span aria-hidden className="text-sm leading-none">+</span>
+                <span>New team</span>
               </button>
-            </li>
-          ))}
-        </ul>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

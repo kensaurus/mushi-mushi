@@ -36,11 +36,13 @@ import {
   Input,
   Textarea,
   SelectField,
+  Sparkline,
 } from '../components/ui'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PlanComparisonTable } from '../components/billing/PlanComparisonTable'
 import { PlanBenefitsList } from '../components/billing/PlanBenefitsList'
+import { Modal } from '../components/Modal'
 
 interface PlanCatalog {
   id: 'hobby' | 'starter' | 'pro' | 'enterprise' | string
@@ -76,16 +78,24 @@ interface BillingProject {
   subscription: {
     status?: string
     plan_id?: string | null
-    stripe_price_id?: string
+    stripe_price_id?: string | null
     current_period_start?: string
     current_period_end?: string
     cancel_at_period_end?: boolean
+    /** True when synthesised by the API for a complimentary org (no Stripe sub). */
+    synthetic?: boolean
   } | null
   customer: {
     stripe_customer_id?: string
     default_payment_ok?: boolean
     email?: string | null
   } | null
+  /**
+   * Org-level billing posture. `'stripe'` (default) = self-serve Stripe Billing;
+   * `'complimentary'` = Mushi-internal / staff / sponsored — entitlements come
+   * from `organizations.plan_id` and no Stripe customer is required.
+   */
+  billing_mode?: 'stripe' | 'complimentary'
   period_start: string
   usage: {
     reports: number
@@ -103,6 +113,16 @@ interface BillingProject {
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
+  /**
+   * Last 30 daily buckets of `reports_ingested` for this project, oldest →
+   * newest. Always exactly 30 entries — days with no events come back as
+   * `reports: 0` so the sparkline domain is stable across renders. Drives the
+   * "Last 30 days" sparkline + caption in the UsageBar so the user can
+   * sanity-check the headline number against actual time distribution.
+   */
+  usage_series?: {
+    days: Array<{ day: string; reports: number }>
+  } | null
 }
 
 interface BillingResponse {
@@ -236,13 +256,14 @@ export function BillingPage() {
         howToUse="Each project bills independently. Click Upgrade to start a Stripe Checkout session, or Manage to jump into the customer portal. Recent invoices appear inline once Stripe sends the first one."
       />
 
-      {(billing?.plans?.length ?? 0) > 0 && (
-        <PlanComparisonTable
-          plans={billing!.plans!}
-          currentPlanId={activeTierId}
-        />
-      )}
-
+      {/* Order: identity first, options second.
+          Project card(s) show "where you are" — current plan, usage, and the
+          30-day sparkline — so the user has context before scanning the plan
+          comparison. Showing "Plans at a glance" first put the user in
+          shopping mode before they knew what they had; landing on their own
+          card answers the implicit "am I OK?" question first, then the table
+          contextualises a switch ("would 0/1k Hobby fit?") with that answer
+          already in hand. */}
       {projects.length === 0 ? (
         <EmptyState
           title="No projects yet"
@@ -266,6 +287,21 @@ export function BillingPage() {
             />
           ))}
         </div>
+      )}
+
+      {(billing?.plans?.length ?? 0) > 0 && (
+        <PlanComparisonTable
+          plans={billing!.plans!}
+          currentPlanId={activeTierId}
+          currentUsage={
+            activeProject
+              ? {
+                  reports: activeProject.usage?.reports ?? 0,
+                  contextLabel: activeProject.project_name,
+                }
+              : undefined
+          }
+        />
       )}
 
       <SupportSection projects={projects} />
@@ -298,12 +334,19 @@ function ProjectBillingCard({
   const planLabel = tier?.display_name
     ?? (subscribed ? `Plan ${project.subscription?.plan_id ?? '—'}` : 'Hobby (free)')
   const statusLabel = subscribed ? (project.subscription?.status ?? 'active') : 'free'
-  // Use the API-provided usage_pct when available; clamp client-side too.
+  // Org-level posture: complimentary orgs (Mushi staff / sponsored / beta) have
+  // a synthesised subscription server-side and intentionally no Stripe customer.
+  // Hide every Stripe-touching affordance for them — no checkout, no portal,
+  // no invoices section noise — and replace with a clear "Complimentary" badge.
+  const isComplimentary = project.billing_mode === 'complimentary'
+  // Use the API-provided usage_pct when available; we DON'T clamp here so the
+  // UsageBar can show the true overage % (e.g. "120% used") in the chip.
+  // Bar fill clamping is the bar component's responsibility.
   const apiPct = project.usage_pct ?? null
   const usagePct = apiPct != null
-    ? Math.min(100, apiPct)
+    ? apiPct
     : project.limit_reports
-      ? Math.min(100, Math.round((project.usage.reports / project.limit_reports) * 100))
+      ? Math.round((project.usage.reports / project.limit_reports) * 100)
       : null
 
   const overageRate = tier?.overage_unit_amount_decimal
@@ -315,28 +358,58 @@ function ProjectBillingCard({
         <div>
           <h3 className="text-sm font-semibold text-fg">{project.project_name}</h3>
           <div className="flex flex-wrap items-center gap-2 mt-0.5">
-            <Badge className={TIER_TONE[tierId] ?? 'bg-surface-overlay text-fg-muted'}>
-              {planLabel}
-              {tier && tier.monthly_price_usd > 0 && (
-                <span className="ml-1 opacity-70">${tier.monthly_price_usd}/mo</span>
-              )}
-            </Badge>
-            {subscribed && (
-              <Badge className={STATUS_TONE[statusLabel] ?? 'bg-surface-overlay text-fg-muted'}>
-                {statusLabel}
-              </Badge>
+            {isComplimentary ? (
+              <>
+                {/* Complimentary orgs lead with the *account class* (Admin),
+                    not the entitlement tier. Showing "Pro $99/mo" on a comp
+                    account misrepresents the relationship and was the user's
+                    direct complaint ("still being shown as Pro instead of
+                    Admin"). The tier sits next to it as a secondary fact so
+                    the user still knows which feature set they have. */}
+                <Badge
+                  className="bg-brand-subtle text-brand border border-brand/40 font-semibold"
+                  title={`Admin account — billed by Mushi Mushi at no cost. Feature set tracks the ${planLabel} tier (${tier?.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo, ${tier?.retention_days ?? 0}-day retention).`}
+                >
+                  <span aria-hidden="true" className="mr-1 leading-none">◆</span>
+                  Admin
+                </Badge>
+                <span className="text-2xs text-fg-muted">
+                  <span className="font-mono uppercase tracking-wider text-fg-faint">tier</span>{' '}
+                  <span className="font-medium text-fg-secondary">{planLabel}</span>
+                  <span className="ml-0.5 text-fg-faint"> entitlements</span>
+                </span>
+                <Badge
+                  className="bg-surface-overlay text-fg-muted border border-edge-subtle"
+                  title="No Stripe customer or invoice exists for this org. Entitlements are honoured at the platform level."
+                >
+                  No charges
+                </Badge>
+              </>
+            ) : (
+              <>
+                <Badge className={TIER_TONE[tierId] ?? 'bg-surface-overlay text-fg-muted'}>
+                  {planLabel}
+                  {tier && tier.monthly_price_usd > 0 && (
+                    <span className="ml-1 opacity-70">${tier.monthly_price_usd}/mo</span>
+                  )}
+                </Badge>
+                {subscribed && (
+                  <Badge className={STATUS_TONE[statusLabel] ?? 'bg-surface-overlay text-fg-muted'}>
+                    {statusLabel}
+                  </Badge>
+                )}
+              </>
             )}
             {project.subscription?.cancel_at_period_end && (
               <Badge className="bg-warn/10 text-warn border border-warn/30">
                 Cancels at period end
               </Badge>
             )}
-            {project.over_quota && (
-              <Badge className="bg-danger-subtle text-danger">
-                Over quota — new reports rejected
-              </Badge>
-            )}
-            {overageRate != null && (
+            {/* The quota severity badge used to live here. Moved into UsageBar
+                so the chip and the bar are co-located — fixes the dup-datum
+                fold issue and gives the severity signal a proper home next to
+                the number it grades. */}
+            {overageRate != null && !isComplimentary && (
               <span className="text-2xs text-fg-faint">
                 Overage ${Number(overageRate).toFixed(4)} / report
               </span>
@@ -349,7 +422,7 @@ function ProjectBillingCard({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          {purchasable.length > 0 && (
+          {purchasable.length > 0 && !isComplimentary && (
             <Btn
               onClick={onTogglePicker}
               disabled={actioning?.startsWith(`checkout:${project.project_id}`) ?? false}
@@ -357,7 +430,7 @@ function ProjectBillingCard({
               {pickerOpen ? 'Hide plans' : subscribed ? 'Change plan' : 'Upgrade'}
             </Btn>
           )}
-          {project.customer?.stripe_customer_id && (
+          {project.customer?.stripe_customer_id && !isComplimentary && (
             <Btn
               variant="ghost"
               onClick={onManage}
@@ -386,6 +459,10 @@ function ProjectBillingCard({
         pct={usagePct}
         periodStart={project.period_start}
         llmCostUsd={project.llm_cost_usd_this_month}
+        overQuota={project.over_quota}
+        overageRate={overageRate ?? null}
+        tierId={tierId}
+        usageSeries={project.usage_series}
       />
 
       {tier && (
@@ -398,7 +475,11 @@ function ProjectBillingCard({
         />
       )}
 
-      <InvoicesSection projectId={project.project_id} hasCustomer={!!project.customer?.stripe_customer_id} />
+      <InvoicesSection
+        projectId={project.project_id}
+        hasCustomer={!!project.customer?.stripe_customer_id}
+        isComplimentary={isComplimentary}
+      />
     </Card>
   )
 }
@@ -470,6 +551,19 @@ interface UsageBarProps {
   periodStart: string | null
   /** §3: real $ spent on LLM calls this billing month. */
   llmCostUsd?: number
+  /** API-flagged: ingest is currently being rejected (Hobby) or overage-billed (paid). */
+  overQuota: boolean
+  /** USD per report once over included quota. `null` for plans without metered overage. */
+  overageRate: number | null
+  /** `'hobby' | 'starter' | 'pro' | 'enterprise'` — drives whether overage is billed or rejected. */
+  tierId: string
+  /**
+   * 30-day daily reports series (oldest → newest, always 30 entries). When
+   * present, renders a sparkline + summary caption beneath the progress bar
+   * so the user can verify the headline count against the actual temporal
+   * shape of their ingest. Omit on legacy API responses → section hides.
+   */
+  usageSeries?: BillingProject['usage_series']
 }
 
 interface UsageForecast {
@@ -514,69 +608,392 @@ const FORECAST_TONE: Record<UsageForecast['tone'], string> = {
   muted: 'text-fg-faint',
 }
 
-function UsageBar({ usage, limitReports, pct, periodStart, llmCostUsd }: UsageBarProps) {
-  const barColor = pct == null
-    ? 'bg-brand'
-    : pct >= 100
-      ? 'bg-danger'
-      : pct >= 80
-        ? 'bg-warn'
-        : 'bg-ok'
+// Severity tone the whole UsageBar takes on — matches across chip, progress
+// bar, and headline number so the user gets one consistent visual signal.
+type UsageTone = 'ok' | 'warn' | 'danger' | 'muted'
+
+interface UsageHeadline {
+  tone: UsageTone
+  /** Short label for the right-aligned chip ("Healthy" / "Approaching quota" / "Over quota"). */
+  chipLabel: string
+  /** Long-form sentence under the bar. Plan-aware. `null` => suppress (no signal yet). */
+  narrative: string | null
+}
+
+const USAGE_CHIP_TONE: Record<UsageTone, string> = {
+  ok: 'bg-ok-muted text-ok',
+  warn: 'bg-warn/10 text-warn',
+  danger: 'bg-danger-subtle text-danger',
+  muted: 'bg-surface-overlay text-fg-muted',
+}
+
+const USAGE_BAR_TONE: Record<UsageTone, string> = {
+  ok: 'bg-ok',
+  warn: 'bg-warn',
+  danger: 'bg-danger',
+  muted: 'bg-fg-faint/40',
+}
+
+const USAGE_NUMBER_TONE: Record<UsageTone, string> = {
+  ok: 'text-fg',
+  warn: 'text-warn',
+  danger: 'text-danger',
+  muted: 'text-fg',
+}
+
+/**
+ * Build the severity tone + plan-aware narrative for a single project's quota.
+ * Hobby gets "rejected" copy because the gateway HTTP-402s past the limit;
+ * paid plans get "billed" copy because the meter just keeps going.
+ */
+function buildUsageHeadline(
+  used: number,
+  limit: number | null,
+  pct: number | null,
+  overQuota: boolean,
+  overageRate: number | null,
+  tierId: string,
+): UsageHeadline {
+  if (limit == null) {
+    return { tone: 'muted', chipLabel: 'Unlimited', narrative: 'No monthly cap on this plan.' }
+  }
+  const isHobby = tierId === 'hobby'
+  if (overQuota || (pct != null && pct >= 100)) {
+    const overageReports = Math.max(0, used - limit)
+    if (isHobby || overageRate == null || overageRate <= 0) {
+      return {
+        tone: 'danger',
+        chipLabel: 'Over quota',
+        narrative:
+          overageReports > 0
+            ? `${overageReports.toLocaleString()} report${overageReports === 1 ? '' : 's'} rejected this period — upgrade to keep ingesting.`
+            : 'New reports are being rejected — upgrade to keep ingesting.',
+      }
+    }
+    const overageUsd = overageReports * overageRate
+    return {
+      tone: 'danger',
+      chipLabel: 'Over quota',
+      narrative: `${overageReports.toLocaleString()} overage report${overageReports === 1 ? '' : 's'} — billed at $${overageRate.toFixed(4)}/each = ${formatLlmCost(overageUsd)} this cycle.`,
+    }
+  }
+  if (pct != null && pct >= 80) {
+    const remaining = Math.max(0, limit - used)
+    return {
+      tone: 'warn',
+      chipLabel: `Approaching quota`,
+      narrative: `${remaining.toLocaleString()} report${remaining === 1 ? '' : 's'} of headroom left this period.`,
+    }
+  }
+  if (pct != null && pct >= 50) {
+    const remaining = Math.max(0, limit - used)
+    return {
+      tone: 'ok',
+      chipLabel: `${pct}% used`,
+      narrative: `${remaining.toLocaleString()} reports of headroom left.`,
+    }
+  }
+  return {
+    tone: 'ok',
+    chipLabel: pct != null ? `${pct}% used` : 'Healthy',
+    narrative: pct === 0 || pct == null ? 'Plenty of headroom this period.' : null,
+  }
+}
+
+interface UsageSeriesSummary {
+  values: number[]
+  total: number
+  activeDays: number
+  peakReports: number
+  peakDayLabel: string | null
+  /** Most recent day with any reports, formatted as "Apr 23" — null when fully idle. */
+  lastActiveDayLabel: string | null
+  lastActiveDaysAgo: number | null
+  /** Average reports / active day, rounded to 1dp. 0 when no active days. */
+  avgPerActiveDay: number
+}
+
+/**
+ * Derive everything the sparkline section needs from a 30-day daily reports
+ * series. Built once per render rather than splattered across JSX so the
+ * component stays scannable and the math is easy to test.
+ */
+function summariseUsageSeries(
+  series: BillingProject['usage_series'],
+): UsageSeriesSummary | null {
+  if (!series || !Array.isArray(series.days) || series.days.length === 0) return null
+  const values = series.days.map((d) => Math.max(0, Number(d.reports) || 0))
+  const total = values.reduce((a, b) => a + b, 0)
+  const activeBuckets = series.days.filter((d) => (Number(d.reports) || 0) > 0)
+  const activeDays = activeBuckets.length
+  const avgPerActiveDay = activeDays > 0 ? Math.round((total / activeDays) * 10) / 10 : 0
+
+  let peakReports = 0
+  let peakDayLabel: string | null = null
+  for (const d of series.days) {
+    const v = Number(d.reports) || 0
+    if (v > peakReports) {
+      peakReports = v
+      peakDayLabel = formatShortDay(d.day)
+    }
+  }
+
+  let lastActiveDayLabel: string | null = null
+  let lastActiveDaysAgo: number | null = null
+  for (let i = series.days.length - 1; i >= 0; i--) {
+    if ((Number(series.days[i].reports) || 0) > 0) {
+      lastActiveDayLabel = formatShortDay(series.days[i].day)
+      lastActiveDaysAgo = series.days.length - 1 - i
+      break
+    }
+  }
+
+  return {
+    values,
+    total,
+    activeDays,
+    peakReports,
+    peakDayLabel,
+    lastActiveDayLabel,
+    lastActiveDaysAgo,
+    avgPerActiveDay,
+  }
+}
+
+function formatShortDay(yyyyMmDd: string): string | null {
+  const [y, m, d] = yyyyMmDd.split('-').map(Number)
+  if (!y || !m || !d) return null
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+const SPARK_TONE: Record<UsageTone, string> = {
+  ok: 'text-ok',
+  warn: 'text-warn',
+  danger: 'text-danger',
+  muted: 'text-fg-muted',
+}
+
+function UsageBar({
+  usage,
+  limitReports,
+  pct,
+  periodStart,
+  llmCostUsd,
+  overQuota,
+  overageRate,
+  tierId,
+  usageSeries,
+}: UsageBarProps) {
+  const headline = buildUsageHeadline(usage.reports, limitReports, pct, overQuota, overageRate, tierId)
+  const barTone = USAGE_BAR_TONE[headline.tone]
+  // Bar fill: clamp at 100% so the visual length stays sane, but the chip +
+  // narrative still report the *real* overage above the bar.
+  const barWidthPct = pct == null ? 0 : Math.min(100, Math.max(2, pct))
   const forecast = buildUsageForecast(usage.reports, limitReports, periodStart)
+  const seriesSummary = summariseUsageSeries(usageSeries)
+
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-2xs text-fg-muted gap-2 flex-wrap">
-        <span>
-          Reports this period: <span className="font-mono text-fg">{usage.reports.toLocaleString()}</span>
-          {limitReports != null && (
-            <> <span className="text-fg-faint">/ {limitReports.toLocaleString()}</span></>
-          )}
-          {limitReports == null && <> <span className="text-fg-faint">(unlimited)</span></>}
-        </span>
-        <span className="text-fg-faint flex items-center gap-2 flex-wrap">
-          <span>
-            Fixes <span className="font-mono text-fg-secondary">{usage.fixes.toLocaleString()}</span>
-          </span>
-          <span aria-hidden="true">·</span>
-          <span>
-            Classifier tokens <span className="font-mono text-fg-secondary">{usage.tokens.toLocaleString()}</span>
-          </span>
-          {llmCostUsd != null && (
-            <>
-              <span aria-hidden="true">·</span>
-              <span
-                className="font-mono text-fg-secondary"
-                title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd"
-              >
-                LLM <span className="text-fg">{formatLlmCost(llmCostUsd)}</span>
+    <section
+      className="space-y-2"
+      aria-label={`Quota usage: ${headline.chipLabel}${pct != null ? ` (${pct}%)` : ''}`}
+      data-quota-tone={headline.tone}
+    >
+      {/* Headline row — the count + severity chip are now the focal point of
+          the card. Tabular-nums keeps the digits aligned across re-renders. */}
+      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-baseline gap-1.5 flex-wrap">
+            <span className={`text-base font-semibold tabular-nums ${USAGE_NUMBER_TONE[headline.tone]}`}>
+              {usage.reports.toLocaleString()}
+            </span>
+            {limitReports != null ? (
+              <span className="text-xs text-fg-muted tabular-nums">
+                / {limitReports.toLocaleString()}
               </span>
-            </>
+            ) : (
+              <span className="text-xs text-fg-faint">unlimited</span>
+            )}
+            <span className="text-2xs text-fg-faint">reports this period</span>
+          </div>
+        </div>
+        <Badge className={USAGE_CHIP_TONE[headline.tone]} title={headline.narrative ?? undefined}>
+          {/* Tone glyph — small visual anchor so the chip reads at a squint
+              even when colour is missing (high-contrast mode, colour-blind). */}
+          <span aria-hidden="true" className="mr-1 leading-none">
+            {headline.tone === 'danger' ? '●' : headline.tone === 'warn' ? '▲' : headline.tone === 'muted' ? '∞' : '○'}
+          </span>
+          {headline.chipLabel}
+          {pct != null && headline.chipLabel !== `${pct}% used` && (
+            <span className="ml-1 font-mono opacity-80 tabular-nums">{pct}%</span>
           )}
-        </span>
+        </Badge>
       </div>
+
       {limitReports != null && (
-        <div className="h-1.5 bg-surface-overlay rounded-sm overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? 0}>
-          <div className={`h-full ${barColor}`} style={{ width: `${Math.max(2, pct ?? 0)}%` }} />
+        <div
+          className="relative h-2.5 bg-surface-overlay rounded-sm overflow-hidden"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.min(100, pct ?? 0)}
+          aria-valuetext={`${pct ?? 0}% of monthly quota used`}
+        >
+          <div
+            className={`h-full ${barTone} motion-safe:transition-[width] duration-500`}
+            style={{ width: `${barWidthPct}%` }}
+          />
+          {/* 80% milestone tick — gives the eye something to land on between
+              "comfortable" and "you should look at this". Hidden when over quota
+              so the danger bar reads as a single saturated block. */}
+          {headline.tone !== 'danger' && (
+            <span
+              aria-hidden="true"
+              className="absolute top-0 bottom-0 w-px bg-edge-subtle/80"
+              style={{ left: '80%' }}
+            />
+          )}
         </div>
       )}
-      {forecast && (
-        <p className={`text-2xs px-1.5 py-0.5 rounded-sm inline-block font-mono ${FORECAST_TONE[forecast.tone]}`}>
-          {forecast.label}
-        </p>
+
+      {(headline.narrative || forecast) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {headline.narrative && (
+            <p
+              className={`text-2xs ${headline.tone === 'danger' ? 'text-danger' : headline.tone === 'warn' ? 'text-warn' : 'text-fg-muted'}`}
+            >
+              {headline.narrative}
+            </p>
+          )}
+          {forecast && (
+            <p
+              className={`text-2xs px-1.5 py-0.5 rounded-sm inline-block font-mono ${FORECAST_TONE[forecast.tone]}`}
+            >
+              {forecast.label}
+            </p>
+          )}
+        </div>
       )}
-    </div>
+
+      {/* 30-day reports trend — sits between the period headline and the
+          secondary metrics so the user can sanity-check the big number ("am I
+          really at 60k?") against the actual time distribution. The
+          sparkline inherits the headline tone so the chart, chip, and bar all
+          read as one coherent severity signal. When the project has been
+          fully idle for 30 days we suppress the chart and show a one-line
+          empty state instead — a flat zero line is visual noise, not signal. */}
+      {seriesSummary && (
+        <section
+          className="border-t border-edge-subtle/60 pt-2 space-y-1"
+          aria-label="Last 30 days of reports ingested"
+        >
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-2xs uppercase tracking-wider text-fg-faint">
+              Last 30 days
+            </span>
+            <span className="text-2xs text-fg-faint tabular-nums">
+              {seriesSummary.total.toLocaleString()} report
+              {seriesSummary.total === 1 ? '' : 's'}
+              <span aria-hidden="true" className="mx-1">·</span>
+              {seriesSummary.activeDays} active day
+              {seriesSummary.activeDays === 1 ? '' : 's'}
+            </span>
+          </div>
+          {seriesSummary.total > 0 ? (
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className={SPARK_TONE[headline.tone]}>
+                <Sparkline
+                  values={seriesSummary.values}
+                  width={180}
+                  height={28}
+                  ariaLabel={`Daily reports trend over the last 30 days. Total ${seriesSummary.total}, ${seriesSummary.activeDays} active days, peak ${seriesSummary.peakReports}${seriesSummary.peakDayLabel ? ` on ${seriesSummary.peakDayLabel}` : ''}.`}
+                />
+              </div>
+              <p className="text-2xs text-fg-muted tabular-nums">
+                {seriesSummary.avgPerActiveDay > 0 && (
+                  <>
+                    <span className="font-mono text-fg-secondary">
+                      {seriesSummary.avgPerActiveDay}
+                    </span>
+                    <span className="ml-0.5">/ active day</span>
+                  </>
+                )}
+                {seriesSummary.peakDayLabel && seriesSummary.peakReports > 0 && (
+                  <>
+                    <span aria-hidden="true" className="mx-1">·</span>
+                    peak <span className="font-mono text-fg-secondary">{seriesSummary.peakReports.toLocaleString()}</span>
+                    <span className="ml-0.5">on {seriesSummary.peakDayLabel}</span>
+                  </>
+                )}
+                {seriesSummary.lastActiveDayLabel && seriesSummary.lastActiveDaysAgo != null && (
+                  <>
+                    <span aria-hidden="true" className="mx-1">·</span>
+                    last activity{' '}
+                    {seriesSummary.lastActiveDaysAgo === 0
+                      ? 'today'
+                      : seriesSummary.lastActiveDaysAgo === 1
+                        ? 'yesterday'
+                        : `${seriesSummary.lastActiveDaysAgo}d ago`}
+                  </>
+                )}
+              </p>
+            </div>
+          ) : (
+            <p className="text-2xs text-fg-faint">
+              No reports ingested in the last 30 days. Confirm the SDK is wired
+              up and sending events to this project.
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* Secondary metrics — explicitly demoted below the quota block.
+          They're useful but not what the user came here to read. */}
+      <div className="flex items-center gap-2 flex-wrap text-2xs text-fg-faint pt-1 border-t border-edge-subtle/60">
+        <span>
+          Fixes <span className="font-mono text-fg-secondary tabular-nums">{usage.fixes.toLocaleString()}</span>
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          Classifier tokens <span className="font-mono text-fg-secondary tabular-nums">{usage.tokens.toLocaleString()}</span>
+        </span>
+        {llmCostUsd != null && (
+          <>
+            <span aria-hidden="true">·</span>
+            <span
+              className="font-mono text-fg-secondary"
+              title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd"
+            >
+              LLM <span className="text-fg">{formatLlmCost(llmCostUsd)}</span>
+            </span>
+          </>
+        )}
+      </div>
+    </section>
   )
 }
 
 interface InvoicesSectionProps {
   projectId: string
   hasCustomer: boolean
+  /** Org is on a complimentary plan — Stripe is bypassed, so no invoices ever issue. */
+  isComplimentary?: boolean
 }
 
-function InvoicesSection({ projectId, hasCustomer }: InvoicesSectionProps) {
-  const invoicesQuery = usePageData<{ invoices: Invoice[] }>(
-    hasCustomer ? `/v1/admin/billing/invoices?project_id=${encodeURIComponent(projectId)}` : null,
+function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSectionProps) {
+  const invoicesQuery = usePageData<{ invoices: Invoice[]; note?: string; billing_mode?: string }>(
+    hasCustomer && !isComplimentary
+      ? `/v1/admin/billing/invoices?project_id=${encodeURIComponent(projectId)}`
+      : null,
   )
+
+  if (isComplimentary) {
+    return (
+      <p className="text-2xs text-fg-faint border-t border-edge-subtle pt-2">
+        Complimentary account — no Stripe invoices are issued for this organization.
+      </p>
+    )
+  }
 
   if (!hasCustomer) {
     return (
@@ -693,12 +1110,16 @@ interface SupportTicket {
   id: string
   project_id: string | null
   subject: string
+  body?: string
   category: string
-  status: 'open' | 'in_progress' | 'resolved' | 'closed'
+  status: 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled'
   plan_id: string | null
+  admin_response?: string | null
+  admin_responded_at?: string | null
   created_at: string
   updated_at: string
   resolved_at: string | null
+  cancelled_at?: string | null
 }
 
 const TICKET_STATUS_TONE: Record<SupportTicket['status'], string> = {
@@ -706,6 +1127,19 @@ const TICKET_STATUS_TONE: Record<SupportTicket['status'], string> = {
   in_progress: 'bg-brand-subtle text-brand',
   resolved: 'bg-ok-muted text-ok',
   closed: 'bg-surface-overlay text-fg-muted',
+  cancelled: 'bg-surface-overlay text-fg-faint border border-edge-subtle',
+}
+
+const TICKET_STATUS_LABEL: Record<SupportTicket['status'], string> = {
+  open: 'Open',
+  in_progress: 'In progress',
+  resolved: 'Resolved',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
+}
+
+function isCancellable(status: SupportTicket['status']): boolean {
+  return status === 'open' || status === 'in_progress'
 }
 
 function SupportSection({ projects }: { projects: BillingProject[] }) {
@@ -751,7 +1185,13 @@ function SupportSection({ projects }: { projects: BillingProject[] }) {
         />
       )}
 
-      {tickets.length > 0 && <TicketHistory tickets={tickets} projects={projects} />}
+      {tickets.length > 0 && (
+        <TicketHistory
+          tickets={tickets}
+          projects={projects}
+          onTicketsChanged={() => ticketsQuery.reload()}
+        />
+      )}
     </Card>
   )
 }
@@ -876,27 +1316,212 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
   )
 }
 
-function TicketHistory({ tickets, projects }: { tickets: SupportTicket[]; projects: BillingProject[] }) {
+function TicketHistory({
+  tickets,
+  projects,
+  onTicketsChanged,
+}: {
+  tickets: SupportTicket[]
+  projects: BillingProject[]
+  onTicketsChanged: () => void
+}) {
   const projectName = useCallback(
     (id: string | null) => projects.find((p) => p.project_id === id)?.project_name ?? '—',
     [projects],
   )
+  // Single source of truth for which ticket is expanded. A modal reads
+  // straight from `tickets` instead of cloning state so the row stays in
+  // sync if a realtime push (or explicit reload) updates the ticket while
+  // the modal is open.
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null)
+  const openTicket = tickets.find((t) => t.id === openTicketId) ?? null
+
   return (
     <section className="border-t border-edge-subtle pt-2">
       <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Recent tickets</h4>
       <ul className="divide-y divide-edge-subtle">
-        {tickets.map((t) => (
-          <li key={t.id} className="py-1.5 flex items-center justify-between gap-2 text-2xs">
-            <div className="min-w-0 flex-1">
-              <p className="text-fg truncate font-medium">{t.subject}</p>
-              <p className="text-fg-faint">
-                {projectName(t.project_id)} · {t.category} · <RelativeTime value={t.created_at} />
-              </p>
-            </div>
-            <Badge className={TICKET_STATUS_TONE[t.status]}>{t.status.replace('_', ' ')}</Badge>
-          </li>
-        ))}
+        {tickets.map((t) => {
+          // Surface "you have a reply waiting" right on the row so users
+          // don't have to open every ticket to find the one with news.
+          const hasReply = Boolean(t.admin_response?.trim())
+          return (
+            <li key={t.id}>
+              <button
+                type="button"
+                onClick={() => setOpenTicketId(t.id)}
+                className="w-full py-1.5 flex items-center justify-between gap-2 text-2xs text-left hover:bg-surface-overlay/40 motion-safe:transition-colors rounded-sm px-1 -mx-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                aria-label={`View ticket ${t.subject}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-fg truncate font-medium">{t.subject}</p>
+                    {hasReply && (
+                      <Badge className="bg-brand/15 text-brand border border-brand/30 shrink-0 text-[0.6rem]">
+                        Reply
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-fg-faint truncate">
+                    {projectName(t.project_id)} · {t.category} · <RelativeTime value={t.created_at} />
+                  </p>
+                </div>
+                <Badge className={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS_LABEL[t.status]}</Badge>
+              </button>
+            </li>
+          )
+        })}
       </ul>
+
+      <TicketDetailModal
+        ticket={openTicket}
+        projectName={openTicket ? projectName(openTicket.project_id) : ''}
+        onClose={() => setOpenTicketId(null)}
+        onCancelled={() => {
+          setOpenTicketId(null)
+          onTicketsChanged()
+        }}
+      />
     </section>
+  )
+}
+
+function TicketDetailModal({
+  ticket,
+  projectName,
+  onClose,
+  onCancelled,
+}: {
+  ticket: SupportTicket | null
+  projectName: string
+  onClose: () => void
+  onCancelled: () => void
+}) {
+  const toast = useToast()
+  const [cancelling, setCancelling] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+
+  // Reset transient confirm/cancel state every time the modal points at a
+  // different ticket. Without this, opening ticket A → clicking "Cancel
+  // ticket" → closing → opening ticket B would leave B pre-armed for
+  // cancel, which is a footgun.
+  const ticketId = ticket?.id ?? null
+  useMemo(() => {
+    setConfirming(false)
+    setCancelling(false)
+  }, [ticketId])
+
+  const handleCancel = useCallback(async () => {
+    if (!ticket) return
+    setCancelling(true)
+    const res = await apiFetch<{ ticket_id: string; status: string }>(
+      `/v1/admin/support/tickets/${ticket.id}/cancel`,
+      { method: 'POST' },
+    )
+    setCancelling(false)
+    if (!res.ok) {
+      toast.error('Could not cancel', res.error?.message)
+      return
+    }
+    toast.success('Ticket cancelled', 'Operators have been notified.')
+    onCancelled()
+  }, [ticket, toast, onCancelled])
+
+  if (!ticket) return null
+
+  const cancellable = isCancellable(ticket.status)
+  const statusLine =
+    ticket.status === 'cancelled' && ticket.cancelled_at
+      ? <>Cancelled <RelativeTime value={ticket.cancelled_at} /></>
+      : ticket.status === 'resolved' && ticket.resolved_at
+        ? <>Resolved <RelativeTime value={ticket.resolved_at} /></>
+        : <>Last updated <RelativeTime value={ticket.updated_at} /></>
+
+  return (
+    <Modal
+      open={Boolean(ticket)}
+      onClose={onClose}
+      size="md"
+      ariaLabel={`Support ticket: ${ticket.subject}`}
+      title={
+        <span className="flex items-center gap-2 min-w-0">
+          <span className="truncate">{ticket.subject}</span>
+        </span>
+      }
+      headerAction={
+        <Badge className={TICKET_STATUS_TONE[ticket.status]}>
+          {TICKET_STATUS_LABEL[ticket.status]}
+        </Badge>
+      }
+      footer={
+        <>
+          <Btn size="sm" variant="ghost" onClick={onClose}>
+            Close
+          </Btn>
+          {cancellable && !confirming && (
+            <Btn size="sm" variant="danger" onClick={() => setConfirming(true)}>
+              Cancel ticket
+            </Btn>
+          )}
+          {cancellable && confirming && (
+            <>
+              <Btn size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={cancelling}>
+                Keep ticket
+              </Btn>
+              <Btn size="sm" variant="danger" onClick={handleCancel} loading={cancelling} disabled={cancelling}>
+                Confirm cancel
+              </Btn>
+            </>
+          )}
+        </>
+      }
+    >
+      <div className="space-y-3 text-xs">
+        <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr] text-2xs">
+          <dt className="text-fg-faint">Project</dt>
+          <dd className="text-fg-secondary">{projectName}</dd>
+          <dt className="text-fg-faint">Category</dt>
+          <dd className="text-fg-secondary capitalize">{ticket.category}</dd>
+          <dt className="text-fg-faint">Submitted</dt>
+          <dd className="text-fg-secondary"><RelativeTime value={ticket.created_at} /></dd>
+          <dt className="text-fg-faint">Status</dt>
+          <dd className="text-fg-secondary">{statusLine}</dd>
+        </dl>
+
+        <section>
+          <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Your message</h4>
+          <p className="text-fg-secondary leading-relaxed whitespace-pre-wrap break-words border border-edge-subtle/60 rounded-md bg-surface-raised/30 p-2.5">
+            {ticket.body?.trim() || <span className="italic text-fg-faint">No message recorded.</span>}
+          </p>
+        </section>
+
+        {ticket.admin_response?.trim() ? (
+          <section>
+            <h4 className="text-2xs uppercase tracking-wider text-brand mb-1.5 flex items-center gap-2">
+              <span aria-hidden>↩</span>
+              <span>Reply from support</span>
+              {ticket.admin_responded_at && (
+                <span className="text-fg-faint normal-case tracking-normal">
+                  · <RelativeTime value={ticket.admin_responded_at} />
+                </span>
+              )}
+            </h4>
+            <p className="text-fg leading-relaxed whitespace-pre-wrap break-words border border-brand/30 rounded-md bg-brand/5 p-2.5">
+              {ticket.admin_response}
+            </p>
+          </section>
+        ) : ticket.status === 'open' || ticket.status === 'in_progress' ? (
+          <p className="text-2xs text-fg-faint italic">
+            No reply yet. We aim for one business day on paid plans, two on free. You'll see the
+            response here and in the original email thread.
+          </p>
+        ) : null}
+
+        {ticket.status === 'cancelled' && (
+          <p className="text-2xs text-fg-faint italic">
+            You cancelled this ticket. If the issue resurfaces, send a fresh ticket and link to this id.
+          </p>
+        )}
+      </div>
+    </Modal>
   )
 }

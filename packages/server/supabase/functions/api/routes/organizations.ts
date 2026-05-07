@@ -86,7 +86,9 @@ export function registerOrganizationRoutes(app: Hono): void {
     const db = getServiceClient();
     const { data, error } = await db
       .from('organization_members')
-      .select('role, organizations!inner(id, slug, name, plan_id, is_personal, created_at)')
+      .select(
+        'role, organizations!inner(id, slug, name, plan_id, billing_mode, is_personal, created_at)',
+      )
       .eq('user_id', userId)
       .order('created_at', { ascending: true });
     if (error) return dbError(c, error);
@@ -95,6 +97,106 @@ export function registerOrganizationRoutes(app: Hono): void {
       role: row.role,
     }));
     return c.json({ ok: true, data: { organizations: orgs } });
+  });
+
+  // Create a brand-new organization (team) with the caller as owner.
+  // Used by the OrgSwitcher "+ New team" affordance in the global header.
+  // Personal orgs are created by the auth-trigger backfill, so anything
+  // built via this route is explicitly a non-personal team workspace.
+  app.post('/v1/org', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = (await c.req.json().catch(() => ({}))) as {
+      name?: unknown;
+      slug?: unknown;
+    };
+
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (name.length < 1 || name.length > 120) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_NAME', message: 'Name must be 1-120 characters.' } },
+        400,
+      );
+    }
+
+    // Slug rules mirror the CHECK constraint on `organizations.slug`:
+    //   ^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$ — 3-64 chars, no leading/trailing dash.
+    // Build a candidate from `slug` if supplied, else slugify the name.
+    const rawSlug = typeof body.slug === 'string' ? body.slug.trim() : '';
+    const slugSource = rawSlug || name;
+    const baseSlug = slugSource
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9-]+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'team';
+
+    const db = getServiceClient();
+
+    // Slug uniqueness: probe up to 10 numeric suffixes before falling back
+    // to a random one. The CHECK constraint forbids leading/trailing dashes
+    // and requires 3+ chars, so we pad short bases.
+    async function findFreeSlug(): Promise<string | null> {
+      const padded = baseSlug.length < 3 ? `${baseSlug}-team` : baseSlug;
+      const candidates = [padded, ...Array.from({ length: 10 }, (_, i) => `${padded}-${i + 2}`)];
+      for (const candidate of candidates) {
+        const slugged = candidate.replace(/^-+|-+$/g, '').slice(0, 64);
+        if (slugged.length < 3) continue;
+        const { data: clash } = await db
+          .from('organizations')
+          .select('id')
+          .eq('slug', slugged)
+          .maybeSingle();
+        if (!clash) return slugged;
+      }
+      // Fall back to a hash-style suffix to guarantee uniqueness even if
+      // the deterministic candidates all collide (extremely unlikely).
+      const random = Math.random().toString(36).slice(2, 8);
+      return `${baseSlug.slice(0, 50)}-${random}`.replace(/^-+|-+$/g, '').slice(0, 64);
+    }
+
+    const slug = await findFreeSlug();
+    if (!slug) {
+      return c.json({ ok: false, error: { code: 'SLUG_GENERATION_FAILED' } }, 500);
+    }
+
+    const { data: org, error: insertErr } = await db
+      .from('organizations')
+      .insert({
+        name,
+        slug,
+        owner_id: userId,
+        is_personal: false,
+      })
+      .select('id, slug, name, plan_id, billing_mode, is_personal, created_at')
+      .single();
+
+    if (insertErr || !org) {
+      return dbError(c, insertErr ?? { message: 'organization_insert_failed' });
+    }
+
+    // Membership: caller is the founding owner. The org gets no project
+    // implicitly — the FE prompts the user to create one inside the new
+    // workspace, mirroring how Vercel/Linear onboard a fresh team.
+    const { error: memberErr } = await db
+      .from('organization_members')
+      .insert({
+        organization_id: org.id,
+        user_id: userId,
+        role: 'owner',
+      });
+    if (memberErr) {
+      // Roll back the org so the user isn't stranded with an org they
+      // can't see (RLS only surfaces orgs they're a member of).
+      await db.from('organizations').delete().eq('id', org.id);
+      return dbError(c, memberErr);
+    }
+
+    return c.json({
+      ok: true,
+      data: { organization: { ...org, role: 'owner' } },
+    });
   });
 
   app.get('/v1/org/:id/members', jwtAuth, async (c) => {

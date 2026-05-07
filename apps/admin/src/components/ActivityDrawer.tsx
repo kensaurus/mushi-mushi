@@ -100,6 +100,11 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
   const [events, setEvents] = useState<ActivityEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Heartbeat: timestamp of the last successful sync (initial fetch OR
+  // realtime-triggered reload). Used so an empty feed visibly says
+  // "● Connected · synced 4s ago" instead of just "Quiet on the
+  // pipeline" — operators were reading the empty state as "broken".
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
   const lastSeenRef = useRef<number>(readLastSeen())
   // Latest-wins guard for in-flight activity fetches. If the user switches
   // projects (or realtime fires a reload) while a previous response is still
@@ -122,8 +127,15 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
       `/v1/admin/repo/activity?project_id=${encodeURIComponent(activeProjectId)}&limit=50`,
     )
     if (requestedProjectId !== activeProjectIdRef.current) return
-    if (res.ok && res.data) setEvents(res.data.events)
-    else setError(res.error?.message ?? 'Failed to load activity')
+    if (res.ok && res.data) {
+      setEvents(res.data.events)
+      // Stamp heartbeat on every successful response (including empty
+      // feeds) so the connection indicator stays trustworthy whether or
+      // not anything new actually streamed in.
+      setLastSyncAt(new Date().toISOString())
+    } else {
+      setError(res.error?.message ?? 'Failed to load activity')
+    }
     setLoading(false)
   }, [activeProjectId])
 
@@ -180,14 +192,33 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
       }
     >
       <div className="px-4 py-3">
+        {/* Connection heartbeat — visible in both empty and populated
+            states so operators always know the stream is alive. */}
+        {!loading && !error && (
+          <div className="mb-2 flex items-center gap-1.5 text-2xs text-fg-faint">
+            <span
+              aria-hidden
+              className="inline-block h-1.5 w-1.5 rounded-full bg-ok motion-safe:animate-pulse"
+            />
+            <span>Live</span>
+            {lastSyncAt && (
+              <>
+                <span className="text-fg-faint/60">·</span>
+                <span>
+                  Synced <RelativeTime value={lastSyncAt} />
+                </span>
+              </>
+            )}
+          </div>
+        )}
         {loading && <Loading text="Loading activity…" />}
         {!loading && error && (
           <p className="text-xs text-danger">{error}</p>
         )}
         {!loading && !error && events.length === 0 && (
           <EmptyState
-            title="Quiet on the pipeline"
-            description="Nothing has happened lately. When Mushi dispatches, pushes, or merges a fix it will stream in here in real time."
+            title="No recent activity"
+            description="Connected and listening. The feed lights up the moment Mushi dispatches a fix, opens a PR, or resolves CI."
           />
         )}
         {!loading && !error && events.length > 0 && (

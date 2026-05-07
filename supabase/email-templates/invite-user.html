@@ -1,0 +1,105 @@
+<!--
+  Supabase template: Invite User (auth.email.template.invite)
+  Subject:           You've been invited to Mushi Mushi
+  Triggered by:      supabase.auth.admin.inviteUserByEmail(email)
+  Variables used:    {{ .ConfirmationURL }}, {{ .Email }}, {{ .SiteURL }}
+                      (Optional: {{ .Data.org_name }}, {{ .Data.inviter_name }}
+                       — currently NOT injected by mushi-mushi; if/when the
+                       invite path starts attaching them via `data: {...}`,
+                       this template can interpolate them in the body.)
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>You've been invited to Mushi Mushi</title>
+  <style>
+    @media (prefers-color-scheme: dark) {
+      .body-bg { background:#0f0e0c !important; }
+      .card { background:#1a1815 !important; border-color:#2a2723 !important; }
+      .ink { color:#f2ebdd !important; }
+      .ink-muted { color:#928b7e !important; }
+      .ink-faint { color:#6b665d !important; }
+      .divider { border-color:#2a2723 !important; }
+      .url-block { background:#13110f !important; border-color:#2a2723 !important; }
+      .url-block a { color:#ffb6ad !important; }
+      .footer-strong { color:#f2ebdd !important; }
+      .pill { color:#928b7e !important; border-color:#2a2723 !important; }
+    }
+    @media (max-width: 480px) {
+      .card { padding:28px 22px !important; }
+      .h1 { font-size:22px !important; }
+      .cta { padding:14px 20px !important; font-size:15px !important; }
+    }
+  </style>
+</head>
+<body class="body-bg" style="margin:0; padding:0; background:#f8f4ed; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif; color:#0e0d0b; -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%;">
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#f8f4ed;">
+    You've been invited to join a Mushi Mushi workspace. Accept within 7 days. — Sent to {{ .Email }}
+  </div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="body-bg" style="background:#f8f4ed;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px; width:100%;">
+          <tr>
+            <td style="padding:0 0 22px 0;">
+              <span class="ink" style="font-family:'Iowan Old Style','Hoefler Text',Georgia,'Times New Roman',serif; font-size:20px; letter-spacing:-0.01em; color:#0e0d0b;">
+                <span style="color:#e03c2c;">mushi</span>mushi
+              </span>
+              <span class="pill" style="display:inline-block; margin-left:6px; padding:2px 6px; font-family:'SF Mono','Roboto Mono',Menlo,Consolas,monospace; font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:#5c5852; border:1px solid #d8d2c4; border-radius:3px; vertical-align:middle;">admin</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="card" style="background:#ffffff; border:1px solid #ece4d3; border-radius:8px; padding:36px 36px 30px 36px;">
+              <p style="margin:0 0 14px 0; font-family:'SF Mono','Roboto Mono',Menlo,Consolas,monospace; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:#e03c2c;">
+                Invitation
+              </p>
+              <h1 class="h1 ink" style="margin:0 0 14px 0; font-family:'Iowan Old Style','Hoefler Text',Georgia,'Times New Roman',serif; font-size:26px; line-height:1.25; font-weight:600; color:#0e0d0b; letter-spacing:-0.01em;">
+                You've been invited to Mushi&nbsp;Mushi
+              </h1>
+              <p class="ink-muted" style="margin:0 0 26px 0; font-size:15px; line-height:1.55; color:#5c5852;">
+                A teammate has invited you to a Mushi Mushi workspace — where bugs your users actually feel land in your queue with a proposed fix. Accept the invite to set up your account.
+              </p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px 0;">
+                <tr>
+                  <td bgcolor="#e03c2c" style="border-radius:6px;">
+                    <a class="cta" href="{{ .ConfirmationURL }}" target="_blank" rel="noopener" style="display:inline-block; background:#e03c2c; color:#ffffff; text-decoration:none; font-weight:600; font-size:15px; line-height:1; padding:14px 24px; border-radius:6px;">
+                      Accept invitation&nbsp;→
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p class="ink-faint" style="margin:0 0 8px 0; font-size:12px; color:#9a9489;">
+                Or copy and paste this URL into your browser:
+              </p>
+              <p class="url-block" style="margin:0 0 24px 0; padding:10px 12px; background:#f8f4ed; border:1px solid #ece4d3; border-radius:4px; font-family:'SF Mono','Roboto Mono',Menlo,Consolas,monospace; font-size:12px; line-height:1.5; word-break:break-all;">
+                <a href="{{ .ConfirmationURL }}" style="color:#7a1f15; text-decoration:none;">{{ .ConfirmationURL }}</a>
+              </p>
+              <div class="divider" style="border-top:1px solid #ece4d3; margin:8px 0 18px 0; height:1px; line-height:1px; font-size:1px;">&nbsp;</div>
+              <p class="ink-faint" style="margin:0; font-size:12px; line-height:1.55; color:#9a9489;">
+                This invitation expires in <strong style="color:#5c5852;">7&nbsp;days</strong>. If you weren't expecting this, you can ignore the email — no account will be created.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 4px 0 4px;">
+              <p style="margin:0 0 4px 0; font-size:12px; line-height:1.5; color:#5c5852;">
+                <strong class="footer-strong" style="color:#0e0d0b;">Mushi Mushi</strong> · The bugs your users actually feel, in your queue with a fix.
+              </p>
+              <p class="ink-faint" style="margin:0; font-size:11px; line-height:1.5; color:#9a9489;">
+                Sent to {{ .Email }} ·
+                <a href="https://kensaur.us/mushi-mushi/docs/" style="color:#5c5852; text-decoration:underline;">Docs</a> ·
+                <a href="mailto:support@kensaur.us" style="color:#5c5852; text-decoration:underline;">Support</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -51,6 +51,17 @@ export interface ActivePlanSummary {
   isPaid: boolean
   /** `true` when the project is blocked from ingesting new reports. */
   overQuota: boolean
+  /**
+   * Org-level billing posture inherited from `organizations.billing_mode`.
+   * `'stripe'` (default) = self-serve, paying customer.
+   * `'complimentary'` = Mushi-internal staff / sponsored / beta — entitlements
+   * track `planId` but no Stripe customer or invoice exists. The PlanBadge,
+   * OrgSwitcher, and BillingPage all render an "Admin" affordance instead of
+   * the plain tier label so the user understands they're not a paying Pro.
+   */
+  billingMode: 'stripe' | 'complimentary'
+  /** Convenience flag — equivalent to `billingMode === 'complimentary'`. */
+  isComplimentary: boolean
 }
 
 interface BillingProject {
@@ -72,6 +83,7 @@ interface BillingProject {
   limit_reports: number | null
   over_quota: boolean
   usage_pct?: number | null
+  billing_mode?: 'stripe' | 'complimentary'
 }
 
 interface BillingResponse {
@@ -100,6 +112,7 @@ export function useActivePlan(): UseActivePlanResult {
     const tier = project.tier
     if (!tier) return null
     const flags = (tier.feature_flags ?? {}) as PlanFeatureFlags
+    const billingMode = project.billing_mode === 'complimentary' ? 'complimentary' : 'stripe'
     return {
       planId: tier.id as PlanId,
       displayName: tier.display_name,
@@ -114,8 +127,13 @@ export function useActivePlan(): UseActivePlanResult {
       usagePct: project.usage_pct ?? null,
       subscriptionStatus: project.subscription?.status ?? null,
       cancelAtPeriodEnd: Boolean(project.subscription?.cancel_at_period_end),
-      isPaid: PAID_PLAN_IDS.has(tier.id),
+      // Complimentary orgs aren't paying customers even on `pro` — `isPaid`
+      // stays gated on actual revenue so paywall/CTA logic doesn't accidentally
+      // start prompting Mushi staff to "upgrade" their own comp account.
+      isPaid: PAID_PLAN_IDS.has(tier.id) && billingMode !== 'complimentary',
       overQuota: Boolean(project.over_quota),
+      billingMode,
+      isComplimentary: billingMode === 'complimentary',
     }
   }, [data, activeProjectId])
 

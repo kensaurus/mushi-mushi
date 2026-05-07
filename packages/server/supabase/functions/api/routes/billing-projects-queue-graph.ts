@@ -69,34 +69,73 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     periodStart.setUTCDate(1);
     periodStart.setUTCHours(0, 0, 0, 0);
 
+    // 30-day rolling window for the per-project sparkline. Anchored at midnight
+    // UTC of "today minus 29 days" so each rendered bucket is a complete UTC
+    // calendar day and the array is always exactly 30 entries long. We pick 30
+    // (rather than the calendar month) because the FE sparkline needs a stable
+    // domain — month-bounded series collapse to two points on day 2 of a new
+    // billing period, which makes the chart useless precisely when the user
+    // most wants to verify "what did I do over the last few weeks?".
+    const thirtyAgo = new Date();
+    thirtyAgo.setUTCHours(0, 0, 0, 0);
+    thirtyAgo.setUTCDate(thirtyAgo.getUTCDate() - 29);
+
     const projectIds = projects.map((p) => p.id);
-    const [{ data: subs }, { data: customers }, { data: usage }, { data: llmCosts }] =
-      await Promise.all([
-        db
-          .from('billing_subscriptions')
-          .select(
-            'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
-          )
-          .in('project_id', projectIds),
-        db
-          .from('billing_customers')
-          .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email')
-          .in('project_id', projectIds),
-        db
-          .from('usage_events')
-          .select('project_id, event_name, quantity, occurred_at')
-          .in('project_id', projectIds)
-          .gte('occurred_at', periodStart.toISOString()),
-        // §2: real LLM cost (COGS) for the current billing month so the
-        // Billing page can show "$ spent on LLM this month" alongside report
-        // quota. Reads the persisted cost_usd column written by telemetry.ts.
-        db
-          .from('llm_invocations')
-          .select('project_id, cost_usd')
-          .in('project_id', projectIds)
-          .gte('created_at', periodStart.toISOString())
-          .not('cost_usd', 'is', null),
-      ]);
+    const orgIds = Array.from(
+      new Set(projects.map((p) => p.organization_id).filter((x): x is string => Boolean(x))),
+    );
+    const [
+      { data: subs },
+      { data: customers },
+      { data: usage },
+      { data: usageSeries },
+      { data: llmCosts },
+      { data: orgs },
+    ] = await Promise.all([
+      db
+        .from('billing_subscriptions')
+        .select(
+          'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
+        )
+        .in('project_id', projectIds),
+      db
+        .from('billing_customers')
+        .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email')
+        .in('project_id', projectIds),
+      db
+        .from('usage_events')
+        .select('project_id, event_name, quantity, occurred_at')
+        .in('project_id', projectIds)
+        .gte('occurred_at', periodStart.toISOString()),
+      // 30-day daily rollup of `reports_ingested` per project — drives the
+      // sparkline on each /billing card. Scoped to one event_name so we don't
+      // pull tens of thousands of classifier-token events for chatty projects.
+      db
+        .from('usage_events')
+        .select('project_id, quantity, occurred_at')
+        .in('project_id', projectIds)
+        .eq('event_name', 'reports_ingested')
+        .gte('occurred_at', thirtyAgo.toISOString()),
+      // §2: real LLM cost (COGS) for the current billing month so the
+      // Billing page can show "$ spent on LLM this month" alongside report
+      // quota. Reads the persisted cost_usd column written by telemetry.ts.
+      db
+        .from('llm_invocations')
+        .select('project_id, cost_usd')
+        .in('project_id', projectIds)
+        .gte('created_at', periodStart.toISOString())
+        .not('cost_usd', 'is', null),
+      // Pull org-level billing posture so projects whose org is on a
+      // complimentary plan (Mushi staff, sponsored, beta) render the right
+      // tier without a Stripe subscription row. The fallback hierarchy is:
+      // billing_subscriptions → org.plan_id (when complimentary) → 'hobby'.
+      orgIds.length > 0
+        ? db
+            .from('organizations')
+            .select('id, plan_id, billing_mode')
+            .in('id', orgIds)
+        : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
+    ]);
 
     // Pick the most recent active sub per project (a project may have a
     // canceled sub + a fresh active one; we always render the active one).
@@ -109,6 +148,11 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     }
     const customerByProject = new Map<string, any>();
     for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
+
+    // org_id → { plan_id, billing_mode } so the per-project loop can decide
+    // whether to honour the org-level complimentary tier.
+    const orgById = new Map<string, { plan_id: string; billing_mode: string }>();
+    for (const o of orgs ?? []) orgById.set(o.id, { plan_id: o.plan_id, billing_mode: o.billing_mode });
 
     const usageByProject = new Map<
       string,
@@ -134,6 +178,40 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       llmCostByProject.set(c.project_id, cur + Number(c.cost_usd));
     }
 
+    // Materialise the 30-day reports series per project. We pre-seed every
+    // project with a zero-filled 30-entry array (oldest → newest) so the FE
+    // can always render a stable sparkline domain — missing days become
+    // explicit zero columns rather than gaps that distort the trend line.
+    const dayKeys: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(thirtyAgo);
+      d.setUTCDate(thirtyAgo.getUTCDate() + i);
+      dayKeys.push(d.toISOString().slice(0, 10));
+    }
+    const seriesByProject = new Map<string, Map<string, number>>();
+    for (const pid of projectIds) {
+      const m = new Map<string, number>();
+      for (const k of dayKeys) m.set(k, 0);
+      seriesByProject.set(pid, m);
+    }
+    for (const u of usageSeries ?? []) {
+      const dayKey = String(u.occurred_at).slice(0, 10);
+      const bucket = seriesByProject.get(u.project_id);
+      if (!bucket) continue;
+      // Defensive: a stray event from an earlier rollover (timezone edge) gets
+      // dropped instead of crashing the loop. Bucket only the 30 known keys.
+      const cur = bucket.get(dayKey);
+      if (cur === undefined) continue;
+      bucket.set(dayKey, cur + Number(u.quantity));
+    }
+
+    // Synthetic period end for complimentary orgs — line up with the calendar
+    // month the rest of the billing UI uses so "Period ends in 3 weeks"
+    // reads sanely without ever referencing a Stripe period.
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+    const periodEndIso = periodEnd.toISOString();
+
     const items = await Promise.all(
       projects.map(async (p) => {
         const sub = subByProject.get(p.id) ?? null;
@@ -144,10 +222,45 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           fixesSucceeded: 0,
           tokens: 0,
         };
-        const planId =
-          sub && ['active', 'trialing', 'past_due'].includes(sub.status) ? sub.plan_id : 'hobby';
+        const orgInfo = p.organization_id ? orgById.get(p.organization_id) ?? null : null;
+        const isComplimentary = orgInfo?.billing_mode === 'complimentary';
+
+        // Resolution order:
+        //   1. real Stripe subscription (active/trialing/past_due)
+        //   2. complimentary org → org.plan_id wins (no Stripe needed)
+        //   3. fallback hobby
+        const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
+        const planId = subPlanActive
+          ? sub.plan_id
+          : isComplimentary
+            ? orgInfo!.plan_id
+            : 'hobby';
         const plan = await getPlan(planId);
         const limit = plan.included_reports_per_month;
+
+        // For complimentary orgs without a real Stripe subscription, synthesize
+        // a subscription view so the FE shows "Pro · active" (or whichever
+        // tier the org is comp'd at) with a coherent period window. The
+        // synthetic sub deliberately lacks Stripe ids so callers can detect
+        // it and skip Stripe API calls.
+        const effectiveSub = subPlanActive
+          ? sub
+          : isComplimentary && plan.id !== 'hobby'
+            ? {
+                project_id: p.id,
+                organization_id: p.organization_id ?? null,
+                status: 'active',
+                plan_id: plan.id,
+                stripe_price_id: null,
+                stripe_subscription_id: null,
+                current_period_start: periodStart.toISOString(),
+                current_period_end: periodEndIso,
+                cancel_at_period_end: false,
+                overage_subscription_item_id: null,
+                synthetic: true,
+              }
+            : sub;
+
         return {
           project_id: p.id,
           organization_id: p.organization_id ?? null,
@@ -163,16 +276,38 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
             retention_days: plan.retention_days,
             feature_flags: plan.feature_flags,
           },
-          subscription: sub,
+          subscription: effectiveSub,
           customer: cust,
+          // Surfaces the org-level posture so the FE can render the
+          // "Complimentary account" badge and hide checkout/manage CTAs.
+          billing_mode: orgInfo?.billing_mode ?? 'stripe',
           period_start: periodStart.toISOString(),
           usage: u,
+          // Last 30 daily buckets of `reports_ingested` for this project,
+          // oldest → newest. Drives the sparkline + "X reports / Y active days"
+          // caption in the FE so the user can sanity-check a surprising
+          // headline number ("why am I at 60k?") against the actual time
+          // distribution. Always exactly 30 entries; days with no events
+          // appear as `reports: 0` rather than gaps.
+          usage_series: {
+            days: dayKeys.map((day) => ({
+              day,
+              reports: seriesByProject.get(p.id)?.get(day) ?? 0,
+            })),
+          },
           // §2: actual LLM dollars spent this billing month, summed from
           // the persisted `llm_invocations.cost_usd` column. Rounded to four
           // decimals so a $0.0001 Haiku call is still visible.
           llm_cost_usd_this_month: Math.round((llmCostByProject.get(p.id) ?? 0) * 10000) / 10000,
           limit_reports: limit,
-          over_quota: limit !== null && u.reports >= limit && !plan.overage_price_lookup_key,
+          // Complimentary orgs never get rejected — they're paid for by Mushi
+          // even when they exceed quota. We still surface usage_pct so the FE
+          // can render the warn/danger UI; the gateway just stops issuing 402s.
+          over_quota:
+            !isComplimentary &&
+            limit !== null &&
+            u.reports >= limit &&
+            !plan.overage_price_lookup_key,
           // Used by the QuotaBanner to render at >=80% / >=100%.
           usage_pct: limit ? Math.round((u.reports / limit) * 100) : null,
         };

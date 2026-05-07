@@ -7,17 +7,38 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate } from 'react-router-dom'
-import { Input, Btn, PageHelp } from '../components/ui'
+import { Input, Btn, PageHelp, Loading } from '../components/ui'
+import { detectRecoveryFromUrl } from '../lib/authRedirect'
 
 export function ResetPasswordPage() {
-  const { isPasswordRecovery, updatePassword, session } = useAuth()
+  const { isPasswordRecovery, updatePassword, session, loading: authLoading } = useAuth()
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
+  // Snapshot the URL on first render. supabase-js will strip the recovery
+  // hash/query within a tick of mounting, so checking on every render is too
+  // late. With this snapshot we keep the form mounted even if the auth
+  // provider's PASSWORD_RECOVERY event arrives a beat after first render.
+  const [recoveryFromUrl] = useState(detectRecoveryFromUrl)
 
-  if (!isPasswordRecovery && !done) {
+  // Auth state isn't ready yet — show a spinner instead of bouncing to /login.
+  // The previous code redirected during this tick, which destroyed the URL
+  // hash containing the recovery token and broke the entire flow.
+  if (authLoading && !done) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-root p-4">
+        <Loading text="Verifying reset link…" />
+      </div>
+    )
+  }
+
+  // Only redirect once we're sure: auth has loaded, the URL has no recovery
+  // signal, supabase didn't fire PASSWORD_RECOVERY, and the user isn't in the
+  // middle of a successful submit. If a session exists, send them home; if
+  // not, send them to /login so they can request a new reset link.
+  if (!isPasswordRecovery && !recoveryFromUrl && !done) {
     return <Navigate to={session ? '/' : '/login'} replace />
   }
 
