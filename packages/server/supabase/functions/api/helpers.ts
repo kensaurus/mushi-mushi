@@ -9,6 +9,7 @@ import { checkAntiGaming } from '../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../_shared/telemetry.ts';
 import { awardPoints } from '../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
+import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { dbError } from './shared.ts';
 
 const SDK_WIDGET_POSITIONS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const;
