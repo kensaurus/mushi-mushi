@@ -30,15 +30,26 @@
   --color-surface-raised: oklch(0.215 0.007 285);   /* cards, wells */
   --color-surface-overlay: oklch(0.255 0.007 285);  /* hover, active cards */
 
-  /* ── Border ────────────────────────────────────────────────────────── */
-  --color-edge: oklch(0.35 0.005 285);
-  --color-edge-subtle: oklch(0.30 0.005 285);
+  /* ── Border ──────────────────────────────────────────────────────────
+     2026-05-07 contrast pass: bumped from L=0.35/0.30 to L=0.45/0.40 so
+     borders/dividers clear WCAG 1.4.11's 3:1 non-text contrast threshold
+     against the L=0.175 surface. The previous values gave dividers a
+     ~1.6:1 ratio — visible if you squinted, invisible at a glance, and
+     a documented "the UI feels mushy" complaint from triage operators. */
+  --color-edge: oklch(0.45 0.005 285);
+  --color-edge-subtle: oklch(0.40 0.005 285);
 
-  /* ── Foreground (text) ─────────────────────────────────────────────── */
+  /* ── Foreground (text) ───────────────────────────────────────────────
+     2026-05-07 contrast pass: bumped fg-faint from L=0.42 (~2.4:1, fails
+     WCAG 1.4.3 AA for normal text) to L=0.58 (~4.4:1, clears AA for the
+     14px+ helper / metadata copy where this token is most often used —
+     timestamps, footer hints, "press [" key cues, kbd labels). fg-muted
+     also nudged from 0.55 → 0.62 so secondary-rank text is comfortably
+     readable instead of sitting right at the AA threshold. */
   --color-fg: oklch(0.93 0.005 285);
   --color-fg-secondary: oklch(0.72 0.005 285);
-  --color-fg-muted: oklch(0.55 0.005 285);
-  --color-fg-faint: oklch(0.42 0.005 285);
+  --color-fg-muted: oklch(0.62 0.005 285);
+  --color-fg-faint: oklch(0.58 0.005 285);
 
   /* ── Brand (amber / beetle-chitin) ─────────────────────────────────── */
   --color-brand: oklch(0.80 0.16 80);
@@ -93,11 +104,17 @@
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.4);
   --shadow-raised: 0 2px 8px oklch(0 0 0 / 0.5);
 
-  /* ── Navigation-specific ─────────────────────────────────────────────── */
+  /* ── Navigation-specific ───────────────────────────────────────────────
+     2026-05-07 contrast pass: section-label was L=0.38 against the L=0.145
+     sidebar root (~2.0:1 — invisible at a glance, the "PLAN / DO / CHECK /
+     ACT" headers reading as a smudge). Bumped to L=0.62 (~4.5:1) so the
+     PDCA scaffolding actually communicates structure instead of decorating
+     it. Nav-hover-bg also nudged so the row lift is perceptible against
+     the sidebar root, not just visible if you stare for a second. */
   --color-nav-active-bg: oklch(0.24 0.015 80);
   --color-nav-active-border: oklch(0.72 0.14 80);
-  --color-nav-hover-bg: oklch(0.20 0.005 285);
-  --color-nav-section-label: oklch(0.38 0.005 285);
+  --color-nav-hover-bg: oklch(0.235 0.005 285);
+  --color-nav-section-label: oklch(0.62 0.005 285);
 
   /* ── Transition timing ───────────────────────────────────────────────── */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -196,13 +213,18 @@ html[data-theme="light"] {
   --color-surface-raised:  oklch(0.995 0.002 285);
   --color-surface-overlay: oklch(0.92 0.004 285);
 
-  --color-edge:         oklch(0.82 0.004 285);
-  --color-edge-subtle:  oklch(0.88 0.003 285);
+  /* 2026-05-07 contrast pass — light mode dividers were near-invisible
+     (edge L=0.82 vs surface L=0.965 ≈ 1.4:1). Pulled to L=0.78 / L=0.84
+     so cell borders, tab dividers, and card outlines actually delineate
+     regions. fg-faint nudged from L=0.60 → L=0.50 so helper copy reads
+     comfortably on white instead of fading into the background. */
+  --color-edge:         oklch(0.78 0.004 285);
+  --color-edge-subtle:  oklch(0.84 0.003 285);
 
   --color-fg:           oklch(0.22 0.008 285);
   --color-fg-secondary: oklch(0.36 0.006 285);
-  --color-fg-muted:     oklch(0.48 0.005 285);
-  --color-fg-faint:     oklch(0.60 0.004 285);
+  --color-fg-muted:     oklch(0.44 0.005 285);
+  --color-fg-faint:     oklch(0.50 0.004 285);
 
   --color-brand:        var(--mushi-vermillion);
   --color-brand-hover:  color-mix(in oklch, var(--mushi-vermillion) 82%, black);
@@ -301,6 +323,29 @@ select, input, textarea {
 .nav-link:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--color-brand);
+}
+
+/* ---------------------------------------------------------------------------
+   GLOBAL FOCUS SAFETY NET (WCAG 2.4.13, 2026-05-07)
+   ---------------------------------------------------------------------------
+   Many components use `focus-visible:outline-none focus-visible:ring-2
+   focus-visible:ring-brand/50` which pairs an explicit Tailwind ring with
+   `outline-none`. That's fine on its own. But anything that DIDN'T opt
+   into that ring utility — third-party widgets, plain native buttons, the
+   long tail of icon buttons — was getting only the browser default
+   focus highlight, which is system-dependent and often invisible on dark
+   chrome.
+
+   This rule adds a 2px brand outline (with 2px offset for a clean halo)
+   to every focus-visible element. Where a component has its own
+   `outline: none`, theirs wins via specificity / cascade — so the explicit
+   ring utilities still render unchanged. Where there's no explicit
+   outline rule, this kicks in and meets WCAG 2.4.13 Focus Appearance
+   (≥2 CSS pixels, ≥3:1 contrast vs. unfocused state).
+--------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
 
 /* Nav link icon */

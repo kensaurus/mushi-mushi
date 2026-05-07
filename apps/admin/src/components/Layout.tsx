@@ -45,6 +45,7 @@ import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { useFaviconBadge } from '../lib/favicon'
 import { useFocusMode } from '../lib/focusMode'
+import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 
 interface NavItem {
   label: string
@@ -536,6 +537,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { isSuperAdmin, has } = useEntitlements()
   const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
   const [focusMode, setFocusMode] = useFocusMode()
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
   // with the page the user is on. Both hooks read from `pageContext` so
@@ -645,6 +647,33 @@ export function Layout({ children }: { children: ReactNode }) {
         ctrl: true,
         allowInInputs: true,
       },
+      // ESC exits focus mode — escape hatch for users who entered focus
+      // mode and now can't find the toggle (the in-sidebar button is
+      // hidden in that mode by design). Without this + the floating exit
+      // pill rendered below, the only way out was clearing localStorage.
+      // Skipped when focus mode is OFF so we don't steal Escape from
+      // modals / drawers / inputs that legitimately want it.
+      {
+        key: 'Escape',
+        description: 'Exit focus mode',
+        handler: (e) => {
+          if (!focusMode) return
+          e.preventDefault()
+          setFocusMode(false)
+        },
+      },
+      // `[` toggles the desktop sidebar between full (208px) and an
+      // icon-only rail (48px). Mirrors Linear's collapsible-sidebar
+      // hotkey so muscle memory transfers from there. Mobile is a
+      // separate overlay (`mobileOpen`) and isn't touched.
+      {
+        key: '[',
+        description: 'Toggle sidebar (collapse to icon rail)',
+        handler: (e) => {
+          e.preventDefault()
+          setSidebarCollapsed((value) => !value)
+        },
+      },
     ],
   )
 
@@ -738,25 +767,39 @@ export function Layout({ children }: { children: ReactNode }) {
     })
   }
 
-  const sidebarContent = (
+  // `compact` collapses the sidebar to an icon rail (~48px wide) — same
+  // content tree, but section headers, item labels, mode toggle, and most
+  // footer chrome are hidden in favour of `title` tooltips. Mobile always
+  // gets `compact: false` because the mobile sidebar is a full overlay.
+  const renderSidebarContent = (compact: boolean) => (
     <>
-      {/* Brand */}
-      <div className="px-4 py-3 border-b border-edge/60">
-        <h1 className="text-sm font-bold tracking-tight leading-none">
-          <span className="text-brand">mushi</span>
-          <span className="text-fg-secondary">mushi</span>
-        </h1>
-        <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
-        <ModeToggle mode={mode} onSelect={setMode} />
-        {onHiddenRoute && (
-          <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn">
-            <p className="leading-snug">{hiddenRouteCopy}</p>
-          </div>
+      {/* Brand — collapses to a single "M" stamp in compact mode so the
+          rail still has a recognisable identity at the top. */}
+      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60`}>
+        {compact ? (
+          <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
+            <span className="text-brand">m</span>
+            <span className="text-fg-secondary">m</span>
+          </h1>
+        ) : (
+          <>
+            <h1 className="text-sm font-bold tracking-tight leading-none">
+              <span className="text-brand">mushi</span>
+              <span className="text-fg-secondary">mushi</span>
+            </h1>
+            <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
+            <ModeToggle mode={mode} onSelect={setMode} />
+            {onHiddenRoute && (
+              <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn">
+                <p className="leading-snug">{hiddenRouteCopy}</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Navigation */}
-      <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-2 py-2">
+      <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
         {visibleNav.map((section) => {
           const collapsed = collapsedMap[section.id] ?? section.defaultCollapsed ?? false
           const stageId = SECTION_TO_STAGE[section.id]
@@ -766,18 +809,26 @@ export function Layout({ children }: { children: ReactNode }) {
           // so advanced users can still see at a glance which PDCA stage
           // needs their attention without expanding.
           const staleness = computeStaleness(section.id, navCounts)
+          // In compact mode we drop section headers entirely (text-only
+          // chrome doesn't survive at 48px) but keep a thin divider
+          // between sections so the PDCA grouping still reads visually.
+          // Items are always rendered in compact mode — the per-section
+          // accordion would be unusable without labels to anchor it.
+          const itemsVisible = compact ? true : !collapsed
           return (
-            <div key={section.id}>
-              <SectionHeader
-                section={section}
-                collapsed={collapsed}
-                collapsible={collapsible}
-                isActiveStage={isActiveStage}
-                staleness={staleness}
-                onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
-              />
-              {!collapsed && (
-                <div className="space-y-0.5">
+            <div key={section.id} className={compact ? 'first:mt-0 mt-2 pt-2 first:border-t-0 first:pt-0 border-t border-edge-subtle/60' : ''}>
+              {!compact && (
+                <SectionHeader
+                  section={section}
+                  collapsed={collapsed}
+                  collapsible={collapsible}
+                  isActiveStage={isActiveStage}
+                  staleness={staleness}
+                  onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
+                />
+              )}
+              {itemsVisible && (
+                <div className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}>
                   {section.items.map(({ label, path, icon: Icon }) => {
                     const active = isActive(pathname, path)
                     return (
@@ -786,10 +837,18 @@ export function Layout({ children }: { children: ReactNode }) {
                         to={path}
                         onClick={() => setMobileOpen(false)}
                         aria-current={active ? 'page' : undefined}
-                        className="nav-link"
+                        // In compact mode, force the label off and let the
+                        // browser native `title` tooltip surface it on hover —
+                        // matches the Linear collapsed-sidebar pattern. The
+                        // base `.nav-link` styles still drive the active
+                        // indicator + hover bg + focus ring so we don't
+                        // double-define them here.
+                        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''}`}
+                        title={compact ? label : undefined}
+                        aria-label={compact ? label : undefined}
                       >
                         <Icon className="nav-link-icon" />
-                        <span>{label}</span>
+                        {!compact && <span>{label}</span>}
                         {path === '/integrations' && <IntegrationHealthDot />}
                         {path === '/inventory' && navCounts.ready && (
                           <SidebarHealthDot
@@ -842,26 +901,36 @@ export function Layout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="px-3 py-2.5 border-t border-edge/60 space-y-2">
-        <DensitySidebarToggle />
-        <ThemeSidebarToggle />
+      {/* User footer — Density / Theme toggles are 3-way segmented controls
+          that don't fit in a 48px rail, so we hide them in compact mode.
+          Focus mode + sign-out collapse to icon-only buttons with `title`
+          tooltips so the user can still get out of either state from the
+          collapsed rail. */}
+      <div className={`${compact ? 'px-1 py-2' : 'px-3 py-2.5'} border-t border-edge/60 space-y-2`}>
+        {!compact && <DensitySidebarToggle />}
+        {!compact && <ThemeSidebarToggle />}
         <button
           type="button"
           onClick={() => setFocusMode((value) => !value)}
-          className="nav-link w-full text-xs"
+          className={`nav-link ${compact ? 'justify-center px-2 py-2' : 'w-full text-xs'}`}
           aria-pressed={focusMode}
+          title={compact ? (focusMode ? 'Exit focus mode' : 'Focus mode') : undefined}
+          aria-label={compact ? (focusMode ? 'Exit focus mode' : 'Focus mode') : undefined}
         >
           <IconSparkle className="nav-link-icon" />
-          <span>{focusMode ? 'Exit focus mode' : 'Focus mode'}</span>
+          {!compact && <span>{focusMode ? 'Exit focus mode' : 'Focus mode'}</span>}
         </button>
-        <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
+        {!compact && (
+          <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
+        )}
         <button
           onClick={signOut}
-          className="nav-link w-full text-xs"
+          className={`nav-link ${compact ? 'justify-center px-2 py-2' : 'w-full text-xs'}`}
+          title={compact ? `Sign out (${user?.email ?? ''})` : undefined}
+          aria-label={compact ? 'Sign out' : undefined}
         >
           <IconSignOut className="nav-link-icon" />
-          <span>Sign out</span>
+          {!compact && <span>Sign out</span>}
         </button>
       </div>
     </>
@@ -878,10 +947,38 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — `sidebarCollapsed` toggles between a 208px nav
+          (w-52) and a 48px icon rail (w-12). Toggle button is rendered
+          INSIDE the sidebar (sticky bottom) so it survives both states.
+          Hidden entirely in focus mode; the floating exit pill below
+          replaces all sidebar affordances when focus mode is on. */}
       {!focusMode && (
-        <aside className="hidden md:flex w-52 flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col">
-          {sidebarContent}
+        <aside
+          className={`hidden md:flex flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-52'}`}
+          data-collapsed={sidebarCollapsed ? 'true' : 'false'}
+        >
+          {renderSidebarContent(sidebarCollapsed)}
+          {/* Collapse toggle — pinned to the bottom of the rail so the
+              affordance is always findable in either state. Renders as a
+              chevron button with `[` hint when expanded; just a chevron
+              in compact mode. The `[` hotkey mirrors Linear's. */}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-pressed={sidebarCollapsed}
+            aria-label={sidebarCollapsed ? 'Expand sidebar (press [ )' : 'Collapse sidebar (press [ )'}
+            title={sidebarCollapsed ? 'Expand sidebar — press [' : 'Collapse to icon rail — press ['}
+            className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+          >
+            <span aria-hidden className="font-mono leading-none text-base">
+              {sidebarCollapsed ? '›' : '‹'}
+            </span>
+            {!sidebarCollapsed && (
+              <span className="font-mono text-3xs uppercase tracking-wider">
+                Collapse <kbd className="ml-1 px-1 py-0.5 rounded-xs border border-edge-subtle text-fg-faint">[</kbd>
+              </span>
+            )}
+          </button>
         </aside>
       )}
 
@@ -903,8 +1000,31 @@ export function Layout({ children }: { children: ReactNode }) {
                 <IconClose size={14} />
               </button>
             </div>
-            {sidebarContent}
+            {renderSidebarContent(false)}
           </aside>
+        </div>
+      )}
+
+      {/* Focus-mode exit pill — floating top-right escape hatch so users
+          who entered focus mode can find their way back out. Critical
+          because the in-sidebar "Exit focus mode" button is itself hidden
+          in this state (the sidebar is hidden by `!focusMode &&` above).
+          ESC also exits via the hotkey wired in useHotkeys. Render outside
+          the sidebar so it's not affected by either focus-mode or
+          sidebar-collapse state. */}
+      {focusMode && (
+        <div className="fixed top-3 right-3 z-50 flex items-center gap-2 rounded-sm border border-edge bg-surface-raised px-2 py-1.5 shadow-raised">
+          <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
+          <span className="text-2xs text-fg-secondary font-medium">Focus mode</span>
+          <button
+            type="button"
+            onClick={() => setFocusMode(false)}
+            className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            aria-label="Exit focus mode"
+            title="Exit focus mode (Esc or Cmd/Ctrl+.)"
+          >
+            Exit <kbd className="ml-1 px-1 py-0.5 rounded-xs border border-edge-subtle text-fg-faint font-mono">Esc</kbd>
+          </button>
         </div>
       )}
 
