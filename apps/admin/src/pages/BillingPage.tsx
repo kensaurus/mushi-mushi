@@ -24,6 +24,8 @@ import { useToast } from '../lib/toast'
 import { useAuth } from '../lib/auth'
 import { formatLlmCost } from '../lib/format'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import {
   PageHeader,
   PageHelp,
@@ -185,6 +187,11 @@ export function BillingPage() {
     [projects, activeProjectId],
   )
   const activeTierId = activeProject?.tier?.id ?? 'hobby'
+  // Setup status drives the connectivity diagnostic empty state below the
+  // active project's billing card. We only need it when the active project
+  // has zero reports this period — otherwise React skips the render and
+  // the hook just sits on its cache.
+  const setup = useSetupStatus(activeProjectId)
 
   const [actioning, setActioning] = useState<string | null>(null)
   // Project ID whose plan picker is open. null = no picker open.
@@ -288,6 +295,30 @@ export function BillingPage() {
           ))}
         </div>
       )}
+
+      {/* Connectivity diagnostic — slotted between the project card and the
+          plan comparison so the user sees "WHY this is zero" before
+          considering "should I switch plans?". Only fires when the active
+          project has zero ingests this period and we have a setup
+          diagnostic to render against — otherwise the existing UsageBar
+          already tells the story. The same component is used as the
+          /reports empty state so the diagnostic copy stays consistent. */}
+      {activeProject &&
+        (activeProject.usage?.reports ?? 0) === 0 &&
+        setup.activeProject?.project_id === activeProject.project_id && (
+          <SdkConnectivityEmptyState
+            projectId={activeProject.project_id}
+            projectName={activeProject.project_name}
+            lastReportAt={null}
+            diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
+            adminHost={setup.data?.admin_endpoint_host ?? null}
+            headline="Why this period reads 0"
+            onTestReportSent={() => {
+              setup.reload()
+              billingQuery.reload()
+            }}
+          />
+        )}
 
       {(billing?.plans?.length ?? 0) > 0 && (
         <PlanComparisonTable

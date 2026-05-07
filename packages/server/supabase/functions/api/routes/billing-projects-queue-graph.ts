@@ -724,9 +724,20 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           .from('reports')
           .select('project_id', { count: 'exact', head: false })
           .in('project_id', projectIds),
+        // Pull `last_seen_*` per-key alongside the existing identity columns so
+        // ProjectsPage's SdkHealthSummary can render per-key connectivity
+        // status without a second round-trip. The same heartbeat columns power
+        // the dashboard onboarding checklist (see the dashboard route's
+        // setup_steps[id=sdk_installed].diagnostic). Missing on /projects was a
+        // discovery gap surfaced by the 2026-05-07 SDK integration audit:
+        // "I generated a key 4 days ago, why am I seeing 0 reports?" — the
+        // answer (`last_seen_at IS NULL`, key never connected) was already in
+        // the row, just never exposed where users look.
         db
           .from('project_api_keys')
-          .select('id, project_id, key_prefix, created_at, is_active, scopes, label')
+          .select(
+            'id, project_id, key_prefix, created_at, is_active, scopes, label, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
+          )
           .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
         db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
@@ -775,6 +786,17 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         revoked: !k.is_active,
         scopes: (k as any).scopes ?? [],
         label: (k as any).label ?? null,
+        // Heartbeat columns — the SDK populates these on every authenticated
+        // request via apiKeyAuth. `null` on an active key === created but
+        // never used; a stale timestamp + a `last_seen_endpoint_host` that
+        // doesn't match this admin's host === SDK pointed at a different
+        // backend. Both diagnostics are rendered by SdkHealthSummary.
+        last_seen_at: (k as { last_seen_at?: string | null }).last_seen_at ?? null,
+        last_seen_origin: (k as { last_seen_origin?: string | null }).last_seen_origin ?? null,
+        last_seen_user_agent:
+          (k as { last_seen_user_agent?: string | null }).last_seen_user_agent ?? null,
+        last_seen_endpoint_host:
+          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
       });
     }
 
@@ -851,7 +873,21 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       };
     });
 
-    return c.json({ ok: true, data: { projects: enriched } });
+    // The host that *this* admin response was served from. The frontend
+    // compares it to each key's `last_seen_endpoint_host` to detect the
+    // common mis-config "SDK is talking to a different backend" — usually
+    // a stale `NEXT_PUBLIC_MUSHI_API_ENDPOINT` left over from local dev,
+    // or a CI build that baked in a staging endpoint. Mirrors the dashboard
+    // route's adminHost capture (~line 513).
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null;
+      } catch {
+        return null;
+      }
+    })();
+
+    return c.json({ ok: true, data: { projects: enriched, admin_host: adminHost } });
   });
 
   app.post('/v1/admin/projects', jwtAuth, async (c) => {

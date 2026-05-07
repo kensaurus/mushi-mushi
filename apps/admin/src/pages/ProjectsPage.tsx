@@ -34,6 +34,7 @@ import {
 import { HeroPlugIntegration } from '../components/illustrations/HeroIllustrations'
 import { RevealedKeyCard } from '../components/RevealedKeyCard'
 import { SdkInstallCard } from '../components/SdkInstallCard'
+import { SdkHealthSummary } from '../components/SdkHealthSummary'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { DangerConfirm } from '../components/DangerConfirm'
@@ -47,6 +48,14 @@ interface ApiKey {
   revoked: boolean
   scopes?: string[]
   label?: string | null
+  // Heartbeat columns surfaced by /v1/admin/projects so the SdkHealthSummary
+  // card can render per-key connectivity status without a second round-trip.
+  // Optional because legacy responses (pre-2026-05-07 audit) didn't return
+  // them; the helper functions in SdkHealthSummary treat absence as "never".
+  last_seen_at?: string | null
+  last_seen_origin?: string | null
+  last_seen_user_agent?: string | null
+  last_seen_endpoint_host?: string | null
 }
 
 /**
@@ -204,10 +213,15 @@ export function ProjectsPage() {
   >(null)
   const [revoking, setRevoking] = useState(false)
 
-  const { data, loading, error, reload } = usePageData<{ projects: Project[] }>(
+  const { data, loading, error, reload } = usePageData<{ projects: Project[]; admin_host: string | null }>(
     '/v1/admin/projects',
   )
   const projects = useMemo(() => data?.projects ?? [], [data])
+  // Captured once per response and threaded into every SdkHealthSummary so
+  // each card can compare the SDK's last-seen endpoint against the host
+  // THIS admin reads from. Mismatch = silent backend split = the bug class
+  // we're surfacing here.
+  const adminHost = data?.admin_host ?? null
 
   const { create: createProjectRaw, creating } = useCreateProject({
     onCreated: () => {
@@ -584,10 +598,29 @@ export function ProjectsPage() {
                   />
                 )}
 
+                {/* SDK CONNECTIVITY HEALTH — primary diagnostic surface for
+                    "I generated a key 4 days ago, why am I seeing 0 reports?"
+                    Renders only when at least one key exists, since pre-key
+                    state already has the "Generate key" CTA above; before
+                    that the card would just say "no key" and double up. */}
+                {project.api_keys.length > 0 && (
+                  <div className="mt-3">
+                    <SdkHealthSummary
+                      projectId={project.id}
+                      projectName={project.name}
+                      apiKeys={project.api_keys}
+                      lastReportAt={project.last_report_at}
+                      adminHost={adminHost}
+                      reportCount={project.report_count}
+                      onTestReportSent={reload}
+                    />
+                  </div>
+                )}
+
                 {project.api_keys.length > 0 && (
                   <details className="mt-3 pt-2 border-t border-edge-subtle">
                     <summary className="text-2xs text-fg-muted cursor-pointer select-none hover:text-fg">
-                      {pluralizeWithCount(project.api_keys.length, 'key')} (
+                      Manage keys ({pluralizeWithCount(project.api_keys.length, 'key')},{' '}
                       {project.active_key_count} active)
                     </summary>
                     <div className="mt-2 space-y-1">

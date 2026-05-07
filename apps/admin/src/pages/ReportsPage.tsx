@@ -36,6 +36,7 @@ import { ReportsTable } from '../components/reports/ReportsTable'
 import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../components/reports/types'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
+import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -662,9 +663,26 @@ export function ReportsPage() {
           }
         />
       ) : reports.length === 0 ? (
-        // RecommendedAction above already shows "No reports yet" — don't
-        // double-paint a contradictory empty state. .
-        null
+        // RecommendedAction above already shows the generic "No reports yet"
+        // headline. Slot a connectivity diagnostic underneath so users get
+        // the *answer* — "your SDK is reaching the wrong backend" / "your
+        // SDK has never authenticated" — instead of just being told to
+        // install something they almost certainly already have.
+        // Only renders when we have a project to diagnose; the legacy
+        // fallback (no active project) keeps the bare RecommendedAction.
+        setup.activeProject ? (
+          <SdkConnectivityEmptyState
+            projectId={setup.activeProject.project_id}
+            projectName={setup.activeProject.project_name}
+            lastReportAt={null}
+            diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
+            adminHost={setup.data?.admin_endpoint_host ?? null}
+            onTestReportSent={() => {
+              setup.reload()
+              reload()
+            }}
+          />
+        ) : null
       ) : (
         <ReportsTable
           reports={reports}
