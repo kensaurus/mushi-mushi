@@ -1,0 +1,106 @@
+Mushi Mushi
+Copyright (c) 2026 Kenji Sakuramoto
+https://github.com/kensaurus/mushi-mushi
+
+This product is composed of multiple packages distributed under different
+licenses. The license that applies to each package is identified at the
+root of that package; the table below is a non-authoritative summary kept
+in sync by `scripts/sync-community-files.mjs`.
+
+================================================================================
+LICENSE SUMMARY
+================================================================================
+
+  License                        Scope
+  ---------                      -----
+  MIT                            Client-side SDKs, plugin SDK, CLI, adapters,
+                                 framework wrappers (React, Vue, Svelte,
+                                 Angular, React Native, iOS, Android,
+                                 Flutter), brand tokens, marketing UI.
+
+  Business Source License 1.1    Server packages: @mushi-mushi/server,
+  (BSL 1.1)                      @mushi-mushi/agents, @mushi-mushi/verify.
+                                 Converts to Apache 2.0 on April 15, 2029.
+                                 See packages/server/LICENSE for the
+                                 Additional Use Grant. The short version:
+                                 self-host freely, do not resell as a
+                                 hosted service.
+
+  Apache 2.0 (future)            Server packages on or after the Change Date
+                                 (April 15, 2029).
+
+================================================================================
+TRADEMARKS
+================================================================================
+
+"Mushi Mushi", "Mushi", the bug logo, and the 虫 mark are unregistered
+trademarks of Kenji Sakuramoto. The licenses listed above grant rights to
+the SOFTWARE only and DO NOT grant any rights to the trademarks. See
+TRADEMARK.md for the full policy. Forks, derivative works, and competing
+products MUST be renamed to a non-confusing identifier; redistributing
+under the Mushi Mushi brand is not permitted.
+
+================================================================================
+THIRD-PARTY ATTRIBUTIONS
+================================================================================
+
+This project bundles, links, or is built on top of the following open-source
+projects. Their copyright notices and license texts are included with their
+distributions; the list below identifies the upstream project and the
+license under which Mushi Mushi consumes it.
+
+  Runtime dependencies (high-impact subset)
+  -----------------------------------------
+  React               MIT       https://github.com/facebook/react
+  React Native        MIT       https://github.com/facebook/react-native
+  Vue.js              MIT       https://github.com/vuejs/core
+  Svelte              MIT       https://github.com/sveltejs/svelte
+  Angular             MIT       https://github.com/angular/angular
+  Flutter             BSD-3     https://github.com/flutter/flutter
+  Hono                MIT       https://github.com/honojs/hono
+  Supabase            Apache-2  https://github.com/supabase/supabase
+  Postgres            PostgreSQL License
+                                https://www.postgresql.org/about/licence/
+  OpenTelemetry JS    Apache-2  https://github.com/open-telemetry/opentelemetry-js
+  ONNX Runtime Web    MIT       https://github.com/microsoft/onnxruntime
+  OkHttp              Apache-2  https://github.com/square/okhttp
+  Gson                Apache-2  https://github.com/google/gson
+  Tailwind CSS        MIT       https://github.com/tailwindlabs/tailwindcss
+  shadcn/ui           MIT       https://github.com/shadcn-ui/ui
+
+  Inbound integration vendor protocols (no code copied)
+  -----------------------------------------------------
+  Sentry, Bugsnag, Rollbar, Datadog, New Relic, Grafana Loki, Honeycomb,
+  Crashlytics, Firebase Analytics, AWS CloudWatch, Opsgenie, PagerDuty,
+  Slack, Discord, Microsoft Teams, Jira, Linear, GitHub, Zapier.
+
+  Mushi Mushi implements webhook endpoints that conform to each vendor's
+  publicly documented payload format. No code, configuration, or assets
+  from those vendors are bundled with this distribution. The trademarks of
+  those vendors are the property of their respective owners and are used
+  for descriptive interoperability only.
+
+================================================================================
+PATENT NOTICE
+================================================================================
+
+The author has not obtained any patents on the contents of this repository
+and grants no patent rights beyond those expressed in the applicable
+license. Should any contribution submitted to this project read on a
+contributor's patent, the contributor implicitly grants the patent license
+defined in section 3 of the Apache License 2.0 for the contribution and
+the work to which it is submitted, regardless of the file's distribution
+license. This mirrors the developer-certificate-of-origin practice without
+requiring a separate CLA.
+
+================================================================================
+EXPORT CONTROL
+================================================================================
+
+This software contains cryptographic primitives (HMAC-SHA256 signature
+verification, JWT signature verification, RSA SNS signature verification)
+and may be subject to U.S. Export Administration Regulations (EAR) under
+ECCN 5D002. The cryptography is incidental to webhook authentication and
+is implemented using publicly available algorithms (BIS license exception
+TSU). Downloaders are responsible for compliance with their local
+re-export laws.

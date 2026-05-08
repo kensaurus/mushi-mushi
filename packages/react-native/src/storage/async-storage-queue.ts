@@ -105,12 +105,43 @@ export class AsyncStorageQueue {
   }
 }
 
-// Added: PII scrubbing (Phase 2.4)
+// PII scrubbing — Wave S2 / D-16
+//
+// Mirrors packages/core/src/pii-scrubber.ts so a React Native user who pastes
+// a Stripe key, an OpenAI key, a JWT, or a credit card into a bug report
+// never ships it to our servers. Order matters: high-entropy / high-cost
+// tokens first so generic email/phone regex never wins a tie. We omit
+// IPv4/IPv6 by default (too noisy: `192.168.1.1` is rarely PII).
+const SCRUB_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\b\d{3}-\d{2}-\d{4}\b/g, '[REDACTED_SSN]'],
+  [/\b(?:\d[ -]*){12,18}\d\b/g, '[REDACTED_CC]'],
+  [/\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, '[REDACTED_AWS_KEY]'],
+  [
+    /(?:aws_secret_access_key|secret_access_key)["'\s:=]+[A-Za-z0-9/+=]{40}\b/gi,
+    'aws_secret_access_key=[REDACTED_AWS_SECRET]',
+  ],
+  [/\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{24,}\b/g, '[REDACTED_STRIPE_KEY]'],
+  [/\bpk_(?:live|test)_[A-Za-z0-9]{24,}\b/g, '[REDACTED_STRIPE_PK]'],
+  [/\bxox[abpor]-[A-Za-z0-9-]{10,}\b/g, '[REDACTED_SLACK_TOKEN]'],
+  [/\bghp_[A-Za-z0-9]{36}\b/g, '[REDACTED_GITHUB_PAT]'],
+  [/\bgithub_pat_[A-Za-z0-9_]{80,}\b/g, '[REDACTED_GITHUB_PAT]'],
+  [/\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g, '[REDACTED_OPENAI_KEY]'],
+  [/\bsk-ant-[A-Za-z0-9_-]{20,}\b/g, '[REDACTED_ANTHROPIC_KEY]'],
+  [/\bAIza[0-9A-Za-z_-]{35}\b/g, '[REDACTED_GOOGLE_KEY]'],
+  [/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[REDACTED_JWT]'],
+  [/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g, '[REDACTED_EMAIL]'],
+  [
+    /(?:\+\d{1,3}[\s.\-])?\(?\d{2,4}\)?[\s.\-]\d{3,4}[\s.\-]\d{3,4}\b/g,
+    '[REDACTED_PHONE]',
+  ],
+]
+
 function scrubPii(text: string): string {
-  return text
-    .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED]')
-    .replace(/\b\d{3}[.-]?\d{3}[.-]?\d{4}\b/g, '[REDACTED]')
-    .replace(/\b(?:\d{4}[-\s]?){3}\d{4}\b/g, '[REDACTED]')
+  let result = text
+  for (const [regex, replacement] of SCRUB_PATTERNS) {
+    result = result.replace(regex, replacement)
+  }
+  return result
 }
 
 // Added: retry+jitter (Phase 2.4)

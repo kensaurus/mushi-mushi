@@ -400,10 +400,22 @@ pnpm dev
 
 Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setup, [`docs/`](./docs/) for handover notes (newest first), and [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md) for the full admin tour.
 
-## License
+## License & branding
 
-- **SDK packages** (core, web, react, vue, svelte, angular, react-native, flutter, ios, android, cli, mcp): [MIT](./LICENSE)
-- **Server, agents, verify**: [BSL 1.1](./packages/server/LICENSE) — converts to Apache 2.0 on April 15, 2029.
+This repository is dual-licensed because the **code** is open source but
+the **brand** is not. The split is what lets us welcome forks while
+making it hard for bad actors to ship a malicious copy under our name.
+
+| Surface | License | Permitted | Notes |
+|---|---|---|---|
+| SDK packages — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `flutter`, `ios`, `android`, `cli`, `mcp`, `plugin-*`, `adapters`, `brand`, `marketing-ui` | [MIT](./LICENSE) | Use, fork, sell, embed in proprietary products. | Trademarks separate — see below. |
+| Server packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [BSL 1.1](./packages/server/LICENSE) | Self-host for your own org. Modify. Resell embedded. | Cannot offer as a hosted bug-reporting service to third parties until **2029-04-15**, when it converts to Apache 2.0 automatically. |
+| Trademarks — "Mushi Mushi", "Mushi", 虫, the bug logo, the visual identity | [Trademark policy](./TRADEMARK.md) | Refer to the project, build add-ons, link to the repo. | **Forks must rename.** Hosting a service under the Mushi name requires written permission. Use on malware / phishing kits is enforced against. |
+| Third-party attributions | [NOTICE](./NOTICE) | — | One-stop list of upstream projects we depend on and their licenses. |
+
+If you're a security researcher, see [`SECURITY.md`](./SECURITY.md) for
+the threat model, PII commitments, coordinated-disclosure timeline, and
+safe-harbor terms.
 
 ---
 
