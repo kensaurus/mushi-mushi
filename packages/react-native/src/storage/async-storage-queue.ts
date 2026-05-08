@@ -62,9 +62,28 @@ export class AsyncStorageQueue {
   }
 
   // Added: PII scrubbing (Phase 2.4)
+  // Scrubs free-text fields where users typically type emails / phones /
+  // card numbers when describing a bug. We deliberately do NOT scrub
+  // structured fields like `metadata.userEmail` — those are explicitly
+  // captured by the host app via `setUser()` and the operator opts in to
+  // collecting them. Scrubbing them here would silently break attribution.
   private scrubReportPii(report: Record<string, unknown>): Record<string, unknown> {
-    if (typeof report.description !== 'string') return report
-    return { ...report, description: scrubPii(report.description) }
+    const next = { ...report }
+    if (typeof next.description === 'string') {
+      next.description = scrubPii(next.description)
+    }
+    if (typeof next.summary === 'string') {
+      next.summary = scrubPii(next.summary)
+    }
+    // Free-text breadcrumb messages are the other vector for accidental PII
+    // (users paste account ids, card test numbers, etc. into the support
+    // composer that gets logged as a breadcrumb).
+    if (Array.isArray(next.breadcrumbs)) {
+      next.breadcrumbs = (next.breadcrumbs as Array<Record<string, unknown>>).map((b) =>
+        typeof b?.message === 'string' ? { ...b, message: scrubPii(b.message) } : b,
+      )
+    }
+    return next
   }
 
   private async getQueue(storage: { getItem: (key: string) => Promise<string | null> }): Promise<QueueItem[]> {

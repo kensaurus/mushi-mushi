@@ -1,8 +1,8 @@
 /**
  * packages/plugin-sdk/src/retry.ts
  *
- * Exponential back-off + full-jitter retry wrapper for outbound HTTP calls
- * made by Mushi plugins (PagerDuty, Slack, Jira, Linear, …).
+ * Exponential back-off + bounded-additive-jitter retry wrapper for outbound
+ * HTTP calls made by Mushi plugins (PagerDuty, Slack, Jira, Linear, …).
  *
  * Retry decision table:
  *   429             → retry; honour Retry-After header (seconds or HTTP-date)
@@ -21,6 +21,9 @@
  *   })
  *
  * Delay formula:  min(baseDelayMs × 2ⁿ + rand(0, 500 ms), maxDelayMs)
+ *   where n is the 0-indexed retry attempt. The 500 ms additive jitter
+ *   smooths thundering-herd effects without giving up the predictable upper
+ *   bound that AWS / Azure-style "full jitter" sacrifices.
  */
 
 import { setTimeout as sleep } from 'node:timers/promises'

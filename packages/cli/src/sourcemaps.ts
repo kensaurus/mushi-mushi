@@ -108,11 +108,21 @@ async function uploadFile(
 export async function runSourcemapsUpload(
   opts: SourcemapsUploadOptions,
 ): Promise<void> {
-  const endpoint =
-    opts.endpoint ??
-    process.env['MUSHI_API_ENDPOINT'] ??
-    'https://api.mushimushi.dev'
+  // Phase 2.1: no dead-host fallback. The previous default
+  // ('https://api.mushimushi.dev') pointed at a host that does not exist —
+  // uploads against it silently failed at the TCP level. Force the operator
+  // to be explicit so misconfiguration surfaces immediately.
+  const endpoint = opts.endpoint ?? process.env['MUSHI_API_ENDPOINT'] ?? ''
   const apiKey = opts.apiKey ?? process.env['MUSHI_API_KEY'] ?? ''
+
+  if (!opts.dryRun && !endpoint) {
+    p.log.error(
+      'No API endpoint configured. Pass --endpoint <url>, set MUSHI_API_ENDPOINT,\n' +
+        '  or run `mushi config endpoint <url>` to persist it. For Supabase self-hosting,\n' +
+        '  this is your edge-functions URL, e.g. https://xyz.supabase.co/functions/v1/api',
+    )
+    process.exit(1)
+  }
 
   if (!opts.dryRun && !apiKey) {
     p.log.error('No API key — set MUSHI_API_KEY or pass --api-key <key>')

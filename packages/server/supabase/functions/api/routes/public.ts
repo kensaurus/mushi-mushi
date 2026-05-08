@@ -442,7 +442,7 @@ export function registerPublicRoutes(app: Hono): void {
 
     const auditRow = await audit(c, body, deliveryId);
     try {
-      checkRateLimit(auditRow.id, sourceIp);
+      checkRateLimit(sourceIp);
       await checkReplay(auditRow.id, deliveryId);
     } catch (err) {
       if (err instanceof RateLimitError) {
@@ -482,6 +482,11 @@ export function registerPublicRoutes(app: Hono): void {
       .single();
 
     if (!settings?.sentry_webhook_secret) {
+      // Resolve the audit row before bailing — otherwise this row is stuck in
+      // 'pending' forever, polluting webhook_audit_log dashboards. The outcome
+      // is 'error' (config), not 'rejected_signature' (which implies the
+      // request was signed but the secret didn't match).
+      await auditRow.resolve('error', 403, Date.now() - t0, 'Sentry webhook secret not configured');
       return c.json(
         { ok: false, error: 'Sentry webhook secret not configured for this project' },
         403,
@@ -717,7 +722,7 @@ export function registerPublicRoutes(app: Hono): void {
 
     const auditRow = await audit(c, body, deliveryId);
     try {
-      checkRateLimit(auditRow.id, sourceIp);
+      checkRateLimit(sourceIp);
       await checkReplay(auditRow.id, deliveryId);
     } catch (err) {
       if (err instanceof RateLimitError) {
@@ -750,6 +755,10 @@ export function registerPublicRoutes(app: Hono): void {
       | undefined;
 
     if (!repo?.full_name || !checkRun?.head_sha) {
+      // The webhook is well-formed JSON but missing fields we need; treat as
+      // accepted-but-ignored so the audit log reflects the no-op outcome
+      // rather than an orphan 'pending' row.
+      await auditRow.resolve('accepted', 200, Date.now() - t0, 'missing repo or sha');
       return c.json({ ok: true, data: { reason: 'missing repo or sha' } });
     }
 
@@ -763,6 +772,7 @@ export function registerPublicRoutes(app: Hono): void {
       .limit(5);
 
     if (!candidates || candidates.length === 0) {
+      await auditRow.resolve('accepted', 200, Date.now() - t0, 'no matching fix_attempt');
       return c.json({ ok: true, data: { reason: 'no matching fix_attempt' } });
     }
 
@@ -793,6 +803,7 @@ export function registerPublicRoutes(app: Hono): void {
     }
 
     if (!verified) {
+      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'No matching github_webhook_secret');
       return c.json(
         {
           ok: false,
@@ -818,6 +829,7 @@ export function registerPublicRoutes(app: Hono): void {
 
     await db.from('fix_attempts').update(updates).in('id', targetIds);
 
+    await auditRow.resolve('accepted', 200, Date.now() - t0);
     return c.json({ ok: true, data: { updated: targetIds.length, verified } });
   });
 

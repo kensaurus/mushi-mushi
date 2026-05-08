@@ -8,7 +8,7 @@
  *   same sticky nav header, same --mushi-* token usage, same MarketingFooter.
  */
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, type LinkProps } from 'react-router-dom'
 import {
   MarketingFooter,
@@ -259,25 +259,54 @@ function letterIcon(name: string): string {
 // ─── Sub-components ───────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const handleCopy = () => {
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+  // 'idle' | 'copied' | 'error'. We surface failure visibly because the
+  // clipboard API rejects in restricted contexts (insecure HTTP, missing
+  // permission, iframe sandbox) and a silent failure looks like a UI bug.
+  const [state, setState] = useState<'idle' | 'copied' | 'error'>('idle')
+  // Hold the timeout so we can clear it on unmount and never call setState
+  // on a vanished component (React will warn in dev, leak the closure in prod).
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+  }, [])
+
+  const handleCopy = async () => {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('Clipboard API unavailable')
+      }
+      await navigator.clipboard.writeText(text)
+      setState('copied')
+    } catch {
+      setState('error')
+    }
+    if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    timeoutRef.current = setTimeout(() => setState('idle'), 2000)
   }
+
+  const label =
+    state === 'copied' ? 'Copied!'
+    : state === 'error' ? 'Copy failed'
+    : `Copy install command for ${text}`
+
   return (
     <button
       type="button"
-      onClick={handleCopy}
+      onClick={() => { void handleCopy() }}
       className="inline-flex items-center gap-1 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-[10px] text-[var(--mushi-ink-muted)] transition hover:border-[var(--mushi-vermillion)]/40 hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
       title={`Copy: ${text}`}
-      aria-label={copied ? 'Copied!' : `Copy install command for ${text}`}
+      aria-label={label}
     >
-      {copied ? (
+      {state === 'copied' ? (
         <>
           <span aria-hidden>✓</span>
           <span>Copied</span>
+        </>
+      ) : state === 'error' ? (
+        <>
+          <span aria-hidden>!</span>
+          <span>Copy failed</span>
         </>
       ) : (
         <>

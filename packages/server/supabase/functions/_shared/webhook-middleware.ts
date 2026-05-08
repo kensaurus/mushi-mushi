@@ -8,35 +8,55 @@
  *          1. **Audit logging** — writes a row to `webhook_audit_log` on
  *             every request (pending → accepted/rejected on completion).
  *             Enables after-the-fact intrusion analysis and rate-limit
- *             dashboards in the admin console.
+ *             dashboards in the admin console. Callers MUST resolve every
+ *             audit row before returning, or rows accumulate as 'pending'
+ *             forever and pollute dashboards.
  *
  *          2. **Replay detection** — checks whether the same
- *             (webhook_source, delivery_id) arrived in the last 24 hours.
- *             Prevents replay attacks where an attacker records and
- *             re-submits a valid signed payload.
+ *             (webhook_source, delivery_id) was previously *accepted* in the
+ *             last 24 hours. Prevents replay attacks where an attacker
+ *             records and re-submits a valid signed payload. Throws
+ *             `ReplayAttackError` (status 409) on hit. Note: this check is
+ *             best-effort — two concurrent in-flight requests with the same
+ *             delivery_id can both pass (TOCTOU). Downstream processing
+ *             should be idempotent regardless.
  *
  *          3. **Per-source rate limiting** — uses an in-memory sliding
- *             window (safe because Supabase edge functions are single-tenant
- *             per isolate) to enforce a per-source request budget:
+ *             window. NOTE: each Supabase edge-function isolate has its own
+ *             window, so the effective global budget is
+ *             `budget × num_isolates`. For per-source-IP correctness use a
+ *             centralized store (Redis / Postgres). The in-memory limiter is
+ *             still useful as a cheap brute-force gate and protects each
+ *             isolate from runaway load.
  *             - Sentry / GitHub / Jira / PagerDuty: 30 req/min per IP
  *             - Unknown sources: 5 req/min per IP
- *             Falls back to the audit log for distributed rate limiting when
- *             the in-memory window is cold (new isolate spin-up).
+ *             Throws `RateLimitError` (status 429) on hit.
  *
  * USAGE:
  *   import { createWebhookMiddleware } from '../_shared/webhook-middleware.ts'
  *
- *   // In your route handler:
  *   const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('sentry')
  *   const auditRow = await audit(c, body, deliveryId)
- *   await checkReplay(auditRow.id, deliveryId)     // throws 429 if replay
- *   await checkRateLimit(auditRow.id, sourceIp)    // throws 429 if rate-limited
- *   // ... process webhook ...
- *   await auditRow.resolve('accepted', responseStatus, durationMs)
+ *   try {
+ *     checkRateLimit(sourceIp)              // throws 429 if rate-limited
+ *     await checkReplay(auditRow.id, deliveryId)  // throws 409 if replay
+ *     // ... process webhook ...
+ *     await auditRow.resolve('accepted', 200, Date.now() - t0)
+ *   } catch (err) {
+ *     if (err instanceof RateLimitError) {
+ *       await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message)
+ *       return c.json({ ok: false, error: err.message }, 429)
+ *     }
+ *     if (err instanceof ReplayAttackError) {
+ *       await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message)
+ *       return c.json({ ok: false, error: 'Duplicate delivery' }, 409)
+ *     }
+ *     throw err
+ *   }
  */
 
 import type { Context } from 'jsr:@hono/hono'
-import { createClient } from 'jsr:@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'jsr:@supabase/supabase-js@2'
 
 type WebhookSource =
   | 'sentry' | 'sentry_seer' | 'github' | 'jira' | 'pagerduty'
@@ -53,7 +73,8 @@ interface AuditRowHandle {
   id: string
   /**
    * Finalize the audit log row with the outcome, response status, and duration.
-   * Call this in a finally block to ensure the row is always resolved.
+   * Call this on EVERY return path — orphaned 'pending' rows pollute the
+   * audit dashboard and block accurate rate-limit accounting.
    */
   resolve(
     outcome: AuditOutcome,
@@ -63,7 +84,9 @@ interface AuditRowHandle {
   ): Promise<void>
 }
 
-// Per-source rate limit budget (requests per 60s per source IP)
+// Per-source rate limit budget (requests per 60s per source IP). Tuned to
+// the documented event volume of each upstream so we don't reject legitimate
+// bursts (CI churn for GitHub, alert storms for PagerDuty, etc.).
 const RATE_LIMIT_BUDGET: Record<WebhookSource, number> = {
   sentry: 30,
   sentry_seer: 30,
@@ -88,7 +111,15 @@ const RATE_LIMIT_BUDGET: Record<WebhookSource, number> = {
 
 // In-memory sliding window for rate limiting.
 // Key: `${source}:${sourceIp}` → array of timestamps (ms)
+//
+// Memory management: every check filters out timestamps outside the window
+// before evaluating; if the resulting array is empty AND the cache reached
+// `MAX_RATE_KEYS`, we evict the entry to bound memory in long-lived isolates
+// that see many unique IPs (scanners, proxies). The cap is a soft fence —
+// individual misses don't break correctness because the next request from
+// that IP just starts a new window.
 const rateLimitWindows = new Map<string, number[]>()
+const MAX_RATE_KEYS = 10_000
 
 function checkInMemoryRateLimit(source: WebhookSource, sourceIp: string): boolean {
   const key = `${source}:${sourceIp}`
@@ -97,10 +128,20 @@ function checkInMemoryRateLimit(source: WebhookSource, sourceIp: string): boolea
   const budget = RATE_LIMIT_BUDGET[source] ?? 5
 
   const hits = (rateLimitWindows.get(key) ?? []).filter((t) => now - t < windowMs)
-  if (hits.length >= budget) return false
+  if (hits.length >= budget) {
+    rateLimitWindows.set(key, hits)
+    return false
+  }
 
   hits.push(now)
   rateLimitWindows.set(key, hits)
+
+  // Bounded GC — evict oldest entries when the map grows past the soft cap.
+  // Map preserves insertion order so the first key is the least-recently-set.
+  if (rateLimitWindows.size > MAX_RATE_KEYS) {
+    const firstKey = rateLimitWindows.keys().next().value
+    if (firstKey !== undefined) rateLimitWindows.delete(firstKey)
+  }
   return true
 }
 
@@ -112,26 +153,43 @@ async function sha256hex(text: string): Promise<string> {
     .join('')
 }
 
-/** Extract the best available source IP from CF/proxy headers */
+/**
+ * Extract the best available source IP from CF/proxy headers.
+ *
+ * Header preference order matches the typical Supabase + Cloudflare deployment:
+ *   1. CF-Connecting-IP (Cloudflare-set, the actual client IP)
+ *   2. X-Real-IP (set by some proxies as a single canonical client IP)
+ *   3. X-Forwarded-For (RFC 7239 chain — first hop is the original client)
+ */
 function extractSourceIp(c: Context): string | null {
   return (
     c.req.header('CF-Connecting-IP') ??
+    c.req.header('X-Real-IP') ??
     c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ??
     null
   )
 }
 
-function getServiceClient() {
-  return createClient(
+// Module-level service-client cache. createClient() is lightweight but
+// recreating it 3-4× per webhook (audit / replay / resolve) on every request
+// added measurable overhead under load. One instance per isolate is safe —
+// the supabase-js client is stateless beyond the URL+key and connection pool.
+let _serviceClient: SupabaseClient | null = null
+function getServiceClient(): SupabaseClient {
+  if (_serviceClient) return _serviceClient
+  _serviceClient = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+  return _serviceClient
 }
 
 /**
  * Factory that creates per-request middleware helpers for a given webhook source.
  */
 export function createWebhookMiddleware(source: WebhookSource) {
+  const db = getServiceClient()
+
   /**
    * Create an audit log row for this request. Returns a handle to finalize
    * the row after processing. Call this before ANY signature verification
@@ -143,7 +201,6 @@ export function createWebhookMiddleware(source: WebhookSource) {
     deliveryId?: string | null,
   ): Promise<AuditRowHandle> {
     const startMs = Date.now()
-    const db = getServiceClient()
     const bodyHash = await sha256hex(rawBody)
     const sourceIp = extractSourceIp(c)
 
@@ -197,7 +254,11 @@ export function createWebhookMiddleware(source: WebhookSource) {
 
   /**
    * Check for replay attacks. Looks for a row with the same (source, delivery_id)
-   * in the last 24 hours. Throws a 409 Conflict response if a replay is detected.
+   * previously *accepted* in the last 24 hours. Throws `ReplayAttackError`
+   * (status 409) if a replay is detected.
+   *
+   * Best-effort: two concurrent requests with the same delivery_id can both
+   * pass this check (TOCTOU). Downstream processing should be idempotent.
    *
    * Call AFTER audit() but BEFORE processing.
    */
@@ -207,7 +268,6 @@ export function createWebhookMiddleware(source: WebhookSource) {
   ): Promise<void> {
     if (!deliveryId) return // No delivery ID = cannot detect replay
 
-    const db = getServiceClient()
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
     const { count } = await db
@@ -225,13 +285,17 @@ export function createWebhookMiddleware(source: WebhookSource) {
   }
 
   /**
-   * Enforce per-source-IP rate limit. Uses an in-memory sliding window first
-   * (cheap, no DB round-trip). Throws a 429 Too Many Requests if over budget.
+   * Enforce per-source-IP rate limit. Uses an in-memory sliding window
+   * (cheap, no DB round-trip). Throws `RateLimitError` (status 429) if over
+   * budget.
    *
-   * Call AFTER audit() but BEFORE signature verification to catch brute-force
-   * signature-guessing attacks.
+   * Call AFTER audit() but BEFORE signature verification to catch
+   * brute-force signature-guessing attacks early.
+   *
+   * NOTE: per-isolate. Across N isolates the effective budget is N × the
+   * documented limit. Use a centralized store for global enforcement.
    */
-  function checkRateLimit(auditRowId: string, sourceIp: string | null): void {
+  function checkRateLimit(sourceIp: string | null): void {
     if (!sourceIp) return // Cannot rate-limit without an IP
     if (!checkInMemoryRateLimit(source, sourceIp)) {
       throw new RateLimitError(source, RATE_LIMIT_BUDGET[source] ?? 5)

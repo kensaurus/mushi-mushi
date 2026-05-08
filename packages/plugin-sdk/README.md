@@ -85,6 +85,33 @@ export default app
 The `v1` signature is `HMAC_SHA256(secret, "${t}.${rawBody}")` in lowercase
 hex. Tolerance is 5 minutes by default and is verified in constant time.
 
+## Outbound HTTP utilities
+
+The SDK ships two zero-dependency helpers used by every reference plugin:
+
+### `withRetry(fn, opts)`
+
+Exponential back-off + bounded-additive jitter for outbound HTTP calls.
+Retries `429` (honouring `Retry-After`), `503`, `504`, other `5xx`, and
+network errors; fails fast on other `4xx`. Throw the raw `Response` object
+so the wrapper can read status + headers:
+
+```ts
+import { withRetry } from '@mushi-mushi/plugin-sdk'
+
+const json = await withRetry(async () => {
+  const res = await fetch(url, { method: 'POST', body })
+  if (!res.ok) throw res                    // expose status + Retry-After
+  return res.json()
+}, { maxAttempts: 4, idempotencyKey: deliveryId })
+```
+
+### `assertFields(payload, required)` / `safeParseInbound(payload, required)`
+
+Two type-narrowing guards for inbound webhook payloads. `assertFields`
+throws `TypeError`; `safeParseInbound` returns `{ ok, data | error }` for
+use at I/O boundaries.
+
 ## Marketplace
 
 Once your plugin is ready, submit it to the Mushi marketplace by opening a PR
@@ -94,15 +121,32 @@ requested API permissions before listing it.
 
 ## Reference plugins
 
-The Mushi monorepo ships three open-source reference plugins built on this
-SDK; copy and adapt them as a starting point:
+The Mushi monorepo ships open-source reference plugins built on this SDK;
+copy and adapt them as a starting point:
 
-- [`@mushi-mushi/plugin-pagerduty`](../plugin-pagerduty) — paged on critical
-  severity events.
-- [`@mushi-mushi/plugin-linear`](../plugin-linear) — bidirectional sync with
-  Linear issues.
-- [`@mushi-mushi/plugin-zapier`](../plugin-zapier) — fan-out to any Zapier
-  workflow via incoming webhook.
+**Project management / on-call**
+
+- [`@mushi-mushi/plugin-pagerduty`](../plugin-pagerduty) — paged on critical events; auto-resolves on `fix.applied`.
+- [`@mushi-mushi/plugin-jira`](../plugin-jira) — bidirectional Jira issue sync (HMAC-verified inbound webhook).
+- [`@mushi-mushi/plugin-linear`](../plugin-linear) — bidirectional Linear sync.
+- [`@mushi-mushi/plugin-github-issues`](../plugin-github-issues) — open + close GitHub Issues with the `mushi-bug` label.
+
+**Chat / notifications**
+
+- [`@mushi-mushi/plugin-slack-app`](../plugin-slack-app) — Block-Kit messages + Slack interaction handler.
+- [`@mushi-mushi/plugin-discord`](../plugin-discord) — embed posts to a Discord webhook.
+- [`@mushi-mushi/plugin-msteams`](../plugin-msteams) — Adaptive Card 1.4 notifications.
+
+**Error monitoring (mirrored writes)**
+
+- [`@mushi-mushi/plugin-sentry`](../plugin-sentry) — mirror reports into Sentry; resolve on fix.
+- [`@mushi-mushi/plugin-bugsnag`](../plugin-bugsnag) — Bugsnag Data API v2 mirror.
+- [`@mushi-mushi/plugin-rollbar`](../plugin-rollbar) — Rollbar item mirror + auto-resolve.
+- [`@mushi-mushi/plugin-crashlytics`](../plugin-crashlytics) — close Crashlytics issues on fix.
+
+**Workflow**
+
+- [`@mushi-mushi/plugin-zapier`](../plugin-zapier) — fan-out to any Zapier workflow via incoming webhook.
 
 ## License
 
