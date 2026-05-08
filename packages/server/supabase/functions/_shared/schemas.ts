@@ -10,6 +10,12 @@ export const reportSubmissionSchema = z.object({
   description: z.string().min(20, 'Description must be at least 20 characters').max(5000),
   userIntent: z.string().optional(),
 
+  // `passthrough()` lets the SDK ship richer environment fields (the
+  // 2026-05-07 boost added screen / userAgentData / prefersColorScheme /
+  // pageLoadTiming etc.) without us having to ship matching server
+  // schema bumps in lockstep — the columns are jsonb so extra keys land
+  // intact in `reports.environment`. The required fields below stay
+  // strictly typed; only *unknown* keys pass through.
   environment: z.object({
     userAgent: z.string(),
     platform: z.string(),
@@ -31,7 +37,7 @@ export const reportSubmissionSchema = z.object({
     // map a freeform report to an Action node in the bidirectional graph.
     route: z.string().max(500).optional(),
     nearestTestid: z.string().max(120).optional(),
-  }),
+  }).passthrough(),
 
   consoleLogs: z.array(z.object({
     level: z.enum(['log', 'warn', 'error', 'info', 'debug']),
@@ -80,6 +86,73 @@ export const reportSubmissionSchema = z.object({
   sdkPackage: z.string().max(120).optional(),
   sdkVersion: z.string().max(40).optional(),
   proactiveTrigger: z.string().optional(),
+
+  /**
+   * Mushi-side breadcrumb ring buffer (max 50 entries on the SDK side).
+   * Server caps to 100 to bound jsonb size in the unlikely event a
+   * forked SDK ships with a larger buffer. We deliberately keep this
+   * loose-typed (`record(unknown)` for `data`) — the field is read by
+   * the admin /reports drawer and the Triage LLM, both of which
+   * tolerate arbitrary structured data.
+   */
+  breadcrumbs: z.array(z.object({
+    timestamp: z.number(),
+    category: z.enum(['navigation', 'ui.click', 'console', 'xhr', 'fetch', 'lifecycle', 'custom']),
+    level: z.enum(['debug', 'info', 'warning', 'error']),
+    message: z.string().max(2000),
+    data: z.record(z.unknown()).optional(),
+  })).max(100).optional(),
+
+  /**
+   * Sticky tags from `Mushi.setTag()` / `Mushi.setTags()`. Hard-cap on
+   * count + value length so a runaway host can't blow up our jsonb
+   * column with a megabyte of tag debris.
+   */
+  tags: z.record(z.union([z.string().max(500), z.number(), z.boolean()]))
+    .refine((t) => Object.keys(t).length <= 64, {
+      message: 'tags: at most 64 keys allowed',
+    })
+    .optional(),
+
+  /**
+   * Rich Sentry context — parallel to `sentryEventId`/`sentryReplayId`
+   * which we keep for back-compat with older SDKs. Every nested field
+   * is optional so a partial Sentry capture (different point releases
+   * of the host's Sentry SDK can expose different APIs) lands cleanly.
+   */
+  sentryContext: z.object({
+    sdk: z.enum(['v7', 'v8', 'v9', 'unknown']).optional(),
+    eventId: z.string().max(80).optional(),
+    replayId: z.string().max(80).optional(),
+    traceId: z.string().max(80).optional(),
+    spanId: z.string().max(40).optional(),
+    transactionName: z.string().max(500).optional(),
+    release: z.string().max(200).optional(),
+    environment: z.string().max(80).optional(),
+    sessionId: z.string().max(80).optional(),
+    user: z.object({
+      id: z.string().max(200).optional(),
+      email: z.string().max(320).optional(),
+      username: z.string().max(200).optional(),
+      ip_address: z.string().max(80).optional(),
+    }).optional(),
+    tags: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
+    breadcrumbs: z.array(z.object({
+      timestamp: z.number().optional(),
+      category: z.string().optional(),
+      level: z.string().optional(),
+      message: z.string().optional(),
+      type: z.string().optional(),
+      data: z.record(z.unknown()).optional(),
+    })).max(100).optional(),
+    issueUrl: z.string().max(2000).optional(),
+  }).optional(),
+
+  /** @deprecated — covered by `sentryContext.eventId`. Kept for back-compat. */
+  sentryEventId: z.string().max(80).optional(),
+  /** @deprecated — covered by `sentryContext.replayId`. Kept for back-compat. */
+  sentryReplayId: z.string().max(80).optional(),
+
   queuedAt: z.string().optional(),
   createdAt: z.string(),
 })

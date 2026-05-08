@@ -329,11 +329,128 @@ export interface MushiReport {
   sdkVersion?: string;
   proactiveTrigger?: string;
 
+  /**
+   * Mushi-side breadcrumbs maintained by the SDK in a 50-entry ring buffer.
+   * Captured automatically (SDK lifecycle events, console errors, route
+   * changes, `[data-testid]` clicks) and via `Mushi.addBreadcrumb()`.
+   * Independent of Sentry's breadcrumbs (those land in
+   * `sentryContext.breadcrumbs`) so a host using Mushi without Sentry
+   * still gets a timeline.
+   */
+  breadcrumbs?: MushiBreadcrumb[];
+
+  /**
+   * Sticky tags set via `Mushi.setTag()` / `Mushi.setTags()`. Mirrors
+   * the Sentry / DataDog "tag" vocabulary — short string keys with
+   * scalar values. The Triage LLM treats these as high-signal hints
+   * ("checkout-flow=redesign-v2" tells the LLM which feature flag the
+   * report came from). Plumbed through to `reports.metadata.tags`
+   * server-side until a dedicated `tags` column is added.
+   */
+  tags?: Record<string, string | number | boolean>;
+
+  /**
+   * Rich Sentry context captured at report time. Replaces the legacy
+   * `sentryEventId`/`sentryReplayId` pair (those are kept for
+   * back-compat — server unifies them). When the host has Sentry
+   * installed (v7, v8, or v9), every Mushi report carries enough trace
+   * data for the admin to pivot into Sentry's MCP / web UI without
+   * a manual paste.
+   */
+  sentryContext?: MushiSentryContext;
+
+  /** @deprecated use `sentryContext.eventId` — kept for back-compat. */
   sentryEventId?: string;
+  /** @deprecated use `sentryContext.replayId` — kept for back-compat. */
   sentryReplayId?: string;
 
   queuedAt?: string;
   createdAt: string;
+}
+
+/**
+ * Single breadcrumb entry. Shape follows the Sentry breadcrumb schema
+ * 1:1 so an admin tooling layer (or the Triage LLM) can treat Mushi
+ * breadcrumbs and Sentry breadcrumbs interchangeably without a
+ * normalisation pass.
+ */
+export interface MushiBreadcrumb {
+  /** Unix epoch ms when the breadcrumb fired. */
+  timestamp: number;
+  /**
+   * Coarse bucket for filtering / coloring in the report drawer.
+   * - `navigation` — route or url change
+   * - `ui.click` — user clicked a `[data-testid]` element
+   * - `console` — `console.error` / `console.warn` callsite
+   * - `xhr` / `fetch` — network request that errored or 4xx/5xx
+   * - `lifecycle` — Mushi SDK init / open / submit / queue
+   * - `custom` — host called `Mushi.addBreadcrumb()`
+   */
+  category: 'navigation' | 'ui.click' | 'console' | 'xhr' | 'fetch' | 'lifecycle' | 'custom';
+  /**
+   * Severity — `info` is the default. `warning` / `error` map to a
+   * coloured pill in the drawer; the Triage LLM uses these to decide
+   * which breadcrumbs to feature in the "what happened" summary.
+   */
+  level: 'debug' | 'info' | 'warning' | 'error';
+  /** Free-form short summary, capped at 500 chars at submit time. */
+  message: string;
+  /** Optional structured payload — kept small to keep ingest cheap. */
+  data?: Record<string, unknown>;
+}
+
+/**
+ * Snapshot of Sentry's current scope at report submission. Captured by
+ * `captureSentryContext()` in the web SDK; designed to be cheap to
+ * serialise and exhaustively useful when the admin pivots into Sentry
+ * MCP via `find_organizations` → `search_issues` → `get_event_attachment`.
+ *
+ * Every field is optional so a host without Sentry installed (and a
+ * Sentry SDK that exposes only a subset of these globals) still
+ * produces a partial — but useful — payload.
+ */
+export interface MushiSentryContext {
+  /** Sentry SDK version family detected at capture time. */
+  sdk?: 'v7' | 'v8' | 'v9' | 'unknown';
+  /** `Sentry.lastEventId()` (v8+) / `getLastEventId()` (v7). */
+  eventId?: string;
+  /** Replay session id from `Sentry.getReplay()?.getReplayId()`. */
+  replayId?: string;
+  /** Distributed-tracing trace id (32 hex). */
+  traceId?: string;
+  /** Active span id at capture time (16 hex). */
+  spanId?: string;
+  /** `transaction` field from the active scope, e.g. `GET /checkout`. */
+  transactionName?: string;
+  /** Build identifier set via `Sentry.init({ release })`. */
+  release?: string;
+  /** Logical environment, e.g. `production`. */
+  environment?: string;
+  /** Session id when Sentry session-tracking is enabled. */
+  sessionId?: string;
+  /** User context from Sentry's scope (id/email/username/ip). */
+  user?: { id?: string; email?: string; username?: string; ip_address?: string };
+  /** Tags attached to Sentry's current scope. */
+  tags?: Record<string, string | number | boolean>;
+  /**
+   * Last N Sentry breadcrumbs (default cap = 30). Already-formatted
+   * Sentry breadcrumbs, not Mushi's — the two are surfaced side by
+   * side in the admin drawer so users can correlate.
+   */
+  breadcrumbs?: Array<{
+    timestamp?: number;
+    category?: string;
+    level?: string;
+    message?: string;
+    type?: string;
+    data?: Record<string, unknown>;
+  }>;
+  /**
+   * Issue url (deeplink) when the SDK can derive it from the event id
+   * + DSN. Lets the admin jump straight to the Sentry issue page
+   * without the user pasting a link.
+   */
+  issueUrl?: string;
 }
 
 export interface MushiReportBuilder {
@@ -379,6 +496,110 @@ export interface MushiEnvironment {
    */
   route?: string;
   nearestTestid?: string;
+
+  /**
+   * SDK boost (2026-05-07): richer per-report context so the Triage LLM
+   * and the admin /reports detail drawer have something to reason about
+   * beyond `userAgent`. Every field is optional so legacy SDKs and
+   * non-browser callers (CLI, server-to-server) keep validating.
+   */
+
+  /**
+   * Parsed UA-CH (User-Agent Client Hints) high-entropy values when the
+   * browser supports `navigator.userAgentData.getHighEntropyValues`.
+   * This is the modern, reliable way to identify Chromium browsers — UA
+   * sniffing is unreliable post-Chrome 100 because the UA string was
+   * frozen for privacy. Safari + Firefox don't expose UA-CH so we still
+   * fall back to UA parsing for those (handled server-side).
+   */
+  userAgentData?: {
+    /** Best-effort browser brand (e.g. "Chrome", "Edge", "Brave"). */
+    browser?: string;
+    /** Browser version (full semver where available, e.g. "131.0.6778.86"). */
+    browserVersion?: string;
+    /** OS family (e.g. "macOS", "Windows", "Android", "iOS"). */
+    os?: string;
+    /** OS version when the browser exposes it (e.g. "14.5.0"). */
+    osVersion?: string;
+    /** Whether the device self-identifies as mobile (UA-CH `mobile`). */
+    mobile?: boolean;
+    /** Device model when the OS exposes it (Android only, e.g. "Pixel 8"). */
+    model?: string;
+    /** CPU architecture (e.g. "x86", "arm"). */
+    architecture?: string;
+    /** CPU bitness ("32" or "64"). */
+    bitness?: string;
+  };
+
+  /**
+   * Physical device pixels behind the viewport. `viewport` already
+   * captures the CSS pixel box; this lets us tell a 1080p MacBook from a
+   * Retina iPhone and explain "looks fine on my screen, broken on
+   * theirs" by surfacing devicePixelRatio mismatches.
+   */
+  screen?: {
+    /** `screen.width` — outer device width in CSS px. */
+    width?: number;
+    /** `screen.height` — outer device height in CSS px. */
+    height?: number;
+    /** `window.devicePixelRatio` — physical / CSS px ratio. */
+    devicePixelRatio?: number;
+    /** `screen.colorDepth` — bits per pixel (typically 24/30). */
+    colorDepth?: number;
+    /** Active orientation type from `screen.orientation`. */
+    orientation?: 'portrait-primary' | 'portrait-secondary' | 'landscape-primary' | 'landscape-secondary' | string;
+  };
+
+  /**
+   * Accessibility / display preferences resolved via media queries.
+   * These are reproduction hints — a bug that only repros under
+   * `prefers-reduced-motion: reduce` or `forced-colors: active` is one
+   * the developer would otherwise spend hours hunting for.
+   */
+  prefersColorScheme?: 'dark' | 'light' | 'no-preference';
+  prefersReducedMotion?: boolean;
+  prefersReducedData?: boolean;
+  prefersContrast?: 'more' | 'less' | 'no-preference' | 'custom';
+  forcedColors?: boolean;
+
+  /** `navigator.onLine` at capture time. False = the report was filed offline. */
+  online?: boolean;
+
+  /**
+   * `(display-mode: standalone | minimal-ui | fullscreen | browser)`
+   * resolved via media queries. Tells us whether the user filed the
+   * report from a regular browser tab, an installed PWA, or a TWA — a
+   * different code path on iOS Safari for each.
+   */
+  displayMode?: 'browser' | 'minimal-ui' | 'standalone' | 'fullscreen';
+
+  /** `document.title` at capture time. Surface for "what page were they on?". */
+  documentTitle?: string;
+
+  /**
+   * Optional opt-in build identifier from `<meta name="mushi:build" content="...">`.
+   * Hosts that already expose a git SHA / build number to their HTML
+   * (e.g. `<meta name="mushi:build" content="abc123def">`) get it
+   * threaded through automatically — no SDK config required. Pairs with
+   * `appVersion` to pin reports to a specific deploy.
+   */
+  buildId?: string;
+
+  /**
+   * Snapshot of the Navigation Timing entry. Reports that come in
+   * during a slow page load look very different from steady-state
+   * reports, and the LLM can't tell the difference from a stack alone.
+   */
+  pageLoadTiming?: {
+    /** `domContentLoadedEventEnd - startTime` in ms. */
+    domContentLoadedMs?: number;
+    /** `loadEventEnd - startTime` in ms. */
+    loadCompleteMs?: number;
+    /** `responseStart - startTime` in ms (TTFB). */
+    timeToFirstByteMs?: number;
+    /** Navigation type (`navigate`, `reload`, `back_forward`, `prerender`). */
+    navigationType?: string;
+  };
 }
 
 export interface MushiConsoleEntry {
@@ -495,11 +716,74 @@ export interface MushiSDKInstance {
   captureEvent(event: MushiCaptureEventInput): Promise<string | null>;
 
   /**
+   * 2026-05-07 — `try/catch`-friendly sugar over `captureEvent`. Pass
+   * a thrown value directly and Mushi normalises it (any exotic
+   * throw shape: `Error`, string, plain object, `null`) into a report
+   * with category `bug`, severity `high` (overridable), and the
+   * stack trace folded into both `description` (compact) and
+   * `metadata.error.stack` (full).
+   *
+   * Pairs with Sentry: when `config.sentry` is present, the same
+   * call-site can flush to Sentry (`Sentry.captureException(err)`)
+   * and Mushi (`Mushi.captureException(err)`) — the two reports get
+   * cross-linked via `sentryContext.eventId` automatically.
+   */
+  captureException(
+    error: unknown,
+    options?: MushiCaptureExceptionOptions,
+  ): Promise<string | null>;
+
+  /**
    * Wave G4 — sugar alias for `setUser()`. Name mirrors the
    * identify/track/capture vocabulary that PostHog/Segment/Mixpanel
    * users already know.
    */
   identify(userId: string, traits?: { email?: string; name?: string; [k: string]: unknown }): void;
+
+  /**
+   * Sentry-grade observability surface (2026-05-07).
+   *
+   * Hosts can drop a breadcrumb on every meaningful state change in
+   * their app — feature-flag toggles, route transitions, optimistic
+   * UI commits, server reconciliation — and the buffer's last 50
+   * entries automatically attach to every report. Useful even when
+   * Sentry isn't installed; when it is, Mushi reports also carry
+   * Sentry's breadcrumbs alongside Mushi's own.
+   */
+  addBreadcrumb(crumb: Omit<MushiBreadcrumb, 'timestamp'> & { timestamp?: number }): void;
+
+  /** Snapshot of the current breadcrumb ring buffer (oldest first). */
+  getBreadcrumbs(): MushiBreadcrumb[];
+
+  /**
+   * Set a sticky tag that lands on every subsequent report. Numeric
+   * and boolean values are accepted; they're coerced to strings on
+   * the wire so the Triage LLM can read them without type juggling.
+   */
+  setTag(key: string, value: string | number | boolean): void;
+
+  /** Bulk variant of `setTag`. Replaces existing values for shared keys. */
+  setTags(tags: Record<string, string | number | boolean>): void;
+
+  /** Remove a single tag, or all tags when called with no argument. */
+  clearTag(key?: string): void;
+}
+
+export interface MushiCaptureExceptionOptions {
+  /** Override the default `'bug'` category (e.g. `'slow'` for timeouts). */
+  category?: MushiReportCategory;
+  /** Default `'high'`. Use `'critical'` for boot-time errors, `'low'` for known recoverables. */
+  severity?: 'critical' | 'high' | 'medium' | 'low';
+  /** Affected component / page area, surfaces in the admin reports list. */
+  component?: string;
+  /** Optional human-readable summary that overrides the auto-derived one. */
+  description?: string;
+  /** Per-call tags merged with sticky tags. */
+  tags?: Record<string, string | number | boolean>;
+  /** Free-form metadata folded into `reports.metadata`. */
+  metadata?: Record<string, unknown>;
+  /** Source label — defaults to `'captureException'`. */
+  source?: string;
 }
 
 export interface MushiCaptureEventInput {

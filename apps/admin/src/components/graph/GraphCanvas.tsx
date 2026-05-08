@@ -20,7 +20,8 @@ import { NODE_COLORS } from '../../lib/tokens'
 import { useTheme } from '../../lib/useTheme'
 import { GraphLegend } from './GraphLegend'
 import { ReactFlowChip } from './NodeChip'
-import type { GraphNode } from './types'
+import { GraphSidePanel } from './GraphSidePanel'
+import type { BlastRadiusItem, GraphNode } from './types'
 
 // Minimap + dot-grid colours are passed straight to SVG attrs by xyflow,
 // which strips `var(--…)` references — so we resolve them per-theme here
@@ -55,6 +56,16 @@ interface Props {
   /** When false, the minimap is suppressed — useful on small graphs where it
    *  adds visual clutter without helping orientation. Defaults to true. */
   showMinimap?: boolean
+  // 2026-05-07 — selection panel now floats *inside* the ReactFlow
+  // viewport (top-right) instead of as a sibling 18rem column. This keeps
+  // the canvas full-width (the user's reported "wasted space" was the
+  // sibling column eating ~25 % of horizontal real estate even when no
+  // node was selected) and means clicks reveal context without the eye
+  // jumping outside the spatial map.
+  selectedNode?: GraphNode | null
+  blastRadius?: BlastRadiusItem[]
+  blastLoading?: boolean
+  onClearSelection?: () => void
 }
 
 const HINT_KEY = 'mushi.graph.hintSeen'
@@ -69,6 +80,10 @@ export function GraphCanvas({
   onResetView,
   hidden = false,
   showMinimap = true,
+  selectedNode = null,
+  blastRadius = [],
+  blastLoading = false,
+  onClearSelection,
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false)
   const { resolved } = useTheme()
@@ -97,10 +112,18 @@ export function GraphCanvas({
 
   return (
     <div
+      // 2026-05-07 — height tightened from `100vh-280` / min 520 to
+      // `100vh-360` / min 440. The user reported "the height is a little
+      // too big"; the prior numbers were sized for a viewport without the
+      // PageHero + filter chips above the canvas. Subtracting another
+      // ~80 px restores ~1.1 viewport-folds of canvas at 1440×900 instead
+      // of overflowing to ~1.4 folds and forcing a vertical scroll just to
+      // reach the legend / minimap controls. min-height stays generous
+      // enough for the storyboard threshold (12 nodes laid out by force).
       className="border border-edge rounded-md bg-surface-root"
       style={{
-        height: 'calc(100vh - 280px)',
-        minHeight: 520,
+        height: 'calc(100vh - 360px)',
+        minHeight: 440,
         display: hidden ? 'none' : 'block',
       }}
       role="region"
@@ -166,6 +189,26 @@ export function GraphCanvas({
         <Panel position="bottom-left">
           <GraphLegend />
         </Panel>
+        {selectedNode && onClearSelection && (
+          // In-canvas detail panel.
+          // Wrapped in a fixed-width track so the floating card never
+          // exceeds ~22rem regardless of node label length (long labels
+          // truncate inside the panel via `wrap-break-word`). Pointer
+          // events: auto so the panel intercepts clicks (otherwise the
+          // ReactFlow `onPaneClick` swallows them and the user can't
+          // scroll the blast-radius list). Max-h leaves headroom above
+          // the bottom-right Controls overlay.
+          <Panel position="top-right">
+            <div className="w-[22rem] max-w-[calc(100vw-3rem)] max-h-[min(70%,28rem)] overflow-y-auto rounded-md shadow-raised pointer-events-auto">
+              <GraphSidePanel
+                node={selectedNode}
+                blastRadius={blastRadius}
+                blastLoading={blastLoading}
+                onClear={onClearSelection}
+              />
+            </div>
+          </Panel>
+        )}
         {filteredCount === 0 && (
           <Panel position="top-center">
             <div className="rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-2 text-2xs text-fg-secondary shadow-raised max-w-sm text-center">

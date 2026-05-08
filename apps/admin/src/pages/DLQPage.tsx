@@ -231,7 +231,7 @@ export function DLQPage() {
           />
         )}
         {items.length > 0 && (
-          <Btn size="sm" onClick={retryAll}>
+          <Btn size="sm" variant="success" onClick={retryAll}>
             Retry page ({items.length})
           </Btn>
         )}
@@ -309,7 +309,27 @@ export function DLQPage() {
         howToUse="Switch status to find what's failing. Use the stage filter to scope. Retry individual items, or use Retry page after fixing the root cause."
       />
 
-      {summary && <QueueKpiRow summary={summary} throughput={throughput} />}
+      {summary && (
+        <div className="space-y-1.5">
+          {/* Plain-language reading guide. The five KPI tiles use technical
+              terms (pending / running / completed / failed / dead letter)
+              that map cleanly to the worker state machine but are opaque
+              to operators who haven't read the queue runbook. The tooltip
+              behind each tile already explains it ("hover for meaning"),
+              but discovery via hover is silent — see NN/g #6 (Recognition
+              over Recall). This sub-caption surfaces the mental model
+              up-front: lanes flow left→right, the sparkline mirrors the
+              same lane in the 14d throughput chart below, and dead-letter
+              is the only lane that needs human action. */}
+          <p className="text-2xs text-fg-muted leading-relaxed max-w-prose">
+            <span className="font-semibold text-fg-secondary">How to read this row:</span>{' '}
+            jobs move <span className="font-medium text-fg-secondary">left → right</span> through the worker
+            (waiting → running → completed). Failed jobs are still inside the retry budget; <span className="font-medium text-warn">dead-letter</span> jobs gave up and need a manual look.
+            Each sparkline shows the last 14 days for that lane — hover any tile for the full meaning.
+          </p>
+          <QueueKpiRow summary={summary} throughput={throughput} />
+        </div>
+      )}
 
       <QueueThroughputChart throughput={throughput} />
 

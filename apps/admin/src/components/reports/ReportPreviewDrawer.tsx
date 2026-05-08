@@ -18,6 +18,8 @@ import { Link } from 'react-router-dom'
 import { apiFetch } from '../../lib/supabase'
 import { Drawer } from '../Drawer'
 import { Badge, CodeValue, RelativeTime, LongFormText, Loading } from '../ui'
+import { SentryContextPanel } from '../report-detail/SentryContextPanel'
+import type { ReportBreadcrumb, ReportSentryContext } from '../report-detail/types'
 import {
   STATUS,
   SEVERITY,
@@ -40,6 +42,21 @@ interface ReportPreview {
   created_at: string
   screenshot_url?: string | null
   environment?: Record<string, unknown> | null
+  // 2026-05-07 SDK observability boost — surfaced in the drawer so
+  // operators can triage from the queue without opening the full
+  // detail page when the report has rich Sentry context attached.
+  breadcrumbs?: ReportBreadcrumb[] | null
+  tags?: Record<string, string | number | boolean> | null
+  sentry_event_id?: string | null
+  sentry_replay_id?: string | null
+  sentry_trace_id?: string | null
+  sentry_release?: string | null
+  sentry_environment?: string | null
+  sentry_issue_url?: string | null
+  custom_metadata?: {
+    sentry?: ReportSentryContext
+    [k: string]: unknown
+  } | null
 }
 
 interface Props {
@@ -151,6 +168,17 @@ export function ReportPreviewDrawer({ previewId, onClose }: Props) {
                 />
               </div>
             )}
+            <SentryContextPanel
+              mushiBreadcrumbs={report.breadcrumbs}
+              sentryContext={report.custom_metadata?.sentry}
+              sentryEventId={report.sentry_event_id}
+              sentryReplayId={report.sentry_replay_id}
+              sentryTraceId={report.sentry_trace_id}
+              sentryRelease={report.sentry_release}
+              sentryEnvironment={report.sentry_environment}
+              sentryIssueUrl={report.sentry_issue_url}
+              tags={report.tags}
+            />
             <div className="pt-2 border-t border-edge/60">
               <Link
                 to={`/reports/${report.id}`}

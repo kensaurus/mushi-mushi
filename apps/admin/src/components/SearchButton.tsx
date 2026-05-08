@@ -30,7 +30,7 @@ export function SearchButton() {
       type="button"
       onClick={open}
       aria-label="Open command palette"
-      className="inline-flex items-center gap-2 h-7 rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 text-xs text-fg-muted hover:text-fg hover:border-edge motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+      className="inline-flex items-center gap-2 h-7 w-full md:w-auto rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 text-xs text-fg-muted hover:text-fg hover:border-edge motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
     >
       <svg
         viewBox="0 0 24 24"

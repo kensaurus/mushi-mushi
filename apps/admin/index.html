@@ -3,6 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      ROBOTS — keep the admin SPA out of every search index.
+
+      The admin console is an authenticated dashboard. Every sub-route
+      (`/admin/reports`, `/admin/graph`, `/admin/fixes`, …) is served by the
+      same `<div id="root"></div>` shell with no per-route `<title>` or
+      `<link rel="canonical">`, then React rewrites the page client-side and
+      `lib/auth.tsx` redirects unauthenticated visitors to the login. From
+      Google's crawler perspective that looks like:
+
+        • "Page with redirect" — every authenticated route 302-equivalents
+          back to `/login` via JS, which Googlebot reports as a redirect.
+        • "Duplicate without user-selected canonical" — every route serves
+          identical pre-hydration HTML with no canonical pointing anywhere.
+
+      Both errors landed in Google Search Console for the kensaur.us-hosted
+      deploy at `/mushi-mushi/admin/*` (7 URLs flagged on 2026-05-07). A
+      dashboard should never be crawled in the first place, so the right
+      structural fix is to declare the SPA shell `noindex,nofollow`. That
+      flag applies to every sub-route the SPA serves because they all
+      hydrate from this same shell.
+
+      `googlebot` is set explicitly in addition to the generic `robots`
+      directive so a future per-bot robots.txt rule can't accidentally
+      undo it. Per Google's robots-meta-tag docs, the most restrictive
+      directive wins when both are present.
+      https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag
+    -->
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="googlebot" content="noindex,nofollow" />
+
     <title>Mushi Mushi — bugs your users feel, in your queue with a fix</title>
     <meta name="description" content="The bug your monitoring can't see, in your queue with a draft fix. Sentry catches what your code throws; Mushi catches the dead button, the 12-second screen, the layout that breaks on one Android. Open source." />
     <meta name="keywords" content="bug tracking, user feedback, AI bug triage, developer tools, SDK, error monitoring, Sentry companion" />

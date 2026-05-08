@@ -78,7 +78,29 @@ export async function checkIngestQuota(
     .limit(1)
     .maybeSingle()
 
-  const plan = await resolvePlanFromSubscription(sub)
+  // Org-level complimentary fallback. When an org is on the comp billing_mode
+  // we honour its plan_id even without a Stripe subscription, so the project
+  // gets full quota + entitlements without ever talking to Stripe. Without
+  // this lookup, comp accounts would silently degrade to Hobby (1k reports/mo)
+  // the moment the operator removes the placeholder billing_subscriptions row.
+  let plan = await resolvePlanFromSubscription(sub)
+  if (!sub || plan.id === 'hobby') {
+    const { data: project } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', projectId)
+      .maybeSingle()
+    if (project?.organization_id) {
+      const { data: org } = await db
+        .from('organizations')
+        .select('billing_mode, plan_id')
+        .eq('id', project.organization_id)
+        .maybeSingle()
+      if (org?.billing_mode === 'complimentary') {
+        plan = await getPlan(org.plan_id)
+      }
+    }
+  }
   const periodResetsActual = sub?.current_period_end ?? periodResetsAt
 
   // Unlimited plan (e.g. enterprise) → fast path, no usage count needed.

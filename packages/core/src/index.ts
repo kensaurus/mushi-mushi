@@ -32,6 +32,7 @@ export type {
   MushiDiagnosticsResult,
   MushiSDKInstance,
   MushiCaptureEventInput,
+  MushiCaptureExceptionOptions,
   MushiApiClient,
   MushiApiResponse,
   MushiRuntimeSdkConfig,
@@ -41,6 +42,8 @@ export type {
   MushiOnDeviceClassifier,
   MushiOnDeviceClassifierInput,
   MushiOnDeviceClassifierResult,
+  MushiBreadcrumb,
+  MushiSentryContext,
 } from './types';
 
 export {
@@ -60,6 +63,15 @@ export { getDeviceFingerprintHash } from './fingerprint';
 export { getSessionId } from './session';
 export { createRateLimiter, type RateLimiter, type RateLimiterConfig } from './rate-limiter';
 export { createPiiScrubber, scrubPii, type PiiScrubberConfig } from './pii-scrubber';
+export {
+  createBreadcrumbBuffer,
+  type BreadcrumbBuffer,
+  type BreadcrumbBufferOptions,
+} from './breadcrumbs';
+export {
+  normaliseThrown,
+  type NormalisedException,
+} from './exception-normaliser';
 export {
   createLogger,
   noopLogger,

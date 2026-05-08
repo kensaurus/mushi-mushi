@@ -21,6 +21,7 @@ import {
   Input,
   EmptyState,
   ErrorAlert,
+  SegmentedControl,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile, type KpiDelta } from '../components/charts'
@@ -121,6 +122,8 @@ function groupEvents(events: AntiGamingEvent[]): EventGroup[] {
   return Array.from(map.values()).sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
 }
 
+type DeviceGroupBy = 'flat' | 'ip' | 'date' | 'status'
+
 export function AntiGamingPage() {
   const toast = useToast()
   const [filter, setFilter] = useState<'flagged' | 'all'>('flagged')
@@ -131,6 +134,28 @@ export function AntiGamingPage() {
   const [flagTarget, setFlagTarget] = useState<string | null>(null)
   const [aggregateEvents, setAggregateEvents] = useState(true)
   const [expandedEventGroup, setExpandedEventGroup] = useState<string | null>(null)
+  // 2026-05-07 enhancement — when 50 devices land in the flagged lane the
+  // flat list is unscannable; an operator can't tell whether they're staring
+  // at one rogue datacenter spamming 30 tokens or a coordinated campaign
+  // across 30 IPs. Grouping by IP / date / status surfaces those structures
+  // without forcing the operator to do the aggregation by eye. Flat stays
+  // the default so first-time visitors see the existing layout.
+  const [groupBy, setGroupBy] = useState<DeviceGroupBy>('flat')
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
+  const toggleGroup = useCallback((key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
+
+  // Reset collapsed state whenever the grouping axis changes — otherwise a
+  // group key collapsed under "by IP" stays collapsed under "by date" even
+  // though it represents a different bucket.
+  const resetCollapsed = useCallback(() => setCollapsedGroups(new Set()), [])
 
   const devicesPath = `/v1/admin/anti-gaming/devices${filter === 'flagged' ? '?flagged=true' : ''}`
   const devicesQuery = usePageData<{ devices: ReporterDevice[] }>(devicesPath, { deps: [filter] })
@@ -169,6 +194,95 @@ export function AntiGamingPage() {
       || d.ip_addresses.some((ip) => ip.toLowerCase().includes(needle)),
     )
   }, [allDevices, search])
+
+  // Bucketise the (already filtered + searched) device list into named
+  // groups. Each grouping axis returns a stable order so the user's eye
+  // doesn't have to re-anchor on every render:
+  //
+  //   flat    → one synthetic group "All devices"
+  //   ip      → primary IP (first ip_address); devices with no IP go
+  //             under "(no IP)" sorted last
+  //   date    → relative day bucket (Today / Yesterday / This week /
+  //             Last 30d / Older), oldest bucket last
+  //   status  → cross-account → flagged → tracked, severity descending
+  //
+  // The `count` is shown in the group header so the operator sees the
+  // shape of abuse at a glance without expanding anything.
+  const deviceGroups = useMemo<Array<{ key: string; label: string; sublabel?: string; count: number; devices: ReporterDevice[] }>>(() => {
+    if (groupBy === 'flat') {
+      return [{ key: 'all', label: 'All devices', count: devices.length, devices }]
+    }
+    if (groupBy === 'ip') {
+      const buckets = new Map<string, ReporterDevice[]>()
+      for (const d of devices) {
+        const key = d.ip_addresses[0] ?? '(no IP)'
+        if (!buckets.has(key)) buckets.set(key, [])
+        buckets.get(key)!.push(d)
+      }
+      return Array.from(buckets.entries())
+        .sort((a, b) => {
+          if (a[0] === '(no IP)') return 1
+          if (b[0] === '(no IP)') return -1
+          if (b[1].length !== a[1].length) return b[1].length - a[1].length
+          return a[0].localeCompare(b[0])
+        })
+        .map(([ip, devs]) => ({
+          key: `ip:${ip}`,
+          label: ip,
+          sublabel: devs.length > 1 ? `${devs.length} devices share this IP` : undefined,
+          count: devs.length,
+          devices: devs,
+        }))
+    }
+    if (groupBy === 'date') {
+      const now = Date.now()
+      const ms = (n: number) => n * 24 * 60 * 60 * 1000
+      const bucketFor = (created: string): { rank: number; key: string; label: string } => {
+        const age = now - new Date(created).getTime()
+        if (age < ms(1)) return { rank: 0, key: 'today', label: 'Today' }
+        if (age < ms(2)) return { rank: 1, key: 'yesterday', label: 'Yesterday' }
+        if (age < ms(7)) return { rank: 2, key: 'this-week', label: 'This week' }
+        if (age < ms(30)) return { rank: 3, key: 'last-30d', label: 'Last 30 days' }
+        return { rank: 4, key: 'older', label: 'Older' }
+      }
+      const buckets = new Map<string, { rank: number; label: string; devices: ReporterDevice[] }>()
+      for (const d of devices) {
+        const b = bucketFor(d.created_at)
+        if (!buckets.has(b.key)) buckets.set(b.key, { rank: b.rank, label: b.label, devices: [] })
+        buckets.get(b.key)!.devices.push(d)
+      }
+      return Array.from(buckets.entries())
+        .sort((a, b) => a[1].rank - b[1].rank)
+        .map(([key, { label, devices: devs }]) => ({
+          key: `date:${key}`,
+          label,
+          count: devs.length,
+          devices: devs,
+        }))
+    }
+    // status — severity descending so the most actionable bucket is at top
+    const buckets = {
+      cross: [] as ReporterDevice[],
+      flagged: [] as ReporterDevice[],
+      tracked: [] as ReporterDevice[],
+    }
+    for (const d of devices) {
+      if (d.cross_account_flagged) buckets.cross.push(d)
+      else if (d.flagged_as_suspicious) buckets.flagged.push(d)
+      else buckets.tracked.push(d)
+    }
+    const out: Array<{ key: string; label: string; sublabel?: string; count: number; devices: ReporterDevice[] }> = []
+    if (buckets.cross.length > 0) {
+      out.push({ key: 'status:cross', label: 'Cross-account', sublabel: 'Tokens reused across distinct users — strongest abuse signal', count: buckets.cross.length, devices: buckets.cross })
+    }
+    if (buckets.flagged.length > 0) {
+      out.push({ key: 'status:flagged', label: 'Flagged', sublabel: 'Heuristically suspicious — review before clearing', count: buckets.flagged.length, devices: buckets.flagged })
+    }
+    if (buckets.tracked.length > 0) {
+      out.push({ key: 'status:tracked', label: 'Tracked', sublabel: 'No abuse signals — listed for completeness', count: buckets.tracked.length, devices: buckets.tracked })
+    }
+    return out
+  }, [devices, groupBy])
 
   const eventGroups = useMemo(() => groupEvents(events), [events])
   const collapsedCount = events.length - eventGroups.length
@@ -334,12 +448,25 @@ export function AntiGamingPage() {
           (search ? ` · ${devices.length}/${allDevices.length} match "${search}"` : '')
         }
         action={
-          <Input
-            placeholder="Search fingerprint, token, IP, reason…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="max-w-xs"
-          />
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <SegmentedControl<DeviceGroupBy>
+              size="sm"
+              ariaLabel="Group devices by"
+              label="Group"
+              value={groupBy}
+              options={DEVICE_GROUP_OPTIONS}
+              onChange={(next) => {
+                setGroupBy(next)
+                resetCollapsed()
+              }}
+            />
+            <Input
+              placeholder="Search fingerprint, token, IP, reason…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="max-w-xs"
+            />
+          </div>
         }
       >
         {loading ? (
@@ -365,91 +492,50 @@ export function AntiGamingPage() {
             />
           )
         ) : (
-          <div className="space-y-1">
-            {devices.map(d => {
-              const isExpanded = expanded === d.id
-              const isBusy = busy === d.id
+          <div className="space-y-2">
+            {deviceGroups.map((group) => {
+              // In flat mode there's only one synthetic group with the
+              // same count as the visible list — drop the header chrome
+              // entirely so the layout stays identical to the pre-grouping
+              // experience for users who don't change the axis.
+              const showHeader = groupBy !== 'flat'
+              const isCollapsed = showHeader && collapsedGroups.has(group.key)
               return (
-                <Card key={d.id} className="overflow-hidden">
-                  <div className="p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {d.cross_account_flagged && (
-                            <Badge className="bg-danger-muted text-danger">cross-account</Badge>
-                          )}
-                          {d.flagged_as_suspicious && !d.cross_account_flagged && (
-                            <Badge className="bg-danger-muted text-danger">flagged</Badge>
-                          )}
-                          <code className="text-2xs font-mono text-fg-secondary truncate">
-                            fp:{d.device_fingerprint.slice(0, 16)}…
-                          </code>
-                          {d.fingerprint_hash && (
-                            <code className="text-2xs font-mono text-fg-faint truncate" title="SDK-supplied stable fingerprint hash">
-                              sdk:{d.fingerprint_hash.slice(0, 12)}…
-                            </code>
-                          )}
-                          <span className="text-2xs text-fg-faint">
-                            {pluralizeWithCount(d.reporter_tokens.length, 'token')} · {pluralizeWithCount(d.ip_addresses.length, 'IP')} · {pluralizeWithCount(d.report_count, 'report')}
-                            {d.distinct_user_count > 0 ? ` · ${pluralizeWithCount(d.distinct_user_count, 'distinct user')}` : ''}
-                          </span>
-                        </div>
-                        {d.flag_reason && (
-                          <p className="mt-1 text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
-                        )}
-                        <p className="mt-1 text-2xs text-fg-faint">
-                          First seen {new Date(d.created_at).toLocaleString()} · last activity {new Date(d.updated_at).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Btn
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setExpanded(isExpanded ? null : d.id)}
-                          aria-expanded={isExpanded}
-                        >
-                          {isExpanded ? 'Hide' : 'Details'}
-                        </Btn>
-                        {d.flagged_as_suspicious ? (
-                          <Btn variant="ghost" size="sm" onClick={() => unflag(d.id)} disabled={isBusy} loading={isBusy}>
-                            Unflag
-                          </Btn>
-                        ) : (
-                          <Btn variant="ghost" size="sm" onClick={() => flag(d.id)} disabled={isBusy} loading={isBusy}>
-                            Flag
-                          </Btn>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {isExpanded && (
-                    <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2 space-y-2">
-                      <div>
-                        <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">Reporter tokens ({d.reporter_tokens.length})</div>
-                        <div className="flex flex-wrap gap-1 font-mono text-2xs">
-                          {d.reporter_tokens.map((t) => (
-                            <span key={t} className="px-1.5 py-0.5 bg-surface-raised rounded-sm text-fg-secondary">
-                              {t.slice(0, 16)}…
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">IP addresses ({d.ip_addresses.length})</div>
-                        <div className="flex flex-wrap gap-1 font-mono text-2xs">
-                          {d.ip_addresses.map((ip) => (
-                            <span key={ip} className="px-1.5 py-0.5 bg-surface-raised rounded-sm text-fg-secondary">
-                              {ip}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="text-2xs text-fg-faint font-mono">
-                        Full fingerprint: {d.device_fingerprint}
-                      </div>
+                <div key={group.key} className="space-y-1">
+                  {showHeader && (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.key)}
+                      aria-expanded={!isCollapsed}
+                      aria-controls={`group-body-${group.key}`}
+                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left bg-surface-raised/40 border border-edge-subtle/60 hover:bg-surface-raised motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                    >
+                      <span aria-hidden="true" className="text-fg-faint font-mono text-2xs leading-none w-3 inline-block">
+                        {isCollapsed ? '▸' : '▾'}
+                      </span>
+                      <span className="font-mono text-xs text-fg truncate">{group.label}</span>
+                      <Badge className="bg-surface-overlay text-fg-muted text-3xs">{group.count}</Badge>
+                      {group.sublabel && (
+                        <span className="text-2xs text-fg-faint truncate">{group.sublabel}</span>
+                      )}
+                    </button>
+                  )}
+                  {!isCollapsed && (
+                    <div id={`group-body-${group.key}`} className={`space-y-1 ${showHeader ? 'pl-4 border-l border-edge-subtle/60 ml-2' : ''}`}>
+                      {group.devices.map((d) => (
+                        <DeviceCard
+                          key={d.id}
+                          device={d}
+                          isExpanded={expanded === d.id}
+                          isBusy={busy === d.id}
+                          onToggleExpand={() => setExpanded(expanded === d.id ? null : d.id)}
+                          onFlag={() => flag(d.id)}
+                          onUnflag={() => unflag(d.id)}
+                        />
+                      ))}
                     </div>
                   )}
-                </Card>
+                </div>
               )
             })}
           </div>
@@ -563,6 +649,117 @@ export function AntiGamingPage() {
         />
       )}
     </div>
+  )
+}
+
+/* ── Device-list helpers ──────────────────────────────────────────────── */
+
+const DEVICE_GROUP_OPTIONS = [
+  { id: 'flat' as const, label: 'Flat' },
+  { id: 'ip' as const, label: 'IP' },
+  { id: 'date' as const, label: 'Date' },
+  { id: 'status' as const, label: 'Status' },
+] as const
+
+interface DeviceCardProps {
+  device: ReporterDevice
+  isExpanded: boolean
+  isBusy: boolean
+  onToggleExpand: () => void
+  onFlag: () => void
+  onUnflag: () => void
+}
+
+/**
+ * Single device row, extracted into a stable component so the parent's
+ * grouping logic doesn't have to re-create the same JSX inside every
+ * group section. The visual contract is unchanged from the pre-grouping
+ * version — the only addition is that it now lives inside an indented
+ * group track when grouping is active (the rule is rendered by the
+ * parent so this component stays grouping-agnostic).
+ */
+function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onUnflag }: DeviceCardProps) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {d.cross_account_flagged && (
+                <Badge className="bg-danger-muted text-danger">cross-account</Badge>
+              )}
+              {d.flagged_as_suspicious && !d.cross_account_flagged && (
+                <Badge className="bg-danger-muted text-danger">flagged</Badge>
+              )}
+              <code className="text-2xs font-mono text-fg-secondary truncate">
+                fp:{d.device_fingerprint.slice(0, 16)}…
+              </code>
+              {d.fingerprint_hash && (
+                <code className="text-2xs font-mono text-fg-faint truncate" title="SDK-supplied stable fingerprint hash">
+                  sdk:{d.fingerprint_hash.slice(0, 12)}…
+                </code>
+              )}
+              <span className="text-2xs text-fg-faint">
+                {pluralizeWithCount(d.reporter_tokens.length, 'token')} · {pluralizeWithCount(d.ip_addresses.length, 'IP')} · {pluralizeWithCount(d.report_count, 'report')}
+                {d.distinct_user_count > 0 ? ` · ${pluralizeWithCount(d.distinct_user_count, 'distinct user')}` : ''}
+              </span>
+            </div>
+            {d.flag_reason && (
+              <p className="mt-1 text-xs text-danger leading-relaxed max-w-prose wrap-break-word text-pretty">{d.flag_reason}</p>
+            )}
+            <p className="mt-1 text-2xs text-fg-faint">
+              First seen {new Date(d.created_at).toLocaleString()} · last activity {new Date(d.updated_at).toLocaleString()}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Btn
+              variant="ghost"
+              size="sm"
+              onClick={onToggleExpand}
+              aria-expanded={isExpanded}
+            >
+              {isExpanded ? 'Hide' : 'Details'}
+            </Btn>
+            {d.flagged_as_suspicious ? (
+              <Btn variant="ghost" size="sm" onClick={onUnflag} disabled={isBusy} loading={isBusy}>
+                Unflag
+              </Btn>
+            ) : (
+              <Btn variant="danger" size="sm" onClick={onFlag} disabled={isBusy} loading={isBusy}>
+                Flag
+              </Btn>
+            )}
+          </div>
+        </div>
+      </div>
+      {isExpanded && (
+        <div className="border-t border-edge-subtle bg-surface-overlay/30 px-3 py-2 space-y-2">
+          <div>
+            <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">Reporter tokens ({d.reporter_tokens.length})</div>
+            <div className="flex flex-wrap gap-1 font-mono text-2xs">
+              {d.reporter_tokens.map((t) => (
+                <span key={t} className="px-1.5 py-0.5 bg-surface-raised rounded-sm text-fg-secondary">
+                  {t.slice(0, 16)}…
+                </span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-2xs text-fg-muted uppercase tracking-wider mb-1">IP addresses ({d.ip_addresses.length})</div>
+            <div className="flex flex-wrap gap-1 font-mono text-2xs">
+              {d.ip_addresses.map((ip) => (
+                <span key={ip} className="px-1.5 py-0.5 bg-surface-raised rounded-sm text-fg-secondary">
+                  {ip}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="text-2xs text-fg-faint font-mono">
+            Full fingerprint: {d.device_fingerprint}
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 

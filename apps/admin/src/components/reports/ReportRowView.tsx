@@ -18,6 +18,8 @@ import { Badge, Tooltip } from '../ui'
 import { SEVERITY } from '../../lib/tokens'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
+import { BreadcrumbPeek } from './BreadcrumbPeek'
+import { IconBolt } from '../icons'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
@@ -178,12 +180,19 @@ function ReportRowViewInner({
           {isVariant && (
             <span className="shrink-0 mt-0.5 text-2xs text-fg-faint" aria-hidden="true">↳</span>
           )}
-          <div
-            className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1"
-            title={typeof summary === 'string' ? summary : undefined}
+          <BreadcrumbPeek
+            breadcrumbs={row.breadcrumbs}
+            tags={row.tags}
+            sentryRelease={row.sentry_release}
+            sentryEnvironment={row.sentry_environment}
           >
-            {summary}
-          </div>
+            <div
+              className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1"
+              title={typeof summary === 'string' ? summary : undefined}
+            >
+              {summary}
+            </div>
+          </BreadcrumbPeek>
           {blastRadius > 1 && (
             <Tooltip
               content={
@@ -222,6 +231,9 @@ function ReportRowViewInner({
         </div>
         {row.component && (
           <div className="text-2xs text-fg-faint mt-0.5 font-mono truncate">{row.component}</div>
+        )}
+        {(hasObservability(row) || row.sentry_trace_id) && (
+          <ObservabilityStrip row={row} />
         )}
       </td>
       <td className="px-2 py-2 align-top">
@@ -349,6 +361,71 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           </svg>
         </button>
       </Tooltip>
+    </div>
+  )
+}
+
+/**
+ * Tiny inline strip beneath the row's component line that surfaces
+ * a single representative tag and a Sentry-trace pill when present.
+ * Deliberately kept to one line so it doesn't grow row height; the
+ * BreadcrumbPeek hover-card is the affordance for the full set.
+ *
+ * "Most informative tag" wins the inline slot. We pick by precedence:
+ * `feature` → `flag` → `tenant` → `plan` → first key alphabetically.
+ */
+const INLINE_TAG_PRIORITY = ['feature', 'flag', 'tenant', 'plan', 'env', 'release']
+
+function pickInlineTag(
+  tags: Record<string, string | number | boolean> | null | undefined,
+): [string, string | number | boolean] | null {
+  if (!tags) return null
+  const keys = Object.keys(tags)
+  if (keys.length === 0) return null
+  for (const k of INLINE_TAG_PRIORITY) {
+    if (k in tags) return [k, tags[k]]
+  }
+  const [first] = keys.sort()
+  return [first, tags[first]]
+}
+
+function hasObservability(row: ReportRow): boolean {
+  return Boolean(
+    (row.tags && Object.keys(row.tags).length > 0) ||
+      row.sentry_release ||
+      row.sentry_environment,
+  )
+}
+
+function ObservabilityStrip({ row }: { row: ReportRow }) {
+  const inlineTag = pickInlineTag(row.tags)
+  const tagCount = row.tags ? Object.keys(row.tags).length : 0
+  const traceShort = row.sentry_trace_id
+    ? `${row.sentry_trace_id.slice(0, 7)}…`
+    : null
+  return (
+    <div className="mt-1 flex items-center gap-1 flex-wrap">
+      {inlineTag && (
+        <span
+          className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-secondary max-w-[14rem] truncate"
+          title={`Tag — ${inlineTag[0]}: ${String(inlineTag[1])}`}
+        >
+          <span className="text-fg-muted">{inlineTag[0]}</span>
+          <span className="mx-0.5 text-fg-faint">:</span>
+          <span className="truncate">{String(inlineTag[1])}</span>
+        </span>
+      )}
+      {tagCount > 1 && (
+        <span className="text-2xs text-fg-faint">+{tagCount - 1}</span>
+      )}
+      {traceShort && (
+        <Tooltip content={`Sentry trace: ${row.sentry_trace_id}`}>
+          <span className="inline-flex items-center gap-0.5 text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-[#7553ff]/10 text-[#7553ff] border border-[#7553ff]/30 cursor-help">
+            <IconBolt className="size-2.5" />
+            {traceShort}
+          </span>
+        </Tooltip>
+      )}
     </div>
   )
 }

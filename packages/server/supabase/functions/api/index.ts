@@ -211,6 +211,20 @@ const MIGRATIONS_PROGRESS_ORIGINS = Array.from(
   new Set([...ADMIN_ORIGIN_ALLOWLIST, ...DOCS_ORIGIN_ALLOWLIST]),
 );
 
+// Canonical header set for any admin-surfaced endpoint. Whenever apps/admin
+// calls apiFetch the browser's preflight asks for this exact set; missing one
+// here drops the preflight and the FE surfaces a "Failed to fetch" toast that
+// reads as a network outage but is really a CORS misconfig. Centralising the
+// list means a new admin-side header gets added in ONE place instead of
+// drifting across every cors() entry below. Declared here (above the first
+// cors() that uses it) to dodge any TDZ pitfall in the module-init path.
+const ADMIN_ALLOWED_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'X-Mushi-Project-Id',
+  'X-Mushi-Org-Id',
+];
+
 app.use(
   '/v1/admin/migrations/*',
   cors({
@@ -223,8 +237,10 @@ app.use(
     // migration progress widget) and the page renders with a stale
     // "fetch-rejected" state. Adding it here is safe: the docs site never
     // sends this header, so the only callers exercising this entry are the
-    // admin and the docs Migration Hub.
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
+    // admin and the docs Migration Hub. Pulled from the shared
+    // ADMIN_ALLOWED_HEADERS constant so a future header addition lands in
+    // one place rather than drifting per-entry.
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -234,7 +250,21 @@ app.use(
   '/v1/admin/*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
+  }),
+);
+// Super-admin diagnostic endpoints (e.g. /v1/super-admin/users) are JWT-authed
+// and called from the admin console with the same header set as /v1/admin/*.
+// Without this dedicated entry the route falls through to the wildcard
+// catch-all and the preflight loses X-Mushi-Project-Id / X-Mushi-Org-Id,
+// which dropped silently because no UI surface had exercised it yet.
+app.use(
+  '/v1/super-admin/*',
+  cors({
+    origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -247,7 +277,7 @@ app.use(
     // org+project), even on /v1/org endpoints. Both must be in the
     // allowlist or the browser drops the preflight.
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
   }),
@@ -256,8 +286,30 @@ app.use(
   '/v1/invitations/*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
-    allowMethods: ['POST', 'OPTIONS'],
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
+    // GET is for /v1/invitations/preview which resolves a token into the
+    // org/inviter/role panel rendered before the user clicks Accept. The
+    // route is unauthenticated (the token IS the bearer), but we still
+    // gate CORS on the admin allowlist because the preview is only ever
+    // rendered from the admin app.
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    credentials: true,
+  }),
+);
+// /v1/support/* is admin-surfaced (apps/admin renders the "Need help?" panel
+// on /billing). The contact form submits to POST /v1/support/contact — note
+// the path lives outside /v1/admin/* because anonymous self-hosters may
+// later need to ping support without an admin JWT. Until then it's still
+// JWT-authed, but the FE's apiFetch unconditionally adds X-Mushi-Project-Id
+// + X-Mushi-Org-Id, so we need a dedicated CORS entry — without it the
+// route falls through to the wildcard catch-all that lacks those headers
+// and every "Send ticket" click failed with `TypeError: Failed to fetch`.
+app.use(
+  '/v1/support/*',
+  cors({
+    origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   }),
 );
@@ -272,20 +324,33 @@ app.use(
   '/v1/marketplace/*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Project-Id', 'X-Mushi-Org-Id'],
+    allowHeaders: ADMIN_ALLOWED_HEADERS,
     allowMethods: ['GET', 'POST', 'OPTIONS'],
     credentials: true,
   }),
 );
 
-// Fallback: anything we haven't classified (rare — mcp, internal) gets the
-// safer admin allowlist. Explicit beats implicit.
+// Fallback: anything we haven't classified (rare — mcp, internal future
+// admin paths) gets the safer admin allowlist. Defense in depth: we also
+// allow the admin header set here so a NEW JWT-authed admin route added
+// without a dedicated cors() entry above doesn't silently break preflight
+// (the failure mode that bit /v1/support/contact). Origin restriction stays
+// strict so this can never widen access — only the headers grow. The legacy
+// SDK headers (X-Mushi-Api-Key, X-Mushi-Project, X-Mushi-Internal) stay on
+// the list so anything else falling through that the SDK might call still
+// works without a regression hunt.
 app.use(
   '*',
   cors({
     origin: (origin) => (ADMIN_ORIGIN_ALLOWLIST.includes(origin) ? origin : null),
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Mushi-Api-Key', 'X-Mushi-Project', 'X-Mushi-Internal'],
+    allowHeaders: [
+      ...ADMIN_ALLOWED_HEADERS,
+      'X-Mushi-Api-Key',
+      'X-Mushi-Project',
+      'X-Mushi-Internal',
+    ],
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    credentials: true,
   }),
 );
 

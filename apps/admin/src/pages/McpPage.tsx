@@ -29,7 +29,8 @@ import {
   Btn,
   EmptyState,
 } from '../components/ui'
-import { IconIntegrations, IconCopy, IconCheck, IconArrowRight } from '../components/icons'
+import { IconIntegrations, IconCheck, IconArrowRight } from '../components/icons'
+import { CopyButton } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -399,24 +400,13 @@ export function McpPage() {
             <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">
               {snippetMode === 'cursor' ? 'Drop into your IDE settings' : 'Drop into your repo root'}
             </span>
-            <button
-              type="button"
-              onClick={() => copy(snippet, snippetMode === 'cursor' ? '.cursor/mcp.json block' : '.env.local block')}
+            <CopyButton
+              onCopy={() => copy(snippet, snippetMode === 'cursor' ? '.cursor/mcp.json block' : '.env.local block')}
+              copied={copied}
+              label={snippetMode === 'cursor' ? 'Copy .cursor/mcp.json block' : 'Copy .env.local block'}
+              copiedLabel="Snippet copied"
               data-testid="mcp-snippet-copy"
-              className="inline-flex items-center gap-1 text-2xs text-brand hover:text-brand-hover"
-            >
-              {copied ? (
-                <>
-                  <IconCheck className="h-3 w-3" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <IconCopy className="h-3 w-3" />
-                  Copy
-                </>
-              )}
-            </button>
+            />
           </div>
           <pre
             className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
