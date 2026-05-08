@@ -35,38 +35,49 @@ export function HealthPanel() {
   }, [])
 
   return (
-    <div className="space-y-4 max-w-2xl">
+    // Same width policy as the General tab: panel fills the page container,
+    // sections paired 2-up on lg+ viewports. ConnectionStatus is the only
+    // section that benefits from full width on every viewport (its internal
+    // grid renders 3 service rows side-by-side at md+), so it spans both
+    // columns via `lg:col-span-2`. The remaining 3 cards pair off below.
+    <div className="space-y-4">
       <Card className="p-4">
         <ConnectionStatus />
       </Card>
 
-      <Section title="SDK Configuration Reference">
-        <p className="text-2xs text-fg-muted mb-2">Use these values when configuring the Mushi SDK in your app:</p>
-        <div className="space-y-1.5">
-          <div>
-            <span className="text-xs text-fg-muted font-medium">API Endpoint</span>
-            <code className="block text-xs font-mono text-fg-secondary bg-surface-raised px-2 py-1 rounded-sm mt-0.5 select-all">
-              {RESOLVED_API_URL}
-            </code>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <Section title="SDK Configuration Reference">
+          <p className="text-2xs text-fg-muted mb-2">Use these values when configuring the Mushi SDK in your app:</p>
+          <div className="space-y-1.5">
+            <div>
+              <span className="text-xs text-fg-muted font-medium">API Endpoint</span>
+              <code className="block text-xs font-mono text-fg-secondary bg-surface-raised px-2 py-1 rounded-sm mt-0.5 select-all break-all">
+                {RESOLVED_API_URL}
+              </code>
+            </div>
           </div>
+        </Section>
+
+        <QuickTestSection project={project} projectLoading={projectLoading} />
+
+        {/* SDK Install card hosts a tabbed code block — gets the wider lane
+            (full row) so the npm + init snippets don't wrap. */}
+        <div className="lg:col-span-2">
+          <Section title="Install the SDK">
+            <p className="text-2xs text-fg-muted mb-2">
+              Per-framework <code className="font-mono">npm install</code> command and init snippet,
+              pre-filled with this project's id.
+            </p>
+            {project ? (
+              <SdkInstallCard projectId={project.id} />
+            ) : projectLoading ? (
+              <p className="text-2xs text-fg-faint">Loading project…</p>
+            ) : (
+              <p className="text-2xs text-fg-faint">Create a project first to see install snippets.</p>
+            )}
+          </Section>
         </div>
-      </Section>
-
-      <Section title="Install the SDK">
-        <p className="text-2xs text-fg-muted mb-2">
-          Per-framework <code className="font-mono">npm install</code> command and init snippet,
-          pre-filled with this project's id.
-        </p>
-        {project ? (
-          <SdkInstallCard projectId={project.id} />
-        ) : projectLoading ? (
-          <p className="text-2xs text-fg-faint">Loading project…</p>
-        ) : (
-          <p className="text-2xs text-fg-faint">Create a project first to see install snippets.</p>
-        )}
-      </Section>
-
-      <QuickTestSection project={project} projectLoading={projectLoading} />
+      </div>
     </div>
   )
 }

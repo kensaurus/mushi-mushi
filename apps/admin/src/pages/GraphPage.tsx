@@ -33,6 +33,11 @@ import {
   QuickViewsRow,
   type QuickView,
 } from '../components/graph/GraphFilters'
+// GraphSidePanel was previously rendered as a sibling 18rem column to the
+// right of the canvas, eating horizontal real estate even when no node was
+// selected. As of 2026-05-07 the panel is mounted inside the ReactFlow
+// canvas via a floating `<Panel position="top-right">` (see GraphCanvas).
+// The storyboard view still renders it inline below the strip.
 import { GraphSidePanel } from '../components/graph/GraphSidePanel'
 import { GraphStoryboard } from '../components/graph/GraphStoryboard'
 import { GraphTableView } from '../components/graph/GraphTableView'
@@ -454,19 +459,27 @@ export function GraphPage() {
           ]}
         />
       ) : (
-        <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
-          <div className="space-y-2">
-            <GraphFilterChips
-              search={search}
-              onSearchChange={setSearch}
-              enabledNodeTypes={enabledNodeTypes}
-              enabledEdgeTypes={enabledEdgeTypes}
-              onToggleNodeType={toggleNodeType}
-              onToggleEdgeType={toggleEdgeType}
-            />
+        // Single-column layout. Pre-2026-05-07 this was a
+        // `md:grid-cols-[1fr_18rem]` split with the GraphSidePanel pinned
+        // to the right — the user reported "wasted a lot of space" and
+        // "graph could extend on the right" because that 18rem column
+        // sat empty until a node was clicked. The detail panel now lives
+        // inside the canvas as a floating Panel (top-right) — see
+        // GraphCanvas. Storyboard + table views still render the panel
+        // inline because they don't have a viewport to float into.
+        <div className="space-y-2">
+          <GraphFilterChips
+            search={search}
+            onSearchChange={setSearch}
+            enabledNodeTypes={enabledNodeTypes}
+            enabledEdgeTypes={enabledEdgeTypes}
+            onToggleNodeType={toggleNodeType}
+            onToggleEdgeType={toggleEdgeType}
+          />
 
-            {useStoryboard ? (
-              <div className="space-y-2">
+          {useStoryboard ? (
+            <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
+              <div className="space-y-2 min-w-0">
                 <StoryboardNarrative
                   nodes={filteredNodes}
                   onSwitchToCanvas={() => setForceCanvas(true)}
@@ -483,53 +496,64 @@ export function GraphPage() {
                   onClear={clearSelection}
                 />
               </div>
-            ) : (
-              <>
-                {view === 'graph' && forceCanvas && filteredNodes.length < STORYBOARD_THRESHOLD && (
-                  <div className="flex items-center justify-end text-2xs text-fg-muted">
-                    <button
-                      type="button"
-                      onClick={() => setForceCanvas(false)}
-                      className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-                    >
-                      ← Back to storyboard
-                    </button>
-                  </div>
-                )}
-                <GraphCanvas
-                  flowNodes={flowNodes}
-                  flowEdges={flowEdges}
-                  filteredCount={filteredNodes.length}
-                  filteredEdgeCount={filteredEdges.length}
-                  onNodeClick={onNodeClick}
-                  onPaneClick={clearSelection}
-                  onResetView={() => applyView('all')}
-                  hidden={view === 'table'}
-                  showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
-                />
-              </>
-            )}
-
-            {view === 'table' && (
-              <GraphTableView
-                nodes={filteredNodes}
-                edges={filteredEdges}
-                selectedNodeId={selectedNode?.id ?? null}
-                blastRadiusIds={blastRadiusIds}
-                onSelect={(node) => {
-                  setSelectedNode(node)
-                  void fetchBlastRadius(node)
-                }}
+              <GraphSidePanel
+                node={selectedNode}
+                blastRadius={blastRadius}
+                blastLoading={blastLoading}
+                onClear={clearSelection}
               />
-            )}
-          </div>
-
-          <GraphSidePanel
-            node={selectedNode}
-            blastRadius={blastRadius}
-            blastLoading={blastLoading}
-            onClear={clearSelection}
-          />
+            </div>
+          ) : view === 'table' ? (
+            <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
+              <div className="min-w-0">
+                <GraphTableView
+                  nodes={filteredNodes}
+                  edges={filteredEdges}
+                  selectedNodeId={selectedNode?.id ?? null}
+                  blastRadiusIds={blastRadiusIds}
+                  onSelect={(node) => {
+                    setSelectedNode(node)
+                    void fetchBlastRadius(node)
+                  }}
+                />
+              </div>
+              <GraphSidePanel
+                node={selectedNode}
+                blastRadius={blastRadius}
+                blastLoading={blastLoading}
+                onClear={clearSelection}
+              />
+            </div>
+          ) : (
+            <>
+              {view === 'graph' && forceCanvas && filteredNodes.length < STORYBOARD_THRESHOLD && (
+                <div className="flex items-center justify-end text-2xs text-fg-muted">
+                  <button
+                    type="button"
+                    onClick={() => setForceCanvas(false)}
+                    className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
+                  >
+                    ← Back to storyboard
+                  </button>
+                </div>
+              )}
+              <GraphCanvas
+                flowNodes={flowNodes}
+                flowEdges={flowEdges}
+                filteredCount={filteredNodes.length}
+                filteredEdgeCount={filteredEdges.length}
+                onNodeClick={onNodeClick}
+                onPaneClick={clearSelection}
+                onResetView={() => applyView('all')}
+                hidden={false}
+                showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
+                selectedNode={selectedNode}
+                blastRadius={blastRadius}
+                blastLoading={blastLoading}
+                onClearSelection={clearSelection}
+              />
+            </>
+          )}
         </div>
       )}
 

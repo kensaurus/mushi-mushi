@@ -107,7 +107,7 @@ export function PluginCard({ plugin: p, installed: inst, stats, busy, onInstall,
           <span />
         )}
         {inst ? (
-          <Btn variant="ghost" size="sm" onClick={onUninstall} disabled={busy} loading={busy}>
+          <Btn variant="danger" size="sm" onClick={onUninstall} disabled={busy} loading={busy}>
             Uninstall
           </Btn>
         ) : (

@@ -37,9 +37,30 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { devices: [] } });
-
     const flagged = c.req.query('flagged') === 'true';
+    // count_only=1 powers the sidebar badge — the Layout only needs the
+    // number of flagged devices, not the full row payload. Skipping the
+    // 200-row select trims sidebar refresh cost from ~30 KB to a single
+    // count() round-trip per project group.
+    const countOnly = c.req.query('count_only') === '1';
+
+    if (projectIds.length === 0) {
+      return countOnly
+        ? c.json({ ok: true, data: { count: 0 } })
+        : c.json({ ok: true, data: { devices: [] } });
+    }
+
+    if (countOnly) {
+      let cq = db
+        .from('reporter_devices')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds);
+      if (flagged) cq = cq.eq('flagged_as_suspicious', true);
+      const { count, error: countErr } = await cq;
+      if (countErr) return dbError(c, countErr);
+      return c.json({ ok: true, data: { count: count ?? 0 } });
+    }
+
     let q = db
       .from('reporter_devices')
       .select('*')
@@ -146,12 +167,32 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const projectIds = await ownedProjectIds(db, userId);
-    if (projectIds.length === 0) return c.json({ ok: true, data: { notifications: [] } });
-
     const type = c.req.query('type');
     const onlyUnread = c.req.query('unread') === '1';
-    const limit = Math.min(Number(c.req.query('limit') ?? 200), 500);
+    // Sidebar count badge mode — server runs `count: 'exact'` against an empty
+    // row select so we get just `{ unread_count: N }` back, not 200 row payloads
+    // every time the user navigates. The full list mode below is unchanged.
+    const countOnly = c.req.query('count_only') === '1';
+    if (projectIds.length === 0) {
+      return c.json({
+        ok: true,
+        data: countOnly ? { unread_count: 0 } : { notifications: [] },
+      });
+    }
 
+    if (countOnly) {
+      let countQuery = db
+        .from('reporter_notifications')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds);
+      if (type) countQuery = countQuery.eq('notification_type', type);
+      if (onlyUnread) countQuery = countQuery.is('read_at', null);
+      const { count, error } = await countQuery;
+      if (error) return dbError(c, error);
+      return c.json({ ok: true, data: { unread_count: count ?? 0 } });
+    }
+
+    const limit = Math.min(Number(c.req.query('limit') ?? 200), 500);
     let query = db
       .from('reporter_notifications')
       .select('*')
@@ -825,6 +866,31 @@ export function registerAdminOpsRoutes(app: Hono): void {
       .maybeSingle();
     const organizationId = projectRef?.organization_id ?? null;
 
+    // Refuse to push a complimentary org through Stripe Checkout — they're
+    // already on a comp tier server-side, and creating a real Stripe customer
+    // here would silently dual-bill them once a card is attached. The FE
+    // hides the upgrade CTA for these orgs, so reaching this branch means
+    // either a forged request or an out-of-date client.
+    if (organizationId) {
+      const { data: orgPosture } = await db
+        .from('organizations')
+        .select('billing_mode, plan_id')
+        .eq('id', organizationId)
+        .maybeSingle();
+      if (orgPosture?.billing_mode === 'complimentary') {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'COMPLIMENTARY_ACCOUNT',
+              message: `This organization is on a complimentary ${orgPosture.plan_id} plan — no checkout is needed. Contact an operator to convert it to self-serve billing.`,
+            },
+          },
+          400,
+        );
+      }
+    }
+
     const cfg = stripeFromEnv();
     if (!cfg.secretKey) {
       return c.json({ ok: false, error: { code: 'STRIPE_NOT_CONFIGURED' } }, 503);
@@ -987,6 +1053,34 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const owned = await ownedProjectIds(db, userId);
     if (!owned.includes(projectId)) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
+    // Short-circuit for complimentary orgs (Mushi staff / sponsored / beta):
+    // they intentionally have no Stripe customer, so calling Stripe would
+    // 400 with `resource_missing`. Surface a friendly note instead so the
+    // BillingPage can render an "Invoices not applicable on a comp account"
+    // empty state without a red error banner.
+    const { data: project } = await db
+      .from('projects')
+      .select('organization_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (project?.organization_id) {
+      const { data: org } = await db
+        .from('organizations')
+        .select('billing_mode')
+        .eq('id', project.organization_id)
+        .maybeSingle();
+      if (org?.billing_mode === 'complimentary') {
+        return c.json({
+          ok: true,
+          data: {
+            invoices: [],
+            billing_mode: 'complimentary',
+            note: 'Complimentary account — invoices are not issued for this org.',
+          },
+        });
+      }
+    }
+
     const { data: customer } = await db
       .from('billing_customers')
       .select('stripe_customer_id')
@@ -1005,10 +1099,28 @@ export function registerAdminOpsRoutes(app: Hono): void {
       const result = await listInvoices(cfg, customer.stripe_customer_id, 20);
       return c.json({ ok: true, data: { invoices: result.data } });
     } catch (err) {
+      // Defense in depth: if Stripe says "no such customer" the local
+      // billing_customers row is stale (cleanup task lagging, manual DB edit,
+      // etc.). Returning 200 + empty list is better UX than the red 502
+      // banner — the user can still see their plan + usage, and the
+      // upstream Sentry breadcrumb tells operators to reconcile the row.
+      const message = err instanceof Error ? err.message : 'unknown';
+      const isMissingCustomer =
+        /resource_missing|no such customer/i.test(message);
+      if (isMissingCustomer) {
+        return c.json({
+          ok: true,
+          data: {
+            invoices: [],
+            note: 'Stripe does not recognise the customer record for this project. An operator needs to reconcile billing_customers.',
+            stale_customer_id: customer.stripe_customer_id,
+          },
+        });
+      }
       return c.json(
         {
           ok: false,
-          error: { code: 'STRIPE_ERROR', message: err instanceof Error ? err.message : 'unknown' },
+          error: { code: 'STRIPE_ERROR', message },
         },
         502,
       );
@@ -1209,7 +1321,9 @@ export function registerAdminOpsRoutes(app: Hono): void {
 
   // List the caller's own tickets (across all projects they own). Used by
   // the BillingPage history section so paid users can see which questions
-  // are still open.
+  // are still open. We include `body` and `admin_response` here (small
+  // strings) so the detail modal opens without a second round trip — the
+  // list is capped at 50 rows so the payload stays bounded.
   app.get('/v1/admin/support/tickets', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -1218,7 +1332,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const { data, error } = await db
       .from('support_tickets')
       .select(
-        'id, project_id, subject, category, status, plan_id, created_at, updated_at, resolved_at',
+        'id, project_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at',
       )
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -1228,5 +1342,96 @@ export function registerAdminOpsRoutes(app: Hono): void {
       return dbError(c, error);
     }
     return c.json({ ok: true, data: { tickets: data ?? [] } });
+  });
+
+  // Detail fetch — used as a defensive fallback if a ticket id is opened
+  // from a deep link or arrives via a future realtime payload that didn't
+  // include `body`/`admin_response`. Same auth model as the list (caller
+  // must own the ticket).
+  app.get('/v1/admin/support/tickets/:id', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const ticketId = c.req.param('id');
+    if (!ticketId) {
+      return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
+    }
+    const db = getServiceClient();
+    const { data, error } = await db
+      .from('support_tickets')
+      .select(
+        'id, project_id, user_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at',
+      )
+      .eq('id', ticketId)
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    if (!data) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    }
+    if (data.user_id !== userId) {
+      // Don't leak existence — return 404 for "not yours" so a brute-force
+      // probe can't enumerate ticket ids belonging to other tenants.
+      return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    }
+    return c.json({ ok: true, data: { ticket: data } });
+  });
+
+  // Customer-side cancel. Allowed only while the ticket is still actionable
+  // (open / in_progress). Once the operator has resolved or closed it the
+  // record is read-only — flipping a "resolved" ticket back to "cancelled"
+  // would falsify the history view used for SLA reporting.
+  app.post('/v1/admin/support/tickets/:id/cancel', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const ticketId = c.req.param('id');
+    if (!ticketId) {
+      return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
+    }
+    const db = getServiceClient();
+
+    const { data: ticket, error: readErr } = await db
+      .from('support_tickets')
+      .select('id, user_id, project_id, status, subject')
+      .eq('id', ticketId)
+      .maybeSingle();
+    if (readErr) return dbError(c, readErr);
+    if (!ticket || ticket.user_id !== userId) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    }
+
+    if (ticket.status === 'cancelled') {
+      // Idempotent — return success so a double-click doesn't surface as
+      // a confusing error.
+      return c.json({ ok: true, data: { ticket_id: ticket.id, status: 'cancelled' } });
+    }
+    if (ticket.status !== 'open' && ticket.status !== 'in_progress') {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'TICKET_NOT_CANCELLABLE',
+            message: `Tickets in '${ticket.status}' state can no longer be cancelled.`,
+          },
+        },
+        409,
+      );
+    }
+
+    const { error: updateErr } = await db
+      .from('support_tickets')
+      .update({ status: 'cancelled' })
+      .eq('id', ticket.id);
+    if (updateErr) return dbError(c, updateErr);
+
+    if (ticket.project_id) {
+      await logAudit(
+        db,
+        ticket.project_id,
+        userId,
+        'support.ticket_cancelled',
+        'support_ticket',
+        ticket.id,
+        { subject: ticket.subject },
+      );
+    }
+
+    return c.json({ ok: true, data: { ticket_id: ticket.id, status: 'cancelled' } });
   });
 }

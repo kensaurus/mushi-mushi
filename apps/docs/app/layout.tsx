@@ -1,6 +1,7 @@
 import { Footer, Layout, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
+import Link from 'next/link'
 /* globals.css imports both `tailwindcss` AND `nextra-theme-docs/style.css`,
  * so we only import the one entry file to keep the cascade ordering stable
  * (Tailwind base layer before Nextra theme styles). */
@@ -32,15 +33,27 @@ export const metadata: Metadata = {
  * same content rendered twice in one fold flattened hierarchy (NN/g H14
  * information duplication). The mono eyebrow gives the banner the same
  * editorial voice as `<EditorialHero>` so it reads as part of the same
- * publication, not a generic toast. */
+ * publication, not a generic toast.
+ *
+ * `next/link` (NOT a raw `<a>`) is required so Next.js prepends the
+ * configured `basePath` (set by MUSHI_BASE_PATH at build time, see
+ * apps/docs/next.config.mjs). A plain `<a href="/changelog">` resolves
+ * against the origin root and ships as a literal `/changelog` in every
+ * page's HTML — on the kensaur.us deploy that path 404s because the docs
+ * are mounted at `/mushi-mushi/docs/changelog`. Google Search Console
+ * flagged this as one of the "Not found (404)" sources on 2026-05-07
+ * (the only true `<a>`-emitted leak; everything else came from the
+ * static-export `.txt` route-payload mirrors blocked at the CloudFront
+ * edge by `scripts/cloudfront-mushi-docs-response.js`).
+ */
 const banner = (
   <Banner storageKey="v0-8-0-wave-c">
     <span className="docs-banner-eyebrow">v0.8.0 · shipped</span>
     Native iOS / Android / Flutter / Capacitor SDKs, A2A discovery, SOC 2
     readiness, residency, BYO storage, BYOK.{' '}
-    <a href="/changelog" className="underline underline-offset-2">
+    <Link href="/changelog" className="underline underline-offset-2">
       Read the changelog →
-    </a>
+    </Link>
   </Banner>
 )
 

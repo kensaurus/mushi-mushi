@@ -18,11 +18,11 @@ import {
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
-import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight } from '../lib/useNavCounts'
+import { useNavCounts, toneForBacklog, toneForFailed, toneForInFlight, toneForOpen } from '../lib/useNavCounts'
 import { useEntitlements } from '../lib/useEntitlements'
+import { UpgradePill } from './billing/UpgradeNudge'
 import { ProjectSwitcher } from './ProjectSwitcher'
 import { OrgSwitcher } from './OrgSwitcher'
-import { PlanBadge } from './PlanBadge'
 import { stageForPath, type PdcaStageId } from '../lib/pdca'
 import { useAdminMode, type AdminMode } from '../lib/mode'
 import { Tooltip } from './ui'
@@ -37,7 +37,9 @@ import { HotkeysModal } from './HotkeysModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
+import { SidebarUserCard } from './SidebarUserCard'
 import { WhatsNewModal, useWhatsNew } from './WhatsNew'
+import { VersionBadge } from './VersionBadge'
 import { AskMushiSidebar } from './AskMushiSidebar'
 import { PageHero, type PageHeroDecide, type PageHeroVerify } from './PageHero'
 import { useCommandPalette } from '../lib/useCommandPalette'
@@ -45,6 +47,7 @@ import { useHotkeys } from '../lib/useHotkeys'
 import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { useFaviconBadge } from '../lib/favicon'
 import { useFocusMode } from '../lib/focusMode'
+import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
 
 interface NavItem {
   label: string
@@ -111,13 +114,19 @@ const NAV: NavSection[] = [
     // because the mode-specific NAV projection (see below) overrides this.
     defaultCollapsed: true,
     items: [
+      // 2026-05-07 reorder — Get started is the entry point for any operator
+      // who hasn't fully wired the SDK + repo + judge. Until that's done the
+      // dashboard / inbox both just stare back with empty PDCA tiles, so we
+      // pin Get started at the top of the rail. Once setup is complete the
+      // checklist itself collapses to a "Setup complete" hero, and Dashboard
+      // / Inbox become the obvious next stops.
+      { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
       { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
       // "what should I do next?" across the whole PDCA surface. Pinned above
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconBell,      beginner: true, quickstartLabel: 'Inbox' },
-      { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
     ],
   },
   {
@@ -182,12 +191,12 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
-      { label: 'Members',    path: '/organization/members', icon: IconProjects },
+      { label: 'Members',    path: '/organization/members', icon: IconProjects, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
-      { label: 'SSO',        path: '/sso',        icon: IconSSO },
+      { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
-      { label: 'Audit Log',  path: '/audit',      icon: IconAudit },
-      { label: 'Compliance', path: '/compliance', icon: IconCompliance },
+      { label: 'Audit Log',  path: '/audit',      icon: IconAudit, requiresFeature: 'audit_log' },
+      { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
       { label: 'Storage',    path: '/storage',    icon: IconStorage },
       { label: 'Query',      path: '/query',      icon: IconQuery },
       // Phase 2c (2026-04-27) — operator-only directory. Hidden from
@@ -536,6 +545,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { isSuperAdmin, has } = useEntitlements()
   const fallbackHero = PAGE_HERO_FALLBACKS[pathname]
   const [focusMode, setFocusMode] = useFocusMode()
+  const [sidebarCollapsed, setSidebarCollapsed] = useSidebarCollapsed()
 
   // UIUX-2 (2026-04-23): keep the browser tab title + favicon in sync
   // with the page the user is on. Both hooks read from `pageContext` so
@@ -645,6 +655,33 @@ export function Layout({ children }: { children: ReactNode }) {
         ctrl: true,
         allowInInputs: true,
       },
+      // ESC exits focus mode — escape hatch for users who entered focus
+      // mode and now can't find the toggle (the in-sidebar button is
+      // hidden in that mode by design). Without this + the floating exit
+      // pill rendered below, the only way out was clearing localStorage.
+      // Skipped when focus mode is OFF so we don't steal Escape from
+      // modals / drawers / inputs that legitimately want it.
+      {
+        key: 'Escape',
+        description: 'Exit focus mode',
+        handler: (e) => {
+          if (!focusMode) return
+          e.preventDefault()
+          setFocusMode(false)
+        },
+      },
+      // `[` toggles the desktop sidebar between full (208px) and an
+      // icon-only rail (48px). Mirrors Linear's collapsible-sidebar
+      // hotkey so muscle memory transfers from there. Mobile is a
+      // separate overlay (`mobileOpen`) and isn't touched.
+      {
+        key: '[',
+        description: 'Toggle sidebar (collapse to icon rail)',
+        handler: (e) => {
+          e.preventDefault()
+          setSidebarCollapsed((value) => !value)
+        },
+      },
     ],
   )
 
@@ -662,6 +699,14 @@ export function Layout({ children }: { children: ReactNode }) {
   // of mode. The gateway also enforces this — UI hiding is purely so
   // we don't tease a feature non-operators can't access.
   const visibleByRole = (i: NavItem) => !i.superAdmin || isSuperAdmin
+  // Nudge-not-hide: feature-gated items used to be filtered out for
+  // unentitled users. That hid the upsell (the user couldn't *see* what
+  // their plan was missing). Now we surface the item alongside an
+  // `UpgradePill` so the click goes to the feature page (which renders
+  // its own UpgradePrompt) and the plan signal is visible right in the
+  // sidebar. We still hide them in beginner/quickstart modes — those
+  // flows already trim the surface aggressively, and a Pro pill in
+  // quickstart would be more confusing than helpful.
   const visibleByFeature = (i: NavItem) =>
     !i.requiresFeature || has(i.requiresFeature) || isSuperAdmin
 
@@ -694,9 +739,14 @@ export function Layout({ children }: { children: ReactNode }) {
       }))
       .filter(s => s.items.length > 0)
   } else {
+    // Advanced mode: render every item including gated ones, so the
+    // sidebar's upsell pill replaces the "hidden until you pay" UX.
+    // The actual page still shows its own UpgradePrompt for users
+    // without the feature, so this is purely a visibility-without-
+    // unlocking change.
     visibleNav = NAV.map(s => ({
       ...s,
-      items: s.items.filter(visibleByRole).filter(visibleByFeature),
+      items: s.items.filter(visibleByRole),
     }))
   }
 
@@ -738,25 +788,39 @@ export function Layout({ children }: { children: ReactNode }) {
     })
   }
 
-  const sidebarContent = (
+  // `compact` collapses the sidebar to an icon rail (~48px wide) — same
+  // content tree, but section headers, item labels, mode toggle, and most
+  // footer chrome are hidden in favour of `title` tooltips. Mobile always
+  // gets `compact: false` because the mobile sidebar is a full overlay.
+  const renderSidebarContent = (compact: boolean) => (
     <>
-      {/* Brand */}
-      <div className="px-4 py-3 border-b border-edge/60">
-        <h1 className="text-sm font-bold tracking-tight leading-none">
-          <span className="text-brand">mushi</span>
-          <span className="text-fg-secondary">mushi</span>
-        </h1>
-        <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
-        <ModeToggle mode={mode} onSelect={setMode} />
-        {onHiddenRoute && (
-          <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn">
-            <p className="leading-snug">{hiddenRouteCopy}</p>
-          </div>
+      {/* Brand — collapses to a single "M" stamp in compact mode so the
+          rail still has a recognisable identity at the top. */}
+      <div className={`${compact ? 'px-2 py-3' : 'px-4 py-3'} border-b border-edge/60`}>
+        {compact ? (
+          <h1 className="text-sm font-bold tracking-tight leading-none text-center" aria-label="mushi mushi admin console">
+            <span className="text-brand">m</span>
+            <span className="text-fg-secondary">m</span>
+          </h1>
+        ) : (
+          <>
+            <h1 className="text-sm font-bold tracking-tight leading-none">
+              <span className="text-brand">mushi</span>
+              <span className="text-fg-secondary">mushi</span>
+            </h1>
+            <p className="text-2xs text-fg-muted mt-1 tracking-wide uppercase">Admin Console</p>
+            <ModeToggle mode={mode} onSelect={setMode} />
+            {onHiddenRoute && (
+              <div className="mt-2 rounded-sm border border-warn/30 bg-warn/10 px-2 py-1.5 text-3xs text-warn">
+                <p className="leading-snug">{hiddenRouteCopy}</p>
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Navigation */}
-      <nav aria-label="Main navigation" className="flex-1 overflow-y-auto px-2 py-2">
+      <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
         {visibleNav.map((section) => {
           const collapsed = collapsedMap[section.id] ?? section.defaultCollapsed ?? false
           const stageId = SECTION_TO_STAGE[section.id]
@@ -766,30 +830,59 @@ export function Layout({ children }: { children: ReactNode }) {
           // so advanced users can still see at a glance which PDCA stage
           // needs their attention without expanding.
           const staleness = computeStaleness(section.id, navCounts)
+          // In compact mode we drop section headers entirely (text-only
+          // chrome doesn't survive at 48px) but keep a thin divider
+          // between sections so the PDCA grouping still reads visually.
+          // Items are always rendered in compact mode — the per-section
+          // accordion would be unusable without labels to anchor it.
+          const itemsVisible = compact ? true : !collapsed
           return (
-            <div key={section.id}>
-              <SectionHeader
-                section={section}
-                collapsed={collapsed}
-                collapsible={collapsible}
-                isActiveStage={isActiveStage}
-                staleness={staleness}
-                onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
-              />
-              {!collapsed && (
-                <div className="space-y-0.5">
-                  {section.items.map(({ label, path, icon: Icon }) => {
+            <div key={section.id} className={compact ? 'first:mt-0 mt-2 pt-2 first:border-t-0 first:pt-0 border-t border-edge-subtle/60' : ''}>
+              {!compact && (
+                <SectionHeader
+                  section={section}
+                  collapsed={collapsed}
+                  collapsible={collapsible}
+                  isActiveStage={isActiveStage}
+                  staleness={staleness}
+                  onToggle={() => toggleSection(section.id, section.defaultCollapsed ?? false)}
+                />
+              )}
+              {itemsVisible && (
+                <div className={compact ? 'space-y-0.5 flex flex-col items-stretch' : 'space-y-0.5'}>
+                  {section.items.map(({ label, path, icon: Icon, requiresFeature }) => {
                     const active = isActive(pathname, path)
+                    // Treat the item as gated when it declares a feature
+                    // flag, the user's plan does NOT have it, and the user
+                    // isn't a super-admin (super-admins see everything).
+                    // The pill links to /billing with the feature focused
+                    // — clicking the row itself still goes to the page,
+                    // which renders its own UpgradePrompt.
+                    const gated = !!requiresFeature && !has(requiresFeature) && !isSuperAdmin
                     return (
                       <Link
                         key={path}
                         to={path}
                         onClick={() => setMobileOpen(false)}
                         aria-current={active ? 'page' : undefined}
-                        className="nav-link"
+                        // In compact mode, force the label off and let the
+                        // browser native `title` tooltip surface it on hover —
+                        // matches the Linear collapsed-sidebar pattern. The
+                        // base `.nav-link` styles still drive the active
+                        // indicator + hover bg + focus ring so we don't
+                        // double-define them here.
+                        className={`nav-link ${compact ? 'justify-center px-2 py-2' : ''} ${gated ? 'opacity-80' : ''}`}
+                        title={compact ? label : undefined}
+                        aria-label={compact ? label : undefined}
                       >
                         <Icon className="nav-link-icon" />
-                        <span>{label}</span>
+                        {!compact && <span>{label}</span>}
+                        {!compact && gated && requiresFeature && (
+                          <UpgradePill
+                            flag={requiresFeature}
+                            className="ml-auto"
+                          />
+                        )}
                         {path === '/integrations' && <IntegrationHealthDot />}
                         {path === '/inventory' && navCounts.ready && (
                           <SidebarHealthDot
@@ -799,6 +892,45 @@ export function Layout({ children }: { children: ReactNode }) {
                               navCounts.regressedActions > 0
                                 ? `${navCounts.regressedActions} regressed inventory actions`
                                 : 'No regressed inventory actions'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {/* Graph + Inventory share the same underlying
+                            inventory data — the graph is just the visual
+                            view of those nodes — so a regressed action
+                            should fire on BOTH rails. Operators who land
+                            on /graph from a deep link still see the same
+                            "needs attention" signal they'd see if they
+                            entered through /inventory. Mirrors the
+                            inventory tone exactly. */}
+                        {path === '/graph' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.regressedActions > 0 ? 'danger' : 'ok'}
+                            count={navCounts.regressedActions}
+                            label={
+                              navCounts.regressedActions > 0
+                                ? `${navCounts.regressedActions} regressed actions in the graph`
+                                : 'Graph healthy — no regressions'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {/* Anti-gaming flagged-device count. Any flag is
+                            critical (someone tried to abuse the report
+                            firehose), so we use toneForFailed which
+                            steps ok → warn (≤2) → danger (>2) — even a
+                            single flag is amber, three or more is red.
+                            Sourced via the cheap count_only=1 mode of
+                            /v1/admin/anti-gaming/devices?flagged=true. */}
+                        {path === '/anti-gaming' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.flaggedDevices)}
+                            count={navCounts.flaggedDevices}
+                            label={
+                              navCounts.flaggedDevices > 0
+                                ? `${navCounts.flaggedDevices} flagged ${navCounts.flaggedDevices === 1 ? 'device' : 'devices'} — review for abuse`
+                                : 'No flagged devices'
                             }
                             hideWhenZero
                           />
@@ -832,6 +964,67 @@ export function Layout({ children }: { children: ReactNode }) {
                             label={`${navCounts.prsOpen} PRs open awaiting review`}
                           />
                         )}
+                        {path === '/inbox' && navCounts.ready && (
+                          // Escalates to danger (red) once the open-action
+                          // backlog hits 6 — six is roughly "more than a
+                          // single working session can clear", which is
+                          // exactly when the sidebar should stop reading
+                          // as amber-warn and switch to a red squint
+                          // signal. Symmetric with toneForFailed (≤2 warn,
+                          // >2 danger) and toneForBacklog (≤5 warn, >5
+                          // danger). 0 stays hidden via hideWhenZero.
+                          <SidebarHealthDot
+                            tone={toneForOpen(navCounts.inboxOpenActions, 6)}
+                            count={navCounts.inboxOpenActions}
+                            label={
+                              navCounts.inboxOpenActions > 0
+                                ? `${navCounts.inboxOpenActions} open action${navCounts.inboxOpenActions === 1 ? '' : 's'} in Action Inbox`
+                                : 'Action Inbox — all clear'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/notifications' && navCounts.ready && (
+                          // Notifications escalate at 11 — under 10 unread
+                          // is a normal day's worth of fix / judge / CI
+                          // pings; >10 means the user is missing their
+                          // own alerts and the sidebar should shout in
+                          // red instead of staying amber.
+                          <SidebarHealthDot
+                            tone={toneForOpen(navCounts.notificationsUnread, 11)}
+                            count={navCounts.notificationsUnread}
+                            label={
+                              navCounts.notificationsUnread > 0
+                                ? `${navCounts.notificationsUnread} unread notification${navCounts.notificationsUnread === 1 ? '' : 's'}`
+                                : 'All notifications read'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/queue' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.queueFailed)}
+                            count={navCounts.queueFailed}
+                            label={
+                              navCounts.queueFailed > 0
+                                ? `${navCounts.queueFailed} dead-letter / failed queue ${navCounts.queueFailed === 1 ? 'item' : 'items'}`
+                                : 'Queue clear — no stuck items'
+                            }
+                            hideWhenZero
+                          />
+                        )}
+                        {path === '/health' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={toneForFailed(navCounts.healthIssues)}
+                            count={navCounts.healthIssues}
+                            label={
+                              navCounts.healthIssues > 0
+                                ? `${navCounts.healthIssues} integration${navCounts.healthIssues === 1 ? '' : 's'} reporting issues`
+                                : 'All integrations healthy'
+                            }
+                            hideWhenZero
+                          />
+                        )}
                       </Link>
                     )
                   })}
@@ -842,27 +1035,48 @@ export function Layout({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="px-3 py-2.5 border-t border-edge/60 space-y-2">
-        <DensitySidebarToggle />
-        <ThemeSidebarToggle />
-        <button
-          type="button"
-          onClick={() => setFocusMode((value) => !value)}
-          className="nav-link w-full text-xs"
-          aria-pressed={focusMode}
-        >
-          <IconSparkle className="nav-link-icon" />
-          <span>{focusMode ? 'Exit focus mode' : 'Focus mode'}</span>
-        </button>
-        <div className="text-2xs text-fg-muted truncate mb-2 px-1">{user?.email}</div>
-        <button
-          onClick={signOut}
-          className="nav-link w-full text-xs"
-        >
-          <IconSignOut className="nav-link-icon" />
-          <span>Sign out</span>
-        </button>
+      {/* User footer.
+          Expanded rail (compact === false): density toggle on top, then
+          a single combined Theme + Focus row (3 icon buttons in one
+          bordered strip — see ThemeSidebarToggle.tsx for the rationale
+          behind dropping the standalone Auto/system option), then the
+          user identity card with provider info + the rose sign-out
+          icon (which opens a confirm dialog so the 3am-on-call
+          accidental sign-out is caught).
+          Collapsed rail (compact === true): density + theme controls
+          don't fit a 48px rail, so we hide them. Focus mode + sign-out
+          stay as icon-only buttons (always-needed escape hatches). */}
+      <div className={`${compact ? 'px-1 py-2 space-y-2' : 'px-3 py-2.5 space-y-2'} border-t border-edge/60`}>
+        {!compact && <DensitySidebarToggle />}
+        {!compact && (
+          <ThemeSidebarToggle
+            focusMode={focusMode}
+            onToggleFocus={() => setFocusMode((value) => !value)}
+          />
+        )}
+        {compact && (
+          <button
+            type="button"
+            onClick={() => setFocusMode((value) => !value)}
+            className="nav-link justify-center px-2 py-2"
+            aria-pressed={focusMode}
+            title={focusMode ? 'Exit focus mode' : 'Focus mode'}
+            aria-label={focusMode ? 'Exit focus mode' : 'Focus mode'}
+          >
+            <IconSparkle className="nav-link-icon" />
+          </button>
+        )}
+        {!compact && <SidebarUserCard user={user} signOut={signOut} />}
+        {compact && (
+          <button
+            onClick={signOut}
+            className="nav-link justify-center px-2 py-2 text-rose hover:text-rose hover:bg-rose-muted/40"
+            title={`Sign out (${user?.email ?? ''})`}
+            aria-label="Sign out"
+          >
+            <IconSignOut className="nav-link-icon" />
+          </button>
+        )}
       </div>
     </>
   )
@@ -878,10 +1092,44 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
 
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — `sidebarCollapsed` toggles between a 208px nav
+          (w-52) and a 48px icon rail (w-12). Toggle button is rendered
+          INSIDE the sidebar (sticky bottom) so it survives both states.
+          Hidden entirely in focus mode; the floating exit pill below
+          replaces all sidebar affordances when focus mode is on. */}
       {!focusMode && (
-        <aside className="hidden md:flex w-52 flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col">
-          {sidebarContent}
+        <aside
+          className={`hidden md:flex flex-shrink-0 border-r border-edge/60 bg-surface-root flex-col motion-safe:transition-[width] motion-safe:duration-base ${sidebarCollapsed ? 'w-12' : 'w-52'}`}
+          data-collapsed={sidebarCollapsed ? 'true' : 'false'}
+        >
+          {renderSidebarContent(sidebarCollapsed)}
+          {/* Collapse toggle — pinned to the bottom of the rail so the
+              affordance is always findable in either state. Renders as a
+              chevron button with `[` hint when expanded; just a chevron
+              in compact mode. The `[` hotkey mirrors Linear's. */}
+          {/* Collapse toggle — chevron-only at the bottom of the rail.
+              Earlier revision included a `[` kbd hint inline; pulled
+              into the title tooltip instead so the chrome stays calm
+              (Linear refresh: "structure should be felt, not seen") —
+              power users who want the hotkey hover for it; everyone
+              else just sees a quiet chevron. */}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-pressed={sidebarCollapsed}
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={sidebarCollapsed ? 'Expand sidebar  ·  [' : 'Collapse to icon rail  ·  ['}
+            className={`group flex items-center gap-2 border-t border-edge/60 px-3 py-1.5 text-2xs text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset ${sidebarCollapsed ? 'justify-center' : 'justify-between'}`}
+          >
+            <span aria-hidden className="font-mono leading-none text-base">
+              {sidebarCollapsed ? '›' : '‹'}
+            </span>
+            {!sidebarCollapsed && (
+              <span className="font-mono text-3xs uppercase tracking-wider text-fg-faint">
+                Collapse
+              </span>
+            )}
+          </button>
         </aside>
       )}
 
@@ -903,93 +1151,110 @@ export function Layout({ children }: { children: ReactNode }) {
                 <IconClose size={14} />
               </button>
             </div>
-            {sidebarContent}
+            {renderSidebarContent(false)}
           </aside>
+        </div>
+      )}
+
+      {/* Focus-mode exit pill — floating top-right escape hatch so users
+          who entered focus mode can find their way back out. Critical
+          because the in-sidebar "Exit focus mode" button is itself hidden
+          in this state (the sidebar is hidden by `!focusMode &&` above).
+          ESC also exits via the hotkey wired in useHotkeys. Render outside
+          the sidebar so it's not affected by either focus-mode or
+          sidebar-collapse state. */}
+      {focusMode && (
+        <div className="fixed top-3 right-3 z-50 flex items-center gap-2 rounded-sm border border-edge bg-surface-raised px-2 py-1.5 shadow-raised">
+          <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse" />
+          <span className="text-2xs text-fg-secondary font-medium">Focus mode</span>
+          <button
+            type="button"
+            onClick={() => setFocusMode(false)}
+            className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            aria-label="Exit focus mode"
+            title="Exit focus mode (Esc or Cmd/Ctrl+.)"
+          >
+            Exit <kbd className="ml-1 px-1 py-0.5 rounded-xs border border-edge-subtle text-fg-faint font-mono">Esc</kbd>
+          </button>
         </div>
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile header */}
-        <header className="md:hidden flex items-center gap-3 px-4 py-2.5 border-b border-edge/60 bg-surface-root">
+        <header className="md:hidden flex items-center gap-2 px-4 py-2.5 border-b border-edge/60 bg-surface-root overflow-visible relative z-20">
           <button
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation menu"
-            className="p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+            className="shrink-0 p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
           >
             <IconMenu size={18} />
           </button>
-          <span className="text-sm font-bold tracking-tight">
+          <div className="min-w-0 flex-1">
+            <SearchButton />
+          </div>
+          <span className="shrink-0 text-sm font-bold tracking-tight">
             <span className="text-brand">mushi</span>
             <span className="text-fg-secondary">mushi</span>
           </span>
-          <div className="ml-auto flex items-center gap-2">
-            <SearchButton />
-            <PlanBadge />
+          <div className="shrink-0 flex items-center gap-2">
             <OrgSwitcher />
             <ProjectSwitcher />
           </div>
         </header>
 
-        {/* Desktop sub-header — project switcher pinned to the right */}
-        {!focusMode && <header className="hidden md:flex items-center justify-end gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60">
-          <SearchButton />
-          <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'}>
-            <button
-              type="button"
-              onClick={() => setActivityOpen(true)}
-              aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
-              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+        {/* Desktop sub-header — search left; controls + switchers right */}
+        {!focusMode && <header className="hidden md:flex items-center gap-3 px-5 py-1.5 border-b border-edge/40 bg-surface-root/60 overflow-visible relative z-20">
+          <div className="min-w-0 shrink-0">
+            <SearchButton />
+          </div>
+          <div className="ml-auto flex items-center gap-2 min-w-0 overflow-visible">
+            <div
+              className="flex items-center gap-0.5 rounded-md border border-edge/50 bg-surface-raised/35 p-0.5 overflow-visible shrink-0"
+              aria-label="Toolbar"
             >
-              <IconBell className="h-3.5 w-3.5" />
-              {activityUnread > 0 && (
-                <span
-                  aria-hidden
-                  className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-[0.55rem] font-semibold leading-none motion-safe:animate-pulse"
+              <Tooltip content={activityUnread > 0 ? `Live activity — ${activityUnread} new` : 'Live activity'} side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setActivityOpen(true)}
+                  aria-label={activityUnread > 0 ? `Live activity, ${activityUnread} unread` : 'Live activity'}
+                  className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
-                  {activityUnread > 9 ? '9+' : activityUnread}
-                </span>
-              )}
-            </button>
-          </Tooltip>
-          <Tooltip content="Keyboard shortcuts (press ?)">
-            <button
-              type="button"
-              onClick={() => setHotkeysOpen(true)}
-              aria-label="Open keyboard shortcuts"
-              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <span aria-hidden className="font-mono text-xs leading-none">?</span>
-            </button>
-          </Tooltip>
-          <Tooltip content={whatsNew.hasUnread ? 'What\'s new — new release notes' : 'What\'s new'}>
-            <button
-              type="button"
-              onClick={whatsNew.openPanel}
-              aria-label={whatsNew.hasUnread ? 'Open what\'s new (unread updates)' : 'Open what\'s new'}
-              className="relative inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <span aria-hidden className="font-mono text-xs leading-none">✦</span>
-              {whatsNew.hasUnread && (
-                <span
-                  aria-hidden
-                  className="absolute -right-0.5 -top-0.5 inline-block h-1.5 w-1.5 rounded-full bg-brand motion-safe:animate-pulse"
-                />
-              )}
-            </button>
-          </Tooltip>
-          <Tooltip content="Ask Mushi (Cmd/Ctrl+J)">
-            <button
-              type="button"
-              onClick={() => setAiOpen(true)}
-              aria-label="Open Ask Mushi"
-              className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-            >
-              <span aria-hidden className="font-mono text-xs leading-none">✨</span>
-            </button>
-          </Tooltip>
-          <PlanBadge />
-          <OrgSwitcher />
-          <ProjectSwitcher />
+                  <IconBell className="h-3.5 w-3.5" />
+                  {activityUnread > 0 && (
+                    <span
+                      aria-hidden
+                      className="absolute -right-0.5 -top-0.5 inline-flex min-w-[0.9rem] h-[0.9rem] items-center justify-center px-1 rounded-full bg-brand text-brand-fg text-[0.55rem] font-semibold leading-none motion-safe:animate-pulse"
+                    >
+                      {activityUnread > 9 ? '9+' : activityUnread}
+                    </span>
+                  )}
+                </button>
+              </Tooltip>
+              <Tooltip content="Keyboard shortcuts (press ?)" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setHotkeysOpen(true)}
+                  aria-label="Open keyboard shortcuts"
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  <span aria-hidden className="font-mono text-xs leading-none">?</span>
+                </button>
+              </Tooltip>
+              <Tooltip content="Ask Mushi (Cmd/Ctrl+J)" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => setAiOpen(true)}
+                  aria-label="Open Ask Mushi"
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  <span aria-hidden className="font-mono text-xs leading-none">✨</span>
+                </button>
+              </Tooltip>
+            </div>
+            <VersionBadge whatsNew={whatsNew} />
+            <OrgSwitcher />
+            <ProjectSwitcher />
+          </div>
         </header>}
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">

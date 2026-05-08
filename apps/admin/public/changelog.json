@@ -2,6 +2,122 @@
   "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
+      "id": "2026-05-07-sidebar-and-sdk-health",
+      "date": "2026-05-07",
+      "title": "Sidebar polish, SDK heartbeat, and a hotkey-discoverable inbox",
+      "summary": "Collapsible chrome, count badges on Notifications/Queue/Health, an SDK connectivity card on every project, the rebuilt Inbox UX, and an end-to-end WCAG-AA contrast pass.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "SDK health card on every project — live heartbeat per runtime, version with npm release-notes link, and an out-of-date pill when the project trails the latest minor."
+        },
+        {
+          "tone": "feature",
+          "text": "Sidebar count badges for Notifications, Queue, and Health — backlog at a glance from any page."
+        },
+        {
+          "tone": "feature",
+          "text": "Sidebar collapses to icons-only with a memorable hotkey, and the user card at the foot now opens a popover with org/project/density/theme controls in one menu."
+        },
+        {
+          "tone": "feature",
+          "text": "Inbox rebuilt with a unified action queue, keyboard-first triage (j/k, e to archive, x to select), and an empty state that suggests the next-best action."
+        },
+        {
+          "tone": "feature",
+          "text": "Hotkeys modal (?) now searchable; every documented shortcut in one filterable list."
+        },
+        {
+          "tone": "feature",
+          "text": "Editorial 404 across every wrong URL — branded body, recovery CTA back to the relevant section, base-URL aware so deep-links survive a redirect."
+        },
+        {
+          "tone": "fix",
+          "text": "WCAG-AA contrast pass on chrome + card-elevated stat tiles (the dark-mode tiles no longer leak into light mode)."
+        },
+        {
+          "tone": "fix",
+          "text": "Sentry cluster + living-config help in Settings now opens deep-linked to the relevant config row."
+        }
+      ]
+    },
+    {
+      "id": "2026-05-05-mushi-v2-inventory",
+      "date": "2026-05-05",
+      "title": "Mushi v2 — bidirectional inventory + agentic-failure gates",
+      "summary": "A declarative inventory.yaml of stories, pages, and actions, five composite gates, a synthetic monitor, and a new Surface mode in the graph that overlays the positive inventory on the live bug map.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "User stories · Inventory page (sidebar → User stories) — per-story cards with verified / unwired / regressed counts and a one-click Run gates / Run crawler from the row."
+        },
+        {
+          "tone": "feature",
+          "text": "Discovery tab — the SDK proposes the inventory. Turn on capture.discoverInventory and Claude drafts an inventory.yaml from the production stream every 24 h."
+        },
+        {
+          "tone": "feature",
+          "text": "Five composite gates rolled into one GitHub check: no-dead-handler, no-mock-leak, inventory drift, agentic-failure detection, and synthetic walk health."
+        },
+        {
+          "tone": "feature",
+          "text": "Synthetic monitor re-walks expected_outcome against staging on a cron — fail-closed by default, with explicit synthetic_monitor_allow_mutations opt-in for write paths."
+        },
+        {
+          "tone": "feature",
+          "text": "Knowledge graph gains a Surface mode — overlay every Page / Element / Action from inventory.yaml on the live bug graph so the dead corners light up."
+        },
+        {
+          "tone": "feature",
+          "text": "@mushi-mushi/mcp-ci ships gates / propose / discover-api / discovery-status / auth-bootstrap commands; the same surface is exposed as MCP tools so Cursor / Claude Code / Copilot can run them on your behalf."
+        }
+      ]
+    },
+    {
+      "id": "2026-05-07-billing-and-support-polish",
+      "date": "2026-05-07",
+      "title": "Billing clarity + support tickets you can talk to",
+      "summary": "Quota severity, complimentary admin accounts, plan-aware sparkline trends, a clickable support ticket history with admin replies, and inline create flows for projects and teams in the global header.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Billing usage bar now flips ok / warn / danger as you approach quota, with an 80% milestone tick and a plain-English headline (e.g. 'You're 47 reports over this month — overages bill at $0.005 / report')."
+        },
+        {
+          "tone": "feature",
+          "text": "Last-30-days sparkline on each project card shows daily reports at a glance, with totals, peak day, and 'last active' caption."
+        },
+        {
+          "tone": "feature",
+          "text": "Plans-at-a-glance table now annotates each tier with how your current usage fits ('✓ Fits', '⚠ Tight', '✕ Over')."
+        },
+        {
+          "tone": "feature",
+          "text": "Complimentary 'admin' org mode for internal accounts — header pill, plan badge, and billing card all read 'Admin' with the underlying tier as secondary context, and Stripe CTAs (checkout, invoices) are silenced."
+        },
+        {
+          "tone": "feature",
+          "text": "Support tickets are now clickable: open any row to read your message, see the operator's reply inline, and cancel an open ticket if you've already solved it."
+        },
+        {
+          "tone": "feature",
+          "text": "ProjectSwitcher and OrgSwitcher dropdowns each gained a footer '+ New project' / '+ New team' affordance — no more side trips to /projects or /organization to spin up a new workspace."
+        },
+        {
+          "tone": "fix",
+          "text": "Hardened CORS for /v1/support/* and /v1/super-admin/*, fixing the 'TypeError: Failed to fetch' that blocked support ticket submission from kensaur.us/mushi-mushi."
+        },
+        {
+          "tone": "fix",
+          "text": "Password recovery deep-link no longer bounces users back to the sign-in page; reset flow detects the recovery token synchronously."
+        },
+        {
+          "tone": "fix",
+          "text": "Stripe 'No such customer' invoice errors no longer surface for complimentary orgs — invoices route returns an empty list with a helpful note instead of throwing."
+        }
+      ]
+    },
+    {
       "id": "2026-04-22-wave-1-2-3",
       "date": "2026-04-22",
       "title": "Live-everywhere overhaul",

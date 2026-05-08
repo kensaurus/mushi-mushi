@@ -4,7 +4,20 @@ import { Card, Badge, Btn, RelativeTime, EmptyState } from '../ui'
 import { useToast } from '../../lib/toast'
 import { formatPct } from '../charts'
 import { ConfirmDialog, PromptDialog } from '../ConfirmDialog'
+import {
+  IconExport,
+  IconShieldCheck,
+  IconBolt,
+  IconClose,
+  IconTrash,
+} from '../icons'
 import type { FineTuningJob } from './types'
+
+// See PromptStageTable for the icon-button pattern. Same `!px-1.5` trick
+// gives us a square inset for icon-only Btns while still inheriting
+// every variant token (`danger` red wash, `success` green wash) from
+// the shared component.
+const ICON_BTN = '!px-1.5'
 
 interface FineTuningJobsCardProps {
   jobs: FineTuningJob[]
@@ -223,28 +236,77 @@ export function FineTuningJobsCard({ jobs, onChange }: FineTuningJobsCardProps) 
                       <RelativeTime value={job.created_at} />
                     </td>
                     <td className="px-2 py-1.5 text-right space-x-1 whitespace-nowrap">
+                      {/* Export / Validate are workflow secondaries —
+                          icon + tooltip keeps the row scannable. Promote
+                          stays text (success green) because it's the
+                          primary forward action and an explicit "Promote"
+                          verb is the safety rail before the live model
+                          flips. Reject and Delete are both danger but
+                          mean different things (Reject = audit-trail no,
+                          Delete = remove the row entirely) — different
+                          glyphs (✕ vs trash) keep them distinguishable
+                          without re-reading the column. */}
                       {actions.canExport && (
-                        <Btn size="sm" variant="ghost" disabled={busy === job.id} onClick={() => exportJob(job)}>
-                          Export
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          className={ICON_BTN}
+                          disabled={busy === job.id}
+                          onClick={() => exportJob(job)}
+                          title="Export training samples"
+                          aria-label="Export training samples"
+                        >
+                          <IconExport />
                         </Btn>
                       )}
                       {actions.canValidate && (
-                        <Btn size="sm" variant="ghost" disabled={busy === job.id} onClick={() => validateJob(job)}>
-                          Validate
+                        <Btn
+                          size="sm"
+                          variant="ghost"
+                          className={ICON_BTN}
+                          disabled={busy === job.id}
+                          onClick={() => validateJob(job)}
+                          title="Validate fine-tuned model accuracy"
+                          aria-label="Validate fine-tuned model accuracy"
+                        >
+                          <IconShieldCheck />
                         </Btn>
                       )}
                       {actions.canPromote && (
-                        <Btn size="sm" disabled={busy === job.id} onClick={() => setPromoteTarget(job)}>
+                        <Btn
+                          size="sm"
+                          variant="success"
+                          leadingIcon={<IconBolt />}
+                          disabled={busy === job.id}
+                          onClick={() => setPromoteTarget(job)}
+                          title="Promote to live — swaps the production model"
+                        >
                           Promote
                         </Btn>
                       )}
                       {actions.canReject && (
-                        <Btn size="sm" variant="ghost" disabled={busy === job.id} onClick={() => setRejectTarget(job)}>
-                          Reject
+                        <Btn
+                          size="sm"
+                          variant="danger"
+                          className={ICON_BTN}
+                          disabled={busy === job.id}
+                          onClick={() => setRejectTarget(job)}
+                          title="Reject — captures a reason in the audit trail"
+                          aria-label="Reject fine-tuning job"
+                        >
+                          <IconClose />
                         </Btn>
                       )}
-                      <Btn size="sm" variant="danger" disabled={busy === job.id} onClick={() => setDeleteTarget(job)}>
-                        Delete
+                      <Btn
+                        size="sm"
+                        variant="danger"
+                        className={ICON_BTN}
+                        disabled={busy === job.id}
+                        onClick={() => setDeleteTarget(job)}
+                        title="Delete fine-tuning job"
+                        aria-label="Delete fine-tuning job"
+                      >
+                        <IconTrash />
                       </Btn>
                     </td>
                   </tr>

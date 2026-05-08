@@ -8,4 +8,6 @@ export default {
   intelligence: 'Intelligence reports',
   'fine-tuning': 'Fine-tuning',
   realtime: 'Real-time collaboration',
+  'sdk-health': 'SDK health',
+  inventory: 'Inventory user stories',
 }

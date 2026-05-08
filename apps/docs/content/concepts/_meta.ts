@@ -8,4 +8,5 @@ export default {
   'multi-repo-fixes': 'Multi-repo coordinated fixes',
   'judge-loop': 'Judge & self-improvement',
   'anti-gaming': 'Anti-gaming & reputation',
+  'inventory-and-gates': 'Inventory & gates',
 }

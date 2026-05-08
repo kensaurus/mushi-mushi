@@ -1,7 +1,32 @@
 import { Card, Badge, Btn, RelativeTime } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
+import {
+  IconCopy,
+  IconPencil,
+  IconDiff,
+  IconSliders,
+  IconTrash,
+} from '../icons'
 import type { PromptVersion } from './types'
 import { STAGE_LABELS } from './types'
+
+// Icon-only Btn override for the dense action column.
+//
+// Each prompt row carries up to six controls (Clone / Edit / Diff /
+// Activate / Traffic / Delete) and the previous text-only treatment
+// caused a 250 px wall of verbs that wrapped on tablet widths and
+// drowned the row metadata. Compressing the secondaries to glyphs
+// while keeping the text label on the *primary* forward action
+// (Activate — the only verb that truly progresses the workflow loop)
+// matches the "icons + tooltip for secondaries, text for primaries"
+// rule the Btn JSDoc spells out and recovers the row to a single
+// horizontal scan.
+//
+// `!px-1.5` shrinks the BTN_SIZES.sm `px-2` to a square inset so the
+// glyph reads as a button face, not a left-aligned icon with empty
+// trailing space. Tooltips + aria-labels are mandatory — without them
+// the column becomes a screen-reader trap.
+const ICON_BTN = '!px-1.5'
 
 /**
  * Domain-local tone ramp for judge scores (0.80 ok / 0.60 warn / <0.60 danger).
@@ -136,32 +161,48 @@ export function PromptStageTable({
                       <Btn
                         size="sm"
                         variant="ghost"
+                        className={ICON_BTN}
                         disabled={busy === p.id}
                         onClick={() => onClone(p)}
-                        title="Create an editable copy"
+                        title="Clone — create an editable copy"
+                        aria-label="Clone prompt"
                       >
-                        Clone
+                        <IconCopy />
                       </Btn>
                       {!isGlobal && (
                         <>
-                          <Btn size="sm" variant="ghost" disabled={busy === p.id} onClick={() => onEdit(p)}>
-                            Edit
+                          <Btn
+                            size="sm"
+                            variant="ghost"
+                            className={ICON_BTN}
+                            disabled={busy === p.id}
+                            onClick={() => onEdit(p)}
+                            title="Edit prompt template"
+                            aria-label="Edit prompt"
+                          >
+                            <IconPencil />
                           </Btn>
                           {p.parent_version_id && (
                             <Btn
                               size="sm"
                               variant="ghost"
+                              className={ICON_BTN}
                               disabled={busy === p.id}
                               onClick={() => onDiff(p)}
                               title="Diff against parent prompt"
+                              aria-label="Diff against parent prompt"
                             >
-                              Diff
+                              <IconDiff />
                             </Btn>
                           )}
                           {!p.is_active && (
+                            // Activate stays text — it's the page's
+                            // primary forward action and "Activate" is
+                            // a one-way swap of the live prompt; the
+                            // explicit verb is the safety rail.
                             <Btn
                               size="sm"
-                              variant="ghost"
+                              variant="success"
                               disabled={busy === p.id}
                               onClick={() => onActivate(p)}
                               title="Make this the live prompt for this stage"
@@ -173,19 +214,25 @@ export function PromptStageTable({
                             <Btn
                               size="sm"
                               variant="ghost"
+                              className={ICON_BTN}
                               disabled={busy === p.id}
                               onClick={() => onTraffic(p)}
+                              title="Set A/B traffic share"
+                              aria-label="Set A/B traffic share"
                             >
-                              Traffic
+                              <IconSliders />
                             </Btn>
                           )}
                           <Btn
                             size="sm"
                             variant="danger"
+                            className={ICON_BTN}
                             disabled={busy === p.id || p.is_active}
                             onClick={() => onDelete(p)}
+                            title="Delete prompt"
+                            aria-label="Delete prompt"
                           >
-                            Delete
+                            <IconTrash />
                           </Btn>
                         </>
                       )}

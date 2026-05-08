@@ -9,7 +9,7 @@
 import { useState } from 'react'
 import type { EnvStatus } from '../lib/env'
 import { CLOUD_SUPABASE_URL, CLOUD_SUPABASE_ANON_KEY } from '../lib/env'
-import { PageHelp, Btn } from '../components/ui'
+import { PageHelp, Btn, CopyButton } from '../components/ui'
 
 const CLOUD_ENV_TEMPLATE = `VITE_SUPABASE_URL=${CLOUD_SUPABASE_URL}
 VITE_SUPABASE_ANON_KEY=${CLOUD_SUPABASE_ANON_KEY}`
@@ -66,12 +66,12 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
             <div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">.env (cloud)</span>
-                <button
-                  onClick={() => copy(CLOUD_ENV_TEMPLATE, 'cloud')}
-                  className="text-2xs text-brand hover:text-brand-hover transition-colors"
-                >
-                  {copied === 'cloud' ? 'Copied!' : 'Copy'}
-                </button>
+                <CopyButton
+                  onCopy={() => copy(CLOUD_ENV_TEMPLATE, 'cloud')}
+                  copied={copied === 'cloud'}
+                  label="Copy cloud .env block"
+                  copiedLabel=".env block copied"
+                />
               </div>
               <pre className="bg-surface-raised border border-edge-subtle rounded-sm p-3 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
                 {CLOUD_ENV_TEMPLATE}
@@ -123,12 +123,12 @@ export function SetupGatePage({ env }: { env: EnvStatus }) {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">.env (self-hosted)</span>
-                  <button
-                    onClick={() => copy(SELF_HOSTED_TEMPLATE, 'self')}
-                    className="text-2xs text-brand hover:text-brand-hover transition-colors"
-                  >
-                    {copied === 'self' ? 'Copied!' : 'Copy'}
-                  </button>
+                  <CopyButton
+                    onCopy={() => copy(SELF_HOSTED_TEMPLATE, 'self')}
+                    copied={copied === 'self'}
+                    label="Copy self-hosted .env block"
+                    copiedLabel=".env block copied"
+                  />
                 </div>
                 <pre className="bg-surface-raised border border-edge-subtle rounded-sm p-3 text-2xs font-mono text-fg-secondary overflow-x-auto whitespace-pre-wrap">
                   {SELF_HOSTED_TEMPLATE}

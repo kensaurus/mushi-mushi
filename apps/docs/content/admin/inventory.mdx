@@ -1,0 +1,113 @@
+---
+title: 'User stories · Inventory'
+---
+
+import { Callout } from 'nextra/components'
+
+# User stories · Inventory
+
+The **User stories** surface (sidebar → User stories) is the v2 positive
+side of the loop. Where Reports / Graph / Fixes catch what your users
+*felt* break, the inventory describes what should *exist* — every page,
+every action, every expected outcome — so the gates can fail when the
+two diverge.
+
+<Callout type="info">
+  Inventory routes are gated behind **Advanced** mode in the sidebar
+  while the surface is still maturing. A workspace owner can promote
+  them via Settings → Workspace → *Surface advanced features*.
+</Callout>
+
+## What you see
+
+Three nested layers:
+
+1. **Truth-layer summary** across the top — verified / unwired /
+   regressed counts rolled up across every story in the project.
+2. **Story cards** — one per top-level user story (`signup`, `pricing`,
+   `dashboard`, …) with per-story counts and a *Run gates* / *Run crawler*
+   action on the row.
+3. **Action drawer** — click any element / action to inspect the
+   `expected_outcome` block, the last walk, and the raw YAML.
+
+## Run gates / Run crawler from a row
+
+Both buttons short-circuit to the same code path the GitHub Action uses
+([`@mushi-mushi/mcp-ci`](/sdks/mcp-ci)):
+
+- **Run gates** — runs all five gates against the current branch and
+  posts the composite check back to your most recent open PR.
+- **Run crawler** — kicks the discovery crawler on staging. Newly
+  observed routes show up in the *Discovery* tab as candidates ready to
+  be promoted into `inventory.yaml`.
+
+## SDK-driven discovery
+
+Most teams will never hand-author `inventory.yaml`. Turn on
+`capture.discoverInventory` in the SDK config:
+
+```ts
+import { MushiProvider } from '@mushi-mushi/react'
+
+<MushiProvider config={{
+  projectId: '…',
+  apiKey: '…',
+  capture: { discoverInventory: true },
+}}>
+  <App />
+</MushiProvider>
+```
+
+The SDK quietly observes routes, `data-testid`s, and outbound API paths
+in production. Claude drafts a candidate `inventory.yaml` from the
+stream every 24 h and the **Discovery** tab surfaces the diff for
+review. You accept, edit, or skip — the production payload itself
+never contains user data.
+
+## Surface mode in the graph
+
+The same inventory powers a **Surface** toggle on the
+[Knowledge graph](/admin/graph) — every Page / Element / Action node
+overlaid on the live bug graph so the dead corners (high-traffic
+elements with no `expected_outcome`) light up.
+
+## Five gates
+
+The composite GitHub check is rolled up from:
+
+| Gate                              | Surfaced as                      |
+| --------------------------------- | -------------------------------- |
+| `mushi-mushi/no-dead-handler`     | ESLint — empty `onClick` etc.    |
+| `mushi-mushi/no-mock-leak`        | ESLint — faker / placeholder data in non-test paths |
+| **Inventory drift**               | Action runner — added / removed / renamed actions |
+| **Agentic-failure detection**     | Action runner — handler regressions across deploys |
+| **Synthetic walk health**         | Synthetic monitor — last walk against staging |
+
+Drilling into any failing gate from a story card opens the relevant
+finding panel — `GateFindingCard` for the static rules, `DriftDiffPanel`
+for inventory drift, `SyntheticTimeline` for the synthetic walks.
+
+## Synthetic monitor
+
+Mushi re-walks the inventory's `expected_outcome` checks against your
+staging URL on a configurable cron (default: hourly). The monitor is
+**fail-closed by default** — write paths (POST / PUT / DELETE actions)
+are skipped unless you opt in per-project:
+
+```yaml filename="inventory.yaml"
+synthetic_monitor_allow_mutations: true
+```
+
+Set this only when staging is fully isolated from production and the
+write endpoints have an idempotency key or roll back cleanly.
+
+## See also
+
+- [Concepts → Inventory and gates](/concepts/inventory-and-gates) — the
+  conceptual model.
+- [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — the Zod /
+  JSON Schema for `inventory.yaml`.
+- [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action.
+- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — the lint rules.
+- [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) —
+  bootstrap an authenticated session for the crawler / monitor.

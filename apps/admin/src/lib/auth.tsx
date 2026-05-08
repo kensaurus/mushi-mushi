@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import * as Sentry from '@sentry/react'
 import { supabase } from './supabase'
 import type { Session, User } from '@supabase/supabase-js'
-import { authRedirectUrl } from './authRedirect'
+import { authRedirectUrl, detectRecoveryFromUrl } from './authRedirect'
 import { notifySignOut, subscribeAuthBroadcast } from './authBroadcast'
 import { signInWithPasskey as signInWithPasskeyApi } from './passkeys'
 
@@ -58,15 +58,20 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false)
+  // Seed the recovery flag from the URL on the very first render. supabase-js
+  // processes the recovery token asynchronously inside _initialize() and then
+  // strips the hash from the URL via history.replaceState. If our React tree
+  // mounts a tick later, the PASSWORD_RECOVERY event has already fired and the
+  // hash is gone — we'd never know the user came from a reset email. Reading
+  // window.location.hash *here* (synchronously, in the useState initializer)
+  // captures the signal before either side-effect can race us.
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(detectRecoveryFromUrl)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      syncSentryUser(session)
-      setLoading(false)
-    }).catch(() => setLoading(false))
-
+    // Subscribe BEFORE getSession() so we never miss a PASSWORD_RECOVERY event
+    // that supabase-js dispatches while resolving the URL token. The previous
+    // ordering registered the listener after getSession()'s promise was kicked
+    // off, which on a slow render could miss the event entirely.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session)
       syncSentryUser(session)
@@ -78,6 +83,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsPasswordRecovery(false)
       }
     })
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      syncSentryUser(session)
+      setLoading(false)
+    }).catch(() => setLoading(false))
 
     const unsubscribeBroadcast = subscribeAuthBroadcast((event) => {
       if (event !== 'SIGNED_OUT') return

@@ -33,7 +33,7 @@ export function ActiveJobCard({ job, onCancel }: ActiveJobProps) {
             <div className="h-full w-1/3 bg-brand animate-pulse rounded-full" />
           </div>
         </div>
-        <Btn variant="ghost" size="sm" onClick={onCancel}>
+        <Btn variant="danger" size="sm" onClick={onCancel}>
           Cancel
         </Btn>
       </div>

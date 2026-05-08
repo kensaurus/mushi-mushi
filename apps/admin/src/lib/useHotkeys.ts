@@ -6,6 +6,21 @@
  *
  *          Used by the Reports triage table for j/k navigation, x toggle,
  *          enter to open, / focus search, and ? for the help overlay.
+ *
+ *          Two listeners on `document` (e.g. global Layout + per-page
+ *          ReportsPage) both fire on the same keystroke by default —
+ *          `addEventListener` does not dedupe across hook invocations.
+ *          When a page-level binding wants to **preempt** the global
+ *          binding for a shared key (e.g. `[` paginates on /reports
+ *          instead of also collapsing the sidebar), opt into:
+ *            • `{ capture: true }` on the per-page hook so its listener
+ *              runs in the capture phase, *before* the bubble-phase
+ *              global listener registered by the Layout shell.
+ *            • `preempt: true` on the binding itself so when its handler
+ *              fires it calls `e.stopImmediatePropagation()`, skipping
+ *              every later listener (including the global one).
+ *          A page that doesn't need preemption ignores both options and
+ *          the hook behaves exactly as before.
  */
 
 import { useEffect, useRef } from 'react'
@@ -21,6 +36,23 @@ export interface HotkeyBinding {
   shift?: boolean
   alt?: boolean
   meta?: boolean
+  /**
+   * When true, calling the handler also calls `e.stopImmediatePropagation()`
+   * so any other `useHotkeys()` listeners on `document` (e.g. the Layout
+   * shortcut registry) don't also fire for the same keystroke. Pair with
+   * `useHotkeys(bindings, { capture: true })` so this listener runs first.
+   */
+  preempt?: boolean
+}
+
+export interface HotkeyOptions {
+  enabled?: boolean
+  /**
+   * Register the listener in the capture phase (`addEventListener(_, _, true)`)
+   * so it runs *before* any bubble-phase listeners on `document`. Required
+   * when a page-level hook wants to preempt a global hook for a shared key.
+   */
+  capture?: boolean
 }
 
 const FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
@@ -32,9 +64,18 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return false
 }
 
-export function useHotkeys(bindings: HotkeyBinding[], enabled = true): void {
+export function useHotkeys(
+  bindings: HotkeyBinding[],
+  optionsOrEnabled: HotkeyOptions | boolean = true,
+): void {
   const ref = useRef(bindings)
   ref.current = bindings
+
+  // Normalise legacy `(bindings, true)` callers and the new
+  // `(bindings, { enabled, capture })` form into a single shape.
+  const options: HotkeyOptions =
+    typeof optionsOrEnabled === 'boolean' ? { enabled: optionsOrEnabled } : optionsOrEnabled
+  const { enabled = true, capture = false } = options
 
   useEffect(() => {
     if (!enabled) return
@@ -56,10 +97,16 @@ export function useHotkeys(bindings: HotkeyBinding[], enabled = true): void {
         if (b.shift && !e.shiftKey) continue
         if (typing && !b.allowInInputs) continue
         b.handler(e)
+        // Stop other `document` keydown listeners (capture or bubble phase)
+        // from also firing for this keystroke. Only the binding that opts
+        // in gets this — non-preempting bindings keep the legacy
+        // multiple-listeners-may-coexist behaviour, which is what most of
+        // the registry relies on.
+        if (b.preempt) e.stopImmediatePropagation()
         break
       }
     }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [enabled])
+    document.addEventListener('keydown', onKey, capture)
+    return () => document.removeEventListener('keydown', onKey, capture)
+  }, [enabled, capture])
 }

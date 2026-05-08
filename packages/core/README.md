@@ -10,10 +10,12 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 - **API Client**: Fetch-based HTTP client with retry and exponential backoff. Tags every internal request with `X-Mushi-Internal: <kind>` so framework SDKs can filter their own traffic out of network capture and `apiCascade`. Ships HMAC-signed reporter helpers (`getLatestSdkVersion`, `listReporterReports`, `listReporterComments`, `replyToReporterReport`) for the two-way reply pipeline, plus `postDiscoveryEvent` (v2.1) for the passive inventory channel
 - **Pre-Filter**: On-device Stage 0 spam/gibberish filter (runs client-side, zero server cost)
 - **Offline Queue**: IndexedDB-backed queue with auto-sync on reconnect
-- **Environment Capture**: Browser/device snapshot (viewport, user agent, connection info)
+- **Environment Capture**: Browser/device snapshot — viewport, user agent (with **User-Agent Client Hints** when supported), connection info, screen + DPR, accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online/displayMode/title, and a one-shot **page load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP)
 - **Reporter Token**: Anonymous persistent identity for report attribution
 - **Session ID**: Tab-scoped session correlation
 - **Rate Limiter**: Token bucket self-throttle to prevent API flooding
+- **Breadcrumb Buffer** (1.0+ — `createBreadcrumbBuffer`): 50-entry ring of `{timestamp, category, level, message, data?}` rows; framework SDKs auto-capture route changes, `console.error/warn`, `[data-testid]` clicks, and SDK lifecycle events. Snapshot is attached to every `MushiReport` (server promotes it to a dedicated `reports.breadcrumbs` jsonb column for GIN-indexed filtering)
+- **Exception Normaliser** (1.0+ — `normaliseThrown`): turns any thrown value (`Error`, string, plain object, `null`, `undefined`) into a stable `{ name, message, stack?, cause? }` shape with truncated stacks and cyclic-cause guards. Powers `Mushi.captureException()` in `@mushi-mushi/web`
 
 ## Public types added in 0.7 → 0.11
 
@@ -31,6 +33,10 @@ Core types, API client, and utilities for the Mushi Mushi SDK.
 | `MushiReporterComment`     | Reporter-facing comment row (HMAC-authed) tagged `author_kind: 'admin' \| 'reporter'`.        |
 | `MushiDiscoverInventoryConfig` | Mushi v2.1 — fine-grained controls for `capture.discoverInventory` (`enabled`, `throttleMs`, `routeTemplates`, `userIdSource`, `captureDomSummary`). Pass `true` for defaults. |
 | `MushiDiscoveryEventPayload`   | Mushi v2.1 — wire shape for `POST /v1/sdk/discovery`. Mirrored server-side by `_shared/schemas.ts::discoveryEventSchema`; route + page title + testids + network paths + query-param **keys only** + sha256 user id hash. |
+| `MushiBreadcrumb`              | 1.0+ — `{ timestamp, category, level: 'debug' \| 'info' \| 'warning' \| 'error' \| 'critical', message, data? }`. Mirrors the Sentry breadcrumb shape so the admin can interleave Mushi + Sentry breadcrumbs on one timeline. |
+| `MushiSentryContext`           | 1.0+ — rich Sentry handshake the SDK captures via `@sentry/browser` v7/v8/v9: `eventId`, `replayId`, `traceId`, `spanId`, `transaction`, `release`, `environment`, `user`, `tags`, `breadcrumbs`, `issueUrl`, `mushiReportId` (bidirectional). |
+| `MushiCaptureExceptionOptions` | 1.0+ — options for `Mushi.captureException(err, opts)`: `level`, `tags`, `extras`, `category`, `userIntent` overrides for the structured report. |
+| `NormalisedException`          | 1.0+ — return type of `normaliseThrown(err)` (`{ name, message, stack?, cause? }`); used internally by `captureException` and exposed for adapters that want to ship their own thin wrappers. |
 
 Constants: `MUSHI_INTERNAL_HEADER` (`'X-Mushi-Internal'`),
 `MUSHI_INTERNAL_INIT_MARKER`, and the `MushiInternalRequestKind` literal union

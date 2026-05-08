@@ -147,14 +147,68 @@ const HIGHLIGHT: Record<string, string> = {
   enterprise: 'ring-2 ring-warn/40',
 }
 
+/**
+ * Per-plan "would-it-fit" annotation rendered under each column header. Lets
+ * the user gut-check downgrade / upgrade decisions against their actual
+ * monthly volume without bouncing back to the project card. We deliberately
+ * keep the math here (not in a parent reducer) because the whole point is
+ * "compute one number relative to *this column's* limit" — extracting it
+ * would just push the conditionals up a level.
+ */
+interface CurrentUsage {
+  /** Reports ingested this billing period. Total across the active project. */
+  reports: number
+  /**
+   * Optional human-friendly context line for the bullet under each column
+   * (e.g. "this period · glot.it"). Renders verbatim under the column header
+   * tally to remind the user *which* project's usage they're looking at.
+   */
+  contextLabel?: string
+}
+
 interface Props {
   plans: PlanCatalogEntry[]
   currentPlanId: string
   busy?: boolean
   onSelectPlan?: (planId: string) => void
+  /** When provided, each plan column shows a "your usage" annotation under the
+   *  price so the comparison doubles as a downgrade / upgrade fit check. */
+  currentUsage?: CurrentUsage
 }
 
-export function PlanComparisonTable({ plans, currentPlanId, busy = false, onSelectPlan }: Props) {
+interface FitVerdict {
+  pct: number | null
+  /** Visual tone for the annotation. `over` => danger, `near` => warn, `fits` => ok, `unbounded` => muted. */
+  tone: 'over' | 'near' | 'fits' | 'unbounded'
+  /** One-word verdict glyph + label, ready to drop into JSX. */
+  glyph: string
+  label: string
+}
+
+function evaluateFit(reports: number, limit: number | null): FitVerdict {
+  if (limit == null) {
+    return { pct: null, tone: 'unbounded', glyph: '∞', label: 'No cap' }
+  }
+  const pct = Math.round((reports / limit) * 100)
+  if (reports > limit) return { pct, tone: 'over', glyph: '●', label: 'Over' }
+  if (pct >= 80) return { pct, tone: 'near', glyph: '▲', label: 'Tight' }
+  return { pct, tone: 'fits', glyph: '✓', label: 'Fits' }
+}
+
+const FIT_TONE: Record<FitVerdict['tone'], string> = {
+  over: 'text-danger',
+  near: 'text-warn',
+  fits: 'text-ok',
+  unbounded: 'text-fg-muted',
+}
+
+export function PlanComparisonTable({
+  plans,
+  currentPlanId,
+  busy = false,
+  onSelectPlan,
+  currentUsage,
+}: Props) {
   const sorted = [...plans]
     .filter(p => p.active)
     .sort((a, b) => a.position - b.position)
@@ -172,6 +226,18 @@ export function PlanComparisonTable({ plans, currentPlanId, busy = false, onSele
           </h3>
           <p className="text-2xs text-fg-faint mt-0.5">
             Billed monthly · cancel any time · prices in USD
+            {currentUsage && (
+              <>
+                {' · '}
+                <span className="text-fg-secondary">
+                  Each column shows whether{' '}
+                  <span className="font-mono text-fg">
+                    {currentUsage.reports.toLocaleString()}
+                  </span>{' '}
+                  report{currentUsage.reports === 1 ? '' : 's'} this period would fit
+                </span>
+              </>
+            )}
           </p>
         </div>
         <span className="text-3xs text-fg-faint font-mono uppercase tracking-wider">
@@ -218,6 +284,42 @@ export function PlanComparisonTable({ plans, currentPlanId, busy = false, onSele
                     ? 'Talk to us'
                     : 'Free'}
               </div>
+              {currentUsage && (() => {
+                const fit = evaluateFit(currentUsage.reports, p.included_reports_per_month)
+                const limitLabel = p.included_reports_per_month == null
+                  ? '∞'
+                  : p.included_reports_per_month.toLocaleString()
+                const ariaSuffix =
+                  fit.tone === 'over'
+                    ? `Would exceed by ${(currentUsage.reports - (p.included_reports_per_month ?? 0)).toLocaleString()} reports.`
+                    : fit.tone === 'unbounded'
+                      ? 'No monthly cap on this plan.'
+                      : `${fit.pct ?? 0}% of quota.`
+                return (
+                  <div
+                    className={`mt-1.5 flex flex-col items-center gap-0.5 ${FIT_TONE[fit.tone]}`}
+                    aria-label={`Your usage on ${p.display_name}: ${currentUsage.reports.toLocaleString()} of ${limitLabel}. ${ariaSuffix}`}
+                    title={
+                      fit.tone === 'unbounded'
+                        ? 'This plan has no monthly report cap.'
+                        : fit.tone === 'over'
+                          ? `Your ${currentUsage.reports.toLocaleString()} reports this period would exceed the ${limitLabel} cap on ${p.display_name}.`
+                          : `Your ${currentUsage.reports.toLocaleString()} reports this period = ${fit.pct}% of the ${limitLabel} cap on ${p.display_name}.`
+                    }
+                  >
+                    <span className="text-2xs font-mono tabular-nums">
+                      {currentUsage.reports.toLocaleString()} / {limitLabel}
+                    </span>
+                    <span className="text-3xs uppercase tracking-wider font-medium">
+                      <span aria-hidden="true" className="mr-0.5">{fit.glyph}</span>
+                      {fit.label}
+                      {fit.pct != null && fit.tone !== 'unbounded' && (
+                        <span className="ml-1 opacity-80">{fit.pct}%</span>
+                      )}
+                    </span>
+                  </div>
+                )
+              })()}
               {onSelectPlan && !isCurrent && p.is_self_serve && (
                 <Btn
                   size="sm"

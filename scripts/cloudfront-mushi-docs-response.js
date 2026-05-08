@@ -114,6 +114,33 @@ function handler(event) {
     response.headers[key] = security[key];
   }
 
+  // Tag Nextra's `.txt` mirror files (e.g. /mushi-mushi/docs/admin.txt,
+  // /mushi-mushi/docs/quickstart/react.txt) as `noindex, nofollow`. Each
+  // `.txt` file is the React Server Component payload Next.js emits next
+  // to the `.html` page so client-side navigation can hydrate without a
+  // full page fetch. The payload embeds the entire `pageMap` with raw
+  // unprefixed routes — `{"name":"fine-tuning","route":"/admin/fine-tuning"}`
+  // and so on — because Next.js prepends `basePath` at runtime. Googlebot
+  // fetches these `.txt` files (their MIME type is text/plain, they're
+  // linked from the HTML for hydration) and parses the embedded route
+  // strings as URLs to crawl, ending up at https://kensaur.us/admin/...,
+  // https://kensaur.us/v1/reports, https://kensaur.us/quickstart/svelte,
+  // etc. — none of which exist. That accounts for the 33 "Not found (404)"
+  // entries Google Search Console flagged for kensaur.us on 2026-05-07.
+  //
+  // X-Robots-Tag is the right lever here (not robots.txt) because:
+  //   1. We still WANT the LLM-friendly `.txt` mirrors served — they're
+  //      Nextra's "copy as markdown" feature for ChatGPT/Claude users.
+  //      robots.txt would also stop AI crawlers from fetching them.
+  //   2. X-Robots-Tag works on non-HTML responses where a `<meta robots>`
+  //      tag has no effect (per Google's documentation).
+  //   3. Already-indexed URLs get dropped on the next recrawl, which
+  //      robots.txt alone cannot do (it stops crawling, not indexing).
+  // https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#xrobotstag
+  if (/\.txt$/.test(request.uri)) {
+    response.headers['x-robots-tag'] = { value: 'noindex, nofollow' };
+  }
+
   if (status !== 403 && status !== 404) {
     return response;
   }

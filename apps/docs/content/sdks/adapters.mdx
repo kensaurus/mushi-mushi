@@ -1,0 +1,55 @@
+---
+title: '@mushi-mushi/adapters'
+---
+
+# `@mushi-mushi/adapters`
+
+Translate inbound webhooks from Datadog, New Relic, Honeycomb, Grafana,
+Pingdom, and PagerDuty into Mushi reports — so an alert that fires in
+your existing monitoring stack also lands in your bug queue, deduped
+against the same knowledge graph.
+
+## Install
+
+```bash
+pnpm add @mushi-mushi/adapters
+```
+
+## Use
+
+Each adapter exposes a single `translate(payload)` function that returns
+a Mushi report shape ready to POST to the gateway:
+
+```ts
+import { datadogAdapter } from '@mushi-mushi/adapters/datadog'
+import { submitReport } from '@mushi-mushi/node'
+import { Hono } from 'hono'
+
+const app = new Hono()
+
+app.post('/webhooks/datadog', async (c) => {
+  const payload = await c.req.json()
+  const report = datadogAdapter.translate(payload)
+  if (!report) return c.json({ ok: false, reason: 'unsupported_event' }, 400)
+  await submitReport(report)
+  return c.json({ ok: true })
+})
+```
+
+Available adapters:
+
+```ts
+import { datadogAdapter }    from '@mushi-mushi/adapters/datadog'
+import { newRelicAdapter }   from '@mushi-mushi/adapters/new-relic'
+import { honeycombAdapter }  from '@mushi-mushi/adapters/honeycomb'
+import { grafanaAdapter }    from '@mushi-mushi/adapters/grafana'
+import { pingdomAdapter }    from '@mushi-mushi/adapters/pingdom'
+import { pagerDutyAdapter }  from '@mushi-mushi/adapters/pagerduty'
+```
+
+Each adapter:
+
+- Validates the payload's signature against the per-vendor scheme.
+- Picks the most specific severity / category from the payload metadata.
+- Carries the original alert URL through to `metadata.source_url` so the
+  triager can jump back to the source on demand.
