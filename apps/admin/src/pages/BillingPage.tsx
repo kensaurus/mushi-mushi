@@ -17,7 +17,7 @@
  *          Stripe-hosted URLs we redirect to.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -1435,8 +1435,13 @@ function TicketDetailModal({
   // different ticket. Without this, opening ticket A → clicking "Cancel
   // ticket" → closing → opening ticket B would leave B pre-armed for
   // cancel, which is a footgun.
+  //
+  // Side-effects must live in `useEffect`, never `useMemo` — `useMemo` runs
+  // during render, which makes `setState` calls inside it warn under
+  // StrictMode and risk render loops. The `useMemo` form was a copilot-flagged
+  // bug from the original wave; this is the fix.
   const ticketId = ticket?.id ?? null
-  useMemo(() => {
+  useEffect(() => {
     setConfirming(false)
     setCancelling(false)
   }, [ticketId])

@@ -176,8 +176,15 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       // `tag=key:value` → reports where tags @> {"key": "value"}. We
       // split only on the *first* `:` so values that themselves contain
       // a colon (e.g. `release:checkout@1.4.0`) round-trip correctly.
-      // Falls back gracefully when the param is malformed (no `:`),
-      // treating it as a "key exists" check via `tags ? key`.
+      //
+      // Bare-key ("key exists") form is intentionally not supported on
+      // this endpoint: the previous fallback used
+      // `tags 'cs' '{"key":""}'`, which only matched empty-string values
+      // (not key existence) AND interpolated user input into a JSON
+      // string without escaping — quotes/backslashes in `key` could
+      // break the filter. The dashboard always sends `key:value`; any
+      // other shape is treated as no-op rather than silently doing the
+      // wrong thing.
       const sepAt = tagParam.indexOf(':');
       if (sepAt > 0 && sepAt < tagParam.length - 1) {
         const k = tagParam.slice(0, sepAt).slice(0, 120);
@@ -185,16 +192,6 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         // PostgREST `cs` (contains) operator on jsonb — uses the GIN
         // index on `reports.tags` for an indexed lookup.
         query = query.contains('tags', { [k]: v });
-      } else if (tagParam.length > 0) {
-        // "key exists" form. PostgREST supports `?` operator via `?`
-        // in the URL but it's awkward; we instead use a `.not.is.null`
-        // style filter via .filter('tags', 'cs', ...) is overkill, so
-        // we settle for a JSON-shape-aware ILIKE on the cast text. It
-        // doesn't hit the GIN index but the dashboard rarely uses the
-        // bare-key form (typical use is k:v) so we accept the seq scan
-        // cost for the rare case.
-        const safe = tagParam.replace(/[%_]/g, '').slice(0, 120);
-        query = query.filter('tags', 'cs', `{"${safe}":""}`);
       }
     }
     if (traceParam) query = query.eq('sentry_trace_id', traceParam);

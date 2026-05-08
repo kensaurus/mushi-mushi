@@ -7,9 +7,13 @@ import type { MushiBreadcrumb } from './types';
  * plain array we slice-copy on snapshot is the right shape.
  *
  * Design notes:
- *   - `add()` is O(1) amortized; it only does an `unshift` once we hit
- *     `max`. We append-then-shift instead of head-insert to keep the
- *     "oldest first" semantics callers expect from `getAll()`.
+ *   - `add()` is O(1) on the steady-state hot path (just `push`). When
+ *     we hit `max` we evict the oldest with `shift()` — that's O(n)
+ *     in the worst case, but with `max=50` the constant is tiny and
+ *     it only fires once per insert past the cap. We deliberately
+ *     append-then-shift (rather than head-insert) so `getAll()` can
+ *     return the underlying array in oldest-first order without an
+ *     extra reverse copy on every snapshot.
  *   - `getAll()` returns a *copy* so callers can't mutate the buffer
  *     after a report is composed. Reports send the snapshot, not the
  *     live ring.

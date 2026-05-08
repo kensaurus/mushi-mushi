@@ -166,24 +166,60 @@ async function collectControlsForProject(
   // `warn` so the auditor knows to follow up rather than reading silence as
   // green.
   const probeSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const { data: probeRows } = await db
+  // Uptime ratio uses count-only queries (head: true) so it stays accurate
+  // regardless of how many probe ticks the project has accumulated. With a
+  // 5-minute probe interval × N integration kinds, a single 2000-row
+  // SELECT was silently capping at <7 days for moderately wired projects,
+  // which inflated apparent uptime — the audit-evidence tier of all
+  // surfaces is the worst place to be undercounting failures.
+  const [{ count: totalRaw }, { count: okRaw }] = await Promise.all([
+    db
+      .from('integration_health_history')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .gte('checked_at', probeSince),
+    db
+      .from('integration_health_history')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .gte('checked_at', probeSince)
+      .eq('status', 'ok'),
+  ])
+  const total = totalRaw ?? 0
+  const okCount = okRaw ?? 0
+  const uptime = total > 0 ? okCount / total : null
+
+  // Latency p95 + per-kind breakdown only needs a representative sample,
+  // not the full 7d population — 5000 samples is plenty for a stable p95
+  // estimate even at 5-min ticking × 5 kinds (~10k events/wk). We pull
+  // them sorted-by-most-recent so the percentile reflects current
+  // performance rather than week-old regressions hidden behind newer
+  // recoveries.
+  const SAMPLE_CAP = 5000
+  const { data: probeSample } = await db
     .from('integration_health_history')
-    .select('status, latency_ms, kind')
+    .select('latency_ms, kind')
     .eq('project_id', projectId)
     .gte('checked_at', probeSince)
-    .limit(2000)
-  const total = probeRows?.length ?? 0
-  const okCount = (probeRows ?? []).filter((r: { status: string }) => r.status === 'ok').length
-  const uptime = total > 0 ? okCount / total : null
-  const latencies = (probeRows ?? [])
+    .order('checked_at', { ascending: false })
+    .limit(SAMPLE_CAP)
+  const latencies = (probeSample ?? [])
     .map((r: { latency_ms: number | null }) => r.latency_ms)
     .filter((v: number | null): v is number => typeof v === 'number' && Number.isFinite(v))
     .sort((a: number, b: number) => a - b)
-  const p95 = latencies.length > 0 ? latencies[Math.floor(latencies.length * 0.95)] ?? null : null
+  // Nearest-rank p95: index = ceil(0.95 * n) - 1, clamped to [0, n-1].
+  // The previous `Math.floor(n * 0.95)` selected the max element when
+  // `n * 0.95` was an integer (e.g. n=20 → idx 19 = p100), so reported
+  // p95 was effectively p100 for many small samples.
+  const p95 = latencies.length > 0
+    ? latencies[Math.min(Math.max(0, Math.ceil(0.95 * latencies.length) - 1), latencies.length - 1)] ?? null
+    : null
   // Group probe counts by integration kind so the auditor sees coverage
   // breadth, not just a single number. e.g. `{sentry: 168, supabase: 168}`.
+  // This is sample-bounded (mirrors the latency sample); for total
+  // coverage the auditor consults `probe_count_7d`.
   const byKind: Record<string, number> = {}
-  for (const r of probeRows ?? []) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1
+  for (const r of probeSample ?? []) byKind[r.kind] = (byKind[r.kind] ?? 0) + 1
   let availabilityStatus: 'pass' | 'warn' | 'fail'
   if (total === 0) availabilityStatus = 'warn'
   else if (uptime !== null && uptime >= 0.99) availabilityStatus = 'pass'

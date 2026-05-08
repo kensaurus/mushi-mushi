@@ -16,12 +16,23 @@ import {
 const originalUrl = typeof window !== 'undefined' ? window.location.href : null
 
 function setLocation(href: string): void {
-  // jsdom: window.location.href = ... triggers a navigation and is read-only in
-  // some configs. Replacing the property keeps the rest of the URL API intact.
-  Object.defineProperty(window, 'location', {
-    writable: true,
-    value: new URL(href),
-  })
+  // We use `history.replaceState` (no actual navigation, no reload) to
+  // surgically update the URL parts of `window.location` that
+  // `detectRecoveryFromUrl` reads — `pathname`, `search`, and `hash`.
+  // The previous test helper used `Object.defineProperty(window,
+  // 'location', { value: new URL(href) })`, which Copilot flagged as
+  // fragile: jsdom's `window.location` is normally non-configurable
+  // (so the call can throw `TypeError: Cannot redefine property` on
+  // some runtimes), and even when it succeeds it replaces jsdom's
+  // `Location` instance with a plain `URL`, breaking sibling helpers
+  // like `Location.prototype.assign` and `Location.prototype.reload`
+  // for any code that runs later in the same suite.
+  //
+  // `history.replaceState` keeps jsdom's real `Location` object intact
+  // and updates `pathname`/`search`/`hash` in-place, which is exactly
+  // the surface the production code under test reads.
+  const u = new URL(href)
+  window.history.replaceState({}, '', u.pathname + u.search + u.hash)
 }
 
 afterEach(() => {

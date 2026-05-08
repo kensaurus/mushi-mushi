@@ -289,46 +289,74 @@ export function registerOrganizationRoutes(app: Hono): void {
 
     const db = getServiceClient();
 
-    // Slug uniqueness: probe up to 10 numeric suffixes before falling back
-    // to a random one. The CHECK constraint forbids leading/trailing dashes
-    // and requires 3+ chars, so we pad short bases.
-    async function findFreeSlug(): Promise<string | null> {
-      const padded = baseSlug.length < 3 ? `${baseSlug}-team` : baseSlug;
-      const candidates = [padded, ...Array.from({ length: 10 }, (_, i) => `${padded}-${i + 2}`)];
-      for (const candidate of candidates) {
-        const slugged = candidate.replace(/^-+|-+$/g, '').slice(0, 64);
-        if (slugged.length < 3) continue;
-        const { data: clash } = await db
-          .from('organizations')
-          .select('id')
-          .eq('slug', slugged)
-          .maybeSingle();
-        if (!clash) return slugged;
+    // Slug allocation is race-safe: we generate a list of candidates
+    // (deterministic + random tail) and INSERT each one in turn,
+    // catching Postgres unique-violation (code 23505) and trying the
+    // next candidate. The previous "probe then insert" version had a
+    // TOCTOU race where two concurrent /v1/org calls would both see
+    // the same slug as free, then one would succeed and the other
+    // would surface a 500 via dbError — bad UX during onboarding.
+    //
+    // The CHECK constraint on organizations.slug forbids
+    // leading/trailing dashes and requires 3+ chars, so we pad short
+    // bases. Random tail uses crypto.getRandomValues so concurrent
+    // racers don't both land on the same Math.random() seed when the
+    // event loop is busy.
+    const padded = baseSlug.length < 3 ? `${baseSlug}-team` : baseSlug;
+    function randSuffix(): string {
+      const buf = new Uint8Array(4);
+      crypto.getRandomValues(buf);
+      return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    const candidates = [
+      padded,
+      ...Array.from({ length: 10 }, (_, i) => `${padded}-${i + 2}`),
+      ...Array.from({ length: 5 }, () => `${padded.slice(0, 50)}-${randSuffix()}`),
+    ]
+      .map((s) => s.replace(/^-+|-+$/g, '').slice(0, 64))
+      .filter((s) => s.length >= 3);
+
+    type OrgInsertRow = {
+      id: string;
+      slug: string;
+      name: string;
+      plan_id: string | null;
+      billing_mode: string | null;
+      is_personal: boolean;
+      created_at: string;
+    };
+    let org: OrgInsertRow | null = null;
+    let lastInsertErr: unknown = null;
+    for (const slug of candidates) {
+      const { data, error } = await db
+        .from('organizations')
+        .insert({
+          name,
+          slug,
+          owner_id: userId,
+          is_personal: false,
+        })
+        .select('id, slug, name, plan_id, billing_mode, is_personal, created_at')
+        .single();
+      if (data) {
+        org = data as OrgInsertRow;
+        break;
       }
-      // Fall back to a hash-style suffix to guarantee uniqueness even if
-      // the deterministic candidates all collide (extremely unlikely).
-      const random = Math.random().toString(36).slice(2, 8);
-      return `${baseSlug.slice(0, 50)}-${random}`.replace(/^-+|-+$/g, '').slice(0, 64);
+      lastInsertErr = error;
+      // Postgres unique-violation = SQLSTATE 23505. supabase-js surfaces
+      // this on `error.code`; some adapters surface it on `.details`/
+      // `.message` so we belt-and-suspender match. Anything else is a
+      // hard error and we stop retrying.
+      const code = (error as { code?: string } | null)?.code ?? '';
+      const msg = (error as { message?: string } | null)?.message ?? '';
+      const isUniqueViolation =
+        code === '23505' || /duplicate key|unique constraint/i.test(msg);
+      if (!isUniqueViolation) break;
     }
-
-    const slug = await findFreeSlug();
-    if (!slug) {
-      return c.json({ ok: false, error: { code: 'SLUG_GENERATION_FAILED' } }, 500);
-    }
-
-    const { data: org, error: insertErr } = await db
-      .from('organizations')
-      .insert({
-        name,
-        slug,
-        owner_id: userId,
-        is_personal: false,
-      })
-      .select('id, slug, name, plan_id, billing_mode, is_personal, created_at')
-      .single();
-
-    if (insertErr || !org) {
-      return dbError(c, insertErr ?? { message: 'organization_insert_failed' });
+    if (!org) {
+      return dbError(c, (lastInsertErr as { message?: string } | null) ?? {
+        message: 'organization_insert_failed_no_free_slug',
+      });
     }
 
     // Membership: caller is the founding owner. The org gets no project
