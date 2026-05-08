@@ -26,11 +26,45 @@
  *            if the page has never been visited yet, never 5xx.
  */
 
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAdminMode } from '../lib/mode'
 import { useNavCounts } from '../lib/useNavCounts'
 
 type Tone = 'ok' | 'warn' | 'danger' | 'idle'
+
+// ----------------------------------------------------------------------------
+// Persisted collapse state.
+//
+// The ribbon is page furniture — it sits at the top of every Advanced-mode
+// route and steals ~64px of vertical real estate that operators on tall
+// worklists (Reports, Fixes, Inventory) want back. Collapsing it leaves
+// behind a single-row pill that still surfaces the worst-case stage tone,
+// so users don't lose the "is anything red?" signal but reclaim the space
+// for the page body. State persists in localStorage so the choice sticks
+// across reloads — same pattern as focus mode + sidebar collapse.
+// ----------------------------------------------------------------------------
+
+const COLLAPSE_KEY = 'mushi:pipelineRibbon:collapsed:v1'
+
+function readCollapsed(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.localStorage.getItem(COLLAPSE_KEY) === '1'
+}
+
+function writeCollapsed(value: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(COLLAPSE_KEY, value ? '1' : '0')
+  } catch {
+    // localStorage write can fail in private mode; non-fatal.
+  }
+}
+
+// Severity rank for picking the "worst" stage to surface in the
+// collapsed pill — higher = louder. Mirrors the at-a-glance triage
+// the operator does when scanning the expanded ribbon.
+const TONE_RANK: Record<Tone, number> = { idle: 0, ok: 1, warn: 2, danger: 3 }
 
 interface RibbonTile {
   stage: 'P' | 'D' | 'C' | 'A'
@@ -58,6 +92,11 @@ const STAGE_TONE: Record<RibbonTile['stage'], string> = {
 export function PipelineStatusRibbon() {
   const { isAdvanced } = useAdminMode()
   const nav = useNavCounts()
+  const [collapsed, setCollapsed] = useState(readCollapsed)
+
+  useEffect(() => {
+    writeCollapsed(collapsed)
+  }, [collapsed])
 
   // Only Advanced mode surfaces the ribbon — beginners and quickstart
   // users have the NextBestAction strip which is higher signal for their
@@ -137,48 +176,130 @@ export function PipelineStatusRibbon() {
 
   const tiles: RibbonTile[] = [plan, doTile, check, act]
 
+  // Surface the loudest tile in the collapsed pill so users don't lose
+  // the "is anything red?" signal when they trade ribbon density for
+  // page real estate. `worst` is also used to tint the toggle chevron
+  // when collapsed — a danger pulse should NOT be invisible just because
+  // the operator collapsed the strip an hour ago and forgot.
+  const worst = tiles.reduce<RibbonTile>((acc, t) => (TONE_RANK[t.tone] > TONE_RANK[acc.tone] ? t : acc), tiles[0])
+  const worstTone = TONE_CLASS[worst.tone]
+
+  if (collapsed) {
+    return (
+      <section
+        role="status"
+        aria-label="Pipeline pulse (collapsed — click to expand)"
+        data-testid="pipeline-status-ribbon"
+        data-collapsed="true"
+        className="mb-3"
+      >
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          aria-expanded="false"
+          aria-controls="pipeline-status-ribbon-tiles"
+          // Reads as a single chip rather than a card so collapsed mode
+          // costs ~28px instead of the expanded ~64px. Tone-tints to the
+          // worst stage so a danger condition still grabs the eye.
+          className={`group flex items-center gap-2 w-full rounded-sm border ${worstTone.ring} bg-surface-raised/40 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          title="Pipeline pulse — click to expand"
+        >
+          <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${worstTone.dot}`} />
+          <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider shrink-0">
+            Pipeline
+          </span>
+          {/* Stage glyph row — every stage as a tinted single letter so
+              the operator can scan all four tones in one glance even when
+              the labels are hidden. */}
+          <span className="flex items-center gap-1 shrink-0" aria-label="Stage tones">
+            {tiles.map((t) => (
+              <span
+                key={t.stage}
+                aria-label={`${t.label}: ${t.summary}`}
+                title={`${t.label}: ${t.summary}`}
+                className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none ${STAGE_TONE[t.stage]} ring-1 ring-inset ${TONE_CLASS[t.tone].ring}`}
+              >
+                {t.stage}
+              </span>
+            ))}
+          </span>
+          <span className={`text-2xs font-mono font-semibold truncate ${worstTone.label}`}>
+            {worst.label}: {worst.summary}
+          </span>
+          <span aria-hidden className="ml-auto text-2xs text-fg-muted shrink-0 group-hover:text-fg motion-safe:transition-colors">
+            Expand ▾
+          </span>
+        </button>
+      </section>
+    )
+  }
+
   return (
     <section
       role="status"
       aria-label="Pipeline pulse"
       data-testid="pipeline-status-ribbon"
-      className="mb-3 grid grid-cols-2 md:grid-cols-4 gap-1.5 rounded-md border border-edge bg-surface-raised/40 px-1.5 py-1.5"
+      data-collapsed="false"
+      className="mb-3 rounded-md border border-edge bg-surface-raised/40 px-1.5 py-1.5"
     >
-      {tiles.map((tile) => {
-        const tone = TONE_CLASS[tile.tone]
-        return (
-          <Link
-            key={tile.stage}
-            to={tile.to}
-            className={`group relative flex items-center gap-2 rounded-sm border ${tone.ring} bg-surface px-2 py-1.5 motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60`}
-            title={tile.summary}
-          >
-            <span
-              aria-hidden
-              className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+      {/* Header strip — provides the collapse affordance + a context label.
+          Kept tight (one line) so the ribbon's vertical footprint barely
+          grows from the previous version. */}
+      <div className="flex items-center justify-between gap-2 px-1 pb-1.5">
+        <span className="text-3xs font-medium text-fg-faint uppercase tracking-wider">
+          Pipeline pulse
+        </span>
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          aria-expanded="true"
+          aria-controls="pipeline-status-ribbon-tiles"
+          className="text-3xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          title="Collapse pipeline ribbon — leaves a single-line summary"
+        >
+          Collapse <span aria-hidden>▴</span>
+        </button>
+      </div>
+      <div
+        id="pipeline-status-ribbon-tiles"
+        className="grid grid-cols-2 md:grid-cols-4 gap-1.5"
+      >
+        {tiles.map((tile) => {
+          const tone = TONE_CLASS[tile.tone]
+          return (
+            <Link
+              key={tile.stage}
+              to={tile.to}
+              className={`group relative flex items-center gap-2 rounded-sm border ${tone.ring} bg-surface px-2 py-1.5 motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+              title={tile.summary}
             >
-              {tile.stage}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
-                />
-                <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider">
-                  {tile.label}
+              <span
+                aria-hidden
+                className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+              >
+                {tile.stage}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
+                  />
+                  <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider">
+                    {tile.label}
+                  </span>
+                  <span className={`ml-auto text-2xs font-mono font-semibold ${tone.label}`}>
+                    {tile.metric}
+                  </span>
                 </span>
-                <span className={`ml-auto text-2xs font-mono font-semibold ${tone.label}`}>
-                  {tile.metric}
+                <span className="block text-3xs text-fg-muted truncate leading-snug mt-0.5">
+                  {tile.summary}
                 </span>
               </span>
-              <span className="block text-3xs text-fg-muted truncate leading-snug mt-0.5">
-                {tile.summary}
-              </span>
-            </span>
-          </Link>
-        )
-      })}
+            </Link>
+          )
+        })}
+      </div>
     </section>
   )
 }

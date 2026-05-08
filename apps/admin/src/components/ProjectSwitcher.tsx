@@ -10,18 +10,32 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
   getActiveProjectIdSnapshot,
   setActiveProjectIdSnapshot,
 } from '../lib/activeProject'
+import { useCreateProject } from '../lib/useCreateProject'
 
 export function ProjectSwitcher() {
   const setup = useSetupStatus()
   const [searchParams, setSearchParams] = useSearchParams()
   const [open, setOpen] = useState(false)
+  // Inline "create new project" affordance — exposed in the dropdown
+  // footer so users don't have to navigate away to /projects to spin up
+  // a fresh workspace. `creating` toggles the row from a chip to an input.
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const newNameInputRef = useRef<HTMLInputElement | null>(null)
+  const { create: createProject, creating: submitting } = useCreateProject({
+    onCreated: () => {
+      setNewName('')
+      setCreating(false)
+      setOpen(false)
+    },
+  })
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   // Hydrate the active project from URL > localStorage > first project. Once
@@ -55,6 +69,17 @@ export function ProjectSwitcher() {
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [open])
+
+  // Auto-focus the inline rename input the moment "+ New project" is clicked
+  // so the user can start typing without an extra click. Defer to next tick
+  // because the input only renders after `creating` flips true.
+  useEffect(() => {
+    if (creating) {
+      requestAnimationFrame(() => newNameInputRef.current?.focus())
+    } else {
+      setNewName('')
+    }
+  }, [creating])
 
   if (setup.loading || !setup.data) {
     // never collapse the chrome anchor while loading. A skeleton
@@ -113,35 +138,93 @@ export function ProjectSwitcher() {
         </svg>
       </button>
       {open && (
-        <ul
-          role="listbox"
-          className="absolute right-0 top-full z-50 mt-1 max-h-72 w-64 overflow-y-auto rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
+        <div
+          className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-edge-subtle bg-surface-raised shadow-raised"
         >
-          {projects.map((p) => {
-            const isActive = p.project_id === active.project_id
-            return (
-              <li key={p.project_id}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={isActive}
-                  onClick={() => pick(p.project_id)}
-                  className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
-                    isActive ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate">{p.project_name}</div>
-                    <div className="mt-0.5 truncate text-3xs font-mono text-fg-faint">
-                      {p.report_count} reports · {p.required_complete}/{p.required_total} setup
+          <ul role="listbox" className="max-h-72 overflow-y-auto">
+            {projects.map((p) => {
+              const isActive = p.project_id === active.project_id
+              return (
+                <li key={p.project_id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isActive}
+                    onClick={() => pick(p.project_id)}
+                    className={`flex w-full items-start justify-between gap-2 px-2.5 py-1.5 text-left text-xs hover:bg-surface-overlay motion-safe:transition-colors ${
+                      isActive ? 'bg-surface-overlay/60 text-fg' : 'text-fg-secondary'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate">{p.project_name}</div>
+                      <div className="mt-0.5 truncate text-3xs font-mono text-fg-faint">
+                        {p.report_count} reports · {p.required_complete}/{p.required_total} setup
+                      </div>
                     </div>
-                  </div>
-                  {isActive && <span className="text-2xs text-brand">✓</span>}
+                    {isActive && <span className="text-2xs text-brand">✓</span>}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <div className="border-t border-edge-subtle bg-surface-raised/60">
+            {/* "View project page" — shortcut into the project list/settings
+                surface so users can manage the project they just selected
+                without round-tripping through the sidebar. Closes the
+                dropdown on click so the navigation feels intentional. */}
+            <Link
+              to="/projects"
+              onClick={() => setOpen(false)}
+              className="flex w-full items-center justify-between gap-1.5 border-b border-edge-subtle px-2.5 py-1.5 text-left text-xs text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+            >
+              <span>View project page</span>
+              <span aria-hidden className="text-fg-faint">→</span>
+            </Link>
+            {creating ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!newName.trim() || submitting) return
+                  void createProject(newName)
+                }}
+                className="flex items-center gap-1.5 p-1.5"
+              >
+                <input
+                  ref={newNameInputRef}
+                  type="text"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation()
+                      setCreating(false)
+                    }
+                  }}
+                  placeholder="New project name"
+                  maxLength={120}
+                  className="flex-1 min-w-0 rounded-sm border border-edge bg-surface-root px-2 py-1 text-xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                  aria-label="New project name"
+                />
+                <button
+                  type="submit"
+                  disabled={!newName.trim() || submitting}
+                  className="rounded-sm bg-brand px-2 py-1 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+                >
+                  {submitting ? '…' : 'Create'}
                 </button>
-              </li>
-            )
-          })}
-        </ul>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-left text-xs text-brand hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:bg-surface-overlay"
+              >
+                <span aria-hidden className="text-sm leading-none">+</span>
+                <span>New project</span>
+              </button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

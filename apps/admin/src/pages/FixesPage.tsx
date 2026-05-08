@@ -8,6 +8,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
@@ -404,7 +405,7 @@ export function FixesPage() {
               ? 'your codebase index is empty, so the LLM has nothing to read.'
               : 'codebase indexing is off, so the LLM has nothing to read.'}
             {' '}
-            <a href="/integrations" className="underline hover:no-underline">Enable it now →</a>
+            <Link to="/integrations" className="underline hover:no-underline">Enable it now →</Link>
           </div>
         </div>
       )}

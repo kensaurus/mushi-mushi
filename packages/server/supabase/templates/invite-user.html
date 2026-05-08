@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<title>{{ if .Data.inviter_name }}{{ .Data.inviter_name }} invited you to {{ .Data.org_name }}{{ else }}You've been invited to a Mushi Mushi workspace{{ end }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f6f7f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0b1220;">
+<!-- Preheader (shown in inbox preview, hidden in body). Branches on
+     `.Data.reminder` so day-3 / day-6 reminders carry the right
+     urgency in the inbox without changing the subject line. -->
+<div style="display:none;font-size:1px;color:#f6f7f9;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;">{{ if .Data.reminder }}{{ if eq .Data.reminder 2.0 }}Your invite expires soon — tap to accept.{{ else }}Still want to join? Your invite is waiting.{{ end }}{{ else }}You have been invited. Tap to accept and set up your account.{{ end }}</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f6f7f9;">
+<tr><td align="center" style="padding:40px 20px;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;background:#ffffff;border:1px solid #e2e6ee;border-radius:14px;">
+
+<!-- Header: wordmark + tagline -->
+<tr><td style="padding:32px 32px 0 32px;">
+<p style="margin:0;font-family:'JetBrains Mono', 'SF Mono', ui-monospace, monospace;font-size:20px;font-weight:600;letter-spacing:-0.3px;color:#0b1220;" aria-label="Mushi Mushi">Mushi Mushi</p>
+<p style="margin:6px 0 0 0;font-size:12px;color:#6b7585;letter-spacing:0.04em;text-transform:uppercase;">The bug your monitoring can't see</p>
+</td></tr>
+
+<!-- Heading + body copy. Branches by reminder window so the inbox
+     framing matches the actual cadence (first send / day-3 nudge /
+     day-6 final). The outer guard `{{ if .Data.reminder }}` lets
+     the template degrade safely when `.Data.reminder` is absent —
+     a vanilla `{{ if eq .Data.reminder 1.0 }}` would explode
+     because `eq` cannot compare a missing field to a float. -->
+<tr><td style="padding:28px 32px 0 32px;">
+{{ if .Data.reminder }}{{ if eq .Data.reminder 2.0 }}
+<h1 style="margin:0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.4px;color:#0b1220;">Your invite to {{ .Data.org_name }} is about to expire.</h1>
+<p style="margin:8px 0 0 0;font-size:15px;line-height:22px;color:#3b4659;">{{ if .Data.inviter_name }}{{ .Data.inviter_name }}{{ else }}A teammate{{ end }} invited you to <strong>{{ .Data.org_name }}</strong> as a {{ .Data.role }}, and the link goes dead within the next day. Tap below if you still want to join.</p>
+{{ else }}
+<h1 style="margin:0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.4px;color:#0b1220;">Still keen on joining {{ .Data.org_name }}?</h1>
+<p style="margin:8px 0 0 0;font-size:15px;line-height:22px;color:#3b4659;">{{ if .Data.inviter_name }}{{ .Data.inviter_name }}{{ else }}A teammate{{ end }} invited you to <strong>{{ .Data.org_name }}</strong> as a {{ .Data.role }} a few days ago. The invite is still good — tap below to come on board.</p>
+{{ end }}{{ else if .Data.inviter_name }}
+<h1 style="margin:0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.4px;color:#0b1220;">{{ .Data.inviter_name }} invited you to {{ .Data.org_name }}.</h1>
+<p style="margin:8px 0 0 0;font-size:15px;line-height:22px;color:#3b4659;">You've been added as a {{ .Data.role }}. Tap the button below to preview the workspace and accept — you'll see who else is on the team before you commit.</p>
+{{ else }}
+<h1 style="margin:0;font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;font-size:24px;line-height:32px;font-weight:600;letter-spacing:-0.4px;color:#0b1220;">You've been added to {{ if .Data.org_name }}{{ .Data.org_name }}{{ else }}a Mushi Mushi workspace{{ end }}.</h1>
+<p style="margin:8px 0 0 0;font-size:15px;line-height:22px;color:#3b4659;">A teammate added you as a {{ if .Data.role }}{{ .Data.role }}{{ else }}member{{ end }} on Mushi Mushi. Tap below to preview the workspace and accept — you'll see who else is on the team before you commit.</p>
+{{ end }}
+</td></tr>
+
+<!-- Optional personal note. Rendered as a quote block when the
+     inviter typed one in the Members form. The italic + left
+     border + smaller-than-body sizing reads as "this came from a
+     human" rather than "another paragraph from the system". -->
+{{ if .Data.note }}
+<tr><td style="padding:18px 32px 0 32px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td style="border-left:3px solid #0ea5e9;background:#f0f9ff;padding:12px 14px;border-radius:0 10px 10px 0;">
+<p style="margin:0;font-style:italic;font-size:14px;line-height:20px;color:#0b1220;">&ldquo;{{ .Data.note }}&rdquo;</p>
+<p style="margin:6px 0 0 0;font-style:normal;font-size:11px;color:#6b7585;">— {{ if .Data.inviter_name }}{{ .Data.inviter_name }}{{ else }}your inviter{{ end }}</p>
+</td></tr>
+</table>
+</td></tr>
+{{ end }}
+
+<!-- Primary CTA. Always points at .ConfirmationURL because Supabase
+     needs to verify the email + grant a session before our preview
+     page (.Data.accept_url) can resolve the invite token. The CTA
+     label flexes by reminder window for inbox glanceability. -->
+<tr><td style="padding:24px 32px 0 32px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td bgcolor="#0ea5e9" style="border-radius:10px;">
+<a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">{{ if .Data.reminder }}{{ if eq .Data.reminder 2.0 }}Accept before it expires{{ else }}Accept the invite{{ end }}{{ else }}Preview &amp; accept{{ end }}</a>
+</td></tr></table>
+</td></tr>
+
+<!-- Plain-text fallback URL -->
+<tr><td style="padding:20px 32px 0 32px;">
+<p style="margin:0 0 6px 0;font-size:13px;line-height:20px;color:#6b7585;">If the button does not open, paste this address into your browser:</p>
+<p style="margin:0;font-size:12px;line-height:18px;color:#3b4659;word-break:break-all;"><a href="{{ .ConfirmationURL }}" style="color:#3b4659;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+</td></tr>
+
+<!-- Footer: why + support + origin -->
+<tr><td style="padding:24px 32px 28px 32px;border-top:1px solid #eef1f6;">
+<p style="margin:20px 0 12px 0;font-size:12px;line-height:18px;color:#6b7585;">You are receiving this because{{ if .Data.inviter_email }} <strong>{{ .Data.inviter_email }}</strong>{{ else }} a teammate{{ end }} added <strong>{{ .Email }}</strong> to {{ if .Data.org_name }}<strong>{{ .Data.org_name }}</strong>{{ else }}their Mushi Mushi workspace{{ end }}. If you don't recognise the sender, just ignore this email — no account is created until you accept.</p>
+<p style="margin:0;font-size:12px;line-height:18px;color:#6b7585;">Made in Tokyo. Questions? Write to <a href="mailto:kensaurus@gmail.com" style="color:#3b4659;text-decoration:underline;">kensaurus@gmail.com</a>.</p>
+</td></tr>
+
+</table>
+
+</td></tr></table>
+</body>
+</html>

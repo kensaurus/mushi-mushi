@@ -21,6 +21,9 @@ import {
   createPiiScrubber,
   createLogger,
   noopLogger,
+  createBreadcrumbBuffer,
+  type BreadcrumbBuffer,
+  normaliseThrown,
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
@@ -34,7 +37,7 @@ import {
   createDiscoveryCapture,
   type DiscoveryCapture,
 } from './capture';
-import { captureSentryContext } from './sentry';
+import { captureSentryContext, tagSentryScope } from './sentry';
 import { setupProactiveTriggers, type ProactiveTriggerCleanup } from './proactive-triggers';
 import { createProactiveManager, type ProactiveManager } from './proactive-manager';
 import { isLocalhostEndpoint } from './internal-requests';
@@ -99,6 +102,41 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   const offlineQueue = createOfflineQueue(bootstrapConfig.offline);
   const rateLimiter = createRateLimiter({ maxBurst: 10, refillRate: 1, refillIntervalMs: 5_000 });
   const piiScrubber = createPiiScrubber();
+
+  // Apply the same scrubber that runs over `description` to the
+  // observability surfaces (breadcrumbs, tags, sentry context) right
+  // before they leave the SDK. The buffer/sentry layers are kept
+  // pristine so `getBreadcrumbs()` returns the host's own values; this
+  // pass only mutates the snapshot that goes on the wire.
+  function scrubBreadcrumbsForWire<T extends { message?: string; data?: Record<string, unknown> }>(
+    crumbs: T[],
+  ): T[] {
+    return crumbs.map((c) => {
+      const next: T = { ...c };
+      if (typeof c.message === 'string') {
+        next.message = piiScrubber.scrub(c.message);
+      }
+      if (c.data && typeof c.data === 'object') {
+        const cleaned: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(c.data)) {
+          cleaned[k] = typeof v === 'string' ? piiScrubber.scrub(v) : v;
+        }
+        next.data = cleaned;
+      }
+      return next;
+    });
+  }
+  function scrubTagsForWire(
+    tags: Record<string, string | number | boolean> | undefined,
+  ): Record<string, string | number | boolean> | undefined {
+    if (!tags) return undefined;
+    const out: Record<string, string | number | boolean> = {};
+    for (const [k, v] of Object.entries(tags)) {
+      out[k] = typeof v === 'string' ? piiScrubber.scrub(v) : v;
+    }
+    return out;
+  }
+
   let consoleCap: ReturnType<typeof createConsoleCapture> | null = null;
   let networkCap: ReturnType<typeof createNetworkCapture> | null = null;
   let perfCap: ReturnType<typeof createPerformanceCapture> | null = null;
@@ -224,6 +262,28 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
   let runtimeConfigLoaded = false;
   let userInfo: { id: string; email?: string; name?: string } | null = null;
   const customMetadata: Record<string, unknown> = {};
+  // Sticky tags applied to every subsequent report. Cleared by
+  // `clearTag()` (single key) or `clearTag()` with no args (all keys).
+  // We coerce to scalar values at insert time so the wire format is
+  // already canonical when the report serialises.
+  const stickyTags: Record<string, string | number | boolean> = {};
+  // Breadcrumb ring buffer — Sentry-grade observability surface that
+  // works whether or not the host has Sentry installed. Auto-populated
+  // by SDK lifecycle events (`init` / `report:opened` / `report:sent`),
+  // route changes, console errors, and `[data-testid]` clicks. Hosts
+  // can also call `Mushi.addBreadcrumb()` directly.
+  const breadcrumbs: BreadcrumbBuffer = createBreadcrumbBuffer({ max: 50 });
+  breadcrumbs.add({
+    category: 'lifecycle',
+    level: 'info',
+    message: 'Mushi SDK init',
+    data: { projectId: bootstrapConfig.projectId, sdkVersion: MUSHI_SDK_VERSION },
+  });
+  // Auto-breadcrumb teardown handles. Stored at module scope so
+  // `destroy()` can detach them cleanly — leaks here would tail every
+  // re-init in HMR'd dev sessions.
+  let detachAutoBreadcrumbs: (() => void) | null = null;
+  detachAutoBreadcrumbs = installAutoBreadcrumbs(breadcrumbs);
   widget = new MushiWidget(bootstrapConfig.widget, {
     onSubmit: async ({ category, description, intent }) => {
       log.info('Report submitted', { category, intent });
@@ -457,6 +517,26 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     const consoleLogs = activeConfig.capture?.console === false ? undefined : consoleCap?.getEntries();
     const networkLogs = activeConfig.capture?.network === false ? undefined : networkCap?.getEntries();
 
+    // Snapshot breadcrumbs *before* we add the lifecycle "submitting"
+    // beat — we want the report's timeline to end with the user-action
+    // event, not with our own bookkeeping. We then add the submit
+    // breadcrumb so it shows up on the *next* report (typical pattern
+    // in production: a user files two reports in close succession,
+    // and the second carries a "previous report submitted" hint).
+    const reportBreadcrumbs = scrubBreadcrumbsForWire(breadcrumbs.getAll());
+    const stickyTagSnapshot = scrubTagsForWire(
+      Object.keys(stickyTags).length > 0 ? { ...stickyTags } : undefined,
+    );
+    const sentryCtxScrubbed = sentryCtx
+      ? {
+          ...sentryCtx,
+          ...(sentryCtx.breadcrumbs
+            ? { breadcrumbs: scrubBreadcrumbsForWire(sentryCtx.breadcrumbs) }
+            : {}),
+          ...(sentryCtx.tags ? { tags: scrubTagsForWire(sentryCtx.tags) } : {}),
+        }
+      : undefined;
+
     const report: MushiReport = {
       id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
       projectId: config.projectId,
@@ -482,10 +562,25 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       sdkPackage: MUSHI_SDK_PACKAGE,
       sdkVersion: MUSHI_SDK_VERSION,
       proactiveTrigger: pendingProactiveTrigger ?? undefined,
+      // Top-level Sentry-grade observability fields. Breadcrumbs are
+      // surfaced separately from `consoleLogs` because they're the
+      // higher-signal "what just happened" trail (vs. the high-volume
+      // raw console mirror), and the admin /reports drawer shows them
+      // in different panes.
+      ...(reportBreadcrumbs.length > 0 ? { breadcrumbs: reportBreadcrumbs } : {}),
+      ...(stickyTagSnapshot ? { tags: stickyTagSnapshot } : {}),
+      ...(sentryCtxScrubbed ? { sentryContext: sentryCtxScrubbed } : {}),
       sentryEventId: sentryCtx?.eventId,
       sentryReplayId: sentryCtx?.replayId,
       createdAt: new Date().toISOString(),
     };
+
+    breadcrumbs.add({
+      category: 'lifecycle',
+      level: 'info',
+      message: `Mushi report submitting (${category})`,
+      data: { reportId: report.id, category },
+    });
 
     if (config.integrations?.custom) {
       const builder = {
@@ -515,10 +610,34 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
+      breadcrumbs.add({
+        category: 'lifecycle',
+        level: 'info',
+        message: `Mushi report sent (${result.data?.reportId ?? report.id})`,
+      });
+      // Bidirectional Sentry linkage. After a successful submit we tag
+      // Sentry's current scope so any subsequent Sentry events show
+      // the Mushi correlation (`mushi.report_id` tag) and the issue
+      // page picks up a `mushi_report` context block. Wrapped in
+      // `try/catch` because Sentry's globals can be in a half-bootstrap
+      // state immediately after page load.
+      try {
+        if (config.sentry && result.data?.reportId) {
+          tagSentryScope(result.data.reportId);
+        }
+      } catch {
+        // Swallow — never break a successful submit because Sentry's
+        // scope API moved between point releases.
+      }
     } else {
       log.warn('Report failed, queuing for retry', { reportId: report.id, error: result.error });
       await offlineQueue.enqueue(report);
       emit('report:failed', { reportId: report.id, error: result.error });
+      breadcrumbs.add({
+        category: 'lifecycle',
+        level: 'warning',
+        message: `Mushi report queued for retry (${report.id})`,
+      });
     }
 
     pendingScreenshot = null;
@@ -607,6 +726,9 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       discoveryCap?.destroy();
       discoveryCap = null;
       offlineQueue.stopAutoSync();
+      detachAutoBreadcrumbs?.();
+      detachAutoBreadcrumbs = null;
+      breadcrumbs.clear();
       listeners.clear();
       instance = null;
       log.debug('Destroyed');
@@ -622,6 +744,29 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       }
       const description = piiScrubber.scrub(preFilter.truncate(input.description));
       const category = input.category ?? 'bug';
+      const sentryCtx = config.sentry ? captureSentryContext(config.sentry) : undefined;
+      const captureBreadcrumbs = scrubBreadcrumbsForWire(breadcrumbs.getAll());
+      // Sticky tags merge with per-call `input.tags` — call-site wins
+      // when both supply the same key. Keeps adapters that already
+      // pass per-event tags compatible while letting hosts set
+      // app-wide defaults via `setTag()`. We then run the same
+      // PII scrubber over string values so secrets a host accidentally
+      // shoved into a tag (e.g. `Mushi.setTag('email', user.email)`)
+      // never hit the wire.
+      const mergedTags = scrubTagsForWire(
+        Object.keys(stickyTags).length === 0 && !input.tags
+          ? undefined
+          : { ...stickyTags, ...(input.tags ?? {}) },
+      );
+      const sentryCtxScrubbed = sentryCtx
+        ? {
+            ...sentryCtx,
+            ...(sentryCtx.breadcrumbs
+              ? { breadcrumbs: scrubBreadcrumbsForWire(sentryCtx.breadcrumbs) }
+              : {}),
+            ...(sentryCtx.tags ? { tags: scrubTagsForWire(sentryCtx.tags) } : {}),
+          }
+        : undefined;
       const report: MushiReport = {
         id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
         projectId: config.projectId,
@@ -632,16 +777,20 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         metadata: {
           ...(input.metadata ?? {}),
           ...(userInfo ? { user: userInfo } : {}),
-          ...(input.tags ? { tags: input.tags } : {}),
           ...(input.error ? { error: input.error } : {}),
           ...(input.severity ? { severity: input.severity } : {}),
           ...(input.component ? { component: input.component } : {}),
           ...(input.source ? { source: input.source } : { source: 'captureEvent' }),
         },
+        ...(captureBreadcrumbs.length > 0 ? { breadcrumbs: captureBreadcrumbs } : {}),
+        ...(mergedTags && Object.keys(mergedTags).length > 0 ? { tags: mergedTags } : {}),
+        ...(sentryCtxScrubbed ? { sentryContext: sentryCtxScrubbed } : {}),
         sessionId: getSessionId(),
         reporterToken: getReporterToken(),
         sdkPackage: MUSHI_SDK_PACKAGE,
         sdkVersion: MUSHI_SDK_VERSION,
+        sentryEventId: sentryCtx?.eventId,
+        sentryReplayId: sentryCtx?.replayId,
         createdAt: new Date().toISOString(),
       };
       emit('report:submitted', { reportId: report.id });
@@ -653,11 +802,51 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       const res = await apiClient.submitReport(report);
       if (res.ok) {
         emit('report:sent', { reportId: res.data?.reportId });
+        try {
+          if (config.sentry && res.data?.reportId) tagSentryScope(res.data.reportId);
+        } catch {
+          // Swallow.
+        }
         return res.data?.reportId ?? null;
       }
       await offlineQueue.enqueue(report);
       emit('report:failed', { reportId: report.id, error: res.error });
       return null;
+    },
+
+    async captureException(error, options) {
+      const normalised = normaliseThrown(error);
+      // Drop a breadcrumb at the call site so this exception shows up
+      // in Mushi's own timeline even if the report itself is rate-limited
+      // or rejected by the pre-filter — losing the report shouldn't lose
+      // the trace.
+      breadcrumbs.add({
+        category: 'lifecycle',
+        level: 'error',
+        message: `Mushi.captureException(${normalised.name}): ${normalised.message}`,
+        ...(normalised.stack ? { data: { stack: normalised.stack.slice(0, 500) } } : {}),
+      });
+      const description =
+        options?.description?.trim() ||
+        `${normalised.name}: ${normalised.message}` ||
+        'Uncaught exception';
+      return sdk.captureEvent({
+        description,
+        category: options?.category ?? 'bug',
+        severity: options?.severity ?? 'high',
+        ...(options?.component ? { component: options.component } : {}),
+        ...(options?.tags ? { tags: options.tags } : {}),
+        source: options?.source ?? 'captureException',
+        error: {
+          name: normalised.name,
+          message: normalised.message,
+          ...(normalised.stack ? { stack: normalised.stack } : {}),
+        },
+        metadata: {
+          ...(options?.metadata ?? {}),
+          ...(normalised.cause ? { cause: normalised.cause } : {}),
+        },
+      });
     },
 
     identify(userId, traits) {
@@ -667,6 +856,43 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
           if (k !== 'email' && k !== 'name') customMetadata[`user.${k}`] = v;
         }
       }
+      breadcrumbs.add({
+        category: 'lifecycle',
+        level: 'info',
+        message: `Mushi.identify(${userId})`,
+      });
+    },
+
+    addBreadcrumb(crumb) {
+      breadcrumbs.add(crumb);
+    },
+
+    getBreadcrumbs() {
+      return breadcrumbs.getAll();
+    },
+
+    setTag(key, value) {
+      if (typeof key !== 'string' || key.length === 0) return;
+      stickyTags[key] = value;
+    },
+
+    setTags(tags) {
+      if (!tags || typeof tags !== 'object') return;
+      for (const [k, v] of Object.entries(tags)) {
+        if (typeof k === 'string' && k.length > 0) {
+          stickyTags[k] = v;
+        }
+      }
+    },
+
+    clearTag(key) {
+      if (typeof key === 'string' && key.length > 0) {
+        delete stickyTags[key];
+        return;
+      }
+      // No-arg variant: clear every sticky tag (used in test teardown
+      // and on app-level "logout" handlers).
+      for (const k of Object.keys(stickyTags)) delete stickyTags[k];
     },
   };
 
@@ -923,6 +1149,193 @@ function createNoopInstance(): MushiSDKInstance {
       instance = null;
     },
     captureEvent: async () => null,
+    captureException: async () => null,
     identify: () => {},
+    addBreadcrumb: () => {},
+    getBreadcrumbs: () => [],
+    setTag: () => {},
+    setTags: () => {},
+    clearTag: () => {},
   };
+}
+
+/**
+ * Auto-breadcrumb installer — attaches passive listeners that turn
+ * common host-app signals into Mushi breadcrumbs without the host
+ * lifting a finger.
+ *
+ *   - Route changes via `popstate` and the `history.pushState` /
+ *     `replaceState` patches that single-page apps already trigger.
+ *   - `console.error` and `console.warn` callsites — distinct from
+ *     the existing `console-capture` (which mirrors the *content* of
+ *     console for the report's `consoleLogs` array; breadcrumbs
+ *     capture only that an error happened, what file/line, and one
+ *     short message).
+ *   - `[data-testid]` clicks anywhere on the page — testids are the
+ *     same identifiers the v2 inventory + Triage LLM grounds against,
+ *     so a breadcrumb of `clicked checkout-submit` is dramatically
+ *     more useful for triage than `clicked button.btn-primary`.
+ *
+ * Returns a teardown closure that detaches every listener. We keep
+ * the closure in scope of `createInstance` so `Mushi.destroy()` can
+ * call it before re-init — without this, dev-mode HMR would tail a
+ * fresh listener stack on every reload.
+ */
+function installAutoBreadcrumbs(buffer: BreadcrumbBuffer): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const cleanups: Array<() => void> = [];
+
+  // 1) Route changes — covers SSR-hydrated SPAs (Next, Remix, SvelteKit)
+  // and old-school history-pushed apps. We patch the prototype methods
+  // because most SPA frameworks call them directly instead of dispatching
+  // an event the host could subscribe to.
+  try {
+    const dispatchRouteChange = (kind: 'pushState' | 'replaceState' | 'popstate') => {
+      buffer.add({
+        category: 'navigation',
+        level: 'info',
+        message: `${kind}: ${window.location.pathname}`,
+        data: { url: window.location.href, kind },
+      });
+    };
+    const onPop = () => dispatchRouteChange('popstate');
+    window.addEventListener('popstate', onPop, { passive: true });
+    cleanups.push(() => window.removeEventListener('popstate', onPop));
+
+    const origPush = window.history.pushState;
+    const origReplace = window.history.replaceState;
+    window.history.pushState = function patched(...args: Parameters<History['pushState']>) {
+      const ret = origPush.apply(this, args);
+      try {
+        dispatchRouteChange('pushState');
+      } catch {
+        // Swallow — never break navigation because the breadcrumb buffer
+        // mis-stringified an URL.
+      }
+      return ret;
+    };
+    window.history.replaceState = function patched(...args: Parameters<History['replaceState']>) {
+      const ret = origReplace.apply(this, args);
+      try {
+        dispatchRouteChange('replaceState');
+      } catch {
+        // Swallow.
+      }
+      return ret;
+    };
+    cleanups.push(() => {
+      window.history.pushState = origPush;
+      window.history.replaceState = origReplace;
+    });
+  } catch {
+    // History API unavailable (some sandboxed iframes) — skip silently.
+  }
+
+  // 2) `console.error` and `console.warn` — wrap *only* these two so
+  // we don't add overhead to `console.log` on the hot path. The
+  // `console-capture` module already mirrors content; this layer
+  // adds a "something went wrong" beat to the breadcrumb timeline.
+  try {
+    const origError = console.error;
+    const origWarn = console.warn;
+    console.error = function (...args: unknown[]) {
+      try {
+        buffer.add({
+          category: 'console',
+          level: 'error',
+          message: args.map(stringifyConsoleArg).join(' '),
+        });
+      } catch {
+        // Swallow.
+      }
+      return origError.apply(this, args as Parameters<typeof origError>);
+    };
+    console.warn = function (...args: unknown[]) {
+      try {
+        buffer.add({
+          category: 'console',
+          level: 'warning',
+          message: args.map(stringifyConsoleArg).join(' '),
+        });
+      } catch {
+        // Swallow.
+      }
+      return origWarn.apply(this, args as Parameters<typeof origWarn>);
+    };
+    cleanups.push(() => {
+      console.error = origError;
+      console.warn = origWarn;
+    });
+  } catch {
+    // Console patching can fail in locked-down environments — non-fatal.
+  }
+
+  // 3) `[data-testid]` clicks — capture the testid, the tag name, and
+  // the visible text (capped) so a breadcrumb of "clicked submit-cta
+  // — Buy now" tells the triage path what the user just touched
+  // without leaking arbitrary innerHTML.
+  try {
+    const onClick = (ev: MouseEvent) => {
+      try {
+        const target = ev.target;
+        if (!(target instanceof Element)) return;
+        let cur: Element | null = target;
+        let hops = 0;
+        while (cur && hops < 10) {
+          const tid = cur.getAttribute('data-testid');
+          if (tid) {
+            const text = (cur.textContent ?? '').trim().slice(0, 80);
+            buffer.add({
+              category: 'ui.click',
+              level: 'info',
+              message: `clicked ${tid}${text ? ` — ${text}` : ''}`,
+              data: { testid: tid, tag: cur.tagName.toLowerCase() },
+            });
+            return;
+          }
+          cur = cur.parentElement;
+          hops++;
+        }
+      } catch {
+        // Swallow — listener errors must never propagate.
+      }
+    };
+    document.addEventListener('click', onClick, { passive: true, capture: true });
+    cleanups.push(() => document.removeEventListener('click', onClick, true));
+  } catch {
+    // Swallow.
+  }
+
+  return () => {
+    for (const c of cleanups) {
+      try {
+        c();
+      } catch {
+        // Swallow.
+      }
+    }
+  };
+}
+
+/**
+ * Coerce arbitrary console arguments to a short string for breadcrumb
+ * messages. Errors get their `name + message`; objects get JSON-encoded
+ * with a 200-char cap; everything else is `String(...)` truncated to
+ * 200 chars. We never invoke a `toString` that throws — failures fall
+ * back to the type label.
+ */
+function stringifyConsoleArg(arg: unknown): string {
+  try {
+    if (arg instanceof Error) {
+      return `${arg.name}: ${arg.message}`;
+    }
+    if (typeof arg === 'object' && arg !== null) {
+      const json = JSON.stringify(arg);
+      return json.length > 200 ? `${json.slice(0, 200)}…` : json;
+    }
+    const s = String(arg);
+    return s.length > 200 ? `${s.slice(0, 200)}…` : s;
+  } catch {
+    return `[${typeof arg}]`;
+  }
 }

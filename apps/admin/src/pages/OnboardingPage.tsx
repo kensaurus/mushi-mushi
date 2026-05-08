@@ -13,7 +13,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn, Card, Input, PageHelp, ErrorAlert, ResultChip, type ResultChipTone } from '../components/ui'
+import { Btn, Card, Input, PageHelp, ErrorAlert, ResultChip, type ResultChipTone, CopyButton } from '../components/ui'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
@@ -147,7 +147,7 @@ export function OnboardingPage() {
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="space-y-6">
       <div className="overflow-hidden rounded-xl border border-edge bg-surface-raised p-5">
         <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
         <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
@@ -367,15 +367,12 @@ function KeyReveal({ apiKey, copied, onCopy }: { apiKey: ApiKey; copied: boolean
       <div className="bg-surface-raised border border-ok/30 rounded-sm px-3 py-2">
         <div className="flex items-center justify-between mb-1">
           <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">Your API Key</span>
-          <button
-            type="button"
-            onClick={onCopy}
-            aria-label={copied ? 'API key copied' : 'Copy API key to clipboard'}
-            className="inline-flex items-center gap-1 text-2xs font-medium text-brand hover:text-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface rounded-sm motion-safe:transition-colors motion-safe:active:scale-[0.97]"
-          >
-            <span aria-hidden="true">{copied ? '✓' : '⎘'}</span>
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
+          <CopyButton
+            onCopy={onCopy}
+            copied={copied}
+            label="Copy API key to clipboard"
+            copiedLabel="API key copied"
+          />
         </div>
         <code className="text-sm font-mono text-ok wrap-anywhere select-all">{apiKey.key}</code>
       </div>

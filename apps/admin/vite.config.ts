@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
 import path from 'node:path'
+import { readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 
 // Base path is environment-driven so the same build works for:
 //   - local dev      (VITE_BASE_PATH unset → "/")
@@ -12,6 +14,40 @@ import path from 'node:path'
 // redirects (`lib/auth.tsx`) already read `BASE_URL`, so no other code needs
 // to change when this flips.
 const basePath = process.env.VITE_BASE_PATH ?? '/'
+
+// Version + build provenance baked into the bundle so the in-app
+// VersionBadge can render the running admin version, the @mushi-mushi/web
+// SDK version, the git SHA, and the build date without a network round-trip.
+// Falls back gracefully when the source files or git aren't reachable so
+// the build never breaks in odd CI / sandbox environments.
+function readPkgVersion(relPath: string): string {
+  try {
+    const raw = readFileSync(path.resolve(__dirname, relPath), 'utf8')
+    return JSON.parse(raw).version ?? '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+function readGitSha(): string {
+  // Honour CI-injected SHAs first (GitHub Actions sets GITHUB_SHA), then a
+  // VITE_RELEASE override (used by Sentry release tagging), and finally fall
+  // back to a local `git rev-parse` so dev builds still show "abc1234".
+  const fromCi = process.env.GITHUB_SHA ?? process.env.VITE_RELEASE
+  if (fromCi) return fromCi.replace(/^[a-z]+@/i, '').slice(0, 7)
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: __dirname, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim()
+  } catch {
+    return 'dev'
+  }
+}
+
+const APP_VERSION = readPkgVersion('./package.json')
+const SDK_WEB_VERSION = readPkgVersion('../../packages/web/package.json')
+const SDK_REACT_VERSION = readPkgVersion('../../packages/react/package.json')
+const SERVER_VERSION = readPkgVersion('../../packages/server/package.json')
+const BUILD_SHA = readGitSha()
+const BUILD_DATE = new Date().toISOString().slice(0, 10)
 
 // Sentry sourcemap upload runs only when all three env vars are set. CI sets
 // them via GitHub Secrets; local dev leaves them unset so builds stay offline.
@@ -23,6 +59,14 @@ const sentryEnabled = Boolean(sentryAuthToken && sentryOrg && sentryProject)
 
 export default defineConfig({
   base: basePath,
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __SDK_WEB_VERSION__: JSON.stringify(SDK_WEB_VERSION),
+    __SDK_REACT_VERSION__: JSON.stringify(SDK_REACT_VERSION),
+    __SERVER_VERSION__: JSON.stringify(SERVER_VERSION),
+    __BUILD_SHA__: JSON.stringify(BUILD_SHA),
+    __BUILD_DATE__: JSON.stringify(BUILD_DATE),
+  },
   plugins: [
     react(),
     tailwindcss(),

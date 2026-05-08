@@ -39,6 +39,59 @@ export interface ReportTimelineEntry {
   payload: Record<string, unknown>
 }
 
+/**
+ * SDK-side breadcrumb shape, mirrors `MushiBreadcrumb` in `@mushi-mushi/core`.
+ * Server stores up to 100 entries per report on `reports.breadcrumbs`.
+ */
+export interface ReportBreadcrumb {
+  timestamp: number
+  category:
+    | 'navigation'
+    | 'ui.click'
+    | 'console'
+    | 'xhr'
+    | 'fetch'
+    | 'lifecycle'
+    | 'custom'
+    | string
+  level: 'debug' | 'info' | 'warning' | 'error' | string
+  message: string
+  data?: Record<string, unknown>
+}
+
+/**
+ * Subset of Sentry breadcrumb shape we keep on the report. Used by the
+ * dual-timeline UI to render Sentry-side events alongside Mushi-side
+ * ones. We deliberately keep the type loose because Sentry's breadcrumb
+ * structure varies between point releases and we only display what's
+ * present.
+ */
+export interface ReportSentryBreadcrumb {
+  timestamp?: number
+  category?: string
+  level?: string
+  message?: string
+  type?: string
+  data?: Record<string, unknown>
+}
+
+export interface ReportSentryContext {
+  sdk?: 'v7' | 'v8' | 'v9' | 'unknown'
+  eventId?: string
+  replayId?: string
+  traceId?: string
+  spanId?: string
+  transactionName?: string
+  release?: string
+  environment?: string
+  sessionId?: string
+  user?: { id?: string; email?: string; username?: string; ip_address?: string }
+  tags?: Record<string, string | number | boolean>
+  breadcrumbs?: ReportSentryBreadcrumb[]
+  /** Pre-built deeplink to Sentry's issue page when we can derive it. */
+  issueUrl?: string
+}
+
 export interface ReportJudgeEval {
   id: string
   judge_score: number | null
@@ -77,4 +130,24 @@ export interface ReportDetail {
   fix_attempts?: ReportFixAttempt[]
   /** Latest classification judge evaluation, if the judge has run. */
   judge_eval?: ReportJudgeEval | null
+  // 2026-05-07 SDK observability boost — these populate from the
+  // dedicated columns added in migration `20260507120000`.
+  breadcrumbs?: ReportBreadcrumb[] | null
+  tags?: Record<string, string | number | boolean> | null
+  sentry_event_id?: string | null
+  sentry_replay_id?: string | null
+  sentry_trace_id?: string | null
+  sentry_release?: string | null
+  sentry_environment?: string | null
+  sentry_issue_url?: string | null
+  /**
+   * Snapshot of the rich Sentry context the SDK captured at report
+   * time. Lives under `custom_metadata.sentry` on the row; surfaced
+   * to the detail page so it can render Sentry breadcrumbs alongside
+   * Mushi breadcrumbs.
+   */
+  custom_metadata?: {
+    sentry?: ReportSentryContext
+    [k: string]: unknown
+  } | null
 }

@@ -73,7 +73,7 @@ export function RoutingProviderCard({
               <Btn variant="ghost" onClick={onTogglePause}>
                 {existing.is_active ? 'Pause' : 'Resume'}
               </Btn>
-              <Btn variant="ghost" onClick={onDisconnect}>Disconnect</Btn>
+              <Btn variant="danger" onClick={onDisconnect}>Disconnect</Btn>
             </>
           )}
           <Btn

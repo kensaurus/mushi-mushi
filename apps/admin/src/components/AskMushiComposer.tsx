@@ -244,11 +244,21 @@ export function AskMushiComposer({
                       key={cmd.command}
                       value={cmd.command + ' ' + (cmd.aliases ?? []).join(' ')}
                       onSelect={() => acceptSlash(cmd)}
-                      className="cmdk-item"
+                      // Stacked 2-row layout — long commands like
+                      // `/draft-pr-summary` used to wrap mid-token in the
+                      // single-row flex layout. By giving each row its own
+                      // line (top: mono command + label, bottom: hint), no
+                      // single span ever has to share width with another
+                      // long token.
+                      className="cmdk-item !flex-col !items-stretch !gap-0.5"
                     >
-                      <span className="font-mono text-2xs text-brand">{cmd.command}</span>
-                      <span className="text-2xs text-fg-secondary">{cmd.label}</span>
-                      <span className="ml-auto text-3xs text-fg-faint truncate">{cmd.hint}</span>
+                      <div className="flex items-baseline gap-2 min-w-0">
+                        <span className="font-mono text-2xs text-brand shrink-0 whitespace-nowrap">
+                          {cmd.command}
+                        </span>
+                        <span className="text-2xs text-fg-secondary truncate">{cmd.label}</span>
+                      </div>
+                      <span className="text-3xs text-fg-faint leading-snug truncate">{cmd.hint}</span>
                     </Command.Item>
                   ))
                 : mentionItems.map((m) => (
@@ -256,11 +266,16 @@ export function AskMushiComposer({
                       key={`${m.kind}:${m.id}`}
                       value={`${m.kind}:${m.id} ${m.label} ${m.sublabel ?? ''}`}
                       onSelect={() => acceptMention(m)}
-                      className="cmdk-item"
+                      className="cmdk-item !flex-col !items-stretch !gap-0.5"
                     >
-                      <span className="font-mono text-2xs text-brand">{m.label}</span>
+                      <div className="flex items-baseline gap-2 min-w-0">
+                        <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0 whitespace-nowrap">
+                          {m.kind}
+                        </span>
+                        <span className="font-mono text-2xs text-brand truncate">{m.label}</span>
+                      </div>
                       {m.sublabel && (
-                        <span className="ml-auto text-3xs text-fg-faint truncate">{m.sublabel}</span>
+                        <span className="text-3xs text-fg-faint leading-snug truncate">{m.sublabel}</span>
                       )}
                     </Command.Item>
                   ))}

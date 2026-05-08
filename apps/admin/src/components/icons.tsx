@@ -369,3 +369,125 @@ export function IconGit(p: IconProps) {
     <path d="M4 7 C 7 7, 9 8, 10.4 8" />
   </>)
 }
+
+// Eye glyph for "View ..." action buttons. Pair with `title` /
+// `aria-label` for screen readers — the icon-only Btn drops the verbose
+// label so dense action columns (compliance evidence, queue items,
+// reports) breathe.
+export function IconEye(p: IconProps) {
+  return wrap(p, <>
+    <path d="M1.75 8C3.5 4.5 5.5 3 8 3s4.5 1.5 6.25 5C12.5 11.5 10.5 13 8 13s-4.5-1.5-6.25-5z" />
+    <circle cx="8" cy="8" r="2" />
+  </>)
+}
+
+// Action-column glyphs. All sized 16×16 to match the rest of the set,
+// stroke-only so they pick up `text-danger` / `text-fg-secondary` from
+// their parent <Btn>. Use icon-only with `title=` / `aria-label=` for
+// dense rows (Prompt Lab, Fine-tuning jobs, Compliance) so the action
+// column reads as a row of glyphs rather than a wall of words.
+export function IconTrash(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3 4.5h10" />
+    <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
+    <path d="M4.5 4.5l.6 8.2a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.2" />
+    <line x1="7" y1="7" x2="7" y2="11.5" />
+    <line x1="9" y1="7" x2="9" y2="11.5" />
+  </>)
+}
+
+export function IconPencil(p: IconProps) {
+  return wrap(p, <>
+    <path d="M11.5 2.5l2 2-7.5 7.5L3 13l1-3z" />
+    <line x1="10" y1="4" x2="12" y2="6" />
+  </>)
+}
+
+// Undo / reset glyph — curved arrow looping back to the left, the universal
+// "revert this change" icon. Used by inline-rename Reset buttons and by
+// "Undo" affordances in delete confirmation toasts. Stroke-only so it picks
+// up `text-fg-secondary` / `text-brand` from its parent <Btn>.
+export function IconUndo(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3.5 7.5h6.5a3 3 0 1 1 0 6H6" />
+    <polyline points="6,4.5 3.5,7 6,9.5" />
+  </>)
+}
+
+// Export / download arrow — outbound from a tray, the universal
+// "save / export to disk" glyph.
+export function IconExport(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 2.5v7" />
+    <polyline points="5,6 8,9.5 11,6" />
+    <path d="M3 11.5v1a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-1" />
+  </>)
+}
+
+// Lightning bolt — "activate / promote / make live". Used on Prompt Lab
+// to flip a candidate to 100 % traffic.
+export function IconBolt(p: IconProps) {
+  return wrap(p, <>
+    <path d="M9 1.5L3.5 9h3.5L7 14.5 12.5 7H9z" strokeLinejoin="round" />
+  </>)
+}
+
+// Sliders glyph for Traffic % (A/B split). Two horizontal tracks with
+// a knob each — reads as "adjust mix".
+export function IconSliders(p: IconProps) {
+  return wrap(p, <>
+    <line x1="2.5" y1="5" x2="13.5" y2="5" />
+    <line x1="2.5" y1="11" x2="13.5" y2="11" />
+    <circle cx="6" cy="5" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="11" r="1.6" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Diff glyph — two parallel lines with a small offset, evokes
+// "compare side-by-side". Used on Prompt Lab to diff against parent.
+export function IconDiff(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="5" cy="4" r="1.4" />
+    <circle cx="11" cy="12" r="1.4" />
+    <path d="M5 5.4v5.2" strokeDasharray="1.5 1.5" />
+    <path d="M11 4.4V8" />
+    <path d="M11 4.4 9 4.4" />
+    <path d="M11 4.4 13 4.4" />
+    <path d="M5 11.6 7 11.6" />
+    <path d="M5 11.6 3 11.6" />
+  </>)
+}
+
+// Shield-check glyph — "validated / passed". Used on Fine-tuning jobs
+// for the Validate action so success accuracy reads as a tick on a
+// shield, not just a verb.
+export function IconShieldCheck(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 1.5l5 1.7v4c0 3-2.2 5.3-5 6.3-2.8-1-5-3.3-5-6.3v-4z" />
+    <polyline points="5.5,8 7.2,9.5 10.5,6" />
+  </>)
+}
+
+// Refresh arrow — "resend / retry". Used on the Members page next to
+// each pending invitation so admins can re-trigger the auth email
+// without revoking + re-creating. Distinct from IconUndo (which is a
+// straight back-arrow) so the two never get confused side-by-side.
+export function IconResend(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2.5 8a5.5 5.5 0 0 1 9.4-3.9" />
+    <polyline points="11.5,1.5 12,4.1 9.4,4.6" />
+    <path d="M13.5 8a5.5 5.5 0 0 1-9.4 3.9" />
+    <polyline points="4.5,14.5 4,11.9 6.6,11.4" />
+  </>)
+}
+
+// Speech-bubble glyph — "personal note". Used as a tiny inline marker
+// on pending invitations whose inviter included a 280-char message,
+// so admins triaging the list can spot which invites are personalised
+// at a glance without opening each row.
+export function IconNote(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H7l-3 3v-3H3a1 1 0 0 1-1-1z" />
+  </>)
+}
+

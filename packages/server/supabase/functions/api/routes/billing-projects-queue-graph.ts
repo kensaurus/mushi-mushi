@@ -69,34 +69,73 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     periodStart.setUTCDate(1);
     periodStart.setUTCHours(0, 0, 0, 0);
 
+    // 30-day rolling window for the per-project sparkline. Anchored at midnight
+    // UTC of "today minus 29 days" so each rendered bucket is a complete UTC
+    // calendar day and the array is always exactly 30 entries long. We pick 30
+    // (rather than the calendar month) because the FE sparkline needs a stable
+    // domain — month-bounded series collapse to two points on day 2 of a new
+    // billing period, which makes the chart useless precisely when the user
+    // most wants to verify "what did I do over the last few weeks?".
+    const thirtyAgo = new Date();
+    thirtyAgo.setUTCHours(0, 0, 0, 0);
+    thirtyAgo.setUTCDate(thirtyAgo.getUTCDate() - 29);
+
     const projectIds = projects.map((p) => p.id);
-    const [{ data: subs }, { data: customers }, { data: usage }, { data: llmCosts }] =
-      await Promise.all([
-        db
-          .from('billing_subscriptions')
-          .select(
-            'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
-          )
-          .in('project_id', projectIds),
-        db
-          .from('billing_customers')
-          .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email')
-          .in('project_id', projectIds),
-        db
-          .from('usage_events')
-          .select('project_id, event_name, quantity, occurred_at')
-          .in('project_id', projectIds)
-          .gte('occurred_at', periodStart.toISOString()),
-        // §2: real LLM cost (COGS) for the current billing month so the
-        // Billing page can show "$ spent on LLM this month" alongside report
-        // quota. Reads the persisted cost_usd column written by telemetry.ts.
-        db
-          .from('llm_invocations')
-          .select('project_id, cost_usd')
-          .in('project_id', projectIds)
-          .gte('created_at', periodStart.toISOString())
-          .not('cost_usd', 'is', null),
-      ]);
+    const orgIds = Array.from(
+      new Set(projects.map((p) => p.organization_id).filter((x): x is string => Boolean(x))),
+    );
+    const [
+      { data: subs },
+      { data: customers },
+      { data: usage },
+      { data: usageSeries },
+      { data: llmCosts },
+      { data: orgs },
+    ] = await Promise.all([
+      db
+        .from('billing_subscriptions')
+        .select(
+          'project_id, organization_id, status, plan_id, stripe_price_id, current_period_start, current_period_end, cancel_at_period_end, overage_subscription_item_id',
+        )
+        .in('project_id', projectIds),
+      db
+        .from('billing_customers')
+        .select('project_id, organization_id, stripe_customer_id, default_payment_ok, email')
+        .in('project_id', projectIds),
+      db
+        .from('usage_events')
+        .select('project_id, event_name, quantity, occurred_at')
+        .in('project_id', projectIds)
+        .gte('occurred_at', periodStart.toISOString()),
+      // 30-day daily rollup of `reports_ingested` per project — drives the
+      // sparkline on each /billing card. Scoped to one event_name so we don't
+      // pull tens of thousands of classifier-token events for chatty projects.
+      db
+        .from('usage_events')
+        .select('project_id, quantity, occurred_at')
+        .in('project_id', projectIds)
+        .eq('event_name', 'reports_ingested')
+        .gte('occurred_at', thirtyAgo.toISOString()),
+      // §2: real LLM cost (COGS) for the current billing month so the
+      // Billing page can show "$ spent on LLM this month" alongside report
+      // quota. Reads the persisted cost_usd column written by telemetry.ts.
+      db
+        .from('llm_invocations')
+        .select('project_id, cost_usd')
+        .in('project_id', projectIds)
+        .gte('created_at', periodStart.toISOString())
+        .not('cost_usd', 'is', null),
+      // Pull org-level billing posture so projects whose org is on a
+      // complimentary plan (Mushi staff, sponsored, beta) render the right
+      // tier without a Stripe subscription row. The fallback hierarchy is:
+      // billing_subscriptions → org.plan_id (when complimentary) → 'hobby'.
+      orgIds.length > 0
+        ? db
+            .from('organizations')
+            .select('id, plan_id, billing_mode')
+            .in('id', orgIds)
+        : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
+    ]);
 
     // Pick the most recent active sub per project (a project may have a
     // canceled sub + a fresh active one; we always render the active one).
@@ -109,6 +148,11 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     }
     const customerByProject = new Map<string, any>();
     for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
+
+    // org_id → { plan_id, billing_mode } so the per-project loop can decide
+    // whether to honour the org-level complimentary tier.
+    const orgById = new Map<string, { plan_id: string; billing_mode: string }>();
+    for (const o of orgs ?? []) orgById.set(o.id, { plan_id: o.plan_id, billing_mode: o.billing_mode });
 
     const usageByProject = new Map<
       string,
@@ -134,6 +178,40 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       llmCostByProject.set(c.project_id, cur + Number(c.cost_usd));
     }
 
+    // Materialise the 30-day reports series per project. We pre-seed every
+    // project with a zero-filled 30-entry array (oldest → newest) so the FE
+    // can always render a stable sparkline domain — missing days become
+    // explicit zero columns rather than gaps that distort the trend line.
+    const dayKeys: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(thirtyAgo);
+      d.setUTCDate(thirtyAgo.getUTCDate() + i);
+      dayKeys.push(d.toISOString().slice(0, 10));
+    }
+    const seriesByProject = new Map<string, Map<string, number>>();
+    for (const pid of projectIds) {
+      const m = new Map<string, number>();
+      for (const k of dayKeys) m.set(k, 0);
+      seriesByProject.set(pid, m);
+    }
+    for (const u of usageSeries ?? []) {
+      const dayKey = String(u.occurred_at).slice(0, 10);
+      const bucket = seriesByProject.get(u.project_id);
+      if (!bucket) continue;
+      // Defensive: a stray event from an earlier rollover (timezone edge) gets
+      // dropped instead of crashing the loop. Bucket only the 30 known keys.
+      const cur = bucket.get(dayKey);
+      if (cur === undefined) continue;
+      bucket.set(dayKey, cur + Number(u.quantity));
+    }
+
+    // Synthetic period end for complimentary orgs — line up with the calendar
+    // month the rest of the billing UI uses so "Period ends in 3 weeks"
+    // reads sanely without ever referencing a Stripe period.
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+    const periodEndIso = periodEnd.toISOString();
+
     const items = await Promise.all(
       projects.map(async (p) => {
         const sub = subByProject.get(p.id) ?? null;
@@ -144,10 +222,45 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           fixesSucceeded: 0,
           tokens: 0,
         };
-        const planId =
-          sub && ['active', 'trialing', 'past_due'].includes(sub.status) ? sub.plan_id : 'hobby';
+        const orgInfo = p.organization_id ? orgById.get(p.organization_id) ?? null : null;
+        const isComplimentary = orgInfo?.billing_mode === 'complimentary';
+
+        // Resolution order:
+        //   1. real Stripe subscription (active/trialing/past_due)
+        //   2. complimentary org → org.plan_id wins (no Stripe needed)
+        //   3. fallback hobby
+        const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
+        const planId = subPlanActive
+          ? sub.plan_id
+          : isComplimentary
+            ? orgInfo!.plan_id
+            : 'hobby';
         const plan = await getPlan(planId);
         const limit = plan.included_reports_per_month;
+
+        // For complimentary orgs without a real Stripe subscription, synthesize
+        // a subscription view so the FE shows "Pro · active" (or whichever
+        // tier the org is comp'd at) with a coherent period window. The
+        // synthetic sub deliberately lacks Stripe ids so callers can detect
+        // it and skip Stripe API calls.
+        const effectiveSub = subPlanActive
+          ? sub
+          : isComplimentary && plan.id !== 'hobby'
+            ? {
+                project_id: p.id,
+                organization_id: p.organization_id ?? null,
+                status: 'active',
+                plan_id: plan.id,
+                stripe_price_id: null,
+                stripe_subscription_id: null,
+                current_period_start: periodStart.toISOString(),
+                current_period_end: periodEndIso,
+                cancel_at_period_end: false,
+                overage_subscription_item_id: null,
+                synthetic: true,
+              }
+            : sub;
+
         return {
           project_id: p.id,
           organization_id: p.organization_id ?? null,
@@ -163,16 +276,38 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
             retention_days: plan.retention_days,
             feature_flags: plan.feature_flags,
           },
-          subscription: sub,
+          subscription: effectiveSub,
           customer: cust,
+          // Surfaces the org-level posture so the FE can render the
+          // "Complimentary account" badge and hide checkout/manage CTAs.
+          billing_mode: orgInfo?.billing_mode ?? 'stripe',
           period_start: periodStart.toISOString(),
           usage: u,
+          // Last 30 daily buckets of `reports_ingested` for this project,
+          // oldest → newest. Drives the sparkline + "X reports / Y active days"
+          // caption in the FE so the user can sanity-check a surprising
+          // headline number ("why am I at 60k?") against the actual time
+          // distribution. Always exactly 30 entries; days with no events
+          // appear as `reports: 0` rather than gaps.
+          usage_series: {
+            days: dayKeys.map((day) => ({
+              day,
+              reports: seriesByProject.get(p.id)?.get(day) ?? 0,
+            })),
+          },
           // §2: actual LLM dollars spent this billing month, summed from
           // the persisted `llm_invocations.cost_usd` column. Rounded to four
           // decimals so a $0.0001 Haiku call is still visible.
           llm_cost_usd_this_month: Math.round((llmCostByProject.get(p.id) ?? 0) * 10000) / 10000,
           limit_reports: limit,
-          over_quota: limit !== null && u.reports >= limit && !plan.overage_price_lookup_key,
+          // Complimentary orgs never get rejected — they're paid for by Mushi
+          // even when they exceed quota. We still surface usage_pct so the FE
+          // can render the warn/danger UI; the gateway just stops issuing 402s.
+          over_quota:
+            !isComplimentary &&
+            limit !== null &&
+            u.reports >= limit &&
+            !plan.overage_price_lookup_key,
           // Used by the QuotaBanner to render at >=80% / >=100%.
           usage_pct: limit ? Math.round((u.reports / limit) * 100) : null,
         };
@@ -545,7 +680,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const [{ data: projectRows }, { data: memberships }] = await Promise.all([
       db
         .from('projects')
-        .select('id, name, slug, created_at, organization_id')
+        // `plan_tier` and `data_residency_region` are surfaced so the FE
+        // can render plan / region badges next to each project — both are
+        // already stored on the row but were never plumbed through, so
+        // ProjectsPage had no way to show "this project is on Pro, EU".
+        // Boost shipped 2026-05-07 along with the repo + codebase joins
+        // below.
+        .select('id, name, slug, created_at, organization_id, plan_tier, data_residency_region')
         .in('id', accessibleIds)
         .order('created_at', { ascending: false }),
       db
@@ -563,6 +704,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       slug: p.slug,
       created_at: p.created_at,
       organization_id: p.organization_id,
+      plan_tier: (p as { plan_tier?: string | null }).plan_tier ?? null,
+      data_residency_region:
+        (p as { data_residency_region?: string | null }).data_residency_region ?? null,
       // null for legacy owned-but-not-in-org rows; FE treats that as 'owner'.
       organization_role: p.organization_id ? roleByOrg.get(p.organization_id) ?? null : null,
     }));
@@ -583,15 +727,44 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
     const fourteenDaysAgo = new Date(Date.now() - 14 * 86_400_000).toISOString();
 
-    const [reportCounts, allKeys, members, latestReports, planBacklogs, doFlights, checkPending] =
-      await Promise.all([
+    // 30-day rollup window for the severity breakdown surfaced on the
+    // projects list. A month is enough to outweigh a single
+    // late-night spike but short enough to reflect "the current state of
+    // this project". Reusing this constant rather than re-deriving it
+    // inline so the FE help-copy ("last 30 days") and the SQL filter
+    // can never drift.
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+    const [
+      reportCounts,
+      allKeys,
+      members,
+      latestReports,
+      planBacklogs,
+      doFlights,
+      checkPending,
+      repos,
+      codebaseFileRows,
+      severityRows,
+    ] = await Promise.all([
         db
           .from('reports')
           .select('project_id', { count: 'exact', head: false })
           .in('project_id', projectIds),
+        // Pull `last_seen_*` per-key alongside the existing identity columns so
+        // ProjectsPage's SdkHealthSummary can render per-key connectivity
+        // status without a second round-trip. The same heartbeat columns power
+        // the dashboard onboarding checklist (see the dashboard route's
+        // setup_steps[id=sdk_installed].diagnostic). Missing on /projects was a
+        // discovery gap surfaced by the 2026-05-07 SDK integration audit:
+        // "I generated a key 4 days ago, why am I seeing 0 reports?" — the
+        // answer (`last_seen_at IS NULL`, key never connected) was already in
+        // the row, just never exposed where users look.
         db
           .from('project_api_keys')
-          .select('id, project_id, key_prefix, created_at, is_active, scopes, label')
+          .select(
+            'id, project_id, key_prefix, created_at, is_active, scopes, label, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
+          )
           .in('project_id', projectIds)
           .order('created_at', { ascending: false }),
         db.from('project_members').select('project_id, user_id, role').in('project_id', projectIds),
@@ -599,12 +772,25 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           projectIds.map((pid) =>
             db
               .from('reports')
-              .select('created_at')
+              // Pull the SDK identity columns alongside `created_at` so the FE
+              // can compare the project's most-recently-observed SDK version
+              // against the latest published version (joined below) and
+              // surface "outdated" / "deprecated" badges per row. Without
+              // this the ProjectsPage SDK install card had no way to tell
+              // a project was running 0.7 against a 0.9 catalog except by
+              // making the operator open the report and read the metadata
+              // by hand.
+              .select('created_at, sdk_package, sdk_version')
               .eq('project_id', pid)
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle()
-              .then((r) => ({ project_id: pid, created_at: r.data?.created_at ?? null })),
+              .then((r) => ({
+                project_id: pid,
+                created_at: r.data?.created_at ?? null,
+                sdk_package: (r.data as { sdk_package?: string | null } | null)?.sdk_package ?? null,
+                sdk_version: (r.data as { sdk_version?: string | null } | null)?.sdk_version ?? null,
+              })),
           ),
         ),
         db
@@ -623,6 +809,45 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
           .select('report_id, project_id, classification_agreed, created_at')
           .in('project_id', projectIds)
           .gte('created_at', fourteenDaysAgo),
+        // Repo connections for the "About this project" surface on
+        // ProjectsPage. We pull every connected repo (a project can
+        // legitimately wire up multiple) but the FE picks the primary
+        // one for the row chip and shows the full list in the
+        // configurator. `last_index_*` columns drive the freshness
+        // badge so users notice when their codebase index has gone
+        // stale (e.g. the OpenAI rate-limit case observed on glot-it
+        // 2026-05-07: indexing failed and there was no surface that
+        // told them).
+        db
+          .from('project_repos')
+          .select(
+            'id, project_id, repo_url, role, default_branch, is_primary, indexing_enabled, last_indexed_at, last_index_attempt_at, last_index_error, github_app_installation_id, created_at',
+          )
+          .in('project_id', projectIds)
+          .order('is_primary', { ascending: false })
+          .order('created_at', { ascending: true }),
+        // Codebase index footprint per project. Counts of indexed files
+        // are a real "is this thing wired up" signal — a project with
+        // an attached repo but zero indexed files is a project where
+        // codebase-aware features (RAG-augmented triage, fix
+        // suggestions, ontology mapping) silently degrade. We pull only
+        // the project_id column so the row count stays cheap; the
+        // aggregation happens in JS below.
+        db
+          .from('project_codebase_files')
+          .select('project_id')
+          .in('project_id', projectIds),
+        // Severity breakdown over the last 30 days, plus signal data
+        // for the new ProjectsPage chips: 7-day report trend (this
+        // 7d vs prior 7d) and "Sentry connected" detection (≥1
+        // report in 30d carries a Sentry trace id). All bucketed in
+        // JS — Postgres-side `group by` would need a fresh RPC and
+        // these series are tiny (≤ project_count × 30d × few KB).
+        db
+          .from('reports')
+          .select('project_id, severity, created_at, sentry_trace_id')
+          .in('project_id', projectIds)
+          .gte('created_at', thirtyDaysAgo),
       ]);
 
     const countMap: Record<string, number> = {};
@@ -640,6 +865,17 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         revoked: !k.is_active,
         scopes: (k as any).scopes ?? [],
         label: (k as any).label ?? null,
+        // Heartbeat columns — the SDK populates these on every authenticated
+        // request via apiKeyAuth. `null` on an active key === created but
+        // never used; a stale timestamp + a `last_seen_endpoint_host` that
+        // doesn't match this admin's host === SDK pointed at a different
+        // backend. Both diagnostics are rendered by SdkHealthSummary.
+        last_seen_at: (k as { last_seen_at?: string | null }).last_seen_at ?? null,
+        last_seen_origin: (k as { last_seen_origin?: string | null }).last_seen_origin ?? null,
+        last_seen_user_agent:
+          (k as { last_seen_user_agent?: string | null }).last_seen_user_agent ?? null,
+        last_seen_endpoint_host:
+          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
       });
     }
 
@@ -650,8 +886,57 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     }
 
     const lastReportMap: Record<string, string> = {};
+    // Per-project most-recently-observed SDK identity, drawn from the same
+    // single-row `latestReports` query as `lastReportMap`. We keep these as
+    // sibling maps (instead of nesting them on a single tuple) because the
+    // FE consumes them independently — `last_report_at` is a freshness
+    // signal, while `(sdk_package, sdk_version)` drives the outdated-SDK
+    // badge below.
+    const lastSdkPackageMap: Record<string, string | null> = {};
+    const lastSdkVersionMap: Record<string, string | null> = {};
     for (const r of latestReports) {
       if (r.created_at) lastReportMap[r.project_id] = r.created_at;
+      if (r.sdk_package) lastSdkPackageMap[r.project_id] = r.sdk_package;
+      if (r.sdk_version) lastSdkVersionMap[r.project_id] = r.sdk_version;
+    }
+
+    // Latest published version per @mushi-mushi/* package. Sourced from the
+    // `sdk_versions` catalogue (populated by the publish workflow — see
+    // `20260429000000_sdk_versions.sql`). One row per package, picking the
+    // most recently released version. The FE compares each project's
+    // last-seen `sdk_version` against this map to render "Up to date /
+    // Outdated / Deprecated" feedback in the project row.
+    //
+    // Done as a single query (not per-project) because the catalogue is
+    // tiny (one row per package) and shared across every row — a project
+    // running @mushi-mushi/web@0.7 is "outdated" the same way regardless of
+    // which org owns it.
+    const { data: sdkCatalogRows } = await db
+      .from('sdk_versions')
+      .select('package, version, deprecated, deprecation_message, released_at')
+      .order('released_at', { ascending: false });
+
+    interface LatestSdk {
+      version: string;
+      deprecated: boolean;
+      deprecation_message: string | null;
+      released_at: string;
+    }
+    const latestSdkVersions: Record<string, LatestSdk> = {};
+    for (const row of sdkCatalogRows ?? []) {
+      // First row per package wins (we ordered DESC by released_at). A
+      // newer release of the same package displaces the older entry only
+      // implicitly via this guard, so we never need a separate "is latest"
+      // flag in the catalogue.
+      if (!latestSdkVersions[row.package]) {
+        latestSdkVersions[row.package] = {
+          version: row.version,
+          deprecated: !!row.deprecated,
+          deprecation_message:
+            (row as { deprecation_message?: string | null }).deprecation_message ?? null,
+          released_at: row.released_at,
+        };
+      }
     }
 
     const planBacklogMap: Record<string, number> = {};
@@ -673,6 +958,77 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     for (const e of checkPending.data ?? []) {
       if (e.classification_agreed === false) {
         checkDisagreeMap[e.project_id] = (checkDisagreeMap[e.project_id] ?? 0) + 1;
+      }
+    }
+
+    // Repo rollups. The first row per project is the "primary" repo
+    // (Postgres ordering guarantees `is_primary DESC, created_at ASC`).
+    // Everything else is exposed as the `repos[]` list so the FE can
+    // surface "+2 more" without a second round-trip when a project has
+    // a monorepo + sister repos.
+    interface RepoRow {
+      id: string;
+      project_id: string;
+      repo_url: string | null;
+      role: string | null;
+      default_branch: string | null;
+      is_primary: boolean | null;
+      indexing_enabled: boolean | null;
+      last_indexed_at: string | null;
+      last_index_attempt_at: string | null;
+      last_index_error: string | null;
+      github_app_installation_id: number | null;
+      created_at: string;
+    }
+    const reposByProject: Record<string, RepoRow[]> = {};
+    for (const r of (repos.data ?? []) as RepoRow[]) {
+      if (!reposByProject[r.project_id]) reposByProject[r.project_id] = [];
+      reposByProject[r.project_id].push(r);
+    }
+
+    const codebaseFileCount: Record<string, number> = {};
+    for (const row of codebaseFileRows.data ?? []) {
+      codebaseFileCount[row.project_id] = (codebaseFileCount[row.project_id] ?? 0) + 1;
+    }
+
+    // Severity breakdown over `thirtyDaysAgo`. We accept any string for
+    // `severity` since the column is plain text — the FE collapses
+    // unknown values into an "other" bucket so a misclassified report
+    // never breaks the chip row.
+    //
+    // Same loop folds in two adjacent signals so we don't pay for
+    // re-iteration on a list that can carry 5–10K rows on a busy
+    // project: (a) Sentry-connected detection — true when ≥1 report
+    // in 30d carries a `sentry_trace_id`; (b) 7-day vs prior-7-day
+    // count for the trend arrow on the project row.
+    interface SeverityRow {
+      project_id: string;
+      severity: string | null;
+      created_at?: string | null;
+      sentry_trace_id?: string | null;
+    }
+    const severityByProject: Record<string, Record<string, number>> = {};
+    const sentryConnectedCount: Record<string, number> = {};
+    const last7Count: Record<string, number> = {};
+    const prev7Count: Record<string, number> = {};
+    const sevenDaysAgoMs = Date.now() - 7 * 86_400_000;
+    const fourteenDaysAgoMs = Date.now() - 14 * 86_400_000;
+    for (const r of (severityRows.data ?? []) as SeverityRow[]) {
+      const sev = (r.severity ?? 'unknown').toLowerCase();
+      if (!severityByProject[r.project_id]) severityByProject[r.project_id] = {};
+      severityByProject[r.project_id][sev] =
+        (severityByProject[r.project_id][sev] ?? 0) + 1;
+      if (r.sentry_trace_id) {
+        sentryConnectedCount[r.project_id] =
+          (sentryConnectedCount[r.project_id] ?? 0) + 1;
+      }
+      if (r.created_at) {
+        const tsMs = new Date(r.created_at).getTime();
+        if (tsMs >= sevenDaysAgoMs) {
+          last7Count[r.project_id] = (last7Count[r.project_id] ?? 0) + 1;
+        } else if (tsMs >= fourteenDaysAgoMs) {
+          prev7Count[r.project_id] = (prev7Count[r.project_id] ?? 0) + 1;
+        }
       }
     }
 
@@ -703,6 +1059,80 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         bottleneckStage = 'plan';
         bottleneckLabel = `${planCount} ${planCount === 1 ? 'report waiting' : 'reports waiting'} > 1h`;
       }
+      // SDK freshness — only meaningful when at least one report has
+      // landed (otherwise we have no version to compare against). The FE
+      // treats `sdk_status: 'unknown'` as "no data yet, don't paint a
+      // badge" so projects in their first 60 seconds don't blink red
+      // before the first ingest arrives.
+      const sdkPackage = lastSdkPackageMap[p.id] ?? null;
+      const sdkVersion = lastSdkVersionMap[p.id] ?? null;
+      const latestForPackage = sdkPackage ? latestSdkVersions[sdkPackage] ?? null : null;
+      let sdkStatus: 'up-to-date' | 'outdated' | 'deprecated' | 'unknown' = 'unknown';
+      if (sdkPackage && sdkVersion && latestForPackage) {
+        if (latestForPackage.deprecated) {
+          sdkStatus = 'deprecated';
+        } else if (sdkVersion === latestForPackage.version) {
+          sdkStatus = 'up-to-date';
+        } else {
+          sdkStatus = 'outdated';
+        }
+      }
+      // Repos for "About this project" surface. Primary first, others
+      // trailing. We expose `github_app_connected` as a boolean rather
+      // than the installation id so the FE can render a "Connected via
+      // GitHub App" badge without leaking the integer (which is mostly
+      // identifying for the install but not useful in the row chip).
+      const projectRepos = reposByProject[p.id] ?? [];
+      const repos = projectRepos.map((r) => ({
+        id: r.id,
+        repo_url: r.repo_url,
+        role: r.role,
+        default_branch: r.default_branch,
+        is_primary: !!r.is_primary,
+        indexing_enabled: !!r.indexing_enabled,
+        last_indexed_at: r.last_indexed_at,
+        last_index_attempt_at: r.last_index_attempt_at,
+        last_index_error: r.last_index_error,
+        github_app_connected: r.github_app_installation_id != null,
+      }));
+      const primaryRepo = repos[0] ?? null;
+
+      const indexedFileCount = codebaseFileCount[p.id] ?? 0;
+
+      // Severity buckets — rolled up to the four canonical buckets
+      // we use everywhere else (critical / major / minor / trivial)
+      // plus an `other` catch-all so misclassified rows don't get
+      // dropped silently.
+      const sevRaw = severityByProject[p.id] ?? {};
+      const severity_breakdown_30d = {
+        critical: sevRaw['critical'] ?? 0,
+        major: sevRaw['major'] ?? 0,
+        minor: sevRaw['minor'] ?? 0,
+        trivial: sevRaw['trivial'] ?? 0,
+        other:
+          Object.entries(sevRaw)
+            .filter(([k]) => !['critical', 'major', 'minor', 'trivial'].includes(k))
+            .reduce((acc, [, v]) => acc + v, 0),
+        total: Object.values(sevRaw).reduce((acc, v) => acc + v, 0),
+      };
+
+      const last7d = last7Count[p.id] ?? 0;
+      const prev7d = prev7Count[p.id] ?? 0;
+      // Trend: relative delta in count from last 7d vs the prior 7d.
+      // We expose direction + magnitude separately so the FE can pick
+      // a chip style without re-deriving thresholds. `flat` covers the
+      // small-noise case where both counts are tiny (≤1 each) — the
+      // signal isn't meaningful below that floor.
+      const trendDelta = last7d - prev7d;
+      let trendDirection: 'up' | 'down' | 'flat' = 'flat';
+      if (last7d <= 1 && prev7d <= 1) {
+        trendDirection = 'flat';
+      } else if (trendDelta > 0) {
+        trendDirection = 'up';
+      } else if (trendDelta < 0) {
+        trendDirection = 'down';
+      }
+      const sentryReports = sentryConnectedCount[p.id] ?? 0;
       return {
         ...p,
         report_count: countMap[p.id] ?? 0,
@@ -713,10 +1143,52 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         last_report_at: lastReportMap[p.id] ?? null,
         pdca_bottleneck: bottleneckStage,
         pdca_bottleneck_label: bottleneckLabel,
+        sdk_package: sdkPackage,
+        sdk_version: sdkVersion,
+        sdk_latest_version: latestForPackage?.version ?? null,
+        sdk_deprecation_message: latestForPackage?.deprecation_message ?? null,
+        sdk_status: sdkStatus,
+        primary_repo: primaryRepo,
+        repos,
+        indexed_file_count: indexedFileCount,
+        severity_breakdown_30d,
+        // 2026-05-07 SDK observability boost — surfaced on the projects
+        // list so the user can see "Sentry is wired up" + "trend is
+        // accelerating" without opening a single project.
+        sentry_connected: sentryReports > 0,
+        sentry_connected_reports_30d: sentryReports,
+        trend_7d: {
+          last7d,
+          prev7d,
+          delta: trendDelta,
+          direction: trendDirection,
+        },
       };
     });
 
-    return c.json({ ok: true, data: { projects: enriched } });
+    // The host that *this* admin response was served from. The frontend
+    // compares it to each key's `last_seen_endpoint_host` to detect the
+    // common mis-config "SDK is talking to a different backend" — usually
+    // a stale `NEXT_PUBLIC_MUSHI_API_ENDPOINT` left over from local dev,
+    // or a CI build that baked in a staging endpoint. Mirrors the dashboard
+    // route's adminHost capture (~line 513).
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null;
+      } catch {
+        return null;
+      }
+    })();
+
+    // Surface the latest-known SDK version per package alongside the
+    // enriched projects so the FE can render outdated-SDK feedback even
+    // for project rows that haven't ingested a report yet (the "install
+    // snippet" already shows a version — let the badge agree with the
+    // catalog instead of the SDK's own bundled metadata).
+    return c.json({
+      ok: true,
+      data: { projects: enriched, admin_host: adminHost, latest_sdk_versions: latestSdkVersions },
+    });
   });
 
   app.post('/v1/admin/projects', jwtAuth, async (c) => {
@@ -837,6 +1309,89 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       );
 
     return c.json({ ok: true, data: { id: data.id, slug } }, 201);
+  });
+
+  // Rename a project. Owner and admin in the project's org can change the
+  // display name; legacy ownerless-org projects fall back to `owner_id`.
+  // Slug is NOT mutable here on purpose — it shows up in shareable Reports
+  // / Settings deep-links, in the X-API-Key auth flow's audit trail, and
+  // in the type-the-slug delete confirmation. A cosmetic rename should
+  // never break those. If we ever need slug edits, ship a separate
+  // explicit "Change project handle" flow that owners only can use.
+  app.patch('/v1/admin/projects/:id', jwtAuth, async (c) => {
+    const projectId = c.req.param('id');
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    if (!UUID_RE.test(projectId)) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_PROJECT_ID', message: 'Project id must be a UUID' } },
+        400,
+      );
+    }
+
+    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    if (name.length < 1 || name.length > 120) {
+      return c.json(
+        { ok: false, error: { code: 'BAD_NAME', message: 'Name must be 1-120 characters.' } },
+        400,
+      );
+    }
+
+    const { data: project, error: projectErr } = await db
+      .from('projects')
+      .select('id, name, slug, organization_id, owner_id')
+      .eq('id', projectId)
+      .maybeSingle();
+    if (projectErr) return dbError(c, projectErr);
+    if (!project) {
+      return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Project not found' } }, 404);
+    }
+
+    // Same authz tiers as DELETE: org owner/admin OR legacy direct owner.
+    let allowed = false;
+    if (project.organization_id) {
+      const { data: membership } = await db
+        .from('organization_members')
+        .select('role')
+        .eq('organization_id', project.organization_id)
+        .eq('user_id', userId)
+        .maybeSingle();
+      const role = membership?.role ?? null;
+      allowed = role === 'owner' || role === 'admin';
+    } else if (project.owner_id === userId) {
+      allowed = true;
+    }
+    if (!allowed) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'FORBIDDEN',
+            message: 'Only org owners or admins can rename a project',
+          },
+        },
+        403,
+      );
+    }
+
+    const { data: updated, error: updateErr } = await db
+      .from('projects')
+      .update({ name, updated_at: new Date().toISOString() })
+      .eq('id', projectId)
+      .select('id, name, slug')
+      .single();
+    if (updateErr || !updated) {
+      return dbError(c, updateErr ?? { message: 'project_update_failed' });
+    }
+
+    await logAudit(db, projectId, userId, 'settings.updated', 'project', projectId, {
+      previousName: project.name,
+      name,
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { project: updated } });
   });
 
   // Permanently deletes a project. All FKs to `projects.id` use ON DELETE

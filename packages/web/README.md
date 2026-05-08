@@ -27,6 +27,8 @@ Browser SDK for Mushi Mushi — embeddable bug reporting widget with Shadow DOM 
 - **Repro timeline** (0.10+) — auto-captures route changes, clicks, and SDK lifecycle into a normalised `MushiReport.timeline`; pair with `Mushi.setScreen({ name, route, feature })` for screen-level grouping in the admin
 - **Two-way replies** (0.11+) — the panel ships a "Your reports" view that polls comments authored by the dev team and lets the reporter reply, all signed with HMAC against the public API key (no auth user required)
 - **Passive inventory discovery** (0.12+) — opt-in `capture.discoverInventory` ships throttled, PII-free observations (route template, page title, `[data-testid]` values, recent fetch paths, query-param **keys** only, sha256 of user/session id) to `POST /v1/sdk/discovery`. The Mushi server aggregates them into a 30-day `discovery_observed_inventory` view and Claude Sonnet drafts a first-pass `inventory.yaml` proposal you can accept on `/inventory ▸ Discovery`. See `MushiDiscoverInventoryConfig` in [`@mushi-mushi/core`](../core)
+- **SDK observability** (1.0+) — Sentry-style breadcrumb buffer, sticky tags, and a structured `Mushi.captureException(err)` that auto-attaches them. `installAutoBreadcrumbs()` ships route changes, `console.error/warn`, and `[data-testid]` clicks for free. PII is scrubbed from breadcrumb messages and tag string values at report-snapshot time, before anything leaves the browser
+- **Sentry handshake v2** (1.0+) — auto-detects `@sentry/browser` v7 / v8 / v9 and captures the full active scope (`eventId`, `replayId`, `traceId`, `spanId`, `transaction`, `release`, `environment`, `user`, tags, breadcrumbs, issue URL) into `MushiReport.sentryContext`. Tags every Sentry event with `mushi.report_id`, so the admin's report drawer can deep-link `Open in Sentry` and Sentry's issue page can deep-link back into Mushi
 - **SDK identity & freshness** (0.8+) — every report ships `sdkPackage` + `sdkVersion`; the widget polls `/v1/sdk/latest-version` and surfaces an outdated banner (configurable via `widget.outdatedBanner`)
 - **Self-noise filters** (0.7.1+) — internal Mushi requests are tagged with `X-Mushi-Internal` and excluded from network capture + `apiCascade`; configurable `capture.ignoreUrls` and `proactive.apiCascade.ignoreUrls` for host-app endpoints you also don't want counted
 - **`Mushi.diagnose()`** (0.7.1+) — one-call CSP / runtime-config / capture / widget health check (also runs without an init for pre-install smoke tests)
@@ -262,6 +264,54 @@ The SDK auto-records `route` (initial + `pushState` / `popstate` / `hashchange`)
 ring buffer. Submissions ship the trail as `MushiReport.timeline` and the admin
 console renders it as a chronological "what happened before the report" card on
 `/reports/:id`.
+
+### Power-user APIs (1.0+)
+
+Once `Mushi.init()` has resolved (cloud or self-hosted) the returned instance
+exposes a Sentry-style observability surface that ships on every subsequent
+report — without you having to plumb it through the report payload yourself:
+
+```typescript
+const mushi = Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
+
+// Identify the active reporter (also sent to Sentry if @sentry/browser is loaded).
+mushi.identify({ id: 'usr_42', email: 'aya@example.com', segment: 'beta' });
+
+// Sticky scalar tags. Up to 64 keys; values are string | number | boolean.
+mushi.setTag('feature', 'checkout-v2');
+mushi.setTags({ plan: 'pro', region: 'apac', experiment: 'B' });
+mushi.clearTag('experiment');
+
+// Manual breadcrumbs — route changes / console.error / [data-testid] clicks
+// are captured automatically by `installAutoBreadcrumbs`.
+mushi.addBreadcrumb({
+  category: 'business',
+  level: 'info',
+  message: 'cart.checkout_started',
+  data: { itemCount: 3, currency: 'JPY' },
+});
+
+// Structured exception capture. Accepts Error, string, plain object, null,
+// or undefined — anything `try { } catch (e) { }` can land on. The SDK
+// normalises the throw, attaches the breadcrumb buffer + sticky tags +
+// Sentry context, and submits as a `bug` report.
+try {
+  await runCheckout();
+} catch (err) {
+  mushi.captureException(err, {
+    level: 'error',
+    tags: { surface: 'checkout' },
+    extras: { orderId: 'ord_123' },
+  });
+}
+```
+
+The dedicated server columns `reports.breadcrumbs` (jsonb, GIN-indexed),
+`reports.tags` (jsonb, GIN-indexed), and `reports.sentry_trace_id` /
+`sentry_release` / `sentry_environment` (text, btree-indexed) make the
+admin's `/reports` page filterable by `tags @> '{feature: checkout-v2}'`,
+`?trace=…`, `?release=…`, `?sentryEnv=…` in O(index-lookup) instead of an
+O(full-scan) traversal of `custom_metadata`.
 
 ### Two-way replies (Your reports)
 

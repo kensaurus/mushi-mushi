@@ -1,11 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
-import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState, Input, SelectField } from '../components/ui'
+import {
+  PageHeader,
+  PageHelp,
+  Card,
+  Btn,
+  ErrorAlert,
+  EmptyState,
+  Input,
+  SelectField,
+  FilterChip,
+  type FilterChipTone,
+} from '../components/ui'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
+import { Modal } from '../components/Modal'
+import { PromptDialog } from '../components/ConfirmDialog'
+import { IconEye } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -32,6 +47,8 @@ interface Dsar {
   subject_id: string | null
   status: 'pending' | 'in_progress' | 'completed' | 'rejected'
   fulfilled_at: string | null
+  rejection_reason: string | null
+  evidence_url: string | null
   notes: string | null
   created_at: string
 }
@@ -60,6 +77,61 @@ const STATUS_CHIP: Record<Evidence['status'], string> = {
   fail: 'bg-danger/15 text-danger border border-danger/30',
 }
 
+const DSAR_STATUS_CHIP: Record<Dsar['status'], string> = {
+  pending: 'bg-warn/15 text-warn border border-warn/30',
+  in_progress: 'bg-info/15 text-info border border-info/30',
+  completed: 'bg-ok/15 text-ok border border-ok/30',
+  rejected: 'bg-fg-faint/20 text-fg-muted border border-edge-subtle',
+}
+
+/**
+ * Severity-led filter chips. The page reads `?status=` from the URL so
+ * deep links from the dashboard hero (e.g. `/compliance?status=open`) and
+ * the Next-Best-Action CTA actually land on a filtered view rather than
+ * the firehose. The chips are stable identifiers — never change without
+ * also updating useNextBestAction.ts.
+ */
+type ComplianceFilter = 'all' | 'open' | 'fail' | 'warn' | 'legal_hold'
+const FILTER_VALUES: ComplianceFilter[] = ['all', 'open', 'fail', 'warn', 'legal_hold']
+function parseFilter(raw: string | null): ComplianceFilter {
+  return FILTER_VALUES.includes(raw as ComplianceFilter) ? (raw as ComplianceFilter) : 'all'
+}
+
+const FILTER_TONES: Record<ComplianceFilter, FilterChipTone> = {
+  all: 'default',
+  open: 'warn',
+  fail: 'danger',
+  warn: 'warn',
+  legal_hold: 'info',
+}
+
+const FILTER_LABELS: Record<ComplianceFilter, string> = {
+  all: 'All',
+  open: 'Open',
+  fail: 'Failing',
+  warn: 'At risk',
+  legal_hold: 'Legal hold',
+}
+
+const FILTER_HINTS: Record<ComplianceFilter, string> = {
+  all: 'Show every section — controls, DSARs, retention, residency.',
+  open: 'Failing or warning controls plus pending / in-progress DSARs.',
+  fail: 'Only controls failing evidence and DSARs overdue past 21 days.',
+  warn: 'Controls flagged with warnings — investigate before they escalate.',
+  legal_hold: 'Projects placed on legal hold — retention sweeps are paused.',
+}
+
+const GDPR_SLA_DAYS = 30
+
+function dsarIsOpen(d: Dsar): boolean {
+  return d.status !== 'completed' && d.status !== 'rejected'
+}
+
+function daysSince(iso: string): number {
+  const ms = Date.now() - new Date(iso).getTime()
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)))
+}
+
 export function CompliancePage() {
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
@@ -72,10 +144,10 @@ export function CompliancePage() {
     '/v1/admin/residency',
   )
 
-  const policies = policiesQuery.data?.policies ?? []
-  const dsars = dsarsQuery.data?.requests ?? []
-  const evidence = evidenceQuery.data?.evidence ?? []
-  const residency = residencyQuery.data?.projects ?? []
+  const policies = useMemo(() => policiesQuery.data?.policies ?? [], [policiesQuery.data])
+  const dsars = useMemo(() => dsarsQuery.data?.requests ?? [], [dsarsQuery.data])
+  const evidence = useMemo(() => evidenceQuery.data?.evidence ?? [], [evidenceQuery.data])
+  const residency = useMemo(() => residencyQuery.data?.projects ?? [], [residencyQuery.data])
   const currentRegion = residencyQuery.data?.currentRegion ?? 'us'
 
   const merged = useMergedErrors([
@@ -93,8 +165,32 @@ export function CompliancePage() {
     residencyQuery.reload()
   }, [policiesQuery, dsarsQuery, evidenceQuery, residencyQuery])
 
+  // Project name resolution. We piggy-back on the residency endpoint which
+  // returns id + name for every owned project — saves a second round-trip
+  // just to label DSAR/evidence rows.
+  const projectNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const p of residency) map.set(p.id, p.name)
+    return map
+  }, [residency])
+
+  const [searchParams, setSearchParams] = useSearchParams()
+  const filter = parseFilter(searchParams.get('status'))
+  const setFilter = useCallback(
+    (next: ComplianceFilter) => {
+      const params = new URLSearchParams(searchParams)
+      if (next === 'all') params.delete('status')
+      else params.set('status', next)
+      setSearchParams(params, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
   const [refreshing, setRefreshing] = useState(false)
   const [filing, setFiling] = useState(false)
+  const [payloadModalEvidence, setPayloadModalEvidence] = useState<Evidence | null>(null)
+  const [rejectingDsar, setRejectingDsar] = useState<Dsar | null>(null)
+  const [rejectingBusy, setRejectingBusy] = useState(false)
   const [dsarForm, setDsarForm] = useState<{
     requestType: Dsar['request_type']
     subjectEmail: string
@@ -121,6 +217,10 @@ export function CompliancePage() {
     reloadAll()
   }
 
+  // De-duplicate evidence rows so we only render the latest snapshot per
+  // (project, control). A non-trivial DB can hold weeks of history under
+  // the same control id; rendering all of them on this page would drown
+  // the auditor in noise. Sorted by control then project for stable scan.
   const latestEvidenceByControl = useMemo(() => {
     const map = new Map<string, Evidence>()
     for (const ev of evidence) {
@@ -128,9 +228,13 @@ export function CompliancePage() {
       const existing = map.get(key)
       if (!existing || existing.generated_at < ev.generated_at) map.set(key, ev)
     }
-    return [...map.values()].sort((a, b) =>
-      a.control.localeCompare(b.control) || a.project_id.localeCompare(b.project_id),
-    )
+    // Sort fail → warn → pass so the most actionable rows scan first.
+    const STATUS_RANK: Record<Evidence['status'], number> = { fail: 0, warn: 1, pass: 2 }
+    return [...map.values()].sort((a, b) => {
+      const r = STATUS_RANK[a.status] - STATUS_RANK[b.status]
+      if (r !== 0) return r
+      return a.control.localeCompare(b.control) || a.project_id.localeCompare(b.project_id)
+    })
   }, [evidence])
 
   const refreshEvidence = async () => {
@@ -161,17 +265,34 @@ export function CompliancePage() {
     reloadAll()
   }
 
-  const setDsarStatus = async (id: string, status: Dsar['status']) => {
+  const setDsarStatus = async (
+    id: string,
+    status: Dsar['status'],
+    extra: { rejection_reason?: string } = {},
+  ) => {
     const res = await apiFetch(`/v1/admin/compliance/dsars/${id}`, {
       method: 'PATCH',
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, ...extra }),
     })
     if (!res.ok) {
       toast.error('Could not update DSAR', res.error?.message)
+      return false
+    }
+    toast.success(`DSAR marked ${status.replace('_', ' ')}`)
+    dsarsQuery.reload()
+    return true
+  }
+
+  const confirmRejection = async (reason: string) => {
+    if (!rejectingDsar) return
+    if (!reason) {
+      toast.error('A rejection reason is required for the audit trail')
       return
     }
-    toast.success(`DSAR marked ${status}`)
-    dsarsQuery.reload()
+    setRejectingBusy(true)
+    const ok = await setDsarStatus(rejectingDsar.id, 'rejected', { rejection_reason: reason })
+    setRejectingBusy(false)
+    if (ok) setRejectingDsar(null)
   }
 
   const fileDsar = async () => {
@@ -184,8 +305,6 @@ export function CompliancePage() {
       return
     }
     setFiling(true)
-    // Backend expects snake_case + explicit projectId.
-    // the previous camelCase body produced a persistent 400 from the validator.
     const res = await apiFetch('/v1/admin/compliance/dsars', {
       method: 'POST',
       body: JSON.stringify({
@@ -206,27 +325,73 @@ export function CompliancePage() {
     dsarsQuery.reload()
   }
 
-  // IA-4 (Wave S, 2026-04-23): compute hero inputs up front so we can
-  // feed both the PageHero "Decide / Act / Verify" tiles and the compact
-  // PageActionBar from the same derived state. Keeping the derivations
-  // here (rather than in the JSX) avoids useNextBestAction being invoked
-  // conditionally and keeps Rules of Hooks happy when the hero renders.
-  const openControlCount = dsars.filter(
-    (d) => d.status !== 'completed' && d.status !== 'rejected',
-  ).length
+  // ── Derivations used by the hero, the chip rail, and the cards ──────────
   const failEvidenceCount = latestEvidenceByControl.filter((e) => e.status === 'fail').length
   const warnEvidenceCount = latestEvidenceByControl.filter((e) => e.status === 'warn').length
+  const openDsars = useMemo(() => dsars.filter(dsarIsOpen), [dsars])
+  const overdueDsars = useMemo(
+    () => openDsars.filter((d) => daysSince(d.created_at) >= GDPR_SLA_DAYS - 9),
+    [openDsars],
+  )
+  const legalHoldPolicies = useMemo(() => policies.filter((p) => p.legal_hold), [policies])
   const latestEvidenceTs = latestEvidenceByControl.reduce<string | null>(
     (acc, e) => (!acc || e.generated_at > acc ? e.generated_at : acc),
     null,
   )
+
+  // Counts shown next to each chip — these read live from the *unfiltered*
+  // server data so the user always knows how much work is hiding behind a
+  // chip before they click.
+  const filterCounts: Record<ComplianceFilter, number | null> = {
+    all: null,
+    open: openDsars.length + failEvidenceCount + warnEvidenceCount,
+    fail: failEvidenceCount + overdueDsars.length,
+    warn: warnEvidenceCount,
+    legal_hold: legalHoldPolicies.length,
+  }
+
+  // Per-card row filtering. We split the predicates per section so a single
+  // chip can reshape the page without each table reaching for its own copy
+  // of the rules.
+  const visibleEvidence = useMemo(() => {
+    if (filter === 'fail') return latestEvidenceByControl.filter((e) => e.status === 'fail')
+    if (filter === 'warn') return latestEvidenceByControl.filter((e) => e.status === 'warn')
+    if (filter === 'open') return latestEvidenceByControl.filter((e) => e.status !== 'pass')
+    if (filter === 'legal_hold') return [] // not relevant for legal-hold view
+    return latestEvidenceByControl
+  }, [filter, latestEvidenceByControl])
+
+  const visibleDsars = useMemo(() => {
+    if (filter === 'fail') return overdueDsars
+    if (filter === 'warn')
+      return openDsars.filter((d) => {
+        const age = daysSince(d.created_at)
+        return age >= 14 && age < GDPR_SLA_DAYS - 9
+      })
+    if (filter === 'open') return openDsars
+    if (filter === 'legal_hold') return []
+    return dsars
+  }, [filter, dsars, openDsars, overdueDsars])
+
+  const visiblePolicies = useMemo(() => {
+    if (filter === 'legal_hold') return legalHoldPolicies
+    if (filter === 'fail' || filter === 'warn' || filter === 'open') return []
+    return policies
+  }, [filter, policies, legalHoldPolicies])
+
+  const showResidencyCard = filter === 'all'
+
   const complianceAction = useNextBestAction({
     scope: 'compliance',
-    openControls: openControlCount,
+    openControls: openDsars.length,
     nextReviewInDays: null,
   })
   const complianceSeverity: 'ok' | 'warn' | 'crit' =
-    failEvidenceCount > 0 ? 'crit' : warnEvidenceCount > 0 || openControlCount > 0 ? 'warn' : 'ok'
+    failEvidenceCount > 0 || overdueDsars.length > 0
+      ? 'crit'
+      : warnEvidenceCount > 0 || openDsars.length > 0
+        ? 'warn'
+        : 'ok'
 
   return (
     <div className="space-y-3">
@@ -252,27 +417,33 @@ export function CompliancePage() {
           label:
             failEvidenceCount > 0
               ? `${failEvidenceCount} control${failEvidenceCount === 1 ? '' : 's'} failing evidence`
-              : warnEvidenceCount > 0
-                ? `${warnEvidenceCount} WARN${warnEvidenceCount === 1 ? '' : 's'} to triage`
-                : openControlCount > 0
-                  ? `${openControlCount} open DSAR${openControlCount === 1 ? '' : 's'}`
-                  : 'Compliant',
+              : overdueDsars.length > 0
+                ? `${overdueDsars.length} DSAR${overdueDsars.length === 1 ? '' : 's'} approaching 30-day SLA`
+                : warnEvidenceCount > 0
+                  ? `${warnEvidenceCount} WARN${warnEvidenceCount === 1 ? '' : 's'} to triage`
+                  : openDsars.length > 0
+                    ? `${openDsars.length} open DSAR${openDsars.length === 1 ? '' : 's'}`
+                    : 'Compliant',
           metric:
             failEvidenceCount > 0
               ? `${failEvidenceCount} fail`
-              : warnEvidenceCount > 0
-                ? `${warnEvidenceCount} warn`
-                : openControlCount > 0
-                  ? `${openControlCount} open`
-                  : `${latestEvidenceByControl.length} green`,
+              : overdueDsars.length > 0
+                ? `${overdueDsars.length} overdue`
+                : warnEvidenceCount > 0
+                  ? `${warnEvidenceCount} warn`
+                  : openDsars.length > 0
+                    ? `${openDsars.length} open`
+                    : `${latestEvidenceByControl.length} green`,
           summary:
             failEvidenceCount > 0
               ? 'One or more controls missed their evidence check — remediate before the next audit.'
-              : warnEvidenceCount > 0
-                ? 'Evidence rows flagged with warnings — investigate before they escalate.'
-                : openControlCount > 0
-                  ? 'DSARs must resolve within 30 days under GDPR / CCPA.'
-                  : 'Controls, DSARs, and retention windows are all green.',
+              : overdueDsars.length > 0
+                ? 'Open DSARs are within 9 days of the 30-day GDPR fulfilment deadline.'
+                : warnEvidenceCount > 0
+                  ? 'Evidence rows flagged with warnings — investigate before they escalate.'
+                  : openDsars.length > 0
+                    ? 'DSARs must resolve within 30 days under GDPR / CCPA.'
+                    : 'Controls, DSARs, and retention windows are all green.',
           severity: complianceSeverity,
         }}
         act={complianceAction}
@@ -298,236 +469,510 @@ export function CompliancePage() {
         howToUse="Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot."
       />
 
+      {/* URL-driven status filter. Deep links from the Next-Best-Action
+          (e.g. /compliance?status=open) drop the user straight onto the
+          relevant view. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {FILTER_VALUES.map((f) => (
+          <FilterChip
+            key={f}
+            label={FILTER_LABELS[f]}
+            count={filterCounts[f] ?? undefined}
+            active={filter === f}
+            tone={FILTER_TONES[f]}
+            hint={FILTER_HINTS[f]}
+            onClick={() => setFilter(f)}
+          />
+        ))}
+      </div>
+
       {loading ? <PanelSkeleton rows={5} label="Loading compliance data" /> : error ? (
         <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'compliance data'}: ${error}`} onRetry={merged.retry} />
       ) : (
         <>
-          <Card className="p-5">
-            <div className="text-xs font-medium uppercase tracking-wider mb-2">Latest control evidence</div>
-            {latestEvidenceByControl.length === 0 ? (
-              <EmptyState
-                title="No evidence rows yet"
-                description="Click Refresh evidence to generate the first snapshot."
-              />
-            ) : (
-              <ResponsiveTable>
-                <table className="w-full text-xs">
-                  <thead className="text-fg-muted uppercase tracking-wider text-3xs">
-                    <tr className="border-b border-edge-subtle">
-                      <th className="py-1.5 text-left">Control</th>
-                      <th className="text-left">Label</th>
-                      <th className="text-left">Status</th>
-                      <th className="text-left">Generated</th>
-                      <th className="text-left">Payload</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {latestEvidenceByControl.map((ev) => (
-                      <tr key={ev.id} className="border-b border-edge-subtle/40">
-                        <td className="py-1.5 font-mono">{ev.control}</td>
-                        <td>{ev.control_label}</td>
-                        <td>
-                          <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${STATUS_CHIP[ev.status]}`}>
-                            {ev.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="opacity-70">{new Date(ev.generated_at).toLocaleString()}</td>
-                        <td className="opacity-80 max-w-xs truncate">
-                          <code className="text-2xs">{JSON.stringify(ev.payload).slice(0, 120)}</code>
-                        </td>
+          {/* Filter-wide empty state — shown when every section the filter
+              would render comes back empty. Avoids the "I clicked Open and
+              the page looks dead" UX. */}
+          {filter !== 'all' &&
+            visibleEvidence.length === 0 &&
+            visibleDsars.length === 0 &&
+            visiblePolicies.length === 0 && (
+              <Card className="p-6">
+                <EmptyState
+                  title={
+                    filter === 'open'
+                      ? 'All clear — no open compliance items'
+                      : filter === 'fail'
+                        ? 'No failing controls or overdue DSARs'
+                        : filter === 'warn'
+                          ? 'No at-risk items'
+                          : 'No projects on legal hold'
+                  }
+                  description={
+                    filter === 'legal_hold'
+                      ? 'Place a project on legal hold from the All view to suspend its retention sweeps.'
+                      : `Last evidence snapshot ${latestEvidenceTs ? new Date(latestEvidenceTs).toLocaleString() : 'has not been generated yet'}.`
+                  }
+                />
+              </Card>
+            )}
+
+          {(filter === 'all' || filter === 'open' || filter === 'fail' || filter === 'warn') && (
+            <Card className="p-5">
+              <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+                <div className="text-xs font-medium uppercase tracking-wider">
+                  Latest control evidence
+                  {filter !== 'all' && (
+                    <span className="ml-2 text-2xs font-normal opacity-60">
+                      filtered to {FILTER_LABELS[filter].toLowerCase()}
+                    </span>
+                  )}
+                </div>
+                {visibleEvidence.length > 0 && (
+                  <span className="text-2xs opacity-70">
+                    {visibleEvidence.length} of {latestEvidenceByControl.length}
+                  </span>
+                )}
+              </div>
+              {visibleEvidence.length === 0 ? (
+                <EmptyState
+                  title={
+                    filter === 'fail'
+                      ? 'No failing controls'
+                      : filter === 'warn'
+                        ? 'No warning controls'
+                        : filter === 'open'
+                          ? 'No open controls'
+                          : 'No evidence rows yet'
+                  }
+                  description={
+                    filter === 'all'
+                      ? 'Click Refresh evidence to generate the first snapshot.'
+                      : 'Switch to All to see the full evidence pack.'
+                  }
+                />
+              ) : (
+                <ResponsiveTable>
+                  <table className="w-full text-xs">
+                    <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+                      <tr className="border-b border-edge-subtle">
+                        <th className="py-1.5 text-left">Control</th>
+                        <th className="text-left">Label</th>
+                        <th className="text-left">Project</th>
+                        <th className="text-left">Status</th>
+                        <th className="text-left">Generated</th>
+                        <th className="text-right">Payload</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ResponsiveTable>
-            )}
-          </Card>
-
-          <Card className="p-5">
-            <div className="flex items-baseline justify-between mb-2">
-              <div className="text-xs font-medium uppercase tracking-wider inline-flex items-center gap-1">
-                Data residency
-                <ConfigHelp helpId="compliance.residency.region" />
-              </div>
-              <span className="text-2xs opacity-70">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
-            </div>
-            <p className="text-2xs text-fg-muted mb-3 max-w-2xl leading-relaxed">
-              Pin a project to a specific regional cluster (US / EU / JP). Once set, the gateway transparently
-              307-redirects cross-region calls. Changing the region of a project that already has data requires
-              an export+restore migration — contact support.
-            </p>
-            {residency.length === 0 ? (
-              <EmptyState title="No projects" />
-            ) : (
-              <div className="space-y-2">
-                {residency.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between gap-3 rounded border border-edge-subtle p-2">
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium truncate">{p.name}</div>
-                      <code className="text-2xs opacity-70 font-mono">{p.id}</code>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {(['us', 'eu', 'jp', 'self'] as const).map((r) => (
-                        <button
-                          key={r}
-                          onClick={() => setProjectRegion(p.id, r)}
-                          className={`px-2 py-1 text-3xs uppercase font-mono rounded border ${
-                            p.data_residency_region === r
-                              ? 'bg-brand text-brand-fg border-brand'
-                              : 'border-edge-subtle text-fg-muted hover:text-fg hover:border-edge'
-                          }`}
-                        >
-                          {r}
-                        </button>
+                    </thead>
+                    <tbody>
+                      {visibleEvidence.map((ev) => (
+                        <tr key={ev.id} className="border-b border-edge-subtle/40">
+                          <td className="py-1.5 font-mono">{ev.control}</td>
+                          <td>{ev.control_label}</td>
+                          <td className="opacity-80">
+                            {projectNameById.get(ev.project_id) ?? (
+                              <code className="text-2xs opacity-60">{ev.project_id.slice(0, 8)}</code>
+                            )}
+                          </td>
+                          <td>
+                            <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${STATUS_CHIP[ev.status]}`}>
+                              {ev.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="opacity-70">{new Date(ev.generated_at).toLocaleString()}</td>
+                          <td className="text-right">
+                            <Btn
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPayloadModalEvidence(ev)}
+                              aria-label={`View ${ev.control} payload`}
+                              title="View full evidence payload"
+                              className="!px-1.5"
+                            >
+                              <IconEye />
+                            </Btn>
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
+                    </tbody>
+                  </table>
+                </ResponsiveTable>
+              )}
+            </Card>
+          )}
 
-          <Card className="p-5">
-            <div className="text-xs font-medium uppercase tracking-wider mb-2">Retention policies</div>
-            {policies.length === 0 ? (
-              <EmptyState
-                title="No retention policies set"
-                description="Defaults of 365d (reports) / 730d (audit) apply until you save a policy."
-              />
-            ) : (
-              <div className="space-y-2">
-                {policies.map((p) => (
-                  <div key={p.project_id} className="rounded border border-edge-subtle p-2">
-                    <div className="flex items-center justify-between mb-2 gap-2">
-                      <code className="text-2xs opacity-70 font-mono">{p.project_id}</code>
-                      <div className="inline-flex items-center gap-1">
-                        <Btn
-                          size="sm"
-                          variant={p.legal_hold ? 'danger' : 'ghost'}
-                          onClick={() => updatePolicy(p.project_id, { legal_hold: !p.legal_hold })}
-                        >
-                          {p.legal_hold ? 'Lift legal hold' : 'Place on legal hold'}
-                        </Btn>
-                        <ConfigHelp helpId="compliance.legal_hold" />
+          {showResidencyCard && (
+            <Card className="p-5">
+              <div className="flex items-baseline justify-between mb-2">
+                <div className="text-xs font-medium uppercase tracking-wider inline-flex items-center gap-1">
+                  Data residency
+                  <ConfigHelp helpId="compliance.residency.region" />
+                </div>
+                <span className="text-2xs opacity-70">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
+              </div>
+              <p className="text-2xs text-fg-muted mb-3 max-w-2xl leading-relaxed">
+                Pin a project to a specific regional cluster (US / EU / JP). Once set, the gateway transparently
+                307-redirects cross-region calls. Changing the region of a project that already has data requires
+                an export+restore migration — contact support.
+              </p>
+              {residency.length === 0 ? (
+                <EmptyState title="No projects" />
+              ) : (
+                <div className="space-y-2">
+                  {residency.map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-3 rounded border border-edge-subtle p-2">
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium truncate">{p.name}</div>
+                        <code className="text-2xs opacity-70 font-mono">{p.id}</code>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {(['us', 'eu', 'jp', 'self'] as const).map((r) => (
+                          <button
+                            key={r}
+                            onClick={() => setProjectRegion(p.id, r)}
+                            className={`px-2 py-1 text-3xs uppercase font-mono rounded border ${
+                              p.data_residency_region === r
+                                ? 'bg-brand text-brand-fg border-brand'
+                                : 'border-edge-subtle text-fg-muted hover:text-fg hover:border-edge'
+                            }`}
+                          >
+                            {r}
+                          </button>
+                        ))}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      <RetentionInput
-                        label="Reports"
-                        helpId="compliance.retention.reports_days"
-                        value={p.reports_retention_days}
-                        onChange={(v) => updatePolicy(p.project_id, { reports_retention_days: v })}
-                      />
-                      <RetentionInput
-                        label="Audit"
-                        helpId="compliance.retention.audit_days"
-                        value={p.audit_retention_days}
-                        onChange={(v) => updatePolicy(p.project_id, { audit_retention_days: v })}
-                      />
-                      <RetentionInput
-                        label="LLM traces"
-                        helpId="compliance.retention.events_days"
-                        value={p.llm_traces_retention_days}
-                        onChange={(v) => updatePolicy(p.project_id, { llm_traces_retention_days: v })}
-                      />
-                      <RetentionInput
-                        label="BYOK audit"
-                        helpId="compliance.retention.attachments_days"
-                        value={p.byok_audit_retention_days}
-                        onChange={(v) => updatePolicy(p.project_id, { byok_audit_retention_days: v })}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {(filter === 'all' || filter === 'legal_hold') && (
+            <Card className="p-5">
+              <div className="text-xs font-medium uppercase tracking-wider mb-2">
+                Retention policies
+                {filter === 'legal_hold' && (
+                  <span className="ml-2 text-2xs font-normal opacity-60">
+                    showing legal-hold projects only
+                  </span>
+                )}
               </div>
-            )}
-          </Card>
-
-          <Card className="p-5">
-            <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
-              <div className="text-xs font-medium uppercase tracking-wider">Data subject requests</div>
-              <p className="text-2xs text-fg-muted max-w-md">
-                File a request when a user invokes their GDPR/CCPA right to access, export, deletion, or rectification.
-                Mark it complete within 30 days to stay compliant.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3 border border-edge-subtle rounded-sm p-2 bg-surface-overlay">
-              <SelectField
-                label="Request type"
-                value={dsarForm.requestType}
-                onChange={(e) => setDsarForm((f) => ({ ...f, requestType: e.target.value as Dsar['request_type'] }))}
-              >
-                <option value="access">Access</option>
-                <option value="export">Export</option>
-                <option value="deletion">Deletion</option>
-                <option value="rectification">Rectification</option>
-              </SelectField>
-              <Input
-                label="Subject email"
-                helpId="compliance.dsar.subject_email"
-                placeholder="user@example.com"
-                value={dsarForm.subjectEmail}
-                onChange={(e) => setDsarForm((f) => ({ ...f, subjectEmail: e.target.value }))}
-              />
-              <Input
-                label="Subject user ID (optional)"
-                placeholder="auth-user-uuid"
-                value={dsarForm.subjectId}
-                onChange={(e) => setDsarForm((f) => ({ ...f, subjectId: e.target.value }))}
-              />
-              <Input
-                label="Notes (optional)"
-                placeholder="Channel, ticket ref, etc."
-                value={dsarForm.notes}
-                onChange={(e) => setDsarForm((f) => ({ ...f, notes: e.target.value }))}
-              />
-              <div className="md:col-span-4 flex justify-end">
-                <Btn size="sm" onClick={fileDsar} disabled={filing} loading={filing}>
-                  File DSAR
-                </Btn>
-              </div>
-            </div>
-
-            {dsars.length === 0 ? (
-              <EmptyState title="No DSARs filed yet" />
-            ) : (
-              <ResponsiveTable>
-                <table className="w-full text-xs">
-                  <thead className="text-fg-muted uppercase tracking-wider text-3xs">
-                    <tr className="border-b border-edge-subtle">
-                      <th className="py-1.5 text-left">Type</th>
-                      <th className="text-left">Subject</th>
-                      <th className="text-left">Status</th>
-                      <th className="text-left">Filed</th>
-                      <th className="text-left">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dsars.map((d) => (
-                      <tr key={d.id} className="border-b border-edge-subtle/40">
-                        <td className="py-1.5">{d.request_type}</td>
-                        <td>{d.subject_email}</td>
-                        <td className="uppercase tracking-wider text-2xs font-medium">{d.status}</td>
-                        <td className="opacity-70">{new Date(d.created_at).toLocaleString()}</td>
-                        <td>
-                          {d.status !== 'completed' && d.status !== 'rejected' ? (
-                            <div className="flex gap-1">
-                              <Btn size="sm" onClick={() => setDsarStatus(d.id, 'completed')}>Complete</Btn>
-                              <Btn size="sm" variant="ghost" onClick={() => setDsarStatus(d.id, 'rejected')}>Reject</Btn>
-                            </div>
-                          ) : (
-                            <span className="opacity-60">—</span>
+              {visiblePolicies.length === 0 ? (
+                <EmptyState
+                  title={
+                    filter === 'legal_hold'
+                      ? 'No projects on legal hold'
+                      : 'No retention policies set'
+                  }
+                  description={
+                    filter === 'legal_hold'
+                      ? undefined
+                      : 'Defaults of 365d (reports) / 730d (audit) apply until you save a policy.'
+                  }
+                />
+              ) : (
+                <div className="space-y-2">
+                  {visiblePolicies.map((p) => (
+                    <div key={p.project_id} className="rounded border border-edge-subtle p-2">
+                      <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium truncate">
+                            {projectNameById.get(p.project_id) ?? 'Project'}
+                          </div>
+                          <code className="text-2xs opacity-60 font-mono">{p.project_id}</code>
+                        </div>
+                        <div className="inline-flex items-center gap-1">
+                          {p.legal_hold && (
+                            <span className="inline-flex rounded px-2 py-0.5 text-3xs bg-info/15 text-info border border-info/30">
+                              LEGAL HOLD
+                            </span>
                           )}
-                        </td>
+                          <Btn
+                            size="sm"
+                            variant={p.legal_hold ? 'danger' : 'ghost'}
+                            onClick={() => updatePolicy(p.project_id, { legal_hold: !p.legal_hold })}
+                          >
+                            {p.legal_hold ? 'Lift legal hold' : 'Place on legal hold'}
+                          </Btn>
+                          <ConfigHelp helpId="compliance.legal_hold" />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                        <RetentionInput
+                          label="Reports"
+                          helpId="compliance.retention.reports_days"
+                          value={p.reports_retention_days}
+                          onChange={(v) => updatePolicy(p.project_id, { reports_retention_days: v })}
+                        />
+                        <RetentionInput
+                          label="Audit"
+                          helpId="compliance.retention.audit_days"
+                          value={p.audit_retention_days}
+                          onChange={(v) => updatePolicy(p.project_id, { audit_retention_days: v })}
+                        />
+                        <RetentionInput
+                          label="LLM traces"
+                          helpId="compliance.retention.events_days"
+                          value={p.llm_traces_retention_days}
+                          onChange={(v) => updatePolicy(p.project_id, { llm_traces_retention_days: v })}
+                        />
+                        <RetentionInput
+                          label="BYOK audit"
+                          helpId="compliance.retention.attachments_days"
+                          value={p.byok_audit_retention_days}
+                          onChange={(v) => updatePolicy(p.project_id, { byok_audit_retention_days: v })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
+          {(filter === 'all' || filter === 'open' || filter === 'fail' || filter === 'warn') && (
+            <Card className="p-5">
+              <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+                <div className="text-xs font-medium uppercase tracking-wider">
+                  Data subject requests
+                  {filter !== 'all' && (
+                    <span className="ml-2 text-2xs font-normal opacity-60">
+                      filtered to {FILTER_LABELS[filter].toLowerCase()}
+                    </span>
+                  )}
+                </div>
+                <p className="text-2xs text-fg-muted max-w-md">
+                  File a request when a user invokes their GDPR/CCPA right to access, export, deletion, or rectification.
+                  Mark it complete within {GDPR_SLA_DAYS} days to stay compliant.
+                </p>
+              </div>
+
+              {/* Filing form is hidden on focused views — the user clicked
+                  "Open" because they want to clear work, not file new
+                  requests. Available again on the All view. */}
+              {filter === 'all' && (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3 border border-edge-subtle rounded-sm p-2 bg-surface-overlay">
+                  <SelectField
+                    label="Request type"
+                    value={dsarForm.requestType}
+                    onChange={(e) => setDsarForm((f) => ({ ...f, requestType: e.target.value as Dsar['request_type'] }))}
+                  >
+                    <option value="access">Access</option>
+                    <option value="export">Export</option>
+                    <option value="deletion">Deletion</option>
+                    <option value="rectification">Rectification</option>
+                  </SelectField>
+                  <Input
+                    label="Subject email"
+                    helpId="compliance.dsar.subject_email"
+                    placeholder="user@example.com"
+                    value={dsarForm.subjectEmail}
+                    onChange={(e) => setDsarForm((f) => ({ ...f, subjectEmail: e.target.value }))}
+                  />
+                  <Input
+                    label="Subject user ID (optional)"
+                    placeholder="auth-user-uuid"
+                    value={dsarForm.subjectId}
+                    onChange={(e) => setDsarForm((f) => ({ ...f, subjectId: e.target.value }))}
+                  />
+                  <Input
+                    label="Notes (optional)"
+                    placeholder="Channel, ticket ref, etc."
+                    value={dsarForm.notes}
+                    onChange={(e) => setDsarForm((f) => ({ ...f, notes: e.target.value }))}
+                  />
+                  <div className="md:col-span-4 flex justify-end">
+                    <Btn size="sm" onClick={fileDsar} disabled={filing} loading={filing}>
+                      File DSAR
+                    </Btn>
+                  </div>
+                </div>
+              )}
+
+              {visibleDsars.length === 0 ? (
+                <EmptyState
+                  title={
+                    filter === 'fail'
+                      ? 'No DSARs are overdue'
+                      : filter === 'warn'
+                        ? 'No DSARs at risk'
+                        : filter === 'open'
+                          ? 'No open DSARs'
+                          : 'No DSARs filed yet'
+                  }
+                />
+              ) : (
+                <ResponsiveTable>
+                  <table className="w-full text-xs">
+                    <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+                      <tr className="border-b border-edge-subtle">
+                        <th className="py-1.5 text-left">Type</th>
+                        <th className="text-left">Subject</th>
+                        <th className="text-left">Project</th>
+                        <th className="text-left">Status</th>
+                        <th className="text-left">Filed</th>
+                        <th className="text-left">Age</th>
+                        <th className="text-left">Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ResponsiveTable>
-            )}
-          </Card>
+                    </thead>
+                    <tbody>
+                      {visibleDsars.map((d) => {
+                        const age = daysSince(d.created_at)
+                        const open = dsarIsOpen(d)
+                        const overdue = open && age >= GDPR_SLA_DAYS
+                        const atRisk = open && age >= GDPR_SLA_DAYS - 9 && age < GDPR_SLA_DAYS
+                        const ageClass = overdue
+                          ? 'text-danger font-medium'
+                          : atRisk
+                            ? 'text-warn font-medium'
+                            : 'opacity-70'
+                        return (
+                          <tr
+                            key={d.id}
+                            className="border-b border-edge-subtle/40 align-top"
+                            title={
+                              d.rejection_reason
+                                ? `Rejected: ${d.rejection_reason}`
+                                : d.evidence_url
+                                  ? `Evidence: ${d.evidence_url}`
+                                  : undefined
+                            }
+                          >
+                            <td className="py-1.5 capitalize">{d.request_type}</td>
+                            <td>
+                              <div className="flex flex-col gap-0.5">
+                                <span>{d.subject_email}</span>
+                                {d.subject_id && (
+                                  <code className="text-3xs opacity-60 font-mono truncate max-w-[14rem]">
+                                    {d.subject_id}
+                                  </code>
+                                )}
+                              </div>
+                            </td>
+                            <td className="opacity-80">
+                              {projectNameById.get(d.project_id) ?? (
+                                <code className="text-2xs opacity-60">{d.project_id.slice(0, 8)}</code>
+                              )}
+                            </td>
+                            <td>
+                              <span
+                                className={`inline-flex rounded px-2 py-0.5 text-3xs uppercase tracking-wider font-medium ${DSAR_STATUS_CHIP[d.status]}`}
+                              >
+                                {d.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="opacity-70">{new Date(d.created_at).toLocaleString()}</td>
+                            <td className={ageClass}>
+                              {age}d
+                              {overdue && <span className="ml-1 text-3xs">overdue</span>}
+                              {atRisk && <span className="ml-1 text-3xs">at risk</span>}
+                            </td>
+                            <td>
+                              {open ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {d.status === 'pending' && (
+                                    <Btn
+                                      size="sm"
+                                      variant="success"
+                                      onClick={() => setDsarStatus(d.id, 'in_progress')}
+                                    >
+                                      Start triage
+                                    </Btn>
+                                  )}
+                                  <Btn
+                                    size="sm"
+                                    variant="success"
+                                    onClick={() => setDsarStatus(d.id, 'completed')}
+                                  >
+                                    Complete
+                                  </Btn>
+                                  <Btn size="sm" variant="danger" onClick={() => setRejectingDsar(d)}>
+                                    Reject…
+                                  </Btn>
+                                </div>
+                              ) : d.rejection_reason ? (
+                                <span className="text-2xs opacity-70 italic line-clamp-2 max-w-[18rem]">
+                                  {d.rejection_reason}
+                                </span>
+                              ) : d.evidence_url ? (
+                                <a
+                                  href={d.evidence_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-info underline text-2xs"
+                                >
+                                  Evidence ↗
+                                </a>
+                              ) : (
+                                <span className="opacity-40">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </ResponsiveTable>
+              )}
+            </Card>
+          )}
         </>
+      )}
+
+      {/* Evidence payload modal — auditors usually need the raw JSON to
+          verify a finding. The truncated 120-char preview in the table is
+          a navigation cue; this modal is the source of truth. */}
+      <Modal
+        open={payloadModalEvidence !== null}
+        onClose={() => setPayloadModalEvidence(null)}
+        title={
+          payloadModalEvidence
+            ? `${payloadModalEvidence.control} · ${payloadModalEvidence.control_label}`
+            : 'Evidence payload'
+        }
+        size="lg"
+        headerAction={
+          payloadModalEvidence && (
+            <span className={`inline-flex rounded px-2 py-0.5 text-3xs ${STATUS_CHIP[payloadModalEvidence.status]}`}>
+              {payloadModalEvidence.status.toUpperCase()}
+            </span>
+          )
+        }
+        footer={
+          payloadModalEvidence && (
+            <div className="flex items-center justify-between gap-2 text-2xs opacity-70">
+              <span>
+                Project:{' '}
+                {projectNameById.get(payloadModalEvidence.project_id) ?? payloadModalEvidence.project_id}
+              </span>
+              <span>{new Date(payloadModalEvidence.generated_at).toLocaleString()}</span>
+            </div>
+          )
+        }
+      >
+        {payloadModalEvidence && (
+          <pre className="text-2xs leading-snug whitespace-pre-wrap break-words bg-surface-overlay border border-edge-subtle rounded-sm p-3 font-mono">
+{JSON.stringify(payloadModalEvidence.payload, null, 2)}
+          </pre>
+        )}
+      </Modal>
+
+      {/* DSAR rejection prompt. We intentionally make rejection_reason
+          required at the UI layer because SOC 2 CC8.1 expects every closed
+          DSAR to have a documented disposition — leaving it null silently
+          would later trip the auditor's WARN heuristic. */}
+      {rejectingDsar && (
+        <PromptDialog
+          title="Reject DSAR"
+          body={`Recording a rejection reason for ${rejectingDsar.subject_email}. This is written to the audit log under compliance.dsar.updated.`}
+          label="Rejection reason"
+          placeholder="e.g. Subject not found in our records; identity could not be verified."
+          confirmLabel="Reject DSAR"
+          loading={rejectingBusy}
+          validate={(v) => (v.length < 4 ? 'Reason must be at least 4 characters' : null)}
+          onConfirm={confirmRejection}
+          onCancel={() => (rejectingBusy ? undefined : setRejectingDsar(null))}
+        />
       )}
     </div>
   )

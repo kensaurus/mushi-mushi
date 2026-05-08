@@ -623,42 +623,119 @@ interface EmptyPromptProps {
   onSuggest: (t: string) => void
 }
 
+// Curated subset of slash commands surfaced as chips in the empty state.
+// Operators told us the slash registry is great when you remember it
+// exists and useless when you don't — chips solve the discoverability
+// half by showing the four most-used commands as one-click suggestions.
+const QUICK_SLASH_CHIPS: { command: string; label: string; hint: string }[] = [
+  { command: '/tldr', label: 'TL;DR', hint: 'One short paragraph. Cheap and fast.' },
+  { command: '/explain', label: 'Explain', hint: 'Walk me through what I am looking at.' },
+  { command: '/why-failed', label: 'Why failed?', hint: 'Diagnose the focused report or fix.' },
+  { command: '/draft-pr-summary', label: 'PR summary', hint: 'Draft a Markdown PR description.' },
+]
+
 function EmptyPrompt({ route, ctx, onSuggest }: EmptyPromptProps) {
   const suggestions =
     ctx?.questions && ctx.questions.length > 0 ? ctx.questions : suggestionsFor(route)
   const actions = ctx?.actions ?? []
-  return (
-    <div className="space-y-3">
-      <p className="text-xs text-fg-muted leading-relaxed">
-        Ask anything about{' '}
-        {ctx?.title ? (
-          <span className="text-fg-secondary">{ctx.title}</span>
-        ) : (
-          <code className="font-mono">{route}</code>
-        )}
-        . The assistant knows your filters and focus, supports{' '}
-        <code className="font-mono">/commands</code> and{' '}
-        <code className="font-mono">@mentions</code>, and will ask back if your question is ambiguous.
-      </p>
 
-      <div className="space-y-1.5">
-        {suggestions.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onSuggest(s)}
-            className="block w-full text-left rounded-sm border border-edge/60 px-2.5 py-1.5 text-xs text-fg-secondary hover:bg-surface-overlay/60 hover:text-fg motion-safe:transition-colors"
-          >
-            {s}
-          </button>
-        ))}
+  // Recent threads on this route, lazily fetched. Surfacing them in the
+  // empty state turns "open Ask Mushi → start typing → realise I asked
+  // this yesterday" into a single click resume.
+  const [recent, setRecent] = useState<AskMushiThreadSummary[] | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void apiFetch<{ threads: AskMushiThreadSummary[] }>(
+      `/v1/admin/ask-mushi/threads?route=${encodeURIComponent(route)}&limit=3`,
+    ).then((res) => {
+      if (cancelled) return
+      if (res.ok && res.data?.threads) setRecent(res.data.threads.slice(0, 3))
+      else setRecent([])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [route])
+
+  return (
+    <div className="space-y-4">
+      {/* Friendly intro — terser than before so the eye reaches the
+          actionable chips and suggestions sooner. */}
+      <div className="flex items-start gap-2.5">
+        <span
+          aria-hidden
+          className="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md bg-brand/10 border border-brand/30 text-brand text-base leading-none"
+        >
+          ✦
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-fg leading-snug">
+            Ask Mushi about{' '}
+            {ctx?.title ? (
+              <span className="text-brand">{ctx.title}</span>
+            ) : (
+              <code className="font-mono text-fg">{route}</code>
+            )}
+            .
+          </p>
+          <p className="mt-0.5 text-2xs text-fg-muted leading-snug">
+            The assistant sees your filters, focus, and the page's quick
+            actions. Use <code className="font-mono text-fg-secondary">/commands</code>{' '}
+            and <code className="font-mono text-fg-secondary">@mentions</code> in the
+            composer to steer the answer.
+          </p>
+        </div>
       </div>
 
+      {/* Quick slash-command chips — discoverability surface for the
+          slash registry. Clicking a chip seeds the composer with the
+          slash token so the user can finish the prompt or hit Enter. */}
+      <section aria-label="Quick commands">
+        <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
+          Try a command
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_SLASH_CHIPS.map((c) => (
+            <button
+              key={c.command}
+              type="button"
+              onClick={() => onSuggest(`${c.command} `)}
+              title={c.hint}
+              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised/50 px-2 py-0.5 text-2xs text-fg-secondary hover:border-brand/30 hover:bg-brand/5 hover:text-fg motion-safe:transition-colors"
+            >
+              <span className="font-mono text-brand">{c.command}</span>
+              <span className="text-fg-faint">·</span>
+              <span>{c.label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* Page-aware suggestions — exactly as before but with a label so
+          the section is self-explanatory. */}
+      <section aria-label="Suggested questions">
+        <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
+          Ask about this page
+        </p>
+        <div className="space-y-1.5">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => onSuggest(s)}
+              className="block w-full text-left rounded-sm border border-edge/60 px-2.5 py-1.5 text-xs text-fg-secondary hover:bg-surface-overlay/60 hover:border-edge hover:text-fg motion-safe:transition-colors"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </section>
+
       {actions.length > 0 && (
-        <div className="pt-2 border-t border-edge/40 space-y-1.5">
-          <div className="text-2xs uppercase tracking-wider text-fg-faint">
+        <section aria-label="Quick actions on this page" className="border-t border-edge/40 pt-3">
+          <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
             Quick actions on this page
-          </div>
+          </p>
           <div className="flex flex-wrap gap-1.5">
             {actions.map((a) => (
               <button
@@ -677,7 +754,48 @@ function EmptyPrompt({ route, ctx, onSuggest }: EmptyPromptProps) {
               </button>
             ))}
           </div>
-        </div>
+        </section>
+      )}
+
+      {/* Recent threads — subtle list at the bottom. Empty array stays
+          quiet (no header), null = still loading (we skip rendering for
+          one tick to avoid layout flash). */}
+      {recent && recent.length > 0 && (
+        <section aria-label="Recent threads on this page" className="border-t border-edge/40 pt-3">
+          <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
+            Resume recent
+          </p>
+          <ul className="space-y-1">
+            {recent.map((t) => (
+              <li key={t.threadId}>
+                <button
+                  type="button"
+                  onClick={() => onSuggest(`(resume thread ${t.threadId})`)}
+                  className="w-full text-left rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 hover:bg-surface-overlay motion-safe:transition-colors"
+                  title={`Reopen ${t.title || '(empty thread)'} in the History menu`}
+                >
+                  <div className="text-2xs text-fg-secondary truncate">
+                    {t.title || '(empty thread)'}
+                  </div>
+                  <div className="text-3xs text-fg-faint flex items-center gap-1.5 font-mono">
+                    <span>{new Date(t.lastAt).toLocaleString()}</span>
+                    <span aria-hidden>·</span>
+                    <span>{t.messageCount} msg</span>
+                    {t.totalCostUsd > 0 && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{formatLlmCost(t.totalCostUsd)}</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-3xs text-fg-faint">
+            Use the History menu in the header to reload one in full.
+          </p>
+        </section>
       )}
     </div>
   )

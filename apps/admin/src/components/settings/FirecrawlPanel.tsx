@@ -165,31 +165,38 @@ export function FirecrawlPanel() {
             autoComplete="new-password"
           />
 
-          <label className="block">
-            <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
-              <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
-              <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
-            </span>
-            <textarea
-              className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
-              value={domains}
-              onChange={(e) => setDomainsDraft(e.target.value)}
-              placeholder={'github.com\nstackoverflow.com\nreact.dev'}
-            />
-          </label>
+          {/* On lg+ viewports the allowed-domains textarea and the per-call
+              page cap sit side-by-side so the card uses its width instead
+              of stacking small controls on top of each other. Below lg
+              they fall back to a single column. `items-start` keeps the
+              textarea anchored to the same baseline as the slider label. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+            <label className="block">
+              <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
+                <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
+                <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
+              </span>
+              <textarea
+                className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
+                value={domains}
+                onChange={(e) => setDomainsDraft(e.target.value)}
+                placeholder={'github.com\nstackoverflow.com\nreact.dev'}
+              />
+            </label>
 
-          <label className="block">
-            <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
-              <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
-              <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
-            </span>
-            <input
-              type="range" min="1" max="20" step="1"
-              className="w-full accent-brand"
-              value={pages}
-              onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
-            />
-          </label>
+            <label className="block">
+              <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
+                <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
+                <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
+              </span>
+              <input
+                type="range" min="1" max="20" step="1"
+                className="w-full accent-brand"
+                value={pages}
+                onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
+              />
+            </label>
+          </div>
 
           <div className="flex items-center gap-2 flex-wrap">
             <Btn size="sm" onClick={save} loading={pending}>
