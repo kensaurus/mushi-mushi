@@ -1060,18 +1060,22 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
           })
           .eq('id', fix.report_id)
           .in('project_id', projectIds);
-        void dispatchPluginEvent(db, fix.project_id, 'fix.applied', {
-          report: { id: fix.report_id },
-          fix: {
-            id: fixId,
-            agent: fix.agent,
-            branch: updates.branch ?? fix.branch,
-            prUrl: updates.pr_url ?? fix.pr_url,
-            commitSha: updates.commit_sha ?? fix.commit_sha,
-          },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }),
-        );
+        try {
+          void dispatchPluginEvent(db, fix.project_id, 'fix.applied', {
+            report: { id: fix.report_id },
+            fix: {
+              id: fixId,
+              agent: fix.agent,
+              branch: updates.branch ?? fix.branch,
+              prUrl: updates.pr_url ?? fix.pr_url,
+              commitSha: updates.commit_sha ?? fix.commit_sha,
+            },
+          }).catch((e) =>
+            log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }),
+          );
+        } catch (e) {
+          log.warn('Plugin dispatch failed (sync)', { event: 'fix.applied', err: String(e) });
+        }
       }
     } else if (updates.status === 'failed') {
       const { data: fix } = await db
@@ -1081,12 +1085,16 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .single();
       if (fix) {
-        void dispatchPluginEvent(db, fix.project_id, 'fix.failed', {
-          report: { id: fix.report_id },
-          fix: { id: fixId, agent: fix.agent, error: updates.error ?? fix.error },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }),
-        );
+        try {
+          void dispatchPluginEvent(db, fix.project_id, 'fix.failed', {
+            report: { id: fix.report_id },
+            fix: { id: fixId, agent: fix.agent, error: updates.error ?? fix.error },
+          }).catch((e) =>
+            log.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }),
+          );
+        } catch (e) {
+          log.warn('Plugin dispatch failed (sync)', { event: 'fix.failed', err: String(e) });
+        }
       }
     } else if (updates.status === 'proposed') {
       const { data: fix } = await db
@@ -1096,17 +1104,21 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .single();
       if (fix) {
-        void dispatchPluginEvent(db, fix.project_id, 'fix.proposed', {
-          report: { id: fix.report_id },
-          fix: {
-            id: fixId,
-            agent: fix.agent,
-            branch: updates.branch ?? fix.branch,
-            prUrl: updates.pr_url ?? fix.pr_url,
-          },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'fix.proposed', err: String(e) }),
-        );
+        try {
+          void dispatchPluginEvent(db, fix.project_id, 'fix.proposed', {
+            report: { id: fix.report_id },
+            fix: {
+              id: fixId,
+              agent: fix.agent,
+              branch: updates.branch ?? fix.branch,
+              prUrl: updates.pr_url ?? fix.pr_url,
+            },
+          }).catch((e) =>
+            log.warn('Plugin dispatch failed', { event: 'fix.proposed', err: String(e) }),
+          );
+        } catch (e) {
+          log.warn('Plugin dispatch failed (sync)', { event: 'fix.proposed', err: String(e) });
+        }
       }
     }
 

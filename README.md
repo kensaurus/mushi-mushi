@@ -336,6 +336,9 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | `npm i @mushi-mushi/angular` | Angular 17+ | `provideMushi()`, `MushiService`, error handler |
 | `npm i @mushi-mushi/react-native` | React Native / Expo | Shake-to-report, bottom-sheet widget, navigation capture, offline queue |
 | `npm i @mushi-mushi/capacitor` | Capacitor / Ionic | iOS + Android via Capacitor |
+| `pub add mushi_mushi` | Flutter / Dart | Shake-to-report, screenshot capture, offline queue — iOS + Android + Web |
+| Swift PM `.package(url:…)` | iOS (Swift) | Native shake-to-report, `MushiConfig`, SwiftUI / UIKit early dev |
+| Gradle `dev.mushimushi:mushi-android` | Android (Kotlin/Java) | Native shake-to-report, early dev |
 | `npm i @mushi-mushi/web` | Vanilla / any framework | Framework-agnostic SDK |
 | `npm i @mushi-mushi/node` | Node (Express / Fastify / Hono) | Server-side SDK — error-handler middleware, `uncaughtException` hook |
 | `npm i @mushi-mushi/adapters` | Any Node webhook server | Translate Datadog / New Relic / Honeycomb / Grafana alerts into Mushi reports |
@@ -356,6 +359,9 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | [`@mushi-mushi/plugin-jira`](./packages/plugin-jira) | Bidirectional Mushi ↔ Jira Cloud sync |
 | [`@mushi-mushi/plugin-slack-app`](./packages/plugin-slack-app) | First-class Slack app — `/mushi` slash command |
 | [`@mushi-mushi/plugin-linear`](./packages/plugin-linear) | Reference plugin — create + sync Linear issues |
+| [`@mushi-mushi/plugin-pagerduty`](./packages/plugin-pagerduty) | Reference plugin — page on-call via PagerDuty when a critical bug is reported |
+| [`@mushi-mushi/plugin-zapier`](./packages/plugin-zapier) | Reference plugin — fan out any Mushi event to a Zapier-style incoming webhook |
+| [`@mushi-mushi/plugin-sentry`](./packages/plugin-sentry) | Reference plugin — mirror critical user-reported bugs into Sentry; resolves the Sentry fingerprint when Mushi applies a fix |
 | `@mushi-mushi/server` (BSL 1.1) | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer |
 | `@mushi-mushi/agents` (BSL 1.1) | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction |
 | `@mushi-mushi/verify` (BSL 1.1) | Playwright fix verification — screenshot visual diff + step interpreter |
@@ -379,7 +385,7 @@ Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setu
 
 ## License
 
-- **SDK packages** (core, web, react, vue, svelte, angular, react-native, cli, mcp): [MIT](./LICENSE)
+- **SDK packages** (core, web, react, vue, svelte, angular, react-native, flutter, ios, android, cli, mcp): [MIT](./LICENSE)
 - **Server, agents, verify**: [BSL 1.1](./packages/server/LICENSE) — converts to Apache 2.0 on April 15, 2029.
 
 ---

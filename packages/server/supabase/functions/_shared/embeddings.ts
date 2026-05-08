@@ -130,6 +130,86 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
   }
 }
 
+/**
+ * Maximum number of retry attempts for a 429 / 5xx embedding response.
+ * 4 retries with exponential backoff (1s, 2s, 4s, 8s) tops out at ~15s
+ * total wait — long enough to ride out a typical OpenRouter free-tier
+ * burst limit reset, short enough that a single chunk can't stall the
+ * whole repo sweep. Set MUSHI_EMBED_MAX_RETRIES to override per-deploy.
+ */
+const MAX_RETRIES = Number(Deno.env.get('MUSHI_EMBED_MAX_RETRIES') ?? '4')
+const BASE_BACKOFF_MS = Number(Deno.env.get('MUSHI_EMBED_BASE_BACKOFF_MS') ?? '1000')
+
+/**
+ * Sleep for `ms` milliseconds. Pulled out for testability (could be stubbed
+ * with `globalThis.setTimeout` mocking) and to keep the retry loop readable.
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Compute the backoff delay for a 429 retry, honouring `Retry-After` when the
+ * gateway provides it, falling back to exponential-with-jitter otherwise.
+ *
+ * `Retry-After` in seconds is the OpenAI / OpenRouter convention; some
+ * gateways send an HTTP-date instead — we parse both shapes and clamp the
+ * result to a sane upper bound so a misconfigured proxy can't park us for
+ * 15 minutes during a single sweep.
+ */
+function computeRetryDelay(response: Response, attempt: number): number {
+  const header = response.headers.get('retry-after')
+  if (header) {
+    const asSeconds = Number(header)
+    if (Number.isFinite(asSeconds) && asSeconds > 0) {
+      return Math.min(asSeconds * 1000, 30_000)
+    }
+    const asDateMs = Date.parse(header)
+    if (Number.isFinite(asDateMs)) {
+      return Math.min(Math.max(asDateMs - Date.now(), 0), 30_000)
+    }
+  }
+  // Exponential backoff with ±20% jitter to spread retries across concurrent
+  // sweeps so a fleet doesn't sync-retry into the same rate window.
+  const base = BASE_BACKOFF_MS * Math.pow(2, attempt)
+  const jitter = base * 0.2 * (Math.random() * 2 - 1)
+  return Math.min(Math.max(base + jitter, 250), 30_000)
+}
+
+/**
+ * Single embedding HTTP call. Returned separately from the retry wrapper so
+ * the loop logic stays compact and the call shape is identical to
+ * `generateAndStoreEmbedding` (which still inlines the fetch because it has
+ * its own tracing span lifecycle).
+ *
+ * Accepts either a single string (back-compat with `createEmbedding`) or an
+ * array (used by `createEmbeddingBatch`). OpenAI's embeddings endpoint accepts
+ * both shapes natively and returns `data: [{ embedding, index }, …]` in the
+ * order the inputs were sent — saving us a round of slot-mapping at the call
+ * site.
+ */
+async function fetchEmbedding(
+  resolved: ResolvedOpenAi,
+  embeddingModel: string,
+  input: string | string[],
+): Promise<Response> {
+  const truncatedInput = Array.isArray(input)
+    ? input.map((t) => t.slice(0, 8000))
+    : input.slice(0, 8000)
+  return await fetch(`${resolved.baseUrl}/v1/embeddings`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${resolved.key}`,
+    },
+    body: JSON.stringify({
+      model: embeddingModel,
+      input: truncatedInput,
+      dimensions: DEFAULT_DIMENSIONS,
+    }),
+  })
+}
+
 export async function createEmbedding(
   text: string,
   modelOrOpts?: string | EmbeddingOptions,
@@ -142,40 +222,167 @@ export async function createEmbedding(
   const resolved = await resolveOpenAi(opts.projectId)
   if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
 
-  const response = await fetch(`${resolved.baseUrl}/v1/embeddings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${resolved.key}`,
-    },
-    body: JSON.stringify({
-      model: embeddingModel,
-      input: text.slice(0, 8000),
-      dimensions: DEFAULT_DIMENSIONS,
-    }),
-  })
+  // Retry loop: 429 (rate-limited) and 5xx (transient upstream) get retried
+  // with backoff; everything else (4xx auth/quota, 200-OK soft-failures)
+  // throws immediately so the caller sees an actionable error. This is the
+  // exact failure pattern flagged by /integrations: the glot.it repo sweep
+  // hammered OpenRouter without any backoff and one bad chunk surfaced as
+  // "No embedding returned from openrouter.ai … HTTP 429" in `last_index_error`.
+  let lastError = ''
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const response = await fetchEmbedding(resolved, embeddingModel, text)
 
-  if (!response.ok) {
+    if (response.ok) {
+      const result = await response.json()
+      const embedding = result.data?.[0]?.embedding
+      if (!embedding) {
+        // 200 OK with no embedding is the OpenRouter / Together / Groq "soft
+        // failure" shape. Include host, model, and upstream diagnostic so the
+        // Sentry event is self-diagnosing. See MUSHI-MUSHI-SERVER-B.
+        throw new Error(
+          `No embedding returned from ${hostOf(resolved.baseUrl)} ` +
+          `for model ${embeddingModel}: ${describeEmptyEmbeddingResponse(result)}`,
+        )
+      }
+      return embedding
+    }
+
     const body = await response.text()
-    throw new Error(
-      `Embedding API error: ${response.status} from ${hostOf(resolved.baseUrl)} ` +
-      `for model ${embeddingModel}: ${body.slice(0, 200)}`,
-    )
+    lastError = `${response.status}: ${body.slice(0, 200)}`
+    const retryable = response.status === 429 || (response.status >= 500 && response.status < 600)
+    if (!retryable || attempt === MAX_RETRIES) {
+      throw new Error(
+        `Embedding API error: ${response.status} from ${hostOf(resolved.baseUrl)} ` +
+        `for model ${embeddingModel}: ${body.slice(0, 200)}`,
+      )
+    }
+
+    const delay = computeRetryDelay(response, attempt)
+    embLog.warn('Embedding API retryable error — backing off', {
+      host: hostOf(resolved.baseUrl),
+      model: embeddingModel,
+      status: response.status,
+      attempt: attempt + 1,
+      maxAttempts: MAX_RETRIES + 1,
+      delayMs: Math.round(delay),
+    })
+    await sleep(delay)
   }
 
-  const result = await response.json()
-  const embedding = result.data?.[0]?.embedding
-  if (!embedding) {
-    // 200 OK with no embedding is the OpenRouter / Together / Groq "soft
-    // failure" shape — include host, model, and upstream diagnostic so the
-    // Sentry event is self-diagnosing instead of an opaque string. See
-    // MUSHI-MUSHI-SERVER-B for the original regression.
-    throw new Error(
-      `No embedding returned from ${hostOf(resolved.baseUrl)} ` +
-      `for model ${embeddingModel}: ${describeEmptyEmbeddingResponse(result)}`,
-    )
+  // Unreachable in practice — the loop either returns or throws inside —
+  // but TS needs a final fallthrough for the function's return type.
+  throw new Error(
+    `Embedding API error after ${MAX_RETRIES + 1} attempts: ${lastError}`,
+  )
+}
+
+/**
+ * Batch-embed multiple inputs in a single API call. OpenAI's embeddings
+ * endpoint accepts up to 2048 inputs per request (per the docs at
+ * https://platform.openai.com/docs/api-reference/embeddings/create) and
+ * returns `data: [{ embedding, index }, …]` indexed in input order.
+ *
+ * Why this exists (perf + rate-limit fix, MUSHI-MUSHI-INDEXER-429):
+ *   The repo sweep was firing 1 request per code-chunk (~1077 chunks for
+ *   the glot.it repo), which slammed both:
+ *     - OpenAI's RPM (requests-per-minute) limit
+ *     - OpenAI's TPM (tokens-per-minute) limit, because every per-request
+ *       overhead (model name, dimensions, header parsing) is amortised over
+ *       a single 100-1000 token chunk.
+ *   The error returned was the misleading
+ *     "Request too large for text-embedding-3-small … Limit 50000000,
+ *      Requested 114"
+ *   — what the user is actually seeing is "the next request would push
+ *   the org's running 60s token total over the cap", not "this one request
+ *   is too big". Batching shrinks 1077 calls into ~11 calls (default
+ *   batch=96) and the issue disappears at any reasonable sweep size.
+ *
+ * Behaviour notes:
+ *   - The same retry-with-backoff policy as `createEmbedding` (Retry-After
+ *     when present, exponential + jitter otherwise, configurable via
+ *     `MUSHI_EMBED_MAX_RETRIES`).
+ *   - The whole batch retries together — partial-failure recovery would
+ *     require knowing which inputs in the batch were already counted
+ *     against the rate limit (OpenAI doesn't expose that), so all-or-
+ *     nothing is the safe semantics.
+ *   - Returns embeddings in the same order as `inputs`. Throws if the API
+ *     returns fewer rows than expected (signals a gateway misbehaviour
+ *     worth surfacing; callers can retry the batch one input at a time
+ *     if they want partial recovery).
+ */
+export async function createEmbeddingBatch(
+  inputs: string[],
+  modelOrOpts?: string | EmbeddingOptions,
+  legacyOpts?: EmbeddingOptions,
+): Promise<number[][]> {
+  if (inputs.length === 0) return []
+  const opts: EmbeddingOptions = typeof modelOrOpts === 'string'
+    ? { model: modelOrOpts, ...(legacyOpts ?? {}) }
+    : { ...(modelOrOpts ?? {}) }
+  const embeddingModel = opts.model ?? DEFAULT_MODEL
+  const resolved = await resolveOpenAi(opts.projectId)
+  if (!resolved) throw new Error('OPENAI_API_KEY not set (and no BYOK key configured)')
+
+  let lastError = ''
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const response = await fetchEmbedding(resolved, embeddingModel, inputs)
+
+    if (response.ok) {
+      const result = await response.json() as {
+        data?: Array<{ embedding: number[]; index?: number }>
+      }
+      const rows = result.data ?? []
+      if (rows.length !== inputs.length) {
+        throw new Error(
+          `Batch embedding shape mismatch from ${hostOf(resolved.baseUrl)} ` +
+          `for model ${embeddingModel}: requested ${inputs.length}, got ${rows.length}`,
+        )
+      }
+      // Sort by `index` if the gateway provided it; otherwise trust order.
+      // OpenAI always sets `index`; OpenRouter forwards it; some self-hosted
+      // proxies omit it — falling back to insertion order is fine because
+      // we sent in order and OpenAI guarantees order in the response.
+      const ordered = rows.every((r) => typeof r.index === 'number')
+        ? [...rows].sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+        : rows
+      const embeddings = ordered.map((r, i) => {
+        if (!r.embedding) {
+          throw new Error(
+            `No embedding for batch index ${i} from ${hostOf(resolved.baseUrl)} ` +
+            `for model ${embeddingModel}`,
+          )
+        }
+        return r.embedding
+      })
+      return embeddings
+    }
+
+    const body = await response.text()
+    lastError = `${response.status}: ${body.slice(0, 200)}`
+    const retryable = response.status === 429 || (response.status >= 500 && response.status < 600)
+    if (!retryable || attempt === MAX_RETRIES) {
+      throw new Error(
+        `Embedding API error: ${response.status} from ${hostOf(resolved.baseUrl)} ` +
+        `for model ${embeddingModel} (batch=${inputs.length}): ${body.slice(0, 200)}`,
+      )
+    }
+
+    const delay = computeRetryDelay(response, attempt)
+    embLog.warn('Batch embedding API retryable error — backing off', {
+      host: hostOf(resolved.baseUrl),
+      model: embeddingModel,
+      status: response.status,
+      batchSize: inputs.length,
+      attempt: attempt + 1,
+      maxAttempts: MAX_RETRIES + 1,
+      delayMs: Math.round(delay),
+    })
+    await sleep(delay)
   }
-  return embedding
+
+  throw new Error(
+    `Batch embedding API error after ${MAX_RETRIES + 1} attempts: ${lastError}`,
+  )
 }
 
 export async function generateAndStoreEmbedding(
@@ -202,28 +409,38 @@ export async function generateAndStoreEmbedding(
   const span = trace.span('openai.embed')
 
   try {
-    const response = await fetch(`${resolved.baseUrl}/v1/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${resolved.key}`,
-      },
-      body: JSON.stringify({
-        model: embeddingModel,
-        input: text.slice(0, 8000),
-        dimensions: DEFAULT_DIMENSIONS,
-      }),
-    })
-
-    if (!response.ok) {
-      const errBody = await response.text()
-      span.end({ model: embeddingModel, error: `${response.status}: ${errBody.slice(0, 200)}` })
-      embLog.error('Embedding API error', {
+    // Mirror the retry policy from `createEmbedding`. Report-similarity is
+    // best-effort but a single 429 burst shouldn't silently disable it for
+    // every report ingested in the next minute.
+    let response: Response | null = null
+    let lastErrBody = ''
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      response = await fetchEmbedding(resolved, embeddingModel, text)
+      if (response.ok) break
+      lastErrBody = await response.text()
+      const retryable = response.status === 429 || (response.status >= 500 && response.status < 600)
+      if (!retryable || attempt === MAX_RETRIES) break
+      const delay = computeRetryDelay(response, attempt)
+      embLog.warn('Embedding API retryable error — backing off', {
         reportId,
-        status: response.status,
         host: hostOf(resolved.baseUrl),
         model: embeddingModel,
-        body: errBody.slice(0, 500),
+        status: response.status,
+        attempt: attempt + 1,
+        maxAttempts: MAX_RETRIES + 1,
+        delayMs: Math.round(delay),
+      })
+      await sleep(delay)
+    }
+
+    if (!response || !response.ok) {
+      span.end({ model: embeddingModel, error: `${response?.status ?? 'no-response'}: ${lastErrBody.slice(0, 200)}` })
+      embLog.error('Embedding API error', {
+        reportId,
+        status: response?.status,
+        host: hostOf(resolved.baseUrl),
+        model: embeddingModel,
+        body: lastErrBody.slice(0, 500),
       })
       return
     }

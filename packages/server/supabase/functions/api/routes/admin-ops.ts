@@ -996,6 +996,20 @@ export function registerAdminOpsRoutes(app: Hono): void {
       .maybeSingle();
 
     let customerId = existing?.stripe_customer_id;
+
+    // Guard: test-fixture IDs (cus_test_*) must never block billing for real
+    // projects in production. If the row in billing_customers holds a stale
+    // fixture ID (e.g. seeded by a QA script), treat it as absent so Stripe
+    // creates a real customer instead of surfacing a resource_missing 400.
+    const isProd = (Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production') === 'production';
+    if (customerId && isProd && customerId.startsWith('cus_test_')) {
+      log.warn('billing.stale_test_customer_id_ignored', {
+        projectId: body.project_id,
+        staleCustomerId: customerId,
+      });
+      customerId = undefined;
+    }
+
     if (!customerId) {
       const customer = await createCustomer(cfg, {
         email: body.email,

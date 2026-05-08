@@ -201,16 +201,24 @@ async function deliverOne(
   }
   const durationMs = Date.now() - start
 
+  // Non-ok deliveries are stored as 'pending' with a retry timestamp so the
+  // plugin-dispatch-retry cron can replay them with exponential backoff.
+  const isFinal = status === 'ok'
+  const persistedStatus = isFinal ? 'ok' : 'pending'
+  const next_retry_at = isFinal ? null : new Date(Date.now() + 30_000).toISOString()
+
   try {
     await db.from('plugin_dispatch_log').insert({
       delivery_id: deliveryId,
       project_id: projectId,
       plugin_slug: plugin.plugin_slug,
       event,
-      status,
+      attempt: 1,
+      status: persistedStatus,
       http_status: httpStatus,
       response_excerpt: excerpt || null,
       duration_ms: durationMs,
+      next_retry_at,
       payload_digest: digest,
     })
   } catch { /* dispatch log is best-effort */ }
@@ -231,6 +239,132 @@ async function loadSecret(db: SupabaseClient, ref: string): Promise<string | nul
     return null
   }
   return typeof data === 'string' ? data : null
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Public test-delivery helper (used by the admin POST /:slug/test-event route)
+// ──────────────────────────────────────────────────────────────────────────
+
+export interface TestDeliveryResult {
+  ok: boolean
+  httpStatus: number | null
+  durationMs: number
+  excerpt: string
+}
+
+/**
+ * Fire a `test.delivery` event at the plugin's webhook URL.
+ * Identical signing logic to `deliverOne` — the envelope is signed and the
+ * result is written to `plugin_dispatch_log` so it appears in the dispatch
+ * table in the UI.
+ */
+export async function sendTestDelivery(
+  db: SupabaseClient,
+  projectId: string,
+  slug: string,
+): Promise<TestDeliveryResult> {
+  const { data: row, error } = await db
+    .from('project_plugins')
+    .select('webhook_url, webhook_secret_vault_ref, plugin_slug, plugin_name')
+    .eq('project_id', projectId)
+    .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
+    .maybeSingle()
+
+  if (error || !row) {
+    return { ok: false, httpStatus: null, durationMs: 0, excerpt: error?.message ?? 'Plugin not found' }
+  }
+  if (!row.webhook_url) {
+    return { ok: false, httpStatus: null, durationMs: 0, excerpt: 'Plugin has no webhook URL' }
+  }
+
+  const deliveryId = crypto.randomUUID()
+  const occurredAt = new Date().toISOString()
+  const pluginSlug = row.plugin_slug ?? row.plugin_name
+  const event = 'test.delivery'
+  const envelope = { event, deliveryId, occurredAt, projectId, pluginSlug, data: { test: true } }
+  const rawBody = JSON.stringify(envelope)
+  const digest = await sha256Hex(rawBody)
+
+  const secret = row.webhook_secret_vault_ref
+    ? await loadSecret(db, row.webhook_secret_vault_ref)
+    : null
+
+  if (!secret) {
+    try {
+      await db.from('plugin_dispatch_log').insert({
+        delivery_id: deliveryId,
+        project_id: projectId,
+        plugin_slug: pluginSlug,
+        event,
+        attempt: 1,
+        status: 'skipped',
+        response_excerpt: 'missing_secret',
+        payload_digest: digest,
+      })
+    } catch { /* dispatch log is best-effort */ }
+    return { ok: false, httpStatus: null, durationMs: 0, excerpt: 'missing_secret' }
+  }
+
+  const t = Date.now()
+  const sig = await signHmac(secret, `${t}.${rawBody}`)
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'X-Mushi-Event': event,
+    'X-Mushi-Signature': `t=${t},v1=${sig}`,
+    'X-Mushi-Project': projectId,
+    'X-Mushi-Plugin': pluginSlug,
+    'X-Mushi-Delivery': deliveryId,
+  }
+
+  const start = Date.now()
+  let status: 'ok' | 'error' | 'timeout' = 'error'
+  let httpStatus: number | null = null
+  let excerpt = ''
+
+  try {
+    const controller = new AbortController()
+    const tm = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS)
+    const res = await fetch(row.webhook_url, {
+      method: 'POST',
+      headers,
+      body: rawBody,
+      signal: controller.signal,
+    })
+    clearTimeout(tm)
+    httpStatus = res.status
+    const text = await res.text().catch(() => '')
+    excerpt = text.slice(0, RESPONSE_EXCERPT_MAX)
+    status = res.ok ? 'ok' : 'error'
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') status = 'timeout'
+    excerpt = String(err).slice(0, RESPONSE_EXCERPT_MAX)
+  }
+  const durationMs = Date.now() - start
+
+  try {
+    await db.from('plugin_dispatch_log').insert({
+      delivery_id: deliveryId,
+      project_id: projectId,
+      plugin_slug: pluginSlug,
+      event,
+      attempt: 1,
+      status,
+      http_status: httpStatus,
+      response_excerpt: excerpt || null,
+      duration_ms: durationMs,
+      next_retry_at: null,
+      payload_digest: digest,
+    })
+  } catch { /* dispatch log is best-effort */ }
+
+  try {
+    await db.from('project_plugins')
+      .update({ last_delivery_at: new Date().toISOString(), last_delivery_status: status })
+      .eq('project_id', projectId)
+      .or(`plugin_slug.eq.${pluginSlug},plugin_name.eq.${pluginSlug}`)
+  } catch { /* last-delivery stamp is best-effort */ }
+
+  return { ok: status === 'ok', httpStatus, durationMs, excerpt }
 }
 
 async function signHmac(secret: string, payload: string): Promise<string> {

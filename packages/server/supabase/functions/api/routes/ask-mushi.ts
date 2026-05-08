@@ -911,9 +911,11 @@ export function registerAskMushiRoutes(app: Hono): void {
     if (route) q = q.eq('route', route);
     const { data, error } = await q;
     if (error) {
-      if (error.code === '42P01') {
-        // ask_mushi_messages migration hasn't landed yet — return empty so
-        // the History popover renders an empty state instead of a 500.
+      // ask_mushi_messages migration hasn't landed yet (42P01 = table missing
+      // at Postgres level; PGRST205 = PostgREST schema cache hasn't reloaded
+      // after the migration was applied). Return empty so the History popover
+      // renders a graceful empty state instead of surfacing a 500/503.
+      if (error.code === '42P01' || error.code === 'PGRST205') {
         return c.json({ ok: true, data: { threads: [], degraded: 'schema_pending' } });
       }
       return dbError(c, error);
@@ -996,7 +998,7 @@ export function registerAskMushiRoutes(app: Hono): void {
       .eq('thread_id', id)
       .order('created_at', { ascending: true });
     if (error) {
-      if (error.code === '42P01')
+      if (error.code === '42P01' || error.code === 'PGRST205')
         return c.json({ ok: true, data: { messages: [], degraded: 'schema_pending' } });
       return dbError(c, error);
     }
@@ -1020,7 +1022,11 @@ export function registerAskMushiRoutes(app: Hono): void {
       .delete()
       .eq('user_id', userId)
       .eq('thread_id', id);
-    if (error) return dbError(c, error);
+    if (error) {
+      if (error.code === '42P01' || error.code === 'PGRST205')
+        return c.json({ ok: true, data: { deleted: id, degraded: 'schema_pending' } });
+      return dbError(c, error);
+    }
     return c.json({ ok: true, data: { deleted: id } });
   });
 

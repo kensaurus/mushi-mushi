@@ -75,14 +75,16 @@
       "@xmldom/xmldom@<0.9.10": ">=0.9.10",
       "uuid@<14.0.0": ">=14.0.0",
       "postcss@<8.5.10": ">=8.5.10",
-      "next@<15.5.14": ">=15.5.14"
+      "next@<15.5.14": ">=15.5.14",
+      "hono@<4.12.16": ">=4.12.16",
+      "ip-address@<=10.1.0": ">=10.1.1"
     }
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.6.1",
     "prettier": "^3.5.3",
-    "turbo": "^2.5.4"
+    "turbo": "^2.9.7"
   },
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"

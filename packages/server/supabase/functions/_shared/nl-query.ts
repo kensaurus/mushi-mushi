@@ -77,9 +77,6 @@ export function sanitizeSql(
   if (!/^\s*(with\s|select\s)/i.test(sql.trim())) {
     throw new Error('Only SELECT / WITH queries are permitted.')
   }
-  if (requireProjectIdParam && !sql.toLowerCase().includes('$1')) {
-    throw new Error('Query must include project_id = $1 to scope results to your project.')
-  }
 
   // Strip inline SQL comments — they can hide injection payloads from the
   // regex checks above. Block comments (/* */) and line comments (--).
@@ -90,6 +87,16 @@ export function sanitizeSql(
     .replace(/\/\*[\s\S]*?\*\//g, ' ')
     .replace(/;\s*$/g, '') // trailing semicolon breaks the RPC wrapper
     .trim()
+
+  // SEC: this MUST run on `cleaned`, not on the raw `sql`. Otherwise a
+  // user can satisfy the check by hiding `$1` inside a comment
+  // (e.g. `SELECT * FROM reports /* $1 */ WHERE severity = 'critical'`)
+  // — comment stripping then removes the only `$1` reference, the RPC
+  // wrapper's `project_id_param` goes unused, and the query returns
+  // rows from every tenant. Cross-project data leak.
+  if (requireProjectIdParam && !cleaned.toLowerCase().includes('$1')) {
+    throw new Error('Query must include project_id = $1 to scope results to your project.')
+  }
 
   if (cleaned.includes(';')) {
     throw new Error('Multi-statement queries are not allowed.')

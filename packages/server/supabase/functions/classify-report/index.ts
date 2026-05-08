@@ -451,21 +451,25 @@ ${ontologyContext}${inventoryContext}`
 
     // D1: notify webhook plugins. Async + tolerant: plugins must not
     // affect classification latency.
-    void dispatchPluginEvent(db, projectId, 'report.classified', {
-      report: {
-        id: reportId,
-        status: 'classified',
-        category: classification.category,
-        severity: classification.severity,
-        title: classification.summary?.slice(0, 80),
-      },
-      classification: {
-        category: classification.category,
-        severity: classification.severity,
-        confidence: classification.confidence,
-        tags: classification.bugOntologyTags ?? [],
-      },
-    }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.classified', err: String(e) }))
+    try {
+      void dispatchPluginEvent(db, projectId, 'report.classified', {
+        report: {
+          id: reportId,
+          status: 'classified',
+          category: classification.category,
+          severity: classification.severity,
+          title: classification.summary?.slice(0, 80),
+        },
+        classification: {
+          category: classification.category,
+          severity: classification.severity,
+          confidence: classification.confidence,
+          tags: classification.bugOntologyTags ?? [],
+        },
+      }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.classified', err: String(e) }))
+    } catch (e) {
+      log.warn('Plugin dispatch failed (sync)', { event: 'report.classified', err: String(e) })
+    }
 
     // Vision analysis (V5.3 air-gap): image-only call with trusted system prompt;
     // never embed untrusted user text alongside the image. Capture OCR'd text

@@ -22,6 +22,7 @@
 import { openSseStream } from './sseClient'
 import { supabase } from './supabase'
 import { RESOLVED_API_URL } from './env'
+import { debugLog, debugError } from './debug'
 import type { AskMushiSendBody, AskMushiMessageMeta } from './askMushiTypes'
 
 export interface AskMushiStreamHandlers {
@@ -55,6 +56,14 @@ export async function openAskMushiStream(
     handlers.onError({ code: 'UNAUTHENTICATED', message: 'No session' })
     return { cancel: () => {} }
   }
+
+  debugLog('ask-mushi:stream', 'Opening SSE stream', {
+    endpoint: `${RESOLVED_API_URL}/v1/admin/ask-mushi/messages/stream`,
+    threadId: body.threadId,
+    route: body.route,
+    messageCount: body.messages.length,
+    bearerPrefix: bearer.slice(0, 10) + '…',
+  })
 
   // We need to POST a JSON body with SSE response. `openSseStream` issues
   // GET only, so we go direct here — same Bearer + abort story, just
@@ -103,17 +112,31 @@ export async function openAskMushiStream(
         sawAnything = true
         try {
           const parsed = JSON.parse(data)
-          if (event === 'start') handlers.onStart?.(parsed)
+          if (event === 'start') {
+            debugLog('ask-mushi:stream', 'Stream started', { model: parsed.model, threadId: parsed.threadId })
+            handlers.onStart?.(parsed)
+          }
           else if (event === 'delta') handlers.onDelta(parsed.delta ?? '')
-          else if (event === 'meta') handlers.onMeta(parsed)
+          else if (event === 'meta') {
+            debugLog('ask-mushi:stream', 'Stream meta received', {
+              model: parsed.model,
+              latencyMs: parsed.latencyMs,
+              inputTokens: parsed.inputTokens,
+              outputTokens: parsed.outputTokens,
+              costUsd: parsed.costUsd,
+              fallbackUsed: parsed.fallbackUsed,
+            })
+            handlers.onMeta(parsed)
+          }
           else if (event === 'done') {
             if (!closed) {
               closed = true
               handlers.onDone()
             }
-          } else if (event === 'error') {
+          }           else if (event === 'error') {
             if (!closed) {
               closed = true
+              debugError('ask-mushi:stream', 'Stream error event', { code: parsed.code, message: parsed.message })
               handlers.onError({ code: parsed.code ?? 'STREAM_ERROR', message: parsed.message ?? 'Stream error' })
             }
           }

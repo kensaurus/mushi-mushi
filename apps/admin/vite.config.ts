@@ -46,6 +46,27 @@ const APP_VERSION = readPkgVersion('./package.json')
 const SDK_WEB_VERSION = readPkgVersion('../../packages/web/package.json')
 const SDK_REACT_VERSION = readPkgVersion('../../packages/react/package.json')
 const SERVER_VERSION = readPkgVersion('../../packages/server/package.json')
+// Additional public SDK packages
+const SDK_CORE_VERSION = readPkgVersion('../../packages/core/package.json')
+const SDK_VUE_VERSION = readPkgVersion('../../packages/vue/package.json')
+const SDK_SVELTE_VERSION = readPkgVersion('../../packages/svelte/package.json')
+const SDK_ANGULAR_VERSION = readPkgVersion('../../packages/angular/package.json')
+const SDK_RN_VERSION = readPkgVersion('../../packages/react-native/package.json')
+const SDK_CLI_VERSION = readPkgVersion('../../packages/cli/package.json')
+const SDK_MCP_VERSION = readPkgVersion('../../packages/mcp/package.json')
+const SDK_NODE_VERSION = readPkgVersion('../../packages/node/package.json')
+const SDK_CAPACITOR_VERSION = readPkgVersion('../../packages/capacitor/package.json')
+const SDK_PLUGIN_SDK_VERSION = readPkgVersion('../../packages/plugin-sdk/package.json')
+const SDK_PLUGIN_JIRA_VERSION = readPkgVersion('../../packages/plugin-jira/package.json')
+const SDK_PLUGIN_LINEAR_VERSION = readPkgVersion('../../packages/plugin-linear/package.json')
+const SDK_PLUGIN_PAGERDUTY_VERSION = readPkgVersion('../../packages/plugin-pagerduty/package.json')
+const SDK_PLUGIN_SENTRY_VERSION = readPkgVersion('../../packages/plugin-sentry/package.json')
+const SDK_PLUGIN_SLACK_VERSION = readPkgVersion('../../packages/plugin-slack-app/package.json')
+const SDK_PLUGIN_ZAPIER_VERSION = readPkgVersion('../../packages/plugin-zapier/package.json')
+const SDK_ADAPTERS_VERSION = readPkgVersion('../../packages/adapters/package.json')
+const SDK_WASM_VERSION = readPkgVersion('../../packages/wasm-classifier/package.json')
+const CREATE_MUSHI_VERSION = readPkgVersion('../../packages/create-mushi-mushi/package.json')
+const LAUNCHER_VERSION = readPkgVersion('../../packages/launcher/package.json')
 const BUILD_SHA = readGitSha()
 const BUILD_DATE = new Date().toISOString().slice(0, 10)
 
@@ -66,6 +87,27 @@ export default defineConfig({
     __SERVER_VERSION__: JSON.stringify(SERVER_VERSION),
     __BUILD_SHA__: JSON.stringify(BUILD_SHA),
     __BUILD_DATE__: JSON.stringify(BUILD_DATE),
+    // Extended SDK catalog
+    __SDK_CORE_VERSION__: JSON.stringify(SDK_CORE_VERSION),
+    __SDK_VUE_VERSION__: JSON.stringify(SDK_VUE_VERSION),
+    __SDK_SVELTE_VERSION__: JSON.stringify(SDK_SVELTE_VERSION),
+    __SDK_ANGULAR_VERSION__: JSON.stringify(SDK_ANGULAR_VERSION),
+    __SDK_RN_VERSION__: JSON.stringify(SDK_RN_VERSION),
+    __SDK_CLI_VERSION__: JSON.stringify(SDK_CLI_VERSION),
+    __SDK_MCP_VERSION__: JSON.stringify(SDK_MCP_VERSION),
+    __SDK_NODE_VERSION__: JSON.stringify(SDK_NODE_VERSION),
+    __SDK_CAPACITOR_VERSION__: JSON.stringify(SDK_CAPACITOR_VERSION),
+    __SDK_PLUGIN_SDK_VERSION__: JSON.stringify(SDK_PLUGIN_SDK_VERSION),
+    __SDK_PLUGIN_JIRA_VERSION__: JSON.stringify(SDK_PLUGIN_JIRA_VERSION),
+    __SDK_PLUGIN_LINEAR_VERSION__: JSON.stringify(SDK_PLUGIN_LINEAR_VERSION),
+    __SDK_PLUGIN_PAGERDUTY_VERSION__: JSON.stringify(SDK_PLUGIN_PAGERDUTY_VERSION),
+    __SDK_PLUGIN_SENTRY_VERSION__: JSON.stringify(SDK_PLUGIN_SENTRY_VERSION),
+    __SDK_PLUGIN_SLACK_VERSION__: JSON.stringify(SDK_PLUGIN_SLACK_VERSION),
+    __SDK_PLUGIN_ZAPIER_VERSION__: JSON.stringify(SDK_PLUGIN_ZAPIER_VERSION),
+    __SDK_ADAPTERS_VERSION__: JSON.stringify(SDK_ADAPTERS_VERSION),
+    __SDK_WASM_VERSION__: JSON.stringify(SDK_WASM_VERSION),
+    __CREATE_MUSHI_VERSION__: JSON.stringify(CREATE_MUSHI_VERSION),
+    __LAUNCHER_VERSION__: JSON.stringify(LAUNCHER_VERSION),
   },
   plugins: [
     react(),

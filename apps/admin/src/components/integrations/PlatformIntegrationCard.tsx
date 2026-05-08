@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
+import { isStale } from '../../lib/staleness'
 import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
 import { IconPlay, IconPencil } from '../icons'
@@ -102,14 +103,19 @@ export function PlatformIntegrationCard({
             {!requiredOk && (
               <Badge className="bg-warn/10 text-warn border border-warn/30">Not configured</Badge>
             )}
+            {requiredOk && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
+              <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
+                <Badge className="bg-warn/10 text-warn border border-warn/30">Stale</Badge>
+              </Tooltip>
+            )}
           </div>
-          <p className="text-2xs text-fg-muted mt-0.5">{def.whyItMatters}</p>
+          <p className="text-2xs text-fg-secondary mt-1 pl-2 border-l-2 border-brand/30 leading-snug">{def.whyItMatters}</p>
           {!requiredOk && def.capabilitiesOnceConnected.length > 0 && (
-            <ul className="mt-1.5 space-y-0.5 text-2xs text-fg-muted">
+            <ul className="mt-1.5 space-y-1 text-2xs">
               {def.capabilitiesOnceConnected.map((capability) => (
-                <li key={capability} className="flex gap-1.5">
-                  <span aria-hidden="true" className="text-fg-faint">+</span>
-                  <span>{capability}</span>
+                <li key={capability} className="flex gap-1.5 items-baseline">
+                  <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
+                  <span className="text-fg-secondary leading-snug">{capability}</span>
                 </li>
               ))}
             </ul>

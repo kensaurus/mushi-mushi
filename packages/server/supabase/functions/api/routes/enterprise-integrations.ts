@@ -6,7 +6,7 @@ import { jwtAuth } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { getActivePlugins } from '../../_shared/plugins.ts';
+import { getActivePlugins, sendTestDelivery } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
@@ -1236,6 +1236,179 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       removed: true,
     }).catch(() => {});
     return c.json({ ok: true });
+  });
+
+  // ============================================================
+  // Plugin lifecycle — patch (pause/resume/edit) + test + rotate
+  // ============================================================
+
+  /**
+   * PATCH /v1/admin/plugins/:slug
+   *
+   * Partial update of a single installed plugin.  Only mutates fields the
+   * caller explicitly sends — never touches webhook_secret_vault_ref so a
+   * URL edit or pause/resume can't accidentally wipe a rotated secret.
+   * Accepted fields: isActive, webhookUrl, subscribedEvents, config.
+   */
+  app.patch('/v1/admin/plugins/:slug', jwtAuth, requireFeature('plugins'), async (c) => {
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    const body = await c.req.json().catch(() => ({}));
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const patch: Record<string, unknown> = {};
+    if (typeof body.isActive === 'boolean') patch.is_active = body.isActive;
+    if (typeof body.webhookUrl === 'string') {
+      if (!body.webhookUrl.startsWith('https://')) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_INPUT', message: 'webhookUrl must be https://' } },
+          400,
+        );
+      }
+      patch.webhook_url = body.webhookUrl;
+    }
+    if (Array.isArray(body.subscribedEvents)) {
+      patch.subscribed_events = body.subscribedEvents.filter(
+        (e: unknown): e is string => typeof e === 'string',
+      );
+    }
+    if (body.config && typeof body.config === 'object') patch.config = body.config;
+
+    if (Object.keys(patch).length === 0) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_INPUT', message: 'No mutable fields supplied' } },
+        400,
+      );
+    }
+
+    const { error, data } = await db
+      .from('project_plugins')
+      .update(patch)
+      .eq('project_id', project.id)
+      .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
+      .select('id')
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    if (!data) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_FOUND', message: 'Plugin not installed' } },
+        404,
+      );
+    }
+
+    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+      action: 'patch',
+      fields: Object.keys(patch),
+    }).catch(() => {});
+    return c.json({ ok: true });
+  });
+
+  /**
+   * POST /v1/admin/plugins/:slug/test-event
+   *
+   * Fire a `test.delivery` event at the plugin's webhook URL using the same
+   * HMAC signing path as a real dispatch. A row is written to
+   * `plugin_dispatch_log` so the result surfaces in the dispatch table.
+   * Returns { httpStatus, durationMs, excerpt } so the UI can confirm the
+   * receiver is reachable.
+   */
+  app.post('/v1/admin/plugins/:slug/test-event', jwtAuth, requireFeature('plugins'), async (c) => {
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const result = await sendTestDelivery(db, project.id, slug);
+    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+      action: 'test_event',
+      ok: result.ok,
+    }).catch(() => {});
+
+    return c.json({
+      ok: true,
+      data: {
+        delivered: result.ok,
+        httpStatus: result.httpStatus,
+        durationMs: result.durationMs,
+        excerpt: result.excerpt,
+      },
+    });
+  });
+
+  /**
+   * POST /v1/admin/plugins/:slug/rotate-secret
+   *
+   * Generate a new 32-byte signing secret, overwrite the existing vault
+   * entry (canonical secret_name comes from the DB row's vault_ref so we
+   * can't be tricked into writing arbitrary keys via the URL), and return
+   * the plaintext exactly once. In-flight dispatches that already loaded
+   * the old secret complete normally; new dispatches pick up the new
+   * secret on their next vault_lookup call.
+   */
+  app.post('/v1/admin/plugins/:slug/rotate-secret', jwtAuth, requireFeature('plugins'), async (c) => {
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: pluginRow, error: lookupErr } = await db
+      .from('project_plugins')
+      .select('plugin_slug, plugin_name, webhook_secret_vault_ref')
+      .eq('project_id', project.id)
+      .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
+      .maybeSingle();
+    if (lookupErr) return dbError(c, lookupErr);
+    if (!pluginRow) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_FOUND', message: 'Plugin not installed' } },
+        404,
+      );
+    }
+
+    // Canonical secret_name: prefer the existing vault_ref (rotation in
+    // place), fall back to the slug-derived path for legacy rows that
+    // were installed without a webhook secret.
+    const secretName = pluginRow.webhook_secret_vault_ref?.startsWith('vault://')
+      ? pluginRow.webhook_secret_vault_ref.slice('vault://'.length)
+      : `mushi/plugin/${project.id}/${pluginRow.plugin_slug ?? pluginRow.plugin_name}`;
+
+    const newSecretBytes = new Uint8Array(32);
+    crypto.getRandomValues(newSecretBytes);
+    const newSecret = Array.from(newSecretBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+    const { error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: secretName,
+      secret_value: newSecret,
+    });
+    if (vaultErr) {
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
+        500,
+      );
+    }
+
+    // If the plugin was previously installed without a secret, point the
+    // row at the freshly written vault entry so dispatch() picks it up.
+    if (!pluginRow.webhook_secret_vault_ref) {
+      await db
+        .from('project_plugins')
+        .update({ webhook_secret_vault_ref: `vault://${secretName}` })
+        .eq('project_id', project.id)
+        .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`);
+    }
+
+    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+      action: 'rotate_secret',
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { secret: newSecret } });
   });
 
   // ============================================================

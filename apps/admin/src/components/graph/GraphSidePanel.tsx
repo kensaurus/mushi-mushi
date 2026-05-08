@@ -6,7 +6,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { Badge, Card, RelativeTime } from '../ui'
+import { Badge, Card, RelativeTime, DetailRows, type DetailRowItem } from '../ui'
 import { NODE_COLORS } from '../../lib/tokens'
 import {
   nodeMetadataValue,
@@ -59,34 +59,43 @@ export function GraphSidePanel({ node, blastRadius, blastLoading, onClear }: Pro
         </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-2xs">
-        {occ != null && (
-          <div>
-            <div className="text-fg-faint">Occurrences</div>
-            <div className="font-mono text-fg">{occ}</div>
-          </div>
-        )}
-        {node.last_traversed_at && (
-          <div>
-            <div className="text-fg-faint">Last seen</div>
-            <div className="text-fg-secondary">
-              <RelativeTime value={node.last_traversed_at} />
-            </div>
-          </div>
-        )}
-        {node.created_at && (
-          <div>
-            <div className="text-fg-faint">First seen</div>
-            <div className="text-fg-secondary">
-              <RelativeTime value={node.created_at} />
-            </div>
-          </div>
-        )}
-        <div className="col-span-2">
-          <div className="text-fg-faint">Node id</div>
-          <div className="font-mono text-fg-secondary wrap-break-word">{node.id}</div>
-        </div>
-      </div>
+      <DetailRows
+        items={(() => {
+          const rows: DetailRowItem[] = []
+          if (occ != null) {
+            rows.push({
+              label: 'Occurrences',
+              value: occ.toLocaleString(),
+              mono: true,
+              tone: 'info',
+              hint: 'How many times this node has been traversed.',
+            })
+          }
+          if (node.last_traversed_at) {
+            rows.push({
+              label: 'Last seen',
+              value: <RelativeTime value={node.last_traversed_at} />,
+              tone: 'muted',
+            })
+          }
+          if (node.created_at) {
+            rows.push({
+              label: 'First seen',
+              value: <RelativeTime value={node.created_at} />,
+              tone: 'muted',
+            })
+          }
+          rows.push({
+            label: 'Node id',
+            value: node.id,
+            mono: true,
+            tone: 'muted',
+            wrap: true,
+            copyable: true,
+          })
+          return rows
+        })()}
+      />
 
       {reportLink && (
         <Link to={reportLink} className="inline-block text-xs text-brand hover:text-brand-hover">

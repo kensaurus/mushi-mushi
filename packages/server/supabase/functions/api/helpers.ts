@@ -372,17 +372,24 @@ export async function ingestReport(
 
   // D1: fire `report.created` to all webhook plugins. Fully async —
   // plugin failures must not impact ingest latency or block the pipeline.
-  void dispatchPluginEvent(db, projectId, 'report.created', {
-    report: {
-      id: reportId,
-      status: 'new',
-      category: report.category,
-      title: report.description?.slice(0, 80),
-    },
-    source: (report.metadata as Record<string, unknown> | undefined)?.source ?? null,
-  }).catch((err) =>
-    log.warn('Plugin dispatch failed', { event: 'report.created', err: String(err) }),
-  );
+  // try/catch guards against synchronous throws (e.g. ReferenceError during a
+  // deploy gap) that would otherwise escape through the async call chain and
+  // surface as a 500 on the ingest endpoint even though the report was saved.
+  try {
+    void dispatchPluginEvent(db, projectId, 'report.created', {
+      report: {
+        id: reportId,
+        status: 'new',
+        category: report.category,
+        title: report.description?.slice(0, 80),
+      },
+      source: (report.metadata as Record<string, unknown> | undefined)?.source ?? null,
+    }).catch((err) =>
+      log.warn('Plugin dispatch failed', { event: 'report.created', err: String(err) }),
+    );
+  } catch (err) {
+    log.warn('Plugin dispatch failed (sync)', { event: 'report.created', err: String(err) });
+  }
 
   // Check circuit breaker before invoking classification
   const shouldProcess = await checkCircuitBreaker(db);

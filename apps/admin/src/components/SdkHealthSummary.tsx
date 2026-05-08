@@ -47,7 +47,7 @@
 
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Card, Btn, Badge } from './ui'
+import { Card, Btn, Badge, DetailRows } from './ui'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import type { SetupStep } from '../lib/useSetupStatus'
@@ -535,15 +535,29 @@ export function SdkHealthSummary({
               fix is one read-and-paste away — no need to drill into a
               tooltip on the table row. */}
           {status === 'endpoint-mismatch' && freshest?.last_seen_endpoint_host && adminHost && (
-            <div className="mt-3 pt-2.5 border-t border-edge-subtle/40 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-2xs font-mono">
-              <div>
-                <div className="text-fg-faint uppercase tracking-wide mb-0.5">SDK is reaching</div>
-                <div className="text-danger break-all">{freshest.last_seen_endpoint_host}</div>
-              </div>
-              <div>
-                <div className="text-fg-faint uppercase tracking-wide mb-0.5">This admin reads from</div>
-                <div className="text-ok break-all">{adminHost}</div>
-              </div>
+            <div className="mt-3">
+              <DetailRows
+                items={[
+                  {
+                    label: 'SDK is reaching',
+                    value: freshest.last_seen_endpoint_host,
+                    mono: true,
+                    tone: 'danger',
+                    wrap: true,
+                    copyable: true,
+                    hint: 'Endpoint host the embedded SDK is currently posting reports to.',
+                  },
+                  {
+                    label: 'This admin reads from',
+                    value: adminHost,
+                    mono: true,
+                    tone: 'ok',
+                    wrap: true,
+                    copyable: true,
+                    hint: 'Endpoint host this admin console is configured to query.',
+                  },
+                ]}
+              />
             </div>
           )}
         </div>

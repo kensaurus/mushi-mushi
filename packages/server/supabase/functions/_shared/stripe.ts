@@ -68,7 +68,25 @@ const stripeFetch = async <T>(
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    stripeLog.error('stripe_http_error', { path, status: res.status, body: text })
+
+    // Parse the Stripe error envelope to distinguish expected client errors
+    // (e.g. resource_missing when a billing_customers row is stale) from real
+    // server faults. Expected invalid_request_errors are warnings — they're
+    // already handled gracefully by callers — so they must not open Sentry
+    // exception issues that page on-call for operator-side data hygiene.
+    let parsedBody: { error?: { type?: string; code?: string } } | null = null
+    try { parsedBody = JSON.parse(text) } catch { /* non-JSON body is fine */ }
+    const stripeErrType = parsedBody?.error?.type
+    const stripeErrCode = parsedBody?.error?.code
+    const isExpectedClientError =
+      stripeErrType === 'invalid_request_error' &&
+      (stripeErrCode === 'resource_missing' || stripeErrCode === 'resource_already_exists')
+
+    if (isExpectedClientError) {
+      stripeLog.warn('stripe_http_error', { path, status: res.status, stripe_code: stripeErrCode, body: text })
+    } else {
+      stripeLog.error('stripe_http_error', { path, status: res.status, stripe_code: stripeErrCode, body: text })
+    }
     throw new Error(`stripe ${path} -> ${res.status}: ${text}`)
   }
   return (await res.json()) as T
