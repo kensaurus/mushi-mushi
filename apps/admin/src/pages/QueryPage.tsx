@@ -879,8 +879,20 @@ export function QueryPage() {
               : saved.length === 0
                 ? 'info'
                 : 'ok',
+          anchor: 'query:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Saved', value: saved.length, tone: saved.length > 0 ? 'ok' : 'neutral' },
+              { label: 'Recent', value: recent.length, tone: recent.length > 0 ? 'info' : 'neutral' },
+              { label: 'From team', value: team.length, tone: team.length > 0 ? 'info' : 'neutral' },
+              ...(lastRunHoursAgo != null ? [{ label: 'Last run', value: `${lastRunHoursAgo}h ago`, tone: 'neutral' as const }] : []),
+            ],
+          },
         }}
         act={queryAction}
+        actAnchor="query:act"
+        actEvidence={queryAction ? { kind: 'rule-trace', why: queryAction.reason ?? queryAction.title } : undefined}
         verify={{
           label: 'Latest activity',
           detail:
@@ -892,6 +904,14 @@ export function QueryPage() {
           to: '/query?tab=history',
           secondaryTo: '/query?action=new',
           secondaryLabel: 'New query',
+          anchor: 'query:verify',
+          evidence: history[0] ? {
+            kind: 'last-event',
+            at: history[0].created_at,
+            by: 'user',
+            payloadSummary: history[0].prompt.slice(0, 60),
+            status: 'ok',
+          } : undefined,
         }}
       />
 
@@ -972,7 +992,7 @@ export function QueryPage() {
           </div>
         )}
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3" data-dav-anchor="query:act">
           {queryMode === 'nl' ? (
             <>
               <label htmlFor="query-composer" className="block text-xs font-medium text-fg-muted">
@@ -1234,7 +1254,7 @@ export function QueryPage() {
                   ) : saved.length === 0 ? (
                     <p className="text-2xs text-fg-faint">Pin a query (☆) and it shows up here for quick rerun.</p>
                   ) : (
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-1.5" data-dav-anchor="query:decide">
                       {saved.map((h) => (
                         <HistoryItem key={h.id} row={h} onRerun={() => handleSubmit(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
                       ))}
@@ -1258,7 +1278,7 @@ export function QueryPage() {
                   ) : recent.length === 0 ? (
                     <p className="text-2xs text-fg-faint">Ask a question — the prompt + row count land here.</p>
                   ) : (
-                    <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1">
+                    <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1" data-dav-anchor="query:verify">
                       {recent.map((h) => (
                         <HistoryItem key={h.id} row={h} onRerun={() => handleSubmit(h.prompt, h.mode ?? 'nl')} onToggleSave={() => toggleSaved(h)} onDelete={() => setPendingDeleteHistory(h)} />
                       ))}

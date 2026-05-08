@@ -273,8 +273,22 @@ export function IntelligencePage() {
                   ? 'Modernization findings are waiting for triage below.'
                   : 'This week\u2019s digest is fresh. Check hotspots and category drift.',
           severity: intelligenceSeverity,
+          anchor: 'intelligence:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Digests', value: reports.length, tone: reports.length === 0 ? 'neutral' : 'ok' },
+              { label: 'Findings', value: findings.length, tone: findings.length > 0 ? 'warn' : 'ok' },
+              ...(lastDigestHoursAgo != null
+                ? [{ label: 'Last digest', value: `${Math.round(lastDigestHoursAgo)}h ago`, tone: lastDigestHoursAgo > 7 * 24 ? 'warn' as const : 'ok' as const }]
+                : []),
+            ],
+          },
+          missingConfigIds: lastDigestHoursAgo == null ? ['intelligence.benchmarking_optin'] : [],
         }}
         act={intelligenceAction}
+        actAnchor="intelligence:act"
+        actEvidence={intelligenceAction ? { kind: 'rule-trace', why: intelligenceAction.reason ?? intelligenceAction.title } : undefined}
         verify={{
           label: 'Latest report',
           detail: reports[0]
@@ -283,6 +297,14 @@ export function IntelligencePage() {
           to: '/intelligence#reports',
           secondaryTo: activeJob ? '/intelligence#job' : undefined,
           secondaryLabel: activeJob ? 'View active job' : undefined,
+          anchor: 'intelligence:verify',
+          evidence: reports[0] ? {
+            kind: 'last-event',
+            at: reports[0].created_at,
+            by: 'intelligence-report cron',
+            payloadSummary: `Week of ${reports[0].week_start ?? 'unknown'} · ${findings.length} finding${findings.length === 1 ? '' : 's'}`,
+            status: 'ok',
+          } : undefined,
         }}
       />
 
@@ -310,18 +332,24 @@ export function IntelligencePage() {
         generating={generating || !!activeJob}
       />
 
-      {activeJob && <ActiveJobCard job={activeJob} onCancel={() => void cancelJob(activeJob.id)} />}
+      {activeJob && (
+        <div data-dav-anchor="intelligence:act">
+          <ActiveJobCard job={activeJob} onCancel={() => void cancelJob(activeJob.id)} />
+        </div>
+      )}
 
       {!activeJob && <LastFailureNote jobs={recentJobs} />}
 
       <BenchmarkOptInCard benchmark={benchmark} onToggle={toggleOptIn} />
 
-      <ModernizationFindings
-        findings={findings}
-        dispatchingId={dispatchingId}
-        onDispatch={(id) => void dispatchFinding(id)}
-        onDismiss={(id) => void dismissFinding(id)}
-      />
+      <div data-dav-anchor="intelligence:decide">
+        <ModernizationFindings
+          findings={findings}
+          dispatchingId={dispatchingId}
+          onDispatch={(id) => void dispatchFinding(id)}
+          onDismiss={(id) => void dismissFinding(id)}
+        />
+      </div>
 
       <RecentJobsList jobs={recentJobs} />
 
@@ -335,7 +363,7 @@ export function IntelligencePage() {
           description="Reports are generated weekly by the cron job. Click Generate above to produce one immediately."
         />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2" data-dav-anchor="intelligence:verify">
           {reports.map((r) => (
             <IntelligenceReportCard
               key={r.id}

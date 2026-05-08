@@ -386,21 +386,46 @@ export function InventoryPage() {
           metric: `${stub} stub · ${regressed} regressed`,
           summary: regressed > 0 ? 'Regressed actions need a fix or rollback before the next release.' : 'Surface looks healthy — keep gates green in CI.',
           severity: regressed > 0 ? 'crit' : total === 0 ? 'neutral' : 'ok',
+          anchor: 'inventory:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            whyNow: regressed > 0
+              ? `${regressed} regressed action${regressed === 1 ? '' : 's'} need a fix or rollback before the next release.`
+              : total === 0
+                ? 'No actions ingested yet — connect a repo to populate the inventory.'
+                : `${verified}/${total} actions verified · ${stub} stub · ${regressed} regressed.`,
+            items: [
+              { label: 'Total', value: total, tone: 'neutral' },
+              { label: 'Verified', value: verified, tone: verified > 0 ? 'ok' : 'neutral' },
+              { label: 'Stub', value: stub, tone: stub > 0 ? 'info' : 'neutral' },
+              { label: 'Regressed', value: regressed, tone: regressed > 0 ? 'crit' : 'ok' },
+            ],
+          },
         }}
         act={nba}
+        actAnchor="inventory:act"
+        actEvidence={nba ? { kind: 'rule-trace', why: nba.reason ?? nba.title, threshold: regressed > 0 ? `${regressed} regressed` : undefined } : undefined}
         verify={{
           label: 'Latest ingest',
           detail: snapshot?.commit_sha ? `commit ${snapshot.commit_sha.slice(0, 7)}` : '—',
           to: '/repo',
           secondaryTo: '/graph',
           secondaryLabel: 'Open graph',
+          anchor: 'inventory:verify',
+          evidence: snapshot?.commit_sha ? {
+            kind: 'last-event',
+            at: mainQuery.lastFetchedAt ?? new Date().toISOString(),
+            by: 'crawler / reconciler',
+            payloadSummary: `commit ${snapshot.commit_sha.slice(0, 7)}`,
+            status: regressed > 0 ? 'warn' : 'ok',
+          } : undefined,
         }}
       />
       <PageActionBar
         scope="inventory"
         action={nba}
         trailing={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" data-dav-anchor="inventory:act">
             <Btn type="button" size="sm" variant="ghost" onClick={runGates}>
               Run gates
             </Btn>
@@ -439,18 +464,20 @@ export function InventoryPage() {
       )}
 
       {tab === 'stories' && (
-        <UserStoryMap
-          stories={stories}
-          findingsByNode={findingsByNode}
-          onSelectAction={(a) => void openActionDrawer(a)}
-        />
+        <div data-dav-anchor="inventory:decide">
+          <UserStoryMap
+            stories={stories}
+            findingsByNode={findingsByNode}
+            onSelectAction={(a) => void openActionDrawer(a)}
+          />
+        </div>
       )}
 
       {tab === 'tree' && <InventoryTree rows={treeRows} onRowClick={openDrawerForRow} />}
 
       {tab === 'gates' && (
         <div className="space-y-3">
-          <div className="grid gap-2 md:grid-cols-5">
+          <div className="grid gap-2 md:grid-cols-5" data-dav-anchor="inventory:verify">
             {gateCards.map((g) => {
               const latest = runs.find((r) => r.gate === g)
               return (

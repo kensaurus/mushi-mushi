@@ -253,6 +253,7 @@ export function DLQPage() {
           loading={flushing}
           leadingIcon={<RefreshIcon />}
           title="Re-fires fast-filter for any report stuck older than 5 minutes plus pending queue items past their SLA."
+          data-dav-anchor="dlq:act"
         >
           Recover stranded
         </Btn>
@@ -282,8 +283,20 @@ export function DLQPage() {
                 ? 'Transient failures will retry; confirm nothing is stuck on the same message.'
                 : 'No stuck work, no dead letters. Backlog is draining normally.',
           severity: dlqSeverity,
+          anchor: 'dlq:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Dead-letter', value: deadLetter, tone: deadLetter > 0 ? 'crit' : 'ok' },
+              { label: 'Failed', value: failedCount, tone: failedCount > 0 ? 'warn' : 'ok' },
+              { label: 'Pending', value: pendingCount, tone: 'neutral' },
+              { label: 'Running', value: runningCount, tone: runningCount > 0 ? 'info' : 'neutral' },
+            ],
+          },
         }}
         act={dlqAction}
+        actAnchor="dlq:act"
+        actEvidence={dlqAction ? { kind: 'rule-trace', why: dlqAction.reason ?? dlqAction.title, threshold: deadLetter > 0 ? `${deadLetter} dead-letter` : failedCount > 0 ? `${failedCount} failed` : undefined } : undefined}
         verify={{
           label: 'Latest throughput snapshot',
           detail:
@@ -293,6 +306,15 @@ export function DLQPage() {
           to: '/health?fn=queue-worker',
           secondaryTo: '/audit?source=queue',
           secondaryLabel: 'Audit log',
+          anchor: 'dlq:verify',
+          evidence: latestThroughput ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Date', value: latestThroughput.day, tone: 'neutral' },
+              { label: 'Completed', value: latestThroughput.completed, tone: 'ok' },
+              { label: 'Failed', value: latestThroughput.failed, tone: latestThroughput.failed > 0 ? 'warn' : 'ok' },
+            ],
+          } : undefined,
         }}
       />
 
@@ -327,11 +349,15 @@ export function DLQPage() {
             (waiting → running → completed). Failed jobs are still inside the retry budget; <span className="font-medium text-warn">dead-letter</span> jobs gave up and need a manual look.
             Each sparkline shows the last 14 days for that lane — hover any tile for the full meaning.
           </p>
-          <QueueKpiRow summary={summary} throughput={throughput} />
+          <div data-dav-anchor="dlq:decide">
+            <QueueKpiRow summary={summary} throughput={throughput} />
+          </div>
         </div>
       )}
 
-      <QueueThroughputChart throughput={throughput} />
+      <div data-dav-anchor="dlq:verify">
+        <QueueThroughputChart throughput={throughput} />
+      </div>
 
       {summary && (
         <QueueStageBreakdown summary={summary} selectedStage={stage} onSelect={setStage} />

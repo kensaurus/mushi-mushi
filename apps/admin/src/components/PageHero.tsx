@@ -49,11 +49,14 @@
  *            buttons are real `<button>`s with `aria-expanded`.
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { PageAction } from './PageActionBar'
 import { useAdminMode } from '../lib/mode'
 import { HeroFlow } from './hero-flow/HeroFlow'
 import type { HeroSeverity } from './hero-flow/heroFlow.data'
+import type { DavEvidence } from '../lib/davManifest'
+import { useDavSpotlight } from '../lib/useDavSpotlight'
+import { HeroDetailPanel } from './hero-flow/HeroDetailPanel'
 
 type Severity = HeroSeverity
 
@@ -67,6 +70,18 @@ export interface PageHeroDecide {
   /** One sentence explaining the number. */
   summary: string
   severity?: Severity
+  /** data-dav-anchor value of the on-page element that corresponds to this
+   *  tile's state (e.g. `'health:decide'`). When set, clicking the tile
+   *  scrolls to `[data-dav-anchor="<anchor>"]` and outlines it. */
+  anchor?: string
+  /** Structured live data rendered in the detail panel when the tile is
+   *  expanded. When absent the panel falls back to `metric` + `summary`. */
+  evidence?: DavEvidence
+  /** configDocs IDs that are currently unset or misconfigured and are
+   *  blocking or degrading this tile's state. Each ID resolves to a
+   *  `ConfigDoc` whose label, summary, and lineage are shown in a
+   *  callout box so the operator knows exactly what to fill in. */
+  missingConfigIds?: string[]
 }
 
 export interface PageHeroVerify {
@@ -79,6 +94,12 @@ export interface PageHeroVerify {
   /** Optional secondary link. */
   secondaryTo?: string
   secondaryLabel?: string
+  /** data-dav-anchor value for the on-page element this verify tile points to. */
+  anchor?: string
+  /** Structured live data for the detail panel (usually `kind: 'last-event'`). */
+  evidence?: DavEvidence
+  /** configDocs IDs blocking the verification step. */
+  missingConfigIds?: string[]
 }
 
 interface PageHeroProps {
@@ -93,6 +114,13 @@ interface PageHeroProps {
    *  with PageActionBar. Pass null to render the calm "nothing to do"
    *  affordance. */
   act: PageAction | null
+  /** data-dav-anchor value for the Act tile's on-page element. */
+  actAnchor?: string
+  /** Structured evidence for the Act tile detail panel
+   *  (usually `kind: 'rule-trace'`). */
+  actEvidence?: DavEvidence
+  /** configDocs IDs blocking the Act tile. */
+  actMissingConfigIds?: string[]
   verify: PageHeroVerify
   /** Optional chart/KPI sparkline shown to the right of Decide in a
    *  full-width layout (keeps the hero interesting when there IS a
@@ -147,7 +175,18 @@ function writeCollapsedScopes(state: Record<string, boolean>) {
  * pill (they still get the global NextBestAction strip above the layout
  * — stacking a second tile hero for them is noisy).
  */
-export function PageHero({ scope, title, kicker, decide, act, verify, decideAccessory }: PageHeroProps) {
+export function PageHero({
+  scope,
+  title,
+  kicker,
+  decide,
+  act,
+  actAnchor,
+  actEvidence,
+  actMissingConfigIds,
+  verify,
+  decideAccessory,
+}: PageHeroProps) {
   const { isAdvanced } = useAdminMode()
   const severity = decide.severity ?? 'neutral'
   const style = SEVERITY_STYLE[severity]
@@ -158,6 +197,10 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
   const [collapsedScopes, setCollapsedScopes] = useState<Record<string, boolean>>(readCollapsedScopes)
   const collapsed = collapsedScopes[scope] ?? false
   const [expandedTile, setExpandedTile] = useState<'decide' | 'act' | 'verify' | null>(null)
+  const { spotlight, clearSpotlight } = useDavSpotlight()
+  // Ref to the hero section so the detail panel's "Show on page" button
+  // can focus back into it after spotlight is cleared.
+  const heroRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     writeCollapsedScopes(collapsedScopes)
@@ -196,7 +239,19 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
   }
 
   function toggleTile(tile: 'decide' | 'act' | 'verify') {
-    setExpandedTile((prev) => (prev === tile ? null : tile))
+    const isExpanding = expandedTile !== tile
+    setExpandedTile(isExpanding ? tile : null)
+
+    if (isExpanding) {
+      // Fire spotlight on the on-page anchor for this tile.
+      const anchor =
+        tile === 'decide' ? decide.anchor
+        : tile === 'act'  ? actAnchor
+        :                   verify.anchor
+      if (anchor) spotlight(anchor)
+    } else {
+      clearSpotlight()
+    }
   }
 
   // Collapsed: single-pill summary. Mirrors Pipeline Pulse's collapsed
@@ -248,6 +303,7 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
 
   return (
     <section
+      ref={heroRef}
       role="banner"
       aria-label={`${title} hero`}
       data-scope={scope}
@@ -283,13 +339,7 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
       </header>
 
       {/* ReactFlow lane: 3 custom nodes (Decide / Act / Verify) connected
-          by 2 gradient bezier edges. Severity drives the source colour;
-          action tone drives the middle; the right edge fades to neutral
-          since Verify is "the receipt", not a state. Same flow primitives
-          as the dashboard PdcaFlow so the two surfaces feel like one
-          system. md+ shows the lane horizontally; below md the canvas
-          still works (the user can scroll horizontally inside the
-          fixed-width canvas viewport — no wrapping logic needed). */}
+          by 2 gradient bezier edges. */}
       <div id={`hero-${scope}-flow`}>
         <HeroFlow
           scope={scope}
@@ -298,20 +348,49 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
             metric: decide.metric,
             summary: decide.summary,
             severity: decide.severity ?? 'neutral',
+            anchor: decide.anchor,
+            evidence: decide.evidence,
+            missingConfigIds: decide.missingConfigIds,
           }}
-          act={{ action: act }}
+          act={{
+            action: act,
+            anchor: actAnchor,
+            evidence: actEvidence,
+            missingConfigIds: actMissingConfigIds,
+          }}
           verify={{
             label: verify.label,
             detail: verify.detail,
             to: verify.to,
             secondaryTo: verify.secondaryTo,
             secondaryLabel: verify.secondaryLabel,
+            anchor: verify.anchor,
+            evidence: verify.evidence,
+            missingConfigIds: verify.missingConfigIds,
           }}
           expandedTile={expandedTile}
           onToggleTile={toggleTile}
           decideAccessory={decideAccessory}
         />
       </div>
+
+      {/* Detail panel — rendered below the ReactFlow lane when a tile is
+          expanded. Lives outside the canvas so it can have variable height
+          and full-width layout without fighting ReactFlow's fixed-size nodes. */}
+      {expandedTile && (
+        <HeroDetailPanel
+          tile={expandedTile}
+          scope={scope}
+          decide={decide}
+          action={act}
+          actEvidence={actEvidence}
+          actAnchor={actAnchor}
+          actMissingConfigIds={actMissingConfigIds}
+          verify={verify}
+          onSpotlight={spotlight}
+          onClose={() => toggleTile(expandedTile)}
+        />
+      )}
     </section>
   )
 }

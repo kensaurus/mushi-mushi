@@ -272,8 +272,21 @@ export function StoragePage() {
                   ? `${settings.length} bucket${settings.length === 1 ? '' : 's'} configured and passing probes.`
                   : 'Connect a bucket to retain screenshots + logs beyond the default rolling window.',
           severity: storageSeverity,
+          anchor: 'storage:decide',
+          evidence: settings.length > 0 ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Buckets', value: settings.length, tone: 'neutral' },
+              { label: 'Healthy', value: healthyBuckets, tone: healthyBuckets > 0 ? 'ok' : 'neutral' },
+              { label: 'Degraded', value: degradedBuckets, tone: degradedBuckets > 0 ? 'warn' : 'ok' },
+              { label: 'Failing', value: failingBuckets, tone: failingBuckets > 0 ? 'crit' : 'ok' },
+            ],
+          } : undefined,
+          missingConfigIds: settings.length === 0 ? ['storage.provider', 'storage.bucket'] : [],
         }}
         act={storageAction}
+        actAnchor="storage:act"
+        actEvidence={storageAction ? { kind: 'rule-trace', why: storageAction.reason ?? storageAction.title, threshold: failingBuckets > 0 ? `${failingBuckets} bucket${failingBuckets === 1 ? '' : 's'} failing` : undefined } : undefined}
         verify={{
           label: 'Latest probe snapshot',
           detail:
@@ -283,6 +296,15 @@ export function StoragePage() {
           to: '/health?fn=storage-probe',
           secondaryTo: '/audit?source=storage',
           secondaryLabel: 'Audit log',
+          anchor: 'storage:verify',
+          evidence: settings.length > 0 ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Healthy', value: healthyBuckets, tone: healthyBuckets > 0 ? 'ok' : 'neutral' },
+              { label: 'Degraded', value: degradedBuckets, tone: degradedBuckets > 0 ? 'warn' : 'ok' },
+              { label: 'Failing', value: failingBuckets, tone: failingBuckets > 0 ? 'crit' : 'ok' },
+            ],
+          } : undefined,
         }}
       />
 
@@ -309,7 +331,7 @@ export function StoragePage() {
 
       {cards.length > 0 && usageRows.length > 0 && (
         <Card className="p-3">
-          <div className="text-xs font-medium uppercase tracking-wider mb-2">Per-project usage</div>
+          <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">Per-project usage</div>
           <p className="text-2xs text-fg-muted mb-2">
             Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project
             burning through storage or to confirm a quiet project before changing its provider.
@@ -342,6 +364,7 @@ export function StoragePage() {
         </Card>
       )}
 
+      <div data-dav-anchor="storage:decide" className="space-y-3">
       {cards.map(({ setting: s, existing }) => {
         const m = merged(s)
         const dirty = Object.keys(draftFor(s.project_id)).length > 0
@@ -553,6 +576,7 @@ export function StoragePage() {
                 disabled={!existing || savingId === s.project_id || checkingId === s.project_id}
                 loading={checkingId === s.project_id}
                 title={!existing ? 'Save the configuration first to enable health checks' : undefined}
+                data-dav-anchor="storage:act"
               >
                 Health check
               </Btn>
@@ -568,6 +592,7 @@ export function StoragePage() {
           </Card>
         )
       })}
+      </div>
     </div>
   )
 }

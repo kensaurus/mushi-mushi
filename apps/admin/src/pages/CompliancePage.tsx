@@ -400,7 +400,7 @@ export function CompliancePage() {
         projectScope={projectName}
         description="Track GDPR, SOC2, and audit obligations against the data Mushi holds for this project."
       >
-        <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing}>
+        <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">
           Refresh evidence
         </Btn>
         <Btn variant="ghost" onClick={() => window.print()} title="Renders the page via @media print so you can save as PDF">
@@ -445,14 +445,35 @@ export function CompliancePage() {
                     ? 'DSARs must resolve within 30 days under GDPR / CCPA.'
                     : 'Controls, DSARs, and retention windows are all green.',
           severity: complianceSeverity,
+          anchor: 'compliance:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Controls green', value: latestEvidenceByControl.length - failEvidenceCount - warnEvidenceCount, tone: 'ok' },
+              { label: 'Controls warn', value: warnEvidenceCount, tone: warnEvidenceCount > 0 ? 'warn' : 'neutral' },
+              { label: 'Controls fail', value: failEvidenceCount, tone: failEvidenceCount > 0 ? 'crit' : 'ok' },
+              { label: 'Open DSARs', value: openDsars.length, tone: overdueDsars.length > 0 ? 'crit' : openDsars.length > 0 ? 'warn' : 'ok' },
+            ],
+          },
+          missingConfigIds: failEvidenceCount > 0 || overdueDsars.length > 0 ? ['compliance.legal_hold'] : [],
         }}
         act={complianceAction}
+        actAnchor="compliance:act"
+        actEvidence={complianceAction ? { kind: 'rule-trace', why: complianceAction.reason ?? complianceAction.title } : undefined}
         verify={{
           label: 'Latest evidence snapshot',
           detail: latestEvidenceTs ? new Date(latestEvidenceTs).toLocaleString() : 'no snapshot yet',
           to: '/audit?scope=compliance',
           secondaryTo: '/compliance?status=fail',
           secondaryLabel: failEvidenceCount > 0 ? 'Open failing controls' : undefined,
+          anchor: 'compliance:verify',
+          evidence: latestEvidenceTs ? {
+            kind: 'last-event',
+            at: latestEvidenceTs,
+            by: 'evidence-sweep cron',
+            payloadSummary: `${latestEvidenceByControl.length} controls · ${failEvidenceCount} fail · ${warnEvidenceCount} warn`,
+            status: failEvidenceCount > 0 ? 'error' : warnEvidenceCount > 0 ? 'warn' : 'ok',
+          } : undefined,
         }}
       />
 
@@ -553,7 +574,7 @@ export function CompliancePage() {
                 />
               ) : (
                 <ResponsiveTable>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs" data-dav-anchor="compliance:decide">
                     <thead className="text-fg-muted uppercase tracking-wider text-3xs">
                       <tr className="border-b border-edge-subtle">
                         <th className="py-1.5 text-left">Control</th>
@@ -826,7 +847,7 @@ export function CompliancePage() {
                 />
               ) : (
                 <ResponsiveTable>
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs" data-dav-anchor="compliance:verify">
                     <thead className="text-fg-muted uppercase tracking-wider text-3xs">
                       <tr className="border-b border-edge-subtle">
                         <th className="py-1.5 text-left">Type</th>

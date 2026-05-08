@@ -45,7 +45,7 @@ const EDGE_TYPES = { heroGradient: HeroGradientEdge }
 // Padding around the 3-node lane so the bezier curves don't clip on the
 // node edges. Matches `fitViewOptions.padding` so the canvas viewport
 // always shows the full diagram regardless of container width.
-const CANVAS_PADDING_Y = 8
+const CANVAS_PADDING_Y = 4
 
 export interface HeroFlowProps {
   scope: string
@@ -94,7 +94,7 @@ export function HeroFlow(props: HeroFlowProps) {
   // ReactFlow clips the expanded body. We compute the height from the
   // base node height + a generous slack for the expanded slot's text.
   const canvasHeight =
-    HERO_FLOW_LAYOUT.nodeHeight + (props.expandedTile ? 96 : 0) + CANVAS_PADDING_Y * 2
+    HERO_FLOW_LAYOUT.nodeHeight + (props.expandedTile ? 60 : 0) + CANVAS_PADDING_Y * 2
 
   return (
     <div

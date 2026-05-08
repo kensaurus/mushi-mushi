@@ -16,6 +16,7 @@
 import type { Edge, Node } from '@xyflow/react'
 
 import type { PageAction } from '../PageActionBar'
+import type { DavEvidence } from '../../lib/davManifest'
 
 export type HeroSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
 
@@ -44,11 +45,23 @@ export interface HeroDecideData {
   metric?: string
   summary: string
   severity: HeroSeverity
+  /** data-dav-anchor value for on-page spotlight. */
+  anchor?: string
+  /** Structured live data for the detail panel. */
+  evidence?: DavEvidence
+  /** configDocs IDs that are currently unset/blocking. */
+  missingConfigIds?: string[]
 }
 
 export interface HeroActData {
   /** When `null`, the node renders an "all clear" calm state. */
   action: PageAction | null
+  /** data-dav-anchor value for on-page spotlight. */
+  anchor?: string
+  /** Structured live data for the detail panel. */
+  evidence?: DavEvidence
+  /** configDocs IDs that are currently unset/blocking. */
+  missingConfigIds?: string[]
 }
 
 export interface HeroVerifyData {
@@ -57,6 +70,12 @@ export interface HeroVerifyData {
   to?: string
   secondaryTo?: string
   secondaryLabel?: string
+  /** data-dav-anchor value for on-page spotlight. */
+  anchor?: string
+  /** Structured live data for the detail panel. */
+  evidence?: DavEvidence
+  /** configDocs IDs that are currently unset/blocking. */
+  missingConfigIds?: string[]
 }
 
 export interface HeroNodeBaseData extends Record<string, unknown> {
@@ -68,7 +87,7 @@ export interface HeroNodeBaseData extends Record<string, unknown> {
 export interface HeroDecideNodeData extends HeroNodeBaseData {
   kind: 'decide'
   decide: HeroDecideData
-  /** Optional accessory rendered in the expanded body. */
+  /** Optional accessory rendered in the compact (non-expanded) body. */
   accessory?: unknown
 }
 
@@ -102,8 +121,8 @@ export interface HeroEdgeData extends Record<string, unknown> {
 // than reading as a straight line.
 
 const NODE_WIDTH = 250
-const NODE_HEIGHT = 152
-const NODE_GAP = 110
+const NODE_HEIGHT = 110
+const NODE_GAP = 80
 
 const POSITIONS = {
   decide: { x: 0, y: 0 },
@@ -185,6 +204,9 @@ export function buildHeroNodes(input: BuildHeroFlowInput): Node<HeroNodeData>[] 
     },
   ]
 }
+
+// Re-export DavEvidence so consumers can import from one hero-flow location.
+export type { DavEvidence }
 
 export function buildHeroEdges(input: {
   decide: HeroDecideData

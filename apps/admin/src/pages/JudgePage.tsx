@@ -383,6 +383,7 @@ export function JudgePage() {
           disabled={running}
           loading={running}
           leadingIcon={<PlayIcon />}
+          data-dav-anchor="judge:act"
         >
           Run judge now
         </Btn>
@@ -412,8 +413,20 @@ export function JudgePage() {
               ? `Down ${(drift * 100).toFixed(1)}% week-over-week — investigate before shipping prompt changes.`
               : `Stable across ${totalEvals} evaluations over ${weeks.length} weeks.`,
           severity: heroSeverity,
+          anchor: 'judge:decide',
+          evidence: overallScore != null ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Avg score', value: overallScore.toFixed(2), tone: overallScore >= 4.2 ? 'ok' : overallScore >= 3.5 ? 'warn' : 'crit' },
+              { label: 'Evaluations', value: totalEvals, tone: 'neutral' },
+              { label: 'Weeks tracked', value: weeks.length, tone: 'neutral' },
+              ...(disagreementRate != null ? [{ label: 'Disagreement', value: `${(disagreementRate * 100).toFixed(1)}%`, tone: disagreementRate > 0.2 ? 'warn' as const : 'ok' as const }] : []),
+            ],
+          } : undefined,
         }}
         act={heroAction}
+        actAnchor="judge:act"
+        actEvidence={heroAction ? { kind: 'rule-trace', why: heroAction.reason ?? heroAction.title, threshold: drift >= 0.05 ? `drift ${(drift * 100).toFixed(1)}%` : undefined } : undefined}
         verify={{
           label: lastEval ? `Last eval · ${lastEval.judge_model ?? 'model'}` : 'Awaiting first eval',
           detail: lastEval
@@ -422,6 +435,14 @@ export function JudgePage() {
           to: lastEval ? `/reports/${lastEval.report_id}` : '/reports',
           secondaryTo: '/prompt-lab',
           secondaryLabel: 'Open Prompt Lab',
+          anchor: 'judge:verify',
+          evidence: lastEval ? {
+            kind: 'last-event',
+            at: lastEval.created_at,
+            by: lastEval.judge_model ?? 'judge',
+            payloadSummary: `eval ${lastEval.id.slice(0, 8)} · ${lastEval.classification_agreed === false ? 'disagreement' : 'agreement'}`,
+            status: lastEval.classification_agreed === false ? 'warn' : 'ok',
+          } : undefined,
         }}
       />
 
@@ -443,6 +464,7 @@ export function JudgePage() {
         howToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
       />
 
+      <div data-dav-anchor="judge:decide">
       <KpiRow cols={4}>
         <KpiTile
           label="Latest week"
@@ -486,6 +508,7 @@ export function JudgePage() {
           meaning="All-time mean judge score across every evaluation. Useful as a long-term health signal — a sliding 12w mean is on the chart to its right."
         />
       </KpiRow>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
         <Section
@@ -727,7 +750,7 @@ export function JudgePage() {
           <p className="text-xs text-fg-muted">No evaluations match.</p>
         ) : (
           <ResponsiveTable className="-mx-3">
-            <table className="w-full text-xs">
+            <table className="w-full text-xs" data-dav-anchor="judge:verify">
               <thead>
                 <tr className="text-fg-muted text-left border-b border-edge">
                   <th className="py-1.5 px-3 font-medium">Report</th>

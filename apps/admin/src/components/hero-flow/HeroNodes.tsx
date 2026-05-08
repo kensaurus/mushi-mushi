@@ -111,8 +111,16 @@ function NodeShell({
     <article
       aria-labelledby={headingId}
       data-hero-tile={kind}
+      tabIndex={0}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onToggle()
+        }
+      }}
       className={[
-        'group/hero relative flex h-full w-full flex-col rounded-md px-3 py-2.5 text-xs pointer-events-auto',
+        'group/hero relative flex h-full w-full flex-col rounded-md px-3 py-1.5 text-xs pointer-events-auto cursor-pointer',
         'motion-safe:transition-all motion-safe:duration-200',
         bgClass,
         expanded
@@ -188,7 +196,7 @@ function NodeShell({
         </button>
       </header>
 
-      <div className="mt-1 flex-1 min-h-0">{children}</div>
+      <div className="mt-0.5 flex-1 min-h-0">{children}</div>
 
       {expanded && expandedSlot && (
         <div className="mt-2 border-t border-edge-subtle/60 pt-2 text-2xs text-fg-faint leading-relaxed">
@@ -216,17 +224,9 @@ function DecideInner({ data }: NodeProps) {
       expanded={node.expanded}
       onToggle={node.onToggle}
       expandedSlot={
-        <>
-          {(node.accessory as ReactNode | undefined) ?? (
-            <p>
-              No additional context published for this scope. Pages can supply a sparkline,
-              trend, or extra metric via the <code className="font-mono text-fg-muted">decideAccessory</code> prop.
-            </p>
-          )}
-          <p className="mt-1 text-3xs font-mono text-fg-faint">
-            severity: <span className="text-fg-muted">{decide.severity}</span>
-          </p>
-        </>
+        <p className="text-3xs text-fg-faint italic">
+          Details below ↓
+        </p>
       }
     >
       <p
@@ -236,7 +236,7 @@ function DecideInner({ data }: NodeProps) {
         {decide.label}
       </p>
       {decide.metric && (
-        <p className="mt-1 text-xl font-semibold text-fg tabular-nums leading-tight">
+        <p className="mt-0.5 text-base font-semibold text-fg tabular-nums leading-tight">
           {decide.metric}
         </p>
       )}
@@ -267,12 +267,7 @@ function ActInner({ data }: NodeProps) {
         glyph={<span className="text-ok">✓</span>}
         expanded={node.expanded}
         onToggle={node.onToggle}
-        expandedSlot={
-          <p>
-            When the rule engine identifies a next-best-action for this scope, the primary CTA
-            appears here. Until then, this tile reads as a calm receipt that the page is nominal.
-          </p>
-        }
+        expandedSlot={<p className="text-3xs text-fg-faint italic">Details below ↓</p>}
       >
         <p className="text-xs font-medium text-fg leading-tight">All clear</p>
         <p className="mt-1 text-2xs text-fg-muted leading-snug line-clamp-2">
@@ -298,26 +293,13 @@ function ActInner({ data }: NodeProps) {
       pulse={action.tone === 'check' || action.tone === 'do'}
       expanded={node.expanded}
       onToggle={node.onToggle}
-      expandedSlot={
-        action.secondary && action.secondary.length > 1 ? (
-          <p>
-            Showing {action.secondary.length} secondary action
-            {action.secondary.length === 1 ? '' : 's'}.
-          </p>
-        ) : (
-          <p>
-            Tone: <span className="text-fg-muted font-mono">{action.tone}</span>. The rule
-            engine recomputes this CTA on every page reload — open the action and the system
-            verifies it landed.
-          </p>
-        )
-      }
+      expandedSlot={<p className="text-3xs text-fg-faint italic">Details below ↓</p>}
     >
       <p className="text-xs font-medium text-fg leading-snug line-clamp-2">{action.title}</p>
       {action.reason && (
         <p className="mt-0.5 text-2xs text-fg-muted leading-snug line-clamp-2">{action.reason}</p>
       )}
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {action.primary && <HeroCta cta={action.primary} variant="primary" />}
         {visibleSecondaries.map((s, i) => (
           <HeroCta key={i} cta={s} variant="ghost" />
@@ -344,12 +326,7 @@ function VerifyInner({ data }: NodeProps) {
       glyph={<span className="text-fg-muted">◎</span>}
       expanded={node.expanded}
       onToggle={node.onToggle}
-      expandedSlot={
-        <p>
-          Verification is the receipt for the most recent Act. Open the evidence link to
-          confirm the action landed where the rule promised it would.
-        </p>
-      }
+      expandedSlot={<p className="text-3xs text-fg-faint italic">Details below ↓</p>}
     >
       <p className="text-xs font-medium text-fg leading-tight truncate" title={node.verify.label}>
         {node.verify.label}
@@ -360,7 +337,7 @@ function VerifyInner({ data }: NodeProps) {
       >
         {node.verify.detail}
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {node.verify.to && (
           <Link
             data-hero-verify

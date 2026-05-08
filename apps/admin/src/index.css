@@ -501,6 +501,26 @@ select, input, textarea {
   padding-top: calc(0.625rem * var(--ui-pad, 1));
 }
 
+/* Active PDCA stage — the section header where the current route lives
+   breathes with a soft brand-tinted glow instead of a text "← here"
+   annotation. The animation is subtle enough to stay calm but distinct
+   enough to answer "where am I in the loop?" at a glance. */
+@keyframes nav-stage-breathe {
+  0%, 100% {
+    background-color: transparent;
+    color: var(--color-nav-section-label);
+  }
+  50% {
+    background-color: color-mix(in oklch, var(--color-brand) 8%, transparent);
+    color: color-mix(in oklch, var(--color-brand) 65%, var(--color-nav-section-label));
+  }
+}
+
+.nav-section-active {
+  animation: nav-stage-breathe 3s ease-in-out infinite;
+  border-radius: 0.25rem;
+}
+
 /* ---------------------------------------------------------------------------
    CARD DEPTH
 --------------------------------------------------------------------------- */
@@ -727,6 +747,38 @@ select, input, textarea {
   100% { background-color: transparent; }
 }
 .animate-mushi-row-flash { animation: mushi-row-flash 650ms var(--ease-out-expo) 1; }
+
+/* ---------------------------------------------------------------------------
+   DAV SPOTLIGHT  (Decide → Act → Verify on-page anchor highlight)
+   Applied via JS to [data-dav-anchor] elements when the operator clicks a
+   hero tile. The keyframe pulses in then fades the branded outline so the
+   eye can follow the hero's "act here" pointer without a hard flash.
+--------------------------------------------------------------------------- */
+
+@keyframes mushi-spotlight {
+  0%   { outline-color: transparent; outline-offset: 8px; }
+  12%  { outline-color: var(--color-brand); outline-offset: 4px; }
+  75%  { outline-color: var(--color-brand); outline-offset: 4px; }
+  100% { outline-color: transparent; outline-offset: 4px; }
+}
+
+[data-dav-spotlight="active"] {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 4px;
+  border-radius: 6px;
+  animation: mushi-spotlight 1800ms var(--ease-out-expo) forwards;
+  /* Layer above surrounding content so the outline isn't clipped. */
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-dav-spotlight="active"] {
+    animation: none;
+    outline: 2px solid var(--color-brand);
+    outline-offset: 4px;
+  }
+}
 
 .animate-mushi-fade-in   { animation: mushi-fade-in 160ms var(--ease-out-expo) both; }
 .animate-mushi-modal-in  { animation: mushi-modal-in 220ms var(--ease-out-expo) both; }
