@@ -200,6 +200,7 @@ export function PublicHomePage() {
           <Hero />
           <MushiCanvas />
           <SwitchingFromStrip />
+          <SynthesisLayerSection />
           <ClosingCta />
           {/* No public health endpoint reachable from the admin SPA, so the
               StatusPill stays in its muted "unknown" state — matches the
@@ -343,6 +344,209 @@ function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
         Get started
       </Link>
     </>
+  )
+}
+
+// ─── Synthesis layer positioning ──────────────────────────────────────────
+
+/**
+ * Two-part section that reframes Mushi as the integration hub, not a
+ * competitor to tools teams already run. Positioned between SwitchingFromStrip
+ * and ClosingCta because visitors who've read the "coming from <competitor>?"
+ * strip are primed to think about their existing stack.
+ *
+ * Part 1: The four-signal model — code errors, system telemetry, product
+ *   analytics, user-felt friction. Only Mushi covers #4 and wires them all.
+ * Part 2: Inbound (adapters) + outbound (plugins) ecosystem tiles so a
+ *   visitor can see at a glance which tool they already use is supported.
+ */
+function SynthesisLayerSection() {
+  return (
+    <section
+      aria-labelledby="synthesis-heading"
+      className="rounded-[1.5rem] border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_94%,white)] px-5 py-8 sm:px-8 sm:py-10"
+    >
+      {/* Eyebrow */}
+      <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+        <span className="text-[var(--mushi-ink)]">Integrator</span>
+        <span className="mx-2 opacity-40">/</span>
+        not a replacement
+      </p>
+
+      {/* Headline */}
+      <h2
+        id="synthesis-heading"
+        className="mt-2 max-w-2xl font-serif text-2xl leading-snug tracking-[-0.02em] text-[var(--mushi-ink)] sm:text-3xl"
+      >
+        The layer that connects what you already run.
+      </h2>
+      <p className="mt-3 max-w-2xl text-[1.0625rem] leading-relaxed text-[var(--mushi-ink-muted)]">
+        Every team has Sentry for thrown errors, Datadog for infra, Firebase for events.
+        Nobody has a tool for what users <em className="not-italic text-[var(--mushi-vermillion)] font-medium">feel</em> — the dead
+        button, the slow screen, the layout that only breaks on one device. Mushi adds that
+        signal and wires it to everything you already rely on.
+      </p>
+
+      {/* Four-signal grid */}
+      <div
+        aria-label="Four monitoring signal types"
+        className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      >
+        {SIGNALS.map((s) => (
+          <SignalCard key={s.title} {...s} />
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div
+        aria-hidden
+        className="my-8 h-px"
+        style={{
+          background:
+            'linear-gradient(90deg, var(--mushi-vermillion) 0, var(--mushi-vermillion) 3rem, var(--mushi-rule) 3rem)',
+        }}
+      />
+
+      {/* Integration tiles */}
+      <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-[var(--mushi-ink-muted)]">
+        <span className="text-[var(--mushi-ink)]">Ecosystem</span>
+        <span className="mx-2 opacity-40">/</span>
+        plug in, don&rsquo;t rip out
+      </p>
+      <div className="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2">
+        <IntegrationGroup
+          direction="inbound"
+          label="Inbound — receive alerts from"
+          hint="Alerts from these tools become Mushi reports, enriching the user-felt signal with system context."
+          tools={INBOUND_TOOLS}
+        />
+        <IntegrationGroup
+          direction="outbound"
+          label="Outbound — notify & sync to"
+          hint="Mushi reports and resolved clusters flow back to these tools so your existing workflows stay intact."
+          tools={OUTBOUND_TOOLS}
+        />
+      </div>
+    </section>
+  )
+}
+
+interface Signal {
+  title: string
+  tools: string
+  mushi: string
+  highlight?: boolean
+}
+
+const SIGNALS: Signal[] = [
+  {
+    title: 'Code-thrown errors',
+    tools: 'Sentry · Crashlytics · Bugsnag · Rollbar',
+    mushi: 'Ingested via plugin — Mushi resolves the Sentry fingerprint when the fix lands.',
+  },
+  {
+    title: 'System telemetry',
+    tools: 'Datadog · New Relic · Honeycomb · Grafana',
+    mushi: 'Alert webhooks become Mushi reports via @mushi-mushi/adapters — latency + user note in one row.',
+  },
+  {
+    title: 'Product analytics',
+    tools: 'Firebase · PostHog · Amplitude',
+    mushi: 'Funnel drops get context: the user note attached to the moment they stopped clicking.',
+  },
+  {
+    title: 'User-felt friction',
+    tools: 'nothing → Mushi',
+    mushi: 'Native signal. Shake-to-report, LLM triage, knowledge graph, optional agentic fix.',
+    highlight: true,
+  },
+]
+
+function SignalCard({ title, tools, mushi, highlight = false }: Signal) {
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        highlight
+          ? 'border-[var(--mushi-vermillion)]/40 bg-[var(--mushi-vermillion-wash)]'
+          : 'border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_88%,white)]'
+      }`}
+    >
+      <p
+        className={`font-mono text-[10px] uppercase tracking-[0.2em] leading-none ${
+          highlight ? 'text-[var(--mushi-vermillion)]' : 'text-[var(--mushi-ink-muted)]'
+        }`}
+      >
+        {highlight ? '★ ' : ''}
+        {title}
+      </p>
+      <p className="mt-2 text-xs text-[var(--mushi-ink-muted)] leading-relaxed">
+        <span className="font-medium text-[var(--mushi-ink)]">Today: </span>
+        {tools}
+      </p>
+      <p className="mt-1.5 text-xs text-[var(--mushi-ink-muted)] leading-relaxed">
+        <span className="font-medium text-[var(--mushi-vermillion)]">+ Mushi: </span>
+        {mushi}
+      </p>
+    </div>
+  )
+}
+
+interface IntegrationTool {
+  name: string
+  pkg: string
+}
+
+const INBOUND_TOOLS: IntegrationTool[] = [
+  { name: 'Datadog', pkg: '@mushi-mushi/adapters' },
+  { name: 'New Relic', pkg: '@mushi-mushi/adapters' },
+  { name: 'Honeycomb', pkg: '@mushi-mushi/adapters' },
+  { name: 'Grafana', pkg: '@mushi-mushi/adapters' },
+]
+
+const OUTBOUND_TOOLS: IntegrationTool[] = [
+  { name: 'Sentry', pkg: '@mushi-mushi/plugin-sentry' },
+  { name: 'Slack', pkg: '@mushi-mushi/plugin-slack-app' },
+  { name: 'Jira', pkg: '@mushi-mushi/plugin-jira' },
+  { name: 'Linear', pkg: '@mushi-mushi/plugin-linear' },
+  { name: 'PagerDuty', pkg: '@mushi-mushi/plugin-pagerduty' },
+  { name: 'Zapier', pkg: '@mushi-mushi/plugin-zapier' },
+]
+
+function IntegrationGroup({
+  direction,
+  label,
+  hint,
+  tools,
+}: {
+  direction: 'inbound' | 'outbound'
+  label: string
+  hint: string
+  tools: IntegrationTool[]
+}) {
+  const arrowColor =
+    direction === 'inbound' ? 'text-[color-mix(in_oklch,var(--mushi-vermillion)_60%,var(--mushi-ink-muted))]' : 'text-[var(--mushi-ink-muted)]'
+  return (
+    <div>
+      <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--mushi-ink)]">
+        {label}
+      </p>
+      <p className="mt-1 text-xs text-[var(--mushi-ink-muted)] leading-relaxed max-w-sm">{hint}</p>
+      <ul className="mt-3 flex flex-wrap gap-1.5">
+        {tools.map((t) => (
+          <li key={t.name}>
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] px-2.5 py-1 font-mono text-[11px] text-[var(--mushi-ink-muted)]"
+              title={`via ${t.pkg}`}
+            >
+              <span className={`text-[10px] ${arrowColor}`} aria-hidden>
+                {direction === 'inbound' ? '→' : '←'}
+              </span>
+              {t.name}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }
 

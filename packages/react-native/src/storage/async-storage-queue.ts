@@ -22,7 +22,10 @@ export class AsyncStorageQueue {
 
     const queue = await this.getQueue(AsyncStorage)
     if (queue.length >= this.maxSize) queue.shift()
-    queue.push({ report: report as Record<string, unknown>, enqueuedAt: Date.now() })
+
+    // Added: PII scrubbing (Phase 2.4)
+    const scrubbedReport = this.scrubReportPii(report as Record<string, unknown>)
+    queue.push({ report: scrubbedReport, enqueuedAt: Date.now() })
     await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(queue))
   }
 
@@ -37,21 +40,11 @@ export class AsyncStorageQueue {
     const remaining: QueueItem[] = []
 
     for (const item of queue) {
-      try {
-        const res = await fetch(`${this.apiEndpoint}/v1/reports`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Mushi-Api-Key': this.apiKey,
-          },
-          body: JSON.stringify(item.report),
-        })
-        if (res.ok) {
-          flushed++
-        } else {
-          remaining.push(item)
-        }
-      } catch {
+      // Added: retry+jitter (Phase 2.4)
+      const ok = await sendWithRetry(item, this.apiEndpoint, this.apiKey)
+      if (ok) {
+        flushed++
+      } else {
         remaining.push(item)
         break
       }
@@ -66,6 +59,12 @@ export class AsyncStorageQueue {
     if (!AsyncStorage) return 0
     const queue = await this.getQueue(AsyncStorage)
     return queue.length
+  }
+
+  // Added: PII scrubbing (Phase 2.4)
+  private scrubReportPii(report: Record<string, unknown>): Record<string, unknown> {
+    if (typeof report.description !== 'string') return report
+    return { ...report, description: scrubPii(report.description) }
   }
 
   private async getQueue(storage: { getItem: (key: string) => Promise<string | null> }): Promise<QueueItem[]> {
@@ -85,4 +84,42 @@ export class AsyncStorageQueue {
       return null
     }
   }
+}
+
+// Added: PII scrubbing (Phase 2.4)
+function scrubPii(text: string): string {
+  return text
+    .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED]')
+    .replace(/\b\d{3}[.-]?\d{3}[.-]?\d{4}\b/g, '[REDACTED]')
+    .replace(/\b(?:\d{4}[-\s]?){3}\d{4}\b/g, '[REDACTED]')
+}
+
+// Added: retry+jitter (Phase 2.4)
+async function sendWithRetry(item: QueueItem, endpoint: string, apiKey: string, attempt = 0): Promise<boolean> {
+  const delay = Math.min(1000 * Math.pow(2, attempt) + Math.random() * 500, 10000)
+  try {
+    const res = await fetch(`${endpoint}/v1/reports`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Mushi-Api-Key': apiKey,
+      },
+      body: JSON.stringify(item.report),
+    })
+    if ((res.status === 429 || res.status >= 500) && attempt < 3) {
+      await sleep(delay)
+      return sendWithRetry(item, endpoint, apiKey, attempt + 1)
+    }
+    return res.ok
+  } catch {
+    if (attempt < 3) {
+      await sleep(delay)
+      return sendWithRetry(item, endpoint, apiKey, attempt + 1)
+    }
+    return false
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

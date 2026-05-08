@@ -24,7 +24,7 @@ import { awardPoints, getReputation } from '../../_shared/reputation.ts';
 import { createNotification, buildNotificationMessage } from '../../_shared/notifications.ts';
 import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { createExternalIssue } from '../../_shared/integrations.ts';
+import { createExternalIssue, resolveExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
@@ -455,6 +455,11 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       } catch (e) {
         log.warn('Plugin dispatch failed (sync)', { event: 'report.status_changed', err: String(e) });
       }
+      if (newStatus === 'resolved') {
+        resolveExternalIssue(reportId, report.project_id, db).catch((e: unknown) =>
+          log.error('resolveExternalIssue failed', { reportId, err: String(e) }),
+        );
+      }
       if (newStatus === 'fixing') {
         awardPoints(db, report.project_id, report.reporter_token_hash, {
           action: 'confirmed',
@@ -654,6 +659,11 @@ export function registerReportsDashboardRoutes(app: Hono): void {
           );
         } catch (e) {
           log.warn('Plugin dispatch failed (sync)', { event: 'report.status_changed', err: String(e) });
+        }
+        if (newStatus === 'resolved') {
+          resolveExternalIssue(id, prev.project_id, db).catch((e: unknown) =>
+            log.error('resolveExternalIssue failed', { reportId: id, err: String(e) }),
+          );
         }
         const reputationAction =
           newStatus === 'fixing'

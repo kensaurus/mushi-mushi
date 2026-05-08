@@ -16,9 +16,11 @@
     "@angular/core": ">=17"
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:^"
+    "@mushi-mushi/core": "workspace:^",
+    "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
+    "@angular/core": "^18.0.0",
     "@mushi-mushi/eslint-config": "workspace:*",
     "eslint": "^10.2.0",
     "tsup": "^8.5.1",

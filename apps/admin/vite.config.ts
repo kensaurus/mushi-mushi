@@ -42,10 +42,16 @@ function readGitSha(): string {
   }
 }
 
-const APP_VERSION = readPkgVersion('./package.json')
+// CI sets VITE_RELEASE to "0.1.${COMMIT_COUNT}" (see deploy-admin.yml).
+// Prefer that over the static package.json value so the in-app VersionBadge
+// pill always matches the number visible in version.json and Sentry.
+// The server package stays at 0.0.0 in package.json because it is BSL and
+// not published to npm; the deployed server comes from the same git SHA as
+// the admin, so VITE_RELEASE is an honest stand-in for its version too.
+const APP_VERSION = process.env.VITE_RELEASE ?? readPkgVersion('./package.json')
 const SDK_WEB_VERSION = readPkgVersion('../../packages/web/package.json')
 const SDK_REACT_VERSION = readPkgVersion('../../packages/react/package.json')
-const SERVER_VERSION = readPkgVersion('../../packages/server/package.json')
+const SERVER_VERSION = process.env.VITE_RELEASE ?? readPkgVersion('../../packages/server/package.json')
 // Additional public SDK packages
 const SDK_CORE_VERSION = readPkgVersion('../../packages/core/package.json')
 const SDK_VUE_VERSION = readPkgVersion('../../packages/vue/package.json')

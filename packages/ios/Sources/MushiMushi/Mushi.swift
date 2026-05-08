@@ -1,4 +1,5 @@
 import Foundation
+import Network
 #if os(iOS)
 import UIKit
 #endif
@@ -26,6 +27,8 @@ public final class Mushi {
     private var flushTimer: Timer?
     private var user: [String: Any]?
     private var globalMetadata: [String: Any] = [:]
+    // Added: network-aware delivery (Phase 2.4)
+    private var networkMonitor: NWPathMonitor?
     #if os(iOS)
     private weak var floatingButton: UIButton?
     private var foregroundObserver: NSObjectProtocol?
@@ -47,6 +50,7 @@ public final class Mushi {
         #endif
         installTriggers()
         startFlushTimer()
+        startNetworkMonitor()
     }
 
     /// Attach app/user identity to subsequent native reports.
@@ -250,6 +254,19 @@ public final class Mushi {
         }
         // Also try once immediately, in case the app was opened with stale queued reports.
         DispatchQueue.global().async { [weak self] in self?.apiClient?.flushQueue() }
+    }
+
+    // Added: network-aware delivery (Phase 2.4)
+    private func startNetworkMonitor() {
+        networkMonitor?.cancel()
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            if path.status == .satisfied {
+                DispatchQueue.global().async { self?.apiClient?.flushQueue() }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "mushi.network-monitor"))
+        networkMonitor = monitor
     }
 
     #if os(iOS)

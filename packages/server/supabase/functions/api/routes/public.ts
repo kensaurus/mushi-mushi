@@ -16,6 +16,7 @@ import {
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
+import { createWebhookMiddleware, ReplayAttackError, RateLimitError } from '../../_shared/webhook-middleware.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
 import { reportSubmissionSchema, discoveryEventSchema } from '../../_shared/schemas.ts';
 import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
@@ -432,13 +433,34 @@ export function registerPublicRoutes(app: Hono): void {
   // ============================================================
 
   app.post('/v1/webhooks/sentry', async (c) => {
+    const t0 = Date.now();
+    const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('sentry');
     const signature = c.req.header('X-Sentry-Hook-Signature');
     const body = await c.req.text();
+    const deliveryId = c.req.header('Sentry-Hook-Resource-Id') ?? null;
+    const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
+
+    const auditRow = await audit(c, body, deliveryId);
+    try {
+      checkRateLimit(auditRow.id, sourceIp);
+      await checkReplay(auditRow.id, deliveryId);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: err.message }, 429);
+      }
+      if (err instanceof ReplayAttackError) {
+        await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: 'Duplicate delivery' }, 409);
+      }
+      throw err;
+    }
 
     let payload: Record<string, unknown>;
     try {
       payload = JSON.parse(body);
     } catch {
+      await auditRow.resolve('error', 400, Date.now() - t0, 'Invalid JSON body');
       return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
     }
 
@@ -447,6 +469,7 @@ export function registerPublicRoutes(app: Hono): void {
       : c.req.header('X-Mushi-Project');
 
     if (!projectId) {
+      await auditRow.resolve('error', 400, Date.now() - t0, 'Cannot determine project');
       return c.json({ ok: false, error: 'Cannot determine project' }, 400);
     }
 
@@ -466,6 +489,7 @@ export function registerPublicRoutes(app: Hono): void {
     }
 
     if (!signature) {
+      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'Missing signature');
       return c.json({ ok: false, error: 'Missing signature' }, 401);
     }
 
@@ -489,6 +513,7 @@ export function registerPublicRoutes(app: Hono): void {
       diff |= (expected.charCodeAt(i) || 0) ^ (signature.charCodeAt(i) || 0);
     }
     if (diff !== 0) {
+      await auditRow.resolve('rejected_signature', 401, Date.now() - t0, 'HMAC mismatch');
       return c.json({ ok: false, error: 'Invalid signature' }, 401);
     }
 
@@ -528,9 +553,11 @@ export function registerPublicRoutes(app: Hono): void {
       });
 
       triggerClassification(reportId, projectId);
+      await auditRow.resolve('accepted', 200, Date.now() - t0);
       return c.json({ ok: true, data: { reportId } });
     }
 
+    await auditRow.resolve('accepted', 200, Date.now() - t0);
     return c.json({ ok: true, data: { action: 'ignored' } });
   });
 
@@ -680,11 +707,32 @@ export function registerPublicRoutes(app: Hono): void {
   //   Events: "Check runs" + "Check suites"
 
   app.post('/v1/webhooks/github', async (c) => {
+    const t0 = Date.now();
+    const { audit, checkReplay, checkRateLimit } = createWebhookMiddleware('github');
     const event = c.req.header('X-GitHub-Event');
     const sig = c.req.header('X-Hub-Signature-256') ?? '';
+    const deliveryId = c.req.header('X-GitHub-Delivery') ?? null;
     const body = await c.req.text();
+    const sourceIp = c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ?? null;
+
+    const auditRow = await audit(c, body, deliveryId);
+    try {
+      checkRateLimit(auditRow.id, sourceIp);
+      await checkReplay(auditRow.id, deliveryId);
+    } catch (err) {
+      if (err instanceof RateLimitError) {
+        await auditRow.resolve('rejected_rate_limit', 429, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: err.message }, 429);
+      }
+      if (err instanceof ReplayAttackError) {
+        await auditRow.resolve('rejected_replay', 409, Date.now() - t0, err.message);
+        return c.json({ ok: false, error: 'Duplicate delivery' }, 409);
+      }
+      throw err;
+    }
 
     if (event !== 'check_run' && event !== 'check_suite') {
+      await auditRow.resolve('accepted', 200, Date.now() - t0);
       return c.json({ ok: true, data: { event, action: 'ignored' } });
     }
 
@@ -692,6 +740,7 @@ export function registerPublicRoutes(app: Hono): void {
     try {
       payload = JSON.parse(body);
     } catch {
+      await auditRow.resolve('error', 400, Date.now() - t0, 'Invalid JSON body');
       return c.json({ ok: false, error: 'Invalid JSON body' }, 400);
     }
 

@@ -75,7 +75,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
     <Card className="p-3">
       <div className="flex items-center justify-between mb-2.5">
         <h3 className="text-xs font-medium text-fg-muted uppercase tracking-wider">Integrations</h3>
-        <Link to="/integrations" className="text-2xs text-brand hover:text-brand-hover">Manage →</Link>
+        <Link to="/integrations/config" className="text-2xs text-brand hover:text-brand-hover">Manage →</Link>
       </div>
       {integrations.length === 0 ? (
         <p className="text-2xs text-fg-faint">Configure Sentry, Langfuse, GitHub on the Integrations page.</p>
@@ -84,7 +84,7 @@ function IntegrationsCard({ integrations }: { integrations: IntegrationStatus[] 
           {integrations.map((it) => (
             <Link
               key={it.kind}
-              to="/integrations"
+              to="/integrations/config"
               className="flex items-center justify-between gap-2 hover:bg-surface-overlay/50 rounded-sm px-1.5 py-1 transition-colors"
             >
               <span className="text-xs text-fg-secondary capitalize">{it.kind}</span>

@@ -16,6 +16,7 @@ import { logLlmInvocation } from '../_shared/telemetry.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { dispatchPluginEvent } from '../_shared/plugins.ts'
+import { createExternalIssue } from '../_shared/integrations.ts'
 import { buildReportGraph } from '../_shared/knowledge-graph.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { STAGE2_MODEL, STAGE2_FALLBACK } from '../_shared/models.ts'
@@ -469,6 +470,40 @@ ${ontologyContext}${inventoryContext}`
       }).catch((e) => log.warn('Plugin dispatch failed', { event: 'report.classified', err: String(e) }))
     } catch (e) {
       log.warn('Plugin dispatch failed (sync)', { event: 'report.classified', err: String(e) })
+    }
+
+    // Fan-out to external issue trackers for bugs and high-severity reports.
+    // Fire-and-forget: must not delay the classification response.
+    if (
+      classification.category === 'bug' ||
+      classification.severity === 'critical' ||
+      classification.severity === 'high'
+    ) {
+      void createExternalIssue(db, projectId, {
+        id: reportId,
+        summary: classification.summary,
+        description: (report.description as string | undefined) ?? classification.summary,
+        category: classification.category,
+        severity: classification.severity,
+        component: classification.component,
+      }).then((externalIssues) => {
+        if (externalIssues.length === 0) return
+        db.from('report_external_issues').insert(
+          externalIssues.map((ei) => ({
+            report_id: reportId,
+            project_id: projectId,
+            system: ei.provider,
+            external_id: ei.externalId,
+            external_url: ei.url || null,
+          })),
+        ).then(() =>
+          log.info('External issues linked', { count: externalIssues.length, reportId })
+        ).catch((e: unknown) =>
+          log.error('report_external_issues insert failed', { err: String(e), reportId })
+        )
+      }).catch((e: unknown) =>
+        log.error('createExternalIssue failed', { err: String(e), reportId })
+      )
     }
 
     // Vision analysis (V5.3 air-gap): image-only call with trusted system prompt;

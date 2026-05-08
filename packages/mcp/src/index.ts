@@ -19,7 +19,7 @@ const VERSION = (require('../package.json') as { version: string }).version
 
 const log = createLogger({ scope: 'mushi:mcp', level: 'info' })
 
-const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? 'https://api.mushimushi.dev'
+const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? ''
 const API_KEY = process.env.MUSHI_API_KEY ?? ''
 const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
 
@@ -28,7 +28,14 @@ async function main() {
     log.fatal('MUSHI_API_KEY environment variable is required')
     process.exit(1)
   }
-  log.info('Starting Mushi MCP server', { version: VERSION, endpoint: API_ENDPOINT, hasProjectId: !!PROJECT_ID })
+  if (!API_ENDPOINT) {
+    console.error(
+      '[mushi-mcp] MUSHI_API_ENDPOINT is not set. All tool calls will fail.\n' +
+        'Set MUSHI_API_ENDPOINT to your Supabase edge function URL, ' +
+        'e.g. https://xyz.supabase.co/functions/v1/api',
+    )
+  }
+  log.info('Starting Mushi MCP server', { version: VERSION, endpoint: API_ENDPOINT || '(unset)', hasProjectId: !!PROJECT_ID })
 
   const server = createMushiServer({
     version: VERSION,

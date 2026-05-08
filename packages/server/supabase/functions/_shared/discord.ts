@@ -26,7 +26,7 @@ export async function sendDiscordNotification(
   const adminBase = Deno.env.get('ADMIN_BASE_URL')?.replace(/\/$/, '') ?? null
   const reportUrl =
     payload.reportUrl ??
-    (adminBase ? `${adminBase}/reports?id=${encodeURIComponent(payload.reportId)}` : null)
+    (adminBase ? `${adminBase}/reports/${encodeURIComponent(payload.reportId)}` : null)
 
   const embed: Record<string, unknown> = {
     title: `New ${payload.category} report in ${payload.projectName}`,

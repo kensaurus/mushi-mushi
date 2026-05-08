@@ -3,34 +3,38 @@
  * PURPOSE: Unit tests for the Svelte Mushi SDK — init, getMushi, error handler.
  *
  * OVERVIEW:
- * - Verifies initMushi creates an instance with correct config
- * - Tests getMushi throws before init and returns instance after
- * - Tests createMushiErrorHandler returns a callable function
- * - Tests submitReport delegates to the API client
+ * - Verifies initMushi delegates to Mushi.init() from @mushi-mushi/web
+ * - Tests getMushi throws before init and delegates to Mushi.getInstance()
+ * - Tests createMushiErrorHandler calls captureException on the SDK instance
+ * - After init, Mushi.getInstance() returns the SDK instance (parity check)
  *
  * DEPENDENCIES:
  * - vitest for test runner and mocking
- * - @mushi-mushi/core mocked entirely
+ * - @mushi-mushi/web mocked entirely
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { initMushi as InitMushi, getMushi as GetMushi, createMushiErrorHandler as CreateMushiErrorHandler } from '../index'
 
-const mockSubmitReport = vi.fn().mockResolvedValue(undefined)
-const mockClient = { submitReport: mockSubmitReport }
+const mockCaptureException = vi.fn().mockResolvedValue(null)
+const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
 
-vi.mock('@mushi-mushi/core', () => ({
-  createApiClient: vi.fn(() => mockClient),
-  captureEnvironment: vi.fn(() => ({ userAgent: 'test' })),
-  getSessionId: vi.fn(() => 'session-123'),
-  getReporterToken: vi.fn(() => 'token-abc'),
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    fatal: vi.fn(),
-  })),
+const mockSdkInstance = {
+  captureException: mockCaptureException,
+  captureEvent: mockCaptureEvent,
+  open: vi.fn(),
+  close: vi.fn(),
+  isOpen: vi.fn().mockReturnValue(false),
+}
+
+let _sdkInstance: typeof mockSdkInstance | null = null
+
+vi.mock('@mushi-mushi/web', () => ({
+  Mushi: {
+    init: vi.fn((_config: unknown) => { _sdkInstance = mockSdkInstance; return mockSdkInstance }),
+    getInstance: vi.fn(() => _sdkInstance),
+    destroy: vi.fn(() => { _sdkInstance = null }),
+  },
 }))
 
 const testConfig = {
@@ -45,20 +49,15 @@ let createMushiErrorHandler: typeof CreateMushiErrorHandler
 
 beforeEach(async () => {
   vi.clearAllMocks()
+  _sdkInstance = null
   vi.resetModules()
 
-  vi.mock('@mushi-mushi/core', () => ({
-    createApiClient: vi.fn(() => mockClient),
-    captureEnvironment: vi.fn(() => ({ userAgent: 'test' })),
-    getSessionId: vi.fn(() => 'session-123'),
-    getReporterToken: vi.fn(() => 'token-abc'),
-    createLogger: vi.fn(() => ({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-      fatal: vi.fn(),
-    })),
+  vi.mock('@mushi-mushi/web', () => ({
+    Mushi: {
+      init: vi.fn((_config: unknown) => { _sdkInstance = mockSdkInstance; return mockSdkInstance }),
+      getInstance: vi.fn(() => _sdkInstance),
+      destroy: vi.fn(() => { _sdkInstance = null }),
+    },
   }))
 
   const mod = await import('../index')
@@ -68,23 +67,27 @@ beforeEach(async () => {
 })
 
 describe('initMushi', () => {
-  it('creates an instance with submitReport and captureError', () => {
-    const instance = initMushi(testConfig)
-
-    expect(instance).toBeDefined()
-    expect(typeof instance.submitReport).toBe('function')
-    expect(typeof instance.captureError).toBe('function')
-  })
-
-  it('calls createApiClient with correct config', async () => {
+  it('calls Mushi.init with correct config', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
     initMushi(testConfig)
 
-    const { createApiClient } = await import('@mushi-mushi/core')
-    expect(createApiClient).toHaveBeenCalledWith({
+    expect(Mushi.init).toHaveBeenCalledWith({
       projectId: 'proj_test',
       apiKey: 'key_test',
       apiEndpoint: 'https://test.api',
     })
+  })
+
+  it('returns the SDK instance from Mushi.init()', () => {
+    const instance = initMushi(testConfig)
+    expect(instance).toBeDefined()
+    expect(instance).toBe(mockSdkInstance)
+  })
+
+  it('after init, Mushi.getInstance() returns the instance (parity check)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    initMushi(testConfig)
+    expect(Mushi.getInstance()).toBe(mockSdkInstance)
   })
 })
 
@@ -94,8 +97,8 @@ describe('getMushi', () => {
   })
 
   it('returns the instance after initMushi', () => {
-    const instance = initMushi(testConfig)
-    expect(getMushi()).toBe(instance)
+    initMushi(testConfig)
+    expect(getMushi()).toBe(mockSdkInstance)
   })
 })
 
@@ -105,28 +108,19 @@ describe('createMushiErrorHandler', () => {
     expect(typeof handler).toBe('function')
   })
 
-  it('calls captureError when instance exists', () => {
-    const instance = initMushi(testConfig)
-    const spy = vi.spyOn(instance, 'captureError')
-
+  it('calls captureException when instance is available', () => {
+    initMushi(testConfig)
     const handler = createMushiErrorHandler()
     handler({ error: new Error('test error'), event: { url: { pathname: '/test' } } })
 
-    expect(spy).toHaveBeenCalledWith(expect.any(Error), { route: '/test' })
-  })
-})
-
-describe('submitReport', () => {
-  it('calls the API client submitReport', async () => {
-    const instance = initMushi(testConfig)
-    await instance.submitReport({ description: 'bug found', category: 'bug' })
-
-    expect(mockSubmitReport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: 'proj_test',
-        description: 'bug found',
-        category: 'bug',
-      }),
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({ metadata: { route: '/test' } }),
     )
+  })
+
+  it('does not throw when no instance is available', () => {
+    const handler = createMushiErrorHandler()
+    expect(() => handler({ error: new Error('test') })).not.toThrow()
   })
 })

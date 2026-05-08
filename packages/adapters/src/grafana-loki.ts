@@ -1,15 +1,23 @@
-import type { MushiCaptureEventInput } from '@mushi-mushi/core'
-import type { MushiCaptureSink, WebhookResponse } from './types.js'
-
 /**
  * Grafana alert webhook (Loki + other datasources) → Mushi adapter.
  *
- * Grafana v11 posts a `GrafanaAlertManagerEvent` shape with `alerts[]`
- * each having `status`, `labels`, `annotations`, `startsAt`, `endsAt`.
- * We translate the FIRST firing alert and stash the rest under metadata
- * so a single report doesn't get flooded with every line of a noisy
- * alert group.
+ * Auth method: shared token. Grafana's webhook contact point does not sign
+ * payloads with HMAC. The recommended pattern is a static secret in the
+ * `X-Grafana-Token` header. Configure the header value in the Grafana contact
+ * point UI and supply the same value here.
+ *
+ * Header: `X-Grafana-Token` (shared secret, compared with `timingSafeEqual`).
+ *
+ * Events handled: Grafana v11 `GrafanaAlertManagerEvent` — `firing` and
+ * `resolved` status groups. Translates the first firing alert; remaining
+ * alerts are stashed in `metadata.firingCount` to avoid report flooding.
+ *
+ * @see https://grafana.com/docs/grafana/latest/alerting/configure-notifications/manage-contact-points/integrations/webhook-notifier/
  */
+import { timingSafeEqual } from 'node:crypto'
+import type { MushiCaptureEventInput } from '@mushi-mushi/core'
+import type { MushiCaptureSink, WebhookResponse } from './types.js'
+
 export interface GrafanaAlertManagerEvent {
   receiver?: string
   status?: 'firing' | 'resolved' | string
@@ -27,6 +35,10 @@ export interface GrafanaAlertManagerEvent {
   externalURL?: string
 }
 
+/**
+ * Maps a raw Grafana AlertManager event to a `MushiCaptureEventInput`.
+ * Pure function — no side effects, safe to call in tests.
+ */
 export function translateGrafanaLoki(raw: GrafanaAlertManagerEvent): MushiCaptureEventInput {
   const firing = raw.alerts?.find(a => a.status === 'firing') ?? raw.alerts?.[0]
   const summary = firing?.annotations?.summary ?? firing?.annotations?.description ?? raw.receiver ?? 'Grafana alert'
@@ -50,15 +62,26 @@ export function translateGrafanaLoki(raw: GrafanaAlertManagerEvent): MushiCaptur
 
 export interface GrafanaHandlerOptions {
   sink: MushiCaptureSink
-  /** Use Grafana's bearer token header to authenticate. */
-  bearerToken: string
+  /**
+   * Static token expected in the `X-Grafana-Token` header. Configure the
+   * same value in the Grafana webhook contact point settings. Grafana does
+   * not use HMAC — this is a shared-secret comparison.
+   */
+  token: string
 }
 
+/**
+ * Creates a Grafana webhook ingress handler.
+ *
+ * Verifies the `X-Grafana-Token` shared-secret header with `timingSafeEqual`,
+ * then maps the Grafana AlertManager event to a `MushiCaptureEventInput` and
+ * forwards it via the injected `sink`.
+ */
 export function createGrafanaLokiWebhookHandler(opts: GrafanaHandlerOptions) {
   return async (req: { headers: Record<string, string | string[] | undefined>; rawBody: string }): Promise<WebhookResponse> => {
-    const authz = extractHeader(req.headers, 'authorization')
-    if (!authz || authz !== `Bearer ${opts.bearerToken}`) {
-      return { status: 401, body: { ok: false, error: 'BAD_BEARER' } }
+    const supplied = extractHeader(req.headers, 'x-grafana-token')
+    if (!supplied || !safeEqual(supplied, opts.token)) {
+      return { status: 401, body: { ok: false, error: 'BAD_TOKEN' } }
     }
     let payload: GrafanaAlertManagerEvent
     try { payload = JSON.parse(req.rawBody) as GrafanaAlertManagerEvent } catch { return { status: 400, body: { ok: false, error: 'INVALID_JSON' } } }
@@ -81,4 +104,12 @@ function extractHeader(headers: Record<string, string | string[] | undefined>, n
     if (k.toLowerCase() === name) return Array.isArray(v) ? v[0] : v
   }
   return undefined
+}
+
+function safeEqual(a: string, b: string): boolean {
+  try {
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  } catch {
+    return false
+  }
 }

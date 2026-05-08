@@ -47,7 +47,7 @@ export class MushiApiError extends Error {
 export interface MushiServerConfig {
   /** Server version — surfaced in MCP handshake. Read from package.json by boot. */
   version: string
-  /** Base URL of the Mushi API, e.g. https://api.mushimushi.dev */
+  /** Base URL of the Mushi API, e.g. https://xyz.supabase.co/functions/v1/api */
   apiEndpoint: string
   /** Project API key with `mcp:read` or `mcp:write` scope. */
   apiKey: string

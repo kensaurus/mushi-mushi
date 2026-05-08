@@ -1,0 +1,45 @@
+{
+  "name": "@mushi-mushi/plugin-rollbar",
+  "version": "0.1.0",
+  "description": "Mushi Mushi plugin for Rollbar — mirrors classified reports as Rollbar items and resolves them when Mushi applies a fix.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "bin": {
+    "mushi-plugin-rollbar": "./dist/server.js"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mushi-mushi/plugin-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.4.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/plugin-rollbar"
+  },
+  "keywords": ["mushi-mushi", "rollbar", "plugin", "error-tracking"]
+}

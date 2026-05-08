@@ -15,9 +15,10 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * HTTP client for submitting reports. On any non-2xx (or transport error),
- * the payload is enqueued to [OfflineQueue] for later flushing — mirrors the
- * JS core SDK behaviour for cross-platform parity.
+ * HTTP client for submitting reports. Scrubs PII from description before
+ * sending. On any non-2xx (or transport error), the payload is enqueued to
+ * [OfflineQueue] for later flushing with retry+jitter — mirrors the JS core
+ * SDK behaviour for cross-platform parity.
  */
 class ApiClient(
     private val config: MushiConfig,
@@ -37,6 +38,9 @@ class ApiClient(
             put("sdkName", MushiInfo.SDK_NAME)
             put("sdkVersion", MushiInfo.SDK_VERSION)
         }
+
+        // Added: PII scrubbing (Phase 2.4)
+        (payload["description"] as? String)?.let { payload["description"] = scrubPii(it) }
 
         val body = gson.toJson(payload).toRequestBody(mediaJson)
         val request = Request.Builder()
@@ -64,16 +68,11 @@ class ApiClient(
     }
 
     /**
-     * Best-effort flush of the offline queue. Stops on first failure.
+     * Best-effort flush of the offline queue with retry+jitter. Stops on
+     * first unrecoverable failure.
      *
      * Called from the dedicated `mushi-flush` executor (see [Mushi.startFlushTimer]),
-     * so blocking is safe. We deliberately avoid enqueue + CountDownLatch here:
-     * with parallel async sends, responses can complete out of order, which means
-     * `delivered` could not be safely mapped back to "the first N queue items"
-     * when calling [OfflineQueue.clearDelivered] — the wrong items would be
-     * dropped and successful sends could be retried as duplicates. Going
-     * sequential keeps `delivered` aligned with the head of the queue and lets
-     * us short-circuit on the first failure without any thread-safety dance.
+     * so blocking (Thread.sleep) is safe here.
      */
     fun flushQueue(maxBatch: Int = 25) {
         val batch = queue.peek(maxBatch)
@@ -81,20 +80,41 @@ class ApiClient(
 
         var delivered = 0
         for (payload in batch) {
-            val body = gson.toJson(payload).toRequestBody(mediaJson)
-            val req = Request.Builder()
-                .url("${config.endpoint}/v1/reports")
-                .post(body)
-                .header("X-Mushi-Api-Key", config.apiKey)
-                .build()
-            val ok = try {
-                client.newCall(req).execute().use { it.isSuccessful }
-            } catch (_: IOException) {
-                false
-            }
+            val body = gson.toJson(payload)
+            val ok = sendWithRetry(body)
             if (!ok) break
             delivered++
         }
         if (delivered > 0) queue.clearDelivered(delivered)
+    }
+
+    // Added: retry+jitter (Phase 2.4)
+    private fun sendWithRetry(body: String, attempt: Int = 0): Boolean {
+        val req = Request.Builder()
+            .url("${config.endpoint}/v1/reports")
+            .post(body.toRequestBody(mediaJson))
+            .header("Content-Type", "application/json")
+            .header("X-Mushi-Api-Key", config.apiKey)
+            .build()
+        val response = try {
+            client.newCall(req).execute()
+        } catch (_: IOException) {
+            null
+        }
+        val code = response?.use { it.code } ?: -1
+        if ((code == 429 || code >= 500) && attempt < 3) {
+            val delayMs = minOf(1000L * (1L shl attempt) + (Math.random() * 500).toLong(), 10000L)
+            Thread.sleep(delayMs)
+            return sendWithRetry(body, attempt + 1)
+        }
+        return code in 200..299
+    }
+
+    // Added: PII scrubbing (Phase 2.4)
+    private fun scrubPii(text: String): String {
+        return text
+            .replace(Regex("[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}"), "[REDACTED]")
+            .replace(Regex("\\b\\d{3}[.\\-]?\\d{3}[.\\-]?\\d{4}\\b"), "[REDACTED]")
+            .replace(Regex("\\b(?:\\d{4}[\\s\\-]?){3}\\d{4}\\b"), "[REDACTED]")
     }
 }

@@ -95,7 +95,15 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
 
   const [sheetVisible, setSheetVisible] = useState(false)
 
-  // Defer to @mushi-mushi/core's DEFAULT_API_ENDPOINT when not provided
+  // Validate: an explicitly empty string is a misconfiguration.
+  if (config.endpoint !== undefined && config.endpoint.trim() === '') {
+    throw new Error(
+      '[MushiProvider] endpoint is set to an empty string. ' +
+        'Set endpoint to your Supabase edge function URL, ' +
+        'e.g. https://xyz.supabase.co/functions/v1/api, or omit it to use the cloud default.',
+    )
+  }
+  // Defer to @mushi-mushi/core's DEFAULT_API_ENDPOINT when not provided.
   const apiEndpoint = config.endpoint ?? DEFAULT_API_ENDPOINT
 
   useEffect(() => {
@@ -122,6 +130,24 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
       consoleRef.current?.restore()
       networkRef.current?.restore()
     }
+  }, [])
+
+  // Added: network-aware delivery (Phase 2.4)
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined
+    ;(async () => {
+      try {
+        const NetInfo = await (new Function('s', 'return import(s)') as (s: string) => Promise<{ default: { addEventListener: (cb: (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => void) => () => void } }>)('@react-native-community/netinfo')
+        unsubscribe = NetInfo.default.addEventListener((state) => {
+          if (state.isConnected && state.isInternetReachable) {
+            queueRef.current?.flush().catch(() => {})
+          }
+        })
+      } catch {
+        // @react-native-community/netinfo is an optional peer dependency
+      }
+    })()
+    return () => unsubscribe?.()
   }, [])
 
   const open = useCallback(() => setSheetVisible(true), [])

@@ -5,10 +5,17 @@ import { runInit } from './init.js'
 import { runMigrate } from './migrate.js'
 import type { FrameworkId } from './detect.js'
 import { MUSHI_CLI_VERSION } from './version.js'
-import { assertEndpoint, DEFAULT_ENDPOINT } from './endpoint.js'
+import { assertEndpoint } from './endpoint.js'
+import { runSourcemapsUpload } from './sourcemaps.js'
 
 async function apiCall(path: string, config: CliConfig, options: RequestInit = {}): Promise<unknown> {
-  const endpoint = config.endpoint ?? DEFAULT_ENDPOINT
+  const endpoint = config.endpoint
+  if (!endpoint) {
+    throw new Error(
+      'No API endpoint configured. Run `mushi init` or set MUSHI_API_ENDPOINT. ' +
+        'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
+    )
+  }
   const res = await fetch(`${endpoint}${path}`, {
     ...options,
     headers: {
@@ -175,7 +182,14 @@ deploy
   .action(async () => {
     const config = loadConfig()
     if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    const endpoint = config.endpoint ?? 'https://api.mushimushi.dev'
+    if (!config.endpoint) {
+      console.error(
+        'No API endpoint configured. Run `mushi init` or set MUSHI_API_ENDPOINT.\n' +
+          'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
+      )
+      process.exit(1)
+    }
+    const endpoint = config.endpoint
     try {
       const res = await fetch(`${endpoint}/health`)
       console.log(`Health: ${res.status === 200 ? 'OK' : 'FAIL'} (${res.status})`)
@@ -267,6 +281,35 @@ program
       }),
     }) as Record<string, unknown>
     console.log('Test report submitted:', JSON.stringify(data, null, 2))
+  })
+
+const sourcemaps = program.command('sourcemaps').description('Source map management')
+
+sourcemaps
+  .command('upload')
+  .description('Upload source map files to the Mushi platform (idempotent, sha256-keyed)')
+  .requiredOption('--release <version>', 'Release version (e.g. 1.0.0 or git SHA)')
+  .option('--dir <path>', 'Directory containing source maps', './dist')
+  .option('--dry-run', 'List files that would be uploaded without uploading')
+  .option('-e, --endpoint <url>', 'API endpoint (overrides MUSHI_API_ENDPOINT)')
+  .option('--api-key <key>', 'API key (overrides MUSHI_API_KEY)')
+  .option('--silent', 'Suppress progress output (exit code still reflects failure)')
+  .action(async (opts: {
+    release: string
+    dir: string
+    dryRun?: boolean
+    endpoint?: string
+    apiKey?: string
+    silent?: boolean
+  }) => {
+    await runSourcemapsUpload({
+      release: opts.release,
+      dir: opts.dir,
+      dryRun: opts.dryRun,
+      endpoint: opts.endpoint,
+      apiKey: opts.apiKey,
+      silent: opts.silent,
+    })
   })
 
 program.parse()

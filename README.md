@@ -4,7 +4,9 @@
 
 **The bug your monitoring can't see, in your queue with a draft fix.**
 
-Sentry catches what your code throws. Mushi catches what your users *feel* — the dead button, the 12-second screen, the layout that breaks on one Android.
+Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users *click*. Mushi catches what your users *feel* — the dead button, the 12-second screen, the layout that breaks on one Android.
+
+Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for Datadog / Crashlytics / New Relic and outbound plugins for Sentry / Slack / Jira / Linear / PagerDuty so every tool in your stack stays in the loop.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
@@ -290,18 +292,33 @@ The orchestrator **refuses to run `local-noop` in production** unless you explic
 
 ---
 
-## Compared to Sentry alone
+## Where Mushi fits
 
-| | Sentry alone | **Mushi Mushi** |
-| --- | :--: | :--: |
-| What it sees | Errors your code throws | Friction your users feel |
-| What lands in your queue | A stack trace | A short user note plus the screenshot they were looking at |
-| Repeat bugs | Each one is a new issue | The same broken button collapses to one row |
-| Closing the loop | Assign a ticket and remember to update it | An optional draft PR you can merge or ignore |
-| From your IDE | Copy the issue ID into Cursor | Cursor reads the report and proposes the diff |
-| Where it runs | Their cloud | Yours, ours, or both |
+Every team we talk to already runs three kinds of monitoring. Mushi is the fourth layer none of them cover.
 
-Mushi is designed as a **companion** to your existing monitoring, not a replacement. Reports stream through to Sentry breadcrumbs and link back to the offending session. The marketing landing at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) walks the comparison in more detail.
+| Signal | Typical tools | What they miss |
+| --- | --- | --- |
+| Code-thrown errors | Sentry, Crashlytics, Bugsnag, Rollbar | Bugs that don't throw — dead buttons, janky scroll, 12-second screens |
+| System telemetry | Datadog, New Relic, Honeycomb, Grafana | The user's perspective on what that latency spike felt like |
+| Product analytics | Firebase Analytics, PostHog, Amplitude | *Why* a funnel step was abandoned, in the user's own words |
+| **User-felt friction** | **nothing → Mushi** | — |
+
+Mushi is the **synthesis layer**, not a replacement. It adds the one signal that's missing, and ingests the others so a single classified bug row can carry everything at once: the stack trace from Crashlytics, the latency spike from Datadog, the funnel drop from Firebase, AND the user's screenshot and note.
+
+### Compared to each tool you already have
+
+| | Sentry / Crashlytics | Datadog / New Relic | Firebase / Amplitude | **Mushi Mushi** |
+| --- | :--- | :--- | :--- | :--- |
+| **Signal origin** | Code throws | Infrastructure metrics | User event streams | User-felt friction, captured in the moment |
+| **What lands in your queue** | Stack trace | Alert threshold breach | Funnel drop-off | User note + screenshot + device context |
+| **Repeat signal** | Same error = separate issue | Spike repeats → new alert | Conversion drops again | Same broken button collapses to one row |
+| **Closing the loop** | Assign a ticket | Write a runbook | A/B test the conversion | Optional draft PR you merge, edit, or close |
+| **From your IDE** | Paste issue ID into Cursor | — | — | Cursor reads the report and proposes the diff |
+| **Where it runs** | Their cloud | Their cloud | Google cloud | Yours, ours, or both |
+
+Mushi is already wired to send signals **back** to the tools you run — Sentry breadcrumbs, Slack, Jira, Linear, PagerDuty — and to **receive** alerts from Datadog / New Relic / Honeycomb / Grafana via [`@mushi-mushi/adapters`](./packages/adapters). You don't replace anything; you add the layer that completes the picture.
+
+The marketing landing at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) walks the full integration story.
 
 ---
 

@@ -16,7 +16,8 @@
     "svelte": ">=4"
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:^"
+    "@mushi-mushi/core": "workspace:^",
+    "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",

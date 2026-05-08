@@ -1401,7 +1401,7 @@ function ProjectContextStrip({ project }: { project: Project }) {
 
       {sentryConnected && (
         <Badge
-          className="bg-[#7553ff]/10 text-[#7553ff] border border-[#7553ff]/30 inline-flex items-center gap-1"
+          className="bg-accent/10 text-accent border border-accent/30 inline-flex items-center gap-1"
           title={
             sentryReports > 0
               ? `Sentry is wired up — ${sentryReports} report${sentryReports === 1 ? '' : 's'} in the last 30 days carried a Sentry trace id. Open any of them to jump to the same trace in Sentry.`

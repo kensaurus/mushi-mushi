@@ -55,6 +55,25 @@ export class MushiNodeClient {
   }
 
   /**
+   * Convenience wrapper: capture an exception as a critical server report.
+   * Accepts an `Error` object or a plain string message.
+   * Never throws.
+   */
+  async captureException(
+    error: Error | string,
+    extra?: Omit<NodeReportPayload, 'description' | 'error'>,
+  ): Promise<{ ok: boolean; reportId?: string }> {
+    const e = error instanceof Error ? error : new Error(String(error))
+    return this.captureReport({
+      description: e.message,
+      userCategory: 'bug',
+      severity: 'critical',
+      error: { name: e.name, message: e.message, stack: e.stack },
+      ...extra,
+    })
+  }
+
+  /**
    * Send a server-side report. Never throws — failures are swallowed and
    * logged once per process at warn level so instrumentation can never take
    * down the host service.

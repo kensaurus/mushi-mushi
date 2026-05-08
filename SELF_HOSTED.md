@@ -36,6 +36,13 @@ This creates all tables, RLS policies, indexes, and RPCs.
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 # Optional: failover provider
 npx supabase secrets set OPENAI_API_KEY=sk-...
+
+# Required for report deep-links in Slack / Discord notifications.
+# Set this to the base URL of your deployed admin console (no trailing slash).
+# Example: https://your-domain.example.com/admin
+# On kensaur.us this is: https://kensaur.us/mushi-mushi/admin
+# When unset, notification buttons degrade gracefully (no URL, no crash).
+npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
 ## 4. Deploy Edge Functions

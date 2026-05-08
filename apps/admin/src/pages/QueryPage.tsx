@@ -462,7 +462,7 @@ function renderCell(col: string, val: unknown): ReactNode {
     const map: Record<string, string> = {
       critical: 'bg-danger/15 text-danger border border-danger/30',
       high:     'bg-warn/15 text-warn border border-warn/30',
-      medium:   'bg-yellow-500/10 text-yellow-400 border border-yellow-500/25',
+      medium:   'bg-warn/10 text-warn border border-warn/25',
       low:      'bg-info/10 text-info border border-info/25',
     }
     const label: Record<string, string> = { critical: 'P0 critical', high: 'P1 high', medium: 'P2 medium', low: 'P3 low' }
@@ -476,8 +476,8 @@ function renderCell(col: string, val: unknown): ReactNode {
       pending:    'bg-info/10 text-info border border-info/25',
       submitted:  'bg-info/10 text-info border border-info/25',
       queued:     'bg-info/10 text-info border border-info/25',
-      classified: 'bg-teal-500/10 text-teal-400 border border-teal-500/25',
-      grouped:    'bg-teal-500/10 text-teal-400 border border-teal-500/25',
+      classified: 'bg-ok/10 text-ok border border-ok/25',
+      grouped:    'bg-ok/10 text-ok border border-ok/25',
       fixing:     'bg-warn/10 text-warn border border-warn/25',
       fixed:      'bg-ok-muted text-ok border border-ok/25',
       dismissed:  'bg-surface-raised text-fg-muted border border-edge-subtle',
@@ -491,7 +491,7 @@ function renderCell(col: string, val: unknown): ReactNode {
     const map: Record<string, string> = {
       bug:       'bg-danger/10 text-danger border border-danger/25',
       slow:      'bg-warn/10 text-warn border border-warn/25',
-      visual:    'bg-purple-500/10 text-purple-400 border border-purple-500/25',
+      visual:    'bg-accent/10 text-accent border border-accent/25',
       confusing: 'bg-info/10 text-info border border-info/25',
       other:     'bg-surface-raised text-fg-muted border border-edge-subtle',
     }

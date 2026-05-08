@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import type { MushiCaptureEventInput } from '@mushi-mushi/core'
 import type { MushiCaptureSink, WebhookResponse } from './types.js'
 
@@ -9,8 +10,18 @@ import type { MushiCaptureSink, WebhookResponse } from './types.js'
  * `priority` + `alert_status` onto Mushi severity so a Datadog P1 lines
  * up with Mushi `critical`.
  *
- * Authentication: Datadog doesn't sign webhooks; the recommended
- * pattern is a shared-secret header. We enforce it below.
+ * Auth method: Datadog does not sign webhook payloads with HMAC. The
+ * recommended pattern is a shared-secret header (`X-Datadog-Secret-Token`).
+ * This is Datadog's own design — configure the header value in the Datadog
+ * webhook integration UI and supply the same value to this adapter.
+ *
+ * Header: `X-Datadog-Secret-Token` (shared secret, compared with
+ * `timingSafeEqual` to avoid timing attacks).
+ *
+ * Events handled: all Datadog alert types (error, warning, info) keyed by
+ * `alert_type` in the payload.
+ *
+ * @see https://docs.datadoghq.com/integrations/webhooks/
  */
 export interface DatadogPayload {
   id?: string
@@ -45,17 +56,32 @@ export function translateDatadog(raw: DatadogPayload): MushiCaptureEventInput {
 
 export interface DatadogHandlerOptions {
   sink: MushiCaptureSink
-  /** Shared secret expected in `X-Mushi-Datadog-Secret` header. */
+  /**
+   * Shared secret to compare against the `X-Datadog-Secret-Token` header.
+   * Configure the same value in the Datadog webhook integration UI.
+   * Datadog does not use HMAC — this is a direct constant-time comparison.
+   */
   secret: string
-  /** Override the header name if you want to match another proxy. */
+  /** Override the header name (default: `x-datadog-secret-token`). */
   secretHeader?: string
 }
 
+/**
+ * Creates a Datadog webhook ingress handler.
+ *
+ * Verifies the `X-Datadog-Secret-Token` shared-secret header, then maps the
+ * Datadog alert payload to a `MushiCaptureEventInput` and forwards it via
+ * the injected `sink`.
+ *
+ * Note: Datadog does not sign webhook bodies with HMAC. The `secret` field is
+ * compared with `timingSafeEqual` to resist timing side-channels even though
+ * it is a plain string comparison.
+ */
 export function createDatadogWebhookHandler(opts: DatadogHandlerOptions) {
-  const headerName = (opts.secretHeader ?? 'x-mushi-datadog-secret').toLowerCase()
+  const headerName = (opts.secretHeader ?? 'x-datadog-secret-token').toLowerCase()
   return async (req: { headers: Record<string, string | string[] | undefined>; rawBody: string }): Promise<WebhookResponse> => {
     const supplied = extractHeader(req.headers, headerName)
-    if (!supplied || supplied !== opts.secret) {
+    if (!supplied || !safeEqual(supplied, opts.secret)) {
       return { status: 401, body: { ok: false, error: 'BAD_SECRET' } }
     }
     let payload: DatadogPayload
@@ -92,4 +118,12 @@ function extractHeader(headers: Record<string, string | string[] | undefined>, n
     if (k.toLowerCase() === name) return Array.isArray(v) ? v[0] : v
   }
   return undefined
+}
+
+function safeEqual(a: string, b: string): boolean {
+  try {
+    return timingSafeEqual(Buffer.from(a), Buffer.from(b))
+  } catch {
+    return false
+  }
 }
