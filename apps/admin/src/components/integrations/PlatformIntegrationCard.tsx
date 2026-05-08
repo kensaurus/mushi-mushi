@@ -6,11 +6,12 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip } from '../ui'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
 import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
+import { IconPlay, IconPencil } from '../icons'
 import { PLATFORM_STATUS_MAP, type HealthRow, type PlatformDef } from './types'
 
 /**
@@ -131,16 +132,36 @@ export function PlatformIntegrationCard({
             </ResultChip>
           )}
           {requiredOk && (
-            <Btn variant="ghost" onClick={onTest} disabled={testing} loading={testing}>
-              {testing ? 'Testing' : 'Test'}
+            <Tooltip content={testing ? 'Testing…' : 'Test connection'}>
+              <Btn
+                variant="ghost"
+                onClick={onTest}
+                disabled={testing}
+                loading={testing}
+                aria-label="Test connection"
+                className="px-2"
+              >
+                <IconPlay size={14} />
+              </Btn>
+            </Tooltip>
+          )}
+          {!isEditing && (
+            <Tooltip content={requiredOk ? 'Edit' : 'Configure'}>
+              <Btn
+                variant={requiredOk ? 'ghost' : 'primary'}
+                onClick={onStartEdit}
+                aria-label={requiredOk ? 'Edit integration' : 'Configure integration'}
+                className={requiredOk ? 'px-2' : undefined}
+              >
+                {requiredOk ? <IconPencil size={14} /> : 'Configure'}
+              </Btn>
+            </Tooltip>
+          )}
+          {isEditing && (
+            <Btn variant="ghost" onClick={onCancelEdit}>
+              Cancel
             </Btn>
           )}
-          <Btn
-            variant={isEditing ? 'ghost' : 'primary'}
-            onClick={isEditing ? onCancelEdit : onStartEdit}
-          >
-            {isEditing ? 'Cancel' : requiredOk ? 'Edit' : 'Configure'}
-          </Btn>
         </div>
       </div>
 

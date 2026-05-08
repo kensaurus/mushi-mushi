@@ -82,8 +82,10 @@ function PdcaStepNodeInner({ data }: NodeProps) {
   return (
     <div
       className={[
-        'group/pdca relative w-56 rounded-md border bg-surface-raised text-xs shadow-sm pointer-events-auto',
-        node.isFocus ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg}` : 'border-edge/70',
+        'group/pdca relative w-56 rounded-md border bg-surface-raised text-xs shadow-md pointer-events-auto',
+        node.isFocus
+          ? `ring-2 ring-offset-1 ring-offset-surface ${meta.ring} ${meta.tintBg}`
+          : 'border-edge/85',
         node.isRunning ? 'mushi-running-glow' : '',
       ].join(' ')}
       data-stage={node.stageId}

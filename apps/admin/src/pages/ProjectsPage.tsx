@@ -21,6 +21,7 @@ import {
   Input,
   EmptyState,
   Badge,
+  Tooltip,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
@@ -50,6 +51,11 @@ import {
   IconExternalLink,
   IconAlertTriangle,
   IconStorage,
+  IconReports,
+  IconIntegrations,
+  IconSettings,
+  IconSend,
+  IconKey,
 } from '../components/icons'
 
 // Undo window for soft-delete operations on this page (project delete,
@@ -879,24 +885,45 @@ export function ProjectsPage() {
                         <IconPencil />
                       </Btn>
                     )}
-                    <Link to={`/reports?project=${project.id}`} className={LINK_CHIP_CLASS}>
-                      Reports
-                    </Link>
-                    <Link to={`/integrations?project=${project.id}`} className={LINK_CHIP_CLASS}>
-                      Integrations
-                    </Link>
-                    <Link to={`/settings?project=${project.id}`} className={LINK_CHIP_CLASS}>
-                      Settings
-                    </Link>
-                    <Btn
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => sendTestReport(project.id, project.name)}
-                      disabled={isBusy}
-                      title="Sends a synthetic report through the live ingest pipeline"
-                    >
-                      Send test report
-                    </Btn>
+                    <Tooltip content="Reports">
+                      <Link
+                        to={`/reports?project=${project.id}`}
+                        className={LINK_CHIP_CLASS}
+                        aria-label={`Reports for ${project.name}`}
+                      >
+                        <IconReports />
+                      </Link>
+                    </Tooltip>
+                    <Tooltip content="Integrations">
+                      <Link
+                        to={`/integrations?project=${project.id}`}
+                        className={LINK_CHIP_CLASS}
+                        aria-label={`Integrations for ${project.name}`}
+                      >
+                        <IconIntegrations />
+                      </Link>
+                    </Tooltip>
+                    <Tooltip content="Settings">
+                      <Link
+                        to={`/settings?project=${project.id}`}
+                        className={LINK_CHIP_CLASS}
+                        aria-label={`Settings for ${project.name}`}
+                      >
+                        <IconSettings />
+                      </Link>
+                    </Tooltip>
+                    <Tooltip content="Send test report">
+                      <Btn
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => sendTestReport(project.id, project.name)}
+                        disabled={isBusy}
+                        aria-label={`Send test report for ${project.name}`}
+                        className="px-2"
+                      >
+                        <IconSend />
+                      </Btn>
+                    </Tooltip>
                     <div className="flex items-center gap-1" data-testid={`mint-key-${project.id}`}>
                       <label htmlFor={`key-scope-${project.id}`} className="sr-only">
                         API key scope for {project.name}
@@ -925,16 +952,20 @@ export function ProjectsPage() {
                           </option>
                         ))}
                       </select>
-                      <Btn
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => generateKey(project.id)}
-                        disabled={isBusy}
-                        loading={isBusy}
-                        data-testid={`generate-key-${project.id}`}
-                      >
-                        Generate key
-                      </Btn>
+                      <Tooltip content="Generate API key">
+                        <Btn
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => generateKey(project.id)}
+                          disabled={isBusy}
+                          loading={isBusy}
+                          data-testid={`generate-key-${project.id}`}
+                          aria-label={`Generate API key for ${project.name}`}
+                          className="px-2"
+                        >
+                          <IconKey />
+                        </Btn>
+                      </Tooltip>
                     </div>
                     {/* Destructive last in tab order on purpose. Gated to
                         org owner/admin (or legacy direct owner). Members and

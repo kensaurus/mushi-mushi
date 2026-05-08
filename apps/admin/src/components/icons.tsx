@@ -491,3 +491,82 @@ export function IconNote(p: IconProps) {
   </>)
 }
 
+// Paper-airplane glyph — "send / dispatch". Used on project rows for
+// the icon-only "Send test report" button so the action column stays
+// compact.
+export function IconSend(p: IconProps) {
+  return wrap(p, <>
+    <path d="M14 2L7 9" />
+    <path d="M14 2l-4.5 12-2.5-5L2 6.5z" />
+  </>)
+}
+
+// Key glyph — "API key / generate credential". Used on project rows
+// for the icon-only "Generate key" button.
+export function IconKey(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="5.5" cy="10.5" r="3" />
+    <path d="M8 8l5.5-5.5" />
+    <path d="M11 5l2 2" />
+    <path d="M9.5 6.5l2 2" />
+  </>)
+}
+
+// Share glyph — three dots connected by lines, the universal "share"
+// icon. Used in kebab menus and action columns for "copy share link".
+export function IconShare(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="12" cy="4" r="2" />
+    <circle cx="4" cy="8" r="2" />
+    <circle cx="12" cy="12" r="2" />
+    <line x1="5.8" y1="7" x2="10.2" y2="5" />
+    <line x1="5.8" y1="9" x2="10.2" y2="11" />
+  </>)
+}
+
+// Play triangle — "run / test / execute". Used on integration cards
+// for the icon-only "Test connection" button.
+export function IconPlay(p: IconProps) {
+  return wrap(p, <>
+    <polygon points="4,2 13,8 4,14" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Flag — "mark as suspicious". Used on anti-gaming device rows.
+export function IconFlag(p: IconProps) {
+  return wrap(p, <>
+    <path d="M4 2v12" />
+    <path d="M4 2h8l-2 4h2l-2 4H4" />
+  </>)
+}
+
+// Flag with diagonal slash — "unflag / clear suspicion".
+export function IconFlagOff(p: IconProps) {
+  return wrap(p, <>
+    <path d="M4 2v12" />
+    <path d="M4 2h8l-2 4h2l-2 4H4" strokeDasharray="3 1.5" strokeOpacity="0.5" />
+    <line x1="2" y1="2" x2="14" y2="14" />
+  </>)
+}
+
+// Pause bars — "pause a routing integration".
+export function IconPause(p: IconProps) {
+  return wrap(p, <>
+    <rect x="3" y="3" width="3.5" height="10" rx="1" fill="currentColor" stroke="none" />
+    <rect x="9.5" y="3" width="3.5" height="10" rx="1" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Chevron expand/collapse — used for Details toggle in device rows.
+export function IconChevronDown(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3 5.5l5 5 5-5" />
+  </>)
+}
+
+export function IconChevronUp(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3 10.5l5-5 5 5" />
+  </>)
+}
+

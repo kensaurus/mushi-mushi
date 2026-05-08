@@ -26,7 +26,7 @@ create or replace function execute_readonly_query(query_text text, project_id_pa
 returns jsonb
 language plpgsql
 security definer
-set search_path = 'pg_catalog, public'
+set search_path = pg_catalog, public
 set statement_timeout = '5s'
 as $$
 declare

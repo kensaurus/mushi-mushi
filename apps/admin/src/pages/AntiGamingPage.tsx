@@ -22,6 +22,7 @@ import {
   EmptyState,
   ErrorAlert,
   SegmentedControl,
+  Tooltip,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiTile, type KpiDelta } from '../components/charts'
@@ -33,6 +34,7 @@ import { pluralizeWithCount } from '../lib/format'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
+import { IconEye, IconChevronUp, IconFlag, IconFlagOff } from '../components/icons'
 
 interface ReporterDevice {
   id: string
@@ -712,22 +714,46 @@ function DeviceCard({ device: d, isExpanded, isBusy, onToggleExpand, onFlag, onU
             </p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Btn
-              variant="ghost"
-              size="sm"
-              onClick={onToggleExpand}
-              aria-expanded={isExpanded}
-            >
-              {isExpanded ? 'Hide' : 'Details'}
-            </Btn>
+            <Tooltip content={isExpanded ? 'Collapse' : 'Details'}>
+              <Btn
+                variant="ghost"
+                size="sm"
+                onClick={onToggleExpand}
+                aria-expanded={isExpanded}
+                aria-label={isExpanded ? 'Collapse device details' : 'Show device details'}
+                className="px-2"
+              >
+                {isExpanded ? <IconChevronUp size={14} /> : <IconEye size={14} />}
+              </Btn>
+            </Tooltip>
             {d.flagged_as_suspicious ? (
-              <Btn variant="ghost" size="sm" onClick={onUnflag} disabled={isBusy} loading={isBusy}>
-                Unflag
-              </Btn>
+              <Tooltip content="Unflag device">
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={onUnflag}
+                  disabled={isBusy}
+                  loading={isBusy}
+                  aria-label="Unflag device"
+                  className="px-2 text-fg-muted hover:text-ok"
+                >
+                  <IconFlagOff size={14} />
+                </Btn>
+              </Tooltip>
             ) : (
-              <Btn variant="danger" size="sm" onClick={onFlag} disabled={isBusy} loading={isBusy}>
-                Flag
-              </Btn>
+              <Tooltip content="Flag as suspicious">
+                <Btn
+                  variant="ghost"
+                  size="sm"
+                  onClick={onFlag}
+                  disabled={isBusy}
+                  loading={isBusy}
+                  aria-label="Flag as suspicious"
+                  className="px-2 text-fg-muted hover:text-danger"
+                >
+                  <IconFlag size={14} />
+                </Btn>
+              </Tooltip>
             )}
           </div>
         </div>

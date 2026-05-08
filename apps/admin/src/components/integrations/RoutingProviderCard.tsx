@@ -4,10 +4,11 @@
  *          platform card but with pause/resume + disconnect actions.
  */
 
-import { Card, Btn, Badge, Input, RelativeTime } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, Tooltip } from '../ui'
 import { HealthPill } from '../charts'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
+import { IconPause, IconPlay, IconPencil, IconClose } from '../icons'
 import { PLATFORM_STATUS_MAP, type RoutingIntegration, type RoutingProviderDef } from './types'
 
 interface Props {
@@ -70,18 +71,45 @@ export function RoutingProviderCard({
         <div className="flex items-center gap-1.5">
           {existing && (
             <>
-              <Btn variant="ghost" onClick={onTogglePause}>
-                {existing.is_active ? 'Pause' : 'Resume'}
-              </Btn>
-              <Btn variant="danger" onClick={onDisconnect}>Disconnect</Btn>
+              <Tooltip content={existing.is_active ? 'Pause' : 'Resume'}>
+                <Btn
+                  variant="ghost"
+                  onClick={onTogglePause}
+                  aria-label={existing.is_active ? 'Pause integration' : 'Resume integration'}
+                  className="px-2"
+                >
+                  {existing.is_active ? <IconPause size={14} /> : <IconPlay size={14} />}
+                </Btn>
+              </Tooltip>
+              <Tooltip content="Disconnect">
+                <Btn
+                  variant="ghost"
+                  onClick={onDisconnect}
+                  aria-label="Disconnect integration"
+                  className="px-2 text-fg-muted hover:text-danger"
+                >
+                  <IconClose size={14} />
+                </Btn>
+              </Tooltip>
             </>
           )}
-          <Btn
-            variant={isEditing ? 'ghost' : 'primary'}
-            onClick={isEditing ? onCancelEdit : onStartEdit}
-          >
-            {isEditing ? 'Cancel' : existing ? 'Edit' : 'Connect'}
-          </Btn>
+          {!isEditing && (
+            <Tooltip content={existing ? 'Edit' : 'Connect'}>
+              <Btn
+                variant={existing ? 'ghost' : 'primary'}
+                onClick={onStartEdit}
+                aria-label={existing ? 'Edit integration' : 'Connect integration'}
+                className={existing ? 'px-2' : undefined}
+              >
+                {existing ? <IconPencil size={14} /> : 'Connect'}
+              </Btn>
+            </Tooltip>
+          )}
+          {isEditing && (
+            <Btn variant="ghost" onClick={onCancelEdit}>
+              Cancel
+            </Btn>
+          )}
         </div>
       </div>
 

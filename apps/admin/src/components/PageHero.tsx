@@ -25,6 +25,15 @@
  *              compact by default, and operators reveal secondary CTAs,
  *              full detail strings, and any optional accessory content
  *              by toggling the per-tile chevron.
+ *          Wave V (2026-05-08) — ReactFlow lane rebuild:
+ *            • Replaces the 5-column flex grid + CSS-channel `<FlowArrow />`
+ *              with a real `<HeroFlow />` ReactFlow canvas (3 custom
+ *              nodes + 2 gradient bezier edges), so the hero shares the
+ *              dashboard's flow vocabulary and severity colour bleeds
+ *              through the edges visually.
+ *            • Beginner mode + collapsed advanced mode are unchanged.
+ *              Public API (props) is unchanged so all 11 consumer pages
+ *              keep working without edits.
  *
  *          Design principles:
  *          - No hard-coded copy — every tile's body comes from a typed
@@ -41,12 +50,12 @@
  */
 
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Btn } from './ui'
 import type { PageAction } from './PageActionBar'
 import { useAdminMode } from '../lib/mode'
+import { HeroFlow } from './hero-flow/HeroFlow'
+import type { HeroSeverity } from './hero-flow/heroFlow.data'
 
-type Severity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
+type Severity = HeroSeverity
 
 export interface PageHeroDecide {
   /** One-word status ("Healthy", "Drift", "Blocked"). */
@@ -91,23 +100,21 @@ interface PageHeroProps {
   decideAccessory?: ReactNode
 }
 
+// Severity tokens used by the *beginner* one-line summary card +
+// collapsed advanced strip. Both surfaces only need the dot, a soft tint,
+// a foreground class for the headline, and a border colour for the
+// outer ring — no edge "flow" colour because they don't render edges.
+// The expanded advanced render delegates colour entirely to HeroFlow,
+// which keeps its own SVG-friendly hex tokens.
 const SEVERITY_STYLE: Record<
   Severity,
-  { ring: string; bg: string; text: string; dot: string; flow: string }
+  { ring: string; bg: string; text: string; dot: string }
 > = {
-  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted/15',      text: 'text-ok',     dot: 'bg-ok',     flow: 'var(--color-ok)' },
-  info:    { ring: 'border-info/40',    bg: 'bg-info-muted/15',    text: 'text-info',   dot: 'bg-info',   flow: 'var(--color-info)' },
-  warn:    { ring: 'border-warn/40',    bg: 'bg-warn/10',          text: 'text-warn',   dot: 'bg-warn',   flow: 'var(--color-warn)' },
-  crit:    { ring: 'border-err/40',     bg: 'bg-err/10',           text: 'text-err',    dot: 'bg-err',    flow: 'var(--color-danger)' },
-  neutral: { ring: 'border-edge',       bg: 'bg-surface-raised/40', text: 'text-fg',    dot: 'bg-fg-muted', flow: 'var(--color-fg-muted)' },
-}
-
-const ACTION_TONE: Record<PageAction['tone'], { ring: string; bg: string; flow: string }> = {
-  plan:  { ring: 'border-info/40',  bg: 'bg-info-muted/15', flow: 'var(--color-info)' },
-  do:    { ring: 'border-brand/40', bg: 'bg-brand/10',      flow: 'var(--color-brand)' },
-  check: { ring: 'border-warn/40',  bg: 'bg-warn/10',       flow: 'var(--color-warn)' },
-  act:   { ring: 'border-ok/40',    bg: 'bg-ok-muted/15',   flow: 'var(--color-ok)' },
-  idle:  { ring: 'border-edge',     bg: 'bg-surface-raised/40', flow: 'var(--color-fg-muted)' },
+  ok:      { ring: 'border-ok/40',      bg: 'bg-ok-muted/15',      text: 'text-ok',     dot: 'bg-ok' },
+  info:    { ring: 'border-info/40',    bg: 'bg-info-muted/15',    text: 'text-info',   dot: 'bg-info' },
+  warn:    { ring: 'border-warn/40',    bg: 'bg-warn/10',          text: 'text-warn',   dot: 'bg-warn' },
+  crit:    { ring: 'border-err/40',     bg: 'bg-err/10',           text: 'text-err',    dot: 'bg-err' },
+  neutral: { ring: 'border-edge',       bg: 'bg-surface-raised/40', text: 'text-fg',    dot: 'bg-fg-muted' },
 }
 
 // Persisted hero collapse state — same pattern Pipeline Pulse uses so
@@ -184,9 +191,6 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
     )
   }
 
-  const decideFlow = SEVERITY_STYLE[severity].flow
-  const actFlow = act ? ACTION_TONE[act.tone].flow : ACTION_TONE.idle.flow
-
   function toggleCollapsed() {
     setCollapsedScopes((prev) => ({ ...prev, [scope]: !collapsed }))
   }
@@ -247,7 +251,7 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
       role="banner"
       aria-label={`${title} hero`}
       data-scope={scope}
-      data-hero-variant="decide-act-verify"
+      data-hero-variant="decide-act-verify-flow"
       data-collapsed="false"
       className="mb-5 rounded-lg border border-edge bg-surface-raised/40 overflow-hidden"
     >
@@ -270,7 +274,7 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
           type="button"
           onClick={toggleCollapsed}
           aria-expanded={true}
-          aria-controls={`hero-${scope}-tiles`}
+          aria-controls={`hero-${scope}-flow`}
           className="text-2xs text-fg-muted hover:text-fg motion-safe:transition-colors px-1.5 py-0.5 rounded-sm hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
           title="Collapse Decide → Act → Verify"
         >
@@ -278,314 +282,36 @@ export function PageHero({ scope, title, kicker, decide, act, verify, decideAcce
         </button>
       </header>
 
-      {/* Tiles + flow arrows. Bezel-less: tiles are flush sections of the
-          parent container, separated only by an animated arrow channel.
-          Stacks vertically on narrow viewports (the arrows rotate to flow
-          downward) so the layout stays readable below md. */}
-      <div
-        id={`hero-${scope}-tiles`}
-        className="grid grid-cols-1 md:grid-cols-[1fr_auto_1fr_auto_1fr]"
-      >
-        <DecideTile
-          decide={decide}
-          accessory={decideAccessory}
-          expanded={expandedTile === 'decide'}
-          onToggle={() => toggleTile('decide')}
-        />
-        <FlowArrow color={decideFlow} />
-        <ActTile
-          action={act}
-          expanded={expandedTile === 'act'}
-          onToggle={() => toggleTile('act')}
-        />
-        <FlowArrow color={actFlow} />
-        <VerifyTile
-          verify={verify}
-          expanded={expandedTile === 'verify'}
-          onToggle={() => toggleTile('verify')}
+      {/* ReactFlow lane: 3 custom nodes (Decide / Act / Verify) connected
+          by 2 gradient bezier edges. Severity drives the source colour;
+          action tone drives the middle; the right edge fades to neutral
+          since Verify is "the receipt", not a state. Same flow primitives
+          as the dashboard PdcaFlow so the two surfaces feel like one
+          system. md+ shows the lane horizontally; below md the canvas
+          still works (the user can scroll horizontally inside the
+          fixed-width canvas viewport — no wrapping logic needed). */}
+      <div id={`hero-${scope}-flow`}>
+        <HeroFlow
+          scope={scope}
+          decide={{
+            label: decide.label,
+            metric: decide.metric,
+            summary: decide.summary,
+            severity: decide.severity ?? 'neutral',
+          }}
+          act={{ action: act }}
+          verify={{
+            label: verify.label,
+            detail: verify.detail,
+            to: verify.to,
+            secondaryTo: verify.secondaryTo,
+            secondaryLabel: verify.secondaryLabel,
+          }}
+          expandedTile={expandedTile}
+          onToggleTile={toggleTile}
+          decideAccessory={decideAccessory}
         />
       </div>
     </section>
-  )
-}
-
-// ─── FlowArrow ──────────────────────────────────────────────────────────
-//
-// The "bezel-less ReactFlow" feel without pulling in the @xyflow/react
-// dependency: a horizontal channel with a marching-dots animation that
-// reads as flowing data and a chunky arrowhead at the end. CSS-only,
-// respects `prefers-reduced-motion` (the marching pauses), and inherits
-// its tint from the upstream tile's severity so a danger Decide bleeds
-// red into the channel toward Act — visually wiring the cause to the
-// recommended action.
-//
-// On md+ viewports the channel is horizontal (D→A→V); below md the grid
-// collapses to single-column and the arrow rotates 90° to flow downward.
-
-function FlowArrow({ color }: { color: string }) {
-  return (
-    <div
-      aria-hidden="true"
-      className="hidden md:flex items-center justify-center px-2 motion-safe:[--mushi-flow-anim:flow-march_1.4s_linear_infinite]"
-      style={{ ['--mushi-flow-color' as string]: color }}
-    >
-      <span className="flow-arrow-channel" />
-      <span className="flow-arrow-head" />
-    </div>
-  )
-}
-
-// ─── Tiles ──────────────────────────────────────────────────────────────
-
-interface TileToggleProps {
-  expanded: boolean
-  onToggle: () => void
-}
-
-function TileChevron({ expanded, onToggle, label }: TileToggleProps & { label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={expanded}
-      aria-label={expanded ? `Collapse ${label}` : `Expand ${label} for more detail`}
-      title={expanded ? `Collapse ${label}` : `Show more about ${label}`}
-      className="ml-auto inline-flex items-center justify-center h-4 w-4 rounded-sm text-fg-faint hover:text-fg-muted hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
-    >
-      <span aria-hidden className={`inline-block motion-safe:transition-transform ${expanded ? 'rotate-180' : ''}`}>
-        ▾
-      </span>
-    </button>
-  )
-}
-
-function DecideTile({
-  decide,
-  accessory,
-  expanded,
-  onToggle,
-}: {
-  decide: PageHeroDecide
-  accessory?: ReactNode
-  expanded: boolean
-  onToggle: () => void
-}) {
-  const style = SEVERITY_STYLE[decide.severity ?? 'neutral']
-  return (
-    <article
-      aria-labelledby="hero-decide"
-      className={`relative ${style.bg} p-3.5`}
-    >
-      <header className="flex items-center gap-2 mb-1.5">
-        <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} aria-hidden="true" />
-        <h3 id="hero-decide" className="text-2xs uppercase tracking-wider text-fg-faint font-semibold">
-          Decide
-        </h3>
-        <TileChevron expanded={expanded} onToggle={onToggle} label="Decide" />
-      </header>
-      <p className={`text-xs font-medium ${style.text}`}>{decide.label}</p>
-      {decide.metric && (
-        <p className="mt-1 text-2xl font-semibold text-fg tabular-nums leading-tight">
-          {decide.metric}
-        </p>
-      )}
-      <p className="mt-1 text-xs text-fg-muted leading-snug">{decide.summary}</p>
-      {expanded && (
-        <div className="mt-2.5 space-y-2 border-t border-edge-subtle/60 pt-2.5">
-          {accessory ? (
-            accessory
-          ) : (
-            <p className="text-2xs text-fg-faint leading-relaxed">
-              No additional context published for this scope. Pages can supply
-              a sparkline, trend, or extra metric via the
-              <code className="mx-1 font-mono text-fg-muted">decideAccessory</code>
-              prop.
-            </p>
-          )}
-          <p className="text-3xs font-mono text-fg-faint">
-            severity: <span className="text-fg-muted">{decide.severity ?? 'neutral'}</span>
-          </p>
-        </div>
-      )}
-      {!expanded && accessory && <div className="mt-2.5">{accessory}</div>}
-    </article>
-  )
-}
-
-function ActTile({
-  action,
-  expanded,
-  onToggle,
-}: {
-  action: PageAction | null
-  expanded: boolean
-  onToggle: () => void
-}) {
-  if (!action) {
-    return (
-      <article
-        aria-labelledby="hero-act"
-        className="relative bg-surface-raised/40 p-3.5"
-      >
-        <header className="flex items-center gap-2 mb-1.5">
-          <span className="text-ok" aria-hidden="true">✓</span>
-          <h3 id="hero-act" className="text-2xs uppercase tracking-wider text-fg-faint font-semibold">
-            Act
-          </h3>
-          <TileChevron expanded={expanded} onToggle={onToggle} label="Act" />
-        </header>
-        <p className="text-xs font-medium text-fg">All clear</p>
-        <p className="mt-1 text-xs text-fg-muted leading-snug">
-          Nothing actionable here right now. The next ingest will refresh this tile.
-        </p>
-        {expanded && (
-          <div className="mt-2.5 space-y-1 border-t border-edge-subtle/60 pt-2.5">
-            <p className="text-2xs text-fg-faint leading-relaxed">
-              When the rule engine identifies a next-best-action for this scope,
-              the primary CTA appears here. Until then, this tile reads as a
-              calm receipt that the page is nominal.
-            </p>
-          </div>
-        )}
-      </article>
-    )
-  }
-
-  const tone = ACTION_TONE[action.tone]
-  // Default-collapsed tile shows primary + first secondary CTA.
-  // Expanded tile shows ALL secondary CTAs + the rule reason in full.
-  const visibleSecondaries = expanded
-    ? (action.secondary ?? [])
-    : (action.secondary ?? []).slice(0, 1)
-  return (
-    <article
-      aria-labelledby="hero-act"
-      className={`relative ${tone.bg} p-3.5`}
-    >
-      <header className="flex items-center gap-2 mb-1.5">
-        <span aria-hidden="true">→</span>
-        <h3 id="hero-act" className="text-2xs uppercase tracking-wider text-fg-faint font-semibold">
-          Act
-        </h3>
-        <TileChevron expanded={expanded} onToggle={onToggle} label="Act" />
-      </header>
-      <p className="text-xs font-medium text-fg leading-snug">{action.title}</p>
-      {action.reason && (
-        <p className="mt-1 text-xs text-fg-muted leading-snug">{action.reason}</p>
-      )}
-      <div className="mt-3 flex items-center gap-2 flex-wrap">
-        {action.primary && <HeroCta cta={action.primary} variant="primary" />}
-        {visibleSecondaries.map((s, i) => (
-          <HeroCta key={i} cta={s} variant="ghost" />
-        ))}
-      </div>
-      {expanded && action.secondary && action.secondary.length > 1 && (
-        <p className="mt-2 text-3xs text-fg-faint">
-          Showing {action.secondary.length} secondary action
-          {action.secondary.length === 1 ? '' : 's'}.
-        </p>
-      )}
-    </article>
-  )
-}
-
-function VerifyTile({
-  verify,
-  expanded,
-  onToggle,
-}: {
-  verify: PageHeroVerify
-  expanded: boolean
-  onToggle: () => void
-}) {
-  return (
-    <article
-      aria-labelledby="hero-verify"
-      className="relative bg-surface-raised/40 p-3.5"
-    >
-      <header className="flex items-center gap-2 mb-1.5">
-        <span className="text-fg-muted" aria-hidden="true">◎</span>
-        <h3 id="hero-verify" className="text-2xs uppercase tracking-wider text-fg-faint font-semibold">
-          Verify
-        </h3>
-        <TileChevron expanded={expanded} onToggle={onToggle} label="Verify" />
-      </header>
-      <p className="text-xs font-medium text-fg">{verify.label}</p>
-      <p
-        className={`mt-1 text-xs text-fg-muted font-mono leading-snug ${expanded ? 'break-all' : 'truncate'}`}
-        title={verify.detail}
-      >
-        {verify.detail}
-      </p>
-      <div className="mt-3 flex items-center gap-2 flex-wrap">
-        {verify.to && (
-          <Link
-            data-hero-verify
-            to={verify.to}
-            className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors border border-edge"
-          >
-            Open evidence <span aria-hidden="true">→</span>
-          </Link>
-        )}
-        {verify.secondaryTo && verify.secondaryLabel && (
-          <Link
-            to={verify.secondaryTo}
-            className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
-          >
-            {verify.secondaryLabel}
-          </Link>
-        )}
-      </div>
-      {expanded && (
-        <div className="mt-2.5 space-y-1 border-t border-edge-subtle/60 pt-2.5">
-          <p className="text-3xs text-fg-faint leading-relaxed">
-            Verification is the receipt for the most recent Act. Open the
-            evidence link to confirm the action landed where the rule
-            promised it would.
-          </p>
-        </div>
-      )}
-    </article>
-  )
-}
-
-function HeroCta({
-  cta,
-  variant,
-}: {
-  cta: NonNullable<PageAction['primary']>
-  variant: 'primary' | 'ghost'
-}) {
-  // Wave T (2026-04-23): `data-hero-primary` / `data-hero-secondary` hooks
-  // are the single source of truth the Playwright dead-button sweep uses
-  // to assert every Advanced page has exactly one primary CTA. Do not
-  // rename without updating examples/e2e-dogfood/tests/hero-ctas.spec.ts.
-  const testHook = variant === 'primary' ? { 'data-hero-primary': true } : { 'data-hero-secondary': true }
-  if (cta.kind === 'link') {
-    if (variant === 'primary') {
-      return (
-        <Link
-          {...testHook}
-          to={cta.to}
-          className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
-        >
-          {cta.label} <span aria-hidden="true">→</span>
-        </Link>
-      )
-    }
-    return (
-      <Link
-        {...testHook}
-        to={cta.to}
-        className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
-      >
-        {cta.label}
-      </Link>
-    )
-  }
-  return (
-    <Btn size="sm" variant={variant} onClick={cta.onClick} disabled={cta.disabled} {...testHook}>
-      {cta.label}
-    </Btn>
   )
 }

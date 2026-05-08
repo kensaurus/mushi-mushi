@@ -27,7 +27,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
-import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
+import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
@@ -108,14 +108,20 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .gte('occurred_at', periodStart.toISOString()),
       // 30-day daily rollup of `reports_ingested` per project — drives the
-      // sparkline on each /billing card. Scoped to one event_name so we don't
-      // pull tens of thousands of classifier-token events for chatty projects.
-      db
-        .from('usage_events')
-        .select('project_id, quantity, occurred_at')
-        .in('project_id', projectIds)
-        .eq('event_name', 'reports_ingested')
-        .gte('occurred_at', thirtyAgo.toISOString()),
+      // sparkline on each /billing card. Pre-aggregated server-side via the
+      // `billing_reports_ingested_daily_rollup` RPC (migration
+      // 20260508000100) so chatty projects don't ship tens of thousands of
+      // raw rows just to produce 30 daily totals. Returns at most
+      // `projectIds.length × 30` rows regardless of underlying volume.
+      db.rpc('billing_reports_ingested_daily_rollup', {
+        p_project_ids: projectIds,
+        p_since: thirtyAgo.toISOString(),
+      }) as unknown as Promise<{
+        data:
+          | { project_id: string; day_utc: string; total: number | string }[]
+          | null
+        error: { message: string } | null
+      }>,
       // §2: real LLM cost (COGS) for the current billing month so the
       // Billing page can show "$ spent on LLM this month" alongside report
       // quota. Reads the persisted cost_usd column written by telemetry.ts.
@@ -182,6 +188,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     // project with a zero-filled 30-entry array (oldest → newest) so the FE
     // can always render a stable sparkline domain — missing days become
     // explicit zero columns rather than gaps that distort the trend line.
+    //
+    // The wire shape from `billing_reports_ingested_daily_rollup` is
+    // already pre-aggregated server-side: one row per (project_id, day_utc)
+    // with SUM(quantity) as `total`. So this loop is a flat O(n_rolled_rows)
+    // join, capped at projectIds.length × 30, regardless of how chatty the
+    // underlying projects are. Pre-RPC this loop iterated every raw event.
     const dayKeys: string[] = [];
     for (let i = 0; i < 30; i++) {
       const d = new Date(thirtyAgo);
@@ -194,15 +206,21 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       for (const k of dayKeys) m.set(k, 0);
       seriesByProject.set(pid, m);
     }
-    for (const u of usageSeries ?? []) {
-      const dayKey = String(u.occurred_at).slice(0, 10);
-      const bucket = seriesByProject.get(u.project_id);
+    for (const row of usageSeries ?? []) {
+      const bucket = seriesByProject.get(row.project_id);
       if (!bucket) continue;
-      // Defensive: a stray event from an earlier rollover (timezone edge) gets
-      // dropped instead of crashing the loop. Bucket only the 30 known keys.
+      // `day_utc` is a Postgres `date` cast. supabase-js serialises it as
+      // 'YYYY-MM-DD' which already matches our pre-seeded `dayKeys`. We
+      // still .slice(0, 10) defensively so a future driver upgrade that
+      // returns 'YYYY-MM-DDT00:00:00+00:00' doesn't silently miss every
+      // bucket.
+      const dayKey = String(row.day_utc).slice(0, 10);
+      // Defensive: a stray row from an earlier rollover (timezone edge,
+      // long-tail event near the boundary) gets dropped instead of
+      // crashing the loop. Bucket only the 30 known keys.
       const cur = bucket.get(dayKey);
       if (cur === undefined) continue;
-      bucket.set(dayKey, cur + Number(u.quantity));
+      bucket.set(dayKey, cur + Number(row.total));
     }
 
     // Synthetic period end for complimentary orgs — line up with the calendar
@@ -2595,5 +2613,117 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         });
       return c.json({ ok: false, error: { code: 'QUERY_ERROR', message } }, 400);
     }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Raw SQL query — authenticated admin sends explicit SQL instead of a
+  // natural-language question. Skips the LLM plan + summary steps (no AI
+  // cost); everything else is identical to the NL path: same rate limit,
+  // same sanitization pipeline (DANGEROUS_PATTERNS + FORBIDDEN_SCHEMAS +
+  // SELECT/WITH gate + $1 scoping + comment stripping), same Postgres RPC,
+  // same audit trail. Extra guards specific to raw SQL mode:
+  //   - Table allowlist: only approved analytics tables (no nl_query_history,
+  //     audit_logs, byok_audit_log, etc.)
+  //   - LIMIT auto-append: if the user forgets LIMIT, append LIMIT 100
+  //   - Input length cap: max 4 000 chars
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post('/v1/admin/query/raw', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = (await c.req.json().catch(() => ({}))) as { sql?: string };
+    const rawSql = body.sql?.trim() ?? '';
+    if (!rawSql) {
+      return c.json(
+        { ok: false, error: { code: 'MISSING_SQL', message: 'sql is required' } },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+
+    // Reuse the same per-user hourly rate limit as the NL endpoint. Raw SQL
+    // is cheaper (no LLM) but still hits the Postgres RPC and could be abused
+    // for data exfiltration if unlimited.
+    const { error: rateErr } = await db.rpc('nl_query_rate_limit_claim', {
+      p_user_id: userId,
+      p_max_per_hour: 60,
+    });
+    if (rateErr) {
+      const msg = rateErr.message ?? '';
+      if (msg.includes('rate_limit_exceeded')) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'RATE_LIMITED',
+              message: 'Query rate limit reached (60 queries/hour). Try again next hour.',
+            },
+          },
+          429,
+        );
+      }
+      console.warn('[raw-query] rate limit RPC failed:', msg);
+    }
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (!projectIds.length) {
+      return c.json({ ok: true, data: { sql: rawSql, results: [], rowCount: 0 } });
+    }
+
+    let cleanedSql: string;
+    try {
+      cleanedSql = sanitizeSql(rawSql, { tableAllowlist: true, requireProjectIdParam: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ ok: false, error: { code: 'INVALID_SQL', message } }, 400);
+    }
+
+    const startedAt = Date.now();
+    const results: unknown[] = [];
+    for (const projectId of projectIds) {
+      const { data, error } = await db.rpc('execute_readonly_query', {
+        query_text: cleanedSql,
+        project_id_param: projectId,
+      });
+      if (error) {
+        const message = `Query execution failed: ${error.message}`;
+        const latencyMs = Date.now() - startedAt;
+        db.from('nl_query_history')
+          .insert({
+            project_id: projectIds[0] ?? null,
+            user_id: userId,
+            prompt: rawSql,
+            sql: cleanedSql,
+            error: message,
+            latency_ms: latencyMs,
+            mode: 'raw',
+          })
+          .then(({ error: e }) => {
+            if (e) console.warn('[raw_query_history] insert failed:', e.message);
+          });
+        return c.json({ ok: false, error: { code: 'QUERY_ERROR', message } }, 400);
+      }
+      if (data) results.push(...(Array.isArray(data) ? data : [data]));
+      if (results.length >= 100) break;
+    }
+
+    const latencyMs = Date.now() - startedAt;
+    db.from('nl_query_history')
+      .insert({
+        project_id: projectIds[0] ?? null,
+        user_id: userId,
+        prompt: rawSql,
+        sql: cleanedSql,
+        row_count: results.length,
+        latency_ms: latencyMs,
+        mode: 'raw',
+      })
+      .then(({ error: e }) => {
+        if (e) console.warn('[raw_query_history] insert failed:', e.message);
+      });
+
+    return c.json({
+      ok: true,
+      data: { sql: cleanedSql, results: results.slice(0, 100), rowCount: results.length, latencyMs },
+    });
   });
 }

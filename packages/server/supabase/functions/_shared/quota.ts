@@ -69,41 +69,78 @@ export async function checkIngestQuota(
   const { start, end } = periodWindow()
   const periodResetsAt = end.toISOString()
 
-  const { data: sub } = await db
-    .from('billing_subscriptions')
-    .select('status, plan_id, current_period_end')
-    .eq('project_id', projectId)
-    .in('status', ['active', 'trialing', 'past_due'])
-    .order('current_period_end', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  // Org-level complimentary fallback. When an org is on the comp billing_mode
-  // we honour its plan_id even without a Stripe subscription, so the project
-  // gets full quota + entitlements without ever talking to Stripe. Without
-  // this lookup, comp accounts would silently degrade to Hobby (1k reports/mo)
-  // the moment the operator removes the placeholder billing_subscriptions row.
-  let plan = await resolvePlanFromSubscription(sub)
-  if (!sub || plan.id === 'hobby') {
-    const { data: project } = await db
+  // Cold-path round trips, parallelized.
+  //
+  // Until 2026-05-08 the gateway resolved the plan in up to four
+  // *serial* trips on cache miss: billing_subscriptions →
+  // (conditionally) projects → (conditionally) organizations →
+  // usage_events. The conditional org lookups fired on every Hobby
+  // ingest (i.e. the most common path), so /v1/reports paid two extra
+  // round-trips for the case complimentary orgs need.
+  //
+  // We collapse that to *one parallel batch*:
+  //   - the billing_subscriptions probe (unchanged contract);
+  //   - a single projects → organizations embedded select that
+  //     returns the org's billing_mode + plan_id in the same trip,
+  //     so the comp-org fallback no longer costs extra hops;
+  //   - the usage_events count, fired unconditionally because we
+  //     want it for every plan with a non-null `included_reports_per_month`
+  //     (i.e. all plans except enterprise). On the rare enterprise
+  //     ingest the count is wasted, but the query is index-only
+  //     (`idx_usage_events_project_event` covers (project_id,
+  //     event_name, occurred_at)) and `head: true` returns no rows.
+  //
+  // Cold-path latency is now O(1 round-trip) instead of O(3-4 serial
+  // round-trips). The 60s verdict cache below still handles the
+  // steady-state hot path so most ingests pay zero round trips.
+  const [
+    { data: sub },
+    { data: projectRow },
+    { count: usageCount, error: countErr },
+  ] = await Promise.all([
+    db
+      .from('billing_subscriptions')
+      .select('status, plan_id, current_period_end')
+      .eq('project_id', projectId)
+      .in('status', ['active', 'trialing', 'past_due'])
+      .order('current_period_end', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // Embedded select uses the FK projects.organization_id → organizations.id
+    // (declared in 20260428000000_organizations.sql). PostgREST resolves
+    // the relationship by FK, so the alias `organizations` is implicit.
+    db
       .from('projects')
-      .select('organization_id')
+      .select('organization_id, organizations(billing_mode, plan_id)')
       .eq('id', projectId)
-      .maybeSingle()
-    if (project?.organization_id) {
-      const { data: org } = await db
-        .from('organizations')
-        .select('billing_mode, plan_id')
-        .eq('id', project.organization_id)
-        .maybeSingle()
-      if (org?.billing_mode === 'complimentary') {
-        plan = await getPlan(org.plan_id)
-      }
-    }
+      .maybeSingle(),
+    db
+      .from('usage_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .eq('event_name', 'reports_ingested')
+      .gte('occurred_at', start.toISOString())
+      .lt('occurred_at', end.toISOString()),
+  ])
+
+  // Resolve plan: subscription wins; complimentary org overrides Hobby
+  // when there's no active sub or the sub resolved to Hobby (mirrors
+  // the pre-2026-05-08 logic exactly — same set of comp-honouring
+  // conditions, just one round trip instead of three).
+  let plan = await resolvePlanFromSubscription(sub)
+  const orgRow =
+    (projectRow as { organizations?: { billing_mode: string | null; plan_id: string | null } | null } | null)
+      ?.organizations ?? null
+  if (orgRow && (!sub || plan.id === 'hobby') && orgRow.billing_mode === 'complimentary') {
+    plan = await getPlan(orgRow.plan_id)
   }
   const periodResetsActual = sub?.current_period_end ?? periodResetsAt
 
-  // Unlimited plan (e.g. enterprise) → fast path, no usage count needed.
+  // Unlimited plan (e.g. enterprise) → fast path. The usage count we
+  // ran in parallel is discarded; that's fine because (a) it's a
+  // head-only count on an indexed range, and (b) enterprise ingests
+  // are <1% of traffic by volume, so the wasted query is negligible
+  // compared to the wall-clock latency win on the 99% path.
   if (plan.included_reports_per_month === null) {
     return finalize(projectId, {
       allowed: true,
@@ -116,16 +153,8 @@ export async function checkIngestQuota(
     })
   }
 
-  const { count, error } = await db
-    .from('usage_events')
-    .select('id', { count: 'exact', head: true })
-    .eq('project_id', projectId)
-    .eq('event_name', 'reports_ingested')
-    .gte('occurred_at', start.toISOString())
-    .lt('occurred_at', end.toISOString())
-
-  if (error) {
-    log.warn('Quota usage count failed; allowing ingest', { projectId, err: error.message })
+  if (countErr) {
+    log.warn('Quota usage count failed; allowing ingest', { projectId, err: countErr.message })
     return finalize(projectId, {
       allowed: true,
       overage: false,
@@ -137,7 +166,7 @@ export async function checkIngestQuota(
     })
   }
 
-  const used = count ?? 0
+  const used = usageCount ?? 0
   return finalize(
     projectId,
     decideQuota({ plan, used, hasSubscription: !!sub, periodResetsAt: periodResetsActual, periodEnd: end }),

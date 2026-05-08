@@ -546,7 +546,6 @@ export function GraphPage() {
                 onPaneClick={clearSelection}
                 onResetView={() => applyView('all')}
                 hidden={false}
-                showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
                 selectedNode={selectedNode}
                 blastRadius={blastRadius}
                 blastLoading={blastLoading}

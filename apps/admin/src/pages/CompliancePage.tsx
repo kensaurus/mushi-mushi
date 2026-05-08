@@ -619,29 +619,52 @@ export function CompliancePage() {
                 <EmptyState title="No projects" />
               ) : (
                 <div className="space-y-2">
-                  {residency.map((p) => (
-                    <div key={p.id} className="flex items-center justify-between gap-3 rounded border border-edge-subtle p-2">
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium truncate">{p.name}</div>
-                        <code className="text-2xs opacity-70 font-mono">{p.id}</code>
+                  {residency.map((p) => {
+                    const pinned = p.data_residency_region
+                    return (
+                      <div key={p.id} className="flex items-center justify-between gap-3 rounded border border-edge-subtle p-2">
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium truncate">{p.name}</div>
+                          <code className="text-2xs opacity-70 font-mono">{p.id}</code>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {pinned ? (
+                            <>
+                              {/* Show the active region as a locked chip */}
+                              <span className="inline-flex items-center rounded px-2 py-1 text-3xs uppercase font-mono bg-brand text-brand-fg border border-brand">
+                                {pinned}
+                              </span>
+                              {/* Disabled buttons for the other regions with a tooltip */}
+                              {(['us', 'eu', 'jp', 'self'] as const)
+                                .filter((r) => r !== pinned)
+                                .map((r) => (
+                                  <button
+                                    key={r}
+                                    disabled
+                                    title="Region is locked — contact support to migrate data between regions."
+                                    className="px-2 py-1 text-3xs uppercase font-mono rounded border border-edge-subtle text-fg-faint cursor-not-allowed opacity-40"
+                                  >
+                                    {r}
+                                  </button>
+                                ))}
+                              <span className="text-2xs text-fg-muted ml-1">Locked</span>
+                            </>
+                          ) : (
+                            /* No region pinned yet — all four buttons are active */
+                            (['us', 'eu', 'jp', 'self'] as const).map((r) => (
+                              <button
+                                key={r}
+                                onClick={() => setProjectRegion(p.id, r)}
+                                className="px-2 py-1 text-3xs uppercase font-mono rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-edge"
+                              >
+                                {r}
+                              </button>
+                            ))
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        {(['us', 'eu', 'jp', 'self'] as const).map((r) => (
-                          <button
-                            key={r}
-                            onClick={() => setProjectRegion(p.id, r)}
-                            className={`px-2 py-1 text-3xs uppercase font-mono rounded border ${
-                              p.data_residency_region === r
-                                ? 'bg-brand text-brand-fg border-brand'
-                                : 'border-edge-subtle text-fg-muted hover:text-fg hover:border-edge'
-                            }`}
-                          >
-                            {r}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </Card>
