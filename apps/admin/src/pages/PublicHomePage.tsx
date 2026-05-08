@@ -16,7 +16,7 @@
  *     redirect-to-login on first contact.
  */
 
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Link, type LinkProps } from 'react-router-dom'
 import {
   ClosingCta,
@@ -29,6 +29,7 @@ import {
   type MarketingLinkProps,
   type MarketingTheme,
 } from '@mushi-mushi/marketing-ui'
+import type { User } from '@supabase/supabase-js'
 import { useAuth } from '../lib/auth'
 
 const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
@@ -70,7 +71,7 @@ const ReactRouterLinkAdapter: MarketingLink = ({
 }
 
 export function PublicHomePage() {
-  const { session } = useAuth()
+  const { session, user, loading } = useAuth()
   const consoleHref = session ? '/dashboard' : '/login?next=%2Fdashboard'
 
   const theme = useMemo<MarketingTheme>(
@@ -121,6 +122,24 @@ export function PublicHomePage() {
   return (
     <MarketingProvider value={theme}>
       <main className="mushi-marketing-surface min-h-screen">
+        {/* Authenticated bar — non-sticky strip above the sticky-nav that
+            tells a returning visitor "yes, you're still signed in" before
+            they even read the H1. Two reasons we keep this AND the sticky-
+            nav identity pill below:
+              1. Above-the-fold visibility. The sticky-nav pill collapses to
+                 an avatar dot at narrow widths; this strip stays full-width
+                 so the email is always readable on first paint.
+              2. Reassurance for the user-bypass-bookmarks-the-landing path.
+                 An operator who left `localhost:6464/` open in a tab and
+                 re-focuses it tomorrow needs to know they don't have to
+                 sign in again. The sticky-nav identity pill answers the
+                 same question, but only after they look up there. */}
+        {!loading && session && user && (
+          <SignedInBanner
+            user={user}
+            consoleHref={consoleHref}
+          />
+        )}
         <div className="mx-auto max-w-6xl space-y-12 px-6 pb-10 pt-4">
           {/* Top nav — small, sticky, mirrors the cloud landing's silhouette
               but routes to the admin's auth surface (no signup form here). */}
@@ -157,25 +176,24 @@ export function PublicHomePage() {
               >
                 Docs
               </a>
-              <Link
-                to="/login"
-                className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
-              >
-                Sign in
-              </Link>
-              {/* The sticky-nav CTA is small chrome, not a hero button —
-                  the longer "Start free, no card" label used by the Hero
-                  and ClosingCta wraps to three lines inside this pill-sized
-                  container at 360px. We keep "Get started" (anonymous) /
-                  "Open console" (authenticated) here for ergonomics; the
-                  Hero and ClosingCta below carry the longer, no-card
-                  promise where they have the room to render it cleanly. */}
-              <Link
-                to={consoleHref}
-                className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
-              >
-                {session ? 'Open console' : 'Get started'}
-              </Link>
+              {/* Right cluster swaps based on auth state.
+                  - signed in: identity pill (avatar + email) + "Open
+                    console" CTA + a subtle sign-out affordance — so a
+                    visitor who already has an active session sees their
+                    own face on the landing page (answering the implicit
+                    "is this me?" question) instead of being asked to
+                    "Sign in" again.
+                  - signed out / loading: original Sign-in + Get-started
+                    chrome. We render the same anonymous shell while
+                    `loading` is true so we never *flash* a wrong identity
+                    or the wrong CTA before supabase-js resolves the
+                    cached session — the rare opposite flash (anonymous →
+                    authenticated) is the safe direction. */}
+              {!loading && session && user ? (
+                <SignedInChrome user={user} consoleHref={consoleHref} />
+              ) : (
+                <SignedOutChrome consoleHref={consoleHref} />
+              )}
             </nav>
           </header>
 
@@ -190,5 +208,184 @@ export function PublicHomePage() {
         </div>
       </main>
     </MarketingProvider>
+  )
+}
+
+// ─── Auth-state chrome ────────────────────────────────────────────────────
+
+/**
+ * Pick the best human-readable label for an authenticated user. We prefer
+ * `user_metadata.full_name` (set by OAuth providers like Google) over the
+ * raw email so the landing page reads as personal ("Welcome back, Alex")
+ * rather than transactional ("Welcome back, alex.smith@megacorp.example").
+ * Falls back through name → email → "your account" so we never render an
+ * empty string even if the session somehow has no email (anonymous auth
+ * via JWT, custom SAML claim).
+ */
+function getDisplayName(user: User): string {
+  const meta = user.user_metadata as Record<string, unknown> | null | undefined
+  const fullName = typeof meta?.full_name === 'string' ? meta.full_name.trim() : ''
+  if (fullName) return fullName
+  const name = typeof meta?.name === 'string' ? meta.name.trim() : ''
+  if (name) return name
+  if (user.email) return user.email
+  return 'your account'
+}
+
+/**
+ * One-character avatar glyph. Falls back to "?" when neither name nor
+ * email is parseable so the circle never renders an empty string (which
+ * would make the round chip look broken). All-caps for visual consistency.
+ */
+function getInitial(user: User): string {
+  const meta = user.user_metadata as Record<string, unknown> | null | undefined
+  const fullName = typeof meta?.full_name === 'string' ? meta.full_name.trim() : ''
+  if (fullName) return fullName.charAt(0).toUpperCase()
+  if (user.email) return user.email.charAt(0).toUpperCase()
+  return '?'
+}
+
+/**
+ * Right-side cluster of the sticky nav, shown when the visitor is signed
+ * in. Replaces the anonymous `Sign in / Get started` pair with an
+ * identity pill + "Open console" CTA + small sign-out affordance.
+ *
+ * Layout note: at narrow viewports (< sm) we collapse the email pill to
+ * just the avatar circle to avoid the nav wrapping to two lines (the
+ * sticky pill is full-width minus 24px page padding, which is tight).
+ * The "Open console" pill stays prominent because that's the action
+ * 95 % of returning visitors want to take from this page.
+ */
+function SignedInChrome({ user, consoleHref }: { user: User; consoleHref: string }) {
+  const { signOut } = useAuth()
+  const [signingOut, setSigningOut] = useState(false)
+  const displayName = getDisplayName(user)
+  const initial = getInitial(user)
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    try {
+      await signOut()
+    } finally {
+      // The auth provider broadcasts SIGNED_OUT and the session goes to
+      // null; this component will re-render as `<SignedOutChrome>` so we
+      // don't strictly need to clear the loading state, but doing so is
+      // cheap and protects against the (unlikely) signOut-throws path.
+      setSigningOut(false)
+    }
+  }
+
+  return (
+    <>
+      <Link
+        to="/dashboard"
+        className="group inline-flex items-center gap-2 rounded-full border border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_92%,white)] py-1 pl-1 pr-3 transition hover:border-[color-mix(in_oklch,var(--mushi-ink)_30%,var(--mushi-rule))] hover:bg-[color-mix(in_oklch,var(--mushi-paper)_82%,white)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--mushi-vermillion)]/55"
+        title={`Signed in as ${displayName}`}
+        aria-label={`Signed in as ${displayName} — open console`}
+      >
+        <span
+          aria-hidden
+          className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[var(--mushi-vermillion)] font-mono text-[11px] font-semibold text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.22)]"
+        >
+          {initial}
+        </span>
+        {/* Hide the email at narrow widths so the sticky pill doesn't
+            wrap. The avatar + the "Open console" CTA still convey the
+            signed-in state on mobile. */}
+        <span className="hidden max-w-[12rem] truncate font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--mushi-ink)] md:inline">
+          {user.email ?? displayName}
+        </span>
+      </Link>
+      <Link
+        to={consoleHref}
+        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+      >
+        Open console
+      </Link>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)] disabled:cursor-wait disabled:opacity-60"
+      >
+        {signingOut ? '…' : 'Sign out'}
+      </button>
+    </>
+  )
+}
+
+/**
+ * Right-side cluster of the sticky nav, shown when the visitor is
+ * signed out OR while the auth provider is still resolving the
+ * persisted session (`loading=true`). Identical to the original
+ * pre-auth-aware chrome.
+ */
+function SignedOutChrome({ consoleHref }: { consoleHref: string }) {
+  return (
+    <>
+      <Link
+        to="/login"
+        className="rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)] transition hover:bg-[var(--mushi-vermillion-wash)] hover:text-[var(--mushi-vermillion)]"
+      >
+        Sign in
+      </Link>
+      {/* The sticky-nav CTA is small chrome, not a hero button —
+          the longer "Start free, no card" label used by the Hero
+          and ClosingCta wraps to three lines inside this pill-sized
+          container at 360px. We keep "Get started" here for
+          ergonomics; the Hero and ClosingCta below carry the
+          longer, no-card promise where they have the room to
+          render it cleanly. */}
+      <Link
+        to={consoleHref}
+        className="ml-1 rounded-full bg-[var(--mushi-ink)] px-3 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+      >
+        Get started
+      </Link>
+    </>
+  )
+}
+
+/**
+ * Full-width "you're signed in" strip rendered above the sticky-nav.
+ * Sits inside the marketing surface (warm paper bg) but with a slight
+ * vermillion-wash tint so it reads as informational chrome — not as
+ * the page's primary content.
+ *
+ * Why a separate banner in addition to the sticky-nav identity pill:
+ * the pill's email collapses on mobile, and a returning operator who
+ * hits this URL needs the unambiguous "yes you're still signed in"
+ * answer above the fold without having to scan the right side of the
+ * sticky bar. Two surfaces, one consistent answer.
+ */
+function SignedInBanner({ user, consoleHref }: { user: User; consoleHref: string }) {
+  const displayName = getDisplayName(user)
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="border-b border-[var(--mushi-rule)] bg-[color-mix(in_oklch,var(--mushi-paper)_82%,var(--mushi-vermillion-wash))]"
+    >
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-1.5 px-6 py-2">
+        <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--mushi-ink-muted)]">
+          <span
+            aria-hidden
+            className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--mushi-vermillion)]"
+          />
+          <span className="text-[var(--mushi-ink)]">Signed in</span>
+          <span aria-hidden className="opacity-40">·</span>
+          <span className="max-w-[18rem] truncate text-[var(--mushi-ink)] sm:max-w-none">
+            {displayName}
+          </span>
+        </p>
+        <Link
+          to={consoleHref}
+          className="inline-flex items-center gap-1.5 rounded-full bg-[var(--mushi-ink)] px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--mushi-paper)] shadow-[inset_0_-2px_0_rgba(255,255,255,0.18)] transition hover:bg-[color-mix(in_oklch,var(--mushi-ink)_82%,var(--mushi-vermillion))]"
+        >
+          Open console
+          <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+        </Link>
+      </div>
+    </div>
   )
 }
