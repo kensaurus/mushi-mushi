@@ -1,5 +1,13 @@
 # @mushi-mushi/vue
 
+## 0.8.2
+
+### Patch Changes
+
+- Updated dependencies [84118af]
+  - @mushi-mushi/core@1.0.0
+  - @mushi-mushi/web@1.0.0
+
 ## 0.8.1
 
 ### Patch Changes
