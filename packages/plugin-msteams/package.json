@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-msteams",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Mushi Mushi plugin for Microsoft Teams — posts Adaptive Cards to an Incoming Webhook for report and fix lifecycle events.",
   "license": "MIT",
   "type": "module",
