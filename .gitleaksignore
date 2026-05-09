@@ -1,0 +1,15 @@
+# Gitleaks fingerprint allowlist.
+#
+# Format: <commit-sha>:<file-path>:<rule-id>:<line-number>
+#
+# Use this file to suppress finite, audited false positives. Each entry
+# MUST come with an inline comment explaining WHY the value is not a real
+# secret — the next reviewer needs to be able to revoke trust quickly.
+
+# adapters bugsnag test fixture: high-entropy string used as the mock
+# `apiKey` for unit tests of the Bugsnag adapter HMAC computation. Not
+# a real Bugsnag credential — the value never authenticated against the
+# Bugsnag API and is now renamed to `TEST-FIXTURE-NOT-A-REAL-SECRET` in
+# the working tree. The fingerprint below pins the historical commit so
+# the renamed value continues to allow the gitleaks gate to pass.
+189035fa6b8c38656469c9c68ff4a0ce7bd7d26a:packages/adapters/src/__tests__/bugsnag.test.ts:generic-api-key:5
