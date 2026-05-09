@@ -85,29 +85,52 @@ export function registerPostRegionDiscoveryRoutes(app: Hono): void {
     const mcpBase = `${origin}/functions/v1/mcp`;
 
     return {
-      schemaVersion: '0.2',
+      schemaVersion: '1.0',
       spec: 'https://github.com/agent-protocol/a2a',
       id: 'dev.mushimushi.autofix',
       name: 'Mushi Mushi Autofix Agent',
       description:
         'LLM-driven bug intake, classification, and autofix agent. Accepts user-reported bugs, ' +
         'classifies them via a two-stage pipeline, and ships fixes through sandboxed agentic workflows.',
-      version: '0.2.0',
+      version: '2.0.0',
       publisher: { name: 'Mushi Mushi', url: 'https://mushimushi.dev' },
       documentation: 'https://docs.mushimushi.dev/api/agent-card',
       capabilities: {
         streaming: {
           protocol: 'agui',
-          version: '0.1',
+          version: '0.4',
           endpoint: `${apiBase}/v1/admin/fixes/dispatch/:id/stream`,
         },
-        sse: { sanitization: 'CVE-2026-29085' },
-        mcp: { transport: 'http+sse', endpoint: mcpBase, version: '2026-03-26' },
+        sse: { sanitization: 'CVE-2026-29085', lastEventId: true },
+        mcp: {
+          // Streamable HTTP per the 2025-03-26 spec — single endpoint,
+          // POST returns application/json or text/event-stream as
+          // negotiated; GET opens an SSE stream for server-pushed
+          // notifications. Replaces the deprecated HTTP+SSE transport
+          // the agent card was advertising (and 404'ing) since V5.3.2.
+          transport: 'streamable-http',
+          endpoint: mcpBase,
+          protocolVersions: ['2025-03-26', '2024-11-05'],
+        },
         auth: {
           schemes: ['bearer', 'mushi-api-key'],
           discovery: `${apiBase}/v1/admin/auth/manifest`,
+          dynamicRegistration: `${apiBase}/v1/admin/auth/register`,
         },
-        tasks: { spec: 'A2A-SEP-1686', endpoint: `${mcpBase}/tasks` },
+        // A2A v1.0.0 task surface lives on the api function alongside
+        // the existing fix dispatch routes — wraps fix_dispatch_jobs as
+        // A2A Task resources (GET / cancel / subscribe).
+        tasks: { spec: 'A2A-1.0.0', endpoint: `${apiBase}/v1/a2a/tasks` },
+        tracing: {
+          standard: 'W3C-TraceContext',
+          propagation: 'traceparent',
+          otlp: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+        },
+        webhooks: {
+          standard: 'StandardWebhooks-1.0',
+          legacyHeader: 'X-Mushi-Signature',
+        },
+        idempotency: { header: 'Idempotency-Key', standard: 'IETF-draft-idempotency-key' },
       },
       skills: [
         {
@@ -130,6 +153,19 @@ export function registerPostRegionDiscoveryRoutes(app: Hono): void {
       transports: {
         rest: { base: apiBase, openapi: `${apiBase}/openapi.json` },
         mcp: { base: mcpBase },
+      },
+      // Public JSON Schemas for the agent contracts (FixContext / FixResult /
+      // SandboxProvider / ExpectedOutcome). Lets non-TS orchestrators
+      // (Python LangGraph, Go agents, A2A skill cards) implement the contract
+      // without typing-by-hand. Whitepaper §2.10 spec-traceability + 2026-05-09
+      // interop audit follow-up.
+      schemas: {
+        index: `${apiBase}/v1/schemas`,
+        fixContext: `${apiBase}/v1/schemas/fix-context.json`,
+        fixResult: `${apiBase}/v1/schemas/fix-result.json`,
+        sandboxProvider: `${apiBase}/v1/schemas/sandbox-provider.json`,
+        expectedOutcome: `${apiBase}/v1/schemas/expected-outcome.json`,
+        inventory: 'https://mushimushi.dev/schemas/inventory-2.0.json',
       },
       contact: {
         email: 'kensaurus@gmail.com',

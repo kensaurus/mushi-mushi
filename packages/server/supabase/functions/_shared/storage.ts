@@ -50,11 +50,24 @@ export interface UploadResult {
   signed: boolean
 }
 
+export interface HealthDebugStep {
+  step: string
+  ok: boolean
+  ms: number
+  detail?: string
+}
+
+export interface HealthCheckResult {
+  ok: boolean
+  error?: string
+  debug: HealthDebugStep[]
+}
+
 export interface StorageAdapter {
   upload(input: UploadInput): Promise<UploadResult>
   signedUrl(key: string, ttlSecs?: number): Promise<string>
   delete(key: string): Promise<void>
-  healthCheck(): Promise<{ ok: boolean; error?: string }>
+  healthCheck(): Promise<HealthCheckResult>
 }
 
 const settingsCache = new Map<string, { settings: StorageSettings | null; expiresAt: number }>()
@@ -100,6 +113,123 @@ export async function getStorageAdapter(projectId: string): Promise<StorageAdapt
       err: String(err),
     })
     return new SupabaseStorageAdapter(getServiceClient(), 'screenshots')
+  }
+}
+
+/**
+ * Health-check variant of the factory that also captures vault-ref resolution
+ * timing as debug steps, so the admin UI can show a structured trace.
+ * Returns null adapter + debug steps if the settings row is missing or if
+ * building the external adapter fails (the caller should surface this as a
+ * configuration error rather than falling back silently).
+ */
+export async function getStorageAdapterForHealthCheck(
+  projectId: string,
+): Promise<{ adapter: StorageAdapter; prefixDebug: HealthDebugStep[] }> {
+  const prefixDebug: HealthDebugStep[] = []
+
+  const t0 = Date.now()
+  const settings = await getStorageSettings(projectId)
+  prefixDebug.push({
+    step: 'settings_lookup',
+    ok: settings !== null,
+    ms: Date.now() - t0,
+    detail: settings
+      ? `provider=${settings.provider} bucket=${settings.bucket}`
+      : 'no settings row — using cluster default',
+  })
+
+  if (!settings || settings.provider === 'supabase') {
+    const bucket = settings?.bucket ?? 'screenshots'
+    return {
+      adapter: new SupabaseStorageAdapter(getServiceClient(), bucket),
+      prefixDebug,
+    }
+  }
+
+  // Vault-ref resolution for external providers
+  if (['s3', 'r2', 'minio'].includes(settings.provider)) {
+    const tv1 = Date.now()
+    const hasAccess = !!(await resolveVaultSecret(settings.access_key_vault_ref))
+    prefixDebug.push({
+      step: 'vault_access_key',
+      ok: hasAccess,
+      ms: Date.now() - tv1,
+      detail: settings.access_key_vault_ref
+        ? `ref=${settings.access_key_vault_ref} resolved=${hasAccess}`
+        : 'no ref configured',
+    })
+
+    const tv2 = Date.now()
+    const hasSecret = !!(await resolveVaultSecret(settings.secret_key_vault_ref))
+    prefixDebug.push({
+      step: 'vault_secret_key',
+      ok: hasSecret,
+      ms: Date.now() - tv2,
+      detail: settings.secret_key_vault_ref
+        ? `ref=${settings.secret_key_vault_ref} resolved=${hasSecret}`
+        : 'no ref configured',
+    })
+
+    if (!hasAccess || !hasSecret) {
+      // Return a broken adapter that immediately fails its own probe so the
+      // healthCheck route can produce a coherent debug log rather than throwing.
+      const missingMsg = `Missing vault secret: ${!hasAccess ? 'access_key' : ''}${!hasAccess && !hasSecret ? '+' : ''}${!hasSecret ? 'secret_key' : ''}`
+      return {
+        adapter: {
+          upload: async () => { throw new Error(missingMsg) },
+          signedUrl: async () => { throw new Error(missingMsg) },
+          delete: async () => { throw new Error(missingMsg) },
+          healthCheck: async () => ({ ok: false, error: missingMsg, debug: [] }),
+        },
+        prefixDebug,
+      }
+    }
+  }
+
+  if (settings.provider === 'gcs') {
+    const tv = Date.now()
+    const hasSa = !!(await resolveVaultSecret(settings.service_account_vault_ref))
+    prefixDebug.push({
+      step: 'vault_service_account',
+      ok: hasSa,
+      ms: Date.now() - tv,
+      detail: settings.service_account_vault_ref
+        ? `ref=${settings.service_account_vault_ref} resolved=${hasSa}`
+        : 'no ref configured',
+    })
+
+    if (!hasSa) {
+      const missingMsg = 'Missing GCS service-account vault ref'
+      return {
+        adapter: {
+          upload: async () => { throw new Error(missingMsg) },
+          signedUrl: async () => { throw new Error(missingMsg) },
+          delete: async () => { throw new Error(missingMsg) },
+          healthCheck: async () => ({ ok: false, error: missingMsg, debug: [] }),
+        },
+        prefixDebug,
+      }
+    }
+  }
+
+  try {
+    const tb = Date.now()
+    const adapter = await buildExternalAdapter(settings)
+    prefixDebug.push({ step: 'adapter_build', ok: true, ms: Date.now() - tb })
+    return { adapter, prefixDebug }
+  } catch (err) {
+    const msg = String(err)
+    prefixDebug.push({ step: 'adapter_build', ok: false, ms: 0, detail: msg.slice(0, 200) })
+    return {
+      adapter: {
+        upload: async () => { throw new Error(msg) },
+        signedUrl: async () => { throw new Error(msg) },
+        delete: async () => { throw new Error(msg) },
+        healthCheck: async () => ({ ok: false, error: msg, debug: [] }),
+      },
+      prefixDebug,
+    }
   }
 }
 
@@ -197,12 +327,25 @@ class SupabaseStorageAdapter implements StorageAdapter {
     if (error) throw new Error(`Supabase delete failed: ${error.message}`)
   }
 
-  async healthCheck(): Promise<{ ok: boolean; error?: string }> {
+  async healthCheck(): Promise<HealthCheckResult> {
+    const debug: HealthDebugStep[] = []
+    debug.push({ step: 'provider', ok: true, ms: 0, detail: `supabase bucket=${this.bucket}` })
+
+    const t0 = Date.now()
     try {
-      await this.db.storage.from(this.bucket).list('', { limit: 1 })
-      return { ok: true }
+      const { error } = await this.db.storage.from(this.bucket).list('', { limit: 1 })
+      const ms = Date.now() - t0
+      if (error) {
+        debug.push({ step: 'list', ok: false, ms, detail: error.message.slice(0, 200) })
+        return { ok: false, error: error.message, debug }
+      }
+      debug.push({ step: 'list', ok: true, ms })
+      return { ok: true, debug }
     } catch (err) {
-      return { ok: false, error: String(err) }
+      const ms = Date.now() - t0
+      const msg = String(err)
+      debug.push({ step: 'list', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
     }
   }
 }
@@ -276,15 +419,37 @@ class S3CompatibleAdapter implements StorageAdapter {
     }
   }
 
-  async healthCheck(): Promise<{ ok: boolean; error?: string }> {
+  async healthCheck(): Promise<HealthCheckResult> {
+    const debug: HealthDebugStep[] = []
+    const providerLabel = `${this.opts.endpoint} bucket=${this.opts.bucket} region=${this.opts.region} prefix=${this.opts.prefix || '(none)'}`
+    debug.push({ step: 'provider', ok: true, ms: 0, detail: providerLabel })
+
+    const probeKey = `_mushi_health_${Date.now()}.txt`
+    debug.push({ step: 'probe_key', ok: true, ms: 0, detail: probeKey })
+
+    const t1 = Date.now()
     try {
-      const probeKey = `_mushi_health_${Date.now()}.txt`
       await this.upload({ key: probeKey, body: new TextEncoder().encode('ok'), contentType: 'text/plain' })
-      await this.delete(probeKey)
-      return { ok: true }
+      debug.push({ step: 'put', ok: true, ms: Date.now() - t1 })
     } catch (err) {
-      return { ok: false, error: String(err) }
+      const ms = Date.now() - t1
+      const msg = String(err)
+      debug.push({ step: 'put', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
     }
+
+    const t2 = Date.now()
+    try {
+      await this.delete(probeKey)
+      debug.push({ step: 'delete', ok: true, ms: Date.now() - t2 })
+    } catch (err) {
+      const ms = Date.now() - t2
+      const msg = String(err)
+      debug.push({ step: 'delete', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
+    }
+
+    return { ok: true, debug }
   }
 }
 
@@ -373,15 +538,50 @@ class GcsAdapter implements StorageAdapter {
     if (!res.ok && res.status !== 404) throw new Error(`GCS delete failed: ${res.status}`)
   }
 
-  async healthCheck(): Promise<{ ok: boolean; error?: string }> {
+  async healthCheck(): Promise<HealthCheckResult> {
+    const debug: HealthDebugStep[] = []
+    debug.push({ step: 'provider', ok: true, ms: 0, detail: `gcs bucket=${this.opts.bucket} prefix=${this.opts.prefix || '(none)'}` })
+
+    // Verify we can obtain an access token (validates service-account JSON shape)
+    const t0 = Date.now()
+    let token: string
     try {
-      const probeKey = `_mushi_health_${Date.now()}.txt`
-      await this.upload({ key: probeKey, body: new TextEncoder().encode('ok'), contentType: 'text/plain' })
-      await this.delete(probeKey)
-      return { ok: true }
+      token = await this.accessToken()
+      debug.push({ step: 'token', ok: true, ms: Date.now() - t0, detail: 'access token obtained' })
     } catch (err) {
-      return { ok: false, error: String(err) }
+      const ms = Date.now() - t0
+      const msg = String(err)
+      debug.push({ step: 'token', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
     }
+    void token // used by upload/delete internally
+
+    const probeKey = `_mushi_health_${Date.now()}.txt`
+    debug.push({ step: 'probe_key', ok: true, ms: 0, detail: probeKey })
+
+    const t1 = Date.now()
+    try {
+      await this.upload({ key: probeKey, body: new TextEncoder().encode('ok'), contentType: 'text/plain' })
+      debug.push({ step: 'put', ok: true, ms: Date.now() - t1 })
+    } catch (err) {
+      const ms = Date.now() - t1
+      const msg = String(err)
+      debug.push({ step: 'put', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
+    }
+
+    const t2 = Date.now()
+    try {
+      await this.delete(probeKey)
+      debug.push({ step: 'delete', ok: true, ms: Date.now() - t2 })
+    } catch (err) {
+      const ms = Date.now() - t2
+      const msg = String(err)
+      debug.push({ step: 'delete', ok: false, ms, detail: msg.slice(0, 200) })
+      return { ok: false, error: msg, debug }
+    }
+
+    return { ok: true, debug }
   }
 }
 

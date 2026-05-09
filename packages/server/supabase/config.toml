@@ -79,6 +79,18 @@ verify_jwt = false
 [functions.judge-batch]
 verify_jwt = false
 
+# mcp is the Model Context Protocol Streamable HTTP transport
+# (2025-03-26 spec). Public endpoint reached by external orchestrators
+# (Cursor remote MCP, OpenAI Agents SDK, Anthropic Claude Agent SDK in
+# hosted mode, A2A discovery). Authentication happens INSIDE the handler
+# via dual-mode auth (X-Mushi-Api-Key with mcp:read|write scope, OR a
+# Supabase JWT). The platform gateway's verify_jwt MUST be false —
+# otherwise every API-key call is rejected at the gateway before our own
+# scope check runs, and every agent card promise of MCP-over-HTTP fails
+# with a 401 the operator can do nothing about.
+[functions.mcp]
+verify_jwt = false
+
 # webhooks-github-indexer authenticates GitHub via X-Hub-Signature-256 (HMAC),
 # and the hourly sweep cron POSTs with the service-role bearer + signed body.
 # Both auth paths happen inside the function, so the platform gateway must

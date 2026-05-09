@@ -51,9 +51,15 @@ async function main(): Promise<void> {
     }
     case 'dispatch-fix': {
       const reportId = core.getInput('report-id', { required: true })
+      // Optional spec-traceability anchor (whitepaper §2.10). When provided
+      // the worker skips the graph walk to recover the inventory Action and
+      // includes its expected_outcome contract verbatim in the LLM prompt.
+      const inventoryActionNodeId = core.getInput('inventory-action-node-id') || undefined
+      const body: Record<string, unknown> = { reportId }
+      if (inventoryActionNodeId) body.inventoryActionNodeId = inventoryActionNodeId
       const res = await api(endpoint, apiKey, projectId, '/v1/admin/fixes/dispatch', {
         method: 'POST',
-        body: JSON.stringify({ reportId }),
+        body: JSON.stringify(body),
       })
       handleResult(res, failOnQuota)
       break

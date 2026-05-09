@@ -14,6 +14,7 @@ The Zod schema (and a hand-authored JSON Schema companion) for the **positive si
 - `ApiDep` — backend route the action calls
 - `DbDep` — table the action writes to / reads from
 - `Test` — the Playwright spec that verifies the action
+- **`expected_outcome`** — machine-readable success contract on every Action. Threaded into the fix-worker LLM prompt by [`@mushi-mushi/agents`](../agents/) and asserted by the synthetic monitor after every probe (whitepaper §2.10)
 
 ## Why it exists
 
@@ -69,6 +70,41 @@ truth. The hand-authored JSON Schema companion lives in
 [`src/json-schema.ts`](./src/json-schema.ts) and is published to
 `https://mushimushi.dev/schemas/inventory-2.0.json` for editor
 autocomplete (see above).
+
+## `expected_outcome` — machine-readable success contract
+
+Every `Action` accepts an optional `expected_outcome` block. It's the
+contract that closes the spec-traceability loop on the **write** side:
+the fix-worker injects it verbatim into the LLM prompt, the
+deterministic `validateAgainstSpec` gate refuses to open a PR that
+removes a `json_path` field the contract asserts on, and the synthetic
+monitor probes the live action against it after every PR merge.
+
+```yaml
+- id: submit
+  selector: '[data-testid="signup-submit"]'
+  actions:
+    - id: submit
+      trigger: click
+      expected_outcome:
+        summary: 'POST /signup returns 200 and creates a user row'
+        response:
+          status_in: [200, 201]
+          json_path:
+            - { path: '$.user.id', op: 'exists' }
+        database:
+          table: 'users'
+          expect: 'row_exists'
+        ui:
+          route_change_to: '/dashboard'
+          visible_text: 'Welcome'
+```
+
+Supported `op` values for `response.json_path` entries: `exists`, `equals`, `not_equals`, `contains`, `gt`, `gte`, `lt`, `lte`, `matches`. Supported `database.expect` values: `row_exists`, `row_absent`, `row_count_at_least` (with `min_count`).
+
+The full TypeScript shape is exported as `ExpectedOutcome` and mirrored
+in [`@mushi-mushi/agents`](../agents/) so the agents package stays
+buildable from the Edge runtime without pulling the YAML loader.
 
 ## License
 

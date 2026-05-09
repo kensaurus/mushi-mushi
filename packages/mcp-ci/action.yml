@@ -22,6 +22,9 @@ inputs:
   report-id:
     description: 'Report UUID — required for dispatch-fix.'
     required: false
+  inventory-action-node-id:
+    description: 'For command=dispatch-fix: optional spec-traceability anchor (whitepaper §2.10). When provided, the worker skips the graph walk to recover the inventory Action and includes its expected_outcome contract verbatim in the LLM prompt.'
+    required: false
   question:
     description: 'NL query text — required for command=query.'
     required: false

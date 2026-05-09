@@ -101,6 +101,39 @@ synthetic_monitor_allow_mutations: true
 Set this only when staging is fully isolated from production and the
 write endpoints have an idempotency key or roll back cleanly.
 
+## Spec traceability — every fix carries the originating Action
+
+As of the 2026-05-09 release every fix dispatched against a report that
+has been linked to an inventory `Action` (via the `reports_against`
+graph edge `classify-report` writes) carries that link end-to-end:
+
+- The dispatch row (`fix_dispatch_jobs.inventory_action_node_id`) and
+  the resulting attempt (`fix_attempts.inventory_action_node_id`) both
+  store the FK to the `graph_nodes` row for the originating Action.
+- The fix-worker LLM prompt includes a Markdown spec-context block
+  with the action description, page, story, and every assertion in
+  the contract — see
+  [Concepts → Spec traceability — read AND write side](/concepts/inventory-and-gates#spec-traceability--read-and-write-side).
+- A deterministic `validateAgainstSpec` gate runs before the PR opens.
+  Soft warnings (no changed file references the contract's required
+  DB table or page route) land on
+  `fix_attempts.spec_validation_warnings JSONB` and surface in the
+  Fixes drawer as a yellow "Sanity-check before merging" callout.
+- A targeted post-PR synthetic probe is queued for the originating
+  Action immediately after the PR opens. The synthetic-monitor cron
+  drains the queue with priority on its next tick — so a fix that
+  immediately makes the action `regressed` shows up here within
+  minutes of merge, not on the next 15-min reconciler sweep.
+
+Open any element / action drawer to see the **"Recent fixes"** strip
+at the bottom — every fix attempt that mutated this Action, with its
+spec-validation warnings (if any) and the post-PR synthetic result.
+
+External orchestrators (Cursor, Claude Code, OpenAI Agents SDK,
+LangGraph, CrewAI, A2A v1.0.0) get the same anchor — see
+[Connecting your orchestrator](/concepts/orchestrator-interop) for the
+per-surface details.
+
 ## See also
 
 - [Concepts → Inventory and gates](/concepts/inventory-and-gates) — the

@@ -13,6 +13,7 @@ import {
   GATED_ROUTES,
   type FeatureFlag,
 } from '../../_shared/entitlements.ts';
+import { extractInboundTraceparent } from '../../_shared/trace.ts';
 import { requireSuperAdmin } from '../../_shared/super-admin.ts';
 import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
@@ -28,6 +29,7 @@ import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
+import { withIdempotency } from '../../_shared/idempotency.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
@@ -48,17 +50,47 @@ export function registerFixDispatchRoutes(app: Hono): void {
   // ============================================================
 
   app.post('/v1/admin/fixes/dispatch', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    return withIdempotency(c, async () => {
     try {
       const userId = c.get('userId') as string;
       const body = (await c.req.json().catch(() => ({}))) as {
         reportId?: string;
         projectId?: string;
+        // Spec-traceability (whitepaper §2.10): MCP / A2A callers that
+        // already know the inventory Action they want repaired can pass
+        // it explicitly. When absent, the fix-worker walks the
+        // `reports_against` graph edge and recovers it on its own. The
+        // override skips one round-trip on the hot path AND lets a
+        // calling agent fix an action that hasn't yet been auto-linked
+        // by classify-report (e.g. a freshly ingested inventory).
+        inventoryActionNodeId?: string;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
           {
             ok: false,
             error: { code: 'MISSING_FIELDS', message: 'reportId and projectId required' },
+          },
+          400,
+        );
+      }
+      // Defensive: reject ids that aren't UUID-shaped before they hit
+      // pg's UUID type (else pg returns 22P02 + we waste a round-trip).
+      // Mirrors the UUID_RE in _shared/auth.ts but inlined to avoid
+      // dragging the helper into yet another route module.
+      if (
+        body.inventoryActionNodeId !== undefined &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          body.inventoryActionNodeId,
+        )
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_INVENTORY_ACTION_ID',
+              message: 'inventoryActionNodeId must be a UUID',
+            },
           },
           400,
         );
@@ -131,6 +163,10 @@ export function registerFixDispatchRoutes(app: Hono): void {
           report_id: body.reportId,
           requested_by: userId,
           status: 'queued',
+          // Spec-traceability: persist the caller's anchor when supplied,
+          // so the worker doesn't need to walk the graph for it. NULL =>
+          // worker derives from `reports_against`.
+          inventory_action_node_id: body.inventoryActionNodeId ?? null,
         })
         .select('id, status, created_at')
         .single();
@@ -172,6 +208,7 @@ export function registerFixDispatchRoutes(app: Hono): void {
       log.error('[fix-dispatch] unhandled error', { message: msg, stack });
       throw err;
     }
+    }) // withIdempotency
   });
 
   app.get('/v1/admin/fixes/dispatches', jwtAuth, async (c) => {
@@ -315,8 +352,16 @@ export function registerFixDispatchRoutes(app: Hono): void {
   // Authorization on EventSource, so the client uses fetch + ReadableStream).
   // All payloads are JSON-encoded via toSseEvent so untrusted strings cannot
   // inject "event:"/"id:"/"data:"/"retry:" frames (CVE-2026-29085).
+  //
+  // Auth: AG-UI v0.4 stream is reachable by either a logged-in admin JWT
+  // OR a project API key with the `mcp:read` scope. The legacy JWT-only
+  // gate locked out third-party orchestrators (LangGraph, OpenAI Agents,
+  // CrewAI) that have a valid API key but no Supabase session — see the
+  // 2026-05-09 spec-traceability audit. The API-key path still hits
+  // userCanAccessProject below, so a key holder cannot subscribe to a
+  // dispatch from a project they don't own.
   // ------------------------------------------------------------
-  app.get('/v1/admin/fixes/dispatch/:id/stream', jwtAuth, async (c) => {
+  app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const dispatchId = c.req.param('id');
     const db = getServiceClient();
@@ -332,6 +377,10 @@ export function registerFixDispatchRoutes(app: Hono): void {
     const access = await userCanAccessProject(db, userId, job.project_id);
     if (!access.allowed) return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
+    // RFC 7231 / WHATWG EventSource: the browser sends `Last-Event-ID` (note
+    // capital-D) but Hono normalises header names to lower-case on Edge.
+    const lastEventId = c.req.header('last-event-id') ?? c.req.header('Last-Event-ID') ?? null;
+
     // V5.3.2 §2.14, B3: AG-UI streaming protocol envelope.
     // The legacy `event: status` frame is still emitted for back-compat; new
     // clients should subscribe to the AG-UI event types (`run.*`).
@@ -339,13 +388,64 @@ export function registerFixDispatchRoutes(app: Hono): void {
       const agui = new AguiEmitter({
         runId: dispatchId,
         write: (frame) => stream.write(frame),
+        traceparent: extractInboundTraceparent(c.req.header('traceparent')),
       });
+
+      // ---------------------------------------------------------------
+      // Last-Event-Id replay: if the client reconnected after a drop,
+      // stream any fix_events that were stored since the last seen event.
+      // Events are keyed as `{dispatchId}:fix:{fix_event_uuid}` so they're
+      // unambiguous from the live status frames keyed `{dispatchId}:{ts}`.
+      // ---------------------------------------------------------------
+      if (lastEventId && job.fix_attempt_id) {
+        const lastEventPrefix = `${dispatchId}:fix:`
+        const lastFixEventId = lastEventId.startsWith(lastEventPrefix)
+          ? lastEventId.slice(lastEventPrefix.length)
+          : null
+
+        // Query stored fix_events since the last-seen fix event UUID.
+        // We order by `at` ascending and replay in chronological order.
+        let fixEventsQuery = db
+          .from('fix_events')
+          .select('id, kind, status, label, detail, at')
+          .eq('fix_attempt_id', job.fix_attempt_id)
+          .order('at', { ascending: true })
+          .limit(100)
+
+        if (lastFixEventId) {
+          // Get the `at` timestamp of the last seen event, then replay
+          // events after it (exclusive).
+          const { data: lastSeen } = await db
+            .from('fix_events')
+            .select('at')
+            .eq('id', lastFixEventId)
+            .single()
+          if (lastSeen?.at) {
+            fixEventsQuery = fixEventsQuery.gt('at', lastSeen.at)
+          }
+        }
+
+        const { data: missedEvents } = await fixEventsQuery
+        if (missedEvents && missedEvents.length > 0) {
+          for (const ev of missedEvents) {
+            await stream.write(
+              toSseEvent(
+                { kind: ev.kind, status: ev.status, label: ev.label, detail: ev.detail, at: ev.at },
+                { event: 'fix.event', id: `${dispatchId}:fix:${ev.id}` },
+              ),
+            )
+          }
+        }
+      }
 
       let lastStatus = '';
       let elapsed = 0;
       const HEARTBEAT_EVERY_MS = 15_000;
       const POLL_EVERY_MS = 1_500;
       const MAX_DURATION_MS = 10 * 60_000;
+      // Track the `at` timestamp of the last streamed fix_event so we only
+      // emit new ones each poll cycle.
+      let lastFixEventAt: string | null = null;
 
       await agui.started({
         resource: 'fix_dispatch',
@@ -387,6 +487,31 @@ export function registerFixDispatchRoutes(app: Hono): void {
               { event: 'status', id: `${dispatchId}:${Date.now()}` },
             ),
           );
+        }
+
+        // Stream any new fix_events since the last poll cycle.
+        if (latest.fix_attempt_id) {
+          let fixQuery = db
+            .from('fix_events')
+            .select('id, kind, status, label, detail, at')
+            .eq('fix_attempt_id', latest.fix_attempt_id)
+            .order('at', { ascending: true })
+            .limit(20)
+          if (lastFixEventAt) {
+            fixQuery = fixQuery.gt('at', lastFixEventAt)
+          }
+          const { data: newFixEvents } = await fixQuery
+          if (newFixEvents && newFixEvents.length > 0) {
+            for (const ev of newFixEvents) {
+              await stream.write(
+                toSseEvent(
+                  { kind: ev.kind, status: ev.status, label: ev.label, detail: ev.detail, at: ev.at },
+                  { event: 'fix.event', id: `${dispatchId}:fix:${ev.id}` },
+                ),
+              )
+              lastFixEventAt = ev.at
+            }
+          }
         }
 
         if (

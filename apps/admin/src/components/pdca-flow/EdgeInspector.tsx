@@ -18,6 +18,7 @@ import type { PdcaStage } from '../dashboard/types'
 import type { PdcaEdgeData } from './pdcaFlow.data'
 import { PDCA_STAGES } from '../../lib/pdca'
 import { STAGE_HEX } from '../flow-primitives/flowTokens'
+import { DetailRows, type DetailRowItem } from '../ui'
 
 interface EdgeInspectorProps {
   edge: {
@@ -129,18 +130,29 @@ export function EdgeInspector({ edge, stages, onClose }: EdgeInspectorProps) {
       <p className="font-medium text-fg leading-tight">{copy.label}</p>
       <p className="mt-0.5 text-fg-faint leading-snug">{copy.hint}</p>
 
-      <dl className="mt-2 grid grid-cols-2 gap-x-2 gap-y-0.5 text-3xs">
-        <dt className="text-fg-muted">In flight</dt>
-        <dd className="font-mono tabular-nums text-fg">{inFlightCount}</dd>
-        {targetStage?.bottleneck && (
-          <>
-            <dt className="text-fg-muted">Next stage</dt>
-            <dd className="text-fg truncate" title={targetStage.bottleneck}>
-              {targetStage.bottleneck}
-            </dd>
-          </>
-        )}
-      </dl>
+      <DetailRows
+        className="mt-2"
+        dense
+        items={(() => {
+          const rows: DetailRowItem[] = [
+            {
+              label: 'In flight',
+              value: <span className="tabular-nums">{inFlightCount}</span>,
+              mono: true,
+              tone: inFlightCount > 0 ? 'info' : 'neutral',
+              hint: 'Reports currently sitting in this stage.',
+            },
+          ]
+          if (targetStage?.bottleneck) {
+            rows.push({
+              label: 'Next stage',
+              value: targetStage.bottleneck,
+              hint: 'Stage with the largest backlog downstream of here.',
+            })
+          }
+          return rows
+        })()}
+      />
 
       <Link
         to={copy.href}

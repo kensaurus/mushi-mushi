@@ -17,7 +17,7 @@
  *          the rest of the operator surfaces (BillingPage, AuditPage).
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useEntitlements } from '../lib/useEntitlements'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -37,6 +37,7 @@ import {
   IdField,
 } from '../components/ui'
 import { EditorialErrorState } from '../components/EditorialErrorState'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 
 interface SuperAdminUser {
   user_id: string
@@ -112,7 +113,7 @@ function planBadgeTone(plan: string | null): {
   if (!plan || plan === 'hobby') return { bg: 'bg-surface-raised', fg: 'text-fg-muted', label: 'Hobby' }
   if (plan === 'starter') return { bg: 'bg-info-muted', fg: 'text-info', label: 'Starter' }
   if (plan === 'pro') return { bg: 'bg-brand/15', fg: 'text-brand', label: 'Pro' }
-  if (plan === 'enterprise') return { bg: 'bg-violet-500/15', fg: 'text-violet-400', label: 'Enterprise' }
+  if (plan === 'enterprise') return { bg: 'bg-[var(--mushi-vermillion-wash)]', fg: 'text-[var(--mushi-vermillion)]', label: 'Enterprise' }
   return { bg: 'bg-surface-raised', fg: 'text-fg-muted', label: plan }
 }
 
@@ -227,7 +228,7 @@ export function UsersPage() {
         {usersError ? (
           <ErrorAlert message={usersError} onRetry={reloadUsers} />
         ) : usersLoading && users.length === 0 ? (
-          <Loading text="Loading directory…" />
+          <TableSkeleton rows={8} columns={7} showFilters={false} />
         ) : users.length === 0 ? (
           <EmptyState
             title="No matching users"
@@ -253,8 +254,9 @@ export function UsersPage() {
                   return (
                     <tr
                       key={u.user_id}
-                      className="border-b border-edge/40 hover:bg-surface-raised/40 cursor-pointer"
+                      className="group border-b border-edge/40 hover:bg-surface-raised/40 cursor-pointer transition-colors"
                       onClick={() => setSelectedUserId(u.user_id)}
+                      aria-label={`View details for ${u.email ?? u.user_id}`}
                     >
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
@@ -277,6 +279,9 @@ export function UsersPage() {
                       </td>
                       <td className="px-3 py-2.5 text-fg-muted">
                         {u.last_sign_in_at ? <RelativeTime value={u.last_sign_in_at} /> : <span className="text-fg-faint">never</span>}
+                      </td>
+                      <td className="px-2 py-2.5 w-6">
+                        <span className="text-fg-faint opacity-0 group-hover:opacity-100 transition-opacity text-xs" aria-hidden>→</span>
                       </td>
                     </tr>
                   )
@@ -302,6 +307,17 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const handleClose = useCallback(onClose, [onClose])
+
+  // Dismiss on Escape
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose()
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [handleClose])
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -320,17 +336,21 @@ function UserDetailDrawer({ userId, onClose }: { userId: string; onClose: () => 
     }
   }, [userId])
 
+  const drawerLabel = detail?.user.email
+    ? `User detail — ${detail.user.email}`
+    : 'User detail'
+
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label={drawerLabel}>
       <div
         className="absolute inset-0 bg-overlay backdrop-blur-sm"
-        onClick={onClose}
+        onClick={handleClose}
         aria-hidden="true"
       />
-      <aside className="relative w-full max-w-xl h-full bg-surface-root border-l border-edge/60 shadow-raised overflow-y-auto">
+      <aside className="relative w-full max-w-xl h-full bg-surface-root border-l border-edge/60 shadow-raised overflow-y-auto animate-in slide-in-from-right duration-200">
         <div className="sticky top-0 z-10 bg-surface-root border-b border-edge/60 px-5 py-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">User detail</h2>
-          <Btn variant="ghost" size="sm" onClick={onClose}>
+          <Btn variant="ghost" size="sm" onClick={handleClose} aria-keyshortcuts="Escape" aria-label="Close user detail (press Escape)">
             Close
           </Btn>
         </div>

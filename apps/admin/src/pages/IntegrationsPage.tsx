@@ -33,6 +33,8 @@ import {
   type RoutingProviderDef,
 } from '../components/integrations/types'
 import { usePageCopy } from '../lib/copy'
+import { PageHero } from '../components/PageHero'
+import { useNextBestAction } from '../lib/useNextBestAction'
 
 export function IntegrationsPage() {
   const toast = useToast()
@@ -94,6 +96,22 @@ export function IntegrationsPage() {
     return map
   }, [history])
 
+  // Derive integration health for the hero tile.
+  const disconnectedCount = PLATFORM_DEFS.filter(
+    (d) => !platform?.[d.kind] || latestByKind[d.kind]?.status === 'down',
+  ).length
+  const expiringCount = 0  // Token expiry not surfaced in the current data model
+  const integrationsAction = useNextBestAction({ scope: 'integrations', disconnectedCount, expiringCount })
+  const integrationsSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
+    disconnectedCount === PLATFORM_DEFS.length ? 'neutral'
+    : disconnectedCount > 0 ? 'warn'
+    : 'ok'
+  const latestPlatformProbe = history[0] ?? null
+  const missingPlatformConfigIds = [
+    ...(platform?.github ? [] : ['integrations.github.repo_url', 'integrations.github.installation_token']),
+    ...(platform?.sentry ? [] : ['integrations.sentry.auth_token']),
+  ].slice(0, 3)
+
   const startEdit = (kind: Kind) => {
     setEditing(kind)
     const current = platform?.[kind] ?? {}
@@ -137,6 +155,25 @@ export function IntegrationsPage() {
       const probeStatus = res.data.status
       if (probeStatus === 'ok') toast.success(`${kind} healthy`, `${res.data.latencyMs}ms`)
       else toast.error(`${kind} probe ${probeStatus}`, res.data.detail)
+    }
+    reloadAll()
+  }
+
+  const [testingRouting, setTestingRouting] = useState<string | null>(null)
+
+  const testRoutingKind = async (healthKind: string, label: string) => {
+    setTestingRouting(healthKind)
+    const res = await apiFetch<{ status: string; latencyMs: number; detail?: string }>(
+      `/v1/admin/health/integration/${healthKind}`,
+      { method: 'POST' },
+    )
+    setTestingRouting(null)
+    if (!res.ok) {
+      toast.error(`Probe failed for ${label}`, res.error?.message)
+    } else if (res.data) {
+      const probeStatus = res.data.status
+      if (probeStatus === 'ok') toast.success(`${label} healthy`, `${res.data.latencyMs}ms`)
+      else toast.error(`${label} probe ${probeStatus}`, res.data.detail)
     }
     reloadAll()
   }
@@ -231,6 +268,61 @@ export function IntegrationsPage() {
         />
       )}
 
+      <PageHero
+        scope="integrations"
+        title={copy?.title ?? 'Integrations'}
+        kicker="Platform wiring"
+        decide={{
+          label: disconnectedCount === 0 ? 'All integrations connected' : `${disconnectedCount} integration${disconnectedCount === 1 ? '' : 's'} disconnected or failing`,
+          metric: `${PLATFORM_DEFS.length - disconnectedCount}/${PLATFORM_DEFS.length} connected`,
+          summary: disconnectedCount === 0
+            ? 'All platform integrations are connected and passing health probes.'
+            : `${disconnectedCount} integration${disconnectedCount === 1 ? '' : 's'} need credentials or failed the last probe — the pipeline degrades without them.`,
+          severity: integrationsSeverity,
+          anchor: 'integrations:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: PLATFORM_DEFS.map(d => ({
+              label: d.label,
+              value: latestByKind[d.kind]?.status ?? (platform?.[d.kind] ? 'configured' : 'missing'),
+              tone: latestByKind[d.kind]?.status === 'ok' ? 'ok'
+                : latestByKind[d.kind]?.status === 'down' ? 'crit'
+                : latestByKind[d.kind]?.status === 'degraded' ? 'warn'
+                : platform?.[d.kind] ? 'neutral'
+                : 'neutral',
+            })),
+          },
+          missingConfigIds: missingPlatformConfigIds,
+        }}
+        act={integrationsAction}
+        actAnchor="integrations:act"
+        actEvidence={integrationsAction ? {
+          kind: 'rule-trace',
+          why: integrationsAction.reason ?? integrationsAction.title,
+          threshold: disconnectedCount > 0 ? `${disconnectedCount} integration${disconnectedCount === 1 ? '' : 's'} disconnected` : undefined,
+        } : undefined}
+        actMissingConfigIds={missingPlatformConfigIds}
+        verify={{
+          label: latestPlatformProbe ? `Last probe · ${latestPlatformProbe.kind}` : 'No probes yet',
+          detail: latestPlatformProbe
+            ? `${latestPlatformProbe.status} · ${new Date(latestPlatformProbe.checked_at).toLocaleString()}`
+            : 'Trigger a test on any platform card below',
+          to: '/health?fn=integration-probe',
+          secondaryTo: '/audit?source=integrations',
+          secondaryLabel: 'Audit log',
+          anchor: 'integrations:verify',
+          evidence: latestPlatformProbe ? {
+            kind: 'last-event',
+            at: latestPlatformProbe.checked_at,
+            by: latestPlatformProbe.kind,
+            payloadSummary: `probe ${latestPlatformProbe.status}`,
+            status: latestPlatformProbe.status === 'ok' ? 'ok'
+              : latestPlatformProbe.status === 'down' ? 'error'
+              : 'warn',
+          } : undefined,
+        }}
+      />
+
       <PageHelp
         title={copy?.help?.title ?? 'About Integrations'}
         whatIsIt={copy?.help?.whatIsIt ?? 'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'}
@@ -243,7 +335,7 @@ export function IntegrationsPage() {
       />
 
       <Section title="Core platform">
-        <div className="space-y-2">
+        <div className="space-y-2" data-dav-anchor="integrations:decide">
           {PLATFORM_DEFS.map((def) => (
             <PlatformIntegrationCard
               key={def.kind}
@@ -264,16 +356,20 @@ export function IntegrationsPage() {
               onTest={() => void testKind(def.kind)}
             />
           ))}
-          {activeProjectId && <CodebaseIndexCard projectId={activeProjectId} />}
+          {activeProjectId && (
+            <div data-dav-anchor="integrations:verify">
+              <CodebaseIndexCard projectId={activeProjectId} />
+            </div>
+          )}
         </div>
       </Section>
 
       <Section title="Routing destinations">
-        <p className="text-2xs text-fg-muted mb-2">
+        <p className="text-2xs text-fg-secondary mb-2 pl-2 border-l-2 border-brand/30 leading-snug">
           Forward triaged reports to your ticketing or paging system. Each provider has its own
           credentials; severity + category routing lives in Settings → Routing.
         </p>
-        <div className="space-y-2">
+        <div className="space-y-2" data-dav-anchor="integrations:act">
           {ROUTING_PROVIDERS.map((provider) => {
             const existing = routing.find((r) => r.integration_type === provider.type)
             return (
@@ -284,6 +380,9 @@ export function IntegrationsPage() {
                 isEditing={routingEditing === provider.type}
                 draft={routingDrafts[provider.type] ?? {}}
                 saving={routingSaving === provider.type}
+                testing={testingRouting === provider.healthKind}
+                latestProbe={latestByKind[provider.healthKind]}
+                sparkline={sparklineByKind[provider.healthKind] ?? []}
                 onStartEdit={() => startRoutingEdit(provider)}
                 onCancelEdit={cancelRoutingEdit}
                 onChangeField={(name, value) =>
@@ -293,6 +392,7 @@ export function IntegrationsPage() {
                   }))
                 }
                 onSave={() => void saveRouting(provider)}
+                onTest={() => void testRoutingKind(provider.healthKind, provider.label)}
                 onTogglePause={() => existing && void toggleRoutingActive(provider, !existing.is_active)}
                 onDisconnect={() => void deleteRouting(provider)}
               />

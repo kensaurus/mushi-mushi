@@ -36,11 +36,22 @@ COMMENT ON COLUMN public.reports.sentry_environment IS
   'Sentry environment (production/staging/preview) captured at report time. Defaults to NULL when Sentry is not configured.';
 
 -- ---------------------------------------------------------------------
--- Indexes — all created CONCURRENTLY-friendly via CREATE INDEX IF NOT
--- EXISTS so re-running the migration during local dev (or restoring a
--- staging branch) is idempotent. We deliberately use partial indexes
--- on `IS NOT NULL` so the index only stores rows that actually carry
--- the field — most reports today still have NULL here.
+-- Indexes. `IF NOT EXISTS` makes re-running the migration during local
+-- dev (or restoring a staging branch) idempotent.
+--
+-- These are NOT concurrent index builds. Supabase wraps every
+-- migration in a transaction, and `CREATE INDEX CONCURRENTLY` cannot
+-- run inside one — so the build takes a normal ACCESS EXCLUSIVE lock
+-- on the partition for the duration of the build. For `reports` (a
+-- monthly partitioned table) the lock window is bounded to the
+-- current partition, which has been acceptable historically. If a
+-- future change here ever needs a truly non-blocking index build,
+-- it must live in a separate migration file with the `--no-transaction`
+-- directive and use `CREATE INDEX CONCURRENTLY` explicitly.
+--
+-- We deliberately use partial indexes on `IS NOT NULL` so the index
+-- only stores rows that actually carry the field — most reports
+-- today still have NULL here.
 -- ---------------------------------------------------------------------
 
 CREATE INDEX IF NOT EXISTS reports_tags_gin

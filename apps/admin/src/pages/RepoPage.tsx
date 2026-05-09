@@ -416,7 +416,7 @@ export function RepoPage() {
                 </a>
               )}
               <Link
-                to="/integrations"
+                to="/integrations/config"
                 className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors inline-flex items-center gap-1"
               >
                 <IconIntegrations />

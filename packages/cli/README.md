@@ -62,7 +62,24 @@ mushi test                           # submit a test report end-to-end
 mushi migrate                        # suggest the most relevant migration guide
 mushi migrate --json                 # machine-readable JSON for CI
 mushi config endpoint https://...    # set API endpoint (https:// required outside localhost)
+mushi sourcemaps upload --release <ver> --dir <dist>   # upload .js.map / .css.map (sha256-idempotent)
 ```
+
+### `mushi sourcemaps upload`
+
+Recursively scans `--dir` for `.js.map` and `.css.map` files and uploads them
+under the given `--release`. Each file is hashed (sha256) and skipped if the
+server already has it for that release, so the command is safe to run from
+every CI build without churning storage.
+
+```bash
+mushi sourcemaps upload --release 1.4.2 --dir ./dist
+mushi sourcemaps upload --release "$GITHUB_SHA" --dir ./build --dry-run
+mushi sourcemaps upload --release "$GITHUB_SHA" --dir ./build --silent
+```
+
+Requires `MUSHI_API_ENDPOINT` and `MUSHI_API_KEY` (or pass `--endpoint` /
+`--api-key`). Exits non-zero on any upload failure so CI gates fail fast.
 
 ### `mushi migrate`
 

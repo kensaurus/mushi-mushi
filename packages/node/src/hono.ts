@@ -33,6 +33,7 @@ export function mushiHonoErrorHandler(
       const headers: Record<string, string> = {}
       c.req.raw.headers.forEach((v, k) => { headers[k] = v })
       const traceContext = parseTraceContext(headers)
+      const rawTraceparent = headers['traceparent'] ?? undefined
       void opts.client.captureReport({
         description: `[${c.req.raw.method} ${c.req.raw.url}] ${err.message}`,
         userCategory: 'bug',
@@ -41,6 +42,7 @@ export function mushiHonoErrorHandler(
         url: c.req.raw.url,
         traceContext,
         error: { name: err.name, message: err.message, stack: err.stack },
+        ...(rawTraceparent ? { metadata: { traceparent: rawTraceparent } } : {}),
       })
     } catch {
       // silent

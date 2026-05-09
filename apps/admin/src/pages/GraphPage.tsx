@@ -377,13 +377,15 @@ export function GraphPage() {
             {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
             {filteredEdges.length}/{rawEdges.length} edges
           </span>
-          <SegmentedControl<ViewMode>
-            size="sm"
-            ariaLabel="Graph view mode"
-            value={view}
-            options={VIEW_MODE_OPTIONS}
-            onChange={setView}
-          />
+          <div data-dav-anchor="graph:decide">
+            <SegmentedControl<ViewMode>
+              size="sm"
+              ariaLabel="Graph view mode"
+              value={view}
+              options={VIEW_MODE_OPTIONS}
+              onChange={setView}
+            />
+          </div>
         </div>
       </PageHeader>
 
@@ -414,14 +416,36 @@ export function GraphPage() {
               : fragileComponents > 0
                 ? 'warn'
                 : 'ok',
+          anchor: 'graph:decide',
+          evidence: rawNodes.length > 0 ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Fragile', value: fragileComponents, tone: fragileComponents > 0 ? 'crit' : 'ok' },
+              { label: 'Regressions', value: regressionCount, tone: regressionCount > 0 ? 'warn' : 'ok' },
+              { label: 'Total nodes', value: rawNodes.length, tone: 'neutral' },
+              { label: 'Total edges', value: rawEdges.length, tone: 'neutral' },
+            ],
+          } : undefined,
         }}
         act={graphAction}
+        actAnchor="graph:act"
+        actEvidence={graphAction ? { kind: 'rule-trace', why: graphAction.reason ?? graphAction.title, threshold: fragileComponents > 0 ? `${fragileComponents} fragile components` : undefined } : undefined}
         verify={{
           label: 'Graph snapshot',
           detail: `${filteredNodes.length}/${rawNodes.length} nodes · ${filteredEdges.length}/${rawEdges.length} edges`,
           to: '/graph?view=fragile',
           secondaryTo: '/graph?view=regressions',
           secondaryLabel: 'Regressions',
+          anchor: 'graph:verify',
+          evidence: rawNodes.length > 0 ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Nodes', value: `${filteredNodes.length}/${rawNodes.length}`, tone: 'neutral' },
+              { label: 'Edges', value: `${filteredEdges.length}/${rawEdges.length}`, tone: 'neutral' },
+              { label: 'Regressions', value: regressionCount, tone: regressionCount > 0 ? 'warn' : 'ok' },
+              { label: 'Fragile', value: fragileComponents, tone: fragileComponents > 0 ? 'crit' : 'ok' },
+            ],
+          } : undefined,
         }}
       />
       <PageActionBar scope="graph" action={graphAction} />
@@ -438,13 +462,15 @@ export function GraphPage() {
         howToUse={copy?.help?.howToUse ?? 'Use the quick views to focus on a story, or filter manually with the chips. Drag the canvas to pan, scroll to zoom, click any node for its blast radius. Re-layout shakes the graph into a fresh arrangement.'}
       />
 
-      <QuickViewsRow
-        hideSingletons={hideSingletons}
-        singletonCount={singletonCount}
-        onApplyView={applyView}
-        onToggleSingletons={setHideSingletons}
-        onRelayout={() => setLayoutSeed((s) => s + 1)}
-      />
+      <div data-dav-anchor="graph:act">
+        <QuickViewsRow
+          hideSingletons={hideSingletons}
+          singletonCount={singletonCount}
+          onApplyView={applyView}
+          onToggleSingletons={setHideSingletons}
+          onRelayout={() => setLayoutSeed((s) => s + 1)}
+        />
+      </div>
 
       {rawNodes.length === 0 ? (
         <SetupNudge
@@ -467,7 +493,7 @@ export function GraphPage() {
         // inside the canvas as a floating Panel (top-right) — see
         // GraphCanvas. Storyboard + table views still render the panel
         // inline because they don't have a viewport to float into.
-        <div className="space-y-2">
+        <div className="space-y-2" data-dav-anchor="graph:verify">
           <GraphFilterChips
             search={search}
             onSearchChange={setSearch}
@@ -546,7 +572,6 @@ export function GraphPage() {
                 onPaneClick={clearSelection}
                 onResetView={() => applyView('all')}
                 hidden={false}
-                showMinimap={filteredNodes.length >= STORYBOARD_THRESHOLD}
                 selectedNode={selectedNode}
                 blastRadius={blastRadius}
                 blastLoading={blastLoading}

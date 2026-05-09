@@ -36,6 +36,18 @@ interface OrtModule {
 const DEFAULT_TIMEOUT_MS = 750;
 const HEURISTIC_FALLBACK_REASON = 'ONNX classifier unavailable — falling back to heuristic';
 
+/** Ensures the "ONNX not loaded, using heuristic" warning fires at most once per process/session. */
+let _heuristicFallbackWarned = false;
+
+function warnHeuristicFallbackOnce(): void {
+  if (_heuristicFallbackWarned) return;
+  _heuristicFallbackWarned = true;
+  console.warn(
+    "[@mushi-mushi/wasm-classifier] ONNX model not loaded — using heuristic classifier. " +
+      "Set modelId to 'heuristic' to suppress this warning.",
+  );
+}
+
 /**
  * Creates a Phi-3-mini-class on-device classifier backed by `onnxruntime-web`.
  *
@@ -59,7 +71,8 @@ export async function createOnnxClassifier(
   try {
     ort = (await loadOrt()) as OrtModule;
   } catch {
-    return wrapHeuristic(heuristic, modelId, HEURISTIC_FALLBACK_REASON);
+    warnHeuristicFallbackOnce();
+    return wrapHeuristic(heuristic, 'heuristic-fallback', HEURISTIC_FALLBACK_REASON);
   }
 
   if (config.numThreads && ort.env?.wasm) {
@@ -107,9 +120,11 @@ export async function createOnnxClassifier(
         if (!verdict) {
           return await heuristic.classify(input);
         }
+        // runInference currently delegates to the heuristic — flag that clearly.
+        warnHeuristicFallbackOnce();
         return {
           ...verdict,
-          modelId,
+          modelId: 'heuristic-fallback',
           durationMs: perfNow() - start,
         };
       } catch {

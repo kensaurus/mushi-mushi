@@ -378,8 +378,8 @@ function PdcaFlowCanvas({
       >
         <Background
           variant={BackgroundVariant.Dots}
-          gap={16}
-          size={1}
+          gap={18}
+          size={1.5}
           color="var(--color-edge-subtle)"
         />
 

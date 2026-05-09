@@ -16,12 +16,16 @@ class MushiTheme {
 }
 
 /// Top-level configuration. Mirrors the iOS/Android/JS SDK shape.
+///
+/// BREAKING CHANGE: [endpoint] is now required — there is no safe default.
+/// Set it to your Supabase Edge Function URL,
+/// e.g. `https://xyz.supabase.co/functions/v1/api`.
 @immutable
 class MushiConfig {
   const MushiConfig({
     required this.projectId,
     required this.apiKey,
-    this.endpoint = defaultEndpoint,
+    required this.endpoint,
     this.triggerMode = MushiTriggerMode.shake,
     this.captureScreenshot = true,
     this.captureBreadcrumbs = true,
@@ -31,10 +35,9 @@ class MushiConfig {
     this.triggerInsets = const MushiTriggerInsets(),
   });
 
-  static const String defaultEndpoint = 'https://api.mushimushi.dev';
-
   final String projectId;
   final String apiKey;
+  /// Your Supabase Edge Function URL, e.g. `https://xyz.supabase.co/functions/v1/api`.
   final String endpoint;
   final MushiTriggerMode triggerMode;
   final bool captureScreenshot;

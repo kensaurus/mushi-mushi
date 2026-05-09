@@ -164,7 +164,13 @@ describe('MCP protocol handshake', () => {
   it('advertises project://* resources', async () => {
     const { resources } = await client.listResources()
     const uris = resources.map(r => r.uri).sort()
-    expect(uris).toEqual(['project://dashboard', 'project://settings', 'project://stats'])
+    expect(uris).toEqual([
+      'inventory://current',
+      'project://dashboard',
+      'project://integration-health',
+      'project://settings',
+      'project://stats',
+    ])
   })
 
   it('advertises the fix-plan / judge / triage prompts', async () => {

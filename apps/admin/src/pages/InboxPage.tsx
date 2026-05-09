@@ -45,7 +45,6 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ErrorAlert,
-  Loading,
   Btn,
   FreshnessPill,
 } from '../components/ui'
@@ -138,7 +137,34 @@ export function InboxPage() {
     ],
   })
 
-  if (loading) return <Loading text="Loading inbox…" />
+  if (loading) return (
+    <div className="space-y-4 animate-pulse" aria-hidden="true" role="status" aria-label="Loading inbox">
+      {/* Hero strip skeleton */}
+      <div className="flex items-end justify-between gap-3 mb-4">
+        <div className="space-y-2">
+          <div className="h-5 w-32 rounded bg-surface-raised" />
+          <div className="h-3 w-64 rounded bg-surface-raised" />
+        </div>
+        <div className="h-6 w-20 rounded bg-surface-raised" />
+      </div>
+      {/* KPI tile skeleton */}
+      <div className="grid grid-cols-3 gap-2 mb-4">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="rounded-lg border border-edge-subtle bg-surface-raised/40 px-4 py-3 space-y-2">
+            <div className="h-3 w-10 rounded bg-surface-overlay" />
+            <div className="h-7 w-8 rounded bg-surface-overlay" />
+          </div>
+        ))}
+      </div>
+      {/* Card skeletons */}
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="rounded-lg border border-edge-subtle bg-surface-raised/20 p-4 space-y-2">
+          <div className="h-4 w-48 rounded bg-surface-raised" />
+          <div className="h-3 w-72 rounded bg-surface-raised/60" />
+        </div>
+      ))}
+    </div>
+  )
   if (error) return <ErrorAlert message={error} />
 
   return (

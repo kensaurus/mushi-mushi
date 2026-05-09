@@ -49,6 +49,12 @@ const PUBLIC_BY_DESIGN: Record<string, string> = {
   // Intelligence report is called by the admin UI via JWT and by internal
   // callers via service role — handler branches on the caller.
   'intelligence-report': 'Dual JWT/service-role handled in handler',
+  // MCP Streamable HTTP transport — public by design (external orchestrators
+  // like Cursor remote MCP / Claude Agent SDK / OpenAI Agents SDK must
+  // connect). The transport itself authenticates with the same dual JWT /
+  // X-Mushi-Api-Key surface as `api`, validated per tool call rather than
+  // at the transport boundary.
+  mcp: 'Per-tool JWT / X-Mushi-Api-Key auth — see MCP transport docstring',
 }
 
 function listFunctionDirs(): string[] {

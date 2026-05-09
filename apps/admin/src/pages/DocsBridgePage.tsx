@@ -183,7 +183,7 @@ export function DocsBridgePage() {
 
   return (
     <main className="grid min-h-screen place-items-center bg-surface p-6">
-      <div className="max-w-md rounded-xl border border-border bg-bg p-6 text-center shadow-sm">
+      <div className="max-w-md rounded-xl border border-edge bg-surface p-6 text-center shadow-sm">
         {status === 'pending' && (
           <p className="text-sm text-fg-muted">Connecting your Mushi account to the docs…</p>
         )}

@@ -34,6 +34,12 @@ export function mushiExpressErrorHandler(opts: ExpressMiddlewareOptions) {
       if (shouldReport(err, req, res)) {
         const e = err instanceof Error ? err : new Error(String(err))
         const traceContext = parseTraceContext(req.headers)
+        const rawTraceparent =
+          typeof req.headers['traceparent'] === 'string'
+            ? req.headers['traceparent']
+            : Array.isArray(req.headers['traceparent'])
+              ? req.headers['traceparent'][0]
+              : undefined
         void opts.client.captureReport({
           description: `[${req.method ?? 'REQ'} ${req.originalUrl ?? req.url ?? ''}] ${e.message}`,
           userCategory: 'bug',
@@ -42,6 +48,7 @@ export function mushiExpressErrorHandler(opts: ExpressMiddlewareOptions) {
           url: req.originalUrl ?? req.url,
           traceContext,
           error: { name: e.name, message: e.message, stack: e.stack },
+          ...(rawTraceparent ? { metadata: { traceparent: rawTraceparent } } : {}),
         })
       }
     } catch {

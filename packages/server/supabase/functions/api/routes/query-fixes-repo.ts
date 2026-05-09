@@ -114,6 +114,107 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     return c.json({ ok: true, data: { deleted: id } });
   });
 
+  // Saved queries from *teammates* — anyone the caller shares an org/project
+  // with (via `accessibleProjectIds`), excluding the caller themselves.
+  // Powers the "Team" tab in the /query sidebar so a colleague's pinned
+  // question is one click away instead of trapped in their console.
+  // Each row carries the author's display name + email so the UI can
+  // attribute the prompt without a second round-trip per row. Service
+  // client + JWT auth: RLS already permits org-member SELECT on
+  // nl_query_history, but we go through service-role to keep latency
+  // predictable and to attach the author display info via auth.admin.
+  app.get('/v1/admin/query/team', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 25), 1), 100);
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: { team: [] } });
+    }
+
+    const { data, error } = await db
+      .from('nl_query_history')
+      .select(
+        'id, project_id, user_id, prompt, sql, summary, explanation, row_count, error, latency_ms, is_saved, created_at',
+      )
+      .in('project_id', projectIds)
+      .eq('is_saved', true)
+      .neq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) {
+      // Same `is_saved`-column resilience the GET history endpoint has —
+      // if a self-host is mid-migration we soft-degrade instead of 500.
+      if (error.code === '42703') {
+        reportError(error, {
+          tags: {
+            path: c.req.path,
+            method: c.req.method,
+            db_code: '42703',
+            error_type: 'migration_drift',
+          },
+          extra: {
+            hint: 'Run `supabase db push` to apply nl_query_history.is_saved migration.',
+          },
+        });
+        return c.json({ ok: true, data: { team: [], degraded: 'schema_pending' } });
+      }
+      return dbError(c, error);
+    }
+
+    const rows = data ?? [];
+    // Decorate each row with author display info. Dedupe by user_id first
+    // because a single power user often owns 5+ saved prompts and we
+    // don't want N admin.getUserById calls when 1 would do (mirrors the
+    // organizations.ts inviter-email pattern).
+    const authorIds = Array.from(
+      new Set(rows.map((r) => r.user_id).filter((id): id is string => Boolean(id))),
+    );
+    const authorById = new Map<string, { email: string | null; name: string | null }>();
+    await Promise.all(
+      authorIds.map(async (id) => {
+        try {
+          const { data: row } = await db.auth.admin.getUserById(id);
+          const u = row.user;
+          if (!u) {
+            authorById.set(id, { email: null, name: null });
+            return;
+          }
+          const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
+          const pick = (key: string): string | null => {
+            const v = meta[key];
+            return typeof v === 'string' && v.trim() ? v.trim() : null;
+          };
+          let name = pick('full_name') ?? pick('name') ?? pick('display_name');
+          if (!name && u.email) {
+            const local = u.email.split('@')[0] ?? '';
+            name =
+              local
+                .split(/[._-]+/)
+                .filter(Boolean)
+                .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+                .join(' ') || null;
+          }
+          authorById.set(id, { email: u.email ?? null, name });
+        } catch {
+          authorById.set(id, { email: null, name: null });
+        }
+      }),
+    );
+
+    const decorated = rows.map((r) => {
+      const author = (r.user_id && authorById.get(r.user_id)) || { email: null, name: null };
+      return {
+        ...r,
+        author_email: author.email,
+        author_name: author.name,
+      };
+    });
+
+    return c.json({ ok: true, data: { team: decorated } });
+  });
+
   // ============================================================
   // PHASE 2: REPORT GROUPS
   // ============================================================
@@ -959,18 +1060,22 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
           })
           .eq('id', fix.report_id)
           .in('project_id', projectIds);
-        void dispatchPluginEvent(db, fix.project_id, 'fix.applied', {
-          report: { id: fix.report_id },
-          fix: {
-            id: fixId,
-            agent: fix.agent,
-            branch: updates.branch ?? fix.branch,
-            prUrl: updates.pr_url ?? fix.pr_url,
-            commitSha: updates.commit_sha ?? fix.commit_sha,
-          },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }),
-        );
+        try {
+          void dispatchPluginEvent(db, fix.project_id, 'fix.applied', {
+            report: { id: fix.report_id },
+            fix: {
+              id: fixId,
+              agent: fix.agent,
+              branch: updates.branch ?? fix.branch,
+              prUrl: updates.pr_url ?? fix.pr_url,
+              commitSha: updates.commit_sha ?? fix.commit_sha,
+            },
+          }).catch((e) =>
+            log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }),
+          );
+        } catch (e) {
+          log.warn('Plugin dispatch failed (sync)', { event: 'fix.applied', err: String(e) });
+        }
       }
     } else if (updates.status === 'failed') {
       const { data: fix } = await db
@@ -980,12 +1085,16 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .single();
       if (fix) {
-        void dispatchPluginEvent(db, fix.project_id, 'fix.failed', {
-          report: { id: fix.report_id },
-          fix: { id: fixId, agent: fix.agent, error: updates.error ?? fix.error },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }),
-        );
+        try {
+          void dispatchPluginEvent(db, fix.project_id, 'fix.failed', {
+            report: { id: fix.report_id },
+            fix: { id: fixId, agent: fix.agent, error: updates.error ?? fix.error },
+          }).catch((e) =>
+            log.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }),
+          );
+        } catch (e) {
+          log.warn('Plugin dispatch failed (sync)', { event: 'fix.failed', err: String(e) });
+        }
       }
     } else if (updates.status === 'proposed') {
       const { data: fix } = await db
@@ -995,17 +1104,21 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .single();
       if (fix) {
-        void dispatchPluginEvent(db, fix.project_id, 'fix.proposed', {
-          report: { id: fix.report_id },
-          fix: {
-            id: fixId,
-            agent: fix.agent,
-            branch: updates.branch ?? fix.branch,
-            prUrl: updates.pr_url ?? fix.pr_url,
-          },
-        }).catch((e) =>
-          log.warn('Plugin dispatch failed', { event: 'fix.proposed', err: String(e) }),
-        );
+        try {
+          void dispatchPluginEvent(db, fix.project_id, 'fix.proposed', {
+            report: { id: fix.report_id },
+            fix: {
+              id: fixId,
+              agent: fix.agent,
+              branch: updates.branch ?? fix.branch,
+              prUrl: updates.pr_url ?? fix.pr_url,
+            },
+          }).catch((e) =>
+            log.warn('Plugin dispatch failed', { event: 'fix.proposed', err: String(e) }),
+          );
+        } catch (e) {
+          log.warn('Plugin dispatch failed (sync)', { event: 'fix.proposed', err: String(e) });
+        }
       }
     }
 

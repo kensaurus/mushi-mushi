@@ -105,3 +105,86 @@ describe('status table integrity', () => {
     expect(Object.keys(STATUS_PRIORITY).length).toBe(6)
   })
 })
+
+describe('expected_outcome (spec-traceability contract)', () => {
+  // Element with full expected_outcome — used by the synthetic monitor and
+  // the fix-worker to verify that any AI-drafted fix still satisfies the
+  // contract the action was meant to fulfil.
+  const YAML_WITH_OUTCOME = `
+schema_version: "2.0"
+app:
+  id: glot-it
+  name: Glot.it
+  base_url: https://glot.it
+pages:
+  - id: practice
+    path: /practice
+    elements:
+      - id: btn-submit
+        type: button
+        action: submit answer
+        backend:
+          - method: POST
+            path: /api/practice/submit
+        expected_outcome:
+          summary: Persists an attempt row and returns the submission id.
+          response:
+            status_in: [200, 201]
+            json_path:
+              - path: data.id
+                op: exists
+              - path: data.status
+                op: equals
+                value: queued
+          database:
+            table: attempts
+            where:
+              user_id: $reporter_id
+            expect: row_exists
+          ui:
+            visible_text: Answer received
+            route_change_to: /practice/results/:id
+`.trim()
+
+  it('accepts an element that declares a full expected_outcome contract', () => {
+    const r = parseInventory(YAML_WITH_OUTCOME)
+    expect(r.ok).toBe(true)
+    const eo = r.inventory!.pages[0].elements[0].expected_outcome
+    expect(eo?.response?.status_in).toEqual([200, 201])
+    expect(eo?.response?.json_path?.[0]?.op).toBe('exists')
+    expect(eo?.database?.table).toBe('attempts')
+    expect(eo?.database?.expect).toBe('row_exists')
+    expect(eo?.ui?.route_change_to).toBe('/practice/results/:id')
+  })
+
+  it('treats expected_outcome as optional (legacy inventories still validate)', () => {
+    const yaml = YAML_WITH_OUTCOME.replace(/\s+expected_outcome:[\s\S]*/m, '')
+    const r = parseInventory(yaml)
+    expect(r.ok).toBe(true)
+    expect(r.inventory!.pages[0].elements[0].expected_outcome).toBeUndefined()
+  })
+
+  it('rejects an unknown json_path operator', () => {
+    const yaml = YAML_WITH_OUTCOME.replace('op: equals', 'op: bogus_op')
+    const r = parseInventory(yaml)
+    expect(r.ok).toBe(false)
+    expect(
+      r.issues.some((i) => /expected_outcome\.response\.json_path/.test(i.path)),
+    ).toBe(true)
+  })
+
+  it('rejects database.expect outside the documented enum', () => {
+    const yaml = YAML_WITH_OUTCOME.replace('expect: row_exists', 'expect: row_maybe')
+    const r = parseInventory(yaml)
+    expect(r.ok).toBe(false)
+    expect(
+      r.issues.some((i) => /expected_outcome\.database\.expect/.test(i.path)),
+    ).toBe(true)
+  })
+
+  it('rejects HTTP statuses outside 100..599', () => {
+    const yaml = YAML_WITH_OUTCOME.replace('status_in: [200, 201]', 'status_in: [200, 999]')
+    const r = parseInventory(yaml)
+    expect(r.ok).toBe(false)
+  })
+})

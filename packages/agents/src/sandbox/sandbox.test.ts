@@ -7,8 +7,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { resolveSandboxProvider, buildSandboxConfig, LocalNoopSandboxProvider, SandboxError } from './index.js'
-import type { SandboxAuditEvent } from './types.js'
+import {
+  resolveSandboxProvider,
+  buildSandboxConfig,
+  LocalNoopSandboxProvider,
+  SandboxError,
+  registerSandboxProvider,
+  unregisterSandboxProvider,
+  KNOWN_SANDBOX_PROVIDERS,
+} from './index.js'
+import type { SandboxAuditEvent, SandboxProvider } from './types.js'
 import type { FixContext } from '../types.js'
 
 const baseContext: FixContext = {
@@ -59,6 +67,46 @@ describe('resolveSandboxProvider (V5.3 §2.10)', () => {
   it('returns the cloudflare provider when requested', () => {
     const p = resolveSandboxProvider({ name: 'cloudflare' })
     expect(p.name).toBe('cloudflare')
+  })
+})
+
+describe('Third-party sandbox provider registry (2026-05-09 audit)', () => {
+  // Keeps the global registry clean across tests — registering once and
+  // unregistering in afterEach prevents bleeding into the rest of the suite.
+  const fakeProvider: SandboxProvider = {
+    name: 'daytona-corp',
+    createSandbox: async () => {
+      throw new Error('not used in this test')
+    },
+  }
+
+  afterEach(() => {
+    unregisterSandboxProvider('daytona-corp')
+  })
+
+  it('exports the first-party providers list', () => {
+    expect(KNOWN_SANDBOX_PROVIDERS).toEqual(['e2b', 'modal', 'cloudflare', 'local-noop'])
+  })
+
+  it('resolves a registered third-party provider by id', () => {
+    registerSandboxProvider('daytona-corp', () => fakeProvider)
+    const p = resolveSandboxProvider({ name: 'daytona-corp' })
+    expect(p.name).toBe('daytona-corp')
+  })
+
+  it('refuses to register over a first-party provider', () => {
+    expect(() => registerSandboxProvider('e2b', () => fakeProvider)).toThrow(/first-party/)
+  })
+
+  it('throws PROVIDER_UNAVAILABLE for an unregistered third-party id', () => {
+    expect(() => resolveSandboxProvider({ name: 'never-registered' })).toThrow(SandboxError)
+    expect(() => resolveSandboxProvider({ name: 'never-registered' })).toThrow(/registerSandboxProvider/)
+  })
+
+  it('unregister removes the provider', () => {
+    registerSandboxProvider('daytona-corp', () => fakeProvider)
+    expect(unregisterSandboxProvider('daytona-corp')).toBe(true)
+    expect(() => resolveSandboxProvider({ name: 'daytona-corp' })).toThrow(SandboxError)
   })
 })
 

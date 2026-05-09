@@ -1,9 +1,9 @@
 # `@mushi-mushi/adapters`
 
-Inbound webhook translators that turn third-party observability events
-(Datadog, New Relic, Honeycomb, Grafana / Loki Alertmanager) into Mushi
-Mushi reports. Use these when you want production monitors to land in the
-same triage + fix pipeline as your user-filed bug reports.
+Inbound webhook translators that turn third-party observability events into
+Mushi Mushi reports. Use these when you want production monitors (Sentry,
+Datadog, CloudWatch, …) and crash reports (Bugsnag, Rollbar, Crashlytics) to
+land in the same triage + fix pipeline as your user-filed bugs.
 
 ## Install
 
@@ -13,16 +13,24 @@ npm i @mushi-mushi/adapters
 
 ## Supported sources
 
-| Source                | Translator              | Webhook handler                   |
-| --------------------- | ----------------------- | --------------------------------- |
-| Datadog               | `translateDatadog`      | `createDatadogWebhookHandler`     |
-| Honeycomb             | `translateHoneycomb`    | `createHoneycombWebhookHandler`   |
-| New Relic             | `translateNewRelic`     | `createNewRelicWebhookHandler`    |
-| Grafana / Loki (AM)   | `translateGrafanaLoki`  | `createGrafanaLokiWebhookHandler` |
+| Source                  | Translator                | Webhook handler                       |
+| ----------------------- | ------------------------- | ------------------------------------- |
+| Sentry                  | `translateSentry`         | `createSentryAdapter`                 |
+| Bugsnag                 | `translateBugsnag`        | `createBugsnagAdapter`                |
+| Rollbar                 | `translateRollbar`        | `createRollbarAdapter`                |
+| Crashlytics (Firebase)  | `translateCrashlytics`    | `createCrashlyticsAdapter`            |
+| Firebase Analytics      | `translateFirebaseAnalytics` | `createFirebaseAnalyticsAdapter`   |
+| AWS CloudWatch (SNS)    | `translateCloudWatch`     | `createCloudWatchAdapter`             |
+| Opsgenie                | `translateOpsGenie`       | `createOpsGenieAdapter`               |
+| Datadog                 | `translateDatadog`        | `createDatadogWebhookHandler`         |
+| New Relic               | `translateNewRelic`       | `createNewRelicWebhookHandler`        |
+| Honeycomb               | `translateHoneycomb`      | `createHoneycombWebhookHandler`       |
+| Grafana / Loki (AM)     | `translateGrafanaLoki`    | `createGrafanaLokiWebhookHandler`     |
 
 Every translator outputs `MushiCaptureEventInput` (from `@mushi-mushi/core`)
 so you can route the result to any sink — the hosted Mushi API, a queue, a
-local database, a fan-out of all four.
+local database, a fan-out of several. Subpath imports are supported, e.g.
+`@mushi-mushi/adapters/cloudwatch`.
 
 ## Quick start — Datadog → Hono
 
@@ -72,9 +80,24 @@ Each adapter maps the source's native severity onto Mushi's four-level scale:
 
 ## Authentication
 
-Datadog, New Relic, and Honeycomb don't sign webhooks — each handler
-enforces a **shared-secret header** that you set on both ends. Grafana
-Alertmanager supports HMAC; use the signed variant when available.
+Each adapter uses the strongest auth its upstream supports:
+
+| Adapter             | Method                           | Header                           |
+| ------------------- | -------------------------------- | -------------------------------- |
+| Sentry              | shared secret (timing-safe)      | `sentry-hook-secret`             |
+| Bugsnag             | HMAC-SHA256 (hex)                | `X-Bugsnag-Signature`            |
+| Rollbar             | shared token (timing-safe)       | `X-Rollbar-Access-Token`         |
+| Crashlytics         | Firebase ID Token JWT (`aud`)    | `X-Firebase-ID-Token`            |
+| Firebase Analytics  | Google OIDC bearer (`aud`)       | `Authorization: Bearer …`        |
+| CloudWatch (SNS)    | RSA-SHA1 / SHA256 cert verify    | `x-amz-sns-message-type`         |
+| Opsgenie            | HMAC-SHA256 (base64)             | `X-OG-Signature`                 |
+| Datadog             | shared secret (timing-safe)      | `x-datadog-secret-token`         |
+| New Relic           | HMAC-SHA256 (hex)                | `X-NewRelic-Signature`           |
+| Honeycomb           | HMAC-SHA256 (`sha256=…`)         | `X-Honeycomb-Signature`          |
+| Grafana / Loki (AM) | shared token (timing-safe)       | `X-Grafana-Token`                |
+
+Tests under `src/__tests__/` cover both the happy-path and forged-signature
+cases (89 tests total).
 
 ## License
 
