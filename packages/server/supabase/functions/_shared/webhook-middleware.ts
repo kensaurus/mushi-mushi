@@ -113,11 +113,11 @@ const RATE_LIMIT_BUDGET: Record<WebhookSource, number> = {
 // Key: `${source}:${sourceIp}` → array of timestamps (ms)
 //
 // Memory management: every check filters out timestamps outside the window
-// before evaluating; if the resulting array is empty AND the cache reached
-// `MAX_RATE_KEYS`, we evict the entry to bound memory in long-lived isolates
-// that see many unique IPs (scanners, proxies). The cap is a soft fence —
-// individual misses don't break correctness because the next request from
-// that IP just starts a new window.
+// before evaluating. When the map exceeds `MAX_RATE_KEYS`, we evict the
+// OLDEST (insertion-order) entry on every subsequent insert, regardless of
+// whether its window is still active. The evicted IP just starts a fresh
+// window on its next request — correctness is not affected; this is a
+// memory-bound only.
 const rateLimitWindows = new Map<string, number[]>()
 const MAX_RATE_KEYS = 10_000
 
@@ -160,14 +160,38 @@ async function sha256hex(text: string): Promise<string> {
  *   1. CF-Connecting-IP (Cloudflare-set, the actual client IP)
  *   2. X-Real-IP (set by some proxies as a single canonical client IP)
  *   3. X-Forwarded-For (RFC 7239 chain — first hop is the original client)
+ *
+ * Returns `null` if none of the headers carry a value that LOOKS like a
+ * legitimate IPv4 / IPv6 address. `webhook_audit_log.source_ip` is a
+ * Postgres `inet` column — a string like "unknown" or a hostname will
+ * cause the audit insert to fail and silently degrade to a no-op handle,
+ * which would (a) make those requests invisible to dashboards and (b)
+ * collapse all such requests into one shared rate-limit bucket. Returning
+ * `null` here surfaces the missing IP cleanly: the audit row records
+ * `source_ip = NULL` and the rate-limit key uses `unknown`, which is
+ * already accounted for in the budget.
  */
+const IPV4_RE = /^(?:25[0-5]|2[0-4]\d|[01]?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d?\d)){3}$/
+const IPV6_RE = /^[0-9a-f:]+$/i
+
+function isLikelyIp(value: string): boolean {
+  if (!value) return false
+  if (IPV4_RE.test(value)) return true
+  // IPv6 incl. zone IDs (`fe80::1%eth0`); rough check, the inet column does
+  // the strict parsing. We just keep `inet` from rejecting clearly-wrong
+  // strings like `unknown` / `internal` / hostnames.
+  const stripped = value.split('%')[0] ?? value
+  return stripped.includes(':') && IPV6_RE.test(stripped)
+}
+
 function extractSourceIp(c: Context): string | null {
-  return (
+  const raw =
     c.req.header('CF-Connecting-IP') ??
     c.req.header('X-Real-IP') ??
     c.req.header('X-Forwarded-For')?.split(',')[0]?.trim() ??
     null
-  )
+  if (!raw) return null
+  return isLikelyIp(raw) ? raw : null
 }
 
 // Module-level service-client cache. createClient() is lightweight but

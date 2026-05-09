@@ -17,23 +17,33 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockCaptureException = vi.fn().mockResolvedValue(null)
-const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
-
-const mockSdkInstance = {
-  captureException: mockCaptureException,
-  captureEvent: mockCaptureEvent,
-  open: vi.fn(),
-  close: vi.fn(),
-}
-
-const mockInit = vi.fn().mockReturnValue(mockSdkInstance)
-const mockGetInstance = vi.fn().mockReturnValue(mockSdkInstance)
+// `vi.mock` is hoisted ABOVE module-level `const` declarations, so the
+// factory cannot reference closure variables defined below it (TDZ:
+// "Cannot access 'mockInit' before initialization"). `vi.hoisted` lifts
+// the mock state so the factory and the test body see the same `vi.fn`s.
+const mocks = vi.hoisted(() => {
+  const mockCaptureException = vi.fn().mockResolvedValue(null)
+  const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
+  const mockSdkInstance = {
+    captureException: mockCaptureException,
+    captureEvent: mockCaptureEvent,
+    open: vi.fn(),
+    close: vi.fn(),
+  }
+  return {
+    mockCaptureException,
+    mockCaptureEvent,
+    mockSdkInstance,
+    mockInit: vi.fn().mockReturnValue(mockSdkInstance),
+    mockGetInstance: vi.fn().mockReturnValue(mockSdkInstance),
+  }
+})
+const { mockCaptureException, mockCaptureEvent, mockSdkInstance, mockInit, mockGetInstance } = mocks
 
 vi.mock('@mushi-mushi/web', () => ({
   Mushi: {
-    init: mockInit,
-    getInstance: mockGetInstance,
+    init: mocks.mockInit,
+    getInstance: mocks.mockGetInstance,
     destroy: vi.fn(),
   },
 }))

@@ -5,13 +5,10 @@ import Foundation
 /// `@mushi-mushi/core` `MushiConfig` so cross-platform behaviour stays
 /// consistent between web, React Native, and native iOS.
 public struct MushiConfig {
-    /// Default cloud endpoint. Self-hosters override this to point at their
-    /// own Supabase Edge Function URL.
-    public static let defaultEndpoint =
-        "https://YOUR-PROJECT.supabase.co/functions/v1/api"
-
     public let projectId: String
     public let apiKey: String
+    /// Required. Set to your Supabase Edge Function URL,
+    /// e.g. "https://xyz.supabase.co/functions/v1/api".
     public var endpoint: String
     public var triggerMode: TriggerMode
     public var captureConsole: Bool
@@ -51,10 +48,12 @@ public struct MushiConfig {
         }
     }
 
+    // BREAKING CHANGE: `endpoint` is now required — there is no safe default.
+    // Pass your Supabase Edge Function URL: "https://xyz.supabase.co/functions/v1/api".
     public init(
         projectId: String,
         apiKey: String,
-        endpoint: String = MushiConfig.defaultEndpoint,
+        endpoint: String,
         triggerMode: TriggerMode = .shake,
         captureConsole: Bool = true,
         captureNetwork: Bool = true,

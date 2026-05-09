@@ -17,27 +17,48 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createApp, defineComponent, h } from 'vue'
 
-const mockCaptureException = vi.fn().mockResolvedValue(null)
-const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
-const mockOpen = vi.fn()
-const mockClose = vi.fn()
-const mockIsOpen = vi.fn().mockReturnValue(false)
-
-const mockSdkInstance = {
-  captureException: mockCaptureException,
-  captureEvent: mockCaptureEvent,
-  open: mockOpen,
-  close: mockClose,
-  isOpen: mockIsOpen,
-}
-
-const mockInit = vi.fn().mockReturnValue(mockSdkInstance)
-const mockGetInstance = vi.fn().mockReturnValue(mockSdkInstance)
+// `vi.mock` is hoisted ABOVE module-level `const` declarations, so the
+// factory cannot reference closure variables defined below it (TDZ:
+// "Cannot access 'mockInit' before initialization"). `vi.hoisted` lifts
+// the mock state so the factory and the test body see the same `vi.fn`s.
+const mocks = vi.hoisted(() => {
+  const mockCaptureException = vi.fn().mockResolvedValue(null)
+  const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
+  const mockOpen = vi.fn()
+  const mockClose = vi.fn()
+  const mockIsOpen = vi.fn().mockReturnValue(false)
+  const mockSdkInstance = {
+    captureException: mockCaptureException,
+    captureEvent: mockCaptureEvent,
+    open: mockOpen,
+    close: mockClose,
+    isOpen: mockIsOpen,
+  }
+  return {
+    mockCaptureException,
+    mockCaptureEvent,
+    mockOpen,
+    mockClose,
+    mockIsOpen,
+    mockSdkInstance,
+    mockInit: vi.fn().mockReturnValue(mockSdkInstance),
+    mockGetInstance: vi.fn().mockReturnValue(mockSdkInstance),
+  }
+})
+// Only the names actually referenced in the test body are destructured.
+// The rest stay accessible via `mocks.*` (used by the vi.mock factory above).
+const {
+  mockCaptureException,
+  mockIsOpen,
+  mockSdkInstance,
+  mockInit,
+  mockGetInstance,
+} = mocks
 
 vi.mock('@mushi-mushi/web', () => ({
   Mushi: {
-    init: mockInit,
-    getInstance: mockGetInstance,
+    init: mocks.mockInit,
+    getInstance: mocks.mockGetInstance,
     destroy: vi.fn(),
   },
 }))

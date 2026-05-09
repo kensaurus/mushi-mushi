@@ -136,9 +136,26 @@ async function resolveOpenAi(projectId?: string): Promise<ResolvedOpenAi | null>
  * total wait — long enough to ride out a typical OpenRouter free-tier
  * burst limit reset, short enough that a single chunk can't stall the
  * whole repo sweep. Set MUSHI_EMBED_MAX_RETRIES to override per-deploy.
+ *
+ * Reads `Deno.env` at module load when running in Edge Functions, and
+ * falls back to `process.env` when imported from a Node test runner
+ * (vitest). Without the dual lookup, importing this module from
+ * `embeddings-base-url.test.ts` blows up on `Deno is not defined` before
+ * any test runs.
  */
-const MAX_RETRIES = Number(Deno.env.get('MUSHI_EMBED_MAX_RETRIES') ?? '4')
-const BASE_BACKOFF_MS = Number(Deno.env.get('MUSHI_EMBED_BASE_BACKOFF_MS') ?? '1000')
+function readEnvNumber(name: string, fallback: number): number {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const denoEnv = (globalThis as any).Deno?.env?.get?.(name) as string | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nodeEnv = (globalThis as any).process?.env?.[name] as string | undefined
+  const raw = denoEnv ?? nodeEnv
+  if (!raw) return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const MAX_RETRIES = readEnvNumber('MUSHI_EMBED_MAX_RETRIES', 4)
+const BASE_BACKOFF_MS = readEnvNumber('MUSHI_EMBED_BASE_BACKOFF_MS', 1000)
 
 /**
  * Sleep for `ms` milliseconds. Pulled out for testability (could be stubbed

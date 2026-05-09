@@ -5,15 +5,18 @@
  * are forwarded through Cloud Functions and delivered via Pub/Sub push
  * subscriptions, Google signs each request with an OIDC token in the
  * `Authorization: Bearer <token>` header. This adapter validates the token's
- * `aud` claim contains the endpoint URL (as prescribed by Google) and decodes
- * the base64-encoded Pub/Sub message payload.
+ * `aud` claim AND its RS256 signature against Google's published public keys
+ * (`https://www.googleapis.com/oauth2/v3/certs`).
  *
- * Full RS256 signature verification against Google's public keys is
- * intentionally out of scope here — the `aud` check is a lightweight guard.
- * For production use, validate the full JWT with a library or Google's token
- * info endpoint.
+ * Header: `Authorization: Bearer <OIDC JWT>`
  *
- * Header: `Authorization: Bearer <OIDC JWT>` (`aud` claim validated).
+ * Verification (default):
+ *   1. RS256 signature against Google's JWKS (cached by `jose` for ~10 min).
+ *   2. `iss` claim is one of `accounts.google.com` or `https://accounts.google.com`.
+ *   3. `aud` claim STRICT-equals the configured projectId or expectedAudience.
+ *
+ * Set `verifySignature: false` to skip the signature check (testing only,
+ * emits a warning at adapter construction).
  *
  * Message format: Pub/Sub push body `{ message: { data: '<base64>', ... } }`.
  * The decoded `data` field is expected to be a JSON object with an `eventType`
@@ -29,6 +32,8 @@
  * @see https://firebase.google.com/docs/analytics/
  * @see https://cloud.google.com/pubsub/docs/push#authentication
  */
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
+
 import type { MushiCaptureEventInput } from '@mushi-mushi/core'
 import type { MushiCaptureSink, WebhookResponse } from './types.js'
 
@@ -80,25 +85,42 @@ export interface FirebaseAnalyticsAdapterOptions {
   sink: MushiCaptureSink
   /**
    * Firebase / GCP project ID. The adapter validates that the OIDC JWT's
-   * `aud` claim includes the endpoint URL or this project ID string.
+   * `aud` claim STRICT-EQUALS this value (or one of `expectedAudience`).
    */
   projectId: string
   /** Optional project name stored in `component` and metadata. */
   projectName?: string
   /**
-   * Expected audience value(s) in the OIDC token.
-   * Defaults to the project ID. Override with the full endpoint URL if Google
-   * Cloud Pub/Sub is configured to include the push endpoint as `aud`.
+   * Expected audience value(s) in the OIDC token (strict equality).
+   * Defaults to `[projectId]`. Override with the full endpoint URL when
+   * Google Cloud Pub/Sub is configured to include the push endpoint as
+   * `aud`.
    */
   expectedAudience?: string | string[]
+  /**
+   * When `true` (default), verifies the OIDC JWT's RS256 signature against
+   * Google's published JWKS. When `false`, only the `aud` claim is checked
+   * (signature is not validated). Set to `false` ONLY for testing — leaving
+   * it disabled in production lets any attacker who knows the project ID
+   * forge admin events.
+   */
+  verifySignature?: boolean
+  /** Override the JWKS endpoint (testing). Defaults to Google's. */
+  jwksUri?: string
 }
+
+/** Google's OIDC JWKS endpoint — same for Pub/Sub push and Firebase Alerts. */
+const GOOGLE_JWKS_URI = 'https://www.googleapis.com/oauth2/v3/certs'
+/** Issuers Google may sign tokens with — accept either form. */
+const GOOGLE_ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com'])
 
 /**
  * Creates a Firebase Analytics Pub/Sub push ingress handler.
  *
- * Validates the `Authorization: Bearer <OIDC JWT>` token's `aud` claim, decodes
- * the base64 Pub/Sub message payload, then maps the Analytics event to a
- * `MushiCaptureEventInput` and forwards it via the injected `sink`.
+ * Validates the `Authorization: Bearer <OIDC JWT>` token's RS256 signature
+ * (against Google's JWKS) and `aud` claim, decodes the base64 Pub/Sub
+ * message payload, then maps the Analytics event to a `MushiCaptureEventInput`
+ * and forwards it via the injected `sink`.
  *
  * All events are mapped to category `confusing` (user dropped from funnel).
  */
@@ -107,16 +129,47 @@ export function createFirebaseAnalyticsAdapter(opts: FirebaseAnalyticsAdapterOpt
     ? (Array.isArray(opts.expectedAudience) ? opts.expectedAudience : [opts.expectedAudience])
     : [opts.projectId]
 
+  const verifySignature = opts.verifySignature !== false
+  if (!verifySignature) {
+    console.warn(
+      '[firebase-analytics] verifySignature=false — JWT signature WILL NOT be verified. ' +
+        'Set this only for offline tests; in production this lets anyone who knows the projectId forge events.',
+    )
+  }
+
+  // jose caches the JWKS in-process; one resolver per adapter instance.
+  const jwks = verifySignature
+    ? createRemoteJWKSet(new URL(opts.jwksUri ?? GOOGLE_JWKS_URI))
+    : null
+
   return async (req: { headers: Record<string, string | string[] | undefined>; rawBody: string }): Promise<WebhookResponse> => {
     const authz = extractHeader(req.headers, 'authorization') ?? ''
     const token = authz.replace(/^Bearer\s+/i, '')
     if (!token) {
       return { status: 401, body: { ok: false, error: 'MISSING_TOKEN' } }
     }
-    const aud = parseJwtAud(token)
-    const audValid = aud.some(a => allowedAudiences.some(allowed => a.includes(allowed)))
-    if (!audValid) {
-      return { status: 401, body: { ok: false, error: 'INVALID_AUD' } }
+
+    let claims: JWTPayload
+    if (jwks) {
+      try {
+        const verified = await jwtVerify(token, jwks, {
+          algorithms: ['RS256'],
+          audience: allowedAudiences,
+        })
+        claims = verified.payload
+      } catch {
+        return { status: 401, body: { ok: false, error: 'INVALID_TOKEN' } }
+      }
+      if (typeof claims.iss !== 'string' || !GOOGLE_ISSUERS.has(claims.iss)) {
+        return { status: 401, body: { ok: false, error: 'INVALID_ISS' } }
+      }
+    } else {
+      // verifySignature=false — `aud`-only fallback. Strict equality.
+      const aud = parseJwtAud(token)
+      const audValid = aud.some((a) => allowedAudiences.includes(a))
+      if (!audValid) {
+        return { status: 401, body: { ok: false, error: 'INVALID_AUD' } }
+      }
     }
 
     let pushBody: PubSubPushBody
@@ -143,6 +196,10 @@ export function createFirebaseAnalyticsAdapter(opts: FirebaseAnalyticsAdapterOpt
 /**
  * Parses the `aud` claim from a JWT without verifying the signature.
  * Returns an empty array if the token is malformed.
+ *
+ * ONLY used when `verifySignature: false` is explicitly opted into. The
+ * default code path uses `jose.jwtVerify` which both validates the
+ * signature AND the audience.
  */
 function parseJwtAud(token: string): string[] {
   const parts = token.split('.')

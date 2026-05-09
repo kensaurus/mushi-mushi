@@ -122,6 +122,28 @@ interface ResolvedRepo {
   scopeDirectory?: string
 }
 
+/**
+ * Inventory anchor recovered from the bidirectional graph at dispatch time.
+ * The Edge fix-worker's twin of `FixContext.inventoryAction` in
+ * `@mushi-mushi/agents` — kept structurally compatible so the docs / admin
+ * UI / future Node-side judge can treat them as one shape.
+ *
+ * `expected_outcome` is the customer's machine-readable success contract
+ * (whitepaper §2.10 spec-traceability). When present, the LLM prompt
+ * embeds every assertion verbatim so the draft fix has an explicit target,
+ * not just "an absence of the bug."
+ */
+interface InventoryAnchor {
+  actionNodeId: string
+  actionLabel: string
+  actionDescription?: string
+  pagePath?: string
+  pageId?: string
+  storyId?: string
+  storyTitle?: string
+  expectedOutcome?: Record<string, unknown> | null
+}
+
 Deno.serve(withSentry('fix-worker', async (req) => {
   // SEC-1: Internal-only — invoked by the `api` function after a user
   // dispatches a fix. `verify_jwt = false` in config.toml; we require the
@@ -151,7 +173,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
     .update({ status: 'running', started_at: new Date().toISOString() })
     .eq('id', body.dispatchId)
     .eq('status', 'queued')
-    .select('id, project_id, report_id, requested_by')
+    .select('id, project_id, report_id, requested_by, inventory_action_node_id')
     .single()
 
   if (dispatchErr || !dispatch) {
@@ -187,6 +209,31 @@ Deno.serve(withSentry('fix-worker', async (req) => {
   // falling through.
   const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm'])
 
+  // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
+  // classify-report writes a `reports_against` graph edge from the report
+  // to its picked Action node. The dispatch row may already carry a hint
+  // (caller-supplied override) — prefer that when present, otherwise walk
+  // the graph. Soft fail: legacy reports / projects without v2 just get
+  // an undefined anchor and the legacy fix prompt runs unchanged.
+  const inventoryAnchor = await loadInventoryAnchor(
+    db,
+    dispatch.project_id,
+    dispatch.report_id,
+    dispatch.inventory_action_node_id ?? null,
+  )
+  if (inventoryAnchor && !dispatch.inventory_action_node_id) {
+    // Mirror the recovered id back onto the dispatch row so admin queries
+    // ("show me dispatches for this Action") work without a graph walk.
+    await db
+      .from('fix_dispatch_jobs')
+      .update({ inventory_action_node_id: inventoryAnchor.actionNodeId })
+      .eq('id', dispatch.id)
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+  }
+
   const { data: attempt, error: attemptErr } = await db
     .from('fix_attempts')
     .insert({
@@ -195,6 +242,10 @@ Deno.serve(withSentry('fix-worker', async (req) => {
       agent: requestedAgent,
       status: 'running',
       langfuse_trace_id: trace.id,
+      // Spec-traceability: stamp the anchor on the attempt at insert time
+      // so the admin "Fixes for this Action" filter is a single index hit
+      // instead of a graph walk per page render.
+      inventory_action_node_id: inventoryAnchor?.actionNodeId ?? null,
     })
     .select('id')
     .single()
@@ -430,7 +481,7 @@ Deno.serve(withSentry('fix-worker', async (req) => {
       )
     }
 
-    const userPrompt = buildUserPrompt(report, settings, codeContext, repo, webSnippets)
+    const userPrompt = buildUserPrompt(report, settings, codeContext, repo, webSnippets, inventoryAnchor)
 
     // Resolve the fix-worker system prompt from `prompt_versions` (stage='fix').
     // Falls back to the hardcoded SYSTEM_PROMPT when no global or project row
@@ -631,6 +682,40 @@ Deno.serve(withSentry('fix-worker', async (req) => {
       status: 'fixing',
     }).eq('id', dispatch.report_id)
 
+    // Spec-traceability: enqueue a targeted post-PR synthetic probe
+    // against the action this fix was meant to repair. We write a marker
+    // `synthetic_runs` row with status='skipped' so the synthetic-monitor
+    // cron picks it up on the next tick and re-runs the full assertion
+    // chain against the inventory's expected_outcome contract. Without
+    // this, the only verification path is the 15-minute reconciler — far
+    // too slow to catch a regression before reviewers merge the PR.
+    if (inventoryAnchor?.actionNodeId) {
+      await db
+        .from('synthetic_runs')
+        .insert({
+          project_id: dispatch.project_id,
+          action_node_id: inventoryAnchor.actionNodeId,
+          status: 'skipped',
+          error_message: 'queued_post_pr',
+          step_results: {
+            trigger: 'post_pr',
+            fix_attempt_id: fixAttemptId,
+            report_id: dispatch.report_id,
+            pr_url: prResult.url,
+            queued_at: new Date().toISOString(),
+          },
+        })
+        .then(
+          () => undefined,
+          (err: unknown) => {
+            log.warn('post_pr synthetic_runs insert failed (non-fatal)', {
+              fixAttemptId,
+              err: String(err),
+            })
+          },
+        )
+    }
+
     // Bill the project for the fix attempt — one usage_event per draft PR
     // we successfully open. The aggregator pushes these to Stripe Meter
     // Events on the next 5-min cron tick. We never block the response on
@@ -802,12 +887,205 @@ async function resolveGithubToken(
   return Deno.env.get('GITHUB_TOKEN') ?? null
 }
 
+/**
+ * Walk: report → graph_nodes(node_type='report_group', label=reportId) →
+ * graph_edges(edge_type='reports_against') → graph_nodes(node_type='action').
+ * Then enrich with parent page (incoming `triggers` then `contains`) and
+ * the implements story so the LLM has the full surface context.
+ *
+ * Returns null on any miss — the fix path MUST run for legacy reports.
+ *
+ * `overrideActionNodeId` lets the dispatcher skip the graph walk when it
+ * already knows the anchor (e.g. an MCP caller picked one explicitly).
+ */
+async function loadInventoryAnchor(
+  db: ReturnType<typeof getServiceClient>,
+  projectId: string,
+  reportId: string,
+  overrideActionNodeId: string | null,
+): Promise<InventoryAnchor | null> {
+  try {
+    let actionNodeId = overrideActionNodeId
+    if (!actionNodeId) {
+      const { data: reportNode } = await db
+        .from('graph_nodes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('node_type', 'report_group')
+        .eq('label', reportId)
+        .maybeSingle()
+      if (!reportNode) return null
+      const { data: edge } = await db
+        .from('graph_edges')
+        .select('to_node_id')
+        .eq('project_id', projectId)
+        .eq('from_node_id', reportNode.id)
+        .eq('edge_type', 'reports_against')
+        .limit(1)
+        .maybeSingle()
+      if (!edge?.to_node_id) return null
+      actionNodeId = edge.to_node_id as string
+    }
+    const { data: action } = await db
+      .from('graph_nodes')
+      .select('id, label, metadata')
+      .eq('id', actionNodeId)
+      .eq('node_type', 'action')
+      .maybeSingle()
+    if (!action) return null
+    const meta = (action.metadata as Record<string, unknown> | null) ?? {}
+
+    let pagePath: string | undefined
+    let pageId: string | undefined
+    const { data: triggerEdge } = await db
+      .from('graph_edges')
+      .select('from_node_id')
+      .eq('project_id', projectId)
+      .eq('to_node_id', action.id)
+      .eq('edge_type', 'triggers')
+      .limit(1)
+      .maybeSingle()
+    if (triggerEdge?.from_node_id) {
+      const { data: containsEdge } = await db
+        .from('graph_edges')
+        .select('from_node_id')
+        .eq('project_id', projectId)
+        .eq('to_node_id', triggerEdge.from_node_id)
+        .eq('edge_type', 'contains')
+        .limit(1)
+        .maybeSingle()
+      if (containsEdge?.from_node_id) {
+        const { data: pageNode } = await db
+          .from('graph_nodes')
+          .select('metadata')
+          .eq('id', containsEdge.from_node_id)
+          .eq('node_type', 'page_v2')
+          .maybeSingle()
+        const pm = (pageNode?.metadata as Record<string, unknown> | null) ?? {}
+        pagePath = typeof pm.path === 'string' ? pm.path : undefined
+        pageId = typeof pm.page_id === 'string' ? pm.page_id : undefined
+      }
+    }
+
+    let storyId: string | undefined
+    let storyTitle: string | undefined
+    const { data: implementsEdge } = await db
+      .from('graph_edges')
+      .select('to_node_id')
+      .eq('project_id', projectId)
+      .eq('from_node_id', action.id)
+      .eq('edge_type', 'implements')
+      .limit(1)
+      .maybeSingle()
+    if (implementsEdge?.to_node_id) {
+      const { data: storyNode } = await db
+        .from('graph_nodes')
+        .select('label, metadata')
+        .eq('id', implementsEdge.to_node_id)
+        .eq('node_type', 'user_story')
+        .maybeSingle()
+      if (storyNode) {
+        storyId = (storyNode.label as string | null) ?? undefined
+        const sm = (storyNode.metadata as Record<string, unknown> | null) ?? {}
+        storyTitle = typeof sm.title === 'string' ? sm.title : undefined
+      }
+    }
+
+    return {
+      actionNodeId: action.id as string,
+      actionLabel: action.label as string,
+      actionDescription: typeof meta.action === 'string' ? meta.action : undefined,
+      pagePath,
+      pageId,
+      storyId,
+      storyTitle,
+      expectedOutcome: (meta.expected_outcome as Record<string, unknown> | null) ?? null,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Render the inventory anchor as a markdown block for inclusion in the
+ * fix-worker LLM prompt. Mirrors `renderSpecContext` in
+ * `@mushi-mushi/agents/src/review.ts` so a customer reading both prompts
+ * sees the same shape regardless of which path drafted the fix.
+ */
+function formatInventoryAnchor(anchor: InventoryAnchor): string {
+  const lines: string[] = []
+  lines.push('## Inventory Spec Context (whitepaper §2.10 spec-traceability)')
+  lines.push(
+    'This fix was dispatched against a tracked Action in the project\'s ' +
+      '`inventory.yaml`. Keep the diff scoped to making the action work as ' +
+      'specified — do NOT refactor unrelated code or break sibling actions ' +
+      'on the same page. The synthetic monitor will re-run the assertions ' +
+      'below against staging immediately after the PR is opened.',
+  )
+  lines.push('')
+  lines.push(`- Action: \`${anchor.actionLabel}\``)
+  if (anchor.actionDescription) lines.push(`- Description: ${anchor.actionDescription}`)
+  if (anchor.pagePath) {
+    lines.push(`- Page: \`${anchor.pagePath}\`${anchor.pageId ? ` (id=\`${anchor.pageId}\`)` : ''}`)
+  }
+  if (anchor.storyTitle) {
+    lines.push(`- User story: ${anchor.storyTitle}${anchor.storyId ? ` (\`${anchor.storyId}\`)` : ''}`)
+  }
+  const eo = anchor.expectedOutcome
+  if (eo && typeof eo === 'object') {
+    lines.push('')
+    lines.push('### Expected outcome contract (success criteria after fix)')
+    if (typeof eo.summary === 'string') lines.push(`- Summary: ${eo.summary}`)
+    const r = eo.response as Record<string, unknown> | undefined
+    if (r) {
+      const statusIn = r.status_in as number[] | undefined
+      if (Array.isArray(statusIn) && statusIn.length > 0) {
+        lines.push(`- HTTP status MUST be one of: ${statusIn.join(', ')}`)
+      }
+      const jp = r.json_path as Array<Record<string, unknown>> | undefined
+      if (Array.isArray(jp) && jp.length > 0) {
+        lines.push('- Response body assertions:')
+        for (const c of jp) {
+          const valuePart = c.value === undefined ? '' : ` ${JSON.stringify(c.value)}`
+          lines.push(`  - \`${String(c.path)}\` ${String(c.op)}${valuePart}`)
+        }
+      }
+    }
+    const d = eo.database as Record<string, unknown> | undefined
+    if (d?.table) {
+      const expect = (d.expect as string | undefined) ?? 'row_exists'
+      const where = d.where ? ` WHERE ${JSON.stringify(d.where)}` : ''
+      const min = d.min_count ? ` (min ${String(d.min_count)})` : ''
+      lines.push(
+        `- Database: \`${(d.schema as string | undefined) ?? 'public'}.${String(d.table)}\` MUST ${expect}${where}${min}`,
+      )
+    }
+    const u = eo.ui as Record<string, unknown> | undefined
+    if (u) {
+      if (typeof u.visible_text === 'string') {
+        lines.push(`- UI MUST show text containing: "${u.visible_text}"`)
+      }
+      if (typeof u.route_change_to === 'string') {
+        lines.push(`- UI MUST navigate to: \`${u.route_change_to}\``)
+      }
+    }
+  } else {
+    lines.push('')
+    lines.push(
+      '_No `expected_outcome` contract declared on this action. Add one to ' +
+        '`inventory.yaml` so future fixes have explicit success criteria._',
+    )
+  }
+  return lines.join('\n')
+}
+
 function buildUserPrompt(
   report: Record<string, unknown>,
   settings: Record<string, unknown> | null,
   codeContext: string,
   repo: ResolvedRepo,
   webSnippets: FirecrawlSearchResult[] = [],
+  inventoryAnchor: InventoryAnchor | null = null,
 ): string {
   const env = (report.environment ?? {}) as Record<string, unknown>
   const consoleErrors = ((report.console_logs ?? []) as Array<{ level: string; message: string }>)
@@ -824,6 +1102,8 @@ function buildUserPrompt(
 
   const reproSteps = (report.reproduction_steps ?? []) as string[]
 
+  const inventoryBlock = inventoryAnchor ? `\n${formatInventoryAnchor(inventoryAnchor)}\n` : ''
+
   return `## Bug Report
 **Summary**: ${report.summary ?? '(none — see description)'}
 **User description**: ${report.description ?? '(none)'}
@@ -833,7 +1113,7 @@ function buildUserPrompt(
 
 ## Reproduction Steps
 ${reproSteps.length > 0 ? reproSteps.map((s, i) => `${i + 1}. ${s}`).join('\n') : '(none captured)'}
-
+${inventoryBlock}
 ## Stage 2 Root Cause Analysis
 ${(report.stage2_analysis as Record<string, unknown> | null)?.rootCause ?? '(no root cause captured)'}
 

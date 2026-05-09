@@ -17,8 +17,9 @@
 -- =============================================================================
 -- webhook_audit_log
 -- =============================================================================
-drop policy if exists "service role full access" on public.webhook_audit_log;
-drop policy if exists "super admin read all"     on public.webhook_audit_log;
+drop policy if exists "service role full access"   on public.webhook_audit_log;
+drop policy if exists "super admin read all"       on public.webhook_audit_log;
+drop policy if exists "operator read own project"  on public.webhook_audit_log;
 
 create policy "service role full access"
   on public.webhook_audit_log
@@ -30,6 +31,23 @@ create policy "super admin read all"
   on public.webhook_audit_log
   for select
   using (((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'super_admin');
+
+-- The operator-read policy was DOA in migration 0002 (referenced
+-- `org_members` / `projects.org_id` — neither column exists in this
+-- schema). Recreated here against the real tables (`organization_members` /
+-- `projects.organization_id`) with the auth.uid() call wrapped in the same
+-- `(select …)` initplan idiom as the other two policies.
+create policy "operator read own project"
+  on public.webhook_audit_log
+  for select using (
+    project_id in (
+      select id from public.projects
+      where organization_id in (
+        select organization_id from public.organization_members
+        where user_id = (select auth.uid())
+      )
+    )
+  );
 
 -- =============================================================================
 -- report_external_issues

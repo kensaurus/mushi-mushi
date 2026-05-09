@@ -68,27 +68,65 @@ create index webhook_audit_log_project_idx    on public.webhook_audit_log (proje
 
 -- Row-level security: edge functions use service role (bypass RLS).
 -- No direct client access needed.
+--
+-- Every policy wraps `auth.role()` / `auth.uid()` / `auth.jwt()` in a
+-- `(select …)` subquery so Postgres evaluates them ONCE at planning time
+-- (initplan) instead of per row. Supabase advisor lint 0003. The savings
+-- become significant on this table because operator dashboards typically
+-- scan thousands of audit rows per page.
+--
+-- Super-admin role lives in `auth.users.raw_app_meta_data.role`, surfaced
+-- to the JWT under `app_metadata.role`. We deliberately do NOT join
+-- `public.profiles` for the role check — that table is operator-managed
+-- application data and was not present at the time these audit rows were
+-- introduced; the JWT path also avoids one read per RLS evaluation.
 alter table public.webhook_audit_log enable row level security;
 
-create policy "service role full access" on public.webhook_audit_log
-  for all using (auth.role() = 'service_role');
+do $$ begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'webhook_audit_log'
+      and policyname = 'service role full access'
+  ) then
+    create policy "service role full access" on public.webhook_audit_log
+      for all
+      using       ((select auth.role()) = 'service_role')
+      with check  ((select auth.role()) = 'service_role');
+  end if;
 
--- Operators can read the audit log for their own projects
-create policy "operator read own project" on public.webhook_audit_log
-  for select using (
-    project_id in (
-      select id from public.projects
-      where org_id in (
-        select org_id from public.org_members where user_id = auth.uid()
-      )
-    )
-  );
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'webhook_audit_log'
+      and policyname = 'operator read own project'
+  ) then
+    -- The original migration used `org_members` / `projects.org_id` which
+    -- never existed in this schema (the actual tables are
+    -- `organization_members` / `projects.organization_id`), so this policy
+    -- silently failed to apply for the lifetime of the table. Fixed here so
+    -- AuditPage / IntegrationsPage can scope rows to the caller's orgs.
+    create policy "operator read own project" on public.webhook_audit_log
+      for select using (
+        project_id in (
+          select id from public.projects
+          where organization_id in (
+            select organization_id from public.organization_members
+            where user_id = (select auth.uid())
+          )
+        )
+      );
+  end if;
 
--- Super-admin read-all (for the AuditPage)
-create policy "super admin read all" on public.webhook_audit_log
-  for select using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'super_admin'
-    )
-  );
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'public'
+      and tablename = 'webhook_audit_log'
+      and policyname = 'super admin read all'
+  ) then
+    create policy "super admin read all" on public.webhook_audit_log
+      for select using (
+        ((select auth.jwt()) -> 'app_metadata' ->> 'role') = 'super_admin'
+      );
+  end if;
+end $$;

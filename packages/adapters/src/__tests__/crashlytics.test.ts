@@ -71,16 +71,30 @@ describe('translateCrashlytics', () => {
 })
 
 describe('createCrashlyticsAdapter', () => {
+  // The default code path requires a real Google JWKS fetch, which we don't
+  // want to do from unit tests. All tests here exercise the
+  // `verifySignature: false` fallback (`aud`-strict-equality only). A
+  // separate integration test would cover the JWKS path against a fixture
+  // server.
+  function makeHandler(opts: Partial<Parameters<typeof createCrashlyticsAdapter>[0]> = {}) {
+    const { sink, calls } = makeSink()
+    const handler = createCrashlyticsAdapter({
+      sink,
+      projectId: PROJECT_ID,
+      verifySignature: false,
+      ...opts,
+    })
+    return { handler, calls }
+  }
+
   it('returns 401 when token header is missing', async () => {
-    const { sink } = makeSink()
-    const handler = createCrashlyticsAdapter({ sink, projectId: PROJECT_ID })
+    const { handler } = makeHandler()
     const res = await handler(makeReq({ alertType: 'crashlytics.newFatalIssue' }))
     expect(res.status).toBe(401)
   })
 
   it('returns 401 when aud claim does not match project ID', async () => {
-    const { sink } = makeSink()
-    const handler = createCrashlyticsAdapter({ sink, projectId: PROJECT_ID })
+    const { handler } = makeHandler()
     const token = makeJwt('other-project')
     const res = await handler(makeReq(
       { alertType: 'crashlytics.newFatalIssue' },
@@ -90,16 +104,14 @@ describe('createCrashlyticsAdapter', () => {
   })
 
   it('returns 400 for invalid JSON body', async () => {
-    const { sink } = makeSink()
-    const handler = createCrashlyticsAdapter({ sink, projectId: PROJECT_ID })
+    const { handler } = makeHandler()
     const token = makeJwt(PROJECT_ID)
     const res = await handler({ headers: { 'x-firebase-id-token': token }, rawBody: 'bad-json' })
     expect(res.status).toBe(400)
   })
 
   it('returns 200 and calls sink for newFatalIssue with matching aud', async () => {
-    const { sink, calls } = makeSink()
-    const handler = createCrashlyticsAdapter({ sink, projectId: PROJECT_ID })
+    const { handler, calls } = makeHandler()
     const token = makeJwt(PROJECT_ID)
     const body = { alertType: 'crashlytics.newFatalIssue', alertData: { title: 'Fatal crash' } }
     const res = await handler(makeReq(body, { 'x-firebase-id-token': token }))
@@ -109,8 +121,7 @@ describe('createCrashlyticsAdapter', () => {
   })
 
   it('accepts aud as array containing project ID', async () => {
-    const { sink, calls } = makeSink()
-    const handler = createCrashlyticsAdapter({ sink, projectId: PROJECT_ID })
+    const { handler, calls } = makeHandler()
     const token = makeJwt(['other', PROJECT_ID])
     const body = { alertType: 'crashlytics.velocityAlert', alertData: { title: 'Velocity crash', crashPercentage: 0.05 } }
     const res = await handler(makeReq(body, { 'x-firebase-id-token': token }))

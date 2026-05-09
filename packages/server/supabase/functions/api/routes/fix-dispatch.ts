@@ -53,12 +53,41 @@ export function registerFixDispatchRoutes(app: Hono): void {
       const body = (await c.req.json().catch(() => ({}))) as {
         reportId?: string;
         projectId?: string;
+        // Spec-traceability (whitepaper §2.10): MCP / A2A callers that
+        // already know the inventory Action they want repaired can pass
+        // it explicitly. When absent, the fix-worker walks the
+        // `reports_against` graph edge and recovers it on its own. The
+        // override skips one round-trip on the hot path AND lets a
+        // calling agent fix an action that hasn't yet been auto-linked
+        // by classify-report (e.g. a freshly ingested inventory).
+        inventoryActionNodeId?: string;
       };
       if (!body.reportId || !body.projectId) {
         return c.json(
           {
             ok: false,
             error: { code: 'MISSING_FIELDS', message: 'reportId and projectId required' },
+          },
+          400,
+        );
+      }
+      // Defensive: reject ids that aren't UUID-shaped before they hit
+      // pg's UUID type (else pg returns 22P02 + we waste a round-trip).
+      // Mirrors the UUID_RE in _shared/auth.ts but inlined to avoid
+      // dragging the helper into yet another route module.
+      if (
+        body.inventoryActionNodeId !== undefined &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          body.inventoryActionNodeId,
+        )
+      ) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'INVALID_INVENTORY_ACTION_ID',
+              message: 'inventoryActionNodeId must be a UUID',
+            },
           },
           400,
         );
@@ -131,6 +160,10 @@ export function registerFixDispatchRoutes(app: Hono): void {
           report_id: body.reportId,
           requested_by: userId,
           status: 'queued',
+          // Spec-traceability: persist the caller's anchor when supplied,
+          // so the worker doesn't need to walk the graph for it. NULL =>
+          // worker derives from `reports_against`.
+          inventory_action_node_id: body.inventoryActionNodeId ?? null,
         })
         .select('id, status, created_at')
         .single();
@@ -315,8 +348,16 @@ export function registerFixDispatchRoutes(app: Hono): void {
   // Authorization on EventSource, so the client uses fetch + ReadableStream).
   // All payloads are JSON-encoded via toSseEvent so untrusted strings cannot
   // inject "event:"/"id:"/"data:"/"retry:" frames (CVE-2026-29085).
+  //
+  // Auth: AG-UI v0.4 stream is reachable by either a logged-in admin JWT
+  // OR a project API key with the `mcp:read` scope. The legacy JWT-only
+  // gate locked out third-party orchestrators (LangGraph, OpenAI Agents,
+  // CrewAI) that have a valid API key but no Supabase session — see the
+  // 2026-05-09 spec-traceability audit. The API-key path still hits
+  // userCanAccessProject below, so a key holder cannot subscribe to a
+  // dispatch from a project they don't own.
   // ------------------------------------------------------------
-  app.get('/v1/admin/fixes/dispatch/:id/stream', jwtAuth, async (c) => {
+  app.get('/v1/admin/fixes/dispatch/:id/stream', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
     const userId = c.get('userId') as string;
     const dispatchId = c.req.param('id');
     const db = getServiceClient();

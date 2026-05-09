@@ -20,11 +20,74 @@ export interface FixContext {
     relatedBugs: Array<{ id: string; summary: string; status: string }>
     blastRadius: Array<{ nodeType: string; label: string }>
   }
+  /**
+   * Inventory anchor recovered from the `reports_against` graph edge that
+   * `classify-report` writes when it picks an Action candidate. Lets the
+   * agent (and `validateResult`) reason against the published spec instead
+   * of just the bug report:
+   *
+   *   - `actionNodeId` / `actionLabel` — what surface the user was using
+   *   - `actionDescription` — the `action:` line from the inventory.yaml
+   *   - `pagePath` / `pageId` — where in the app it lives
+   *   - `storyId` / `storyTitle` — the user story it serves
+   *   - `expectedOutcome` — the machine-readable success contract; the
+   *     review prompt instructs the agent to preserve every assertion in
+   *     it, and the synthetic monitor will probe against it after merge
+   *
+   * `undefined` means the report was never linked to an inventory Action
+   * (legacy report, or project without v2). All downstream code MUST
+   * handle that path — adding a HARD requirement here would silently
+   * regress every fix dispatched against a project that hasn't ingested
+   * an inventory yet.
+   */
+  inventoryAction?: {
+    actionNodeId: string
+    actionLabel: string
+    actionDescription?: string
+    pagePath?: string
+    pageId?: string
+    storyId?: string
+    storyTitle?: string
+    expectedOutcome?: ExpectedOutcome
+  }
   config: {
     maxLines: number
     scopeRestriction: 'component' | 'directory' | 'none'
     repoUrl: string
   }
+}
+
+/**
+ * Mirror of `@mushi-mushi/inventory-schema`'s `ExpectedOutcome` type. We
+ * duplicate the shape (rather than depending on inventory-schema directly)
+ * so the agents package stays buildable from the Edge runtime AND from
+ * Node consumers that don't pull the full inventory pipeline. The two
+ * definitions are kept in sync by the round-trip test in
+ * `packages/agents/src/review.test.ts` which feeds a real
+ * `inventory-schema` value through and asserts structural compat.
+ */
+export interface ExpectedOutcome {
+  summary?: string
+  response?: {
+    status_in?: number[]
+    json_path?: Array<{
+      path: string
+      op: 'exists' | 'equals' | 'not_equals' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte' | 'matches'
+      value?: unknown
+    }>
+  }
+  database?: {
+    table: string
+    schema?: string
+    where?: Record<string, unknown>
+    expect?: 'row_exists' | 'row_absent' | 'row_count_at_least'
+    min_count?: number
+  }
+  ui?: {
+    visible_text?: string
+    route_change_to?: string
+  }
+  extensions?: Record<string, unknown>
 }
 
 export interface CodeFile {

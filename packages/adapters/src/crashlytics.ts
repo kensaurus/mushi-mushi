@@ -1,15 +1,17 @@
 /**
  * Firebase Crashlytics → Mushi adapter.
  *
- * Auth method: Firebase ID Token JWT. Firebase Alerting sends a signed JWT in
- * the `X-Firebase-ID-Token` header. This adapter validates the token's `aud`
- * claim against the configured Firebase project ID. Full cryptographic JWT
- * signature verification (RS256 against Google's public keys) is intentionally
- * out of scope here — the `aud` check is a lightweight guard that prevents
- * payloads from unrelated Firebase projects; deploy behind a firewall or API
- * gateway for production use.
+ * Auth method: Firebase Alerts ID Token JWT. Firebase Alerting (Cloud
+ * Functions delivery) sends a signed RS256 JWT in the `X-Firebase-ID-Token`
+ * header. This adapter validates BOTH:
+ *   1. The RS256 signature against Google's published public keys
+ *      (`https://www.googleapis.com/oauth2/v3/certs`).
+ *   2. The `aud` claim STRICT-equals the configured Firebase project ID.
  *
- * Header: `X-Firebase-ID-Token` (JWT; `aud` claim validated against projectId).
+ * Set `verifySignature: false` to skip the signature check (testing only,
+ * emits a warning at adapter construction).
+ *
+ * Header: `X-Firebase-ID-Token` (RS256 JWT).
  *
  * Events handled (alertType field):
  *   - `crashlytics.velocityAlert`      — crash rate velocity threshold crossed
@@ -19,6 +21,8 @@
  *
  * @see https://firebase.google.com/docs/functions/alert-events#crashlytics
  */
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
+
 import type { MushiCaptureEventInput } from '@mushi-mushi/core'
 import type { MushiCaptureSink, WebhookResponse } from './types.js'
 
@@ -98,34 +102,79 @@ export function translateCrashlytics(raw: CrashlyticsPayload, projectName?: stri
 export interface CrashlyticsAdapterOptions {
   sink: MushiCaptureSink
   /**
-   * Firebase project ID. The adapter validates that the JWT's `aud` claim
-   * contains this value to prevent payloads from unrelated projects.
+   * Firebase project ID. The adapter validates the JWT's `aud` claim
+   * STRICT-equals this value to prevent payloads from unrelated projects.
    */
   projectId: string
   /** Optional project name stored in `component` and metadata. */
   projectName?: string
+  /**
+   * When `true` (default), verifies the JWT's RS256 signature against
+   * Google's published JWKS. When `false`, only the `aud` claim is checked
+   * (signature is not validated). Set to `false` ONLY for testing —
+   * leaving it disabled in production lets any attacker who knows the
+   * project ID forge crash alerts.
+   */
+  verifySignature?: boolean
+  /** Override the JWKS endpoint (testing). Defaults to Google's. */
+  jwksUri?: string
 }
+
+/** Google's OIDC JWKS endpoint — same one Firebase Alerts signs against. */
+const GOOGLE_JWKS_URI = 'https://www.googleapis.com/oauth2/v3/certs'
+/** Issuers Google may sign tokens with — accept either form. */
+const GOOGLE_ISSUERS = new Set(['accounts.google.com', 'https://accounts.google.com'])
 
 /**
  * Creates a Firebase Crashlytics webhook ingress handler.
  *
- * Validates the `X-Firebase-ID-Token` JWT's `aud` claim against the
- * configured `projectId`, then maps the Crashlytics alert payload to a
+ * Validates the `X-Firebase-ID-Token` JWT (RS256 signature + `aud` claim)
+ * against Google's JWKS, then maps the Crashlytics alert payload to a
  * `MushiCaptureEventInput` and forwards it via the injected `sink`.
  *
  * Handles alert types: `crashlytics.velocityAlert`, `crashlytics.newFatalIssue`,
  * `crashlytics.newNonfatalIssue`, `crashlytics.regression`.
  */
 export function createCrashlyticsAdapter(opts: CrashlyticsAdapterOptions) {
+  const verifySignature = opts.verifySignature !== false
+  if (!verifySignature) {
+    console.warn(
+      '[crashlytics] verifySignature=false — JWT signature WILL NOT be verified. ' +
+        'Set this only for offline tests; in production this lets anyone who knows the projectId forge crash alerts.',
+    )
+  }
+  const jwks = verifySignature
+    ? createRemoteJWKSet(new URL(opts.jwksUri ?? GOOGLE_JWKS_URI))
+    : null
+
   return async (req: { headers: Record<string, string | string[] | undefined>; rawBody: string }): Promise<WebhookResponse> => {
     const token = extractHeader(req.headers, 'x-firebase-id-token')
     if (!token) {
       return { status: 401, body: { ok: false, error: 'MISSING_TOKEN' } }
     }
-    const aud = parseJwtAud(token)
-    if (!aud.includes(opts.projectId)) {
-      return { status: 401, body: { ok: false, error: 'INVALID_AUD' } }
+
+    let claims: JWTPayload
+    if (jwks) {
+      try {
+        const verified = await jwtVerify(token, jwks, {
+          algorithms: ['RS256'],
+          audience: opts.projectId,
+        })
+        claims = verified.payload
+      } catch {
+        return { status: 401, body: { ok: false, error: 'INVALID_TOKEN' } }
+      }
+      if (typeof claims.iss !== 'string' || !GOOGLE_ISSUERS.has(claims.iss)) {
+        return { status: 401, body: { ok: false, error: 'INVALID_ISS' } }
+      }
+    } else {
+      // verifySignature=false — `aud`-only fallback. Strict equality.
+      const aud = parseJwtAud(token)
+      if (!aud.includes(opts.projectId)) {
+        return { status: 401, body: { ok: false, error: 'INVALID_AUD' } }
+      }
     }
+
     let payload: CrashlyticsPayload
     try { payload = JSON.parse(req.rawBody) as CrashlyticsPayload } catch { return { status: 400, body: { ok: false, error: 'INVALID_JSON' } } }
     const id = await opts.sink(translateCrashlytics(payload, opts.projectName))
@@ -136,6 +185,10 @@ export function createCrashlyticsAdapter(opts: CrashlyticsAdapterOptions) {
 /**
  * Parses the `aud` claim from a JWT without verifying the signature.
  * Returns an empty array if the token is malformed.
+ *
+ * ONLY used when `verifySignature: false` is explicitly opted into. The
+ * default code path uses `jose.jwtVerify` which both validates the
+ * signature AND the audience.
  */
 function parseJwtAud(token: string): string[] {
   const parts = token.split('.')

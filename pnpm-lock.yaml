@@ -224,6 +224,9 @@ importers:
       '@mushi-mushi/core':
         specifier: workspace:^
         version: link:../core
+      jose:
+        specifier: ^6.2.2
+        version: 6.2.2
     devDependencies:
       '@mushi-mushi/eslint-config':
         specifier: workspace:*

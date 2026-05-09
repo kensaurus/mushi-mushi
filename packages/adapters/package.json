@@ -84,7 +84,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:^"
+    "@mushi-mushi/core": "workspace:^",
+    "jose": "^6.2.2"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",

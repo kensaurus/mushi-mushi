@@ -166,9 +166,16 @@ async function verifySnsSignature(sns: SNSMessage): Promise<boolean> {
   const { SigningCertURL, Signature, SignatureVersion } = sns
   if (!SigningCertURL || !Signature) return false
 
-  // SSRF guard: only allow AWS SNS certificate URLs
+  // SSRF guard: only allow AWS SNS certificate URLs over HTTPS.
+  //
+  // The protocol check is critical — without it, `http://sns.us-east-1.amazonaws.com/cert.pem`
+  // passes the hostname allow-list and gets fetched in plaintext. On a
+  // compromised network segment an attacker can MITM the cert response and
+  // forge SNS messages. AWS only ever serves SNS signing certs over HTTPS,
+  // so the only legitimate `http:` URL is an attacker-supplied one.
   try {
     const certUrl = new URL(SigningCertURL)
+    if (certUrl.protocol !== 'https:') return false
     if (!certUrl.hostname.startsWith('sns.') || !certUrl.hostname.endsWith('.amazonaws.com')) {
       return false
     }
@@ -178,7 +185,10 @@ async function verifySnsSignature(sns: SNSMessage): Promise<boolean> {
 
   let pem: string
   try {
-    const res = await fetch(SigningCertURL)
+    // `redirect: 'error'` prevents an attacker from chaining the allow-listed
+    // URL into a redirect to an attacker-controlled host (defence in depth —
+    // AWS SNS doesn't redirect today, but the cost is one option).
+    const res = await fetch(SigningCertURL, { redirect: 'error' })
     if (!res.ok) return false
     pem = await res.text()
   } catch {

@@ -178,6 +178,18 @@ async function resolveLinearIssue(config: Record<string, unknown>, externalId: s
       variables: { identifier: externalId },
     }),
   })
+  // Distinguish "issue genuinely not found" (data.issueByIdentifier === null,
+  // status 200) from "the request never reached Linear's GraphQL layer"
+  // (auth failure, throttle, 5xx). Without this guard, every transport-level
+  // failure surfaces to the operator as the misleading message
+  // "Linear: issue not found for identifier MUSHI-123" and they go hunting
+  // for a non-existent ticket.
+  if (!lookupRes.ok) {
+    const body = await lookupRes.text()
+    throw new Error(
+      `Linear lookup HTTP ${lookupRes.status} for identifier ${externalId}: ${body.slice(0, 200)}`,
+    )
+  }
   const lookupData = await lookupRes.json()
   const issue = lookupData.data?.issueByIdentifier
   if (!issue?.id) throw new Error(`Linear: issue not found for identifier ${externalId}`)

@@ -123,4 +123,32 @@ describe('inventoryJsonSchema (draft-07 companion)', () => {
     expect(re.test('2.0')).toBe(true)
     expect(re.test('2.1')).toBe(true)
   })
+
+  it('exposes expected_outcome on the element shape (spec-traceability gate)', () => {
+    const expectedOutcome =
+      inventoryJsonSchema.properties.pages.items.properties.elements.items.properties
+        .expected_outcome
+    expect(expectedOutcome).toBeDefined()
+    expect(expectedOutcome.type).toBe('object')
+    // Mirrors the Zod expectedOutcomeJsonPathCheckSchema operator enum.
+    const ops =
+      expectedOutcome.properties.response.properties.json_path.items.properties.op.enum
+    expect(ops).toEqual([
+      'exists',
+      'equals',
+      'not_equals',
+      'contains',
+      'gt',
+      'gte',
+      'lt',
+      'lte',
+      'matches',
+    ])
+    // Mirrors the Zod expectedOutcomeDatabaseSchema expect enum.
+    expect(expectedOutcome.properties.database.properties.expect.enum).toEqual([
+      'row_exists',
+      'row_absent',
+      'row_count_at_least',
+    ])
+  })
 })

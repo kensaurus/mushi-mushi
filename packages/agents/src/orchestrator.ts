@@ -1,11 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
-import type { FixContext, FixResult, FixAgent } from './types.js'
+import type { FixContext, FixResult, FixAgent, ExpectedOutcome } from './types.js'
 import { ClaudeCodeAgent } from './adapters/claude-code.js'
 import { CodexAgent } from './adapters/codex.js'
 import { GenericMCPAgent } from './adapters/generic-mcp.js'
 import { RestFixWorkerAgent } from './adapters/rest-fix-worker.js'
 import { McpFixAgent } from './adapters/mcp.js'
 import { createPR } from './github.js'
+import { validateAgainstSpec } from './review.js'
 import { resolveSandboxProvider, buildSandboxConfig, type SandboxProviderName } from './sandbox/index.js'
 import { SandboxAuditWriter, insertSandboxRun, updateSandboxRun } from './sandbox/persistence.js'
 
@@ -85,6 +86,18 @@ export class FixOrchestrator {
 
     const repoUrl = settings?.github_repo_url ?? settings?.codebase_repo_url ?? ''
 
+    // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
+    // classify-report writes a `reports_against` edge from the report node
+    // to the picked Action node when an inventory candidate matched. We
+    // walk back through it here so every downstream surface (the LLM
+    // prompt, validateResult, the post-PR probe) sees the contract the
+    // user was actually trying to use.
+    //
+    // Soft failure: if no edge exists (legacy report, no inventory yet,
+    // or LLM picked "none"), `inventoryAction` stays undefined and the
+    // legacy fix path runs unchanged.
+    const inventoryAction = await this.loadInventoryAnchor(report.project_id, reportId)
+
     return {
       reportId,
       projectId: report.project_id,
@@ -100,11 +113,134 @@ export class FixOrchestrator {
       reproductionSteps: report.reproduction_steps ?? [],
       relevantCode,
       graphContext,
+      inventoryAction,
       config: {
         maxLines: settings?.autofix_max_lines ?? 200,
         scopeRestriction: (settings?.autofix_scope_restriction ?? 'component') as FixContext['config']['scopeRestriction'],
         repoUrl,
       },
+    }
+  }
+
+  /**
+   * Walk: report → graph_nodes(node_type='report_group', label=reportId) →
+   * graph_edges(edge_type='reports_against') → graph_nodes(node_type='action').
+   *
+   * Then enrich with the page (via incoming `contains` edge) and the
+   * user_story (via outgoing `implements` edge) so the prompt can show
+   * the full context without forcing the agent to re-traverse.
+   *
+   * Returns undefined on any miss — never throws. The fix path MUST run
+   * even when the graph is partial (e.g. Stage 2 hasn't classified yet).
+   */
+  private async loadInventoryAnchor(
+    projectId: string,
+    reportId: string,
+  ): Promise<FixContext['inventoryAction']> {
+    try {
+      const { data: reportNode } = await this.db
+        .from('graph_nodes')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('node_type', 'report_group')
+        .eq('label', reportId)
+        .maybeSingle()
+      if (!reportNode) return undefined
+
+      const { data: edge } = await this.db
+        .from('graph_edges')
+        .select('to_node_id')
+        .eq('project_id', projectId)
+        .eq('from_node_id', reportNode.id)
+        .eq('edge_type', 'reports_against')
+        .limit(1)
+        .maybeSingle()
+      if (!edge?.to_node_id) return undefined
+
+      const { data: action } = await this.db
+        .from('graph_nodes')
+        .select('id, label, metadata')
+        .eq('id', edge.to_node_id)
+        .eq('node_type', 'action')
+        .maybeSingle()
+      if (!action) return undefined
+
+      const meta = (action.metadata as Record<string, unknown> | null) ?? {}
+      const expectedOutcome = (meta.expected_outcome as ExpectedOutcome | null) ?? undefined
+
+      // Page is the parent of the action's element (page → contains →
+      // element → triggers → action). One join is enough — we don't need
+      // the element node itself for the prompt.
+      let pagePath: string | undefined
+      let pageId: string | undefined
+      const { data: triggerEdge } = await this.db
+        .from('graph_edges')
+        .select('from_node_id')
+        .eq('project_id', projectId)
+        .eq('to_node_id', action.id)
+        .eq('edge_type', 'triggers')
+        .limit(1)
+        .maybeSingle()
+      if (triggerEdge?.from_node_id) {
+        const { data: containsEdge } = await this.db
+          .from('graph_edges')
+          .select('from_node_id')
+          .eq('project_id', projectId)
+          .eq('to_node_id', triggerEdge.from_node_id)
+          .eq('edge_type', 'contains')
+          .limit(1)
+          .maybeSingle()
+        if (containsEdge?.from_node_id) {
+          const { data: pageNode } = await this.db
+            .from('graph_nodes')
+            .select('metadata')
+            .eq('id', containsEdge.from_node_id)
+            .eq('node_type', 'page_v2')
+            .maybeSingle()
+          const pm = (pageNode?.metadata as Record<string, unknown> | null) ?? {}
+          pagePath = typeof pm.path === 'string' ? pm.path : undefined
+          pageId = typeof pm.page_id === 'string' ? pm.page_id : undefined
+        }
+      }
+
+      // Story is the implements target.
+      let storyId: string | undefined
+      let storyTitle: string | undefined
+      const { data: implementsEdge } = await this.db
+        .from('graph_edges')
+        .select('to_node_id')
+        .eq('project_id', projectId)
+        .eq('from_node_id', action.id)
+        .eq('edge_type', 'implements')
+        .limit(1)
+        .maybeSingle()
+      if (implementsEdge?.to_node_id) {
+        const { data: storyNode } = await this.db
+          .from('graph_nodes')
+          .select('label, metadata')
+          .eq('id', implementsEdge.to_node_id)
+          .eq('node_type', 'user_story')
+          .maybeSingle()
+        if (storyNode) {
+          storyId = (storyNode.label as string | null) ?? undefined
+          const sm = (storyNode.metadata as Record<string, unknown> | null) ?? {}
+          storyTitle = typeof sm.title === 'string' ? sm.title : undefined
+        }
+      }
+
+      return {
+        actionNodeId: action.id as string,
+        actionLabel: action.label as string,
+        actionDescription: typeof meta.action === 'string' ? meta.action : undefined,
+        pagePath,
+        pageId,
+        storyId,
+        storyTitle,
+        expectedOutcome,
+      }
+    } catch {
+      // Hard fail-open: never block the fix loop on a graph traversal error.
+      return undefined
     }
   }
 
@@ -168,6 +304,10 @@ export class FixOrchestrator {
       coordination_id: coordination?.coordinationId ?? null,
       repo_id: coordination?.repoId ?? null,
       repo_role: coordination?.repoRole ?? null,
+      // Spec-traceability: stamp the inventory anchor on the attempt row
+      // so the admin "Fixes for this Action" query stays a single index
+      // hit instead of a graph walk per page render.
+      inventory_action_node_id: context.inventoryAction?.actionNodeId ?? null,
     }).select('id').single()
 
     const fixId = fix!.id
@@ -229,6 +369,34 @@ export class FixOrchestrator {
         }
       }
 
+      // Spec-traceability gate (whitepaper §2.10). Runs AFTER the agent's
+      // own validateResult so the cheap circuit-breaker checks (line count,
+      // scope) still fail fast — but BEFORE we open a PR, so the synthetic
+      // monitor never has to mark a freshly-shipped fix as `regressed` for
+      // a reason the deterministic check could have caught at dispatch time.
+      //
+      // No-op when the report has no inventory anchor; soft warnings are
+      // logged but not enforced.
+      if (result.success && context.inventoryAction) {
+        const specCheck = validateAgainstSpec(context, result)
+        if (!specCheck.valid) {
+          result.success = false
+          result.error = `Spec contract violation: ${specCheck.errors.join('; ')}`
+        }
+        if (specCheck.warnings.length > 0) {
+          await this.db
+            .from('fix_attempts')
+            .update({
+              spec_validation_warnings: specCheck.warnings,
+            })
+            .eq('id', fixId)
+            .then(
+              () => undefined,
+              () => undefined,
+            )
+        }
+      }
+
       let prUrl: string | undefined
       if (result.success && this.config.githubToken && context.config.repoUrl) {
         const [owner, repo] = context.config.repoUrl.replace(/\.git$/, '').split('/').slice(-2)
@@ -258,6 +426,35 @@ export class FixOrchestrator {
           fix_branch: result.branch,
           fix_pr_url: prUrl,
         }).eq('id', reportId)
+
+        // Spec-traceability: enqueue a targeted post-PR synthetic probe
+        // against the action this fix was meant to repair. We write a
+        // marker row with status='skipped' so the synthetic-monitor cron
+        // picks it up on the next tick and re-runs the full assertion
+        // chain against the inventory's expected_outcome contract.
+        // Best-effort: a missing column / RLS rejection here MUST NOT
+        // fail the fix path.
+        if (context.inventoryAction?.actionNodeId) {
+          await this.db
+            .from('synthetic_runs')
+            .insert({
+              project_id: context.projectId,
+              action_node_id: context.inventoryAction.actionNodeId,
+              status: 'skipped',
+              error_message: 'queued_post_pr',
+              step_results: {
+                trigger: 'post_pr',
+                fix_attempt_id: fixId,
+                report_id: reportId,
+                pr_url: prUrl,
+                queued_at: new Date().toISOString(),
+              },
+            })
+            .then(
+              () => undefined,
+              () => undefined,
+            )
+        }
       }
 
       if (sandboxRunId) {
