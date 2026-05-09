@@ -20,6 +20,9 @@ import { registerQueryFixesRepoRoutes } from './routes/query-fixes-repo.ts';
 import { registerReportsDashboardRoutes } from './routes/reports-dashboard.ts';
 import { registerSettingsResearchRoutes } from './routes/settings-research.ts';
 import { registerInventoryRoutes } from './routes/inventory.ts';
+import { registerA2ATaskRoutes } from './routes/a2a-tasks.ts';
+import { registerOpenApiRoute } from './routes/openapi.ts';
+import { registerSchemaRoutes } from './routes/schemas.ts';
 
 ensureSentry('api');
 
@@ -385,6 +388,12 @@ registerMigrationProgressRoutes(app);
 registerAdminOpsRoutes(app);
 
 registerInventoryRoutes(app);
+
+registerA2ATaskRoutes(app);
+
+registerOpenApiRoute(app);
+
+registerSchemaRoutes(app);
 
 function isStatusZeroRangeError(err: unknown): err is RangeError {
   return (

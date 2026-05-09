@@ -19,7 +19,7 @@ import { SEVERITY } from '../../lib/tokens'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
-import { IconBolt } from '../icons'
+import { IconBolt, IconShare, IconExternalLink, IconClose } from '../icons'
 import {
   DISPATCH_ELIGIBLE_STATUSES,
   formatRelative,
@@ -325,10 +325,7 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm"
           aria-label="Copy link"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M9 7l4-4M13 7V3h-4" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M7 9l-4 4M3 9v4h4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <IconShare size={12} />
         </button>
       </Tooltip>
       <Tooltip content="Open in new tab">
@@ -340,9 +337,7 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           className="p-1 text-fg-faint hover:text-fg-muted hover:bg-surface-overlay rounded-sm inline-flex"
           aria-label="Open in new tab"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M10 2h4v4M14 2L7 9M11 8v5H3V5h5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+          <IconExternalLink size={12} />
         </a>
       </Tooltip>
       <Tooltip content="Dismiss">
@@ -355,10 +350,7 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           className="p-1 text-fg-faint hover:text-danger hover:bg-danger-muted/20 rounded-sm"
           aria-label="Dismiss"
         >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <line x1="4" y1="4" x2="12" y2="12" strokeLinecap="round" />
-            <line x1="12" y1="4" x2="4" y2="12" strokeLinecap="round" />
-          </svg>
+          <IconClose size={12} />
         </button>
       </Tooltip>
     </div>

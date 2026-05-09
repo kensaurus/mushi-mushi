@@ -35,6 +35,11 @@ interface DrawerProps {
    *  drawer needs to coexist with the page behind it, e.g. a split-view
    *  report preview where the list should stay readable. Defaults true. */
   dimmed?: boolean
+  /** Override the outer fixed-container className. Defaults to
+   *  `'fixed inset-0 z-50 flex justify-end'`. Pass a custom value when
+   *  the drawer must start below a persistent header (e.g. Ask Mushi
+   *  should not occlude the desktop top bar). */
+  containerClassName?: string
 }
 
 export function Drawer({
@@ -48,6 +53,7 @@ export function Drawer({
   width = 'md',
   dismissible = true,
   dimmed = true,
+  containerClassName,
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const prevFocusRef = useRef<HTMLElement | null>(null)
@@ -132,7 +138,7 @@ export function Drawer({
       role="dialog"
       aria-modal="true"
       aria-label={typeof title === 'string' ? title : ariaLabel}
-      className="fixed inset-0 z-50 flex justify-end"
+      className={containerClassName ?? 'fixed inset-0 z-50 flex justify-end'}
       onClick={onBackdropClick}
     >
       {dimmed && (

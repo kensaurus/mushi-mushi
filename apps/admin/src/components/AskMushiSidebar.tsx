@@ -27,7 +27,8 @@ import { Drawer } from './Drawer'
 import { Btn, Loading, Tooltip } from './ui'
 import { usePageContext, contextFilterChips, type PageContext } from '../lib/pageContext'
 import { formatLlmCost } from '../lib/format'
-import { langfuseTraceUrl } from '../lib/env'
+import { langfuseTraceUrl, RESOLVED_API_URL, RESOLVED_SUPABASE_ANON_KEY } from '../lib/env'
+import { debugLog } from '../lib/debug'
 import { AskMushiComposer } from './AskMushiComposer'
 import { ClarifyChips } from './ClarifyChips'
 import {
@@ -157,6 +158,16 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
       // UX is identical when the SSE flag is off or the backend isn't
       // ready yet — only the typewriter effect drops.
       const useStream = isAskMushiStreamingEnabled() && !modelOverride
+      debugLog('ask-mushi', `Sending turn (${useStream ? 'stream' : 'POST'})`, {
+        endpoint: `${RESOLVED_API_URL}/v1/admin/ask-mushi/messages${useStream ? '/stream' : ''}`,
+        model: modelOverride ?? 'server-default',
+        intent: intentOverride ?? intent,
+        route,
+        threadId,
+        messageCount: next.length,
+        streaming: useStream,
+        anonKeyPrefix: RESOLVED_SUPABASE_ANON_KEY.slice(0, 10) + '…',
+      })
       if (useStream) {
         const assistantId = uuid()
         setMessages((prev) => [
@@ -439,6 +450,11 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
       onClose={onClose}
       width="md"
       dimmed={false}
+      // Offset below the desktop header (~36px = top-9) so the header
+      // chrome remains accessible and visible while the drawer is open.
+      // On mobile the header is taller and sits on top of the drawer in
+      // the DOM flow already, so we keep full-height there (top-0).
+      containerClassName="fixed inset-x-0 bottom-0 top-0 md:top-9 z-50 flex justify-end"
       title={
         <div className="flex items-center gap-2 min-w-0">
           <span className="shrink-0">Ask Mushi</span>
@@ -560,6 +576,7 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
             route={route}
             ctx={activeCtx}
             onSuggest={(t) => setInput(t)}
+            onSend={(t) => { void sendTurn(t) }}
           />
         )}
 
@@ -620,7 +637,10 @@ function ContextStrip({ ctx }: { ctx: PageContext }) {
 interface EmptyPromptProps {
   route: string
   ctx: PageContext | null
+  /** Populate the composer with a text prefix (slash commands — user may edit before sending). */
   onSuggest: (t: string) => void
+  /** Send a message immediately without stopping at the composer (suggestion buttons). */
+  onSend: (t: string) => void
 }
 
 // Curated subset of slash commands surfaced as chips in the empty state.
@@ -634,7 +654,7 @@ const QUICK_SLASH_CHIPS: { command: string; label: string; hint: string }[] = [
   { command: '/draft-pr-summary', label: 'PR summary', hint: 'Draft a Markdown PR description.' },
 ]
 
-function EmptyPrompt({ route, ctx, onSuggest }: EmptyPromptProps) {
+function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
   const suggestions =
     ctx?.questions && ctx.questions.length > 0 ? ctx.questions : suggestionsFor(route)
   const actions = ctx?.actions ?? []
@@ -711,8 +731,8 @@ function EmptyPrompt({ route, ctx, onSuggest }: EmptyPromptProps) {
         </div>
       </section>
 
-      {/* Page-aware suggestions — exactly as before but with a label so
-          the section is self-explanatory. */}
+      {/* Page-aware suggestions — clicking sends immediately so the
+          operator gets a response without an extra Enter press. */}
       <section aria-label="Suggested questions">
         <p className="text-3xs uppercase tracking-wider text-fg-faint mb-1.5">
           Ask about this page
@@ -722,7 +742,7 @@ function EmptyPrompt({ route, ctx, onSuggest }: EmptyPromptProps) {
             <button
               key={s}
               type="button"
-              onClick={() => onSuggest(s)}
+              onClick={() => onSend(s)}
               className="block w-full text-left rounded-sm border border-edge/60 px-2.5 py-1.5 text-xs text-fg-secondary hover:bg-surface-overlay/60 hover:border-edge hover:text-fg motion-safe:transition-colors"
             >
               {s}

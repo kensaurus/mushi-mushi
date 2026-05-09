@@ -42,7 +42,8 @@ import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from './ProjectSwitcher'
 import { Drawer } from './Drawer'
-import { RelativeTime, Badge, EmptyState, Loading } from './ui'
+import { RelativeTime, Badge, EmptyState, Loading, DetailRows, type DetailRowItem, type DetailRowTone } from './ui'
+import { debugLog, debugWarn } from '../lib/debug'
 
 type EventKind =
   | 'dispatched'
@@ -195,17 +196,26 @@ export function ActivityDrawer({ open, onClose, onUnreadChange }: Props) {
     // previously active project must not overwrite state after the user
     // (or realtime reload) has switched projects.
     const requestedProjectId = activeProjectId
+    debugLog('activity', 'Fetching live activity feed', {
+      endpoint: `/v1/admin/repo/activity`,
+      projectId: activeProjectId,
+    })
     const res = await apiFetch<{ events: ActivityEvent[] }>(
       `/v1/admin/repo/activity?project_id=${encodeURIComponent(activeProjectId)}&limit=50`,
     )
     if (requestedProjectId !== activeProjectIdRef.current) return
     if (res.ok && res.data) {
+      debugLog('activity', `Feed loaded — ${res.data.events.length} events`, {
+        projectId: activeProjectId,
+        eventCount: res.data.events.length,
+      })
       setEvents(res.data.events)
       // Stamp heartbeat on every successful response (including empty
       // feeds) so the connection indicator stays trustworthy whether or
       // not anything new actually streamed in.
       setLastSyncAt(new Date().toISOString())
     } else {
+      debugWarn('activity', 'Feed fetch failed', { error: res.error?.message })
       setError(res.error?.message ?? 'Failed to load activity')
     }
     setLoading(false)
@@ -624,43 +634,45 @@ function EventRow({
           {expanded ? 'Less ▴' : 'More ▾'}
         </button>
       </div>
-      {expanded && (
-        <dl className="mt-1.5 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-0.5 text-3xs font-mono">
-          <dt className="text-fg-faint">attempt</dt>
-          <dd className="text-fg-muted truncate" title={event.fix_attempt_id}>
-            {event.fix_attempt_id}
-          </dd>
-          <dt className="text-fg-faint">report</dt>
-          <dd className="text-fg-muted truncate" title={event.report_id}>
-            <Link
-              to={`/reports/${event.report_id}`}
-              className="hover:text-fg hover:underline"
-            >
-              {event.report_id}
-            </Link>
-          </dd>
-          <dt className="text-fg-faint">kind</dt>
-          <dd className="text-fg-muted">{event.kind}</dd>
-          {event.status && (
-            <>
-              <dt className="text-fg-faint">status</dt>
-              <dd
-                className={
-                  event.status === 'fail'
-                    ? 'text-danger'
-                    : event.status === 'pending'
-                      ? 'text-warn'
-                      : 'text-ok'
-                }
-              >
-                {event.status}
-              </dd>
-            </>
-          )}
-          <dt className="text-fg-faint">at</dt>
-          <dd className="text-fg-muted">{new Date(event.at).toLocaleString()}</dd>
-        </dl>
-      )}
+      {expanded && <DetailRows dense className="mt-1.5" items={buildEventDetailRows(event)} />}
     </li>
   )
+}
+
+/**
+ * Build the expanded "attempt / report / kind / status / at" rows for an
+ * activity event. Pulled out of the JSX so the conditional `status` row
+ * and tone-mapping logic don't tangle with the markup.
+ */
+function buildEventDetailRows(event: ActivityEvent): DetailRowItem[] {
+  const statusTone: DetailRowTone | undefined = event.status === 'fail'
+    ? 'danger'
+    : event.status === 'pending'
+      ? 'warn'
+      : event.status
+        ? 'ok'
+        : undefined
+  const rows: DetailRowItem[] = [
+    { label: 'attempt', value: event.fix_attempt_id, mono: true, tone: 'muted', hint: 'Fix attempt UUID owning this event.' },
+    {
+      label: 'report',
+      value: (
+        <Link to={`/reports/${event.report_id}`} className="hover:text-fg hover:underline font-mono">
+          {event.report_id}
+        </Link>
+      ),
+      hint: 'Report UUID — click to open the report detail page.',
+    },
+    { label: 'kind', value: event.kind, mono: true, tone: 'muted' },
+  ]
+  if (event.status) {
+    rows.push({ label: 'status', value: event.status, mono: true, tone: statusTone })
+  }
+  rows.push({
+    label: 'at',
+    value: new Date(event.at).toLocaleString(),
+    mono: true,
+    tone: 'muted',
+  })
+  return rows
 }

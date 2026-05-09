@@ -32,6 +32,41 @@
       "import": "./dist/grafana-loki.js",
       "require": "./dist/grafana-loki.cjs",
       "types": "./dist/grafana-loki.d.ts"
+    },
+    "./sentry": {
+      "import": "./dist/sentry.js",
+      "require": "./dist/sentry.cjs",
+      "types": "./dist/sentry.d.ts"
+    },
+    "./bugsnag": {
+      "import": "./dist/bugsnag.js",
+      "require": "./dist/bugsnag.cjs",
+      "types": "./dist/bugsnag.d.ts"
+    },
+    "./rollbar": {
+      "import": "./dist/rollbar.js",
+      "require": "./dist/rollbar.cjs",
+      "types": "./dist/rollbar.d.ts"
+    },
+    "./crashlytics": {
+      "import": "./dist/crashlytics.js",
+      "require": "./dist/crashlytics.cjs",
+      "types": "./dist/crashlytics.d.ts"
+    },
+    "./firebase-analytics": {
+      "import": "./dist/firebase-analytics.js",
+      "require": "./dist/firebase-analytics.cjs",
+      "types": "./dist/firebase-analytics.d.ts"
+    },
+    "./cloudwatch": {
+      "import": "./dist/cloudwatch.js",
+      "require": "./dist/cloudwatch.cjs",
+      "types": "./dist/cloudwatch.d.ts"
+    },
+    "./opsgenie": {
+      "import": "./dist/opsgenie.js",
+      "require": "./dist/opsgenie.cjs",
+      "types": "./dist/opsgenie.d.ts"
     }
   },
   "files": [
@@ -49,7 +84,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mushi-mushi/core": "workspace:^"
+    "@mushi-mushi/core": "workspace:^",
+    "jose": "^6.2.2"
   },
   "devDependencies": {
     "@mushi-mushi/eslint-config": "workspace:*",

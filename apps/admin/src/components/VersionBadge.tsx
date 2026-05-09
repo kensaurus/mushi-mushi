@@ -15,7 +15,7 @@
  *          existing flow.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { useWhatsNew } from './WhatsNew'
 import { Badge } from './ui'
 
@@ -202,24 +202,36 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         <div
           role="dialog"
           aria-label="Version details and release notes"
-          className="absolute right-0 top-full mt-1.5 z-50 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-edge bg-surface-raised shadow-raised overflow-hidden tooltip-enter"
+          className="absolute right-0 top-full mt-1.5 z-50 w-[28rem] max-w-[calc(100vw-2rem)] rounded-md border border-edge bg-surface-raised shadow-raised overflow-hidden tooltip-enter"
         >
-          <div className="px-3 py-2.5 border-b border-edge-subtle/60 flex items-baseline justify-between gap-2">
+          <div className="px-3 py-2.5 border-b border-edge-subtle/60 flex items-start justify-between gap-2">
             <div>
               <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint leading-none">Running</p>
               <p className="mt-1 text-sm font-semibold text-fg leading-none">
                 <span className="text-brand">mushi</span><span className="text-fg-secondary">mushi</span>
                 <span className="ml-1.5 font-mono text-xs tabular-nums text-fg-secondary">v{__APP_VERSION__}</span>
               </p>
-              <p className="mt-1.5 text-2xs text-fg-muted leading-snug max-w-[16rem]">
-                <span className="text-cyan-300 font-medium">SDK</span> = <code className="font-mono text-fg-secondary">@mushi-mushi/web</code> on npm (what you embed).
-                {' '}
-                <span className="text-fuchsia-300 font-medium">Admin</span> = this dashboard SPA (operator console).
-              </p>
+              <div className="mt-1.5 space-y-0.5">
+                <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
+                  <span className="text-cyan-300 font-medium">SDK</span> = <code className="font-mono text-fg-secondary">@mushi-mushi/web</code> on npm (what you embed).
+                </p>
+                <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
+                  <span className="text-fuchsia-300 font-medium">Admin</span> = this dashboard SPA (operator console).
+                </p>
+              </div>
             </div>
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <p className="text-3xs font-mono text-fg-muted leading-none">{__BUILD_SHA__}</p>
               <p className="mt-1 text-3xs text-fg-faint leading-none">{__BUILD_DATE__}</p>
+              <a
+                href={REPO_URL}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="mt-1.5 inline-flex items-center gap-0.5 text-3xs text-fg-muted hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 rounded-sm"
+                title="View source on GitHub"
+              >
+                GitHub <span aria-hidden>↗</span>
+              </a>
             </div>
           </div>
 
@@ -227,31 +239,43 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               the SDK on the page matches the one their own apps embed.
               Each row links to npmjs so the user can copy install snippets,
               read READMEs, or audit the published tarball without leaving
-              the badge flow. */}
+              the badge flow. Grouped: SDK core, framework bindings, tooling,
+              plugin ecosystem, and the private server package. */}
           <div className="px-3 py-2.5 border-b border-edge-subtle/60">
             <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Packages</p>
-            <dl className="mt-1.5 space-y-0.5 text-2xs">
-              <PackageRow
-                name="@mushi-mushi/web"
-                version={__SDK_WEB_VERSION__}
-                hint="Browser SDK (Shadow DOM widget) — open on npmjs"
-                npmName="@mushi-mushi/web"
-              />
-              <PackageRow
-                name="@mushi-mushi/react"
-                version={__SDK_REACT_VERSION__}
-                hint="React bindings — open on npmjs"
-                npmName="@mushi-mushi/react"
-              />
-              <PackageRow
-                name="@mushi-mushi/server"
-                version={__SERVER_VERSION__}
-                hint="Edge Functions backend (private — links to repo source)"
-                // server is private (version 0.0.0). No npm page exists; link
-                // to the directory on GitHub so operators land somewhere real.
-                githubPath="packages/server"
-              />
-            </dl>
+            <div className="mt-1.5 space-y-2 text-2xs">
+              <PackageGroup label="SDK">
+                <PackageRow name="@mushi-mushi/core"    version={__SDK_CORE_VERSION__}  hint="Core runtime"          npmName="@mushi-mushi/core" />
+                <PackageRow name="web"                  version={__SDK_WEB_VERSION__}   hint="Browser widget (Shadow DOM)" npmName="@mushi-mushi/web" />
+                <PackageRow name="react"                version={__SDK_REACT_VERSION__} hint="React bindings"         npmName="@mushi-mushi/react" />
+                <PackageRow name="vue"                  version={__SDK_VUE_VERSION__}   hint="Vue bindings"           npmName="@mushi-mushi/vue" />
+                <PackageRow name="svelte"               version={__SDK_SVELTE_VERSION__} hint="Svelte bindings"       npmName="@mushi-mushi/svelte" />
+                <PackageRow name="angular"              version={__SDK_ANGULAR_VERSION__} hint="Angular bindings"    npmName="@mushi-mushi/angular" />
+                <PackageRow name="react-native"         version={__SDK_RN_VERSION__}    hint="React Native bindings"  npmName="@mushi-mushi/react-native" />
+              </PackageGroup>
+              <PackageGroup label="Tooling">
+                <PackageRow name="cli"                  version={__SDK_CLI_VERSION__}   hint="Mushi CLI"              npmName="@mushi-mushi/cli" />
+                <PackageRow name="mcp"                  version={__SDK_MCP_VERSION__}   hint="MCP server"             npmName="@mushi-mushi/mcp" />
+                <PackageRow name="node"                 version={__SDK_NODE_VERSION__}  hint="Node.js SDK"            npmName="@mushi-mushi/node" />
+                <PackageRow name="capacitor"            version={__SDK_CAPACITOR_VERSION__} hint="Capacitor plugin"   npmName="@mushi-mushi/capacitor" />
+                <PackageRow name="adapters"             version={__SDK_ADAPTERS_VERSION__}  hint="Integration adapters" npmName="@mushi-mushi/adapters" />
+                <PackageRow name="create-mushi-mushi"   version={__CREATE_MUSHI_VERSION__}  hint="Project scaffold CLI" npmName="create-mushi-mushi" />
+                <PackageRow name="mushi-mushi"          version={__LAUNCHER_VERSION__}  hint="Launcher / CLI entry"   npmName="mushi-mushi" />
+              </PackageGroup>
+              <PackageGroup label="Plugins">
+                <PackageRow name="plugin-sdk"           version={__SDK_PLUGIN_SDK_VERSION__}      hint="Plugin SDK base"      npmName="@mushi-mushi/plugin-sdk" />
+                <PackageRow name="plugin-jira"          version={__SDK_PLUGIN_JIRA_VERSION__}     hint="Jira routing plugin"  npmName="@mushi-mushi/plugin-jira" />
+                <PackageRow name="plugin-linear"        version={__SDK_PLUGIN_LINEAR_VERSION__}   hint="Linear routing"       npmName="@mushi-mushi/plugin-linear" />
+                <PackageRow name="plugin-pagerduty"     version={__SDK_PLUGIN_PAGERDUTY_VERSION__} hint="PagerDuty routing"   npmName="@mushi-mushi/plugin-pagerduty" />
+                <PackageRow name="plugin-sentry"        version={__SDK_PLUGIN_SENTRY_VERSION__}   hint="Sentry enrichment"    npmName="@mushi-mushi/plugin-sentry" />
+                <PackageRow name="plugin-slack-app"     version={__SDK_PLUGIN_SLACK_VERSION__}    hint="Slack app integration" npmName="@mushi-mushi/plugin-slack-app" />
+                <PackageRow name="plugin-zapier"        version={__SDK_PLUGIN_ZAPIER_VERSION__}   hint="Zapier webhook bridge" npmName="@mushi-mushi/plugin-zapier" />
+              </PackageGroup>
+              <PackageGroup label="Runtime">
+                <PackageRow name="wasm-classifier"      version={__SDK_WASM_VERSION__}  hint="WASM classifier module"  npmName="@mushi-mushi/wasm-classifier" />
+                <PackageRow name="server"               version={__SERVER_VERSION__}    hint="Edge Functions (private)" githubPath="packages/server" />
+              </PackageGroup>
+            </div>
           </div>
 
           {/* Latest changelog entry — keeps the user from having to open the
@@ -322,6 +346,17 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
   )
 }
 
+function PackageGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <p className="text-3xs font-medium uppercase tracking-wider text-fg-faint/70 mb-0.5">{label}</p>
+      <div className="grid grid-cols-2 gap-x-2">
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function PackageRow({
   name,
   version,
@@ -347,18 +382,18 @@ function PackageRow({
   return (
     <Tag
       {...(href ? { href, target: '_blank', rel: 'noreferrer noopener' } : {})}
-      className={`group flex items-baseline justify-between gap-2 rounded-sm px-1 -mx-1 py-0.5 ${
+      className={`group flex items-baseline justify-between gap-1 rounded-sm px-1 -mx-1 py-px ${
         href ? 'hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50' : ''
       }`}
       title={hint}
     >
-      <dt className="font-mono text-2xs text-fg-muted truncate flex items-baseline gap-1">
+      <span className="font-mono text-3xs text-fg-muted truncate flex items-baseline gap-0.5">
         {name}
         {href && (
           <span aria-hidden className="text-fg-faint group-hover:text-fg-muted shrink-0 leading-none">↗</span>
         )}
-      </dt>
-      <dd className="font-mono text-2xs tabular-nums text-fg-secondary shrink-0">{version}</dd>
+      </span>
+      <span className="font-mono text-3xs tabular-nums text-fg-secondary shrink-0">{version}</span>
     </Tag>
   )
 }

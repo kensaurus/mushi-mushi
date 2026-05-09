@@ -2,14 +2,15 @@ import type { Hono } from 'npm:hono@4';
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { jwtAuth } from '../../_shared/auth.ts';
+import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
-import { getActivePlugins } from '../../_shared/plugins.ts';
+import { getActivePlugins, sendTestDelivery } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
@@ -1118,12 +1119,19 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const projectIds = await ownedProjectIds(db, userId);
     const { data: report } = await db
       .from('reports')
-      .select('id, project_id, summary, description, category, severity, component')
+      .select('id, project_id, summary, description, category, severity, component, metadata')
       .eq('id', reportId)
       .in('project_id', projectIds)
       .single();
     if (!report)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+
+    // Propagate any stored traceparent (set at ingest time) so BYOK API calls
+    // (Jira, Linear, GitHub, PagerDuty) share the same distributed trace.
+    const storedTraceparent =
+      typeof (report.metadata as Record<string, unknown> | null)?.traceparent === 'string'
+        ? (report.metadata as Record<string, unknown>).traceparent as string
+        : extractInboundTraceparent(c.req.header('traceparent'))
 
     const results = await createExternalIssue(db, report.project_id, {
       id: report.id,
@@ -1132,7 +1140,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       category: report.category,
       severity: report.severity ?? 'medium',
       component: report.component,
-    });
+    }, storedTraceparent);
 
     await logAudit(db, report.project_id, userId, 'integration.synced', 'report', reportId, {
       results,
@@ -1236,6 +1244,179 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       removed: true,
     }).catch(() => {});
     return c.json({ ok: true });
+  });
+
+  // ============================================================
+  // Plugin lifecycle — patch (pause/resume/edit) + test + rotate
+  // ============================================================
+
+  /**
+   * PATCH /v1/admin/plugins/:slug
+   *
+   * Partial update of a single installed plugin.  Only mutates fields the
+   * caller explicitly sends — never touches webhook_secret_vault_ref so a
+   * URL edit or pause/resume can't accidentally wipe a rotated secret.
+   * Accepted fields: isActive, webhookUrl, subscribedEvents, config.
+   */
+  app.patch('/v1/admin/plugins/:slug', jwtAuth, requireFeature('plugins'), async (c) => {
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    const body = await c.req.json().catch(() => ({}));
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const patch: Record<string, unknown> = {};
+    if (typeof body.isActive === 'boolean') patch.is_active = body.isActive;
+    if (typeof body.webhookUrl === 'string') {
+      if (!body.webhookUrl.startsWith('https://')) {
+        return c.json(
+          { ok: false, error: { code: 'INVALID_INPUT', message: 'webhookUrl must be https://' } },
+          400,
+        );
+      }
+      patch.webhook_url = body.webhookUrl;
+    }
+    if (Array.isArray(body.subscribedEvents)) {
+      patch.subscribed_events = body.subscribedEvents.filter(
+        (e: unknown): e is string => typeof e === 'string',
+      );
+    }
+    if (body.config && typeof body.config === 'object') patch.config = body.config;
+
+    if (Object.keys(patch).length === 0) {
+      return c.json(
+        { ok: false, error: { code: 'INVALID_INPUT', message: 'No mutable fields supplied' } },
+        400,
+      );
+    }
+
+    const { error, data } = await db
+      .from('project_plugins')
+      .update(patch)
+      .eq('project_id', project.id)
+      .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
+      .select('id')
+      .maybeSingle();
+    if (error) return dbError(c, error);
+    if (!data) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_FOUND', message: 'Plugin not installed' } },
+        404,
+      );
+    }
+
+    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+      action: 'patch',
+      fields: Object.keys(patch),
+    }).catch(() => {});
+    return c.json({ ok: true });
+  });
+
+  /**
+   * POST /v1/admin/plugins/:slug/test-event
+   *
+   * Fire a `test.delivery` event at the plugin's webhook URL using the same
+   * HMAC signing path as a real dispatch. A row is written to
+   * `plugin_dispatch_log` so the result surfaces in the dispatch table.
+   * Returns { httpStatus, durationMs, excerpt } so the UI can confirm the
+   * receiver is reachable.
+   */
+  app.post('/v1/admin/plugins/:slug/test-event', jwtAuth, requireFeature('plugins'), async (c) => {
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const result = await sendTestDelivery(db, project.id, slug);
+    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+      action: 'test_event',
+      ok: result.ok,
+    }).catch(() => {});
+
+    return c.json({
+      ok: true,
+      data: {
+        delivered: result.ok,
+        httpStatus: result.httpStatus,
+        durationMs: result.durationMs,
+        excerpt: result.excerpt,
+      },
+    });
+  });
+
+  /**
+   * POST /v1/admin/plugins/:slug/rotate-secret
+   *
+   * Generate a new 32-byte signing secret, overwrite the existing vault
+   * entry (canonical secret_name comes from the DB row's vault_ref so we
+   * can't be tricked into writing arbitrary keys via the URL), and return
+   * the plaintext exactly once. In-flight dispatches that already loaded
+   * the old secret complete normally; new dispatches pick up the new
+   * secret on their next vault_lookup call.
+   */
+  app.post('/v1/admin/plugins/:slug/rotate-secret', jwtAuth, requireFeature('plugins'), async (c) => {
+    const userId = c.get('userId') as string;
+    const slug = c.req.param('slug');
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data: pluginRow, error: lookupErr } = await db
+      .from('project_plugins')
+      .select('plugin_slug, plugin_name, webhook_secret_vault_ref')
+      .eq('project_id', project.id)
+      .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
+      .maybeSingle();
+    if (lookupErr) return dbError(c, lookupErr);
+    if (!pluginRow) {
+      return c.json(
+        { ok: false, error: { code: 'NOT_FOUND', message: 'Plugin not installed' } },
+        404,
+      );
+    }
+
+    // Canonical secret_name: prefer the existing vault_ref (rotation in
+    // place), fall back to the slug-derived path for legacy rows that
+    // were installed without a webhook secret.
+    const secretName = pluginRow.webhook_secret_vault_ref?.startsWith('vault://')
+      ? pluginRow.webhook_secret_vault_ref.slice('vault://'.length)
+      : `mushi/plugin/${project.id}/${pluginRow.plugin_slug ?? pluginRow.plugin_name}`;
+
+    const newSecretBytes = new Uint8Array(32);
+    crypto.getRandomValues(newSecretBytes);
+    const newSecret = Array.from(newSecretBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+    const { error: vaultErr } = await db.rpc('vault_store_secret', {
+      secret_name: secretName,
+      secret_value: newSecret,
+    });
+    if (vaultErr) {
+      return c.json(
+        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
+        500,
+      );
+    }
+
+    // If the plugin was previously installed without a secret, point the
+    // row at the freshly written vault entry so dispatch() picks it up.
+    if (!pluginRow.webhook_secret_vault_ref) {
+      await db
+        .from('project_plugins')
+        .update({ webhook_secret_vault_ref: `vault://${secretName}` })
+        .eq('project_id', project.id)
+        .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`);
+    }
+
+    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+      action: 'rotate_secret',
+    }).catch(() => {});
+
+    return c.json({ ok: true, data: { secret: newSecret } });
   });
 
   // ============================================================
@@ -1774,6 +1955,92 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
   // Admin: telemetry & operational health
   // ============================================================
+
+  // ============================================================
+  // GET /v1/admin/integrations/health
+  //
+  // Returns the latest health check result for every configured BYOK
+  // channel (Sentry, GitHub, LangFuse, etc.) for projects the caller
+  // owns. Orchestrators (LangGraph, OpenAI Agents, CrewAI) can poll
+  // this before dispatching a fix to fail-fast on broken channels rather
+  // than burning LLM budget and time only to fail at the last step.
+  //
+  // Response shape:
+  //   {
+  //     ok: true,
+  //     data: {
+  //       channels: Array<{
+  //         projectId: string
+  //         kind: string           // e.g. "sentry", "github", "langfuse"
+  //         status: "ok" | "degraded" | "error" | "unknown"
+  //         latencyMs: number | null
+  //         checkedAt: string      // ISO timestamp
+  //         detail: string | null
+  //       }>
+  //       staleSince: string | null  // ISO — oldest check timestamp, null if no data
+  //       summary: "healthy" | "degraded" | "error"
+  //     }
+  //   }
+  // ============================================================
+  app.get('/v1/admin/integrations/health', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: { channels: [], staleSince: null, summary: 'healthy' } });
+    }
+
+    // Optional filter: ?projectId=<uuid> to scope to a single project.
+    const filterProjectId = c.req.query('projectId');
+    const scopedIds = filterProjectId && projectIds.includes(filterProjectId)
+      ? [filterProjectId]
+      : projectIds;
+
+    // Return the most recent health row per (project_id, kind).
+    // We use a subquery in JS since Supabase JS client doesn't expose
+    // DISTINCT ON directly — we fetch the last 200 rows and dedupe in memory.
+    const { data: rows, error } = await db
+      .from('integration_health_history')
+      .select('project_id, kind, status, latency_ms, checked_at, message, source')
+      .in('project_id', scopedIds)
+      .order('checked_at', { ascending: false })
+      .limit(500);
+
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500);
+    }
+
+    // Dedupe: keep only the newest row per (project_id, kind).
+    const seen = new Set<string>();
+    const channels: Array<{
+      projectId: string; kind: string; status: string;
+      latencyMs: number | null; checkedAt: string; message: string | null; source: string | null;
+    }> = [];
+    for (const row of rows ?? []) {
+      const key = `${row.project_id}:${row.kind}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      channels.push({
+        projectId: row.project_id,
+        kind: row.kind,
+        status: row.status ?? 'unknown',
+        latencyMs: row.latency_ms ?? null,
+        checkedAt: row.checked_at,
+        message: row.message ?? null,
+        source: row.source ?? null,
+      });
+    }
+
+    const staleSince = channels.length > 0
+      ? channels.reduce((min, c) => c.checkedAt < min ? c.checkedAt : min, channels[0].checkedAt)
+      : null;
+
+    const hasError = channels.some((ch) => ch.status === 'error');
+    const hasDegraded = channels.some((ch) => ch.status === 'degraded');
+    const summary = hasError ? 'error' : hasDegraded ? 'degraded' : 'healthy';
+
+    return c.json({ ok: true, data: { channels, staleSince, summary } });
+  });
 
   app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;

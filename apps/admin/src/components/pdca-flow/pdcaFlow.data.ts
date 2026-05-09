@@ -15,7 +15,7 @@
  *                            see what the loop *means*, not empty zeros.
  */
 
-import type { Edge, Node } from '@xyflow/react'
+import { MarkerType, type Edge, type Node } from '@xyflow/react'
 import { PDCA_ORDER, PDCA_STAGES, PDCA_STAGE_OUTCOMES } from '../../lib/pdca'
 import type { PdcaStageId } from '../../lib/pdca'
 import type { PdcaStage, PdcaStageTone } from '../dashboard/types'
@@ -182,12 +182,14 @@ export function buildEdges(
     ['check', 'act'],
     ['act', 'plan'],
   ]
+  const DANGER_HEX = '#ef4444'
   const toneById = new Map(stages.map((s) => [s.id, s.tone]))
   return pairs.map(([source, target]) => {
     // Paint the segment red when the *target* stage is urgent — that's
     // the node where data is piling up, so the arrow into it is the one
     // the eye should follow.
     const failing = toneById.get(target) === 'urgent'
+    const arrowColor = failing ? DANGER_HEX : STAGE_HEX[target]
     return {
       id: `${source}->${target}`,
       source,
@@ -196,6 +198,15 @@ export function buildEdges(
       sourceHandle: 'out',
       targetHandle: 'in',
       animated: source === focusStage || source === runningStage || failing,
+      // Colored arrowhead matching the target stage so the eye follows the
+      // gradient to its destination. markerEnd is sized larger than the RF
+      // default (10×10) to stay readable at the canvas's default fitView scale.
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 18,
+        height: 18,
+        color: arrowColor,
+      },
       data: {
         sourceColor: STAGE_HEX[source],
         targetColor: STAGE_HEX[target],

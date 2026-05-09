@@ -397,6 +397,15 @@ async function maybeSendTestReport(
 
   if (!shouldSend) return
 
+  if (!options.endpoint) {
+    p.note(
+      'No endpoint configured — skipping test report.\n' +
+        'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
+      'Skipped',
+    )
+    return
+  }
+
   const spinner = p.spinner()
   spinner.start('Sending test report…')
 
@@ -443,7 +452,15 @@ async function maybeSendTestReport(
     }
 
     spinner.stop('Test report sent.')
-    p.log.success('View it at https://kensaur.us/mushi-mushi/reports')
+    let reportId: string | undefined
+    try {
+      const body = await res.json() as { data?: { reportId?: string } }
+      reportId = body.data?.reportId
+    } catch {
+      // non-fatal — fall back to the reports list
+    }
+    const reportPath = reportId ? `/reports/${reportId}` : '/reports'
+    p.log.success(`View it at https://kensaur.us/mushi-mushi/admin${reportPath}`)
   } catch (err) {
     const aborted = err instanceof Error && err.name === 'AbortError'
     spinner.stop(aborted ? 'Timed out reaching the Mushi API.' : 'Could not reach the Mushi API.')

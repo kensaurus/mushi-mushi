@@ -32,16 +32,20 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-2xs">
-        <Stat label="Reports" value={report.stats?.reports?.total?.toString() ?? '—'} />
-        <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toString() ?? '—'} />
-        <div title="Share of fix attempts that finished without errors this week. Higher is healthier.">
-          <div className="text-fg-faint">Completion</div>
-          <div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 rounded-md border border-edge-subtle/55 bg-surface-overlay/25 p-2">
+        <Stat label="Reports" value={report.stats?.reports?.total?.toLocaleString() ?? '—'} />
+        <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toLocaleString() ?? '—'} />
+        <div
+          className="md:border-l md:border-edge-subtle/45 md:pl-2"
+          title="Share of fix attempts that finished without errors this week. Higher is healthier."
+        >
+          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Completion</div>
+          <div className="mt-0.5 font-mono tabular-nums">
             <Pct value={completionPct} precision={0} direction="higher-better" />
           </div>
         </div>
         <Stat
+          divider
           label="Avg fix"
           value={
             report.stats?.fixes?.avgDurationSeconds != null && report.stats.fixes.avgDurationSeconds > 0
@@ -63,11 +67,11 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, divider }: { label: string; value: string; divider?: boolean }) {
   return (
-    <div>
-      <div className="text-fg-faint">{label}</div>
-      <div className="text-fg font-mono tabular-nums">{value}</div>
+    <div className={divider ? 'md:border-l md:border-edge-subtle/45 md:pl-2' : undefined}>
+      <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint">{label}</div>
+      <div className="mt-0.5 text-sm text-fg font-mono tabular-nums">{value}</div>
     </div>
   )
 }

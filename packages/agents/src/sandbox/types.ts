@@ -101,9 +101,29 @@ export interface Sandbox {
   destroy(): Promise<void>
 }
 
+/**
+ * The set of provider ids Mushi ships first-party adapters for. Third-party
+ * providers can use any other string — the union is open (`string`) so an
+ * external sandbox runtime (Daytona, Sealos DevBox, an internal corp
+ * sandbox, …) can register itself without having to fork this type.
+ *
+ * The constant is exported so consumers can branch on the ones we know
+ * about (`if (KNOWN_SANDBOX_PROVIDERS.includes(p.name)) …`) while still
+ * accepting unknown providers at the type level.
+ */
+export const KNOWN_SANDBOX_PROVIDERS = ['e2b', 'modal', 'cloudflare', 'local-noop'] as const
+export type KnownSandboxProvider = (typeof KNOWN_SANDBOX_PROVIDERS)[number]
+
 export interface SandboxProvider {
-  /** Stable identifier — persisted in fix_sandbox_runs.provider for observability. */
-  readonly name: 'e2b' | 'modal' | 'cloudflare' | 'local-noop'
+  /**
+   * Stable identifier — persisted in `fix_sandbox_runs.provider` for
+   * observability. First-party providers use one of {@link KNOWN_SANDBOX_PROVIDERS};
+   * third-party adapters set their own string (recommended: lowercase
+   * kebab, e.g. `daytona-corp` or `runpod-pool-a`).
+   *
+   * Was a closed union — see 2026-05-09 spec-traceability audit.
+   */
+  readonly name: KnownSandboxProvider | (string & {})
   createSandbox(config: SandboxConfig, onAudit: (e: SandboxAuditEvent) => void): Promise<Sandbox>
 }
 

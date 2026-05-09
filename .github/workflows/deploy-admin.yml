@@ -40,6 +40,7 @@ on:
     paths:
       - 'apps/admin/**'
       - 'scripts/cloudfront-mushi-*'
+      - 'scripts/cloudfront-mushi-apex-redirect.js'
   workflow_dispatch:
 
 concurrency:
@@ -249,6 +250,42 @@ jobs:
               --if-match "$EXISTING_ETAG" \
               --function-config '{"Comment":"Security headers and 404 handling for mushi-mushi","Runtime":"cloudfront-js-2.0"}' \
               --function-code fileb://scripts/cloudfront-mushi-spa-response.js \
+              --region us-east-1
+          fi
+
+          ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text)
+          aws cloudfront publish-function \
+            --name "$FUNC_NAME" \
+            --if-match "$ETAG" \
+            --region us-east-1
+
+      - name: Deploy CloudFront apex redirect function
+        # Rescues historical bad links (e.g. https://kensaur.us/reports/<uuid>)
+        # that were generated before the copy-link BASE_URL fix.
+        # The function is created/updated here on every deploy; it must be
+        # manually associated with the correct CloudFront cache behavior(s)
+        # once — see scripts/cloudfront-mushi-apex-redirect.js for the list.
+        run: |
+          FUNC_NAME="mushi-mushi-apex-redirect"
+
+          EXISTING_ETAG=$(aws cloudfront describe-function --name "$FUNC_NAME" --region us-east-1 \
+            --query 'ETag' --output text 2>/dev/null || echo "")
+
+          if [ -z "$EXISTING_ETAG" ] || [ "$EXISTING_ETAG" = "None" ]; then
+            echo "Creating new CloudFront Function: $FUNC_NAME"
+            aws cloudfront create-function \
+              --name "$FUNC_NAME" \
+              --function-config '{"Comment":"Redirect apex-domain SPA routes to /mushi-mushi/admin/","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
+              --region us-east-1
+          else
+            echo "Updating existing CloudFront Function: $FUNC_NAME (ETag: $EXISTING_ETAG)"
+            aws cloudfront update-function \
+              --name "$FUNC_NAME" \
+              --if-match "$EXISTING_ETAG" \
+              --function-config '{"Comment":"Redirect apex-domain SPA routes to /mushi-mushi/admin/","Runtime":"cloudfront-js-2.0"}' \
+              --function-code fileb://scripts/cloudfront-mushi-apex-redirect.js \
               --region us-east-1
           fi
 

@@ -1,14 +1,18 @@
 /**
  * FILE: apps/admin/src/components/integrations/RoutingProviderCard.tsx
  * PURPOSE: One Jira/Linear/GitHub-Issues/PagerDuty card. Same shape as the
- *          platform card but with pause/resume + disconnect actions.
+ *          platform card but with pause/resume + disconnect actions and a
+ *          Test button that probes the provider's credentials live.
  */
 
-import { Card, Btn, Badge, Input, RelativeTime } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, Tooltip } from '../ui'
 import { HealthPill } from '../charts'
 import { ConfigHelp } from '../ConfigHelp'
 import { resolveValidator } from '../../lib/validators'
-import { PLATFORM_STATUS_MAP, type RoutingIntegration, type RoutingProviderDef } from './types'
+import { isStale } from '../../lib/staleness'
+import { HealthSparkline } from './HealthSparkline'
+import { IconPause, IconPlay, IconPencil, IconClose } from '../icons'
+import { PLATFORM_STATUS_MAP, type HealthRow, type RoutingIntegration, type RoutingProviderDef } from './types'
 
 interface Props {
   provider: RoutingProviderDef
@@ -16,10 +20,14 @@ interface Props {
   isEditing: boolean
   draft: Record<string, string>
   saving: boolean
+  testing: boolean
+  latestProbe: HealthRow | undefined
+  sparkline: HealthRow[]
   onStartEdit: () => void
   onCancelEdit: () => void
   onChangeField: (name: string, value: string) => void
   onSave: () => void
+  onTest: () => void
   onTogglePause: () => void
   onDisconnect: () => void
 }
@@ -30,14 +38,20 @@ export function RoutingProviderCard({
   isEditing,
   draft,
   saving,
+  testing,
+  latestProbe,
+  sparkline,
   onStartEdit,
   onCancelEdit,
   onChangeField,
   onSave,
+  onTest,
   onTogglePause,
   onDisconnect,
 }: Props) {
-  const status: 'ok' | 'unknown' = existing?.is_active ? 'ok' : 'unknown'
+  // Status comes from the probe history when available; otherwise fall back to
+  // is_active for a coarse connected/not-connected signal.
+  const probeStatus: HealthRow['status'] = latestProbe?.status ?? (existing?.is_active ? 'ok' : 'unknown')
 
   return (
     <Card className="p-3">
@@ -45,18 +59,23 @@ export function RoutingProviderCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-semibold text-fg">{provider.label}</h3>
-            <HealthPill status={existing ? PLATFORM_STATUS_MAP[status] : undefined} />
+            <HealthPill status={existing ? PLATFORM_STATUS_MAP[probeStatus] : undefined} />
             {existing && !existing.is_active && (
               <Badge className="bg-warn/10 text-warn border border-warn/30">Paused</Badge>
             )}
+            {existing && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
+              <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
+                <Badge className="bg-warn/10 text-warn border border-warn/30">Stale</Badge>
+              </Tooltip>
+            )}
           </div>
-          <p className="text-2xs text-fg-muted mt-0.5">{provider.whyItMatters}</p>
+          <p className="text-2xs text-fg-secondary mt-1 pl-2 border-l-2 border-brand/30 leading-snug">{provider.whyItMatters}</p>
           {!existing && provider.capabilitiesOnceConnected.length > 0 && (
-            <ul className="mt-1.5 space-y-0.5 text-2xs text-fg-muted">
+            <ul className="mt-1.5 space-y-1 text-2xs">
               {provider.capabilitiesOnceConnected.map((capability) => (
-                <li key={capability} className="flex gap-1.5">
-                  <span aria-hidden="true" className="text-fg-faint">+</span>
-                  <span>{capability}</span>
+                <li key={capability} className="flex gap-1.5 items-baseline">
+                  <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
+                  <span className="text-fg-secondary leading-snug">{capability}</span>
                 </li>
               ))}
             </ul>
@@ -70,20 +89,91 @@ export function RoutingProviderCard({
         <div className="flex items-center gap-1.5">
           {existing && (
             <>
-              <Btn variant="ghost" onClick={onTogglePause}>
-                {existing.is_active ? 'Pause' : 'Resume'}
-              </Btn>
-              <Btn variant="danger" onClick={onDisconnect}>Disconnect</Btn>
+              {testing && (
+                <ResultChip tone="running">Testing…</ResultChip>
+              )}
+              {existing && !testing && latestProbe && (
+                <ResultChip
+                  tone={latestProbe.status === 'ok' ? 'success' : latestProbe.status === 'degraded' ? 'info' : 'error'}
+                  at={latestProbe.checked_at}
+                >
+                  {latestProbe.status === 'ok'
+                    ? 'Connection OK'
+                    : latestProbe.status === 'degraded'
+                      ? 'Degraded'
+                      : latestProbe.message ?? 'Failed'}
+                </ResultChip>
+              )}
+              <Tooltip content={testing ? 'Testing…' : 'Test connection'}>
+                <Btn
+                  variant="ghost"
+                  onClick={onTest}
+                  disabled={testing}
+                  loading={testing}
+                  aria-label="Test connection"
+                  className="px-2"
+                >
+                  <IconPlay size={14} />
+                </Btn>
+              </Tooltip>
+              <Tooltip content={existing.is_active ? 'Pause' : 'Resume'}>
+                <Btn
+                  variant="ghost"
+                  onClick={onTogglePause}
+                  aria-label={existing.is_active ? 'Pause integration' : 'Resume integration'}
+                  className="px-2"
+                >
+                  {existing.is_active ? <IconPause size={14} /> : <IconPlay size={14} />}
+                </Btn>
+              </Tooltip>
+              <Tooltip content="Disconnect">
+                <Btn
+                  variant="ghost"
+                  onClick={onDisconnect}
+                  aria-label="Disconnect integration"
+                  className="px-2 text-fg-muted hover:text-danger"
+                >
+                  <IconClose size={14} />
+                </Btn>
+              </Tooltip>
             </>
           )}
-          <Btn
-            variant={isEditing ? 'ghost' : 'primary'}
-            onClick={isEditing ? onCancelEdit : onStartEdit}
-          >
-            {isEditing ? 'Cancel' : existing ? 'Edit' : 'Connect'}
-          </Btn>
+          {!isEditing && (
+            <Tooltip content={existing ? 'Edit' : 'Connect'}>
+              <Btn
+                variant={existing ? 'ghost' : 'primary'}
+                onClick={onStartEdit}
+                aria-label={existing ? 'Edit integration' : 'Connect integration'}
+                className={existing ? 'px-2' : undefined}
+              >
+                {existing ? <IconPencil size={14} /> : 'Connect'}
+              </Btn>
+            </Tooltip>
+          )}
+          {isEditing && (
+            <Btn variant="ghost" onClick={onCancelEdit}>
+              Cancel
+            </Btn>
+          )}
         </div>
       </div>
+
+      {(latestProbe || sparkline.length > 0) && (
+        <div className="mt-2 flex items-center gap-3 text-2xs text-fg-muted">
+          {latestProbe?.checked_at && (
+            <span>Last probe <RelativeTime value={latestProbe.checked_at} /></span>
+          )}
+          {latestProbe?.latency_ms != null && (
+            <span className="font-mono">{latestProbe.latency_ms}ms</span>
+          )}
+          {latestProbe?.message && (
+            <span className="font-mono truncate" title={latestProbe.message}>
+              {latestProbe.message}
+            </span>
+          )}
+          {sparkline.length > 1 && <HealthSparkline rows={sparkline.slice(0, 14)} />}
+        </div>
+      )}
 
       {isEditing && (
         <div className="mt-3 space-y-2 border-t border-edge-subtle pt-3">

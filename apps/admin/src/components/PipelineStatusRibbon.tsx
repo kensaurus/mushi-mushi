@@ -89,6 +89,50 @@ const STAGE_TONE: Record<RibbonTile['stage'], string> = {
   A: 'bg-ok-muted text-ok',
 }
 
+const STAGE_BORDER_HEX: Record<RibbonTile['stage'], string> = {
+  P: '#60a5fa',
+  D: '#f5b544',
+  C: '#fbbf24',
+  A: '#34d399',
+}
+
+function PulseArrow({ fromHex, toHex }: { fromHex: string; toHex: string }) {
+  const gId = `pa-${fromHex.slice(1)}-${toHex.slice(1)}`
+  const animId = `pm-${fromHex.slice(1)}-${toHex.slice(1)}`
+  // Marching dashes: same approach as HeroGradientEdge, no blur.
+  return (
+    <div className="hidden md:flex items-center justify-center w-8 shrink-0" aria-hidden="true">
+      <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
+        <defs>
+          <linearGradient id={gId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={fromHex} />
+            <stop offset="100%" stopColor={toHex} />
+          </linearGradient>
+        </defs>
+        <style>{`
+          @keyframes ${animId} {
+            from { stroke-dashoffset: 14; }
+            to   { stroke-dashoffset: 0; }
+          }
+        `}</style>
+        {/* Faint base rail */}
+        <path d="M2 10 L20 10" stroke={toHex} strokeWidth="1" strokeLinecap="round" opacity="0.25" />
+        {/* Marching dashes */}
+        <path
+          d="M2 10 L20 10"
+          stroke={`url(#${gId})`}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray="5 9"
+          style={{ animation: `${animId} 0.9s linear infinite` }}
+        />
+        {/* Solid filled arrowhead */}
+        <path d="M18 6 L24 10 L18 14 Z" fill={toHex} />
+      </svg>
+    </div>
+  )
+}
+
 export function PipelineStatusRibbon() {
   const { isAdvanced } = useAdminMode()
   const nav = useNavCounts()
@@ -262,41 +306,55 @@ export function PipelineStatusRibbon() {
       </div>
       <div
         id="pipeline-status-ribbon-tiles"
-        className="grid grid-cols-2 md:grid-cols-4 gap-1.5"
+        className="flex items-stretch gap-0 md:gap-0"
       >
-        {tiles.map((tile) => {
+        {tiles.map((tile, i) => {
           const tone = TONE_CLASS[tile.tone]
+          const borderHex = STAGE_BORDER_HEX[tile.stage]
           return (
-            <Link
-              key={tile.stage}
-              to={tile.to}
-              className={`group relative flex items-center gap-2 rounded-sm border ${tone.ring} bg-surface px-2 py-1.5 motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
-              title={tile.summary}
-            >
-              <span
-                aria-hidden
-                className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+            <div key={tile.stage} className="flex items-stretch flex-1 min-w-0">
+              <Link
+                to={tile.to}
+                className="group relative flex items-center gap-2 rounded-sm bg-surface px-2 py-1.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand flex-1 min-w-0"
+                title={tile.summary}
+                style={{
+                  borderLeft: `3px solid ${borderHex}`,
+                  borderTop: `1px solid ${borderHex}30`,
+                  borderRight: `1px solid ${borderHex}30`,
+                  borderBottom: `1px solid ${borderHex}30`,
+                }}
               >
-                {tile.stage}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span
-                    aria-hidden
-                    className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
-                  />
-                  <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider">
-                    {tile.label}
+                <span
+                  aria-hidden
+                  className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+                >
+                  {tile.stage}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span
+                      aria-hidden
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
+                    />
+                    <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider">
+                      {tile.label}
+                    </span>
+                    <span className={`ml-auto text-2xs font-mono font-semibold ${tone.label}`}>
+                      {tile.metric}
+                    </span>
                   </span>
-                  <span className={`ml-auto text-2xs font-mono font-semibold ${tone.label}`}>
-                    {tile.metric}
+                  <span className="block text-3xs text-fg-muted truncate leading-snug mt-0.5">
+                    {tile.summary}
                   </span>
                 </span>
-                <span className="block text-3xs text-fg-muted truncate leading-snug mt-0.5">
-                  {tile.summary}
-                </span>
-              </span>
-            </Link>
+              </Link>
+              {i < tiles.length - 1 && (
+                <PulseArrow
+                  fromHex={borderHex}
+                  toHex={STAGE_BORDER_HEX[tiles[i + 1].stage]}
+                />
+              )}
+            </div>
           )
         })}
       </div>

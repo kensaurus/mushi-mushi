@@ -4,7 +4,9 @@
 
 **The bug your monitoring can't see, in your queue with a draft fix.**
 
-Sentry catches what your code throws. Mushi catches what your users *feel* — the dead button, the 12-second screen, the layout that breaks on one Android.
+Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users *click*. Mushi catches what your users *feel* — the dead button, the 12-second screen, the layout that breaks on one Android.
+
+Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for Datadog / Crashlytics / New Relic and outbound plugins for Sentry / Slack / Jira / Linear / PagerDuty so every tool in your stack stays in the loop.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
@@ -45,6 +47,8 @@ Mushi v1 was the negative side: catch what your users *felt* break and triage it
 - 🚦 **Five gates, one composite GitHub check.** `mushi-mushi/no-dead-handler` (empty `onClick`s), `mushi-mushi/no-mock-leak` (faker / "John Doe" arrays in non-test paths), inventory drift (added / removed / renamed actions), agentic-failure detection (handler regressions across deploys), and synthetic walk health.
 - 🛰️ **Synthetic monitor** runs the inventory's `expected_outcome` checks against your staging URL on a cron — fail-closed by default, with explicit `synthetic_monitor_allow_mutations` opt-in for write paths.
 - 🕸️ **Graph gets a Surface mode** — the same `Bug graph` toggles to a `Surface` view that overlays the positive inventory on the live knowledge graph so you can see the dead corners.
+- 🧭 **Spec traceability is end-to-end (2026-05-09 release).** `expected_outcome` is a real schema field — its assertions ride along with every fix dispatch, get rendered into the LLM prompt, gate the PR through `validateAgainstSpec`, and trigger a *targeted* synthetic probe against the originating Action the moment the PR opens. Every `fix_attempt` row records the inventory `Action` it was meant to repair (`inventory_action_node_id`), so the admin "Where this fix came from" drawer can show the same spec the agent saw. See [How spec traceability works](#how-spec-traceability-works) below for the full chain.
+- 🔌 **First-class orchestrator interop.** Plug Mushi into Cursor, Claude Code, OpenAI Agents SDK, LangGraph, CrewAI, A2A v1.0.0 agents, or anything else: **MCP Streamable HTTP** at `/functions/v1/mcp` (2025-03-26 spec), **A2A `tasks` endpoints** at `/v1/a2a/tasks` (create / get / cancel / SSE subscribe), **OpenAPI 3.1** at `/openapi.json`, AG-UI v0.4 SSE accepts API keys (`mcp:read`), `SandboxProvider` is an open contract with a third-party registry, and JSON Schemas for `FixContext` / `FixResult` / `SandboxProvider` / `ExpectedOutcome` are served at `/v1/schemas/*`. See [Connecting your orchestrator](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop) for per-orchestrator recipes.
 
 Get started in any project that already has Mushi installed:
 
@@ -60,6 +64,86 @@ Get started in any project that already has Mushi installed:
 Inside your IDE the same commands are exposed as MCP tools via [`@mushi-mushi/mcp`](./packages/mcp/), so Cursor / Claude Code / Copilot can run them on your behalf. From the admin UI you click *Run gates* / *Run crawler* directly on each row of the User stories page.
 
 Full schema in [`@mushi-mushi/inventory-schema`](./packages/inventory-schema/), ESLint rules in [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi/), the auth-bootstrap helper in [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner/).
+
+---
+
+## How spec traceability works
+
+The most-asked v2 question is "how do you keep agent work tied back to the original spec once implementation starts?" Honest answer: until the 2026-05-09 release the read side was tight and the write side was a U-turn — the worker dropped the inventory pointer the moment dispatch started. That's now closed end-to-end.
+
+```
+report ──► classify-report writes graph_edge (reports_against)
+              │
+              ▼
+        inventory Action node ◄────────── inventory.yaml (expected_outcome)
+              │
+              ▼
+       POST /v1/admin/fixes/dispatch  (or /v1/a2a/tasks, MCP dispatch_fix)
+              │  body may carry { inventoryActionNodeId } — else worker walks the edge
+              ▼
+        fix_dispatch_jobs.inventory_action_node_id  ──► persisted
+              │
+              ▼
+        fix-worker assembles FixContext
+              + inventoryAction.expectedOutcome  ──► Markdown spec block in the LLM prompt
+              ▼
+        validateAgainstSpec  (deterministic pre-PR gate)
+              │  HARD ERROR if the diff removes a json_path field the contract asserts on
+              │  WARN to fix_attempts.spec_validation_warnings if no file references the contract's table / route
+              ▼
+        GitHub PR + fix_attempts row stamped with inventory_action_node_id
+              │
+              ▼
+        synthetic_runs queued (status='skipped', error_message='queued_post_pr', action_node_id=…)
+              │
+              ▼
+        synthetic-monitor cron drains the queue with priority on the next tick,
+        runs an HTTP probe, evaluates expected_outcome (status_in + JSONPath assertions),
+        records a real synthetic_runs row.
+              │
+              ▼
+        Status reconciler picks it up → admin UI flips the Action to verified / regressed.
+```
+
+Every link in that chain has a real column / migration / test:
+
+| Link | Where to look |
+| ---- | ------------- |
+| `expected_outcome` schema | [`packages/inventory-schema/src/index.ts`](./packages/inventory-schema/src/index.ts) — Zod + JSON Schema, mirrored at `/v1/schemas/expected-outcome.json` |
+| `inventory_action_node_id` columns | [`20260509100000_inventory_action_traceability.sql`](./packages/server/supabase/migrations/) — `fix_dispatch_jobs` + `fix_attempts` (FK, `ON DELETE SET NULL`) + `spec_validation_warnings JSONB` |
+| Spec context in the LLM prompt | `renderSpecContext()` in [`packages/agents/src/review.ts`](./packages/agents/src/review.ts), mirrored in [`packages/server/supabase/functions/fix-worker/index.ts`](./packages/server/supabase/functions/fix-worker/index.ts) |
+| Pre-PR gate | `validateAgainstSpec()` in [`packages/agents/src/review.ts`](./packages/agents/src/review.ts), wired into [`packages/agents/src/orchestrator.ts`](./packages/agents/src/orchestrator.ts) |
+| Post-PR probe | `drainPostPrQueue()` + `evaluateExpectedOutcome()` in [`packages/server/supabase/functions/synthetic-monitor/index.ts`](./packages/server/supabase/functions/synthetic-monitor/index.ts) |
+| External orchestrators see the same anchor | `dispatch_fix` and `get_fix_context` MCP tools in [`packages/server/supabase/functions/mcp/index.ts`](./packages/server/supabase/functions/mcp/index.ts); A2A `inventoryActionNodeId` body field in [`packages/server/supabase/functions/api/routes/a2a-tasks.ts`](./packages/server/supabase/functions/api/routes/a2a-tasks.ts) |
+
+What the agent sees in its prompt today (rendered by `renderSpecContext`):
+
+```markdown
+## Inventory Spec Context (whitepaper §2.10 spec-traceability)
+This fix was dispatched against a tracked Action in the project's `inventory.yaml`.
+The agent and the reviewer MUST keep the diff scoped to making the action work as
+specified — do NOT refactor unrelated code or break sibling actions on the same page.
+
+- Action: `signup-form: submit`
+- Description: Submit the signup form and create a new user
+- Page: `/signup` (id=`signup`)
+- User story: New user signup (`signup`)
+
+### Expected outcome contract (success criteria after fix)
+- Summary: POST /signup returns 200 and creates a user row
+- HTTP status MUST be one of: 200, 201
+- Response body assertions:
+  - `$.user.id` exists
+- Database: `public.users` MUST row_exists
+- UI MUST show text containing: "Welcome"
+- UI MUST navigate to: `/dashboard`
+
+After the PR merges, the synthetic monitor will probe the action against this
+contract. A draft fix that the synthetic monitor will then immediately mark
+`regressed` is worse than no fix at all.
+```
+
+The same anchor flows out to every external surface — Cursor / Claude Code / OpenAI Agents SDK / LangGraph / CrewAI / A2A all get the inventory Action and its `expected_outcome` via the MCP `get_fix_context` tool, the A2A Task `metadata.inventoryActionNodeId` field, or the dispatch row's column directly.
 
 ---
 
@@ -284,24 +368,40 @@ Mushi is honest about what's still partial. Skim before you commit:
 | Verify | Playwright screenshot diff + step interpreter (`navigate` / `click` / `type` / `press` / `select` / `assertText` / `waitFor` / `observe`) | — |
 | Enterprise | Plugin marketplace + HMAC, audit ingest, region pinning, retention CRUD, Stripe metering, **SAML SSO via Supabase Auth Admin API** | **OIDC SSO returns `501 Not Implemented`** — Supabase GoTrue does not yet expose admin endpoints for OIDC. The admin form still saves so the round-trip is tested; tracking the GoTrue changelog. |
 | Graph backend | SQL adjacency over `graph_nodes` / `graph_edges` ships in every deployment | Apache AGE is a hosted-tier enhancement when the extension is installed (self-hosted Postgres 16 or Supabase Enterprise). Managed Supabase stays on SQL adjacency. |
-| Inventory v2 | Hand-written `inventory.yaml`, SDK-driven discovery (`capture.discoverInventory`), Claude proposer, ESLint rules `no-dead-handler` + `no-mock-leak`, 5-gate composite GitHub check, synthetic monitor with explicit mutation opt-in, **Surface** mode in the graph | Inventory routes are gated behind *Advanced* mode in the sidebar (sidebar → User stories) — promote when the team is ready. Synthetic mutations stay fail-closed unless `synthetic_monitor_allow_mutations = true` is set per-project. |
+| Inventory v2 | Hand-written `inventory.yaml`, SDK-driven discovery (`capture.discoverInventory`), Claude proposer, ESLint rules `no-dead-handler` + `no-mock-leak`, 5-gate composite GitHub check, synthetic monitor with explicit mutation opt-in, **Surface** mode in the graph, **`expected_outcome` contract end-to-end** (schema → fix-worker prompt → `validateAgainstSpec` pre-PR gate → targeted post-PR synthetic probe) | Inventory routes are gated behind *Advanced* mode in the sidebar (sidebar → User stories) — promote when the team is ready. Synthetic mutations stay fail-closed unless `synthetic_monitor_allow_mutations = true` is set per-project. |
+| Orchestrator interop | **MCP Streamable HTTP** at `/functions/v1/mcp` (2025-03-26 spec), **A2A v1.0.0 `tasks` endpoints** at `/v1/a2a/tasks`, **OpenAPI 3.1 spec** at `/openapi.json`, AG-UI v0.4 SSE accepts API keys (`mcp:read`), `SandboxProvider` is an open contract with a third-party registry, JSON Schemas for `FixContext` / `FixResult` / `SandboxProvider` / `ExpectedOutcome` served at `/v1/schemas/*` | Outbound A2A push notifications (vs. SSE pull) land in a future PR — outbound webhook system already covers `fix.pr_opened` / `fix.failed` for HMAC-signed pushes. |
 
 The orchestrator **refuses to run `local-noop` in production** unless you explicitly set `MUSHI_ALLOW_LOCAL_SANDBOX=1`. Pick `e2b` (or implement `SandboxProvider` yourself) before exposing autofix to production traffic.
 
 ---
 
-## Compared to Sentry alone
+## Where Mushi fits
 
-| | Sentry alone | **Mushi Mushi** |
-| --- | :--: | :--: |
-| What it sees | Errors your code throws | Friction your users feel |
-| What lands in your queue | A stack trace | A short user note plus the screenshot they were looking at |
-| Repeat bugs | Each one is a new issue | The same broken button collapses to one row |
-| Closing the loop | Assign a ticket and remember to update it | An optional draft PR you can merge or ignore |
-| From your IDE | Copy the issue ID into Cursor | Cursor reads the report and proposes the diff |
-| Where it runs | Their cloud | Yours, ours, or both |
+Every team we talk to already runs three kinds of monitoring. Mushi is the fourth layer none of them cover.
 
-Mushi is designed as a **companion** to your existing monitoring, not a replacement. Reports stream through to Sentry breadcrumbs and link back to the offending session. The marketing landing at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) walks the comparison in more detail.
+| Signal | Typical tools | What they miss |
+| --- | --- | --- |
+| Code-thrown errors | Sentry, Crashlytics, Bugsnag, Rollbar | Bugs that don't throw — dead buttons, janky scroll, 12-second screens |
+| System telemetry | Datadog, New Relic, Honeycomb, Grafana | The user's perspective on what that latency spike felt like |
+| Product analytics | Firebase Analytics, PostHog, Amplitude | *Why* a funnel step was abandoned, in the user's own words |
+| **User-felt friction** | **nothing → Mushi** | — |
+
+Mushi is the **synthesis layer**, not a replacement. It adds the one signal that's missing, and ingests the others so a single classified bug row can carry everything at once: the stack trace from Crashlytics, the latency spike from Datadog, the funnel drop from Firebase, AND the user's screenshot and note.
+
+### Compared to each tool you already have
+
+| | Sentry / Crashlytics | Datadog / New Relic | Firebase / Amplitude | **Mushi Mushi** |
+| --- | :--- | :--- | :--- | :--- |
+| **Signal origin** | Code throws | Infrastructure metrics | User event streams | User-felt friction, captured in the moment |
+| **What lands in your queue** | Stack trace | Alert threshold breach | Funnel drop-off | User note + screenshot + device context |
+| **Repeat signal** | Same error = separate issue | Spike repeats → new alert | Conversion drops again | Same broken button collapses to one row |
+| **Closing the loop** | Assign a ticket | Write a runbook | A/B test the conversion | Optional draft PR you merge, edit, or close |
+| **From your IDE** | Paste issue ID into Cursor | — | — | Cursor reads the report and proposes the diff |
+| **Where it runs** | Their cloud | Their cloud | Google cloud | Yours, ours, or both |
+
+Mushi is already wired to send signals **back** to the tools you run — Sentry breadcrumbs, Slack, Jira, Linear, PagerDuty — and to **receive** alerts from Datadog / New Relic / Honeycomb / Grafana via [`@mushi-mushi/adapters`](./packages/adapters). You don't replace anything; you add the layer that completes the picture.
+
+The marketing landing at [`kensaur.us/mushi-mushi/`](https://kensaur.us/mushi-mushi/) walks the full integration story.
 
 ---
 
@@ -336,6 +436,9 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | `npm i @mushi-mushi/angular` | Angular 17+ | `provideMushi()`, `MushiService`, error handler |
 | `npm i @mushi-mushi/react-native` | React Native / Expo | Shake-to-report, bottom-sheet widget, navigation capture, offline queue |
 | `npm i @mushi-mushi/capacitor` | Capacitor / Ionic | iOS + Android via Capacitor |
+| `pub add mushi_mushi` | Flutter / Dart | Shake-to-report, screenshot capture, offline queue — iOS + Android + Web |
+| Swift PM `.package(url:…)` | iOS (Swift) | Native shake-to-report, `MushiConfig`, SwiftUI / UIKit early dev |
+| Gradle `dev.mushimushi:mushi-android` | Android (Kotlin/Java) | Native shake-to-report, early dev |
 | `npm i @mushi-mushi/web` | Vanilla / any framework | Framework-agnostic SDK |
 | `npm i @mushi-mushi/node` | Node (Express / Fastify / Hono) | Server-side SDK — error-handler middleware, `uncaughtException` hook |
 | `npm i @mushi-mushi/adapters` | Any Node webhook server | Translate Datadog / New Relic / Honeycomb / Grafana alerts into Mushi reports |
@@ -347,7 +450,7 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | ------- | ------- |
 | [`@mushi-mushi/core`](./packages/core) | Shared engine — types, API client, PII scrubber, offline queue, rate limiter, **v2.1 `discoverInventory` types** |
 | [`@mushi-mushi/cli`](./packages/cli) | CLI for project setup, report listing, triage |
-| [`@mushi-mushi/mcp`](./packages/mcp) | MCP server — Cursor / Copilot / Claude read, triage, classify, dispatch fixes |
+| [`@mushi-mushi/mcp`](./packages/mcp) | MCP server — Cursor / Copilot / Claude read, triage, classify, dispatch fixes. **Both stdio (local) and Streamable HTTP (`/functions/v1/mcp`, hosted) transports per the 2025-03-26 spec.** Discoverable via `/.well-known/agent-card`, `/openapi.json`, and `/v1/a2a/tasks` (A2A v1.0.0). |
 | [`@mushi-mushi/mcp-ci`](./packages/mcp-ci) | GitHub Action — `gates`, `discover-api`, `discovery-status`, `propose`, `auth-bootstrap` (the v2 pre-release suite + new MCP CLI) |
 | [`@mushi-mushi/inventory-schema`](./packages/inventory-schema) | **v2 source of truth** — Zod + JSON Schema for `inventory.yaml`, used by the admin ingester, gate runner, LLM proposer, and GitHub Action |
 | [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi) | **v2 gate rules** — `no-dead-handler` (empty `onClick` etc.) and `no-mock-leak` (faker / "John Doe" arrays in non-test paths). Ships a `recommended` preset |
@@ -356,6 +459,9 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | [`@mushi-mushi/plugin-jira`](./packages/plugin-jira) | Bidirectional Mushi ↔ Jira Cloud sync |
 | [`@mushi-mushi/plugin-slack-app`](./packages/plugin-slack-app) | First-class Slack app — `/mushi` slash command |
 | [`@mushi-mushi/plugin-linear`](./packages/plugin-linear) | Reference plugin — create + sync Linear issues |
+| [`@mushi-mushi/plugin-pagerduty`](./packages/plugin-pagerduty) | Reference plugin — page on-call via PagerDuty when a critical bug is reported |
+| [`@mushi-mushi/plugin-zapier`](./packages/plugin-zapier) | Reference plugin — fan out any Mushi event to a Zapier-style incoming webhook |
+| [`@mushi-mushi/plugin-sentry`](./packages/plugin-sentry) | Reference plugin — mirror critical user-reported bugs into Sentry; resolves the Sentry fingerprint when Mushi applies a fix |
 | `@mushi-mushi/server` (BSL 1.1) | Edge functions — classification pipeline, knowledge graph, fix dispatch + SSE, RAG indexer |
 | `@mushi-mushi/agents` (BSL 1.1) | Agentic fix orchestrator — `validateResult` gating, GitHub PR creation, sandbox abstraction |
 | `@mushi-mushi/verify` (BSL 1.1) | Playwright fix verification — screenshot visual diff + step interpreter |
@@ -377,10 +483,22 @@ pnpm dev
 
 Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setup, [`docs/`](./docs/) for handover notes (newest first), and [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md) for the full admin tour.
 
-## License
+## License & branding
 
-- **SDK packages** (core, web, react, vue, svelte, angular, react-native, cli, mcp): [MIT](./LICENSE)
-- **Server, agents, verify**: [BSL 1.1](./packages/server/LICENSE) — converts to Apache 2.0 on April 15, 2029.
+This repository is dual-licensed because the **code** is open source but
+the **brand** is not. The split is what lets us welcome forks while
+making it hard for bad actors to ship a malicious copy under our name.
+
+| Surface | License | Permitted | Notes |
+|---|---|---|---|
+| SDK packages — `core`, `web`, `react`, `vue`, `svelte`, `angular`, `react-native`, `flutter`, `ios`, `android`, `cli`, `mcp`, `plugin-*`, `adapters`, `brand`, `marketing-ui` | [MIT](./LICENSE) | Use, fork, sell, embed in proprietary products. | Trademarks separate — see below. |
+| Server packages — `@mushi-mushi/server`, `@mushi-mushi/agents`, `@mushi-mushi/verify` | [BSL 1.1](./packages/server/LICENSE) | Self-host for your own org. Modify. Resell embedded. | Cannot offer as a hosted bug-reporting service to third parties until **2029-04-15**, when it converts to Apache 2.0 automatically. |
+| Trademarks — "Mushi Mushi", "Mushi", 虫, the bug logo, the visual identity | [Trademark policy](./TRADEMARK.md) | Refer to the project, build add-ons, link to the repo. | **Forks must rename.** Hosting a service under the Mushi name requires written permission. Use on malware / phishing kits is enforced against. |
+| Third-party attributions | [NOTICE](./NOTICE) | — | One-stop list of upstream projects we depend on and their licenses. |
+
+If you're a security researcher, see [`SECURITY.md`](./SECURITY.md) for
+the threat model, PII commitments, coordinated-disclosure timeline, and
+safe-harbor terms.
 
 ---
 

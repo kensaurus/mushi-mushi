@@ -3,34 +3,49 @@
  * PURPOSE: Unit tests for the Angular Mushi SDK — MushiService, MushiErrorHandler, provideMushi.
  *
  * OVERVIEW:
- * - Verifies MushiService constructor creates an API client
- * - Tests submitReport delegates to the underlying client
- * - Tests captureError handles both Error objects and strings
- * - Tests MushiErrorHandler.handleError delegates to MushiService
+ * - Verifies MushiService constructor delegates to Mushi.init() from @mushi-mushi/web
+ * - Tests report() and submitReport() delegate to the SDK captureEvent
+ * - Tests captureError delegates to captureException
+ * - Tests MushiErrorHandler.handleError delegates to MushiService.captureError
  * - Tests provideMushi factory returns service + errorHandler pair
+ * - After init, Mushi.getInstance() returns the SDK instance (parity check)
  *
  * DEPENDENCIES:
  * - vitest for test runner and mocking
- * - @mushi-mushi/core mocked entirely
+ * - @mushi-mushi/web mocked entirely
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const mockSubmitReport = vi.fn().mockResolvedValue(undefined)
-const mockClient = { submitReport: mockSubmitReport }
+// `vi.mock` is hoisted ABOVE module-level `const` declarations, so the
+// factory cannot reference closure variables defined below it (TDZ:
+// "Cannot access 'mockInit' before initialization"). `vi.hoisted` lifts
+// the mock state so the factory and the test body see the same `vi.fn`s.
+const mocks = vi.hoisted(() => {
+  const mockCaptureException = vi.fn().mockResolvedValue(null)
+  const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
+  const mockSdkInstance = {
+    captureException: mockCaptureException,
+    captureEvent: mockCaptureEvent,
+    open: vi.fn(),
+    close: vi.fn(),
+  }
+  return {
+    mockCaptureException,
+    mockCaptureEvent,
+    mockSdkInstance,
+    mockInit: vi.fn().mockReturnValue(mockSdkInstance),
+    mockGetInstance: vi.fn().mockReturnValue(mockSdkInstance),
+  }
+})
+const { mockCaptureException, mockCaptureEvent, mockSdkInstance, mockInit, mockGetInstance } = mocks
 
-vi.mock('@mushi-mushi/core', () => ({
-  createApiClient: vi.fn(() => mockClient),
-  captureEnvironment: vi.fn(() => ({ userAgent: 'test' })),
-  getSessionId: vi.fn(() => 'session-123'),
-  getReporterToken: vi.fn(() => 'token-abc'),
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    fatal: vi.fn(),
-  })),
+vi.mock('@mushi-mushi/web', () => ({
+  Mushi: {
+    init: mocks.mockInit,
+    getInstance: mocks.mockGetInstance,
+    destroy: vi.fn(),
+  },
 }))
 
 import { MushiService, MushiErrorHandler, provideMushi } from '../index'
@@ -43,53 +58,68 @@ const testConfig = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockInit.mockReturnValue(mockSdkInstance)
+  mockGetInstance.mockReturnValue(mockSdkInstance)
 })
 
 describe('MushiService', () => {
-  it('constructor creates API client with correct config', async () => {
+  it('constructor delegates to Mushi.init with correct config', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
     new MushiService(testConfig)
 
-    const { createApiClient } = await import('@mushi-mushi/core')
-    expect(createApiClient).toHaveBeenCalledWith({
+    expect(Mushi.init).toHaveBeenCalledWith({
       projectId: 'proj_test',
       apiKey: 'key_test',
       apiEndpoint: 'https://test.api',
     })
   })
 
+  it('after init, Mushi.getInstance() returns the instance (parity check)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    new MushiService(testConfig)
+    expect(Mushi.getInstance()).toBeDefined()
+    expect(Mushi.getInstance()).toBe(mockSdkInstance)
+  })
+
   it('defers to core default endpoint when not provided', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
     new MushiService({ projectId: 'p', apiKey: 'k' })
 
-    const { createApiClient } = await import('@mushi-mushi/core')
-    // V5.3: angular no longer hardcodes the endpoint; it omits apiEndpoint so
-    // @mushi-mushi/core's DEFAULT_API_ENDPOINT applies. Verify the call did
-    // NOT include an apiEndpoint property at all.
-    const call = (createApiClient as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]
+    const call = (Mushi.init as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]
     expect(call?.[0]).not.toHaveProperty('apiEndpoint')
   })
 
-  it('submitReport calls client.submitReport with built report', async () => {
+  it('report() calls captureEvent on the SDK instance', async () => {
     const service = new MushiService(testConfig)
-    await service.submitReport({ description: 'test bug', category: 'bug' })
+    await service.report({ description: 'test bug', category: 'bug' })
 
-    expect(mockSubmitReport).toHaveBeenCalledWith(
+    expect(mockCaptureEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        projectId: 'proj_test',
         description: 'test bug',
         category: 'bug',
       }),
     )
   })
 
-  it('captureError handles Error objects', () => {
+  it('submitReport() delegates to report() for backwards compatibility', async () => {
+    const service = new MushiService(testConfig)
+    await service.submitReport({ description: 'test bug', category: 'bug' })
+
+    expect(mockCaptureEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        description: 'test bug',
+        category: 'bug',
+      }),
+    )
+  })
+
+  it('captureError calls captureException on the SDK instance', () => {
     const service = new MushiService(testConfig)
     service.captureError(new Error('something broke'))
 
-    expect(mockSubmitReport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        description: 'something broke',
-        category: 'bug',
-      }),
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      expect.objectContaining({}),
     )
   })
 
@@ -97,11 +127,9 @@ describe('MushiService', () => {
     const service = new MushiService(testConfig)
     service.captureError('string error')
 
-    expect(mockSubmitReport).toHaveBeenCalledWith(
-      expect.objectContaining({
-        description: 'string error',
-        category: 'bug',
-      }),
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      'string error',
+      expect.objectContaining({}),
     )
   })
 })

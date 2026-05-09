@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { reportPermalink } from '../lib/reportUrl'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { useStagedRealtime } from '../lib/useStagedRealtime'
@@ -576,7 +577,7 @@ export function ReportsPage() {
 
   const handleCopyLink = useCallback(
     (r: ReportRow) => {
-      const url = `${window.location.origin}/reports/${r.id}`
+      const url = reportPermalink(r.id)
       navigator.clipboard.writeText(url).then(
         () => toast.success('Link copied'),
         () => toast.error('Could not copy link'),

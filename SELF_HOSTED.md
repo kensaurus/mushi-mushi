@@ -36,6 +36,13 @@ This creates all tables, RLS policies, indexes, and RPCs.
 npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 # Optional: failover provider
 npx supabase secrets set OPENAI_API_KEY=sk-...
+
+# Required for report deep-links in Slack / Discord notifications.
+# Set this to the base URL of your deployed admin console (no trailing slash).
+# Example: https://your-domain.example.com/admin
+# On kensaur.us this is: https://kensaur.us/mushi-mushi/admin
+# When unset, notification buttons degrade gracefully (no URL, no crash).
+npx supabase secrets set ADMIN_BASE_URL=https://your-domain.example.com/admin
 ```
 
 ## 4. Deploy Edge Functions
@@ -162,6 +169,33 @@ embedding column in `report_embeddings`. The functions still live in the
 correct namespaces (`vector.*`, `net.*`) so this has no functional impact.
 
 **Auth hardening:** Two further `WARN`s require dashboard configuration that
-isn't covered by migrations: enable HaveIBeenPwned-based leaked-password
-protection in **Authentication → Policies**, and turn on at least one
-additional MFA factor in **Authentication → Providers**.
+isn't covered by migrations:
+
+1. **Leaked-password protection** (`auth_leaked_password_protection`): In the
+   [Supabase dashboard](https://app.supabase.com) → your project →
+   **Authentication** → **Sign In / Sign Up** → **Password Security** → enable
+   **HaveIBeenPwned password check**. This prevents users from setting passwords
+   that appear in public breach datasets.
+
+2. **MFA / second factor** (`auth_insufficient_mfa_options`): Navigate to
+   **Authentication** → **Providers** → enable at least one second factor beyond
+   email (e.g. **TOTP authenticator app** or **SMS**). With only password auth
+   enabled, Supabase flags the project as having insufficient MFA options. TOTP
+   via Google Authenticator is the recommended option for self-hosters — it has
+   no SMS cost and works offline.
+
+Both are dashboard-level toggles on Supabase managed projects. For self-hosted
+Supabase (running `supabase start` locally or self-managed Postgres), set the
+equivalent `GOTRUE_*` environment variables in your `supabase/config.toml`:
+
+```toml
+[auth]
+# Enable HaveIBeenPwned leaked-password check
+enable_pwned_passwords = true
+
+[auth.mfa]
+# Enable TOTP as a second factor
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+```

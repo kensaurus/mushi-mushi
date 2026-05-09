@@ -120,6 +120,90 @@ export const testRefSchema = z.object({
 })
 export type TestRef = z.infer<typeof testRefSchema>
 
+// ---- expected_outcome ---------------------------------------------------
+//
+// Machine-readable contract describing what a successful invocation of this
+// action MUST produce. Consumed by:
+//   - the Synthetic Monitor — every probe asserts these checks against the
+//     live response / DB row instead of just "did the endpoint 2xx?"
+//   - the Fix-Worker — the LLM prompt includes these checks so any draft fix
+//     has the success criteria inline (whitepaper §2.10 spec-traceability)
+//   - the Judge — fix attempts are scored against whether the merged change
+//     would still satisfy the contract
+//
+// All checks are optional. An action with no `expected_outcome` falls back to
+// the legacy "endpoint reachable + 2xx" probe (still better than nothing).
+//
+// HTTP shape (`response`): asserts on the verified_by API call.
+//   - `status_in: [200, 201]` — accepted status codes (default: 2xx)
+//   - `json_path` entries — JSONPath-lite expression + operator + value.
+//     Operators: `exists`, `equals`, `not_equals`, `contains`, `gt`, `gte`,
+//     `lt`, `lte`, `matches` (regex). Path syntax is dotted with `[*]` for
+//     "any element" e.g. `data.items[*].id`.
+//
+// DB shape (`database`): asserts on the side-effect of an insert/update.
+//   - `table` — required when `database` is present
+//   - `where` — partial column match used to find the row that should now
+//     exist. Values are matched literally; `null` is allowed.
+//   - `expect: 'row_exists' | 'row_absent' | 'row_count_at_least'`
+//   - `min_count` — only used with `row_count_at_least`
+//
+// UI shape (`ui`): asserts that the visible state changed — used by the
+// (planned) Playwright sandbox probe and currently rendered as guidance only.
+//   - `visible_text` — substring that should appear in the page after action
+//   - `route_change_to` — path the user should land on (supports `/foo/:id`
+//     style placeholders)
+//
+// Free-form `summary` is the human one-liner shown in the admin UI for
+// readers; the machine probes ignore it.
+//
+// Customers MAY also use the `extensions` escape hatch (see appSchema /
+// inventorySchema) for plugin-defined assertions that don't fit any of the
+// above shapes; those are returned untouched but not enforced by Mushi.
+export const expectedOutcomeJsonPathCheckSchema = z.object({
+  path: z.string().min(1).max(200),
+  op: z.enum([
+    'exists',
+    'equals',
+    'not_equals',
+    'contains',
+    'gt',
+    'gte',
+    'lt',
+    'lte',
+    'matches',
+  ]),
+  value: z.unknown().optional(),
+})
+export type ExpectedOutcomeJsonPathCheck = z.infer<typeof expectedOutcomeJsonPathCheckSchema>
+
+export const expectedOutcomeResponseSchema = z.object({
+  status_in: z.array(z.number().int().min(100).max(599)).optional(),
+  json_path: z.array(expectedOutcomeJsonPathCheckSchema).optional(),
+})
+
+export const expectedOutcomeDatabaseSchema = z.object({
+  table: z.string().min(1).max(120),
+  schema: z.string().min(1).max(80).optional().default('public'),
+  where: z.record(z.string(), z.unknown()).optional(),
+  expect: z.enum(['row_exists', 'row_absent', 'row_count_at_least']).optional().default('row_exists'),
+  min_count: z.number().int().min(1).optional(),
+})
+
+export const expectedOutcomeUiSchema = z.object({
+  visible_text: z.string().max(400).optional(),
+  route_change_to: z.string().max(200).optional(),
+})
+
+export const expectedOutcomeSchema = z.object({
+  summary: z.string().max(400).optional(),
+  response: expectedOutcomeResponseSchema.optional(),
+  database: expectedOutcomeDatabaseSchema.optional(),
+  ui: expectedOutcomeUiSchema.optional(),
+  extensions: z.record(z.string(), z.unknown()).optional(),
+})
+export type ExpectedOutcome = z.infer<typeof expectedOutcomeSchema>
+
 // ---- element / action ---------------------------------------------------
 
 export const elementSchema = z.object({
@@ -134,6 +218,7 @@ export const elementSchema = z.object({
   user_story: z.string().max(400).optional(),
   status: z.enum(STATUSES).optional(),
   last_verified: isoDateTime.optional(),
+  expected_outcome: expectedOutcomeSchema.optional(),
   notes: z.string().max(1000).optional(),
   owner_team: z.string().max(80).optional(),
   testid: z.string().max(120).optional(),

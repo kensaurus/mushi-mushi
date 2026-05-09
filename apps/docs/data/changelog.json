@@ -1,5 +1,82 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "`createBreadcrumbBuffer(options?)`",
+        "description": "— 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars *at insert time* so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
+      },
+      {
+        "title": "`normaliseThrown(thrown)`",
+        "description": "— turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation."
+      },
+      {
+        "title": "`captureEnvironment()` expansion",
+        "description": "— same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload."
+      },
+      {
+        "title": "W3C `traceparent` end-to-end.",
+        "description": "`MushiNodeClient.captureReport()` and the `express` / `fastify` / `hono` middlewares now extract the inbound `traceparent` header (or `payload.metadata.traceparent`) and forward it through Mushi → classify → fix dispatch → adapter calls. Your customer APM (Sentry, Datadog, Honeycomb, Tempo, Jaeger) shows one unbroken trace from \"user clicks report\" through \"PR opens\" without any host-app glue."
+      },
+      {
+        "title": "`createOtelSpanProcessor()` upgraded.",
+        "description": "New optional `OtelSpanProcessorOptions` — set `errorsOnly: false` to forward all sampled spans, or set `otlpEndpoint` / `otlpHeaders` to fan out to your own OTLP/HTTP+JSON collector (BYOK; defaults read `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS`)."
+      },
+      {
+        "title": "`inventory://current`",
+        "description": "resource — exposes the latest inventory snapshot to MCP clients with live `notifications/resources/updated` events when a new `inventory.yaml` is ingested. No more polling; LangGraph / OpenAI Agents / Claude Desktop see the new spec the moment it lands."
+      },
+      {
+        "title": "`project://integration-health`",
+        "description": "resource — last-known status for every BYOK channel (Jira, Linear, GitHub, PagerDuty, Slack, Datadog, Sentry, Honeycomb, Crashlytics, Bugsnag, Rollbar, MS Teams, Discord, Opsgenie, CloudWatch, Firebase Analytics, Grafana Loki, New Relic, Bugsnag) so an orchestrator can pre-flight before dispatching a fix."
+      },
+      {
+        "title": "`dispatch_fix` accepts `inventoryActionNodeId`",
+        "description": "— optional spec-traceability anchor (whitepaper §2.10). The fix-worker skips the graph walk and includes the Action's `expected_outcome` contract verbatim in the LLM prompt."
+      },
+      {
+        "title": "`dispatch_fix` accepts `idempotencyKey`",
+        "description": "— surfaces the new server-side `Idempotency-Key` header so a retried tool call can never double-dispatch."
+      },
+      {
+        "title": "[Standard Webhooks](https://www.standardwebhooks.com/) signature verification.",
+        "description": "Mushi now emits both legacy `X-Mushi-Signature` AND the standard `webhook-id` / `webhook-timestamp` / `webhook-signature` headers. Plugins built with `createPluginHandler` automatically prefer the standard headers when present and fall back to legacy. Receivers using competing tooling (Hookdeck, Inngest, Convoy, Defang) verify Mushi events without custom code."
+      },
+      {
+        "title": "OAuth 2.0 Dynamic Client Registration",
+        "description": "(`POST /v1/admin/auth/register`, [RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)) — orchestrators self-onboard with an initial-access API key and receive `client_id` / `client_secret`. Audit-logged + cross-tenant safe (caller can only register clients in projects they own/admin)."
+      },
+      {
+        "title": "Idempotency-Key middleware",
+        "description": "on `POST /v1/admin/fixes/dispatch` and `POST /v1/a2a/tasks` — RFC-style replay-on-retry, scoped by authenticated `user_id` (not body-supplied projectId) so a logged-in user cannot pollute another user's key namespace. JSON 2xx/4xx responses cached for 24h; 5xx and SSE responses always re-execute."
+      },
+      {
+        "title": "`.well-known/agent-card`",
+        "description": "discovery doc bumped to `schemaVersion: 1.0`, advertises the new tracing / webhooks / idempotency / dynamic-registration / `Last-Event-Id` capabilities."
+      },
+      {
+        "title": "`GET /v1/admin/integrations/health`",
+        "description": "— live integration health probe summary (status, latency, last-checked, source)."
+      },
+      {
+        "title": "`GET /v1/admin/inventory/:projectId/agents.md`",
+        "description": "— auto-generated Markdown manifest of every Action node + open report for human/LLM consumption (also `?format=json`)."
+      },
+      {
+        "title": "`Last-Event-Id` resume",
+        "description": "on `/v1/admin/fixes/dispatch/:id/stream` and `/v1/a2a/tasks/:id:subscribe` — clients reconnect after a network blip and replay missed `fix_events` without losing the trace."
+      },
+      {
+        "title": "42 missing FK indexes added",
+        "description": ", 8 RLS policies rewritten with `(SELECT auth.uid())` initplan pattern, `citext` extension moved out of `public` (Supabase advisor cleanup wave)."
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "0.9",
     "headline": null,
     "pending": false,

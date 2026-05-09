@@ -27,6 +27,11 @@ import { getBlastRadius } from '../../_shared/knowledge-graph.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
+import {
+  probeIntegration,
+  ALL_INTEGRATION_KINDS,
+  type IntegrationKind,
+} from '../../_shared/integration-probes.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
 import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
@@ -230,206 +235,54 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
   // bearer token + repo). Generic adapters end up as a giant switch
   // statement anyway — keeping them named makes the code grep-friendly.
 
-  const INTEGRATION_KINDS = ['sentry', 'langfuse', 'github', 'anthropic', 'openai'] as const;
-  type IntegrationKind = (typeof INTEGRATION_KINDS)[number];
-
   app.post('/v1/admin/health/integration/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind') as IntegrationKind;
-    if (!INTEGRATION_KINDS.includes(kind)) {
+    if (!ALL_INTEGRATION_KINDS.includes(kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
 
     const db = getServiceClient();
-    // Teams v1: any member can probe an integration in an org they belong
-    // to. Pick the first accessible project (matches /v1/admin/health/history
-    // semantics; integrations are wired per-project but health probes are
-    // workspace-level so the precise pick doesn't matter).
+    // Teams v1: any member can probe an integration in an org they belong to.
+    // Health probes are workspace-level — the precise project pick doesn't matter.
     const accessibleIds = await ownedProjectIds(db, userId);
     if (accessibleIds.length === 0) return c.json({ ok: false, error: { code: 'NO_PROJECT' } }, 404);
-    const project = { id: accessibleIds[0] };
+    const projectId = accessibleIds[0];
 
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_project_slug, sentry_auth_token_ref, sentry_dsn, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref',
       )
-      .eq('project_id', project.id)
+      .eq('project_id', projectId)
       .single();
 
-    const startedAt = Date.now();
-    let healthStatus: 'ok' | 'degraded' | 'down' | 'unknown' = 'unknown';
-    let detail = '';
-    let httpStatus = 0;
+    // For routing-provider probes, load the stored config from project_integrations.
+    // Map kind → integration_type (github_issues is stored as 'github' in project_integrations).
+    const routingType = kind === 'github_issues' ? 'github' : kind;
+    const { data: routingRow } = await db
+      .from('project_integrations')
+      .select('config')
+      .eq('project_id', projectId)
+      .eq('integration_type', routingType)
+      .eq('is_active', true)
+      .maybeSingle();
+    const routingConfig = (routingRow?.config ?? {}) as Record<string, unknown>;
 
-    try {
-      if (kind === 'sentry') {
-        const token = await dereferenceMaybeVault(db, settings?.sentry_auth_token_ref ?? null);
-        const org = settings?.sentry_org_slug;
-        if (!token || !org) {
-          healthStatus = 'unknown';
-          detail =
-            'Set sentry_org_slug and sentry_auth_token in Integrations to enable health checks.';
-        } else {
-          const res = await fetch(
-            `https://sentry.io/api/0/organizations/${encodeURIComponent(org)}/`,
-            {
-              headers: { Authorization: `Bearer ${token}` },
-              signal: AbortSignal.timeout(8_000),
-            },
-          );
-          httpStatus = res.status;
-          healthStatus = res.ok
-            ? 'ok'
-            : res.status === 401 || res.status === 403
-              ? 'down'
-              : 'degraded';
-          if (!res.ok) detail = `HTTP ${res.status}`;
-        }
-      } else if (kind === 'langfuse') {
-        const host =
-          settings?.langfuse_host ||
-          Deno.env.get('LANGFUSE_BASE_URL') ||
-          'https://cloud.langfuse.com';
-        const pub =
-          (await dereferenceMaybeVault(db, settings?.langfuse_public_key_ref ?? null)) ||
-          Deno.env.get('LANGFUSE_PUBLIC_KEY') ||
-          '';
-        const sec =
-          (await dereferenceMaybeVault(db, settings?.langfuse_secret_key_ref ?? null)) ||
-          Deno.env.get('LANGFUSE_SECRET_KEY') ||
-          '';
-        if (!pub || !sec) {
-          healthStatus = 'unknown';
-          detail = 'Add Langfuse public + secret keys (or set env vars on the host).';
-        } else {
-          const auth = btoa(`${pub}:${sec}`);
-          const res = await fetch(`${host.replace(/\/$/, '')}/api/public/health`, {
-            headers: { Authorization: `Basic ${auth}` },
-            signal: AbortSignal.timeout(8_000),
-          });
-          httpStatus = res.status;
-          healthStatus = res.ok ? 'ok' : res.status === 401 ? 'down' : 'degraded';
-          if (!res.ok) detail = `HTTP ${res.status}`;
-        }
-      } else if (kind === 'anthropic') {
-        // Minimal-cost 1-token probe against Anthropic Messages API. Uses
-        // Haiku (cheapest available) with max_tokens=1 so a healthy round
-        // trip costs well under $0.0001. Abort after 5s so a stuck upstream
-        // can't block the health dashboard.
-        const key = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
-        if (!key) {
-          healthStatus = 'unknown';
-          detail = 'ANTHROPIC_API_KEY is not set on the server.';
-        } else {
-          const res = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'x-api-key': key,
-              'anthropic-version': '2023-06-01',
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'claude-haiku-4-5',
-              max_tokens: 1,
-              messages: [{ role: 'user', content: 'ping' }],
-            }),
-            signal: AbortSignal.timeout(5_000),
-          });
-          httpStatus = res.status;
-          healthStatus = res.ok
-            ? 'ok'
-            : res.status === 401 || res.status === 403
-              ? 'down'
-              : 'degraded';
-          if (!res.ok) {
-            const body = await res.text().catch(() => '');
-            detail = `HTTP ${res.status}${body ? ` — ${body.slice(0, 160)}` : ''}`;
-          }
-        }
-      } else if (kind === 'openai') {
-        // Chat-completion 1-token probe against OpenAI. We use the cheapest
-        // current-generation model (gpt-5.4-mini) so this stays a rounding
-        // error on the monthly bill.
-        const key = Deno.env.get('OPENAI_API_KEY') ?? '';
-        if (!key) {
-          healthStatus = 'unknown';
-          detail = 'OPENAI_API_KEY is not set on the server.';
-        } else {
-          const res = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${key}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'gpt-5.4-mini',
-              max_tokens: 1,
-              messages: [{ role: 'user', content: 'ping' }],
-            }),
-            signal: AbortSignal.timeout(5_000),
-          });
-          httpStatus = res.status;
-          healthStatus = res.ok
-            ? 'ok'
-            : res.status === 401 || res.status === 403
-              ? 'down'
-              : 'degraded';
-          if (!res.ok) {
-            const body = await res.text().catch(() => '');
-            detail = `HTTP ${res.status}${body ? ` — ${body.slice(0, 160)}` : ''}`;
-          }
-        }
-      } else if (kind === 'github') {
-        const token =
-          (await dereferenceMaybeVault(db, settings?.github_installation_token_ref ?? null)) ||
-          Deno.env.get('GITHUB_TOKEN') ||
-          '';
-        const url = settings?.github_repo_url ?? '';
-        // Repo names can contain dots (e.g. glot.it). Strip optional trailing
-        // `.git` and capture everything up to the next `/` or end-of-string.
-        const match = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/);
-        if (!token || !match) {
-          healthStatus = 'unknown';
-          detail = 'Add github_repo_url and a GitHub App / PAT installation token.';
-        } else {
-          const [, owner, repo] = match;
-          const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-              'User-Agent': 'mushi-mushi-health-probe/1.0',
-            },
-            signal: AbortSignal.timeout(8_000),
-          });
-          httpStatus = res.status;
-          healthStatus = res.ok
-            ? 'ok'
-            : res.status === 401 || res.status === 403 || res.status === 404
-              ? 'down'
-              : 'degraded';
-          if (!res.ok) detail = `HTTP ${res.status}`;
-        }
-      }
-    } catch (err) {
-      healthStatus = 'down';
-      detail = String(err).slice(0, 200);
-    }
+    const probe = await probeIntegration(kind, db, settings ?? {}, routingConfig);
 
-    const latencyMs = Date.now() - startedAt;
     await db.from('integration_health_history').insert({
-      project_id: project.id,
+      project_id: projectId,
       kind,
-      status: healthStatus,
-      latency_ms: latencyMs,
-      message: detail || (httpStatus ? `HTTP ${httpStatus}` : null),
+      status: probe.status,
+      latency_ms: probe.latencyMs,
+      message: probe.detail || (probe.httpStatus ? `HTTP ${probe.httpStatus}` : null),
       source: 'manual',
     });
 
     return c.json({
       ok: true,
-      data: { kind, status: healthStatus, httpStatus, latencyMs, detail },
+      data: { kind, status: probe.status, httpStatus: probe.httpStatus, latencyMs: probe.latencyMs, detail: probe.detail },
     });
   });
 
@@ -452,18 +305,6 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
 
     return c.json({ ok: true, data: { history: data ?? [] } });
   });
-
-  async function dereferenceMaybeVault(
-    db: ReturnType<typeof getServiceClient>,
-    ref: string | null,
-  ): Promise<string | null> {
-    if (!ref) return null;
-    if (!ref.startsWith('vault://')) return ref;
-    const id = ref.slice('vault://'.length);
-    const { data, error } = await db.rpc('vault_get_secret', { secret_id: id });
-    if (error) return null;
-    return typeof data === 'string' ? data : null;
-  }
 
   // Single source of truth for "what can this caller do?". Used by every
   // admin-frontend gate so the UI stays in lockstep with the server-side

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertEndpoint, DEFAULT_ENDPOINT, normalizeEndpoint } from './endpoint.js'
+import { assertEndpoint, normalizeEndpoint } from './endpoint.js'
 
 describe('assertEndpoint', () => {
   it('accepts https URLs', () => {
@@ -36,8 +36,12 @@ describe('assertEndpoint', () => {
 })
 
 describe('normalizeEndpoint', () => {
-  it('falls back to the default when undefined', () => {
-    expect(normalizeEndpoint(undefined)).toBe(DEFAULT_ENDPOINT)
+  it('throws when undefined — no silent dead-host fallback', () => {
+    expect(() => normalizeEndpoint(undefined)).toThrow(/No API endpoint configured/)
+  })
+
+  it('throws when empty string', () => {
+    expect(() => normalizeEndpoint('')).toThrow(/No API endpoint configured/)
   })
 
   it('strips trailing slashes', () => {

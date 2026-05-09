@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Card, Badge, Btn, ErrorAlert, RelativeTime } from '../ui'
+import { Card, Badge, Btn, ErrorAlert, RelativeTime, DetailRows, type DetailRowItem } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 
 interface GraphBackendStatus {
@@ -28,6 +28,74 @@ const BACKEND_LABEL: Record<GraphBackendStatus['backend'], string> = {
   sql_only: 'SQL only',
   age_dual: 'SQL + AGE (dual-write)',
   age_only: 'AGE only',
+}
+
+/**
+ * Translate a `GraphBackendStatus` into the standard `DetailRowItem` shape
+ * used across the admin app. Keeping the row-construction here (instead of
+ * inlined in the JSX) means tone choices and conditional rows are easy to
+ * reason about, and the JSX stays a single readable expression.
+ *
+ * Tone choices:
+ * - Backend mode + AGE extension stay as Badges (semantic surfaces with
+ *   their own chrome) — DetailRows just hosts them.
+ * - Unsynced node/edge counts use `warn` when > 0 (drift exists) and
+ *   `ok` when 0 (in sync), so an operator's eye lands on the column
+ *   that needs attention.
+ * - Last drift audit gets `wrap: true` so the relative-time + drift-
+ *   count + nodes/edges line stays on its own row instead of being
+ *   crushed into a right-aligned column.
+ */
+function buildBackendRows(data: GraphBackendStatus): DetailRowItem[] {
+  const rows: DetailRowItem[] = [
+    {
+      label: 'Backend mode',
+      value: <Badge className={BACKEND_TONE[data.backend]}>{BACKEND_LABEL[data.backend]}</Badge>,
+      hint: 'How the report graph is currently stored — pure SQL, dual-write to AGE, or AGE-only.',
+    },
+    {
+      label: 'AGE extension',
+      value: data.ageAvailable
+        ? <Badge className="bg-ok/15 text-ok border border-ok/30">Available</Badge>
+        : <Badge className="bg-warn/15 text-warn border border-warn/30">Not installed</Badge>,
+      hint: 'Whether the Apache AGE Postgres extension is loaded on the database.',
+    },
+    {
+      label: 'Unsynced nodes',
+      value: data.unsynced.nodes != null ? data.unsynced.nodes.toLocaleString() : '—',
+      mono: true,
+      tone: (data.unsynced.nodes ?? 0) > 0 ? 'warn' : 'ok',
+      hint: 'Nodes present in SQL but not yet mirrored into AGE.',
+    },
+    {
+      label: 'Unsynced edges',
+      value: data.unsynced.edges != null ? data.unsynced.edges.toLocaleString() : '—',
+      mono: true,
+      tone: (data.unsynced.edges ?? 0) > 0 ? 'warn' : 'ok',
+      hint: 'Edges present in SQL but not yet mirrored into AGE.',
+    },
+  ]
+  if (data.latestAudit) {
+    const a = data.latestAudit
+    rows.push({
+      label: 'Last drift audit',
+      value: (
+        <span className="font-mono text-fg-secondary">
+          <RelativeTime value={a.ran_at} />
+          {' · '}
+          {a.drift_count != null
+            ? `${a.drift_count.toLocaleString()} drift`
+            : 'no drift count'}
+          {a.nodes_in_age != null && (
+            <> · {a.nodes_in_age.toLocaleString()} nodes / {a.edges_in_age?.toLocaleString() ?? '—'} edges in AGE</>
+          )}
+        </span>
+      ),
+      wrap: true,
+      hint: 'When the most recent SQL ↔ AGE drift snapshot ran.',
+    })
+  }
+  return rows
 }
 
 export function GraphBackendPanel() {
@@ -69,47 +137,7 @@ export function GraphBackendPanel() {
       ) : error ? (
         <ErrorAlert message={error} onRetry={reload} />
       ) : data ? (
-        <div className="grid grid-cols-2 gap-3 text-2xs">
-          <div>
-            <div className="text-fg-faint mb-0.5">Backend mode</div>
-            <Badge className={BACKEND_TONE[data.backend]}>{BACKEND_LABEL[data.backend]}</Badge>
-          </div>
-          <div>
-            <div className="text-fg-faint mb-0.5">AGE extension</div>
-            {data.ageAvailable ? (
-              <Badge className="bg-ok/15 text-ok border border-ok/30">Available</Badge>
-            ) : (
-              <Badge className="bg-warn/15 text-warn border border-warn/30">Not installed</Badge>
-            )}
-          </div>
-          <div>
-            <div className="text-fg-faint mb-0.5">Unsynced nodes</div>
-            <div className="font-mono tabular-nums text-fg">
-              {data.unsynced.nodes != null ? data.unsynced.nodes.toLocaleString() : '—'}
-            </div>
-          </div>
-          <div>
-            <div className="text-fg-faint mb-0.5">Unsynced edges</div>
-            <div className="font-mono tabular-nums text-fg">
-              {data.unsynced.edges != null ? data.unsynced.edges.toLocaleString() : '—'}
-            </div>
-          </div>
-          {data.latestAudit && (
-            <div className="col-span-2 border-t border-edge-subtle pt-2 space-y-0.5">
-              <div className="text-fg-faint">Last drift audit</div>
-              <div className="font-mono text-fg-secondary">
-                <RelativeTime value={data.latestAudit.ran_at} />
-                {' · '}
-                {data.latestAudit.drift_count != null
-                  ? `${data.latestAudit.drift_count.toLocaleString()} drift`
-                  : 'no drift count'}
-                {data.latestAudit.nodes_in_age != null && (
-                  <> · {data.latestAudit.nodes_in_age.toLocaleString()} nodes / {data.latestAudit.edges_in_age?.toLocaleString() ?? '—'} edges in AGE</>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
+        <DetailRows items={buildBackendRows(data)} />
       ) : null}
     </Card>
   )

@@ -11,17 +11,25 @@ export interface ClassificationInput {
   proactiveTrigger?: string;
 }
 
+/**
+ * Well-known model identifiers. `string` is also valid for custom models.
+ * - `'heuristic'` / `'heuristic-fallback'`: keyword-based fallback (no ONNX runtime required).
+ * - `'phi-3-mini-onnx-int4'`: quantized Phi-3-mini served from a CDN (requires onnxruntime-web).
+ */
+export type KnownModelId = 'heuristic' | 'heuristic-fallback' | 'phi-3-mini-onnx-int4';
+
 export interface ClassificationResult {
   verdict: ClassificationVerdict;
   confidence: number;
   reason: string;
   predictedCategory?: string;
-  modelId: string;
+  /** @see KnownModelId for well-known values. */
+  modelId: KnownModelId | string;
   durationMs: number;
 }
 
 export interface WasmClassifier {
-  readonly modelId: string;
+  readonly modelId: KnownModelId | string;
   readonly ready: Promise<void>;
   classify(input: ClassificationInput): Promise<ClassificationResult>;
   destroy(): void;

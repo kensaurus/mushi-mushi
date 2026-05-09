@@ -18,6 +18,8 @@ dependencies:
   sensors_plus: ^6.0.1
   package_info_plus: ^8.0.2
   device_info_plus: ^11.0.0
+  # Added: network-aware delivery (Phase 2.4)
+  connectivity_plus: ^6.0.0
 
 dev_dependencies:
   flutter_test:

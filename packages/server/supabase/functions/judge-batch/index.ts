@@ -368,19 +368,23 @@ Score each dimension 0-1. Be critical of vague components, miscalibrated severit
 
           // D1: surface judge scores to webhook plugins (e.g. low-score
           // alerts to Slack/Linear). Async; failures must not affect batch.
-          void dispatchPluginEvent(db, project.id, 'judge.score_recorded', {
-            report: { id: report.id },
-            judge: {
-              model: usedJudgeModel,
-              fallback: judgeFallbackUsed,
-              score: compositeScore,
-              accuracy: evaluation.accuracy,
-              severity: evaluation.severity_calibration,
-              component: evaluation.component_tagging,
-              repro: evaluation.repro_quality,
-              classificationAgreed: evaluation.classification_agreed,
-            },
-          }).catch((e) => rootLog.child('judge').warn('Plugin dispatch failed', { event: 'judge.score_recorded', err: String(e) }))
+          try {
+            void dispatchPluginEvent(db, project.id, 'judge.score_recorded', {
+              report: { id: report.id },
+              judge: {
+                model: usedJudgeModel,
+                fallback: judgeFallbackUsed,
+                score: compositeScore,
+                accuracy: evaluation.accuracy,
+                severity: evaluation.severity_calibration,
+                component: evaluation.component_tagging,
+                repro: evaluation.repro_quality,
+                classificationAgreed: evaluation.classification_agreed,
+              },
+            }).catch((e) => rootLog.child('judge').warn('Plugin dispatch failed', { event: 'judge.score_recorded', err: String(e) }))
+          } catch (e) {
+            rootLog.child('judge').warn('Plugin dispatch failed (sync)', { event: 'judge.score_recorded', err: String(e) })
+          }
 
           // V5.3 §2.7 (M-cross-cutting): MUST scope by project_id and stage
           // so two projects sharing a version string don't corrupt each other's

@@ -212,6 +212,101 @@ export function MarketplacePage() {
     [],
   )
 
+  // ── Lifecycle handlers for installed plugins ──────────────────────────────
+  // Each handler tracks `installing` (slug being mutated) so the row can show
+  // a busy state and prevent overlapping operations.
+
+  const testPlugin = useCallback(
+    async (slug: string) => {
+      setInstalling(slug)
+      try {
+        const res = await apiFetch<{ delivered: boolean; httpStatus: number | null; durationMs: number; excerpt: string | null }>(
+          `/v1/admin/plugins/${encodeURIComponent(slug)}/test-event`,
+          { method: 'POST' },
+        )
+        if (!res.ok) throw new Error(res.error?.message ?? 'Test failed')
+        if (res.data?.delivered) {
+          toast.success(`Test delivered (${res.data.httpStatus ?? '—'})`, `${res.data.durationMs}ms`)
+        } else {
+          toast.error(
+            `Test failed (HTTP ${res.data?.httpStatus ?? '—'})`,
+            res.data?.excerpt ?? 'No response body',
+          )
+        }
+        reloadAll()
+      } catch (err) {
+        toast.error('Test failed', err instanceof Error ? err.message : String(err))
+      } finally {
+        setInstalling(null)
+      }
+    },
+    [toast, reloadAll],
+  )
+
+  const togglePausePlugin = useCallback(
+    async (slug: string, currentlyActive: boolean) => {
+      setInstalling(slug)
+      try {
+        const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isActive: !currentlyActive }),
+        })
+        if (!res.ok) throw new Error(res.error?.message ?? 'Update failed')
+        toast.success(currentlyActive ? 'Plugin paused' : 'Plugin resumed')
+        reloadAll()
+      } catch (err) {
+        toast.error('Update failed', err instanceof Error ? err.message : String(err))
+      } finally {
+        setInstalling(null)
+      }
+    },
+    [toast, reloadAll],
+  )
+
+  const editPluginUrl = useCallback(
+    async (slug: string, newUrl: string) => {
+      setInstalling(slug)
+      try {
+        const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ webhookUrl: newUrl }),
+        })
+        if (!res.ok) throw new Error(res.error?.message ?? 'Update failed')
+        toast.success('Webhook URL updated')
+        reloadAll()
+      } catch (err) {
+        toast.error('Update failed', err instanceof Error ? err.message : String(err))
+        throw err
+      } finally {
+        setInstalling(null)
+      }
+    },
+    [toast, reloadAll],
+  )
+
+  const rotatePluginSecret = useCallback(
+    async (slug: string): Promise<string> => {
+      setInstalling(slug)
+      try {
+        const res = await apiFetch<{ secret: string }>(
+          `/v1/admin/plugins/${encodeURIComponent(slug)}/rotate-secret`,
+          { method: 'POST' },
+        )
+        if (!res.ok || !res.data?.secret) {
+          throw new Error(res.error?.message ?? 'Rotation failed')
+        }
+        toast.success('Secret rotated', 'Copy it now — it will not be shown again.')
+        return res.data.secret
+      } catch (err) {
+        toast.error('Rotation failed', err instanceof Error ? err.message : String(err))
+        throw err
+      } finally {
+        setInstalling(null)
+      }
+    },
+    [toast],
+  )
+
   if (loading) return <TableSkeleton rows={6} columns={4} showFilters label="Loading marketplace" />
   if (error)
     return <ErrorAlert message={`Failed to load marketplace: ${error}`} onRetry={reloadAll} />
@@ -307,7 +402,15 @@ export function MarketplacePage() {
       </Section>
 
       <Section title="Installed">
-        <InstalledList installed={installed} />
+        <InstalledList
+          installed={installed}
+          busySlug={installing}
+          onTest={testPlugin}
+          onTogglePause={togglePausePlugin}
+          onEditUrl={editPluginUrl}
+          onRotateSecret={rotatePluginSecret}
+          onUninstall={uninstall}
+        />
       </Section>
 
       <Section title={`Recent deliveries (${visibleDispatch.length}/${dispatchLog.length})`}>

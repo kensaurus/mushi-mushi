@@ -12,7 +12,19 @@ import type {
   MushiCapacitorPlugin,
   MushiCapacitorPluginConfig,
   MushiCapacitorReport,
+  MushiCapacitorUser,
 } from './definitions';
+
+/** Thrown when a plugin method is called before `configure({ endpoint })` is set. */
+class MushiConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'MushiConfigError';
+  }
+}
+
+const ENDPOINT_HINT =
+  'Call MushiMushi.configure({ endpoint: "https://xyz.supabase.co/functions/v1/api", ... }) first.';
 
 /**
  * Web fallback for the Capacitor plugin. Reuses the canonical
@@ -27,20 +39,32 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   // field (`WebPluginConfig | undefined`) and TS rejects the type clash.
   private pluginConfig: MushiCapacitorPluginConfig | null = null;
   private apiClient: MushiApiClient | null = null;
+  private currentUser: MushiCapacitorUser | null = null;
 
   async configure(options: MushiCapacitorPluginConfig): Promise<void> {
     this.pluginConfig = options;
-    this.apiClient = createApiClient({
-      projectId: options.projectId,
-      apiKey: options.apiKey,
-      apiEndpoint: options.endpoint ?? 'https://api.mushimushi.dev',
-    });
+    if (options.endpoint) {
+      this.apiClient = createApiClient({
+        projectId: options.projectId,
+        apiKey: options.apiKey,
+        apiEndpoint: options.endpoint,
+      });
+    } else {
+      this.apiClient = null;
+      console.warn(
+        '[MushiMushi] endpoint not set — report() calls will throw. ' + ENDPOINT_HINT,
+      );
+    }
   }
 
   async report(payload: MushiCapacitorReport): Promise<{ accepted: boolean }> {
     const cfg = this.pluginConfig;
+    if (!cfg) return { accepted: false };
+
     const client = this.apiClient;
-    if (!cfg || !client) return { accepted: false };
+    if (!client) {
+      throw new MushiConfigError('Mushi endpoint not configured. ' + ENDPOINT_HINT);
+    }
 
     const environment = captureEnvironment();
     const report: MushiReport = {
@@ -49,7 +73,10 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
       description: payload.description,
       category: ((payload.category as MushiReportCategory | undefined) ?? 'bug') as MushiReportCategory,
       createdAt: new Date().toISOString(),
-      metadata: payload.metadata ?? {},
+      metadata: {
+        ...payload.metadata ?? {},
+        ...(this.currentUser ? { user: this.currentUser } : {}),
+      },
       environment,
       reporterToken: getReporterToken(),
     };
@@ -65,10 +92,27 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   }
 
   async captureScreenshot(): Promise<{ image: string | null }> {
-    // Browser fallback: html2canvas / native APIs aren't available without a
-    // dependency we don't want to ship by default. Returns null and lets the
-    // native iOS/Android side handle this in production.
-    return { image: null };
+    if (typeof document === 'undefined') {
+      return { image: null };
+    }
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.warn('[MushiMushi] captureScreenshot: 2d canvas context unavailable');
+        return { image: null };
+      }
+      // The Canvas API cannot capture cross-origin DOM content; this produces
+      // a blank frame for most pages. Apps wanting real screenshots should
+      // add html2canvas or dom-to-image-more as a direct dependency and call
+      // it before invoking report().
+      return { image: canvas.toDataURL('image/png') };
+    } catch {
+      console.warn('[MushiMushi] captureScreenshot failed; returning null');
+      return { image: null };
+    }
   }
 
   async showWidget(): Promise<void> {
@@ -77,9 +121,8 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
     this.notifyListeners('widgetRequested', {});
   }
 
-  async setUser(): Promise<void> {
-    // Native-only bridge. Browser previews should pass user context through
-    // the standard web SDK instead.
+  async setUser(payload: { user: MushiCapacitorUser | null }): Promise<void> {
+    this.currentUser = payload.user;
   }
 
   async setMetadata(): Promise<void> {
@@ -88,8 +131,9 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
   }
 
   async flushQueue(): Promise<{ delivered: number }> {
-    // The web `createApiClient` retries internally, so there's no separate
-    // queue to flush. Return zero to keep the contract.
+    // The web `createApiClient` retries internally — there is no separate
+    // offline queue on the web path. Native platforms flush their SQLite
+    // queue here; the web fallback always reports zero.
     return { delivered: 0 };
   }
 }

@@ -55,6 +55,25 @@ export class MushiNodeClient {
   }
 
   /**
+   * Convenience wrapper: capture an exception as a critical server report.
+   * Accepts an `Error` object or a plain string message.
+   * Never throws.
+   */
+  async captureException(
+    error: Error | string,
+    extra?: Omit<NodeReportPayload, 'description' | 'error'>,
+  ): Promise<{ ok: boolean; reportId?: string }> {
+    const e = error instanceof Error ? error : new Error(String(error))
+    return this.captureReport({
+      description: e.message,
+      userCategory: 'bug',
+      severity: 'critical',
+      error: { name: e.name, message: e.message, stack: e.stack },
+      ...extra,
+    })
+  }
+
+  /**
    * Send a server-side report. Never throws — failures are swallowed and
    * logged once per process at warn level so instrumentation can never take
    * down the host service.
@@ -68,6 +87,17 @@ export class MushiNodeClient {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.opts.timeout ?? 10_000)
     try {
+      // If the caller stashed a W3C traceparent (e.g. from a middleware), pass
+      // it both as the standard HTTP header and inside `metadata` so the server
+      // can mint a child span and propagate it to outbound BYOK calls.
+      const inboundTraceparent =
+        typeof payload.metadata?.traceparent === 'string'
+          ? payload.metadata.traceparent
+          : null
+
+      const extraHeaders: Record<string, string> = {}
+      if (inboundTraceparent) extraHeaders['traceparent'] = inboundTraceparent
+
       const res = await fetch(`${this.endpoint}/v1/reports`, {
         method: 'POST',
         signal: controller.signal,
@@ -76,6 +106,7 @@ export class MushiNodeClient {
           'X-Mushi-Api-Key': this.opts.apiKey,
           'X-Mushi-Project': this.opts.projectId,
           'User-Agent': '@mushi-mushi/node',
+          ...extraHeaders,
         },
         body: JSON.stringify({
           projectId: this.opts.projectId,

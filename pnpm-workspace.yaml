@@ -27,6 +27,13 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - "@mushi-mushi/*"
   - "mushi-mushi"
+  # Security-patched transitive dep. fast-uri 3.1.2 fixes
+  # GHSA-q3j6-qgpj-74h6 (path traversal) + the host-confusion CVE pulled
+  # in via @modelcontextprotocol/sdk → ajv. Patch shipped 2026-05-05; we
+  # exempt it from the 7-day cooldown because the HIGH-severity vuln is
+  # in every <=3.1.0 release and we run npm audit signatures + provenance
+  # in CI as compensating controls.
+  - "fast-uri"
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies

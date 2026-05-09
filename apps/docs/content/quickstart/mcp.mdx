@@ -15,7 +15,7 @@ and dispatch fixes from your IDE.
 pnpm add -g @mushi-mushi/mcp
 ```
 
-## Add to Claude Desktop
+## Add to Claude Desktop (stdio transport — default)
 
 ```json filename="~/Library/Application Support/Claude/claude_desktop_config.json"
 {
@@ -31,6 +31,34 @@ pnpm add -g @mushi-mushi/mcp
 }
 ```
 
+## Hosted Streamable HTTP transport (no subprocess)
+
+The Mushi backend also exposes the same tool catalog over the
+**Streamable HTTP** transport from the MCP 2025-03-26 spec at
+`/functions/v1/mcp`. Use this when you'd rather not spawn a local
+subprocess — typical for OpenAI Agents SDK, ChatGPT Agent, hosted
+CrewAI, or any orchestrator that talks remote MCP:
+
+```jsonc filename=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "mushi-mushi-hosted": {
+      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "headers": {
+        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Project-Id": "proj_…"
+      }
+    }
+  }
+}
+```
+
+The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json`
+or `text/event-stream` per content negotiation), opens an SSE stream on
+GET for server-pushed notifications, and accepts DELETE for session
+termination. Auth is the same dual-mode API-key / JWT used everywhere
+else on `/v1/admin/*`.
+
 ## Available tools
 
 | Tool                 | Purpose                                      |
@@ -39,7 +67,8 @@ pnpm add -g @mushi-mushi/mcp
 | `get_report`         | Full detail incl. screenshot + classification |
 | `comment_on_report`  | Post a triage note (audit-logged)            |
 | `transition_report`  | `new → fixing → fixed` etc.                  |
-| `dispatch_fix`       | Hand off to the agentic fix orchestrator     |
+| `dispatch_fix`       | Hand off to the agentic fix orchestrator. Optionally accepts `inventoryActionNodeId` to pin the fix to a specific inventory `Action` (whitepaper §2.10 spec-traceability) |
+| `get_fix_context`    | One-shot brief for an external agent — root cause, smallest file set, repro, and the linked inventory `Action` with its `expected_outcome` contract when set |
 | `query_knowledge_graph` | Ask "what other reports look like this?"  |
 
 import { Callout } from 'nextra/components'

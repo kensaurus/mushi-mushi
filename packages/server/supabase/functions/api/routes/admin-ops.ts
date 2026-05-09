@@ -3,7 +3,7 @@ import type { Hono } from 'npm:hono@4';
 import { getServiceClient } from '../../_shared/db.ts';
 import { jwtAuth } from '../../_shared/auth.ts';
 import { currentRegion } from '../../_shared/region.ts';
-import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
+import { getStorageAdapter, getStorageAdapterForHealthCheck, invalidateStorageCache } from '../../_shared/storage.ts';
 import { log } from '../../_shared/logger.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
@@ -821,18 +821,42 @@ export function registerAdminOpsRoutes(app: Hono): void {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
 
     invalidateStorageCache(projectId);
-    const adapter = await getStorageAdapter(projectId);
-    const result = await adapter.healthCheck();
+
+    const tTotal = Date.now();
+    const { adapter, prefixDebug } = await getStorageAdapterForHealthCheck(projectId);
+    const probeResult = await adapter.healthCheck();
+    const totalMs = Date.now() - tTotal;
+
+    // Merge vault-resolution prefix steps with the adapter-level probe steps
+    const fullDebug = [
+      ...prefixDebug,
+      ...probeResult.debug,
+      { step: 'total', ok: probeResult.ok, ms: totalMs },
+    ];
+
     await db
       .from('project_storage_settings')
       .update({
-        health_status: result.ok ? 'healthy' : 'failing',
+        health_status: probeResult.ok ? 'healthy' : 'failing',
         last_health_check_at: new Date().toISOString(),
-        last_health_error: result.ok ? null : (result.error ?? null),
+        last_health_error: probeResult.ok ? null : (probeResult.error ?? null),
+        last_health_debug: fullDebug,
       })
       .eq('project_id', projectId);
 
-    return c.json({ ok: true, health: result });
+    // Outer `ok` reflects the probe outcome — callers check `res.ok` to know
+    // whether the bucket is reachable, not just whether the HTTP request succeeded.
+    return c.json(
+      {
+        ok: probeResult.ok,
+        data: {
+          healthy: probeResult.ok,
+          error: probeResult.error ?? null,
+          debug: fullDebug,
+        },
+      },
+      probeResult.ok ? 200 : 424,
+    );
   });
 
   // ----------------------------------------------------------------
@@ -972,6 +996,20 @@ export function registerAdminOpsRoutes(app: Hono): void {
       .maybeSingle();
 
     let customerId = existing?.stripe_customer_id;
+
+    // Guard: test-fixture IDs (cus_test_*) must never block billing for real
+    // projects in production. If the row in billing_customers holds a stale
+    // fixture ID (e.g. seeded by a QA script), treat it as absent so Stripe
+    // creates a real customer instead of surfacing a resource_missing 400.
+    const isProd = (Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production') === 'production';
+    if (customerId && isProd && customerId.startsWith('cus_test_')) {
+      log.warn('billing.stale_test_customer_id_ignored', {
+        projectId: body.project_id,
+        staleCustomerId: customerId,
+      });
+      customerId = undefined;
+    }
+
     if (!customerId) {
       const customer = await createCustomer(cfg, {
         email: body.email,

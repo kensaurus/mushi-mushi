@@ -2,9 +2,12 @@ package dev.mushimushi.sdk
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -62,7 +65,11 @@ object Mushi {
             }
             refreshTriggers(app)
             refreshFloatingButton()
-            if (!initialized) startFlushTimer()
+            if (!initialized) {
+                startFlushTimer()
+                // Added: network-aware delivery (Phase 2.4)
+                startNetworkMonitor(app)
+            }
             initialized = true
         }
     }
@@ -219,6 +226,19 @@ object Mushi {
                 runCatching { apiClient?.flushQueue() }
             }, 5, 30, TimeUnit.SECONDS)
         }
+    }
+
+    // Added: network-aware delivery (Phase 2.4)
+    private fun startNetworkMonitor(app: Application) {
+        val connectivityManager =
+            app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return
+        val networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                flushExecutor?.execute { runCatching { apiClient?.flushQueue() } }
+            }
+        }
+        runCatching { connectivityManager.registerDefaultNetworkCallback(networkCallback) }
     }
 
     private class LifecycleTracker : Application.ActivityLifecycleCallbacks {

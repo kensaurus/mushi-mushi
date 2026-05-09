@@ -47,6 +47,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { DetailRows, type DetailRowItem } from './ui'
 import { getConfigDoc } from '../lib/configDocs'
 
 interface ConfigHelpProps {
@@ -438,39 +439,49 @@ function DefaultChip({ value, range }: { value: string; range?: string }) {
 function BackendLineage({ backend }: { backend: NonNullable<ReturnType<typeof getConfigDoc>>['backend'] }) {
   if (!backend) return null
   const writes = [backend.table, backend.column].filter(Boolean).join('.')
-  return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-2xs">
-      {writes && (
-        <>
-          <dt className="text-fg-faint">Writes</dt>
-          <dd className="min-w-0">
-            <code className="font-mono text-fg wrap-anywhere">{writes}</code>
-          </dd>
-        </>
-      )}
-      {backend.endpoint && (
-        <>
-          <dt className="text-fg-faint">Endpoint</dt>
-          <dd className="min-w-0">
-            <code className="font-mono text-fg-secondary wrap-anywhere">{backend.endpoint}</code>
-          </dd>
-        </>
-      )}
-      {backend.readBy && backend.readBy.length > 0 && (
-        <>
-          <dt className="text-fg-faint">Read by</dt>
-          <dd className="min-w-0 flex flex-wrap gap-1">
-            {backend.readBy.map((r) => (
-              <code
-                key={r}
-                className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5 font-mono text-fg-secondary"
-              >
-                {r}
-              </code>
-            ))}
-          </dd>
-        </>
-      )}
-    </dl>
-  )
+  const rows: DetailRowItem[] = []
+  if (writes) {
+    rows.push({
+      label: 'Writes',
+      value: writes,
+      mono: true,
+      tone: 'info',
+      wrap: true,
+      hint: 'The Postgres table.column updated when this config changes.',
+    })
+  }
+  if (backend.endpoint) {
+    rows.push({
+      label: 'Endpoint',
+      value: backend.endpoint,
+      mono: true,
+      tone: 'muted',
+      wrap: true,
+      hint: 'API endpoint that mutates this config server-side.',
+    })
+  }
+  if (backend.readBy && backend.readBy.length > 0) {
+    // The "Read by" row keeps its chip treatment because each consumer is
+    // a distinct surface — they read better as discrete pills than a
+    // comma-joined string. We hand DetailRows a JSX value with `wrap`
+    // so the chips flow under the label on their own line.
+    rows.push({
+      label: 'Read by',
+      value: (
+        <div className="flex flex-wrap gap-1">
+          {backend.readBy.map((r) => (
+            <code
+              key={r}
+              className="inline-flex items-center rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5 font-mono text-fg-secondary"
+            >
+              {r}
+            </code>
+          ))}
+        </div>
+      ),
+      wrap: true,
+      hint: 'Surfaces in the app that consume this config.',
+    })
+  }
+  return <DetailRows dense items={rows} />
 }

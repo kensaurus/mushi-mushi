@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/widgets.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -23,6 +24,8 @@ class Mushi {
   OfflineQueue? _queue;
   Timer? _flushTimer;
   StreamSubscription<AccelerometerEvent>? _accelSub;
+  // Added: network-aware delivery (Phase 2.4)
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   OverlayEntry? _buttonOverlay;
   DateTime _lastShake = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -50,6 +53,7 @@ class Mushi {
     _installShakeIfNeeded();
     _installButtonIfNeeded();
     _startFlushTimer();
+    _startConnectivityListener();
   }
 
   /// Records the root context and installs the floating trigger when the
@@ -172,5 +176,16 @@ class Mushi {
       (_) => _api?.flushQueue(),
     );
     unawaited(_api?.flushQueue() ?? Future<void>.value());
+  }
+
+  // Added: network-aware delivery (Phase 2.4)
+  void _startConnectivityListener() {
+    _connectivitySub?.cancel();
+    _connectivitySub =
+        Connectivity().onConnectivityChanged.listen((results) {
+      if (results.any((r) => r != ConnectivityResult.none)) {
+        unawaited(_api?.flushQueue() ?? Future<void>.value());
+      }
+    });
   }
 }

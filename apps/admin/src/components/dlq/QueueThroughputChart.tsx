@@ -44,15 +44,24 @@ export function QueueThroughputChart({ throughput }: Props) {
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div>
-          <div className="text-3xs text-fg-faint mb-1">Created</div>
+          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-info/70" aria-hidden="true" />
+            Created
+          </div>
           <BarSparkline values={throughput.map((d) => d.created)} accent="bg-info/70" height={28} />
         </div>
         <div>
-          <div className="text-3xs text-fg-faint mb-1">Completed</div>
+          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok/70" aria-hidden="true" />
+            Completed
+          </div>
           <BarSparkline values={throughput.map((d) => d.completed)} accent="bg-ok/70" height={28} />
         </div>
         <div>
-          <div className="text-3xs text-fg-faint mb-1">Failed / DLQ</div>
+          <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger/70" aria-hidden="true" />
+            Failed / DLQ
+          </div>
           <BarSparkline values={throughput.map((d) => d.failed)} accent="bg-danger/70" height={28} />
         </div>
       </div>

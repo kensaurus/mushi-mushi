@@ -1,13 +1,13 @@
 /**
  * FILE: packages/angular/src/index.ts
- * PURPOSE: Angular SDK for Mushi Mushi — injectable service, error handler,
- *          and provider factory via @mushi-mushi/core.
+ * PURPOSE: Angular SDK for Mushi Mushi — delegates entirely to @mushi-mushi/web
+ *          so offline queue, PII scrubber, breadcrumb buffer, and rate limiter
+ *          are all inherited automatically. Mirrors the React provider pattern.
  */
 
-import { createApiClient, captureEnvironment, getSessionId, getReporterToken, createLogger } from '@mushi-mushi/core'
-import type { MushiApiClient, MushiReport, MushiReportCategory } from '@mushi-mushi/core'
-
-const log = createLogger({ scope: 'mushi:angular' })
+import { InjectionToken, Injectable } from '@angular/core'
+import { Mushi } from '@mushi-mushi/web'
+import type { MushiConfig as CoreMushiConfig, MushiReportCategory } from '@mushi-mushi/core'
 
 export interface MushiConfig {
   projectId: string
@@ -15,46 +15,37 @@ export interface MushiConfig {
   endpoint?: string
 }
 
-export const MUSHI_CONFIG = 'MUSHI_CONFIG'
+export const MUSHI_CONFIG = new InjectionToken<MushiConfig>('MushiConfig')
 
+function toCoreConfig(config: MushiConfig): CoreMushiConfig {
+  return {
+    projectId: config.projectId,
+    apiKey: config.apiKey,
+    ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
+  }
+}
+
+@Injectable()
 export class MushiService {
-  private client: MushiApiClient
-  private projectId: string
-
   constructor(config: MushiConfig) {
-    this.projectId = config.projectId
-    this.client = createApiClient({
-      projectId: config.projectId,
-      apiKey: config.apiKey,
-      ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
-    })
+    Mushi.init(toCoreConfig(config))
   }
 
-  private buildReport(data: { description: string; category: MushiReportCategory; metadata?: Record<string, unknown> }): MushiReport {
-    return {
-      id: crypto.randomUUID?.() ?? `mushi_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      projectId: this.projectId,
+  report(data: { description: string; category: MushiReportCategory; metadata?: Record<string, unknown> }): Promise<string | null> {
+    return Mushi.getInstance()?.captureEvent({
       description: data.description,
       category: data.category,
-      environment: captureEnvironment(),
       metadata: data.metadata,
-      sessionId: getSessionId(),
-      reporterToken: getReporterToken(),
-      createdAt: new Date().toISOString(),
-    } as MushiReport
+    }) ?? Promise.resolve(null)
   }
 
+  /** @deprecated Use report() — kept for backwards compatibility */
   async submitReport(data: { description: string; category: MushiReportCategory; metadata?: Record<string, unknown> }): Promise<void> {
-    await this.client.submitReport(this.buildReport(data))
+    await this.report(data)
   }
 
   captureError(error: unknown, context?: Record<string, unknown>): void {
-    const description = error instanceof Error ? error.message : String(error)
-    this.submitReport({
-      description,
-      category: 'bug',
-      metadata: { stack: error instanceof Error ? error.stack : undefined, ...context },
-    }).catch(e => log.error('Failed to capture error', { err: String(e) }))
+    Mushi.getInstance()?.captureException(error, { metadata: context }).catch(() => {})
   }
 }
 
@@ -67,7 +58,6 @@ export class MushiErrorHandler {
 
   handleError(error: unknown): void {
     this.service.captureError(error)
-    log.error('Unhandled error', { err: String(error) })
   }
 }
 

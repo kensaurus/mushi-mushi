@@ -458,6 +458,15 @@ export async function ingestInventory(
         claimed_status: el.status ?? 'unknown',
         status: 'unknown',
         last_verified: el.last_verified,
+        // Spec-traceability: persist the success contract on the Action node
+        // metadata so:
+        //   1. the fix-worker can recover it via reports_against → action and
+        //      include it verbatim in the LLM prompt
+        //   2. the synthetic monitor can assert against it on every probe
+        //   3. the judge can score whether a merged fix still satisfies it
+        // Optional — actions without an expected_outcome fall back to the
+        // legacy "endpoint reachable" probe and the legacy fix prompt.
+        expected_outcome: el.expected_outcome ?? null,
       })
       incNode(1)
       await createEdge(db, projectId, elementNodeId, actionNodeId, 'triggers')

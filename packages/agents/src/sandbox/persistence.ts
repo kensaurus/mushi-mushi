@@ -65,7 +65,14 @@ export interface CreateSandboxRunRow {
   projectId: string
   fixAttemptId?: string
   reportId?: string
-  provider: 'local-noop' | 'e2b' | 'modal' | 'cloudflare'
+  /**
+   * Stable provider id stored in `fix_sandbox_runs.provider` (free-form
+   * text column). First-party providers use one of `KnownSandboxProvider`;
+   * third-party adapters registered via `registerSandboxProvider` use
+   * their own string. Was a closed union — see 2026-05-09 spec-traceability
+   * audit (mirrors `SandboxProvider['name']` in `./types.ts`).
+   */
+  provider: 'local-noop' | 'e2b' | 'modal' | 'cloudflare' | (string & {})
   config: SandboxConfig
 }
 

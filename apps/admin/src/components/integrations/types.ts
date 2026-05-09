@@ -5,7 +5,16 @@
  *          touching orchestration.
  */
 
+/** Narrow union for *platform* integrations — the SDK-feeding services
+ *  (Sentry / Langfuse / GitHub code-repo) that have first-class card slots
+ *  on the page. Kept narrow so `Record<Kind, …>` literals stay exhaustive. */
 export type Kind = 'sentry' | 'langfuse' | 'github'
+
+/** Wider union accepted by the `/v1/admin/health/integration/:kind` probe
+ *  route. Includes the four routing destinations (Jira / Linear /
+ *  GitHub Issues / PagerDuty) so a single Test button on a routing card can
+ *  reuse the same probe endpoint. */
+export type ProbeKind = Kind | 'jira' | 'linear' | 'github_issues' | 'pagerduty'
 
 export interface PlatformResponse {
   platform: Record<Kind, Record<string, unknown>>
@@ -68,6 +77,9 @@ export interface PlatformDef {
 
 export interface RoutingProviderDef {
   type: 'jira' | 'linear' | 'github' | 'pagerduty'
+  /** The kind key used in integration_health_history. 'github' routing maps to
+   *  'github_issues' to avoid colliding with the platform GitHub (code-repo). */
+  healthKind: 'jira' | 'linear' | 'github_issues' | 'pagerduty'
   label: string
   whyItMatters: string
   capabilitiesOnceConnected: string[]
@@ -143,6 +155,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
 export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
   {
     type: 'jira',
+    healthKind: 'jira',
     label: 'Jira',
     whyItMatters: 'Triaged reports become Jira tickets in the project of your choice. Severity maps to Jira priority.',
     capabilitiesOnceConnected: [
@@ -159,6 +172,7 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
   },
   {
     type: 'linear',
+    healthKind: 'linear',
     label: 'Linear',
     whyItMatters: 'Mirror reports into Linear with proper labels and priorities. Classification metadata maps to Linear labels.',
     capabilitiesOnceConnected: [
@@ -173,6 +187,7 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
   },
   {
     type: 'github',
+    healthKind: 'github_issues',
     label: 'GitHub Issues',
     whyItMatters: 'Open GitHub Issues directly in your repo. Different repo than the auto-fix code repo — this is for tracking, not patching.',
     capabilitiesOnceConnected: [
@@ -188,6 +203,7 @@ export const ROUTING_PROVIDERS: RoutingProviderDef[] = [
   },
   {
     type: 'pagerduty',
+    healthKind: 'pagerduty',
     label: 'PagerDuty',
     whyItMatters: 'Page on-call when severity ≥ critical. Routes through Events API v2.',
     capabilitiesOnceConnected: [
