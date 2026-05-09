@@ -41,5 +41,22 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-bugsnag"
   },
-  "keywords": ["mushi-mushi", "bugsnag", "plugin", "error-tracking"]
+  "keywords": [
+    "mushi-mushi",
+    "bugsnag",
+    "plugin",
+    "error-tracking"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

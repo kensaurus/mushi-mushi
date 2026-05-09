@@ -41,5 +41,24 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-msteams"
   },
-  "keywords": ["mushi-mushi", "microsoft-teams", "msteams", "plugin", "notifications", "adaptive-cards"]
+  "keywords": [
+    "mushi-mushi",
+    "microsoft-teams",
+    "msteams",
+    "plugin",
+    "notifications",
+    "adaptive-cards"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

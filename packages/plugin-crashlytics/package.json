@@ -41,5 +41,24 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-crashlytics"
   },
-  "keywords": ["mushi-mushi", "firebase", "crashlytics", "plugin", "mobile", "crash-reporting"]
+  "keywords": [
+    "mushi-mushi",
+    "firebase",
+    "crashlytics",
+    "plugin",
+    "mobile",
+    "crash-reporting"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

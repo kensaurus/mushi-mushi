@@ -41,5 +41,23 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-discord"
   },
-  "keywords": ["mushi-mushi", "discord", "plugin", "notifications", "webhook"]
+  "keywords": [
+    "mushi-mushi",
+    "discord",
+    "plugin",
+    "notifications",
+    "webhook"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

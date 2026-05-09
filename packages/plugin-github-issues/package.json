@@ -41,5 +41,23 @@
     "url": "https://github.com/kensaurus/mushi-mushi.git",
     "directory": "packages/plugin-github-issues"
   },
-  "keywords": ["mushi-mushi", "github", "github-issues", "plugin", "bug-tracking"]
+  "keywords": [
+    "mushi-mushi",
+    "github",
+    "github-issues",
+    "plugin",
+    "bug-tracking"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }
