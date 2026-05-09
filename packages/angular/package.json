@@ -20,7 +20,7 @@
     "@mushi-mushi/web": "workspace:^"
   },
   "devDependencies": {
-    "@angular/core": "^18.0.0",
+    "@angular/core": "^19.2.21",
     "@mushi-mushi/eslint-config": "workspace:*",
     "eslint": "^10.2.0",
     "tsup": "^8.5.1",
