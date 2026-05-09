@@ -27,6 +27,7 @@
  */
 
 import { toSseEvent } from './sse.ts'
+import { childTraceparent } from './trace.ts'
 
 export const AGUI_PROTOCOL_VERSION = '0.4'
 
@@ -46,6 +47,10 @@ export interface AguiEnvelope<T = unknown> {
   ts: string
   runId: string
   protocol: typeof AGUI_PROTOCOL_VERSION
+  /** W3C traceparent for this envelope frame (child of the run root span).
+   *  Consumers (LangGraph, OpenAI Agents, CrewAI, etc.) can use this to
+   *  attach to the distributed trace that triggered the run. */
+  traceparent?: string
   payload: T
 }
 
@@ -93,10 +98,18 @@ export class AguiEmitter {
   private seq = 0
   private readonly runId: string
   private readonly write: (frame: string) => Promise<void> | void
+  /** Root traceparent for this run — each emitted frame gets a child span. */
+  private readonly traceparent: string | undefined
 
-  constructor(opts: { runId: string; write: (frame: string) => Promise<void> | void }) {
+  constructor(opts: {
+    runId: string
+    write: (frame: string) => Promise<void> | void
+    /** Optional inbound W3C traceparent to continue the distributed trace. */
+    traceparent?: string
+  }) {
     this.runId = opts.runId
     this.write = opts.write
+    this.traceparent = opts.traceparent
   }
 
   private nextId(): string {
@@ -105,12 +118,16 @@ export class AguiEmitter {
   }
 
   private async emit<T>(type: AguiEventType, payload: T): Promise<void> {
+    const frameTraceparent = this.traceparent
+      ? childTraceparent(this.traceparent)
+      : undefined
     const env: AguiEnvelope<T> = {
       type,
       id: this.nextId(),
       ts: new Date().toISOString(),
       runId: this.runId,
       protocol: AGUI_PROTOCOL_VERSION,
+      ...(frameTraceparent ? { traceparent: frameTraceparent } : {}),
       payload,
     }
     const frame = toSseEvent(env, { event: type, id: env.id })

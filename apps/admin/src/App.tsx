@@ -51,6 +51,7 @@ const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ 
 const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
+const PublicIntegrationsPage = lazy(() => import('./pages/PublicIntegrationsPage').then(m => ({ default: m.PublicIntegrationsPage })))
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
@@ -183,6 +184,18 @@ export function App() {
             </Suspense>
           }
         />
+        {/* Public marketing page — not auth-gated; takes precedence over the
+            auth-gated /integrations route inside ProtectedRoute because React
+            Router v6 picks the more-specific match over `/*`. The admin
+            integration config is available at /integrations/config. */}
+        <Route
+          path="/integrations"
+          element={
+            <Suspense fallback={<Loading text="Loading..." />}>
+              <PublicIntegrationsPage />
+            </Suspense>
+          }
+        />
         <Route
           path="/*"
           element={
@@ -213,7 +226,7 @@ export function App() {
                   <Route path="/compliance" element={<CompliancePage />} />
                   <Route path="/storage" element={<StoragePage />} />
                   <Route path="/marketplace" element={<MarketplacePage />} />
-                  <Route path="/integrations" element={<IntegrationsPage />} />
+                  <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/health" element={<HealthPage />} />

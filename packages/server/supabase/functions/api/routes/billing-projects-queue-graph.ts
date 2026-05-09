@@ -27,7 +27,7 @@ import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, dispatchPluginEvent } from '../../_shared/plugins.ts';
 import { getAvailableTags } from '../../_shared/ontology.ts';
-import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
+import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
@@ -108,14 +108,20 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .gte('occurred_at', periodStart.toISOString()),
       // 30-day daily rollup of `reports_ingested` per project — drives the
-      // sparkline on each /billing card. Scoped to one event_name so we don't
-      // pull tens of thousands of classifier-token events for chatty projects.
-      db
-        .from('usage_events')
-        .select('project_id, quantity, occurred_at')
-        .in('project_id', projectIds)
-        .eq('event_name', 'reports_ingested')
-        .gte('occurred_at', thirtyAgo.toISOString()),
+      // sparkline on each /billing card. Pre-aggregated server-side via the
+      // `billing_reports_ingested_daily_rollup` RPC (migration
+      // 20260508000100) so chatty projects don't ship tens of thousands of
+      // raw rows just to produce 30 daily totals. Returns at most
+      // `projectIds.length × 30` rows regardless of underlying volume.
+      db.rpc('billing_reports_ingested_daily_rollup', {
+        p_project_ids: projectIds,
+        p_since: thirtyAgo.toISOString(),
+      }) as unknown as Promise<{
+        data:
+          | { project_id: string; day_utc: string; total: number | string }[]
+          | null
+        error: { message: string } | null
+      }>,
       // §2: real LLM cost (COGS) for the current billing month so the
       // Billing page can show "$ spent on LLM this month" alongside report
       // quota. Reads the persisted cost_usd column written by telemetry.ts.
@@ -182,6 +188,12 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     // project with a zero-filled 30-entry array (oldest → newest) so the FE
     // can always render a stable sparkline domain — missing days become
     // explicit zero columns rather than gaps that distort the trend line.
+    //
+    // The wire shape from `billing_reports_ingested_daily_rollup` is
+    // already pre-aggregated server-side: one row per (project_id, day_utc)
+    // with SUM(quantity) as `total`. So this loop is a flat O(n_rolled_rows)
+    // join, capped at projectIds.length × 30, regardless of how chatty the
+    // underlying projects are. Pre-RPC this loop iterated every raw event.
     const dayKeys: string[] = [];
     for (let i = 0; i < 30; i++) {
       const d = new Date(thirtyAgo);
@@ -194,15 +206,21 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       for (const k of dayKeys) m.set(k, 0);
       seriesByProject.set(pid, m);
     }
-    for (const u of usageSeries ?? []) {
-      const dayKey = String(u.occurred_at).slice(0, 10);
-      const bucket = seriesByProject.get(u.project_id);
+    for (const row of usageSeries ?? []) {
+      const bucket = seriesByProject.get(row.project_id);
       if (!bucket) continue;
-      // Defensive: a stray event from an earlier rollover (timezone edge) gets
-      // dropped instead of crashing the loop. Bucket only the 30 known keys.
+      // `day_utc` is a Postgres `date` cast. supabase-js serialises it as
+      // 'YYYY-MM-DD' which already matches our pre-seeded `dayKeys`. We
+      // still .slice(0, 10) defensively so a future driver upgrade that
+      // returns 'YYYY-MM-DDT00:00:00+00:00' doesn't silently miss every
+      // bucket.
+      const dayKey = String(row.day_utc).slice(0, 10);
+      // Defensive: a stray row from an earlier rollover (timezone edge,
+      // long-tail event near the boundary) gets dropped instead of
+      // crashing the loop. Bucket only the 30 known keys.
       const cur = bucket.get(dayKey);
       if (cur === undefined) continue;
-      bucket.set(dayKey, cur + Number(u.quantity));
+      bucket.set(dayKey, cur + Number(row.total));
     }
 
     // Synthetic period end for complimentary orgs — line up with the calendar
@@ -1526,6 +1544,160 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return unique as AllowedScope[];
   }
 
+  // ============================================================
+  // POST /v1/admin/auth/register
+  //
+  // OAuth 2.0 RFC 7591 Dynamic Client Registration.
+  //
+  // Allows orchestrators (LangGraph, OpenAI Agents, CrewAI, etc.) to
+  // self-onboard by presenting an "initial access token" (any existing
+  // project API key with `mcp:write` scope) and receiving a new
+  // `client_id` / `client_secret` pair scoped for the operation the
+  // orchestrator needs. The returned `client_secret` is the raw Mushi
+  // API key; store it securely.
+  //
+  // Request body (RFC 7591 §3.1 metadata):
+  //   {
+  //     client_name: "my-langraph-agent",   // human-readable
+  //     grant_types: ["client_credentials"], // must be client_credentials
+  //     scope: "mcp:read mcp:write",         // space-separated Mushi scopes
+  //     contacts: ["ops@example.com"]        // optional
+  //   }
+  //
+  // Response (RFC 7591 §3.2):
+  //   {
+  //     client_id:                   "<uuid>",
+  //     client_secret:               "mushi_...",
+  //     client_secret_expires_at:    0,          // 0 = never expires
+  //     client_id_issued_at:         <unix-secs>,
+  //     client_name:                 "...",
+  //     grant_types:                 ["client_credentials"],
+  //     token_endpoint_auth_method:  "client_secret_post",
+  //     scope:                       "mcp:read mcp:write"
+  //   }
+  // ============================================================
+  app.post('/v1/admin/auth/register', adminOrApiKey({ scope: 'mcp:write' }), async (c) => {
+    const userId = c.get('userId') as string;
+    const apiKeyProjectId = c.get('projectId') as string | undefined;
+    const db = getServiceClient();
+
+    // Resolve the project: orchestrators using an API key get the key's
+    // project; JWT users must pass projectId in the body.
+    let resolvedProjectId: string | undefined = apiKeyProjectId
+    const body = (await c.req.json().catch(() => ({}))) as {
+      client_name?: unknown;
+      grant_types?: unknown;
+      scope?: unknown;
+      contacts?: unknown;
+      projectId?: unknown;
+    };
+
+    if (!resolvedProjectId) {
+      if (typeof body.projectId !== 'string') {
+        return c.json({
+          error: 'invalid_client_metadata',
+          error_description: 'projectId is required for JWT-authenticated registrations.',
+        }, 400);
+      }
+      const access = await userCanAccessProject(db, userId, body.projectId as string);
+      if (!access.allowed || (access.role !== 'owner' && access.role !== 'admin')) {
+        return c.json({ error: 'access_denied', error_description: 'Owner or admin required.' }, 403);
+      }
+      resolvedProjectId = body.projectId as string;
+    }
+
+    // Validate grant_types
+    const grantTypes = Array.isArray(body.grant_types) ? body.grant_types : ['client_credentials'];
+    if (!grantTypes.every((g) => g === 'client_credentials')) {
+      return c.json({
+        error: 'invalid_client_metadata',
+        error_description: 'Only grant_types=["client_credentials"] is supported.',
+      }, 400);
+    }
+
+    // Parse requested scopes (space-separated, RFC 7591 §2)
+    const scopeStr = typeof body.scope === 'string' ? body.scope : 'mcp:read';
+    const requestedScopes = scopeStr.split(/\s+/).filter(Boolean);
+    const scopes = normaliseScopes(requestedScopes);
+    if ('error' in scopes) {
+      return c.json({
+        error: 'invalid_client_metadata',
+        error_description: scopes.error,
+      }, 400);
+    }
+
+    // client_name validation
+    const clientName =
+      typeof body.client_name === 'string' && body.client_name.trim().length > 0
+        ? body.client_name.trim().slice(0, 64)
+        : 'orchestrator';
+
+    // Mint a new API key (same pattern as /v1/admin/projects/:id/keys).
+    const rawKey = `mushi_${crypto.randomUUID().replace(/-/g, '')}`;
+    const prefix = rawKey.slice(0, 12);
+    const encoder = new TextEncoder();
+    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(rawKey));
+    const keyHash = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    const clientId = crypto.randomUUID();
+
+    const { error: insertErr } = await db.from('project_api_keys').insert({
+      id: clientId,
+      project_id: resolvedProjectId,
+      key_hash: keyHash,
+      key_prefix: prefix,
+      label: `dcr:${clientName}`,
+      scopes,
+      is_active: true,
+    });
+    if (insertErr) {
+      return c.json({ error: 'server_error', error_description: insertErr.message }, 500);
+    }
+
+    // Audit trail for DCR is critical: this is the only path where an
+    // existing API key can mint another API key. If the initial-access
+    // token leaks, owners need to see every minted client to revoke.
+    // Failure here must not block the registration response — the key is
+    // already persisted and the operator needs the secret returned.
+    db.from('audit_logs')
+      .insert({
+        project_id: resolvedProjectId,
+        actor_id: userId ?? '00000000-0000-0000-0000-000000000000',
+        actor_type: apiKeyProjectId ? 'api_key' : 'user',
+        action: 'api_key.created',
+        resource_type: 'project_api_key',
+        resource_id: clientId,
+        metadata: {
+          source: 'oauth_dcr',
+          client_name: clientName,
+          scopes,
+          key_prefix: prefix,
+          ip_address: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+          user_agent: c.req.header('user-agent') ?? null,
+        },
+      })
+      .then(({ error: auditErr }) => {
+        if (auditErr) console.warn('[dcr] audit_logs insert failed (non-fatal):', auditErr.message);
+      });
+
+    const issuedAt = Math.floor(Date.now() / 1000);
+    // RFC 7591 §3.2 response
+    return c.json({
+      client_id: clientId,
+      client_secret: rawKey,
+      client_secret_expires_at: 0,
+      client_id_issued_at: issuedAt,
+      client_name: clientName,
+      grant_types: ['client_credentials'],
+      token_endpoint_auth_method: 'client_secret_post',
+      scope: scopes.join(' '),
+      // Non-standard: Mushi-specific fields for convenience.
+      mushi_project_id: resolvedProjectId,
+      mushi_key_prefix: prefix,
+    }, 201);
+  });
+
   app.post('/v1/admin/projects/:id/keys', jwtAuth, async (c) => {
     const projectId = c.req.param('id');
     const userId = c.get('userId') as string;
@@ -2595,5 +2767,117 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         });
       return c.json({ ok: false, error: { code: 'QUERY_ERROR', message } }, 400);
     }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Raw SQL query — authenticated admin sends explicit SQL instead of a
+  // natural-language question. Skips the LLM plan + summary steps (no AI
+  // cost); everything else is identical to the NL path: same rate limit,
+  // same sanitization pipeline (DANGEROUS_PATTERNS + FORBIDDEN_SCHEMAS +
+  // SELECT/WITH gate + $1 scoping + comment stripping), same Postgres RPC,
+  // same audit trail. Extra guards specific to raw SQL mode:
+  //   - Table allowlist: only approved analytics tables (no nl_query_history,
+  //     audit_logs, byok_audit_log, etc.)
+  //   - LIMIT auto-append: if the user forgets LIMIT, append LIMIT 100
+  //   - Input length cap: max 4 000 chars
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post('/v1/admin/query/raw', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const body = (await c.req.json().catch(() => ({}))) as { sql?: string };
+    const rawSql = body.sql?.trim() ?? '';
+    if (!rawSql) {
+      return c.json(
+        { ok: false, error: { code: 'MISSING_SQL', message: 'sql is required' } },
+        400,
+      );
+    }
+
+    const db = getServiceClient();
+
+    // Reuse the same per-user hourly rate limit as the NL endpoint. Raw SQL
+    // is cheaper (no LLM) but still hits the Postgres RPC and could be abused
+    // for data exfiltration if unlimited.
+    const { error: rateErr } = await db.rpc('nl_query_rate_limit_claim', {
+      p_user_id: userId,
+      p_max_per_hour: 60,
+    });
+    if (rateErr) {
+      const msg = rateErr.message ?? '';
+      if (msg.includes('rate_limit_exceeded')) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'RATE_LIMITED',
+              message: 'Query rate limit reached (60 queries/hour). Try again next hour.',
+            },
+          },
+          429,
+        );
+      }
+      console.warn('[raw-query] rate limit RPC failed:', msg);
+    }
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (!projectIds.length) {
+      return c.json({ ok: true, data: { sql: rawSql, results: [], rowCount: 0 } });
+    }
+
+    let cleanedSql: string;
+    try {
+      cleanedSql = sanitizeSql(rawSql, { tableAllowlist: true, requireProjectIdParam: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ ok: false, error: { code: 'INVALID_SQL', message } }, 400);
+    }
+
+    const startedAt = Date.now();
+    const results: unknown[] = [];
+    for (const projectId of projectIds) {
+      const { data, error } = await db.rpc('execute_readonly_query', {
+        query_text: cleanedSql,
+        project_id_param: projectId,
+      });
+      if (error) {
+        const message = `Query execution failed: ${error.message}`;
+        const latencyMs = Date.now() - startedAt;
+        db.from('nl_query_history')
+          .insert({
+            project_id: projectIds[0] ?? null,
+            user_id: userId,
+            prompt: rawSql,
+            sql: cleanedSql,
+            error: message,
+            latency_ms: latencyMs,
+            mode: 'raw',
+          })
+          .then(({ error: e }) => {
+            if (e) console.warn('[raw_query_history] insert failed:', e.message);
+          });
+        return c.json({ ok: false, error: { code: 'QUERY_ERROR', message } }, 400);
+      }
+      if (data) results.push(...(Array.isArray(data) ? data : [data]));
+      if (results.length >= 100) break;
+    }
+
+    const latencyMs = Date.now() - startedAt;
+    db.from('nl_query_history')
+      .insert({
+        project_id: projectIds[0] ?? null,
+        user_id: userId,
+        prompt: rawSql,
+        sql: cleanedSql,
+        row_count: results.length,
+        latency_ms: latencyMs,
+        mode: 'raw',
+      })
+      .then(({ error: e }) => {
+        if (e) console.warn('[raw_query_history] insert failed:', e.message);
+      });
+
+    return c.json({
+      ok: true,
+      data: { sql: cleanedSql, results: results.slice(0, 100), rowCount: results.length, latencyMs },
+    });
   });
 }

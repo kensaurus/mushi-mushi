@@ -9,36 +9,72 @@ import { useEffect, useState } from 'react'
 import {
   ReactFlow,
   Background,
-  Controls,
-  MiniMap,
   Panel,
+  useReactFlow,
   type Edge,
   type Node,
   type NodeMouseHandler,
 } from '@xyflow/react'
-import { NODE_COLORS } from '../../lib/tokens'
 import { useTheme } from '../../lib/useTheme'
 import { GraphLegend } from './GraphLegend'
 import { ReactFlowChip } from './NodeChip'
 import { GraphSidePanel } from './GraphSidePanel'
 import type { BlastRadiusItem, GraphNode } from './types'
 
-// Minimap + dot-grid colours are passed straight to SVG attrs by xyflow,
-// which strips `var(--…)` references — so we resolve them per-theme here
-// instead of trying to live inside CSS custom properties.
-const MINIMAP_COLORS = {
-  dark: {
-    background: 'oklch(0.215 0.007 285)',
-    mask: 'oklch(0.10 0 0 / 0.55)',
-    border: 'oklch(0.30 0.005 285)',
-  },
-  light: {
-    background: 'oklch(0.97 0.003 285)',
-    mask: 'oklch(0.55 0.005 285 / 0.18)',
-    border: 'oklch(0.85 0.004 285)',
-  },
-} as const
+/** Zoom +/−/fit control rendered as a Panel so it picks up design tokens
+ *  instead of React Flow's hardcoded white stylesheet. Must be a child of
+ *  ReactFlow so it can call useReactFlow(). */
+function ZoomControls() {
+  const { zoomIn, zoomOut, fitView } = useReactFlow()
+  const btn =
+    'flex items-center justify-center w-7 h-7 text-fg-secondary hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors'
+  return (
+    <div className="flex flex-col rounded-md border border-edge/70 bg-surface-raised/90 backdrop-blur shadow-raised overflow-hidden">
+      <button
+        type="button"
+        onClick={() => zoomIn({ duration: 200 })}
+        className={`${btn} border-b border-edge/50`}
+        aria-label="Zoom in"
+        title="Zoom in"
+      >
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <path d="M6.5 2v9M2 6.5h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => zoomOut({ duration: 200 })}
+        className={`${btn} border-b border-edge/50`}
+        aria-label="Zoom out"
+        title="Zoom out"
+      >
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <path d="M2 6.5h9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={() => fitView({ duration: 300, padding: 0.2 })}
+        className={btn}
+        aria-label="Fit view"
+        title="Fit view"
+      >
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
+          <path
+            d="M2 4.5V2h2.5M11 4.5V2H8.5M2 8.5V11h2.5M11 8.5V11H8.5"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </div>
+  )
+}
 
+// Dot-grid colours are passed straight to SVG attrs by xyflow, which strips
+// `var(--…)` references — so we resolve them per-theme here.
 const DOT_GRID_COLORS = {
   dark: 'oklch(0.30 0 0)',
   light: 'oklch(0.86 0.004 285)',
@@ -53,9 +89,6 @@ interface Props {
   onPaneClick: () => void
   onResetView: () => void
   hidden?: boolean
-  /** When false, the minimap is suppressed — useful on small graphs where it
-   *  adds visual clutter without helping orientation. Defaults to true. */
-  showMinimap?: boolean
   // 2026-05-07 — selection panel now floats *inside* the ReactFlow
   // viewport (top-right) instead of as a sibling 18rem column. This keeps
   // the canvas full-width (the user's reported "wasted space" was the
@@ -79,7 +112,6 @@ export function GraphCanvas({
   onPaneClick,
   onResetView,
   hidden = false,
-  showMinimap = true,
   selectedNode = null,
   blastRadius = [],
   blastLoading = false,
@@ -87,7 +119,6 @@ export function GraphCanvas({
 }: Props) {
   const [hintDismissed, setHintDismissed] = useState(false)
   const { resolved } = useTheme()
-  const minimap = MINIMAP_COLORS[resolved]
   const dotGrid = DOT_GRID_COLORS[resolved]
 
   // Auto-fade the pan/zoom hint after 6s. Stored in localStorage so it doesn't
@@ -112,18 +143,18 @@ export function GraphCanvas({
 
   return (
     <div
-      // 2026-05-07 — height tightened from `100vh-280` / min 520 to
-      // `100vh-360` / min 440. The user reported "the height is a little
-      // too big"; the prior numbers were sized for a viewport without the
-      // PageHero + filter chips above the canvas. Subtracting another
-      // ~80 px restores ~1.1 viewport-folds of canvas at 1440×900 instead
-      // of overflowing to ~1.4 folds and forcing a vertical scroll just to
-      // reach the legend / minimap controls. min-height stays generous
-      // enough for the storyboard threshold (12 nodes laid out by force).
+      // 2026-05-08 — switched from a raw calc() to clamp() so the canvas
+      // is bounded on both ends. The page now carries PageHero + PageHelp
+      // + QuickViewsRow + two filter-chip rows above the canvas (~520 px
+      // of chrome at typical zoom). The old `100vh-360` produced a 700 px+
+      // canvas at 1080 p viewports, eating the entire fold and burying the
+      // GraphBackendPanel / OntologyPanel below. clamp(380px, 100vh-540px,
+      // 600px) yields: 380 px at 920 px viewport, 540 px at 1080 px, and
+      // caps at 600 px even on tall displays — leaving the panels visible
+      // without scrolling on most desktop monitors.
       className="border border-edge rounded-md bg-surface-root"
       style={{
-        height: 'calc(100vh - 360px)',
-        minHeight: 440,
+        height: 'clamp(380px, calc(100vh - 540px), 600px)',
         display: hidden ? 'none' : 'block',
       }}
       role="region"
@@ -151,25 +182,9 @@ export function GraphCanvas({
         aria-label="Knowledge graph nodes and edges. Use Tab to focus, Enter or Space to select a node and load its blast radius."
       >
         <Background gap={24} color={dotGrid} />
-        <Controls position="bottom-right" showInteractive={false} />
-        {showMinimap && (
-          <MiniMap
-            pannable
-            zoomable
-            nodeColor={(n) => {
-              const data = n.data as { node?: GraphNode } | undefined
-              return NODE_COLORS[data?.node?.node_type ?? ''] ?? 'oklch(0.55 0.005 285)'
-            }}
-            nodeStrokeColor={minimap.border}
-            nodeStrokeWidth={1.5}
-            maskColor={minimap.mask}
-            style={{
-              background: minimap.background,
-              border: `1px solid ${minimap.border}`,
-              borderRadius: 6,
-            }}
-          />
-        )}
+        <Panel position="bottom-right">
+          <ZoomControls />
+        </Panel>
         {!hintDismissed && (
           <Panel position="top-center">
             <div className="flex items-center gap-2 rounded-md border border-edge bg-surface-raised/95 backdrop-blur px-3 py-1.5 text-2xs text-fg-secondary shadow-raised">

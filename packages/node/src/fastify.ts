@@ -33,6 +33,12 @@ export function mushiFastifyPlugin(app: FastifyInstance, opts: FastifyPluginOpti
   app.addHook('onError', (req, reply, err) => {
     try {
       const traceContext = parseTraceContext(req.headers)
+      const rawTraceparent =
+        typeof req.headers['traceparent'] === 'string'
+          ? req.headers['traceparent']
+          : Array.isArray(req.headers['traceparent'])
+            ? req.headers['traceparent'][0]
+            : undefined
       void opts.client.captureReport({
         description: `[${req.method ?? 'REQ'} ${req.url ?? req.raw?.url ?? ''}] ${err.message}`,
         userCategory: 'bug',
@@ -41,6 +47,7 @@ export function mushiFastifyPlugin(app: FastifyInstance, opts: FastifyPluginOpti
         url: req.url ?? req.raw?.url,
         traceContext,
         error: { name: err.name, message: err.message, stack: err.stack },
+        ...(rawTraceparent ? { metadata: { traceparent: rawTraceparent } } : {}),
       })
     } catch {
       // silent — instrumentation never fails the handler chain

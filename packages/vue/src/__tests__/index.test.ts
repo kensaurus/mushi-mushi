@@ -3,34 +3,64 @@
  * PURPOSE: Unit tests for the Vue 3 Mushi plugin, composables, and error handler.
  *
  * OVERVIEW:
- * - Verifies MushiPlugin installs correctly on a Vue app
+ * - Verifies MushiPlugin delegates to Mushi.init() from @mushi-mushi/web
  * - Tests useMushi, useMushiReport, and useMushiWidget composables
- * - Validates the global error handler delegates to captureError
+ * - Validates the global error handler delegates to captureException
+ * - After init, Mushi.getInstance() returns the SDK instance (parity check)
  *
  * DEPENDENCIES:
  * - vitest for test runner and mocking
  * - vue for createApp / ref reactivity
- * - @mushi-mushi/core mocked entirely
+ * - @mushi-mushi/web mocked entirely
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createApp, defineComponent, h } from 'vue'
 
-const mockSubmitReport = vi.fn().mockResolvedValue(undefined)
-const mockClient = { submitReport: mockSubmitReport }
+// `vi.mock` is hoisted ABOVE module-level `const` declarations, so the
+// factory cannot reference closure variables defined below it (TDZ:
+// "Cannot access 'mockInit' before initialization"). `vi.hoisted` lifts
+// the mock state so the factory and the test body see the same `vi.fn`s.
+const mocks = vi.hoisted(() => {
+  const mockCaptureException = vi.fn().mockResolvedValue(null)
+  const mockCaptureEvent = vi.fn().mockResolvedValue('report-id')
+  const mockOpen = vi.fn()
+  const mockClose = vi.fn()
+  const mockIsOpen = vi.fn().mockReturnValue(false)
+  const mockSdkInstance = {
+    captureException: mockCaptureException,
+    captureEvent: mockCaptureEvent,
+    open: mockOpen,
+    close: mockClose,
+    isOpen: mockIsOpen,
+  }
+  return {
+    mockCaptureException,
+    mockCaptureEvent,
+    mockOpen,
+    mockClose,
+    mockIsOpen,
+    mockSdkInstance,
+    mockInit: vi.fn().mockReturnValue(mockSdkInstance),
+    mockGetInstance: vi.fn().mockReturnValue(mockSdkInstance),
+  }
+})
+// Only the names actually referenced in the test body are destructured.
+// The rest stay accessible via `mocks.*` (used by the vi.mock factory above).
+const {
+  mockCaptureException,
+  mockIsOpen,
+  mockSdkInstance,
+  mockInit,
+  mockGetInstance,
+} = mocks
 
-vi.mock('@mushi-mushi/core', () => ({
-  createApiClient: vi.fn(() => mockClient),
-  captureEnvironment: vi.fn(() => ({ userAgent: 'test' })),
-  getSessionId: vi.fn(() => 'session-123'),
-  getReporterToken: vi.fn(() => 'token-abc'),
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    fatal: vi.fn(),
-  })),
+vi.mock('@mushi-mushi/web', () => ({
+  Mushi: {
+    init: mocks.mockInit,
+    getInstance: mocks.mockGetInstance,
+    destroy: vi.fn(),
+  },
 }))
 
 import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from '../index'
@@ -43,19 +73,31 @@ const testConfig = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockIsOpen.mockReturnValue(false)
+  mockInit.mockReturnValue(mockSdkInstance)
+  mockGetInstance.mockReturnValue(mockSdkInstance)
 })
 
 describe('MushiPlugin', () => {
-  it('installs on a Vue app and calls createApiClient', async () => {
-    const { createApiClient } = await import('@mushi-mushi/core')
+  it('installs on a Vue app and calls Mushi.init', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
     const app = createApp(defineComponent({ render: () => h('div') }))
     app.use(MushiPlugin, testConfig)
 
-    expect(createApiClient).toHaveBeenCalledWith({
+    expect(Mushi.init).toHaveBeenCalledWith({
       projectId: 'proj_test',
       apiKey: 'key_test',
       apiEndpoint: 'https://test.api',
     })
+  })
+
+  it('after Mushi.init(), getInstance() returns the SDK instance (parity check)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    const app = createApp(defineComponent({ render: () => h('div') }))
+    app.use(MushiPlugin, testConfig)
+
+    expect(Mushi.getInstance()).toBeDefined()
+    expect(Mushi.getInstance()).toBe(mockSdkInstance)
   })
 
   it('sets app.config.errorHandler', () => {
@@ -66,7 +108,7 @@ describe('MushiPlugin', () => {
     expect(typeof app.config.errorHandler).toBe('function')
   })
 
-  it('errorHandler calls submitReport on error', async () => {
+  it('errorHandler calls captureException on error', async () => {
     const app = createApp(defineComponent({ render: () => h('div') }))
     app.use(MushiPlugin, testConfig)
 
@@ -74,7 +116,10 @@ describe('MushiPlugin', () => {
     handler(new Error('boom'), null as any, 'mounted hook')
 
     await vi.waitFor(() => {
-      expect(mockSubmitReport).toHaveBeenCalled()
+      expect(mockCaptureException).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.objectContaining({ source: 'vue-error-handler' }),
+      )
     })
   })
 })

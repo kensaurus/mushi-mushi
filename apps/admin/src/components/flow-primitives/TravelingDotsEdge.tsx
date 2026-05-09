@@ -18,6 +18,12 @@ interface TravelingDotsEdgeProps {
   dots?: number
   /** Total traversal time per cycle. */
   durationMs?: number
+  /** Override the dot's stroke-width (default 4). The hero flow uses a
+   *  smaller value (~2.25) because its 76px paths read busier with thick
+   *  dots. */
+  strokeWidth?: number
+  /** Override the drop-shadow glow radius in px (default 3). */
+  glowBlur?: number
 }
 
 export function TravelingDotsEdge({
@@ -25,6 +31,8 @@ export function TravelingDotsEdge({
   color,
   dots = 3,
   durationMs = 2400,
+  strokeWidth = 4,
+  glowBlur = 3,
 }: TravelingDotsEdgeProps) {
   const spacing = 1 / dots
   return (
@@ -38,13 +46,13 @@ export function TravelingDotsEdge({
             pathLength={1}
             fill="none"
             stroke={color}
-            strokeWidth={4}
+            strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray="0.01 1"
             style={{
               animation: `mushi-dot-travel ${durationMs}ms linear infinite`,
               animationDelay: `${delay}ms`,
-              filter: 'drop-shadow(0 0 3px currentColor)',
+              filter: `drop-shadow(0 0 ${glowBlur}px currentColor)`,
             }}
           />
         )

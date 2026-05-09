@@ -25,7 +25,8 @@ export interface MushiCapacitorPluginConfig {
   /** Public ingest API key (`mush_pk_...`). */
   apiKey: string;
   /**
-   * Override the ingest endpoint. Defaults to `https://api.mushimushi.dev`.
+   * Supabase Edge Function URL for the ingest endpoint.
+   * Required for reports to be delivered. Example: `https://xyz.supabase.co/functions/v1/api`.
    */
   endpoint?: string;
   /** Defaults to `'shake'`. */

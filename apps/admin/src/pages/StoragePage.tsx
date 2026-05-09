@@ -22,6 +22,13 @@ import { useNextBestAction } from '../lib/useNextBestAction'
 
 type Provider = 'supabase' | 's3' | 'r2' | 'gcs' | 'minio'
 
+interface HealthDebugStep {
+  step: string
+  ok: boolean
+  ms: number
+  detail?: string
+}
+
 interface StorageSetting {
   project_id: string
   provider: Provider
@@ -39,6 +46,7 @@ interface StorageSetting {
   health_status: 'unknown' | 'healthy' | 'degraded' | 'failing'
   last_health_check_at: string | null
   last_health_error: string | null
+  last_health_debug: HealthDebugStep[] | null
 }
 
 interface OwnedProject {
@@ -79,7 +87,41 @@ function defaultsFor(projectId: string): StorageSetting {
     health_status: 'unknown',
     last_health_check_at: null,
     last_health_error: null,
+    last_health_debug: null,
   }
+}
+
+interface ValidationHint {
+  field: string
+  message: string
+  blocking: boolean
+}
+
+function validateProvider(m: StorageSetting): ValidationHint[] {
+  const hints: ValidationHint[] = []
+  const p = m.provider
+
+  if (p === 'minio' && !m.endpoint) {
+    hints.push({ field: 'endpoint', message: 'MinIO requires an explicit endpoint URL.', blocking: true })
+  }
+  if (p === 'gcs' && !m.service_account_vault_ref) {
+    hints.push({ field: 'service_account_vault_ref', message: 'GCS requires a service-account Vault reference.', blocking: true })
+  }
+  if (['s3', 'r2', 'minio'].includes(p)) {
+    if (!m.access_key_vault_ref) {
+      hints.push({ field: 'access_key_vault_ref', message: `${p.toUpperCase()} requires an Access key Vault reference.`, blocking: true })
+    }
+    if (!m.secret_key_vault_ref) {
+      hints.push({ field: 'secret_key_vault_ref', message: `${p.toUpperCase()} requires a Secret key Vault reference.`, blocking: true })
+    }
+  }
+  if (p === 's3' && !m.region) {
+    hints.push({ field: 'region', message: 'AWS S3 requires a region (e.g. us-east-1).', blocking: true })
+  }
+  if (p === 'r2' && m.region && m.region.toLowerCase() !== 'auto') {
+    hints.push({ field: 'region', message: 'Cloudflare R2 ignores the region field — set it to "auto" or leave blank.', blocking: false })
+  }
+  return hints
 }
 
 export function StoragePage() {
@@ -107,6 +149,10 @@ export function StoragePage() {
   const [drafts, setDrafts] = useState<Record<string, Partial<StorageSetting>>>({})
   const [savingId, setSavingId] = useState<string | null>(null)
   const [checkingId, setCheckingId] = useState<string | null>(null)
+  // Live debug steps from the most recent health probe (not yet persisted to DB)
+  const [liveDebug, setLiveDebug] = useState<Record<string, HealthDebugStep[]>>({})
+  // Which cards have their debug panel open
+  const [debugOpen, setDebugOpen] = useState<Record<string, boolean>>({})
   const toast = useToast()
 
   // Show one card per owned project. Projects with an existing row use their
@@ -131,8 +177,6 @@ export function StoragePage() {
 
   const save = async (projectId: string, isFirstSave: boolean) => {
     const patch = drafts[projectId] ?? {}
-    // First save needs to send the full default row so the upsert creates a
-    // valid record even if the user only touched one field.
     const payload = isFirstSave
       ? { ...defaultsFor(projectId), ...patch }
       : patch
@@ -154,15 +198,23 @@ export function StoragePage() {
 
   const checkHealth = async (projectId: string) => {
     setCheckingId(projectId)
-    const res = await apiFetch<{ healthy?: boolean; error?: string }>(
+    const res = await apiFetch<{ healthy: boolean; error: string | null; debug: HealthDebugStep[] }>(
       `/v1/admin/storage/${projectId}/health`,
       { method: 'POST' },
     )
     setCheckingId(null)
-    if (res.ok) {
-      toast.success('Health check complete', 'Status updated below.')
+
+    if (res.data?.debug) {
+      setLiveDebug((prev) => ({ ...prev, [projectId]: res.data!.debug }))
+      // Auto-open the debug panel so the user sees the output immediately
+      setDebugOpen((prev) => ({ ...prev, [projectId]: true }))
+    }
+
+    if (res.data?.healthy) {
+      toast.success('Health check passed', 'Bucket is reachable and accepts writes.')
     } else {
-      toast.error('Health check failed', res.error?.message)
+      const errMsg = res.data?.error ?? res.error?.message
+      toast.error('Health check failed', errMsg)
     }
     reloadAll()
   }
@@ -220,8 +272,21 @@ export function StoragePage() {
                   ? `${settings.length} bucket${settings.length === 1 ? '' : 's'} configured and passing probes.`
                   : 'Connect a bucket to retain screenshots + logs beyond the default rolling window.',
           severity: storageSeverity,
+          anchor: 'storage:decide',
+          evidence: settings.length > 0 ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Buckets', value: settings.length, tone: 'neutral' },
+              { label: 'Healthy', value: healthyBuckets, tone: healthyBuckets > 0 ? 'ok' : 'neutral' },
+              { label: 'Degraded', value: degradedBuckets, tone: degradedBuckets > 0 ? 'warn' : 'ok' },
+              { label: 'Failing', value: failingBuckets, tone: failingBuckets > 0 ? 'crit' : 'ok' },
+            ],
+          } : undefined,
+          missingConfigIds: settings.length === 0 ? ['storage.provider', 'storage.bucket'] : [],
         }}
         act={storageAction}
+        actAnchor="storage:act"
+        actEvidence={storageAction ? { kind: 'rule-trace', why: storageAction.reason ?? storageAction.title, threshold: failingBuckets > 0 ? `${failingBuckets} bucket${failingBuckets === 1 ? '' : 's'} failing` : undefined } : undefined}
         verify={{
           label: 'Latest probe snapshot',
           detail:
@@ -231,6 +296,15 @@ export function StoragePage() {
           to: '/health?fn=storage-probe',
           secondaryTo: '/audit?source=storage',
           secondaryLabel: 'Audit log',
+          anchor: 'storage:verify',
+          evidence: settings.length > 0 ? {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Healthy', value: healthyBuckets, tone: healthyBuckets > 0 ? 'ok' : 'neutral' },
+              { label: 'Degraded', value: degradedBuckets, tone: degradedBuckets > 0 ? 'warn' : 'ok' },
+              { label: 'Failing', value: failingBuckets, tone: failingBuckets > 0 ? 'crit' : 'ok' },
+            ],
+          } : undefined,
         }}
       />
 
@@ -257,7 +331,7 @@ export function StoragePage() {
 
       {cards.length > 0 && usageRows.length > 0 && (
         <Card className="p-3">
-          <div className="text-xs font-medium uppercase tracking-wider mb-2">Per-project usage</div>
+          <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">Per-project usage</div>
           <p className="text-2xs text-fg-muted mb-2">
             Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project
             burning through storage or to confirm a quiet project before changing its provider.
@@ -290,10 +364,18 @@ export function StoragePage() {
         </Card>
       )}
 
+      <div data-dav-anchor="storage:decide" className="space-y-3">
       {cards.map(({ setting: s, existing }) => {
         const m = merged(s)
         const dirty = Object.keys(draftFor(s.project_id)).length > 0
         const projectName = projects.find((p) => p.id === s.project_id)?.name ?? s.project_id
+        const hints = validateProvider(m)
+        const blockingHints = hints.filter((h) => h.blocking)
+        const warnHints = hints.filter((h) => !h.blocking)
+        const saveBlocked = existing ? (!dirty || blockingHints.length > 0) : blockingHints.length > 0
+        const debugSteps = liveDebug[s.project_id] ?? s.last_health_debug ?? null
+        const isDebugOpen = debugOpen[s.project_id] ?? false
+
         return (
           <Card key={s.project_id} className="p-3">
             <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
@@ -396,11 +478,95 @@ export function StoragePage() {
                 value={m.kms_key_id ?? ''}
                 onChange={(e) => updateDraft(s.project_id, { kms_key_id: e.target.value || null as unknown as string })}
               />
+              {/* Toggles for columns that were in DB but missing from the form */}
+              <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={m.use_signed_urls}
+                  onChange={(e) => updateDraft(s.project_id, { use_signed_urls: e.target.checked })}
+                  className="h-3.5 w-3.5 rounded border-edge-subtle accent-brand"
+                />
+                <span>
+                  Use signed URLs
+                  <span className="ml-1 text-fg-muted text-2xs">(serve uploads via short-lived links)</span>
+                </span>
+              </label>
+              <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={m.encryption_required}
+                  onChange={(e) => updateDraft(s.project_id, { encryption_required: e.target.checked })}
+                  className="h-3.5 w-3.5 rounded border-edge-subtle accent-brand"
+                />
+                <span>
+                  Require encryption
+                  <span className="ml-1 text-fg-muted text-2xs">(reject uploads without server-side encryption)</span>
+                </span>
+              </label>
             </div>
+
+            {/* Provider-specific validation hints */}
+            {(blockingHints.length > 0 || warnHints.length > 0) && (
+              <div className="mt-3 space-y-1">
+                {blockingHints.map((h) => (
+                  <p key={h.field} className="text-2xs text-danger flex items-start gap-1">
+                    <span className="shrink-0 font-bold">✕</span>
+                    {h.message}
+                  </p>
+                ))}
+                {warnHints.map((h) => (
+                  <p key={h.field} className="text-2xs text-warn flex items-start gap-1">
+                    <span className="shrink-0 font-bold">!</span>
+                    {h.message}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {existing && s.last_health_error ? (
               <p className="mt-2 text-2xs text-danger">Last error: {s.last_health_error}</p>
             ) : null}
+
+            {/* Health probe debug log — shown after a check or if the row has persisted debug */}
+            {existing && debugSteps && debugSteps.length > 0 && (
+              <div className="mt-3">
+                <button
+                  type="button"
+                  className="text-2xs text-fg-muted hover:text-fg flex items-center gap-1 focus:outline-none"
+                  onClick={() => setDebugOpen((prev) => ({ ...prev, [s.project_id]: !prev[s.project_id] }))}
+                >
+                  <span className={`inline-block transition-transform duration-150 ${isDebugOpen ? 'rotate-90' : ''}`}>▶</span>
+                  <span>{isDebugOpen ? 'Hide' : 'Show'} debug log</span>
+                  <span className="opacity-50">({debugSteps.length} steps)</span>
+                </button>
+                {isDebugOpen && (
+                  <div className="mt-1 overflow-x-auto rounded border border-edge-subtle bg-surface-overlay">
+                    <table className="w-full text-2xs font-mono">
+                      <thead className="text-fg-muted uppercase tracking-wider text-3xs border-b border-edge-subtle">
+                        <tr>
+                          <th className="py-1 px-2 text-left">Step</th>
+                          <th className="px-2">Result</th>
+                          <th className="px-2 text-right">ms</th>
+                          <th className="px-2 text-left">Detail</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {debugSteps.map((step, i) => (
+                          <tr key={i} className="border-b border-edge-subtle/40">
+                            <td className="py-1 px-2">{step.step}</td>
+                            <td className={`px-2 text-center font-semibold ${step.ok ? 'text-ok' : 'text-danger'}`}>
+                              {step.ok ? '✓' : '✕'}
+                            </td>
+                            <td className="px-2 text-right text-fg-muted">{step.ms}</td>
+                            <td className="px-2 text-fg-muted truncate max-w-xs" title={step.detail}>{step.detail ?? '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="mt-3 flex items-center justify-end gap-2">
               <Btn
@@ -410,13 +576,14 @@ export function StoragePage() {
                 disabled={!existing || savingId === s.project_id || checkingId === s.project_id}
                 loading={checkingId === s.project_id}
                 title={!existing ? 'Save the configuration first to enable health checks' : undefined}
+                data-dav-anchor="storage:act"
               >
                 Health check
               </Btn>
               <Btn
                 size="sm"
                 onClick={() => save(s.project_id, !existing)}
-                disabled={(existing && !dirty) || savingId === s.project_id || checkingId === s.project_id}
+                disabled={saveBlocked || savingId === s.project_id || checkingId === s.project_id}
                 loading={savingId === s.project_id}
               >
                 {existing ? 'Save' : 'Save & enable'}
@@ -425,6 +592,7 @@ export function StoragePage() {
           </Card>
         )
       })}
+      </div>
     </div>
   )
 }

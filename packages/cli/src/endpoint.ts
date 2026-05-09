@@ -2,11 +2,10 @@
  * FILE: packages/cli/src/endpoint.ts
  * PURPOSE: Single source of truth for the Mushi Mushi API endpoint and the
  *          validation used everywhere we accept one (CLI flag, config set,
- *          login). Keeps the default, the scheme policy, and the localhost
- *          escape-hatch in one place.
+ *          login). Keeps the scheme policy and the localhost escape-hatch in
+ *          one place. There is no built-in default — callers must supply an
+ *          explicit endpoint or handle the absence themselves.
  */
-
-export const DEFAULT_ENDPOINT = 'https://api.mushimushi.dev'
 
 const TEST_REPORT_TIMEOUT_MS = 10_000
 
@@ -39,6 +38,10 @@ export function assertEndpoint(url: string): string {
 /**
  * Strip trailing slashes so `${endpoint}/v1/...` never double-slashes.
  *
+ * Throws if `url` is undefined or empty — the caller must have already
+ * resolved the endpoint from config or env. Error message tells the user
+ * exactly what to do.
+ *
  * Uses a character-by-character trim (not a regex) so we do not create a
  * ReDoS surface on attacker-controlled endpoints: a string of thousands of
  * trailing slashes would otherwise make even `/\/+$/` more expensive than
@@ -46,8 +49,13 @@ export function assertEndpoint(url: string): string {
  * regardless. Linear time, no backtracking.
  */
 export function normalizeEndpoint(url: string | undefined): string {
-  const input = url ?? DEFAULT_ENDPOINT
-  let end = input.length
-  while (end > 0 && input.charCodeAt(end - 1) === 47 /* '/' */) end--
-  return input.slice(0, end)
+  if (!url) {
+    throw new Error(
+      'No API endpoint configured. Run `mushi init` or set MUSHI_API_ENDPOINT. ' +
+        'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
+    )
+  }
+  let end = url.length
+  while (end > 0 && url.charCodeAt(end - 1) === 47 /* '/' */) end--
+  return url.slice(0, end)
 }

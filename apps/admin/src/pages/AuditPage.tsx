@@ -312,7 +312,7 @@ export function AuditPage() {
         description="Append-only history of every mutation made by the platform. Filter by actor, action, or resource."
       >
         <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-        <Btn variant="ghost" size="sm" onClick={exportCsv}>Export CSV ({logs.length})</Btn>
+        <Btn variant="ghost" size="sm" onClick={exportCsv} data-dav-anchor="audit:act">Export CSV ({logs.length})</Btn>
       </PageHeader>
 
       <PageHero
@@ -336,8 +336,19 @@ export function AuditPage() {
                 ? 'Audit stream empty — broaden the filters or wait for the next mutation.'
                 : 'Every mutation in scope is accounted for. Export evidence for your next review.',
           severity: auditSeverity,
+          anchor: 'audit:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Total events', value: logs.length, tone: 'neutral' },
+              { label: 'FAIL events', value: failCount, tone: failCount > 0 ? 'crit' : 'ok' },
+              { label: 'WARN events', value: warnCount, tone: warnCount > 0 ? 'warn' : 'ok' },
+            ],
+          },
         }}
         act={auditAction}
+        actAnchor="audit:act"
+        actEvidence={auditAction ? { kind: 'rule-trace', why: auditAction.reason ?? auditAction.title, threshold: failCount > 0 ? `${failCount} FAIL event${failCount === 1 ? '' : 's'}` : undefined } : undefined}
         verify={{
           label: lastLog ? `Last event · ${lastLog.action}` : 'Awaiting activity',
           detail: lastLog
@@ -346,6 +357,14 @@ export function AuditPage() {
           to: '/audit?export=csv',
           secondaryTo: '/compliance',
           secondaryLabel: 'Open compliance',
+          anchor: 'audit:verify',
+          evidence: lastLog ? {
+            kind: 'last-event',
+            at: lastLog.created_at,
+            by: lastLog.actor_email ?? lastLog.actor_id ?? 'system',
+            payloadSummary: lastLog.action,
+            status: lastLog.action === 'fix.failed' || lastLog.action === 'integration.disconnected' ? 'error' : 'ok',
+          } : undefined,
         }}
       />
 
@@ -363,7 +382,7 @@ export function AuditPage() {
       />
 
       <Card className="p-3 space-y-2">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-2" data-dav-anchor="audit:decide">
           <FilterSelect
             label="Action"
             value={action}
@@ -455,6 +474,7 @@ export function AuditPage() {
         />
       ) : (
         <>
+          <div data-dav-anchor="audit:verify">
           <DataTable<AuditEntry>
             data={logs}
             columns={columns}
@@ -482,6 +502,7 @@ export function AuditPage() {
               </div>
             )}
           />
+          </div>
 
           <div className="flex items-center justify-between text-2xs text-fg-muted pt-1">
             <span>

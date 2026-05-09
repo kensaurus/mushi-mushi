@@ -19,6 +19,12 @@ const DASH_LENGTH = 8
 const GAP_LENGTH = 4
 const ANIMATION_DURATION = '0.6s'
 
+// Stroke widths: inactive edges are now clearly visible at rest so the user
+// can follow the loop without hovering. Active/selected edges jump up one
+// more notch. Values are tuned for the canvas's default fitView scale.
+const STROKE_BASE = 2.5   // was 1.75 — too thin at 70% opacity
+const STROKE_ACTIVE = 3.5 // was 2.5
+
 function PdcaGradientEdgeInner({
   id,
   sourceX,
@@ -61,6 +67,8 @@ function PdcaGradientEdgeInner({
   const strokeValue = isFailing ? DANGER : `url(#${gradientId})`
   const failingDash = '6 3'
 
+  const currentStrokeWidth = isActive || selected ? STROKE_ACTIVE : STROKE_BASE
+
   return (
     <>
       <defs>
@@ -79,33 +87,44 @@ function PdcaGradientEdgeInner({
         `}</style>
       )}
 
+      {/* Track — always-on wide-but-faint stripe so the loop path is visible
+          even for inactive edges. Rendered first so the gradient sits on top. */}
       <path
         d={edgePath}
         stroke={strokeValue}
-        strokeWidth={isActive || selected ? 2.5 : 1.75}
+        strokeWidth={currentStrokeWidth + 4}
+        fill="none"
+        style={{ opacity: isActive ? 0.18 : 0.12 }}
+      />
+
+      {/* Glow — blur halo. On inactive edges a subtle ambient glow anchors
+          the path without fighting the node content. On active edges it pops. */}
+      <path
+        d={edgePath}
+        stroke={strokeValue}
+        strokeWidth={isActive ? 8 : 6}
         fill="none"
         strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
-          opacity: isActive || selected ? 1 : 0.7,
+          opacity: isActive ? (isFailing ? 0.4 : 0.3) : 0.13,
+          filter: 'blur(2.5px)',
+          animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
+        }}
+      />
+
+      {/* Main gradient stroke */}
+      <path
+        d={edgePath}
+        stroke={strokeValue}
+        strokeWidth={currentStrokeWidth}
+        fill="none"
+        strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
+        style={{
+          opacity: isActive || selected ? 1 : 0.88,
           animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
         }}
         markerEnd={markerEnd}
       />
-
-      {isActive && (
-        <path
-          d={edgePath}
-          stroke={strokeValue}
-          strokeWidth={5}
-          fill="none"
-          strokeDasharray={isFailing ? failingDash : dashArray}
-          style={{
-            opacity: isFailing ? 0.35 : 0.25,
-            filter: 'blur(2px)',
-            animation: `${keyframeName} ${ANIMATION_DURATION} linear infinite`,
-          }}
-        />
-      )}
 
       {isFlowing && (
         <TravelingDotsEdge

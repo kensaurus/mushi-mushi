@@ -47,7 +47,7 @@ export class MushiApiError extends Error {
 export interface MushiServerConfig {
   /** Server version — surfaced in MCP handshake. Read from package.json by boot. */
   version: string
-  /** Base URL of the Mushi API, e.g. https://api.mushimushi.dev */
+  /** Base URL of the Mushi API, e.g. https://xyz.supabase.co/functions/v1/api */
   apiEndpoint: string
   /** Project API key with `mcp:read` or `mcp:write` scope. */
   apiKey: string
@@ -487,6 +487,8 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       inputSchema: {
         reportId: z.string().describe('Report UUID to fix'),
         agent: z.enum(['claude_code', 'codex', 'rest_worker', 'mcp']).optional().describe('Override the agent adapter'),
+        idempotencyKey: z.string().uuid().optional().describe('Optional RFC 4122 UUID. Resend the same key to safely retry without dispatching a duplicate fix job (Idempotency-Key IETF draft).'),
+        inventoryActionNodeId: z.string().uuid().optional().describe('Optional inventory Action node UUID for spec-traceability (§2.10). When provided, the fix-worker embeds the expected_outcome contract in the LLM prompt and runs validateAgainstSpec before opening the PR.'),
       },
     },
     async (args, extra) => {
@@ -508,9 +510,13 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
       }
       const data = await apiCall('/v1/admin/fixes/dispatch', {
         method: 'POST',
+        headers: args.idempotencyKey
+          ? { 'Idempotency-Key': args.idempotencyKey }
+          : undefined,
         body: JSON.stringify({
           reportId: args.reportId,
           agent: args.agent,
+          inventoryActionNodeId: args.inventoryActionNodeId,
           ...(projectId ? { projectId } : {}),
         }),
       })
@@ -611,6 +617,49 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     async () => ({
       contents: [{ uri: 'project://dashboard', mimeType: 'application/json', text: JSON.stringify(await apiCall('/v1/admin/dashboard'), null, 2) }],
     }),
+  )
+
+  server.resource(
+    'project_integration_health',
+    'project://integration-health',
+    {
+      description:
+        'Live health status of every configured BYOK channel (Sentry, GitHub, LangFuse, PagerDuty, …). ' +
+        'Orchestrators should check this before dispatching a fix to fail-fast on broken channels ' +
+        'rather than burning LLM budget and discovering the failure mid-run.',
+    },
+    async () => ({
+      contents: [{
+        uri: 'project://integration-health',
+        mimeType: 'application/json',
+        text: JSON.stringify(await apiCall('/v1/admin/integrations/health'), null, 2),
+      }],
+    }),
+  )
+
+  server.resource(
+    'inventory_current',
+    'inventory://current',
+    {
+      description:
+        'Current inventory snapshot for the active project — all Action nodes with their ' +
+        'spec contract (expected_outcome), build-gate status, linked reports, and fix attempts. ' +
+        'Subscribe to this resource to receive notifications/resources/updated when the inventory ' +
+        'is re-crawled (e.g. after a PR merge or manual trigger). ' +
+        'Orchestrators can use this to enumerate work items and pick the next Action to fix.',
+    },
+    async () => {
+      const path = projectId
+        ? `/v1/admin/inventory/${projectId}`
+        : '/v1/admin/inventory'
+      return {
+        contents: [{
+          uri: 'inventory://current',
+          mimeType: 'application/json',
+          text: JSON.stringify(await apiCall(path), null, 2),
+        }],
+      }
+    },
   )
 
   // --- Prompts ---------------------------------------------------------

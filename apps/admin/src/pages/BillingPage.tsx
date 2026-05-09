@@ -39,6 +39,7 @@ import {
   Textarea,
   SelectField,
   Sparkline,
+  DetailRows,
 } from '../components/ui'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -1512,16 +1513,15 @@ function TicketDetailModal({
       }
     >
       <div className="space-y-3 text-xs">
-        <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr] text-2xs">
-          <dt className="text-fg-faint">Project</dt>
-          <dd className="text-fg-secondary">{projectName}</dd>
-          <dt className="text-fg-faint">Category</dt>
-          <dd className="text-fg-secondary capitalize">{ticket.category}</dd>
-          <dt className="text-fg-faint">Submitted</dt>
-          <dd className="text-fg-secondary"><RelativeTime value={ticket.created_at} /></dd>
-          <dt className="text-fg-faint">Status</dt>
-          <dd className="text-fg-secondary">{statusLine}</dd>
-        </dl>
+        <DetailRows
+          dense
+          items={[
+            { label: 'Project', value: projectName, tone: 'muted' },
+            { label: 'Category', value: <span className="capitalize">{ticket.category}</span>, tone: 'muted' },
+            { label: 'Submitted', value: <RelativeTime value={ticket.created_at} />, tone: 'muted' },
+            { label: 'Status', value: statusLine, tone: 'muted' },
+          ]}
+        />
 
         <section>
           <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Your message</h4>

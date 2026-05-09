@@ -158,6 +158,16 @@ const linkCustomerOnCheckout = async (db: Db, session: Record<string, unknown>) 
   const customerId = session.customer as string | undefined
   const email = (session.customer_details as { email?: string } | undefined)?.email
   if (!projectId || !customerId) return
+
+  // Guard: test-fixture IDs (cus_test_*) must never be written to
+  // billing_customers in production — they indicate a QA event that leaked
+  // into the live webhook stream and would cause resource_missing errors on
+  // every subsequent invoice or portal lookup.
+  const isProd = (Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production') === 'production'
+  if (isProd && customerId.startsWith('cus_test_')) {
+    wlog.warn('billing.test_customer_id_in_webhook', { projectId, customerId })
+    return
+  }
   const paymentOk = session.payment_status === 'paid' || session.payment_status === 'no_payment_required'
   const { error } = await db.from('billing_customers').upsert(
     {

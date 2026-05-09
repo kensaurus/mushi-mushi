@@ -140,3 +140,6 @@ apps/admin/dist/**/*.map
 # --- Git-filter-repo artefacts ----------------------------------------------
 .filter-repo-replacements.txt
 .git-rewrite/
+
+# Local-only Edge Function deploy payloads
+.agent-tmp/

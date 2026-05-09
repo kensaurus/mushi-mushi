@@ -450,6 +450,106 @@ export function DefinitionChips({ items, className = '', columns = 2, dense }: D
   )
 }
 
+/* ── DetailRows (key/value rows inside a card — denser than DefinitionChips) ─
+
+   Use for the metadata "field: value" blocks that previously rendered as
+   a bare `<dl class="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">` with
+   labels in `text-fg-muted` and values in arbitrary classes. That pattern
+   left text floating with no visual hierarchy — a UX failure flagged on
+   /integrations (Codebase indexing card) where Repo / Branch / Indexed
+   files / Last sweep / Last error all blended together regardless of how
+   important the data was.
+
+   Differences from existing primitives:
+   - `DefinitionChips` (above) renders one bordered card per cell — too
+     heavy for use inside another card (card-on-card layering).
+   - `Field` is a vertical detail-page primitive (label above value,
+     `mb-2`) — too tall for a stack of 5+ technical attributes.
+   - `DetailRows` is one bordered container with internal dividers.
+     Each row puts a `text-3xs` uppercase label on the left and the
+     value on the right with optional tone color (status), mono font
+     (URLs/hashes), or full-width wrap (errors / long descriptions).
+   - Tones (`ok`, `warn`, `danger`, `info`) tint the value to match
+     status meaning — green file count vs red error vs amber warning.
+*/
+
+export type DetailRowTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'muted'
+
+export interface DetailRowItem {
+  label: string
+  value: ReactNode
+  /** Color emphasis on the value (not the label). Use for status data
+   *  like indexed-file counts ('ok' when > 0, 'warn' when 0) or error
+   *  rows ('danger'). Defaults to neutral fg color. */
+  tone?: DetailRowTone
+  /** Render value in JetBrains-Mono — for URLs, IDs, hashes, branch
+   *  names, file paths. Defaults to false (sans). */
+  mono?: boolean
+  /** Tooltip on the label — for explaining technical metadata
+   *  ("indexed_files = chunks pgvector returned for this repo"). */
+  hint?: string
+  /** When true, the value flows on its own line below the label
+   *  (full width). Use for long values like errors, multi-line URLs,
+   *  or descriptions that don't fit the inline row width. */
+  wrap?: boolean
+  /** Show a copy affordance next to the value. Useful for IDs, repo
+   *  URLs, webhook secrets. */
+  copyable?: boolean
+  /** Optional key when `label` is reused (rare). Defaults to `label`. */
+  key?: string
+}
+
+interface DetailRowsProps {
+  items: DetailRowItem[]
+  className?: string
+  /** Compact padding — for very dense metadata strips. Defaults to
+   *  comfortable padding that breathes inside a 12-16rem card. */
+  dense?: boolean
+}
+
+const DETAIL_ROW_TONE: Record<DetailRowTone, string> = {
+  neutral: 'text-fg',
+  ok:      'text-ok',
+  warn:    'text-warn',
+  danger:  'text-danger',
+  info:    'text-info',
+  muted:   'text-fg-secondary',
+}
+
+export function DetailRows({ items, className = '', dense }: DetailRowsProps) {
+  if (items.length === 0) return null
+  const padCls = dense ? 'px-2 py-1' : 'px-2.5 py-1.5'
+  return (
+    <dl
+      className={`divide-y divide-edge-subtle/45 rounded-md border border-edge-subtle/55 bg-surface-overlay/25 overflow-hidden ${className}`}
+    >
+      {items.map((item) => {
+        const valueToneCls = DETAIL_ROW_TONE[item.tone ?? 'neutral']
+        const valueFontCls = item.mono ? 'font-mono' : ''
+        const valueTextCls = `text-2xs leading-snug wrap-break-word ${valueFontCls} ${valueToneCls}`
+        const copyable = item.copyable && typeof item.value === 'string'
+        return (
+          <div
+            key={item.key ?? item.label}
+            className={`${padCls} ${item.wrap ? 'flex flex-col gap-0.5' : 'flex items-start justify-between gap-3'}`}
+          >
+            <dt
+              className="text-3xs font-medium uppercase tracking-wider text-fg-faint shrink-0"
+              title={item.hint}
+            >
+              {item.label}
+            </dt>
+            <dd className={`${item.wrap ? 'min-w-0' : 'min-w-0 text-right'} ${valueTextCls} ${copyable ? 'inline-flex items-baseline gap-1.5 justify-end' : ''}`}>
+              {item.value}
+              {copyable && <CopyButton value={item.value as string} className="shrink-0" />}
+            </dd>
+          </div>
+        )
+      })}
+    </dl>
+  )
+}
+
 /* ── InfoHint (i icon that reveals a tooltip) ──────────────────────────── */
 
 export function InfoHint({ content }: { content: string }) {

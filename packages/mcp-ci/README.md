@@ -19,7 +19,7 @@ queries against your report corpus — all without leaving your workflow.
 | ------------------ | ---------------------------------------------------------------------------- | ------------------------------------- |
 | `check-coverage`   | Fails if `classified / total` is below `min-coverage`. Default threshold `0.8`. | —                                     |
 | `trigger-judge`    | Runs the classification pipeline on up to 50 unclassified reports.           | —                                     |
-| `dispatch-fix`     | Queues an agentic fix attempt for a specific report.                         | `report-id`                           |
+| `dispatch-fix`     | Queues an agentic fix attempt for a specific report. Optionally accepts `inventory-action-node-id` to pin the fix to a specific inventory `Action` so the worker threads its `expected_outcome` contract into the LLM prompt and runs a targeted post-PR synthetic probe (whitepaper §2.10). | `report-id` (+ optional `inventory-action-node-id`) |
 | `query`            | Runs a natural-language query and prints the result.                         | `question`                            |
 
 ### Mushi v2 — bidirectional inventory & gates

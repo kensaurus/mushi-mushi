@@ -24,6 +24,11 @@ make. The synthetic monitor re-walks those expectations on a cron, the
 crawler discovers candidate routes the SDK has observed in production,
 and the gates fail when reality diverges from the file.
 
+`expected_outcome` is the load-bearing field for the v2 closed loop. It
+threads through every stage of the agent pipeline — see
+[Spec traceability — read AND write side](#spec-traceability--read-and-write-side)
+below for the full chain.
+
 ## Five gates
 
 The composite GitHub status `mushi-mushi/gates` rolls up:
@@ -81,6 +86,93 @@ The same inventory powers a **Surface** toggle on the
 [knowledge graph](/concepts/knowledge-graph) — every Page, Element,
 and Action node from `inventory.yaml` overlaid on the live bug graph.
 Dead corners (high-traffic pages with no `expected_outcome`) light up.
+
+## Spec traceability — read AND write side
+
+The v1 question every team asked was *"how do you keep agent work tied
+back to the original spec once implementation starts?"* Until the
+2026-05-09 release the **read side** (proposer → ingest → gates →
+status reconciler → admin UI) was tight, and the **write side** (report
+→ fix → PR → re-verify) was a U-turn — the worker dropped the inventory
+pointer the moment dispatch started. That's now closed end-to-end.
+
+```text
+report ──► classify-report writes graph_edge (reports_against)
+                │
+                ▼
+          inventory Action node ◄─── inventory.yaml (expected_outcome)
+                │
+                ▼
+       POST /v1/admin/fixes/dispatch  (or A2A /v1/a2a/tasks, MCP dispatch_fix)
+                │   body may carry { inventoryActionNodeId } — else worker walks the edge
+                ▼
+       fix_dispatch_jobs.inventory_action_node_id  ──► persisted
+                │
+                ▼
+       fix-worker assembles FixContext + inventoryAction.expectedOutcome
+                │   → Markdown spec block in the LLM prompt
+                ▼
+       validateAgainstSpec  (deterministic pre-PR gate)
+                │   HARD ERROR  if the diff removes a json_path field the contract asserts on
+                │   WARN to fix_attempts.spec_validation_warnings if no file references the table / route
+                ▼
+       GitHub PR + fix_attempts row stamped with inventory_action_node_id
+                │
+                ▼
+       synthetic_runs queued (status='skipped', error_message='queued_post_pr', action_node_id=…)
+                │
+                ▼
+       synthetic-monitor cron drains the queue with priority on its next tick,
+       runs an HTTP probe, evaluates expected_outcome (status_in + JSONPath assertions),
+       records a real synthetic_runs row.
+                │
+                ▼
+       Status reconciler picks it up → admin UI flips the Action to verified / regressed.
+```
+
+What the agent sees in its prompt today:
+
+```markdown filename="rendered by renderSpecContext()"
+## Inventory Spec Context (whitepaper §2.10 spec-traceability)
+This fix was dispatched against a tracked Action in the project's `inventory.yaml`.
+The agent and the reviewer MUST keep the diff scoped to making the action work as
+specified — do NOT refactor unrelated code or break sibling actions on the same page.
+
+- Action: `signup-form: submit`
+- Description: Submit the signup form and create a new user
+- Page: `/signup` (id=`signup`)
+- User story: New user signup (`signup`)
+
+### Expected outcome contract (success criteria after fix)
+- Summary: POST /signup returns 200 and creates a user row
+- HTTP status MUST be one of: 200, 201
+- Response body assertions:
+  - `$.user.id` exists
+- Database: `public.users` MUST row_exists
+- UI MUST show text containing: "Welcome"
+- UI MUST navigate to: `/dashboard`
+
+After the PR merges, the synthetic monitor will probe the action against this
+contract. A draft fix that the synthetic monitor will then immediately mark
+`regressed` is worse than no fix at all.
+```
+
+External orchestrators (Cursor, Claude Code, OpenAI Agents SDK,
+LangGraph, CrewAI, A2A v1.0.0 agents) see the **same** anchor through
+the MCP `get_fix_context` tool, the A2A Task `metadata.inventoryActionNodeId`
+field, or the dispatch row's column directly. See
+[Connecting your orchestrator](/concepts/orchestrator-interop).
+
+### Where each link lives
+
+| Link | Where to look |
+| ---- | ------------- |
+| `expected_outcome` schema | `@mushi-mushi/inventory-schema` (Zod + JSON Schema, mirrored at `/v1/schemas/expected-outcome.json`) |
+| `inventory_action_node_id` columns | Migration `20260509100000_inventory_action_traceability` — `fix_dispatch_jobs` + `fix_attempts` (FK, `ON DELETE SET NULL`), plus `spec_validation_warnings JSONB` |
+| Spec context in the LLM prompt | `renderSpecContext()` in `@mushi-mushi/agents`, mirrored in the `fix-worker` Edge Function |
+| Pre-PR gate | `validateAgainstSpec()` in `@mushi-mushi/agents`, wired into `FixOrchestrator` |
+| Post-PR probe | `drainPostPrQueue()` + `evaluateExpectedOutcome()` in the `synthetic-monitor` Edge Function |
+| External orchestrators | MCP tools `dispatch_fix` + `get_fix_context`, A2A `POST /v1/a2a/tasks` |
 
 ## Related packages
 

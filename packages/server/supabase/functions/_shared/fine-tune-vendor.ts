@@ -13,16 +13,21 @@
  *          those so the `VendorName` union is exhaustive and callers get
  *          a clean "not enabled" error rather than a runtime crash.
  *
- *          IMPORTANT: the old validate endpoint used a stub predictor that
- *          mirrored the ground-truth label — it would ALWAYS pass. The
- *          new `buildRealPredictor` below actually calls the vendor model,
- *          so a broken fine-tune surfaces as failed validation, not a
- *          silent promotion.
+ *          P2.3 decision: delete `stubAdapter` from the production code path.
+ *          The `stub` vendor name is preserved for test isolation only
+ *          (offline CI that cannot reach the OpenAI API). Any `base_model`
+ *          that does not match a real vendor prefix now throws a clear error
+ *          instead of silently succeeding with fake predictions.
+ *
+ *          BYOK model: the caller sets OPENAI_API_KEY in their own
+ *          environment. Mushi never manages vendor credentials.
  */
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import type { FineTuningJobRow, ExportSampleRow } from './fine-tune.ts'
 
+/** Production vendors. `stub` is test-only; getAdapter() refuses it unless
+ *  MUSHI_ALLOW_STUB_FINE_TUNE=1 is set.  */
 export type VendorName = 'openai' | 'anthropic' | 'bedrock' | 'stub'
 
 export interface VendorSubmitResult {
@@ -55,7 +60,16 @@ export function resolveVendor(baseModel: string): VendorName {
   if (lc.startsWith('gpt-') || lc.startsWith('openai:') || lc.includes('ft:gpt-')) return 'openai'
   if (lc.startsWith('claude-') || lc.startsWith('anthropic:')) return 'anthropic'
   if (lc.startsWith('bedrock:')) return 'bedrock'
-  return 'stub'
+  // Test-only escape hatch: base_model='stub:...' maps to the stub adapter,
+  // but getAdapter() will still throw unless MUSHI_ALLOW_STUB_FINE_TUNE=1.
+  if (lc.startsWith('stub:') || lc === 'stub') return 'stub'
+  // Unknown base_model — throw early with an actionable error.
+  throw new Error(
+    `[fine-tune] Cannot resolve vendor for base_model="${baseModel}". ` +
+    'Use a known prefix: openai:gpt-4o-mini, openai:gpt-3.5-turbo-0125, ' +
+    'bedrock:<model-id>, claude-<model-id>, etc. ' +
+    'Mushi never falls back to stub in production.',
+  )
 }
 
 export function getAdapter(vendor: VendorName): VendorAdapter {
@@ -65,6 +79,19 @@ export function getAdapter(vendor: VendorName): VendorAdapter {
     case 'bedrock': return makeUnsupportedAdapter('bedrock', 'Bedrock fine-tune requires AWS credentials; set MUSHI_BEDROCK_ENABLED=1 and add an IAM role before invoking.')
     case 'stub':
     default:
+      // Guard the stub so it never silently powers a real fine-tune job.
+      // In production the caller would have resolved a real vendor from
+      // `resolveVendor(baseModel)` — `stub` only appears when base_model
+      // starts with `stub:`. Allowing it in production would silently
+      // "succeed" and promote a model that was never actually trained.
+      if (Deno.env.get('MUSHI_ALLOW_STUB_FINE_TUNE') !== '1') {
+        throw new Error(
+          '[fine-tune] stub adapter is disabled in production. ' +
+          'Use a real base_model (openai:gpt-4o-mini, openai:gpt-3.5-turbo-0125, etc.) ' +
+          'and set the corresponding BYOK env var (OPENAI_API_KEY / BEDROCK_* / VERTEX_*). ' +
+          'Set MUSHI_ALLOW_STUB_FINE_TUNE=1 only in test environments.',
+        )
+      }
       return stubAdapter
   }
 }
@@ -191,7 +218,11 @@ const openaiAdapter: VendorAdapter = {
 }
 
 // ---------------------------------------------------------------------------
-// Stub adapter — kept only for offline tests.
+// Stub adapter — kept only for offline tests (MUSHI_ALLOW_STUB_FINE_TUNE=1).
+//
+// NEVER use this in production. The stub mirrors ground-truth labels —
+// validation will always pass and the "model" never actually trains.
+// getAdapter() throws before returning this unless the env var is set.
 // ---------------------------------------------------------------------------
 
 const stubAdapter: VendorAdapter = {
@@ -202,9 +233,6 @@ const stubAdapter: VendorAdapter = {
     return { vendor: 'stub', status: 'succeeded', fineTunedModelId: 'stub-model', error: null, rawStatus: 'succeeded' }
   },
   async predict(_job, input) {
-    // Mirror the ground truth — only legal for tests where we want a clean
-    // validation pass. The API route wires in this predictor explicitly by
-    // setting base_model to `stub:`.
     return { category: input.category, severity: input.severity, summary: input.summary, component: input.component }
   },
 }

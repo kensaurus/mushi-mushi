@@ -405,7 +405,7 @@ export function FixesPage() {
               ? 'your codebase index is empty, so the LLM has nothing to read.'
               : 'codebase indexing is off, so the LLM has nothing to read.'}
             {' '}
-            <Link to="/integrations" className="underline hover:no-underline">Enable it now →</Link>
+            <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
           </div>
         </div>
       )}

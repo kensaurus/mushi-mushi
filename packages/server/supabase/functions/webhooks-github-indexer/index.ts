@@ -16,7 +16,7 @@
 import { Hono } from 'npm:hono@4'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { chunk, shouldIndex, sha256Hex } from '../_shared/code-indexer.ts'
-import { createEmbedding } from '../_shared/embeddings.ts'
+import { createEmbeddingBatch } from '../_shared/embeddings.ts'
 import { log as rootLog } from '../_shared/logger.ts'
 import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
@@ -715,36 +715,82 @@ async function sweepIndexRepo(
   let failed = 0
   let lastError: string | undefined
   const cap = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300')
+  // Batched embedding sweep (MUSHI-MUSHI-INDEXER-429 fix):
+  //
+  // Why batching: the previous loop fired one embedding API call per chunk
+  // (1077 chunks for the glot.it repo). That overshot OpenAI's TPM budget
+  // because each request carries fixed per-call overhead (model name,
+  // dimensions, headers) that gets counted toward token usage even when
+  // the actual chunk is small. The result was a wave of:
+  //   "Request too large for text-embedding-3-small … Limit 50000000,
+  //    Requested 114"
+  // — OpenAI's confusingly-worded "the next 114 tokens would push you
+  // over your 50M-tokens-per-minute cap" error.
+  //
+  // OpenAI's embeddings endpoint accepts up to 2048 inputs per call and
+  // returns embeddings in input order. Batching at 96 inputs cuts the
+  // request count to ~11 for a 1077-chunk repo and keeps the token count
+  // accurately scoped to the actual chunk text.
+  //
+  // Throttling between batches stays for two reasons: (1) safety margin
+  // against shared-org TPM consumption from other workers, (2) an
+  // additional layer of resilience on top of `createEmbeddingBatch`'s
+  // built-in exponential backoff. The default 250ms gives ~4 batches/s
+  // (~384 inputs/s) which is well inside the published limits.
+  const batchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96')
+  const throttleMs = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_THROTTLE_MS') ?? '250')
+
+  // Phase 1: walk the file tree and collect every chunk. We materialise the
+  // whole list before embedding so we can size batches deterministically.
+  // Memory is bounded by `cap * avg-chunks-per-file * preview-size` —
+  // at the default 300-file cap with ~5 chunks per file × 600-char preview,
+  // that's ~900 KB worst case; comfortable inside the Edge Function memory
+  // budget.
+  interface PendingChunk {
+    path: string
+    chunk: ReturnType<typeof chunk>[number]
+    text: string
+  }
+  const pending: PendingChunk[] = []
   for (const f of files.slice(0, cap)) {
     const source = await fetchFileContents(token, owner, repo, f.path, branch)
     if (!source) { skipped++; continue }
-    const chunks = chunk(f.path, source)
-    for (const ch of chunks) {
-      const text = `${f.path}::${ch.symbolName ?? 'whole'}\n${ch.body}`
-      // Per-chunk resilience: one bad chunk (e.g. a BYOK gateway soft-failure
-      // on a single embedding call, a content filter rejection, or a
-      // transient 5xx) should not abort an entire hourly repo sweep. Count
-      // the failure, remember the last error for `last_index_error`, and
-      // keep going. If *every* chunk fails, the outer handler still marks
-      // the sweep as failed because `inserted === 0` — see handleSweep.
-      let embedding: number[]
-      try {
-        embedding = await createEmbedding(text, { projectId })
-      } catch (err) {
-        failed++
-        lastError = err instanceof Error ? err.message : String(err)
-        log.warn('sweep: chunk embed failed (non-fatal)', {
-          repo: `${owner}/${repo}`,
-          path: f.path,
-          symbol: ch.symbolName ?? null,
-          error: lastError.slice(0, 240),
-        })
-        continue
-      }
+    for (const ch of chunk(f.path, source)) {
+      pending.push({
+        path: f.path,
+        chunk: ch,
+        text: `${f.path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
+      })
+    }
+  }
+
+  // Phase 2: batched embedding + per-chunk upsert. If a whole batch fails
+  // (e.g. retries exhausted) we count every input in that batch as failed
+  // and continue with the next batch — same all-or-nothing semantics as
+  // before, just amortised across many chunks per failure.
+  for (let i = 0; i < pending.length; i += batchSize) {
+    const batch = pending.slice(i, i + batchSize)
+    let embeddings: number[][]
+    try {
+      embeddings = await createEmbeddingBatch(batch.map((b) => b.text), { projectId })
+    } catch (err) {
+      failed += batch.length
+      lastError = err instanceof Error ? err.message : String(err)
+      log.warn('sweep: batch embed failed (non-fatal)', {
+        repo: `${owner}/${repo}`,
+        batchSize: batch.length,
+        firstPath: batch[0]?.path,
+        error: lastError.slice(0, 240),
+      })
+      continue
+    }
+    for (let j = 0; j < batch.length; j++) {
+      const { path, chunk: ch } = batch[j]
+      const embedding = embeddings[j]
       const contentHash = await sha256Hex(ch.body)
       const { error } = await db.from('project_codebase_files').upsert({
         project_id: projectId,
-        file_path: f.path,
+        file_path: path,
         symbol_name: ch.symbolName,
         signature: ch.signature,
         line_start: ch.lineStart,
@@ -759,6 +805,9 @@ async function sweepIndexRepo(
       }, { onConflict: 'project_id,file_path,symbol_name' })
       if (error) { skipped++; continue }
       inserted++
+    }
+    if (throttleMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, throttleMs))
     }
   }
   return { inserted, skipped, failed, lastError }
@@ -906,14 +955,50 @@ app.post('/webhooks-github-indexer', async (c) => {
     tombstoned++
   }
 
+  // Same batching strategy as the sweep path (MUSHI-MUSHI-INDEXER-429): a
+  // large `git rebase --force-push` can deliver dozens of files in one
+  // webhook payload, and per-chunk embeddings will eat through the TPM
+  // budget. We collect all chunks first, then embed in batches of 96.
+  interface PendingPushChunk {
+    path: string
+    chunk: ReturnType<typeof chunk>[number]
+    text: string
+  }
+  const pendingChunks: PendingPushChunk[] = []
   for (const path of added) {
     if (!shouldIndex(path)) continue
     const source = await fetchFileContents(token, owner, repo, path, ref)
     if (!source) continue
-    const chunks = chunk(path, source)
-    for (const ch of chunks) {
-      const text = `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`
-      const embedding = await createEmbedding(text, { projectId })
+    for (const ch of chunk(path, source)) {
+      pendingChunks.push({
+        path,
+        chunk: ch,
+        text: `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
+      })
+    }
+  }
+
+  const pushBatchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96')
+  for (let i = 0; i < pendingChunks.length; i += pushBatchSize) {
+    const batch = pendingChunks.slice(i, i + pushBatchSize)
+    let embeddings: number[][]
+    try {
+      embeddings = await createEmbeddingBatch(batch.map((b) => b.text), { projectId })
+    } catch (err) {
+      // Push embeddings are best-effort — log and move on. The next push
+      // event for the same path will re-attempt indexing.
+      log.warn('push: batch embed failed (non-fatal)', {
+        projectId,
+        repoFullName,
+        batchSize: batch.length,
+        firstPath: batch[0]?.path,
+        error: err instanceof Error ? err.message : String(err),
+      })
+      continue
+    }
+    for (let j = 0; j < batch.length; j++) {
+      const { path, chunk: ch } = batch[j]
+      const embedding = embeddings[j]
       const contentHash = await sha256Hex(ch.body)
       // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
       // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.

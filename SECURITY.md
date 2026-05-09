@@ -12,15 +12,59 @@ If you discover a security vulnerability, please report it responsibly.
 
 **Do NOT open a public GitHub issue.**
 
-Instead, email: **kensaurus@gmail.com**
+Use either channel below:
+
+1. **GitHub Private Vulnerability Reporting** — strongly preferred.
+   <https://github.com/kensaurus/mushi-mushi/security/advisories/new>
+   Routes the report into a private advisory with built-in CVE issuance,
+   patch coordination, and contributor-credit workflow.
+2. **Email** — `kensaurus@gmail.com`, subject prefix `[mushi-security]`.
+   PGP welcome but not required.
 
 Include:
 - Description of the vulnerability
-- Steps to reproduce
-- Impact assessment
+- Steps to reproduce (smallest reproducer wins)
+- Impact assessment (what an attacker gains)
 - Suggested fix (if any)
+- Whether you want public credit (and how to spell your name)
 
-We will acknowledge receipt within 48 hours and aim to release a patch within 7 days for critical issues.
+### Coordinated-disclosure timeline
+
+| Day | Action |
+|-----|--------|
+| 0 | Report received |
+| ≤ 2 | Acknowledgment + assigned a tracking ID |
+| ≤ 7 | Triage complete: severity assigned (CVSS 3.1) and target patch date communicated |
+| ≤ 30 | Patch released for critical / high (CVSS ≥ 7.0); ≤ 60 days for medium; best-effort for low |
+| Patch + 7 | Public advisory + CVE published; reporter credited unless they declined |
+| Patch + 90 | Embargo expires regardless; if upstream is unresponsive, the reporter is free to publish |
+
+### Safe harbor
+
+Good-faith security research on Mushi Mushi is welcome. If you stay
+within the rules below, we will not pursue legal action, will not ask
+your hosting provider to take you offline, and will publicly credit your
+work:
+
+- Test only against your own self-hosted instance, the public demo at
+  <https://kensaur.us/mushi-mushi/admin/>, or accounts you own.
+- Do not access, exfiltrate, or modify data belonging to other users.
+- Do not run automated scanning that affects availability for others
+  (rate-limit your tooling, exclude `/health`).
+- Disclose privately first (channels above); do not publish before the
+  embargo above expires.
+- Do not intentionally exploit a finding to escalate beyond proving it
+  exists.
+
+If a finding requires touching production data to confirm, **stop and
+ask first** — describe what you'd need to do and we'll spin up a sandbox.
+
+### Hall of fame
+
+Researchers who report a confirmed vulnerability are credited in the
+release notes for the patched version and added to
+[`docs/SECURITY_HALL_OF_FAME.md`](./docs/SECURITY_HALL_OF_FAME.md) (with
+permission).
 
 ## Scope
 
@@ -41,6 +85,125 @@ We will acknowledge receipt within 48 hours and aim to release a patch within 7 
 - **Rotate API keys** regularly via the admin console
 - **Enable SSO** for team projects (Enterprise tier)
 - **Review audit logs** periodically for suspicious activity
+- **Verify SDK integrity** with `npm audit signatures` after install
+- **Set `Content-Security-Policy`** on any page embedding the Mushi widget;
+  the widget itself ships with `script-src 'self'` and does not load
+  remote scripts.
+
+## Threat model
+
+What we treat as in-scope attacker capabilities, and what we don't.
+
+| Capability | In scope | Notes |
+|-----------|----------|-------|
+| Unauthenticated network attacker hitting public endpoints | ✅ | Rate-limit + HMAC + replay protection on every webhook endpoint (`packages/server/supabase/functions/_shared/webhook-middleware.ts`). |
+| Authenticated user trying to read another tenant's data | ✅ | Postgres RLS on every `public.*` table; advisor lints reviewed monthly. |
+| Authenticated user trying to escalate to super-admin | ✅ | Role lives in `auth.users.raw_app_meta_data.role`; cannot be self-edited via PostgREST. |
+| Compromised dependency (npm supply-chain attack) | ✅ | 7-day cooldown + provenance + Harden-Runner + pinned SHAs (see "Supply-chain hardening" below). |
+| Stolen API key | ✅ | Per-key scopes (`api_key_has_scope`), revocation via admin console, audit log of every use. |
+| User pasting a Stripe / OpenAI / GitHub PAT into a bug report | ✅ | PII scrubber redacts ~15 vendor token formats client-side before the report leaves the device. Mirrors `packages/core/src/pii-scrubber.ts` across iOS, Android, Flutter, React Native. |
+| Stolen end-user device with the SDK installed | ⚠️ partial | Offline queue is AsyncStorage / Keychain / SharedPreferences — no app-level encryption beyond the OS default. Reports waiting to flush are vulnerable to a forensic attacker. |
+| Compromised Supabase service-role key | ❌ | Treated as a tier-0 incident; would require key rotation and audit-log forensics. Not defendable in software. |
+| Compromise of `kensaurus@gmail.com` | ❌ | Treated as a project-fork event; downstream consumers should pin to the last known-good version and follow the new release channel. |
+| Physical / OS-level attacker on an end-user device | ❌ | Out of scope. |
+| Malicious fork using the Mushi name to ship malware | ❌ (technical) ✅ (legal) | The MIT/BSL grant lets the fork exist; the trademark policy (`TRADEMARK.md`) makes shipping it under the Mushi name an infringement we will pursue. |
+
+## Data handling and PII
+
+### What the SDK collects by default
+
+| Field | Scope | PII risk |
+|-------|-------|----------|
+| URL / route the user was on | Always | Low — strip query strings if your routes encode user IDs. |
+| Browser / OS / device | Always | None |
+| Console errors (last 50) | Opt-in via `captureConsole: true` | Medium — can include user data your code logs. |
+| Network failures (URL + status) | Opt-in via `captureNetwork: true` | Medium — query params logged as-is unless you redact in-app. |
+| User id / email / role | Only if you call `setUser()` | High — only set what you need; we do not auto-discover. |
+| Session replay frames | Off by default | High — handled by the masking layer; passwords / cards / opted-out elements never leave the page. |
+| Free-text bug description | Always | Medium — passed through the PII scrubber (see below). |
+
+### What the PII scrubber redacts before send
+
+Implemented identically across `@mushi-mushi/core`, the iOS, Android,
+Flutter, and React Native SDKs. Defaults are below — every category can
+be toggled off, but `secretTokens` is on by default and we recommend
+keeping it that way.
+
+| Category | Default | Patterns |
+|----------|---------|----------|
+| `ssns` | on | `123-45-6789` |
+| `creditCards` | on | 12–19 digit Luhn-shaped sequences with optional separators |
+| `secretTokens` | on | AWS access key (`AKIA…` / `ASIA…`), AWS secret (`aws_secret_access_key=…`), Stripe (`sk_live_…`, `sk_test_…`, `rk_…`, `pk_…`), Slack (`xox[abpor]-…`), GitHub PAT (`ghp_…`, `github_pat_…`), OpenAI (`sk-…`, `sk-proj-…`), Anthropic (`sk-ant-…`), Google API (`AIza…`), JWT (`eyJ…` 3-segment) |
+| `emails` | on | RFC-5322 lite |
+| `phones` | on | E.164 with optional country code |
+| `ipAddresses` | off | IPv4 (off because internal IPs are usually not PII and noise hurts triage) |
+| `ipv6` | off | Same |
+
+The fields scrubbed are:
+
+- `description` — primary free-text field of every bug report
+- `summary` — short summary, in the same composer
+- `breadcrumbs[].message` — auto-captured user-action trail (clicks, route changes, console messages)
+
+Structured fields you set explicitly (`metadata.userEmail`,
+`metadata.userId`, etc.) are intentionally **not** scrubbed — those are
+opt-in attribution data, and silently rewriting them would break
+support workflows.
+
+### Where data lives
+
+- **Reports & telemetry** — Supabase Postgres in the `us-west-1` region.
+- **Session replays** — Supabase Storage, same region. Lifecycle policy
+  trims replays older than 30 days unless explicitly retained from the
+  admin console.
+- **Inbound webhook bodies** — only a SHA-256 hash + `delivery_id` of
+  the body is persisted (`webhook_audit_log`). The full body is
+  processed in memory and discarded.
+- **Outbound integrations** (Slack, Jira, …) — Mushi is a sender only;
+  the receiving system's retention applies.
+
+### Encryption
+
+| Surface | At rest | In transit |
+|---------|---------|------------|
+| Postgres (Supabase) | AES-256 (Supabase default) | TLS 1.2+ |
+| Supabase Storage (replays) | AES-256 | TLS 1.2+ |
+| Edge Function ↔ Postgres | — | TLS via the Supavisor pooler |
+| SDK ↔ ingest endpoint | — | TLS 1.2+ enforced; HSTS preload on `kensaur.us` |
+| Inbound webhooks | — | TLS terminated at CloudFront / Supabase edge |
+| Audit log integrity | append-only by RLS; no in-row signing | — |
+
+### Cryptographic primitives
+
+| Use | Algorithm | Implementation |
+|-----|-----------|---------------|
+| Webhook HMAC verification (Sentry, GitHub, Datadog, Honeycomb, Grafana, Bugsnag, Rollbar, Crashlytics) | HMAC-SHA256, constant-time compare | Web Crypto in Deno; `crypto.subtle.timingSafeEqual` analogue |
+| AWS SNS subscription confirmation | RSA-SHA1 / RSA-SHA256 | Deno `crypto.subtle.verify` with the cert from `SigningCertURL` (URL allow-listed to `*.sns.*.amazonaws.com`) |
+| Opsgenie JWT shared-token | HS256 with `aud` claim verification | `jose` (Deno-compatible) |
+| API-key hashing (database) | SHA-256 prefix + bcrypt secret half | `pgcrypto` |
+| Provenance attestations (npm) | Sigstore (Fulcio + Rekor) | `npm publish --provenance` |
+
+We deliberately do not roll our own crypto. If you find an algorithm or
+library above that has been deprecated, please file a security advisory.
+
+### Operator security checklist
+
+When you provision a new self-hosted Mushi instance:
+
+- [ ] Set `auth_leaked_password_protection = true` in Supabase Auth
+      (HaveIBeenPwned blocklist; flagged as `auth_leaked_password_protection`
+      in the security advisor).
+- [ ] Enable at least two MFA factors in Supabase Auth (`auth_insufficient_mfa_options`).
+- [ ] Rotate the service-role key on day 1, then quarterly.
+- [ ] Restrict Postgres direct connections to your CI / migration runners
+      via Supabase network restrictions.
+- [ ] Run `pnpm dlx supabase advisors --project-ref <ref>` after every
+      migration; aim for zero ERROR-level findings.
+- [ ] Configure a Supabase log drain to your SIEM if you are subject to
+      SOC 2 / ISO 27001.
+- [ ] Set CSP `frame-ancestors` on the host page if you embed the Mushi
+      widget (the widget is iframe-friendly but does not enforce
+      framing constraints itself).
 
 ## Supply-chain hardening (how this package is protected)
 

@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip, CopyButton } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, CopyButton, DetailRows, type DetailRowItem } from '../ui'
 import { useToast } from '../../lib/toast'
 
 interface CodebaseStats {
@@ -42,6 +42,62 @@ interface EnableResponse {
 
 interface Props {
   projectId: string
+}
+
+/**
+ * Map the raw CodebaseStats response into the design-system `DetailRowItem`
+ * shape. Pulled out of the JSX so the row order, tone choices, and conditional
+ * rendering live in one readable place — not interleaved with markup.
+ *
+ * Tone choices:
+ * - Indexed files: `ok` when > 0 (green), `warn` when 0 (still indexing or
+ *   the worker silently failed every chunk — both deserve attention).
+ * - Last error: `danger` and `wrap` so the full upstream message renders on
+ *   its own line instead of truncating mid-sentence in the right-aligned
+ *   value column.
+ */
+function buildStatsRows(stats: CodebaseStats, hasFiles: boolean): DetailRowItem[] {
+  const rows: DetailRowItem[] = [
+    {
+      label: 'Repo',
+      value: stats.repo_url ?? '—',
+      mono: true,
+      tone: 'info',
+      copyable: !!stats.repo_url,
+      hint: 'GitHub repository indexed by the Mushi RAG sweeper.',
+    },
+    {
+      label: 'Branch',
+      value: stats.default_branch ?? 'main',
+      mono: true,
+      hint: 'Branch the sweeper pulls from on each push.',
+    },
+    {
+      label: 'Indexed files',
+      value: stats.indexed_files.toLocaleString(),
+      mono: true,
+      tone: hasFiles ? 'ok' : 'warn',
+      hint: 'Number of file-chunks currently in pgvector for this repo.',
+    },
+  ]
+  if (stats.last_indexed_at) {
+    rows.push({
+      label: 'Last sweep',
+      value: <RelativeTime value={stats.last_indexed_at} />,
+      hint: 'When the most recent successful sweep finished.',
+    })
+  }
+  if (stats.last_index_error) {
+    rows.push({
+      label: 'Last error',
+      value: stats.last_index_error,
+      tone: 'danger',
+      mono: true,
+      wrap: true,
+      hint: 'Upstream error from the most recent failed chunk during the sweep.',
+    })
+  }
+  return rows
 }
 
 export function CodebaseIndexCard({ projectId }: Props) {
@@ -137,32 +193,13 @@ export function CodebaseIndexCard({ projectId }: Props) {
         )}
       </div>
 
-      <p className="text-2xs text-fg-muted">
+      <p className="text-2xs text-fg-secondary pl-2 border-l-2 border-brand/30 leading-snug">
         Pulls your repo's source tree into Mushi's RAG so the auto-fix agent can read real files
-        instead of guessing. Without this the worker emits <code className="font-mono">INVESTIGATION_NEEDED.md</code> stubs.
+        instead of guessing. Without this the worker emits <code className="font-mono bg-surface-overlay px-0.5 rounded-sm text-fg-secondary">INVESTIGATION_NEEDED.md</code> stubs.
       </p>
 
       {stats?.repo_url && (
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
-          <dt className="text-fg-muted">Repo</dt>
-          <dd className="font-mono text-fg-primary truncate" title={stats.repo_url}>{stats.repo_url}</dd>
-          <dt className="text-fg-muted">Branch</dt>
-          <dd className="font-mono text-fg-primary">{stats.default_branch ?? 'main'}</dd>
-          <dt className="text-fg-muted">Indexed files</dt>
-          <dd className={hasFiles ? 'font-mono text-ok' : 'font-mono text-warn'}>{stats.indexed_files}</dd>
-          {stats.last_indexed_at && (
-            <>
-              <dt className="text-fg-muted">Last sweep</dt>
-              <dd className="text-fg-primary"><RelativeTime value={stats.last_indexed_at} /></dd>
-            </>
-          )}
-          {stats.last_index_error && (
-            <>
-              <dt className="text-fg-muted">Last error</dt>
-              <dd className="text-danger text-2xs truncate" title={stats.last_index_error}>{stats.last_index_error}</dd>
-            </>
-          )}
-        </dl>
+        <DetailRows items={buildStatsRows(stats, hasFiles)} />
       )}
 
       {editing && (

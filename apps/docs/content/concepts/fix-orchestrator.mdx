@@ -14,16 +14,25 @@ sequenceDiagram
   actor T as Triage
   participant API
   participant Orch as fix-orchestrator
-  participant Sand as Sandbox (E2B / Modal / local-noop)
+  participant Inv as Inventory anchor (graph_edge reports_against)
+  participant Sand as Sandbox (E2B / Modal / Cloudflare / local-noop)
   participant Agent as RestFixWorkerAgent or McpFixAgent
+  participant Spec as validateAgainstSpec
   participant GH as GitHub App
-  T->>API: dispatch_fix(report_id)
+  participant Mon as synthetic-monitor (post-PR probe)
+  T->>API: dispatch_fix(report_id, inventoryActionNodeId?)
   API->>Orch: enqueue task (SEP-1686 Tasks envelope)
+  Orch->>Inv: walk reports_against graph edge (when not pinned)
+  Inv-->>Orch: action + page + story + expected_outcome
   Orch->>Sand: spawn ephemeral env (network-isolated)
-  Sand->>Agent: tools/call (MCP) or POST /fix (REST)
+  Sand->>Agent: tools/call (MCP) or POST /fix (REST) — prompt carries spec context
   Agent-->>Sand: proposed diff
-  Sand->>GH: create branch, push, open PR (scoped App)
+  Sand->>Spec: validateResult + validateAgainstSpec(diff, expected_outcome)
+  Spec-->>Sand: pass / hard error / soft warnings
+  Sand->>GH: create branch, push, open PR (scoped App) — fix_attempts row stamped with inventory_action_node_id
   GH-->>API: PR URL
+  API->>Mon: queue post-PR probe (synthetic_runs status='skipped', error_message='queued_post_pr')
+  Mon-->>API: real synthetic_runs row with verified / regressed
   API-->>T: fix.proposed webhook
 ```
 
@@ -60,3 +69,73 @@ Mushi's GitHub App ships with **per-repo, per-PR scoping**: each fix
 attempt installs the app only on the target repo, with `contents:write` and
 `pull-requests:write` only. Tokens last 60 minutes and are revoked the
 moment the PR is opened.
+
+## Spec traceability — `inventoryAction` end-to-end
+
+Every fix carries the originating inventory `Action` from dispatch all
+the way back to the admin UI. The 2026-05-09 release closed the
+write-side U-turn that was the v2 system's biggest open issue.
+
+### What the worker now does
+
+1. **Recover the anchor.** The worker reads `inventory_action_node_id`
+   from the dispatch row. If empty (legacy report or the caller didn't
+   specify), it walks the `reports_against` graph edge that
+   `classify-report` writes when it can match a report to an Action —
+   then back-fills the dispatch row so the next consumer doesn't have
+   to repeat the walk.
+2. **Thread `expected_outcome` into the LLM prompt.** A Markdown block
+   rendered by `renderSpecContext()` lists the action description,
+   page, story, and every assertion in the contract. The reviewer
+   prompt's question 4 explicitly asks the agent to preserve every
+   assertion — drift is treated as a regression, not a stylistic note.
+3. **Run `validateAgainstSpec` as a deterministic pre-PR gate.**
+   Hard-fails the dispatch if the diff *removes* a `json_path` field
+   the contract asserts on; soft warnings (no changed file references
+   the contract's required DB table, no changed file mentions the
+   action's page route) are persisted to
+   `fix_attempts.spec_validation_warnings JSONB` so the admin Fixes
+   drawer can show "this fix didn't reference the inventory's required
+   `users` table — sanity-check before merging".
+4. **Queue a targeted post-PR synthetic probe.** A marker `synthetic_runs`
+   row scoped to `actionNodeId` is inserted the moment the PR opens.
+   The synthetic-monitor cron drains the queue with priority on its
+   next tick, runs an HTTP probe, and evaluates `expected_outcome`
+   (`status_in` checks + JSONPath assertions) against the live action.
+   The result is a real `synthetic_runs` row that flips the Action to
+   `verified` or `regressed` in the admin UI within minutes of merge.
+
+### `expected_outcome` shape
+
+```yaml
+expected_outcome:
+  summary: 'POST /signup returns 200 and creates a user row'
+  response:
+    status_in: [200, 201]
+    json_path:
+      - { path: '$.user.id', op: 'exists' }
+      - { path: '$.error', op: 'not_equals', value: 'rate_limited' }
+  database:
+    table: 'users'
+    schema: 'public'
+    expect: 'row_exists'
+  ui:
+    route_change_to: '/dashboard'
+    visible_text: 'Welcome'
+```
+
+Every field is optional except `database.table` (when `database` is set). The
+synthetic monitor evaluates the HTTP-side assertions today; database +
+UI assertions are recorded as `unverified` until the Playwright crawler
+runtime lands. See
+[`/v1/schemas/expected-outcome.json`](/concepts/orchestrator-interop#json-schemas)
+for the canonical JSON Schema.
+
+### Carrying the anchor through external surfaces
+
+| Surface | How the anchor flows |
+| ------- | -------------------- |
+| REST `POST /v1/admin/fixes/dispatch` | Optional `inventoryActionNodeId` field on the request body (UUID-validated) |
+| MCP `dispatch_fix` tool | `inputSchema.properties.inventoryActionNodeId`; `get_fix_context` returns the full `inventory_action` (with `expected_outcome`) |
+| A2A `POST /v1/a2a/tasks` | `input.inventoryActionNodeId` at create time; surfaced on every `GET /v1/a2a/tasks/:id` as `metadata.inventoryActionNodeId` |
+| GitHub Action | `inventory-action-node-id` input on `command: dispatch-fix` |

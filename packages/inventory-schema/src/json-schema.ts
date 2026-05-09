@@ -117,6 +117,7 @@ export const inventoryJsonSchema = {
                 user_story: { type: 'string' },
                 status: { enum: ['stub', 'mocked', 'wired', 'verified', 'regressed', 'unknown'] },
                 last_verified: { type: 'string', format: 'date-time' },
+                expected_outcome: expectedOutcomeJsonShape(),
                 notes: { type: 'string' },
                 owner_team: { type: 'string' },
                 testid: { type: 'string' },
@@ -173,6 +174,56 @@ function dbDepJsonShape() {
       schema: { type: 'string' },
       operation: { enum: ['insert', 'update', 'delete', 'upsert', 'select'] },
       rpc: { type: 'string' },
+    },
+  }
+}
+
+function expectedOutcomeJsonShape() {
+  return {
+    type: 'object',
+    description:
+      'Machine-readable success contract — asserted by the synthetic monitor and threaded into the fix-worker LLM prompt for spec-traceable autofix (whitepaper §2.10).',
+    properties: {
+      summary: { type: 'string' },
+      response: {
+        type: 'object',
+        properties: {
+          status_in: { type: 'array', items: { type: 'integer', minimum: 100, maximum: 599 } },
+          json_path: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['path', 'op'],
+              properties: {
+                path: { type: 'string' },
+                op: {
+                  enum: ['exists', 'equals', 'not_equals', 'contains', 'gt', 'gte', 'lt', 'lte', 'matches'],
+                },
+                value: {},
+              },
+            },
+          },
+        },
+      },
+      database: {
+        type: 'object',
+        required: ['table'],
+        properties: {
+          table: { type: 'string' },
+          schema: { type: 'string' },
+          where: { type: 'object' },
+          expect: { enum: ['row_exists', 'row_absent', 'row_count_at_least'] },
+          min_count: { type: 'integer', minimum: 1 },
+        },
+      },
+      ui: {
+        type: 'object',
+        properties: {
+          visible_text: { type: 'string' },
+          route_change_to: { type: 'string' },
+        },
+      },
+      extensions: { type: 'object' },
     },
   }
 }

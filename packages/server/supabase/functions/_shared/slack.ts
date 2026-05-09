@@ -67,7 +67,7 @@ function adminBaseUrl(): string | null {
 
 function buildReportBlocks(payload: SlackReportPayload) {
   const base = adminBaseUrl()
-  const reportUrl = base ? `${base}/reports?id=${encodeURIComponent(payload.reportId)}` : null
+  const reportUrl = base ? `${base}/reports/${encodeURIComponent(payload.reportId)}` : null
   const severityBadge = SEVERITY_EMOJI[payload.severity] ?? '\u{26AA}'
   const categoryBadge = CATEGORY_EMOJI[payload.category] ?? '\u{1F41B}'
 

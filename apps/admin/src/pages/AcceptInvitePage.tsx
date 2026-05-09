@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react
 import { apiFetch } from '../lib/supabase'
 import { setActiveOrgIdSnapshot } from '../lib/activeOrg'
 import { useAuth } from '../lib/auth'
-import { Badge, Btn, Card, Loading, RelativeTime } from '../components/ui'
+import { Badge, Btn, Card, DetailRows, Loading, RelativeTime } from '../components/ui'
 import { loginPathForLocation } from '../lib/authRedirect'
 
 type PreviewStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
@@ -232,20 +232,23 @@ export function AcceptInvitePage() {
           </blockquote>
         )}
 
-        <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
-          <div>
-            <dt className="text-fg-faint">Sent to</dt>
-            <dd className="mt-0.5 truncate text-fg" title={preview.invitation.email}>
-              {preview.invitation.email}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-fg-faint">Expires</dt>
-            <dd className="mt-0.5 text-fg">
-              <RelativeTime value={preview.invitation.expires_at} />
-            </dd>
-          </div>
-        </dl>
+        <DetailRows
+          className="mt-4"
+          items={[
+            {
+              label: 'Sent to',
+              value: preview.invitation.email,
+              mono: true,
+              tone: 'info',
+              hint: 'Email address this invitation was sent to.',
+            },
+            {
+              label: 'Expires',
+              value: <RelativeTime value={preview.invitation.expires_at} />,
+              hint: 'Invitations expire automatically — accept before this time.',
+            },
+          ]}
+        />
 
         {acceptDone ? (
           <div className="mt-5 rounded-md bg-ok-muted/40 px-3 py-2 text-center text-sm text-ok">

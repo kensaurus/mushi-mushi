@@ -145,8 +145,8 @@ const NAV: NavSection[] = [
         requiresFeature: 'inventory_v2',
       },
       { label: 'Graph',       path: '/graph',       icon: IconGraph,   beginner: true },
-      { label: 'Anti-Gaming', path: '/anti-gaming', icon: IconShield },
       { label: 'Queue',       path: '/queue',       icon: IconQueue },
+      { label: 'Anti-Gaming', path: '/anti-gaming', icon: IconShield },
     ],
   },
   {
@@ -193,10 +193,10 @@ const NAV: NavSection[] = [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
       { label: 'Members',    path: '/organization/members', icon: IconProjects, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
-      { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
-      { label: 'Audit Log',  path: '/audit',      icon: IconAudit, requiresFeature: 'audit_log' },
+      { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
+      { label: 'Audit Log',  path: '/audit',      icon: IconAudit, requiresFeature: 'audit_log' },
       { label: 'Storage',    path: '/storage',    icon: IconStorage },
       { label: 'Query',      path: '/query',      icon: IconQuery },
       // Phase 2c (2026-04-27) — operator-only directory. Hidden from
@@ -245,20 +245,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Open a report to review screenshots, console logs, network traces, and user context.',
     },
   },
-  '/inventory': {
-    title: 'User stories',
-    kicker: 'Plan',
-    scope: 'inventory',
-    decide: {
-      label: 'Truth layer',
-      summary: 'Stories, elements, and actions tied to gate + synthetic signals — the positive half of the graph.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Evidence',
-      detail: 'Gate runs, drift reconciles, and synthetic timelines anchor status claims.',
-    },
-  },
   '/fixes': {
     title: 'Fixes',
     kicker: 'Do',
@@ -299,20 +285,6 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     verify: {
       label: 'Evaluation data',
       detail: 'Use scored runs and datasets below to confirm prompt changes improve classification.',
-    },
-  },
-  '/integrations': {
-    title: 'Integrations',
-    kicker: 'Act',
-    scope: 'integrations',
-    decide: {
-      label: 'Connection health',
-      summary: 'Check which routing destinations are connected, stale, or waiting on setup.',
-      severity: 'info',
-    },
-    verify: {
-      label: 'Probe history',
-      detail: 'Each integration shows its latest test result and latency where available.',
     },
   },
   '/mcp': {
@@ -821,7 +793,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto py-2 ${compact ? 'px-1' : 'px-2'}`}>
-        {visibleNav.map((section) => {
+        {visibleNav.map((section, sectionIdx) => {
           const collapsed = collapsedMap[section.id] ?? section.defaultCollapsed ?? false
           const stageId = SECTION_TO_STAGE[section.id]
           const isActiveStage = stageId !== undefined && stageId === activeStage
@@ -837,7 +809,7 @@ export function Layout({ children }: { children: ReactNode }) {
           // accordion would be unusable without labels to anchor it.
           const itemsVisible = compact ? true : !collapsed
           return (
-            <div key={section.id} className={compact ? 'first:mt-0 mt-2 pt-2 first:border-t-0 first:pt-0 border-t border-edge-subtle/60' : ''}>
+            <div key={section.id} className={compact ? 'first:mt-0 mt-2 pt-2 first:border-t-0 first:pt-0 border-t border-edge-subtle/60' : sectionIdx > 0 ? 'border-t border-edge/20 pt-1.5 mt-0.5' : ''}>
               {!compact && (
                 <SectionHeader
                   section={section}
@@ -1438,14 +1410,6 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
           {staleness.count > 99 ? '99+' : staleness.count}
         </span>
       )}
-      {isActiveStage && (
-        <span
-          className="text-3xs font-medium normal-case tracking-normal text-brand shrink-0"
-          aria-label="Current stage"
-        >
-          ← here
-        </span>
-      )}
       {collapsible && (
         <svg
           className={`h-2.5 w-2.5 text-fg-faint shrink-0 motion-safe:transition-transform ${collapsed ? '' : 'rotate-90'}`}
@@ -1466,7 +1430,7 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
       <button
         type="button"
         onClick={onToggle}
-        className="nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm"
+        className={`nav-section flex items-center gap-1.5 w-full hover:text-fg-secondary motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 rounded-sm ${isActiveStage ? 'nav-section-active' : ''}`}
         title={section.hint}
         aria-expanded={!collapsed}
       >
@@ -1475,7 +1439,7 @@ function SectionHeader({ section, collapsed, collapsible, isActiveStage, stalene
     )
   }
   return (
-    <div className="nav-section flex items-center gap-1.5" title={section.hint}>
+    <div className={`nav-section flex items-center gap-1.5 ${isActiveStage ? 'nav-section-active' : ''}`} title={section.hint}>
       {inner}
     </div>
   )

@@ -329,8 +329,23 @@ export function HealthPage() {
               ? `${amberCount} amber probe${amberCount === 1 ? '' : 's'} — fallbacks or slow jobs, not yet blocking.`
               : `Fallback rate ${fallbackPct}% · avg ${Math.round(llm.avgLatencyMs)}ms (${window}).`,
           severity: healthSeverity,
+          anchor: 'health:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            whyNow: redCount > 0
+              ? `${redCount} red probe${redCount === 1 ? '' : 's'} are blocking the pipeline — error rate ${errorPct}% exceeds the 5% threshold.`
+              : `Pipeline is nominal: ${errorPct}% errors · ${fallbackPct}% fallbacks · ${Math.round(llm.avgLatencyMs)}ms avg latency.`,
+            items: [
+              { label: 'Total calls', value: llm.totalCalls, tone: 'neutral' },
+              { label: 'Error rate', value: `${errorPct}%`, tone: llm.errorRate > 0.05 ? 'crit' : llm.errorRate > 0 ? 'warn' : 'ok' },
+              { label: 'Fallback rate', value: `${fallbackPct}%`, tone: llm.fallbackRate > 0.1 ? 'crit' : llm.fallbackRate > 0 ? 'warn' : 'ok' },
+              { label: 'Avg latency', value: `${Math.round(llm.avgLatencyMs)}ms`, tone: 'neutral' },
+            ],
+          },
         }}
         act={healthAction}
+        actAnchor="health:act"
+        actEvidence={healthAction ? { kind: 'rule-trace', why: healthAction.reason ?? healthAction.title, threshold: redCount > 0 ? 'errorRate > 5% or probes failing' : undefined } : undefined}
         verify={{
           label: lastLlmCall ? `Last LLM call · ${lastLlmCall.used_model}` : 'Awaiting first call',
           detail: lastLlmCall
@@ -339,6 +354,14 @@ export function HealthPage() {
           to: lastLlmCall?.report_id ? `/reports/${lastLlmCall.report_id}` : '/reports',
           secondaryTo: '/audit',
           secondaryLabel: 'Open audit log',
+          anchor: 'health:verify',
+          evidence: lastLlmCall ? {
+            kind: 'last-event',
+            at: lastLlmCall.created_at,
+            by: lastLlmCall.used_model ?? 'unknown',
+            payloadSummary: lastLlmCall.function_name ?? 'llm call',
+            status: 'ok',
+          } : undefined,
         }}
       />
 
@@ -409,7 +432,7 @@ export function HealthPage() {
         title={`LLM Health (${window})`}
         freshness={{ at: llmQuery.lastFetchedAt, isValidating: llmQuery.isValidating }}
       >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2" data-dav-anchor="health:decide">
           <StatCard
             label="Total calls"
             value={llm.totalCalls.toString()}
@@ -509,7 +532,7 @@ export function HealthPage() {
       </Section>
 
       <Section title="Provider probes">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2" data-dav-anchor="health:act">
           {(['anthropic', 'openai'] as const).map((kind) => {
             const r = probeResults[kind]
             const statusColor = r?.status === 'ok'
@@ -552,7 +575,7 @@ export function HealthPage() {
         title="Cron Jobs"
         freshness={{ at: cronQuery.lastFetchedAt, isValidating: cronQuery.isValidating }}
       >
-        <div className="space-y-1">
+        <div className="space-y-1" data-dav-anchor="health:verify">
           {KNOWN_JOBS.map(job => {
             const j = cron?.byJob[job]
             const isManual = job !== 'data-retention'
