@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import { createBugsnagAdapter, translateBugsnag } from '../bugsnag.js'
 import { computeHmacSha256Hex, makeSink, makeReq } from './shared-hmac-fixtures.js'
 
-// eslint-disable-next-line no-secrets/no-secrets -- fixture value for unit tests; matched by gitleaks entropy heuristic
 const API_KEY = 'TEST-FIXTURE-NOT-A-REAL-SECRET'
 
 describe('translateBugsnag', () => {
