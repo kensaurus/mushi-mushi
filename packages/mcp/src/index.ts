@@ -46,6 +46,48 @@ async function main() {
 
   const transport = new StdioServerTransport()
   await server.connect(transport)
+
+  // Inventory change notifications (P1.7):
+  // Poll the inventory endpoint every 60 seconds and send
+  // notifications/resources/updated when the `updated_at` timestamp changes.
+  // This gives orchestrators (LangGraph, Claude, etc.) a push signal so they
+  // can re-fetch inventory://current without constant polling.
+  //
+  // Only active when MUSHI_PROJECT_ID is set (single-project mode) and the
+  // transport supports server-to-client notifications (all transports do).
+  if (PROJECT_ID && API_ENDPOINT) {
+    let lastInventoryAt: string | null = null
+    const POLL_INTERVAL_MS = 60_000
+
+    const pollInventory = async () => {
+      try {
+        const res = await fetch(`${API_ENDPOINT}/v1/admin/inventory/${PROJECT_ID}`, {
+          headers: {
+            'X-Mushi-Api-Key': API_KEY,
+            'X-Mushi-Project': PROJECT_ID,
+          },
+          signal: AbortSignal.timeout(10_000),
+        })
+        if (!res.ok) return
+        const data = await res.json() as { data?: { updatedAt?: string } }
+        const updatedAt = data?.data?.updatedAt ?? null
+        if (updatedAt && updatedAt !== lastInventoryAt) {
+          if (lastInventoryAt !== null) {
+            // Only notify after the first successful fetch (not on startup).
+            await server.server.sendResourceUpdated({ uri: 'inventory://current' })
+            log.info('inventory://current updated — notified subscribers', { updatedAt })
+          }
+          lastInventoryAt = updatedAt
+        }
+      } catch {
+        // Polling errors are silent — we never want the notification loop to crash the server.
+      }
+    }
+
+    // Start immediately, then repeat.
+    void pollInventory()
+    setInterval(() => { void pollInventory() }, POLL_INTERVAL_MS)
+  }
 }
 
 main().catch((err) => {

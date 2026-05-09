@@ -2,7 +2,7 @@ import type { Hono } from 'npm:hono@4';
 
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { jwtAuth } from '../../_shared/auth.ts';
+import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
@@ -10,6 +10,7 @@ import { getActivePlugins, sendTestDelivery } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
@@ -1118,12 +1119,19 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const projectIds = await ownedProjectIds(db, userId);
     const { data: report } = await db
       .from('reports')
-      .select('id, project_id, summary, description, category, severity, component')
+      .select('id, project_id, summary, description, category, severity, component, metadata')
       .eq('id', reportId)
       .in('project_id', projectIds)
       .single();
     if (!report)
       return c.json({ ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } }, 404);
+
+    // Propagate any stored traceparent (set at ingest time) so BYOK API calls
+    // (Jira, Linear, GitHub, PagerDuty) share the same distributed trace.
+    const storedTraceparent =
+      typeof (report.metadata as Record<string, unknown> | null)?.traceparent === 'string'
+        ? (report.metadata as Record<string, unknown>).traceparent as string
+        : extractInboundTraceparent(c.req.header('traceparent'))
 
     const results = await createExternalIssue(db, report.project_id, {
       id: report.id,
@@ -1132,7 +1140,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       category: report.category,
       severity: report.severity ?? 'medium',
       component: report.component,
-    });
+    }, storedTraceparent);
 
     await logAudit(db, report.project_id, userId, 'integration.synced', 'report', reportId, {
       results,
@@ -1947,6 +1955,92 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
   // Admin: telemetry & operational health
   // ============================================================
+
+  // ============================================================
+  // GET /v1/admin/integrations/health
+  //
+  // Returns the latest health check result for every configured BYOK
+  // channel (Sentry, GitHub, LangFuse, etc.) for projects the caller
+  // owns. Orchestrators (LangGraph, OpenAI Agents, CrewAI) can poll
+  // this before dispatching a fix to fail-fast on broken channels rather
+  // than burning LLM budget and time only to fail at the last step.
+  //
+  // Response shape:
+  //   {
+  //     ok: true,
+  //     data: {
+  //       channels: Array<{
+  //         projectId: string
+  //         kind: string           // e.g. "sentry", "github", "langfuse"
+  //         status: "ok" | "degraded" | "error" | "unknown"
+  //         latencyMs: number | null
+  //         checkedAt: string      // ISO timestamp
+  //         detail: string | null
+  //       }>
+  //       staleSince: string | null  // ISO — oldest check timestamp, null if no data
+  //       summary: "healthy" | "degraded" | "error"
+  //     }
+  //   }
+  // ============================================================
+  app.get('/v1/admin/integrations/health', adminOrApiKey({ scope: 'mcp:read' }), async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: { channels: [], staleSince: null, summary: 'healthy' } });
+    }
+
+    // Optional filter: ?projectId=<uuid> to scope to a single project.
+    const filterProjectId = c.req.query('projectId');
+    const scopedIds = filterProjectId && projectIds.includes(filterProjectId)
+      ? [filterProjectId]
+      : projectIds;
+
+    // Return the most recent health row per (project_id, kind).
+    // We use a subquery in JS since Supabase JS client doesn't expose
+    // DISTINCT ON directly — we fetch the last 200 rows and dedupe in memory.
+    const { data: rows, error } = await db
+      .from('integration_health_history')
+      .select('project_id, kind, status, latency_ms, checked_at, message, source')
+      .in('project_id', scopedIds)
+      .order('checked_at', { ascending: false })
+      .limit(500);
+
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500);
+    }
+
+    // Dedupe: keep only the newest row per (project_id, kind).
+    const seen = new Set<string>();
+    const channels: Array<{
+      projectId: string; kind: string; status: string;
+      latencyMs: number | null; checkedAt: string; message: string | null; source: string | null;
+    }> = [];
+    for (const row of rows ?? []) {
+      const key = `${row.project_id}:${row.kind}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      channels.push({
+        projectId: row.project_id,
+        kind: row.kind,
+        status: row.status ?? 'unknown',
+        latencyMs: row.latency_ms ?? null,
+        checkedAt: row.checked_at,
+        message: row.message ?? null,
+        source: row.source ?? null,
+      });
+    }
+
+    const staleSince = channels.length > 0
+      ? channels.reduce((min, c) => c.checkedAt < min ? c.checkedAt : min, channels[0].checkedAt)
+      : null;
+
+    const hasError = channels.some((ch) => ch.status === 'error');
+    const hasDegraded = channels.some((ch) => ch.status === 'degraded');
+    const summary = hasError ? 'error' : hasDegraded ? 'degraded' : 'healthy';
+
+    return c.json({ ok: true, data: { channels, staleSince, summary } });
+  });
 
   app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;

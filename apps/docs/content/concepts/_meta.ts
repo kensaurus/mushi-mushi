@@ -9,4 +9,5 @@ export default {
   'judge-loop': 'Judge & self-improvement',
   'anti-gaming': 'Anti-gaming & reputation',
   'inventory-and-gates': 'Inventory & gates',
+  'orchestrator-interop': 'Connecting your orchestrator',
 }

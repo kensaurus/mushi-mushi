@@ -195,6 +195,9 @@ describe('createOtelSpanProcessor', () => {
       status: { code: 0 /* SpanStatusCode.UNSET */ },
       attributes: {},
       name: 'GET /api/ok',
+      spanContext: () => ({ traceId: '0'.repeat(32), spanId: '0'.repeat(16) }),
+      startTime: [0, 0],
+      endTime: [0, 0],
     })
 
     expect(captureSpy).not.toHaveBeenCalled()

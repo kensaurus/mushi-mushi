@@ -1,5 +1,6 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log } from './logger.ts'
+import { attachTraceparent } from './trace.ts'
 
 const intLog = log.child('integrations')
 
@@ -22,6 +23,9 @@ export async function createExternalIssue(
   db: SupabaseClient,
   projectId: string,
   report: IntegrationReport,
+  /** Optional W3C traceparent to propagate into BYOK API calls so the
+   *  issue creation shows up in the same distributed trace. */
+  traceparent?: string,
 ): Promise<ExternalIssue[]> {
   const { data: integrations } = await db
     .from('project_integrations')
@@ -31,7 +35,7 @@ export async function createExternalIssue(
 
   const settled = await Promise.allSettled(
     (integrations ?? []).map(async (integration) => {
-      const result = await dispatchToProvider(integration.integration_type, integration.config as Record<string, unknown>, report)
+      const result = await dispatchToProvider(integration.integration_type, integration.config as Record<string, unknown>, report, traceparent)
       if (result) {
         await db.from('project_integrations').update({ last_synced_at: new Date().toISOString() }).eq('id', integration.id)
       }
@@ -272,23 +276,24 @@ async function dispatchToProvider(
   type: string,
   config: Record<string, unknown>,
   report: IntegrationReport,
+  traceparent?: string,
 ): Promise<ExternalIssue | null> {
   switch (type) {
-    case 'jira': return createJiraIssue(config, report)
-    case 'linear': return createLinearIssue(config, report)
-    case 'github': return createGitHubIssue(config, report)
-    case 'pagerduty': return triggerPagerDuty(config, report)
+    case 'jira': return createJiraIssue(config, report, traceparent)
+    case 'linear': return createLinearIssue(config, report, traceparent)
+    case 'github': return createGitHubIssue(config, report, traceparent)
+    case 'pagerduty': return triggerPagerDuty(config, report, traceparent)
     default: return null
   }
 }
 
-async function createJiraIssue(config: Record<string, unknown>, report: IntegrationReport): Promise<ExternalIssue> {
+async function createJiraIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
   const res = await fetch(`${config.baseUrl}/rest/api/3/issue`, {
     method: 'POST',
-    headers: {
+    headers: attachTraceparent({
       'Authorization': `Basic ${btoa(`${config.email}:${config.apiToken}`)}`,
       'Content-Type': 'application/json',
-    },
+    }, traceparent),
     body: JSON.stringify({
       fields: {
         project: { key: config.projectKey },
@@ -303,13 +308,13 @@ async function createJiraIssue(config: Record<string, unknown>, report: Integrat
   return { externalId: data.key, url: `${config.baseUrl}/browse/${data.key}`, provider: 'jira' }
 }
 
-async function createLinearIssue(config: Record<string, unknown>, report: IntegrationReport): Promise<ExternalIssue> {
+async function createLinearIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
   const res = await fetch('https://api.linear.app/graphql', {
     method: 'POST',
-    headers: {
+    headers: attachTraceparent({
       'Authorization': String(config.apiKey),
       'Content-Type': 'application/json',
-    },
+    }, traceparent),
     body: JSON.stringify({
       query: `mutation CreateIssue($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }`,
       variables: {
@@ -327,13 +332,13 @@ async function createLinearIssue(config: Record<string, unknown>, report: Integr
   return { externalId: issue?.identifier ?? '', url: issue?.url ?? '', provider: 'linear' }
 }
 
-async function createGitHubIssue(config: Record<string, unknown>, report: IntegrationReport): Promise<ExternalIssue> {
+async function createGitHubIssue(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue> {
   const res = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/issues`, {
     method: 'POST',
-    headers: {
+    headers: attachTraceparent({
       'Authorization': `token ${config.token}`,
       'Content-Type': 'application/json',
-    },
+    }, traceparent),
     body: JSON.stringify({
       title: `[Mushi] ${report.summary}`,
       body: `**Category**: ${report.category}\n**Severity**: ${report.severity}\n**Component**: ${report.component ?? 'unknown'}\n\n${report.description}`,
@@ -344,12 +349,12 @@ async function createGitHubIssue(config: Record<string, unknown>, report: Integr
   return { externalId: String(data.number), url: data.html_url, provider: 'github' }
 }
 
-async function triggerPagerDuty(config: Record<string, unknown>, report: IntegrationReport): Promise<ExternalIssue | null> {
+async function triggerPagerDuty(config: Record<string, unknown>, report: IntegrationReport, traceparent?: string): Promise<ExternalIssue | null> {
   if (report.severity !== 'critical') return null
 
   const res = await fetch('https://events.pagerduty.com/v2/enqueue', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: attachTraceparent({ 'Content-Type': 'application/json' }, traceparent),
     body: JSON.stringify({
       routing_key: config.routingKey,
       event_action: 'trigger',

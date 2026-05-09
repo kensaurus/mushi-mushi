@@ -167,13 +167,22 @@ async function deliverOne(
 
   const t = Date.now()
   const sig = await signHmac(secret, `${t}.${rawBody}`)
+  // Standard Webhooks: webhook-id=<deliveryId>, webhook-timestamp=<unix-secs>,
+  // webhook-signature=v1,<base64-hmac> where payload = "${id}.${ts}.${body}"
+  const stdTimestamp = String(Math.floor(t / 1000))
+  const stdSig = await signHmacBase64(secret, `${deliveryId}.${stdTimestamp}.${rawBody}`)
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // Legacy X-Mushi-* headers (kept for back-compat)
     'X-Mushi-Event': event,
     'X-Mushi-Signature': `t=${t},v1=${sig}`,
     'X-Mushi-Project': projectId,
     'X-Mushi-Plugin': plugin.plugin_slug,
     'X-Mushi-Delivery': deliveryId,
+    // Standard Webhooks (https://www.standardwebhooks.com/) headers
+    'webhook-id': deliveryId,
+    'webhook-timestamp': stdTimestamp,
+    'webhook-signature': `v1,${stdSig}`,
   }
 
   const start = Date.now()
@@ -307,13 +316,21 @@ export async function sendTestDelivery(
 
   const t = Date.now()
   const sig = await signHmac(secret, `${t}.${rawBody}`)
+  // Standard Webhooks: same ID as original delivery for idempotent retry tracking
+  const stdTimestamp = String(Math.floor(t / 1000))
+  const stdSig = await signHmacBase64(secret, `${deliveryId}.${stdTimestamp}.${rawBody}`)
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    // Legacy X-Mushi-* headers (kept for back-compat)
     'X-Mushi-Event': event,
     'X-Mushi-Signature': `t=${t},v1=${sig}`,
     'X-Mushi-Project': projectId,
     'X-Mushi-Plugin': pluginSlug,
     'X-Mushi-Delivery': deliveryId,
+    // Standard Webhooks (https://www.standardwebhooks.com/) headers
+    'webhook-id': deliveryId,
+    'webhook-timestamp': stdTimestamp,
+    'webhook-signature': `v1,${stdSig}`,
   }
 
   const start = Date.now()
@@ -372,6 +389,14 @@ async function signHmac(secret: string, payload: string): Promise<string> {
   const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload))
   return toHex(new Uint8Array(sig))
+}
+
+/** Standard Webhooks signature format: base64(HMAC_SHA256(secret, payload)) */
+async function signHmacBase64(secret: string, payload: string): Promise<string> {
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload))
+  return btoa(String.fromCharCode(...new Uint8Array(sig)))
 }
 
 async function sha256Hex(payload: string): Promise<string> {

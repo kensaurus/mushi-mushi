@@ -87,6 +87,17 @@ export class MushiNodeClient {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.opts.timeout ?? 10_000)
     try {
+      // If the caller stashed a W3C traceparent (e.g. from a middleware), pass
+      // it both as the standard HTTP header and inside `metadata` so the server
+      // can mint a child span and propagate it to outbound BYOK calls.
+      const inboundTraceparent =
+        typeof payload.metadata?.traceparent === 'string'
+          ? payload.metadata.traceparent
+          : null
+
+      const extraHeaders: Record<string, string> = {}
+      if (inboundTraceparent) extraHeaders['traceparent'] = inboundTraceparent
+
       const res = await fetch(`${this.endpoint}/v1/reports`, {
         method: 'POST',
         signal: controller.signal,
@@ -95,6 +106,7 @@ export class MushiNodeClient {
           'X-Mushi-Api-Key': this.opts.apiKey,
           'X-Mushi-Project': this.opts.projectId,
           'User-Agent': '@mushi-mushi/node',
+          ...extraHeaders,
         },
         body: JSON.stringify({
           projectId: this.opts.projectId,

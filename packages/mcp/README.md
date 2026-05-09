@@ -50,6 +50,27 @@ MUSHI_API_KEY=key_xxx MUSHI_PROJECT_ID=proj_xxx npx -y @mushi-mushi/mcp@latest
 
 The server speaks stdio MCP transport by default — your client launches it as a subprocess.
 
+### 4. Hosted Streamable HTTP (no subprocess) — 2026-05-09 release
+
+The Mushi backend now exposes the same tool catalog over the **Streamable HTTP** transport from the MCP 2025-03-26 spec at `/functions/v1/mcp`. Use this when you want to skip the local subprocess — typical for OpenAI Agents SDK, ChatGPT Agent, hosted CrewAI, or any orchestrator that talks remote MCP:
+
+```jsonc
+// .cursor/mcp.json — example
+{
+  "mcpServers": {
+    "mushi-mushi-hosted": {
+      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "headers": {
+        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Project-Id": "proj_…"
+      }
+    }
+  }
+}
+```
+
+The endpoint accepts JSON-RPC 2.0 over POST (returns `application/json` or `text/event-stream` per content negotiation), opens an SSE stream on GET for server-pushed notifications, and accepts DELETE for session termination. Auth is the same dual-mode API-key / JWT used everywhere else on `/v1/admin/*`.
+
 ## Tools
 
 ### Read
@@ -188,9 +209,10 @@ Honest scorecard against the MCP 2025-10 spec:
 - ✅ **Progress notifications** — wired on `dispatch_fix` (the one genuinely long-running call). Sends `notifications/progress` the moment the orchestrator accepts the job.
 - ✅ **Scope-aware errors** — `[INSUFFICIENT_SCOPE]` surfaces verbatim so agents don't silently retry.
 - ✅ **Stdio transport** — default for local editor integration.
+- ✅ **Streamable HTTP transport (2025-03-26 spec)** — hosted at `/functions/v1/mcp` on the Mushi backend; same tool catalog, no local subprocess. The previous "⏳" entry shipped in the 2026-05-09 release.
+- ✅ **Spec traceability for `dispatch_fix`** — the `dispatch_fix` tool input schema now accepts `inventoryActionNodeId`, and `get_fix_context` surfaces the inventory `Action` (with `expected_outcome`) the report was classified against. External orchestrators can read the contract before drafting a fix and pass the anchor back at dispatch time.
 - ⏳ **Resource subscriptions / `notifications/resources/list_changed`** — the spec supports live-updating resources (e.g. dashboard numbers that push rather than poll). Worth adding once Cursor + Claude Desktop both ship client support (currently patchy).
 - ⏳ **Sampling / elicitation** — letting the server ask the client to run an LLM call (e.g. to draft a commit message from the fix context). Not yet wired; would let us move some orchestrator LLM spend from server-side to the user's own subscription.
-- ⏳ **Streamable HTTP transport** — the spec's alternative to stdio for remote hosting. Relevant if we ever host the MCP server on behalf of customers; irrelevant for the local-install path that 95% of users want.
 
 If you want a feature from the "⏳" column, open an issue — we're holding them back on "MCP client support has shipped in ≥2 major clients", not on implementation effort.
 

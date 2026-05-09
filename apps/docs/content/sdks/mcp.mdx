@@ -10,4 +10,62 @@ Speaks **JSON-RPC 2.0** with `tools/call` semantics and supports the
 **SEP-1686 Tasks** envelope so long-running fixes can stream progress back
 into your IDE.
 
+## Two transports
+
+- **stdio (local)** — `npx -y @mushi-mushi/mcp@latest`. The default for
+  Cursor / Claude Desktop / Claude Code / Continue / Cline / Zed /
+  Windsurf. Your client launches the server as a subprocess and pipes
+  JSON-RPC over stdio.
+- **Streamable HTTP (hosted, 2026-05-09 release)** — single endpoint
+  at `/functions/v1/mcp` per the MCP 2025-03-26 spec. POST returns
+  `application/json` or `text/event-stream` per content negotiation,
+  GET opens an SSE stream for server-pushed notifications, DELETE
+  terminates the session. Use this when you want to skip the local
+  subprocess (typical for OpenAI Agents SDK, ChatGPT Agent, hosted
+  CrewAI, or any orchestrator that talks remote MCP).
+
+```jsonc
+// .cursor/mcp.json — Streamable HTTP example
+{
+  "mcpServers": {
+    "mushi-mushi-hosted": {
+      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "headers": {
+        "X-Mushi-Api-Key": "mushi_live_…",
+        "X-Mushi-Project-Id": "proj_…"
+      }
+    }
+  }
+}
+```
+
+Auth on both transports is the same dual-mode (API key with
+`mcp:read|write` OR JWT) used everywhere on `/v1/admin/*`.
+
+## Spec traceability for `dispatch_fix`
+
+The `dispatch_fix` tool now accepts `inventoryActionNodeId` so callers
+that already know the inventory `Action` they want repaired can pin the
+fix directly. The complementary `get_fix_context` tool surfaces the
+linked Action (with `expected_outcome`) so an external orchestrator can
+read the contract before drafting a fix.
+
+```jsonc
+// dispatch_fix tool inputSchema (excerpt)
+{
+  "type": "object",
+  "required": ["reportId"],
+  "properties": {
+    "reportId": { "type": "string" },
+    "projectId": { "type": "string" },
+    "inventoryActionNodeId": { "type": "string" }
+  }
+}
+```
+
+See [`@mushi-mushi/mcp`](https://www.npmjs.com/package/@mushi-mushi/mcp)
+on npm for the full tool catalog and
+[Connecting your orchestrator](/concepts/orchestrator-interop) for the
+non-MCP surfaces (REST, A2A, AG-UI SSE).
+
 Discoverable via the [A2A Agent Card](/concepts/architecture#a2a-agent-card).

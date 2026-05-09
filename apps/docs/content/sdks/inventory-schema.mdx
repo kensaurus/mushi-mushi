@@ -41,9 +41,21 @@ stories:
             actions:
               - id: submit
                 trigger: click
+                # Machine-readable success contract. Threaded into the
+                # fix-worker LLM prompt and asserted by the synthetic
+                # monitor after every probe.
                 expected_outcome:
-                  - waitFor: { url: /\/dashboard$/ }
-                  - assertText: { selector: 'h1', includes: 'Welcome' }
+                  summary: 'POST /signup returns 200 and creates a user row'
+                  response:
+                    status_in: [200, 201]
+                    json_path:
+                      - { path: '$.user.id', op: 'exists' }
+                  database:
+                    table: 'users'
+                    expect: 'row_exists'
+                  ui:
+                    route_change_to: '/dashboard'
+                    visible_text: 'Welcome'
 
 # Optional: feed an authenticated session to the synthetic monitor.
 auth:

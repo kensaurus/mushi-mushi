@@ -6,6 +6,30 @@
     "versions": [],
     "highlights": [
       {
+        "title": "Spec traceability — closed end-to-end",
+        "description": "— `expected_outcome` is now a real `inventory.yaml` schema field (Zod + JSON Schema, served at `/v1/schemas/expected-outcome.json`). Migration `20260509100000_inventory_action_traceability` adds `inventory_action_node_id` to both `fix_dispatch_jobs` and `fix_attempts`, plus `spec_validation_warnings JSONB` on `fix_attempts`. Every fix dispatched against an inventory-linked report carries the contract through the LLM prompt, gates the PR through the deterministic `validateAgainstSpec` check, and triggers a targeted post-PR synthetic probe scoped to the originating Action. Whitepaper §2.10."
+      },
+      {
+        "title": "MCP Streamable HTTP transport",
+        "description": "— hosted MCP at `/functions/v1/mcp` per the 2025-03-26 spec. Single endpoint, POST returns `application/json` or `text/event-stream` per content negotiation, GET opens an SSE stream for server-pushed notifications, DELETE terminates the session. Same tool catalog as the stdio transport; same dual-mode API-key / JWT auth as `/v1/admin/*`. Unlocks OpenAI Agents SDK, ChatGPT Agent, hosted CrewAI, and any orchestrator that talks remote MCP without spawning a subprocess."
+      },
+      {
+        "title": "A2A v1.0.0 `tasks` endpoints",
+        "description": "— `POST /v1/a2a/tasks` (create), `GET /v1/a2a/tasks/{id}`, `POST /v1/a2a/tasks/{id}:cancel`, `GET /v1/a2a/tasks/{id}:subscribe` (SSE). Wraps `fix_dispatch_jobs` rows as A2A `Task` resources with status translation (`queued`→`submitted`, `running`→`working`, `cancelled`→`canceled`). Optional `inventoryActionNodeId` on create flows the spec anchor straight through. Mushi is now a first-class citizen in Google's A2A v1.0.0 ecosystem."
+      },
+      {
+        "title": "OpenAPI 3.1 specification",
+        "description": "— hand-curated spec at `/openapi.json` (alias `/v1/openapi.json`). Documents fixes dispatch, reports, inventory, A2A tasks, and the auth token endpoint — every endpoint external orchestrators (LangGraph code-gen, generic OpenAPI clients, A2A skill negotiators) need to call without hand-authoring a Mushi client per integration."
+      },
+      {
+        "title": "AG-UI v0.4 SSE accepts API keys",
+        "description": "— `/v1/admin/fixes/dispatch/{id}/stream` was JWT-only; now accepts `adminOrApiKey({ scope: 'mcp:read' })`. Single biggest unblock for non-browser orchestrators (LangGraph nodes, CI integrations, A2A subscribers)."
+      },
+      {
+        "title": "Open `SandboxProvider` contract + JSON Schemas at `/v1/schemas/*`",
+        "description": "— `SandboxProvider['name']` is now an open `KnownSandboxProvider | (string & {})` union with a runtime registry (`registerSandboxProvider`) so third-party providers (Daytona, Sealos DevBox, internal corp envs) can register without forking. Hand-authored JSON Schemas (draft-07) for `FixContext`, `FixResult`, `SandboxProvider`, and `ExpectedOutcome` are exported from `@mushi-mushi/agents` and served at `/v1/schemas/*` so non-TS orchestrators (Python LangGraph, Go agents, A2A skill cards) can implement the contract without typing-by-hand."
+      },
+      {
         "title": "`createBreadcrumbBuffer(options?)`",
         "description": "— 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars *at insert time* so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean."
       },

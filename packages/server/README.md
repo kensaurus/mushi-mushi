@@ -6,7 +6,8 @@ Backend for Mushi Mushi — Supabase Edge Functions powering the LLM pipeline, k
 
 ```
 supabase/functions/
-  api/                       Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins, SSO, integrations, organizations + invitations under /v1/org and /v1/invitations)
+  api/                       Hono-based REST API (ingest, admin CRUD, graph, NL queries, billing, plugins, SSO, integrations, organizations + invitations under /v1/org and /v1/invitations, A2A v1.0.0 tasks under /v1/a2a/tasks, OpenAPI 3.1 spec at /openapi.json, JSON Schemas at /v1/schemas/*)
+  mcp/                       Mushi v2 — **MCP Streamable HTTP transport** (2025-03-26 spec) at /functions/v1/mcp. Single endpoint, POST returns application/json or text/event-stream per content negotiation, GET opens an SSE stream for server-pushed notifications, DELETE terminates the session. Proxies tool calls into the existing /v1/admin/* REST surface — same auth (API key with `mcp:read|write` scope OR JWT), same RLS. `verify_jwt = false` in `config.toml` because this function handles its own dual-mode auth
   fast-filter/               Stage 1 — Haiku extracts key facts and a structured evidence object, blocks spam (prompt-cached). **Internal-only** — rejects callers without `MUSHI_INTERNAL_CALLER_SECRET` / `SUPABASE_SERVICE_ROLE_KEY` since 2026-04-21 (SEC-1)
   classify-report/           Stage 2 — Sonnet deep analysis with vision + RAG. AIR-GAPPED: only consumes Stage 1's structured evidence, never raw user strings (prompt-cached). **Internal-only + `airGap=true` required** — any caller omitting the flag gets `400 AIR_GAP_REQUIRED` (SEC-7, belt-and-braces around OWASP LLM01 prompt injection)
   judge-batch/               Nightly LLM quality scoring + prompt A/B auto-promotion
@@ -16,12 +17,12 @@ supabase/functions/
   usage-aggregator/ D5 — hourly cron pushing usage_events to Stripe Meter Events
   webhooks-github-indexer/   GitHub App webhook → codebase RAG indexer; `?mode=sweep` reindexes all installed repos for cron use
   sentry-seer-poll/          Polls Sentry Seer issues for proactive bug intake. verify_jwt=false — invoked only by pg_cron via Vault-stored token
-  fix-worker/                Self-hosted fix-agent runner stub (used for restFixWorker integration tests). **Internal-only** since 2026-04-21 (SEC-1)
+  fix-worker/                Self-hosted fix-agent runner. **Internal-only** since 2026-04-21 (SEC-1). Now recovers the originating inventory `Action` for the report (via `reports_against` graph edge or the `inventoryActionNodeId` override on the dispatch row), threads `expected_outcome` into the LLM prompt, runs `validateAgainstSpec` as a deterministic pre-PR gate, and queues a targeted post-PR synthetic probe (`synthetic_runs` row with `status='skipped'`, `error_message='queued_post_pr'`) the moment the PR opens (whitepaper §2.10 spec-traceability)
   inventory-crawler/         Mushi v2 — Playwright (and `crawler_auth_config`-aware) crawler that walks the customer's `app.base_url`, snapshots discovered pages / elements / actions, and writes the rolling diff into `inventory_crawl_summaries`. Powers Gate 4 (`crawl`)
   inventory-gates/           Mushi v2 — server-side runner for Gates 3 (`api_contract`), 4 (`crawl`), 5 (`status_claim`). Consumes `discovered_apis` from `mushi-mushi-gates discover-api`, runs the crawl + status reconciler, and persists `gate_runs` / `gate_findings` for `/inventory ▸ Gates`
   inventory-propose/         Mushi v2.1 — LLM proposer. Reads `discovery_observed_inventory` (rolling 30-day SDK observations) + the current `inventory.yaml`, asks Claude Sonnet 4.6 to draft a `user_stories` + `pages` proposal, validates with `@mushi-mushi/inventory-schema`, and persists into `inventory_proposals` for review on `/inventory ▸ Discovery`. **Internal-only**
   status-reconciler/         Mushi v2 — derives every action's status (`stub` / `mocked` / `wired` / `verified` / `regressed`) from observable signals (lint, contract diff, CI test results, synthetic monitor, user reports) and writes the result back onto the inventory tree
-  synthetic-monitor/         Mushi v2 — periodic health-check runner. Hits each declared user-story's happy-path route via Playwright (using the crawler cookie when set) and writes results into `synthetic_runs` for the `/inventory` timeline
+  synthetic-monitor/         Mushi v2 — periodic health-check runner. Hits each declared user-story's happy-path route via Playwright (using the crawler cookie when set) and writes results into `synthetic_runs` for the `/inventory` timeline. As of 2026-05-09 it also drains the post-PR probe queue (`synthetic_runs WHERE status='skipped' AND error_message='queued_post_pr'`) with priority and `evaluateExpectedOutcome` against each Action's `expected_outcome` (status_in + JSONPath assertions on the live HTTP response)
   sentinel-audit/            Periodic audit sweep that compares the SDK-observed inventory against the accepted inventory and surfaces drift findings on `/inventory`
   test-gen-from-report/      Generates a Playwright spec stub from a report so the next dispatch has a regression test to lean on
   _shared/                   Shared modules (db, auth, schemas, embeddings, notifications, prompt-ab,
@@ -117,6 +118,21 @@ supabase/migrations/         PostgreSQL schema + RLS policies. Recent migrations
                                 operators can spot cross-environment mismatches (e.g.
                                 SDK pointed at local Supabase while the admin reads
                                 cloud) instead of staring at a stuck red checkmark.
+                              - **`20260509100000_inventory_action_traceability`** —
+                                spec-traceability on the WRITE side of the loop
+                                (whitepaper §2.10). Adds nullable
+                                `inventory_action_node_id UUID REFERENCES graph_nodes(id)
+                                ON DELETE SET NULL` to both `fix_dispatch_jobs` and
+                                `fix_attempts` (so the worker can persist the
+                                originating Action without forcing every legacy report
+                                to have an inventory linkage), plus
+                                `spec_validation_warnings JSONB` on `fix_attempts` for
+                                the soft warnings `validateAgainstSpec` emits when the
+                                diff doesn't reference the contract's required DB
+                                table or page route. Two partial indexes
+                                (`WHERE inventory_action_node_id IS NOT NULL`) back the
+                                "show me every fix that touched this Action" admin
+                                drawer.
 ```
 
 ## Development
@@ -229,6 +245,14 @@ All routes are served from the `api` function under `/v1/`:
 - `POST /v1/admin/inventory/:projectId/proposals/:id/accept` — replaces the project's active inventory with the proposal's parsed YAML and marks the proposal `accepted`. Idempotent; returns the new inventory snapshot
 - `POST /v1/admin/inventory/:projectId/proposals/:id/discard` — marks the proposal `discarded` (used for malformed LLM outputs or stale drafts)
 - `GET | PATCH /v1/admin/inventory/:projectId/settings` — Mushi v2.1. Project-scoped crawler / synthetic-monitor configuration: `crawler_base_url`, `crawler_auth_config` (cookie blob, `crawler_auth_runner` writes here), `synthetic_monitor_enabled`, `synthetic_monitor_target_url`, `synthetic_monitor_allow_mutations` (false by default — opt-in to allow non-safe HTTP verbs against the configured target; whitepaper §4.4). `PATCH` SSRF-validates `crawler_base_url` and `synthetic_monitor_target_url` at write time so misconfigured hosts (private IPs, cloud-metadata endpoints, embedded credentials) are rejected before the cron picks them up. Same endpoint `@mushi-mushi/inventory-auth-runner` POSTs the freshly-captured cookie back to
+- `POST /v1/admin/fixes/dispatch` — agentic fix orchestrator dispatch. Body now optionally accepts `inventoryActionNodeId` (UUID-validated) so callers that already know the inventory `Action` they want repaired can pass it directly; the worker falls back to walking the `reports_against` graph edge when omitted (whitepaper §2.10 spec-traceability)
+- `GET /v1/admin/fixes/dispatch/:id/stream` — AG-UI v0.4 SSE stream of fix dispatch events (`run.started` / `run.status` / `run.completed` / `run.failed`). **Auth swapped from JWT-only to `adminOrApiKey({ scope: 'mcp:read' })` on 2026-05-09** so API-key orchestrators can subscribe (was the single biggest unblock for non-browser clients). Sanitised against CVE-2026-29085
+- `POST /v1/a2a/tasks` — Google A2A v1.0.0 task delegation. Wraps `fix_dispatch_jobs` rows as A2A `Task` resources; body shape `{ skill: 'dispatch_fix', input: { reportId, projectId, inventoryActionNodeId? } }`. Auth: `adminOrApiKey({ scope: 'mcp:write' })`
+- `GET /v1/a2a/tasks/:id` — fetch A2A task state. Status names translated at the edge (`fix_dispatch_jobs.status='queued'` → A2A `state='submitted'`, `running` → `working`, `cancelled` → `canceled`, etc.). Includes a `metadata.inventoryActionNodeId` so external orchestrators can fetch the spec context via the MCP `get_fix_context` tool
+- `POST /v1/a2a/tasks/:id:cancel` — A2A task cancellation (Hono path uses the regex constraint `:id{[^:]+}:cancel` to keep the literal colon-suffix verb intact)
+- `GET /v1/a2a/tasks/:id:subscribe` — SSE stream of A2A `task.updated` / `task.terminal` events. Same back-pressure + heartbeat semantics as the AG-UI stream
+- `GET /openapi.json` (alias `/v1/openapi.json`) — hand-curated OpenAPI 3.1 specification for the public REST surface (fixes dispatch, reports, inventory, A2A tasks, auth token). Referenced from the agent card so LangGraph code-gen, generic OpenAPI clients, and A2A skill negotiators can auto-generate Mushi clients
+- `GET /v1/schemas` / `GET /v1/schemas/:name` — JSON Schemas (draft-07) for the public agent contracts: `fix-context.json`, `fix-result.json`, `sandbox-provider.json`, `expected-outcome.json`. Mirrored from `@mushi-mushi/agents` so non-TS orchestrators (Python LangGraph, Go agents, A2A skill cards) can implement the contract without typing-by-hand
 - See `supabase/functions/api/index.ts` and `supabase/functions/api/routes/*.ts` for the full route table
 
 ### Inventory-route security guards (`_shared/inventory-guards.ts`)

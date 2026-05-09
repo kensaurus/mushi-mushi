@@ -8,7 +8,7 @@
  * dispatcher healthy.
  */
 
-import { verifySignature } from './sign.js'
+import { verifySignature, verifyStandardWebhooksSignature } from './sign.js'
 import type { MushiEventEnvelope, MushiEventName } from './types.js'
 
 export interface PluginHandlerConfig {
@@ -54,7 +54,26 @@ export function createPluginHandler(config: PluginHandlerConfig) {
 
   return async function handle(input: HandlePluginRequestInput): Promise<HandlePluginResult> {
     const sigHeader = pickHeader(input.headers, 'x-mushi-signature')
-    const verification = verifySignature({ rawBody: input.rawBody, header: sigHeader, secret: config.secret })
+    // Accept either the legacy X-Mushi-Signature (Stripe-style) or the
+    // Standard Webhooks headers (webhook-id / webhook-timestamp / webhook-signature).
+    // We try legacy first for back-compat; new deployments will have both.
+    const stdId = pickHeader(input.headers, 'webhook-id')
+    const stdTs = pickHeader(input.headers, 'webhook-timestamp')
+    const stdSig = pickHeader(input.headers, 'webhook-signature')
+
+    let verification: ReturnType<typeof verifySignature>
+    if (stdId && stdTs && stdSig) {
+      verification = verifyStandardWebhooksSignature({
+        rawBody: input.rawBody,
+        webhookId: stdId,
+        webhookTimestamp: stdTs,
+        webhookSignature: stdSig,
+        secret: config.secret,
+      })
+    } else {
+      verification = verifySignature({ rawBody: input.rawBody, header: sigHeader, secret: config.secret })
+    }
+
     if (!verification.ok) {
       log.warn('Signature verification failed', { reason: verification.reason })
       return reject(401, 'BAD_SIGNATURE', verification.reason)

@@ -85,23 +85,23 @@ export function registerPostRegionDiscoveryRoutes(app: Hono): void {
     const mcpBase = `${origin}/functions/v1/mcp`;
 
     return {
-      schemaVersion: '0.2',
+      schemaVersion: '1.0',
       spec: 'https://github.com/agent-protocol/a2a',
       id: 'dev.mushimushi.autofix',
       name: 'Mushi Mushi Autofix Agent',
       description:
         'LLM-driven bug intake, classification, and autofix agent. Accepts user-reported bugs, ' +
         'classifies them via a two-stage pipeline, and ships fixes through sandboxed agentic workflows.',
-      version: '0.2.0',
+      version: '2.0.0',
       publisher: { name: 'Mushi Mushi', url: 'https://mushimushi.dev' },
       documentation: 'https://docs.mushimushi.dev/api/agent-card',
       capabilities: {
         streaming: {
           protocol: 'agui',
-          version: '0.1',
+          version: '0.4',
           endpoint: `${apiBase}/v1/admin/fixes/dispatch/:id/stream`,
         },
-        sse: { sanitization: 'CVE-2026-29085' },
+        sse: { sanitization: 'CVE-2026-29085', lastEventId: true },
         mcp: {
           // Streamable HTTP per the 2025-03-26 spec — single endpoint,
           // POST returns application/json or text/event-stream as
@@ -115,11 +115,22 @@ export function registerPostRegionDiscoveryRoutes(app: Hono): void {
         auth: {
           schemes: ['bearer', 'mushi-api-key'],
           discovery: `${apiBase}/v1/admin/auth/manifest`,
+          dynamicRegistration: `${apiBase}/v1/admin/auth/register`,
         },
         // A2A v1.0.0 task surface lives on the api function alongside
         // the existing fix dispatch routes — wraps fix_dispatch_jobs as
         // A2A Task resources (GET / cancel / subscribe).
         tasks: { spec: 'A2A-1.0.0', endpoint: `${apiBase}/v1/a2a/tasks` },
+        tracing: {
+          standard: 'W3C-TraceContext',
+          propagation: 'traceparent',
+          otlp: 'OTEL_EXPORTER_OTLP_ENDPOINT',
+        },
+        webhooks: {
+          standard: 'StandardWebhooks-1.0',
+          legacyHeader: 'X-Mushi-Signature',
+        },
+        idempotency: { header: 'Idempotency-Key', standard: 'IETF-draft-idempotency-key' },
       },
       skills: [
         {
