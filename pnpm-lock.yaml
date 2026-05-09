@@ -661,7 +661,7 @@ importers:
   packages/plugin-bugsnag:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@types/node':
@@ -680,7 +680,7 @@ importers:
   packages/plugin-crashlytics:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@types/node':
@@ -699,7 +699,7 @@ importers:
   packages/plugin-discord:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@types/node':
@@ -718,7 +718,7 @@ importers:
   packages/plugin-github-issues:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@types/node':
@@ -790,7 +790,7 @@ importers:
   packages/plugin-msteams:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@types/node':
@@ -834,7 +834,7 @@ importers:
   packages/plugin-rollbar:
     dependencies:
       '@mushi-mushi/plugin-sdk':
-        specifier: workspace:*
+        specifier: workspace:^
         version: link:../plugin-sdk
     devDependencies:
       '@types/node':
