@@ -2,6 +2,24 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { debugWarn } from './debug'
 
+/**
+ * Reporter feedback chip — a structured 1-click signal the SDK widget can
+ * attach to a comment. Mirrors the CHECK constraint on
+ * `report_comments.feedback_signal` (migration 20260510020000).
+ *
+ *   confirms                — yes, this IS the bug I meant
+ *   wrong_target            — agent fixed something that wasn't the bug
+ *   agent_fixed_wrong_thing — partial: bug is right, fix is wrong
+ *   already_fixed           — false positive, bug is gone
+ *   noise                   — spam / off-topic / shouldn't have been classified
+ */
+export type FeedbackSignal =
+  | 'confirms'
+  | 'wrong_target'
+  | 'agent_fixed_wrong_thing'
+  | 'already_fixed'
+  | 'noise'
+
 export interface ReportCommentRow {
   id: number
   report_id: string
@@ -15,6 +33,7 @@ export interface ReportCommentRow {
   parent_id: number | null
   edited_at: string | null
   created_at: string
+  feedback_signal?: FeedbackSignal | null
 }
 
 export interface UseReportCommentsOptions {

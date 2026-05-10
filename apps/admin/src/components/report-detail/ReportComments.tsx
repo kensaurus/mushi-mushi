@@ -1,8 +1,41 @@
 import { useState } from 'react'
 import { Section, RelativeTime, InfoHint, Tooltip } from '../ui'
 import { IconChat } from '../icons'
-import { useReportComments } from '../../lib/reportComments'
+import { useReportComments, type FeedbackSignal } from '../../lib/reportComments'
 import { useToast } from '../../lib/toast'
+
+// Loop-closure: short, human-readable hover text for each feedback chip
+// the SDK widget can attach to a reporter reply. Used by the comment
+// thread to explain "why is this badge here?" without making the
+// reviewer hunt through docs.
+function feedbackSignalTooltip(signal: FeedbackSignal): string {
+  switch (signal) {
+    case 'confirms':
+      return 'Reporter confirmed this IS the bug they meant. Strongest positive signal — feeds the judge as ground truth.'
+    case 'wrong_target':
+      return "Reporter says we fixed the wrong thing. Stage 1/2 mis-classified the report; the prompt-tuner pulls these as negative training examples."
+    case 'agent_fixed_wrong_thing':
+      return 'Reporter says the bug is real but the fix is wrong. The classifier was right; the fix-worker prompt needs improvement.'
+    case 'already_fixed':
+      return 'Reporter says the bug is gone — likely a regression that someone else fixed. Auto-resolves the report.'
+    case 'noise':
+      return "Reporter says this shouldn't have been classified — noise / spam / off-topic. Down-weights this reporter's anti-gaming score."
+  }
+}
+
+function feedbackSignalToneClass(signal: FeedbackSignal): string {
+  switch (signal) {
+    case 'confirms':
+      return 'border-ok/40 bg-ok-muted/20 text-ok'
+    case 'already_fixed':
+      return 'border-info/40 bg-info-muted/20 text-info'
+    case 'wrong_target':
+    case 'agent_fixed_wrong_thing':
+      return 'border-warn/40 bg-warn-muted/20 text-warn'
+    case 'noise':
+      return 'border-danger/40 bg-danger-muted/20 text-danger'
+  }
+}
 
 export function ReportComments({ reportId, projectId }: { reportId: string; projectId: string }) {
   const toast = useToast()
@@ -53,6 +86,15 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
                 <span className="font-medium text-fg">{c.author_kind === 'reporter' ? 'Reporter' : (c.author_name ?? 'Unknown')}</span>
                 {c.author_kind === 'reporter' && (
                   <span className="text-2xs text-accent border border-accent/40 px-1 rounded">reporter replied</span>
+                )}
+                {c.feedback_signal && (
+                  <Tooltip content={feedbackSignalTooltip(c.feedback_signal)}>
+                    <span
+                      className={`text-2xs px-1 rounded font-mono cursor-help border ${feedbackSignalToneClass(c.feedback_signal)}`}
+                    >
+                      {c.feedback_signal}
+                    </span>
+                  </Tooltip>
                 )}
                 <span className="text-2xs text-fg-muted">
                   <RelativeTime value={c.created_at} />

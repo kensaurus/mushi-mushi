@@ -1,31 +1,42 @@
 # Plugin marketplace
 
-Mushi events flow out as **HMAC-signed JSON webhooks** to any tool you
-hook up. The marketplace ships first-party plugins and lets you build
-your own with `@mushi-mushi/plugin-sdk`.
+Mushi events flow out as **HMAC-signed JSON webhooks** with [Standard Webhooks](https://www.standardwebhooks.com/) headers (`webhook-id` / `webhook-timestamp` / `webhook-signature: v1,…`) to any tool you wire up. The marketplace ships **12 first-party plugins** and lets you build your own with `@mushi-mushi/plugin-sdk` (retry helpers, signature verification, REST callback in one tiny package).
 
 ## Available plugins
 
-| Plugin       | Triggers                                            |
-| ------------ | --------------------------------------------------- |
-| **PagerDuty** | `report.created` (P0/P1) → page on-call            |
-| **Linear**   | `report.classified` → file an issue with labels     |
-| **Zapier**   | All events → fan-out to 6,000+ Zapier integrations  |
+| Plugin              | Triggers                                                           | Use case                                       |
+| ------------------- | ------------------------------------------------------------------ | ---------------------------------------------- |
+| **PagerDuty**       | `report.created` (P0/P1)                                           | Page on-call for blocker user-felt regressions |
+| **Linear**          | `report.classified`                                                | File issues with labels + assignees            |
+| **Jira Cloud**      | `report.classified` + status sync                                  | Bidirectional Jira ↔ Mushi sync (OAuth 3LO)    |
+| **Slack app**       | `report.created` / `fix.pr_opened` + `/mushi` slash command        | Inline triage from your team channel           |
+| **Discord**         | Configurable per-event embeds                                      | Community / startup teams who live in Discord  |
+| **Microsoft Teams** | Adaptive cards on classified reports                               | Enterprise on-call handoff                     |
+| **GitHub Issues**   | `report.classified` → labelled issue with Mushi backlink           | Repos that already triage in GitHub Issues     |
+| **Sentry**          | Mirror critical reports + resolve on fix                           | Companion to your existing Sentry surface      |
+| **Bugsnag**         | Mirror reports into Bugsnag projects + close on fix merge          | Bugsnag-native shops                           |
+| **Rollbar**         | Mirror reports + resolve Rollbar items on fix                      | Rollbar-native shops                           |
+| **Crashlytics**     | Push Mushi reports into Firebase Crashlytics issues + close on fix | Mobile-first teams                             |
+| **Zapier**          | All events                                                         | Fan-out to 6,000+ Zapier integrations          |
 
-Browse and install from the admin console: **Marketplace**.
+Browse and install from the admin console: **Marketplace**. Each plugin enforces strict scope — it only sees the events you subscribe it to.
 
 ## Webhook delivery contract
 
 Every dispatch is:
 
-- **POST** to your configured webhook URL
-- Body: `{ event, project_id, occurred_at, data }`
-- Header `x-mushi-signature: sha256=…` — HMAC-SHA256 of the raw body
-  using the per-plugin secret stored in Vault
-- Retried with exponential backoff on 5xx (3 attempts, 0/30/120s)
-- Logged to `plugin_dispatch_log` with status, latency, and response code
+- **POST** to your configured webhook URL with `Content-Type: application/json`.
+- Body: `{ event, deliveryId, occurredAt, projectId, pluginSlug, data }`.
+- **Standard Webhooks headers** ([standardwebhooks.com](https://www.standardwebhooks.com/)) — receivers can use any spec-compliant library to verify:
+  - `webhook-id: <uuid>`
+  - `webhook-timestamp: <unix-secs>`
+  - `webhook-signature: v1,<base64-hmac-sha256>` over `${id}.${ts}.${rawBody}`
+- Legacy `X-Mushi-*` headers are also emitted for back-compat with first-generation receivers.
+- Retried with exponential backoff on 5xx / network errors (3 attempts: 0 / 30 / 120s).
+- Logged to `plugin_dispatch_log` with status, HTTP code, latency, and response excerpt — visible in **Marketplace → plugin → Deliveries**.
 
 ## Build your own
 
-See [Building a plugin](/plugins/building) and
-[Webhook events](/plugins/events).
+See [Building a plugin](/plugins/building) and [Webhook events](/plugins/events).
+
+The `@mushi-mushi/plugin-sdk` exports `verifyStandardWebhook(headers, rawBody, secret)` and `withRetry(fn)` so a production-ready receiver is ~20 lines of code.

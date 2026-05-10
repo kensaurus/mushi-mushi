@@ -102,6 +102,7 @@ async function loadFailures(
       disagreement_reason,
       judge_reasoning,
       suggested_correction,
+      report_id,
       reports!inner(description, category, severity, component)
     `)
     .eq('project_id', projectId)
@@ -116,7 +117,7 @@ async function loadFailures(
     return []
   }
 
-  return (data ?? []).map((row) => {
+  const judgeFailures = (data ?? []).map((row) => {
     const report = row.reports as unknown as {
       description: string
       category: string | null
@@ -124,6 +125,7 @@ async function loadFailures(
       component: string | null
     }
     return {
+      reportId: row.report_id as string | null,
       reportDescription: report.description ?? '',
       category: report.category,
       severity: report.severity,
@@ -133,8 +135,108 @@ async function loadFailures(
       disagreementReason: row.disagreement_reason,
       judgeReasoning: row.judge_reasoning,
       suggestedCorrection: row.suggested_correction,
-    } satisfies FailureSample
+    } satisfies FailureSample & { reportId: string | null }
   })
+
+  // Loop-closure (deferred-1): also sample reports whose downstream fix
+  // attempt was closed without merging in the same lookback window. The
+  // judge may have agreed with the classification, but if a human
+  // reviewer ultimately rejected the resulting fix PR, that's a strong
+  // signal something went wrong upstream — usually the classifier
+  // mis-tagged severity / component / category in a way that led to a
+  // misguided fix attempt. Surfacing these as ADDITIONAL failure
+  // samples lets the prompt-tuner learn from real merge-outcome
+  // ground-truth, not just from the judge's secondary opinion.
+  //
+  // We dedupe by reportId so a report that ALSO has a low judge score
+  // doesn't get sampled twice (and use the existing judge sample which
+  // already has a populated `disagreementReason`).
+  const mergeFailures = await loadMergeOutcomeFailures(
+    db,
+    projectId,
+    since,
+    new Set(judgeFailures.map((f) => f.reportId).filter((id): id is string => Boolean(id))),
+  )
+
+  // Strip the helper-only `reportId` field before returning to keep the
+  // public FailureSample shape stable.
+  const combined = [...judgeFailures, ...mergeFailures]
+    .map(({ reportId: _reportId, ...rest }) => rest)
+    .slice(0, MAX_FAILURES_TO_SAMPLE)
+
+  return combined
+}
+
+async function loadMergeOutcomeFailures(
+  db: SupabaseClient,
+  projectId: string,
+  since: string,
+  excludeReportIds: Set<string>,
+): Promise<Array<FailureSample & { reportId: string | null }>> {
+  // Pull merge outcomes via fix_attempts directly. We treat
+  // `pr_state='closed' AND merged_at IS NULL` as a "rejected fix"
+  // signal — the human reviewer chose not to merge our work. We CAP
+  // at `MAX_FAILURES_TO_SAMPLE / 2` so judge signal still dominates
+  // (the judge has more samples and is the primary oracle for
+  // classifier prompts).
+  const cap = Math.max(1, Math.floor(MAX_FAILURES_TO_SAMPLE / 2))
+  const { data, error } = await db
+    .from('fix_attempts')
+    .select(`
+      report_id,
+      pr_state,
+      merged_at,
+      summary,
+      error,
+      failure_category,
+      reports!inner(description, category, severity, component)
+    `)
+    .eq('project_id', projectId)
+    .eq('pr_state', 'closed')
+    .is('merged_at', null)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(cap * 2) // over-fetch so we can dedupe and still hit `cap`
+
+  if (error) {
+    log.warn('merge-outcome failure load failed', { projectId, error: error.message })
+    return []
+  }
+
+  const out: Array<FailureSample & { reportId: string | null }> = []
+  for (const row of data ?? []) {
+    const reportId = row.report_id as string | null
+    if (!reportId || excludeReportIds.has(reportId)) continue
+    const report = row.reports as unknown as {
+      description: string
+      category: string | null
+      severity: string | null
+      component: string | null
+    }
+    out.push({
+      reportId,
+      reportDescription: report.description ?? '',
+      category: report.category,
+      severity: report.severity,
+      component: report.component,
+      // We have no judge score for this row — surface a sentinel low
+      // value so it sorts alongside genuine judge failures. The
+      // bucketize() function will route it under the
+      // `merge_outcome:closed_unmerged` bucket via disagreementReason.
+      judgeScore: 0.5,
+      classificationAgreed: false,
+      disagreementReason: row.failure_category
+        ? `merge_outcome:${row.failure_category}`
+        : 'merge_outcome:closed_unmerged',
+      judgeReasoning:
+        `The reviewer closed the auto-fix PR without merging. ` +
+        `Mushi's fix summary was: "${(row.summary ?? '').slice(0, 200)}". ` +
+        (row.error ? `Worker error: ${String(row.error).slice(0, 200)}` : ''),
+      suggestedCorrection: null,
+    })
+    if (out.length >= cap) break
+  }
+  return out
 }
 
 function bucketize(failures: FailureSample[]): Array<{ reason: string; count: number }> {

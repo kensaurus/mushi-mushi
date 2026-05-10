@@ -47,40 +47,42 @@
  * multi-turn lands in a release.
  */
 
-import { generateObject, NoObjectGeneratedError } from 'npm:ai@4'
-import { createAnthropic } from 'npm:@ai-sdk/anthropic@1'
-import { createOpenAI } from 'npm:@ai-sdk/openai@1'
-import { z } from 'npm:zod@3'
-import { getServiceClient } from '../_shared/db.ts'
-import { withSentry } from '../_shared/sentry.ts'
-import { resolveLlmKey } from '../_shared/byok.ts'
-import { getRelevantCodeWithReason, formatCodeContext, type RagSkipReason } from '../_shared/rag.ts'
+import { generateObject, NoObjectGeneratedError } from 'npm:ai@4';
+import { createAnthropic } from 'npm:@ai-sdk/anthropic@1';
+import { createOpenAI } from 'npm:@ai-sdk/openai@1';
+import { z } from 'npm:zod@3';
+import { getServiceClient } from '../_shared/db.ts';
+import { withSentry } from '../_shared/sentry.ts';
+import { resolveLlmKey } from '../_shared/byok.ts';
+import {
+  getRelevantCodeWithReason,
+  formatCodeContext,
+  type RagSkipReason,
+} from '../_shared/rag.ts';
 
-function ragSkipReasonMessage(
-  reason: RagSkipReason | 'ok',
-  detail: string | undefined,
-): string {
+function ragSkipReasonMessage(reason: RagSkipReason | 'ok', detail: string | undefined): string {
   switch (reason) {
     case 'disabled':
-      return 'Codebase indexing is disabled. Enable it in Settings → Integrations → GitHub and re-run the fix.'
+      return 'Codebase indexing is disabled. Enable it in Settings → Integrations → GitHub and re-run the fix.';
     case 'empty_query':
-      return 'Report lacks a summary/intent/component — cannot build a RAG query. Re-classify the report and retry.'
+      return 'Report lacks a summary/intent/component — cannot build a RAG query. Re-classify the report and retry.';
     case 'embedding_failed':
-      return `RAG embedding call failed (${detail ?? 'unknown'}). Check BYOK OpenAI key / base URL or set OPENAI_API_KEY as an env fallback, then retry.`
+      return `RAG embedding call failed (${detail ?? 'unknown'}). Check BYOK OpenAI key / base URL or set OPENAI_API_KEY as an env fallback, then retry.`;
     case 'rpc_failed':
-      return `match_codebase_files RPC failed (${detail ?? 'unknown'}). Re-run the latest migrations, then retry.`
+      return `match_codebase_files RPC failed (${detail ?? 'unknown'}). Re-run the latest migrations, then retry.`;
     case 'no_matches':
-      return 'Codebase is indexed but no file matched this report. Re-index the repo or broaden the report summary, then retry.'
+      return 'Codebase is indexed but no file matched this report. Re-index the repo or broaden the report summary, then retry.';
     default:
-      return 'Codebase not indexed. Enable in Settings → Integrations → GitHub, or increase MUSHI_FIX_MIN_RAG_CHUNKS if you want to proceed with less context.'
+      return 'Codebase not indexed. Enable in Settings → Integrations → GitHub, or increase MUSHI_FIX_MIN_RAG_CHUNKS if you want to proceed with less context.';
   }
 }
-import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts'
-import { createTrace } from '../_shared/observability.ts'
-import { log as rootLog } from '../_shared/logger.ts'
-import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts'
-import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { firecrawlSearch, type FirecrawlSearchResult } from '../_shared/firecrawl.ts';
+import { createTrace } from '../_shared/observability.ts';
+import { log as rootLog } from '../_shared/logger.ts';
+import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
+import { getPromptForStage } from '../_shared/prompt-ab.ts';
+import { dispatchPluginEvent } from '../_shared/plugins.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -89,7 +91,7 @@ import { getPromptForStage } from '../_shared/prompt-ab.ts'
 // rationale.
 // ----------------------------------------------------------------------------
 
-import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts'
+import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -109,17 +111,17 @@ NEVER emit placeholder output. The strings "placeholder", "TODO", "lorem ipsum",
   - set \`needsHumanReview: true\`
   - in \`rationale\`, explain exactly which file or snippet you would need to see
   - in \`files\`, emit the SMALLEST plausible defensive change you can justify (e.g. an explicit error message at the crash site) rather than a placeholder
-  - never emit a draft PR full of stub files just to satisfy the schema`
+  - never emit a draft PR full of stub files just to satisfy the schema`;
 
 interface FixRequestBody {
-  dispatchId: string
+  dispatchId: string;
 }
 
 interface ResolvedRepo {
-  owner: string
-  repo: string
-  defaultBranch: string
-  scopeDirectory?: string
+  owner: string;
+  repo: string;
+  defaultBranch: string;
+  scopeDirectory?: string;
 }
 
 /**
@@ -134,497 +136,668 @@ interface ResolvedRepo {
  * not just "an absence of the bug."
  */
 interface InventoryAnchor {
-  actionNodeId: string
-  actionLabel: string
-  actionDescription?: string
-  pagePath?: string
-  pageId?: string
-  storyId?: string
-  storyTitle?: string
-  expectedOutcome?: Record<string, unknown> | null
+  actionNodeId: string;
+  actionLabel: string;
+  actionDescription?: string;
+  pagePath?: string;
+  pageId?: string;
+  storyId?: string;
+  storyTitle?: string;
+  expectedOutcome?: Record<string, unknown> | null;
 }
 
-Deno.serve(withSentry('fix-worker', async (req) => {
-  // SEC-1: Internal-only — invoked by the `api` function after a user
-  // dispatches a fix. `verify_jwt = false` in config.toml; we require the
-  // service-role key that `api` already sends. Without this guard an
-  // attacker could trigger arbitrary fix-worker runs (PR creation, LLM
-  // calls billed to the project).
-  const unauthorized = requireServiceRoleAuth(req)
-  if (unauthorized) return unauthorized
+Deno.serve(
+  withSentry('fix-worker', async (req) => {
+    // SEC-1: Internal-only — invoked by the `api` function after a user
+    // dispatches a fix. `verify_jwt = false` in config.toml; we require the
+    // service-role key that `api` already sends. Without this guard an
+    // attacker could trigger arbitrary fix-worker runs (PR creation, LLM
+    // calls billed to the project).
+    const unauthorized = requireServiceRoleAuth(req);
+    if (unauthorized) return unauthorized;
 
-  const log = rootLog.child('fix-worker')
-  let body: FixRequestBody
-  try {
-    const raw: unknown = await req.json()
-    if (!raw || typeof raw !== 'object' || typeof (raw as { dispatchId?: unknown }).dispatchId !== 'string') {
-      return new Response(JSON.stringify({ ok: false, error: 'dispatchId required' }), { status: 400 })
+    const log = rootLog.child('fix-worker');
+    let body: FixRequestBody;
+    try {
+      const raw: unknown = await req.json();
+      if (
+        !raw ||
+        typeof raw !== 'object' ||
+        typeof (raw as { dispatchId?: unknown }).dispatchId !== 'string'
+      ) {
+        return new Response(JSON.stringify({ ok: false, error: 'dispatchId required' }), {
+          status: 400,
+        });
+      }
+      body = { dispatchId: (raw as { dispatchId: string }).dispatchId };
+    } catch {
+      return new Response(JSON.stringify({ ok: false, error: 'Body must be JSON' }), {
+        status: 400,
+      });
     }
-    body = { dispatchId: (raw as { dispatchId: string }).dispatchId }
-  } catch {
-    return new Response(JSON.stringify({ ok: false, error: 'Body must be JSON' }), { status: 400 })
-  }
 
-  const db = getServiceClient()
+    const db = getServiceClient();
 
-  // ---- 1. Mark dispatch as running -----------------------------------------
-  const { data: dispatch, error: dispatchErr } = await db
-    .from('fix_dispatch_jobs')
-    .update({ status: 'running', started_at: new Date().toISOString() })
-    .eq('id', body.dispatchId)
-    .eq('status', 'queued')
-    .select('id, project_id, report_id, requested_by, inventory_action_node_id')
-    .single()
+    // ---- 1. Mark dispatch as running -----------------------------------------
+    const { data: dispatch, error: dispatchErr } = await db
+      .from('fix_dispatch_jobs')
+      .update({ status: 'running', started_at: new Date().toISOString() })
+      .eq('id', body.dispatchId)
+      .eq('status', 'queued')
+      .select(
+        'id, project_id, report_id, requested_by, inventory_action_node_id, coordination_id, dispatch_metadata',
+      )
+      .single();
 
-  if (dispatchErr || !dispatch) {
-    log.warn('Dispatch not found or not in queued state', { dispatchId: body.dispatchId, err: dispatchErr?.message })
-    return new Response(JSON.stringify({ ok: false, error: 'Dispatch not in queued state' }), { status: 409 })
-  }
+    if (dispatchErr || !dispatch) {
+      log.warn('Dispatch not found or not in queued state', {
+        dispatchId: body.dispatchId,
+        err: dispatchErr?.message,
+      });
+      return new Response(JSON.stringify({ ok: false, error: 'Dispatch not in queued state' }), {
+        status: 409,
+      });
+    }
 
-  const trace = createTrace('fix-worker', {
-    dispatchId: dispatch.id,
-    projectId: dispatch.project_id,
-    reportId: dispatch.report_id,
-  })
+    const trace = createTrace('fix-worker', {
+      dispatchId: dispatch.id,
+      projectId: dispatch.project_id,
+      reportId: dispatch.report_id,
+    });
 
-  // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
-  // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the
-  // three agent shapes the orchestrator knows about). Historically this
-  // row was hardcoded `agent:'llm'`, which meant the Fixes page and the
-  // judge both lost track of what the user *asked* for vs. what ran.
-  // Thread settings.autofix_agent through so the receipt is honest.
-  const { data: requestedSettings } = await db
-    .from('project_settings')
-    .select('autofix_agent')
-    .eq('project_id', dispatch.project_id)
-    .single()
-  const requestedAgent = (requestedSettings?.autofix_agent as string | null) ?? 'claude_code'
+    // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
+    // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the
+    // three agent shapes the orchestrator knows about). Historically this
+    // row was hardcoded `agent:'llm'`, which meant the Fixes page and the
+    // judge both lost track of what the user *asked* for vs. what ran.
+    // Thread settings.autofix_agent through so the receipt is honest.
+    const { data: requestedSettings } = await db
+      .from('project_settings')
+      .select('autofix_agent')
+      .eq('project_id', dispatch.project_id)
+      .single();
+    const requestedAgent = (requestedSettings?.autofix_agent as string | null) ?? 'claude_code';
 
-  // Agents the fix-worker can actually execute today. 'claude_code' is the
-  // migration default and maps to the LLM path (Anthropic primary, OpenAI
-  // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
-  // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
-  // explicit opt-in for this same path. Anything else is the Node-only
-  // orchestrator territory and must be rejected rather than silently
-  // falling through.
-  const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm'])
+    // Agents the fix-worker can actually execute today. 'claude_code' is the
+    // migration default and maps to the LLM path (Anthropic primary, OpenAI
+    // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
+    // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
+    // explicit opt-in for this same path. Anything else is the Node-only
+    // orchestrator territory and must be rejected rather than silently
+    // falling through.
+    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm']);
 
-  // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
-  // classify-report writes a `reports_against` graph edge from the report
-  // to its picked Action node. The dispatch row may already carry a hint
-  // (caller-supplied override) — prefer that when present, otherwise walk
-  // the graph. Soft fail: legacy reports / projects without v2 just get
-  // an undefined anchor and the legacy fix prompt runs unchanged.
-  const inventoryAnchor = await loadInventoryAnchor(
-    db,
-    dispatch.project_id,
-    dispatch.report_id,
-    dispatch.inventory_action_node_id ?? null,
-  )
-  if (inventoryAnchor && !dispatch.inventory_action_node_id) {
-    // Mirror the recovered id back onto the dispatch row so admin queries
-    // ("show me dispatches for this Action") work without a graph walk.
+    // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
+    // classify-report writes a `reports_against` graph edge from the report
+    // to its picked Action node. The dispatch row may already carry a hint
+    // (caller-supplied override) — prefer that when present, otherwise walk
+    // the graph. Soft fail: legacy reports / projects without v2 just get
+    // an undefined anchor and the legacy fix prompt runs unchanged.
+    const inventoryAnchor = await loadInventoryAnchor(
+      db,
+      dispatch.project_id,
+      dispatch.report_id,
+      dispatch.inventory_action_node_id ?? null,
+    );
+    if (inventoryAnchor && !dispatch.inventory_action_node_id) {
+      // Mirror the recovered id back onto the dispatch row so admin queries
+      // ("show me dispatches for this Action") work without a graph walk.
+      await db
+        .from('fix_dispatch_jobs')
+        .update({ inventory_action_node_id: inventoryAnchor.actionNodeId })
+        .eq('id', dispatch.id)
+        .then(
+          () => undefined,
+          () => undefined,
+        );
+    }
+
+    const { data: attempt, error: attemptErr } = await db
+      .from('fix_attempts')
+      .insert({
+        report_id: dispatch.report_id,
+        project_id: dispatch.project_id,
+        agent: requestedAgent,
+        status: 'running',
+        langfuse_trace_id: trace.id,
+        // Spec-traceability: stamp the anchor on the attempt at insert time
+        // so the admin "Fixes for this Action" filter is a single index hit
+        // instead of a graph walk per page render.
+        inventory_action_node_id: inventoryAnchor?.actionNodeId ?? null,
+      })
+      .select('id')
+      .single();
+
+    if (attemptErr || !attempt) {
+      await failDispatch(db, dispatch.id, `fix_attempts insert failed: ${attemptErr?.message}`);
+      return new Response(JSON.stringify({ ok: false, error: attemptErr?.message }), {
+        status: 500,
+      });
+    }
+    const fixAttemptId = attempt.id;
+
     await db
       .from('fix_dispatch_jobs')
-      .update({ inventory_action_node_id: inventoryAnchor.actionNodeId })
-      .eq('id', dispatch.id)
-      .then(
-        () => undefined,
-        () => undefined,
-      )
-  }
-
-  const { data: attempt, error: attemptErr } = await db
-    .from('fix_attempts')
-    .insert({
-      report_id: dispatch.report_id,
-      project_id: dispatch.project_id,
-      agent: requestedAgent,
-      status: 'running',
-      langfuse_trace_id: trace.id,
-      // Spec-traceability: stamp the anchor on the attempt at insert time
-      // so the admin "Fixes for this Action" filter is a single index hit
-      // instead of a graph walk per page render.
-      inventory_action_node_id: inventoryAnchor?.actionNodeId ?? null,
-    })
-    .select('id')
-    .single()
-
-  if (attemptErr || !attempt) {
-    await failDispatch(db, dispatch.id, `fix_attempts insert failed: ${attemptErr?.message}`)
-    return new Response(JSON.stringify({ ok: false, error: attemptErr?.message }), { status: 500 })
-  }
-  const fixAttemptId = attempt.id
-
-  await db.from('fix_dispatch_jobs').update({ fix_attempt_id: fixAttemptId }).eq('id', dispatch.id)
-
-  try {
-    // ---- 3. Load report, settings, RAG context -----------------------------
-    // Wave S (2026-04-23, PERF): narrow `select('*')` to the columns we
-    // actually touch. `reports` carries a fat `stage2_analysis` jsonb,
-    // dozens of attribute columns, embedding vectors, and audit fields —
-    // pulling all of them over the wire cost ~50 KB per dispatch. Same
-    // for `project_settings` (BYOK blobs, Slack tokens, PR template).
-    // The explicit column list doubles as documentation of what the
-    // fix-worker actually depends on — drift between handler code and
-    // schema becomes a type error instead of a silent correctness risk.
-    const ctxSpan = trace.span('context.assemble')
-    const [{ data: report }, { data: settings }, { data: project }] = await Promise.all([
-      db
-        .from('reports')
-        .select(
-          'id, description, summary, category, severity, component, confidence, user_intent, ' +
-          'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
-          'judge_score',
-        )
-        .eq('id', dispatch.report_id)
-        .single(),
-      db
-        .from('project_settings')
-        .select(
-          'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
-          'github_repo_url, codebase_repo_url',
-        )
-        .eq('project_id', dispatch.project_id)
-        .single(),
-      db.from('projects').select('id, name, owner_id').eq('id', dispatch.project_id).single(),
-    ])
-
-    if (!report) throw new Error(`Report ${dispatch.report_id} not found`)
-    if (!project) throw new Error(`Project ${dispatch.project_id} not found`)
-
-    // Agent pre-flight: fix-worker can only run the LLM path today. Any
-    // other autofix_agent (mcp, generic_mcp, codex) needs the Node-side
-    // orchestrator — fail fast with an actionable error instead of
-    // silently running the LLM and mislabeling the receipt.
-    if (!SUPPORTED_AGENTS.has(requestedAgent)) {
-      const reason =
-        `autofix_agent='${requestedAgent}' isn't supported by the edge fix-worker yet. ` +
-        `Change Settings → Integrations → Auto-fix agent to 'claude_code' (default), ` +
-        `or run the Node-side orchestrator in @mushi-mushi/agents.`
-      log.warn('Fix skipped: unsupported agent', {
-        reportId: dispatch.report_id,
-        requestedAgent,
-      })
-      await completeAttempt(db, fixAttemptId, {
-        status: 'skipped_unsupported_agent',
-        error: reason,
-        files_changed: [],
-      })
-      await db.from('fix_dispatch_jobs').update({
-        status: 'skipped',
-        error: reason,
-        finished_at: new Date().toISOString(),
-      }).eq('id', dispatch.id)
-      await trace.end()
-      return new Response(
-        JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
-    // Sandbox pre-flight (V5.3 §2.10): the orchestrator gate lives in
-    // packages/agents but the fix-worker is a parallel code path that
-    // ships today. Mirror the policy here so production dispatches never
-    // land on a no-op sandbox by accident. Non-production and explicit
-    // opt-in (MUSHI_ALLOW_LOCAL_SANDBOX=1) both bypass the gate.
-    const sandboxProvider = (settings?.sandbox_provider as string | null) ?? 'local-noop'
-    const denoEnv =
-      Deno.env.get('SUPABASE_ENV') ??
-      Deno.env.get('DENO_ENV') ??
-      'production'
-    const allowLocalSandbox = Deno.env.get('MUSHI_ALLOW_LOCAL_SANDBOX') === '1'
-    if (
-      sandboxProvider === 'local-noop' &&
-      denoEnv === 'production' &&
-      !allowLocalSandbox
-    ) {
-      const reason =
-        'Sandbox provider is set to local-noop which is not allowed in ' +
-        'production. Switch Settings → Integrations → Sandbox to e2b/modal/' +
-        'cloudflare, or set MUSHI_ALLOW_LOCAL_SANDBOX=1 for CI/dry-run.'
-      log.warn('Fix skipped: sandbox policy violation', {
-        reportId: dispatch.report_id,
-        sandboxProvider,
-        env: denoEnv,
-      })
-      await completeAttempt(db, fixAttemptId, {
-        status: 'skipped_no_sandbox',
-        error: reason,
-        files_changed: [],
-      })
-      await db.from('fix_dispatch_jobs').update({
-        status: 'skipped',
-        error: reason,
-        finished_at: new Date().toISOString(),
-      }).eq('id', dispatch.id)
-      await trace.end()
-      return new Response(
-        JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
-    const repo = await resolveRepo(db, dispatch.project_id, settings)
-    if (!repo) {
-      throw new Error('No GitHub repo configured for this project. Set Settings → Integrations → GitHub repo.')
-    }
-
-    const ragSpan = trace.span('context.rag')
-    const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
-      symptom: report.summary ?? report.description?.slice(0, 200) ?? '',
-      action: report.user_intent ?? '',
-      component: report.component ?? '',
-    })
-    const codeFiles = ragResult.files
-    ragSpan.end({
-      fileCount: codeFiles.length,
-      reason: ragResult.reason,
-      detail: ragResult.detail ?? null,
-    })
-
-    const MIN_RAG_CHUNKS = Math.max(0, Number(Deno.env.get('MUSHI_FIX_MIN_RAG_CHUNKS') ?? '1') | 0)
-    if (codeFiles.length < MIN_RAG_CHUNKS) {
-      log.warn('RAG context below minimum threshold', {
-        reportId: dispatch.report_id,
-        codeFiles: codeFiles.length,
-        threshold: MIN_RAG_CHUNKS,
-      })
-    }
-
-    const codeContext = formatCodeContext(codeFiles)
-    ctxSpan.end({ codeFileCount: codeFiles.length, repo: `${repo.owner}/${repo.repo}` })
-
-    // ---- 3b. Firecrawl auto-augment when local RAG is sparse OR
-    //          the report has a poor prior judge score (a "stubborn" report).
-    //          The whole block is best-effort: if Firecrawl is missing the key,
-    //          rate-limited, or otherwise unhappy, the worker proceeds with
-    //          local-only context. We persist the trace id + URLs onto
-    //          fix_attempts so the Fixes page shows what the agent saw.
-    const judgeScore = typeof report.judge_score === 'number' ? report.judge_score : null
-    const augmentReason: 'rag_sparse' | 'low_judge_score' | null =
-      codeFiles.length < 3 ? 'rag_sparse'
-      : (judgeScore !== null && judgeScore < 0.6 ? 'low_judge_score' : null)
-
-    let webSnippets: FirecrawlSearchResult[] = []
-    let augmentTraceId: string | null = null
-    if (augmentReason) {
-      try {
-        const symptom = report.summary
-          ?? report.description?.slice(0, 200)
-          ?? report.component
-          ?? ''
-        if (symptom.length > 0) {
-          const augSpan = trace.span('fix.augment.firecrawl')
-          webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 })
-          augSpan.end({ resultCount: webSnippets.length })
-          if (webSnippets.length > 0) {
-            augmentTraceId = trace.id
-            await db.from('fix_attempts').update({
-              augment_trace_id: augmentTraceId,
-              augment_sources: webSnippets.map((s) => ({ url: s.url, title: s.title, snippet: s.snippet.slice(0, 240) })),
-              augment_reason: augmentReason,
-            }).eq('id', fixAttemptId)
-          }
-        }
-      } catch (err) {
-        // FIRECRAWL_NOT_CONFIGURED is expected on most projects — silent.
-        // Other errors get logged but never fail the fix.
-        const msg = err instanceof Error ? err.message : String(err)
-        if (msg !== 'FIRECRAWL_NOT_CONFIGURED') {
-          log.warn('Firecrawl augment failed (non-fatal)', { reportId: dispatch.report_id, reason: augmentReason, error: msg })
-        }
-      }
-    }
-
-    // ---- 3c. Context floor gate -------------------------------------------
-    // If BOTH the codebase RAG and the Firecrawl augment produced nothing,
-    // we have no grounding for the LLM — calling it anyway produces a
-    // "INVESTIGATION_NEEDED.md" stub PR (exactly what landed on glot.it
-    // PRs #3/#4/#5). Short-circuit instead of burning a model call, and
-    // surface the reason on the PDCA receipt so the user can act.
-    if (codeFiles.length < MIN_RAG_CHUNKS && webSnippets.length === 0) {
-      const reason = ragSkipReasonMessage(ragResult.reason, ragResult.detail)
-      log.warn('Fix skipped: no grounding context available', {
-        reportId: dispatch.report_id,
-        codeFiles: codeFiles.length,
-        webSnippets: webSnippets.length,
-        minRagChunks: MIN_RAG_CHUNKS,
-        ragReason: ragResult.reason,
-        ragDetail: ragResult.detail ?? null,
-      })
-      await completeAttempt(db, fixAttemptId, {
-        status: 'skipped_no_context',
-        error: reason,
-        files_changed: [],
-      })
-      await db.from('fix_dispatch_jobs').update({
-        status: 'skipped',
-        error: reason,
-        finished_at: new Date().toISOString(),
-      }).eq('id', dispatch.id)
-      await trace.end()
-      return new Response(
-        JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      )
-    }
-
-    // ---- 4. Resolve LLM key (BYOK first, env fallback) --------------------
-    const anthropicResolved = await resolveLlmKey(db, dispatch.project_id, 'anthropic')
-    const openaiResolved = await resolveLlmKey(db, dispatch.project_id, 'openai')
-
-    if (!anthropicResolved && !openaiResolved) {
-      throw new Error(
-        'No LLM key available. Add an Anthropic or OpenAI BYOK key in Settings → LLM Keys, ' +
-        'or contact support to enable the platform default.',
-      )
-    }
-
-    const userPrompt = buildUserPrompt(report, settings, codeContext, repo, webSnippets, inventoryAnchor)
-
-    // Resolve the fix-worker system prompt from `prompt_versions` (stage='fix').
-    // Falls back to the hardcoded SYSTEM_PROMPT when no global or project row
-    // exists (first boot before migration 20260422110000 runs, or when the
-    // operator has deleted every fix-stage row). Wired here so operators can
-    // A/B rewrite the senior-engineer rubric without redeploying.
-    const fixPromptSelection = await getPromptForStage(db, dispatch.project_id, 'fix')
-    const activeFixSystemPrompt = fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT
-    const fixPromptVersion = fixPromptSelection.promptVersion
-
-    // ---- 5. Call LLM with structured output -------------------------------
-    const llmSpan = trace.span('llm.fix')
-    const llmStart = Date.now()
-    let fix: FixOutput
-    let usedModel = ''
-    let inputTokens = 0
-    let outputTokens = 0
-
-    // Model defaults come from _shared/models.ts (Wave R, 2026-04-22):
-    // Sonnet 4-6 for Anthropic (upgrade from 4-5-20250929 which had skewed
-    // against the rest of the stack), GPT-5.4 for the OpenAI/OpenRouter
-    // path. Both are strong at structured-output tool use; Sonnet 4-6 also
-    // gets the Anthropic prompt-cache speedup on the system prompt.
-    const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL
-    const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}` // OpenRouter-friendly slug
+      .update({ fix_attempt_id: fixAttemptId })
+      .eq('id', dispatch.id);
 
     try {
-      if (anthropicResolved) {
-        usedModel = DEFAULT_ANTHROPIC_MODEL
-        const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
-        // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): pin temperature to 0 so
-        // the structured tool-call output is deterministic. Without it, the
-        // `files[].contents` string would occasionally break the schema's
-        // min/max constraints (e.g. a summary under 10 chars) and throw
-        // AI_NoObjectGeneratedError with no retry path. maxTokens was
-        // already sufficient; temperature was the missing knob.
-        // Wave S (2026-04-23): mark the system prompt as cacheable. The
-        // fix-worker system prompt is ~4 KB of stable guardrails; every
-        // dispatch re-sends it unchanged. Anthropic's ephemeral cache
-        // halves the prompt-tokens bill on the second request within 5
-        // minutes — the judge, classify, and fast-filter functions already
-        // do this, fix-worker was the outlier.
-        const { object, usage } = await generateObject({
-          model: anthropic(usedModel),
-          schema: fixSchema,
-          temperature: 0,
-          messages: [
-            {
-              role: 'system',
-              content: activeFixSystemPrompt,
-              experimental_providerMetadata: {
-                anthropic: { cacheControl: { type: 'ephemeral' } },
+      // ---- 3. Load report, settings, RAG context -----------------------------
+      // Wave S (2026-04-23, PERF): narrow `select('*')` to the columns we
+      // actually touch. `reports` carries a fat `stage2_analysis` jsonb,
+      // dozens of attribute columns, embedding vectors, and audit fields —
+      // pulling all of them over the wire cost ~50 KB per dispatch. Same
+      // for `project_settings` (BYOK blobs, Slack tokens, PR template).
+      // The explicit column list doubles as documentation of what the
+      // fix-worker actually depends on — drift between handler code and
+      // schema becomes a type error instead of a silent correctness risk.
+      const ctxSpan = trace.span('context.assemble');
+      const [{ data: report }, { data: settings }, { data: project }] = await Promise.all([
+        db
+          .from('reports')
+          .select(
+            'id, description, summary, category, severity, component, confidence, user_intent, ' +
+              'stage2_analysis, reproduction_steps, environment, console_logs, network_logs, ' +
+              'judge_score',
+          )
+          .eq('id', dispatch.report_id)
+          .single(),
+        db
+          .from('project_settings')
+          .select(
+            'project_id, autofix_agent, autofix_max_lines, sandbox_provider, ' +
+              'github_repo_url, codebase_repo_url',
+          )
+          .eq('project_id', dispatch.project_id)
+          .single(),
+        db.from('projects').select('id, name, owner_id').eq('id', dispatch.project_id).single(),
+      ]);
+
+      if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
+      if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
+
+      // Agent pre-flight: fix-worker can only run the LLM path today. Any
+      // other autofix_agent (mcp, generic_mcp, codex) needs the Node-side
+      // orchestrator — fail fast with an actionable error instead of
+      // silently running the LLM and mislabeling the receipt.
+      if (!SUPPORTED_AGENTS.has(requestedAgent)) {
+        const reason =
+          `autofix_agent='${requestedAgent}' isn't supported by the edge fix-worker yet. ` +
+          `Change Settings → Integrations → Auto-fix agent to 'claude_code' (default), ` +
+          `or run the Node-side orchestrator in @mushi-mushi/agents.`;
+        log.warn('Fix skipped: unsupported agent', {
+          reportId: dispatch.report_id,
+          requestedAgent,
+        });
+        await completeAttempt(db, fixAttemptId, {
+          status: 'skipped_unsupported_agent',
+          error: reason,
+          files_changed: [],
+        });
+        await db
+          .from('fix_dispatch_jobs')
+          .update({
+            status: 'skipped',
+            error: reason,
+            finished_at: new Date().toISOString(),
+          })
+          .eq('id', dispatch.id);
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Sandbox pre-flight (V5.3 §2.10): the orchestrator gate lives in
+      // packages/agents but the fix-worker is a parallel code path that
+      // ships today. Mirror the policy here so production dispatches never
+      // land on a no-op sandbox by accident. Non-production and explicit
+      // opt-in (MUSHI_ALLOW_LOCAL_SANDBOX=1) both bypass the gate.
+      const sandboxProvider = (settings?.sandbox_provider as string | null) ?? 'local-noop';
+      const denoEnv = Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('DENO_ENV') ?? 'production';
+      const allowLocalSandbox = Deno.env.get('MUSHI_ALLOW_LOCAL_SANDBOX') === '1';
+      if (sandboxProvider === 'local-noop' && denoEnv === 'production' && !allowLocalSandbox) {
+        const reason =
+          'Sandbox provider is set to local-noop which is not allowed in ' +
+          'production. Switch Settings → Integrations → Sandbox to e2b/modal/' +
+          'cloudflare, or set MUSHI_ALLOW_LOCAL_SANDBOX=1 for CI/dry-run.';
+        log.warn('Fix skipped: sandbox policy violation', {
+          reportId: dispatch.report_id,
+          sandboxProvider,
+          env: denoEnv,
+        });
+        await completeAttempt(db, fixAttemptId, {
+          status: 'skipped_no_sandbox',
+          error: reason,
+          files_changed: [],
+        });
+        await db
+          .from('fix_dispatch_jobs')
+          .update({
+            status: 'skipped',
+            error: reason,
+            finished_at: new Date().toISOString(),
+          })
+          .eq('id', dispatch.id);
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Multi-repo: when this dispatch was fanned out by a sibling
+      // attempt's `markCrossRepoSpan()` it carries a target_repo_id
+      // hint in `dispatch_metadata`. Honor it so we run the fix against
+      // the matching repo's URL + scope, not the project primary.
+      const dispatchMeta = (dispatch.dispatch_metadata as Record<string, unknown> | null) ?? {};
+      const targetRepoId = typeof dispatchMeta.target_repo_id === 'string' ? dispatchMeta.target_repo_id : null;
+      const repo = await resolveRepo(db, dispatch.project_id, settings, targetRepoId);
+      if (!repo) {
+        throw new Error(
+          'No GitHub repo configured for this project. Set Settings → Integrations → GitHub repo.',
+        );
+      }
+
+      const ragSpan = trace.span('context.rag');
+      const ragResult = await getRelevantCodeWithReason(db, dispatch.project_id, {
+        symptom: report.summary ?? report.description?.slice(0, 200) ?? '',
+        action: report.user_intent ?? '',
+        component: report.component ?? '',
+      });
+      const codeFiles = ragResult.files;
+      ragSpan.end({
+        fileCount: codeFiles.length,
+        reason: ragResult.reason,
+        detail: ragResult.detail ?? null,
+      });
+
+      const MIN_RAG_CHUNKS = Math.max(
+        0,
+        Number(Deno.env.get('MUSHI_FIX_MIN_RAG_CHUNKS') ?? '1') | 0,
+      );
+      if (codeFiles.length < MIN_RAG_CHUNKS) {
+        log.warn('RAG context below minimum threshold', {
+          reportId: dispatch.report_id,
+          codeFiles: codeFiles.length,
+          threshold: MIN_RAG_CHUNKS,
+        });
+      }
+
+      const codeContext = formatCodeContext(codeFiles);
+
+      // Loop-closure: pull "past similar merged fixes" via the fix_corpus
+      // RPC. This is the second retrieval signal — `match_codebase_files`
+      // tells us "where in the code the bug probably lives", and
+      // `match_fix_corpus` tells us "what diffs have worked for similar
+      // bugs in this project's past". The latter is gold for in-context
+      // learning: the model sees a real, validated diff for a real,
+      // validated bug instead of having to reason from first principles.
+      //
+      // Best-effort: a failed corpus call must NOT block the fix. We
+      // swallow + log; the model still gets the source-chunk context.
+      const pastFixesSpan = trace.span('context.past-fixes');
+      let pastFixesContext = '';
+      try {
+        const queryText = [
+          report.summary as string | undefined,
+          (report.user_intent as string | undefined) ?? undefined,
+          (report.component as string | undefined) ?? undefined,
+        ]
+          .filter((s) => typeof s === 'string' && s.trim().length > 0)
+          .join(' ');
+        if (queryText.trim().length > 0) {
+          const { createEmbedding } = await import('../_shared/embeddings.ts');
+          const queryEmbedding = await createEmbedding(queryText, {
+            projectId: dispatch.project_id,
+          });
+          const { data: pastFixes } = await db.rpc('match_fix_corpus', {
+            query_embedding: queryEmbedding,
+            match_project: dispatch.project_id,
+            match_count: 3,
+          });
+          const matched = (pastFixes ?? []) as Array<{
+            id: string;
+            bug_summary: string;
+            fix_summary: string;
+            rationale: string | null;
+            files_changed: string[] | null;
+            similarity: number;
+          }>;
+          // Floor at 0.55 — anything below is effectively unrelated and
+          // the model treats it as noise, often anchoring on the wrong
+          // file. Tuned against glot.it's first 30 indexed fixes.
+          const relevant = matched.filter((m) => m.similarity >= 0.55);
+          if (relevant.length > 0) {
+            pastFixesContext = relevant
+              .map(
+                (m, i) =>
+                  `### Past fix ${i + 1} (similarity ${m.similarity.toFixed(2)})
+- Bug: ${m.bug_summary}
+- Fix: ${m.fix_summary}
+${m.rationale ? `- Rationale: ${m.rationale.slice(0, 600)}` : ''}
+${
+  Array.isArray(m.files_changed) && m.files_changed.length > 0
+    ? `- Files touched: ${m.files_changed.slice(0, 10).join(', ')}`
+    : ''
+}`,
+              )
+              .join('\n\n');
+          }
+          pastFixesSpan.end({ matched: matched.length, used: relevant.length });
+        } else {
+          pastFixesSpan.end({ matched: 0, used: 0, reason: 'empty_query' });
+        }
+      } catch (err) {
+        log.warn('fix_corpus retrieval failed (non-fatal)', {
+          reportId: dispatch.report_id,
+          err: err instanceof Error ? err.message : String(err),
+        });
+        pastFixesSpan.end({ error: String(err).slice(0, 200) });
+      }
+
+      ctxSpan.end({ codeFileCount: codeFiles.length, repo: `${repo.owner}/${repo.repo}` });
+
+      // ---- 3b. Firecrawl auto-augment when local RAG is sparse OR
+      //          the report has a poor prior judge score (a "stubborn" report).
+      //          The whole block is best-effort: if Firecrawl is missing the key,
+      //          rate-limited, or otherwise unhappy, the worker proceeds with
+      //          local-only context. We persist the trace id + URLs onto
+      //          fix_attempts so the Fixes page shows what the agent saw.
+      const judgeScore = typeof report.judge_score === 'number' ? report.judge_score : null;
+      const augmentReason: 'rag_sparse' | 'low_judge_score' | null =
+        codeFiles.length < 3
+          ? 'rag_sparse'
+          : judgeScore !== null && judgeScore < 0.6
+            ? 'low_judge_score'
+            : null;
+
+      let webSnippets: FirecrawlSearchResult[] = [];
+      let augmentTraceId: string | null = null;
+      if (augmentReason) {
+        try {
+          const symptom =
+            report.summary ?? report.description?.slice(0, 200) ?? report.component ?? '';
+          if (symptom.length > 0) {
+            const augSpan = trace.span('fix.augment.firecrawl');
+            webSnippets = await firecrawlSearch(db, dispatch.project_id, symptom, { limit: 3 });
+            augSpan.end({ resultCount: webSnippets.length });
+            if (webSnippets.length > 0) {
+              augmentTraceId = trace.id;
+              await db
+                .from('fix_attempts')
+                .update({
+                  augment_trace_id: augmentTraceId,
+                  augment_sources: webSnippets.map((s) => ({
+                    url: s.url,
+                    title: s.title,
+                    snippet: s.snippet.slice(0, 240),
+                  })),
+                  augment_reason: augmentReason,
+                })
+                .eq('id', fixAttemptId);
+            }
+          }
+        } catch (err) {
+          // FIRECRAWL_NOT_CONFIGURED is expected on most projects — silent.
+          // Other errors get logged but never fail the fix.
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg !== 'FIRECRAWL_NOT_CONFIGURED') {
+            log.warn('Firecrawl augment failed (non-fatal)', {
+              reportId: dispatch.report_id,
+              reason: augmentReason,
+              error: msg,
+            });
+          }
+        }
+      }
+
+      // ---- 3c. Context floor gate -------------------------------------------
+      // If BOTH the codebase RAG and the Firecrawl augment produced nothing,
+      // we have no grounding for the LLM — calling it anyway produces a
+      // "INVESTIGATION_NEEDED.md" stub PR (exactly what landed on glot.it
+      // PRs #3/#4/#5). Short-circuit instead of burning a model call, and
+      // surface the reason on the PDCA receipt so the user can act.
+      if (codeFiles.length < MIN_RAG_CHUNKS && webSnippets.length === 0) {
+        const reason = ragSkipReasonMessage(ragResult.reason, ragResult.detail);
+        log.warn('Fix skipped: no grounding context available', {
+          reportId: dispatch.report_id,
+          codeFiles: codeFiles.length,
+          webSnippets: webSnippets.length,
+          minRagChunks: MIN_RAG_CHUNKS,
+          ragReason: ragResult.reason,
+          ragDetail: ragResult.detail ?? null,
+        });
+        await completeAttempt(db, fixAttemptId, {
+          status: 'skipped_no_context',
+          error: reason,
+          files_changed: [],
+          failure_category: 'no_relevant_code',
+        });
+        await db
+          .from('fix_dispatch_jobs')
+          .update({
+            status: 'skipped',
+            error: reason,
+            finished_at: new Date().toISOString(),
+          })
+          .eq('id', dispatch.id);
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // ---- 4. Resolve LLM key (BYOK first, env fallback) --------------------
+      const anthropicResolved = await resolveLlmKey(db, dispatch.project_id, 'anthropic');
+      const openaiResolved = await resolveLlmKey(db, dispatch.project_id, 'openai');
+
+      if (!anthropicResolved && !openaiResolved) {
+        throw new Error(
+          'No LLM key available. Add an Anthropic or OpenAI BYOK key in Settings → LLM Keys, ' +
+            'or contact support to enable the platform default.',
+        );
+      }
+
+      const userPrompt = buildUserPrompt(
+        report,
+        settings,
+        codeContext,
+        repo,
+        webSnippets,
+        inventoryAnchor,
+        pastFixesContext,
+      );
+
+      // Resolve the fix-worker system prompt from `prompt_versions` (stage='fix').
+      // Falls back to the hardcoded SYSTEM_PROMPT when no global or project row
+      // exists (first boot before migration 20260422110000 runs, or when the
+      // operator has deleted every fix-stage row). Wired here so operators can
+      // A/B rewrite the senior-engineer rubric without redeploying.
+      const fixPromptSelection = await getPromptForStage(db, dispatch.project_id, 'fix');
+      const activeFixSystemPrompt = fixPromptSelection.promptTemplate ?? SYSTEM_PROMPT;
+      const fixPromptVersion = fixPromptSelection.promptVersion;
+
+      // ---- 5. Call LLM with structured output -------------------------------
+      const llmSpan = trace.span('llm.fix');
+      const llmStart = Date.now();
+      let fix: FixOutput;
+      let usedModel = '';
+      let inputTokens = 0;
+      let outputTokens = 0;
+
+      // Model defaults come from _shared/models.ts (Wave R, 2026-04-22):
+      // Sonnet 4-6 for Anthropic (upgrade from 4-5-20250929 which had skewed
+      // against the rest of the stack), GPT-5.4 for the OpenAI/OpenRouter
+      // path. Both are strong at structured-output tool use; Sonnet 4-6 also
+      // gets the Anthropic prompt-cache speedup on the system prompt.
+      const DEFAULT_ANTHROPIC_MODEL = FIX_MODEL;
+      const DEFAULT_OPENAI_MODEL = `openai/${FIX_FALLBACK}`; // OpenRouter-friendly slug
+
+      try {
+        if (anthropicResolved) {
+          usedModel = DEFAULT_ANTHROPIC_MODEL;
+          const anthropic = createAnthropic({ apiKey: anthropicResolved.key });
+          // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): pin temperature to 0 so
+          // the structured tool-call output is deterministic. Without it, the
+          // `files[].contents` string would occasionally break the schema's
+          // min/max constraints (e.g. a summary under 10 chars) and throw
+          // AI_NoObjectGeneratedError with no retry path. maxTokens was
+          // already sufficient; temperature was the missing knob.
+          // Wave S (2026-04-23): mark the system prompt as cacheable. The
+          // fix-worker system prompt is ~4 KB of stable guardrails; every
+          // dispatch re-sends it unchanged. Anthropic's ephemeral cache
+          // halves the prompt-tokens bill on the second request within 5
+          // minutes — the judge, classify, and fast-filter functions already
+          // do this, fix-worker was the outlier.
+          const { object, usage } = await generateObject({
+            model: anthropic(usedModel),
+            schema: fixSchema,
+            temperature: 0,
+            messages: [
+              {
+                role: 'system',
+                content: activeFixSystemPrompt,
+                experimental_providerMetadata: {
+                  anthropic: { cacheControl: { type: 'ephemeral' } },
+                },
               },
-            },
-            { role: 'user', content: userPrompt },
-          ],
-          maxTokens: 8_000,
-        })
-        fix = object
-        inputTokens = usage?.promptTokens ?? 0
-        outputTokens = usage?.completionTokens ?? 0
-      } else {
-        // For OpenRouter the model slug needs the "provider/model" prefix;
-        // for plain OpenAI it's just the bare slug. We use the OpenRouter
-        // form by default since that's what BYOK users are most likely to
-        // configure, and plain OpenAI tolerates stripping the prefix.
-        const openaiKey = openaiResolved!.key
-        const openaiBaseUrl = openaiResolved!.baseUrl
-        const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false
-        usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK
-        const openai = createOpenAI({
-          apiKey: openaiKey,
-          ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
-        })
-        const { object, usage } = await generateObject({
-          model: openai(usedModel),
-          schema: fixSchema,
-          temperature: 0,
-          system: activeFixSystemPrompt,
-          prompt: userPrompt,
-          maxTokens: 8_000,
-        })
-        fix = object
-        inputTokens = usage?.promptTokens ?? 0
-        outputTokens = usage?.completionTokens ?? 0
+              { role: 'user', content: userPrompt },
+            ],
+            maxTokens: 8_000,
+          });
+          fix = object;
+          inputTokens = usage?.promptTokens ?? 0;
+          outputTokens = usage?.completionTokens ?? 0;
+        } else {
+          // For OpenRouter the model slug needs the "provider/model" prefix;
+          // for plain OpenAI it's just the bare slug. We use the OpenRouter
+          // form by default since that's what BYOK users are most likely to
+          // configure, and plain OpenAI tolerates stripping the prefix.
+          const openaiKey = openaiResolved!.key;
+          const openaiBaseUrl = openaiResolved!.baseUrl;
+          const isOpenRouter = openaiBaseUrl?.includes('openrouter.ai') ?? false;
+          usedModel = isOpenRouter ? DEFAULT_OPENAI_MODEL : FIX_FALLBACK;
+          const openai = createOpenAI({
+            apiKey: openaiKey,
+            ...(openaiBaseUrl ? { baseURL: openaiBaseUrl } : {}),
+          });
+          const { object, usage } = await generateObject({
+            model: openai(usedModel),
+            schema: fixSchema,
+            temperature: 0,
+            system: activeFixSystemPrompt,
+            prompt: userPrompt,
+            maxTokens: 8_000,
+          });
+          fix = object;
+          inputTokens = usage?.promptTokens ?? 0;
+          outputTokens = usage?.completionTokens ?? 0;
+        }
+      } catch (llmErr) {
+        // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): preserve diagnostic detail
+        // for NoObjectGeneratedError — otherwise the wrapping Error below loses
+        // `.text` (the raw model output) and `.cause.issues` (the Zod failures)
+        // and the operator sees only "LLM call failed: AI_NoObjectGeneratedError"
+        // with nothing to act on. Log structured fields to Sentry before
+        // re-throwing so the first recurrence is already actionable.
+        if (NoObjectGeneratedError.isInstance(llmErr)) {
+          const cause = llmErr.cause as
+            | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
+            | undefined;
+          log.error('Fix worker structured-output schema violation', {
+            dispatchId: dispatch.id,
+            model: usedModel,
+            modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
+            zodIssues:
+              cause?.issues?.slice(0, 5).map((i) => ({
+                path: i.path.join('.'),
+                code: i.code,
+                message: i.message,
+              })) ?? null,
+          });
+        }
+        llmSpan.end({ error: String(llmErr).slice(0, 500) });
+        throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);
       }
-    } catch (llmErr) {
-      // Sentry MUSHI-MUSHI-SERVER-8 (2026-04-21): preserve diagnostic detail
-      // for NoObjectGeneratedError — otherwise the wrapping Error below loses
-      // `.text` (the raw model output) and `.cause.issues` (the Zod failures)
-      // and the operator sees only "LLM call failed: AI_NoObjectGeneratedError"
-      // with nothing to act on. Log structured fields to Sentry before
-      // re-throwing so the first recurrence is already actionable.
-      if (NoObjectGeneratedError.isInstance(llmErr)) {
-        const cause = llmErr.cause as { issues?: Array<{ path: (string|number)[]; message: string; code?: string }> } | undefined
-        log.error('Fix worker structured-output schema violation', {
-          dispatchId: dispatch.id,
-          model: usedModel,
-          modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
-          zodIssues: cause?.issues?.slice(0, 5).map(i => ({
-            path: i.path.join('.'),
-            code: i.code,
-            message: i.message,
-          })) ?? null,
-        })
-      }
-      llmSpan.end({ error: String(llmErr).slice(0, 500) })
-      throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`)
-    }
-    const llmLatencyMs = Date.now() - llmStart
-    llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: llmLatencyMs })
+      const llmLatencyMs = Date.now() - llmStart;
+      llmSpan.end({ model: usedModel, inputTokens, outputTokens, latencyMs: llmLatencyMs });
 
-    // ---- 6. Validate scope + circuit breaker ------------------------------
-    const validationErrors: string[] = []
-    const maxLines = settings?.autofix_max_lines ?? 200
-    let totalLines = 0
-    for (const f of fix.files) {
-      const lines = f.contents.split('\n').length
-      totalLines += lines
-      if (lines > maxLines) {
-        validationErrors.push(`${f.path}: ${lines} lines exceeds circuit breaker (${maxLines}).`)
+      // ---- 6. Validate scope + circuit breaker ------------------------------
+      const validationErrors: string[] = [];
+      const maxLines = settings?.autofix_max_lines ?? 200;
+      let totalLines = 0;
+      for (const f of fix.files) {
+        const lines = f.contents.split('\n').length;
+        totalLines += lines;
+        if (lines > maxLines) {
+          validationErrors.push(`${f.path}: ${lines} lines exceeds circuit breaker (${maxLines}).`);
+        }
+        if (repo.scopeDirectory && !isFileInScope(f.path, repo.scopeDirectory)) {
+          validationErrors.push(`${f.path}: outside scope ${repo.scopeDirectory}.`);
+        }
+        if (containsObviousSecret(f.contents)) {
+          validationErrors.push(`${f.path}: contains a token-shaped string. Refusing to commit.`);
+        }
       }
-      if (repo.scopeDirectory && !isFileInScope(f.path, repo.scopeDirectory)) {
-        validationErrors.push(`${f.path}: outside scope ${repo.scopeDirectory}.`)
-      }
-      if (containsObviousSecret(f.contents)) {
-        validationErrors.push(`${f.path}: contains a token-shaped string. Refusing to commit.`)
-      }
-    }
 
-    if (validationErrors.length > 0) {
-      throw new Error(`Validation failed: ${validationErrors.join(' ')}`)
-    }
+      if (validationErrors.length > 0) {
+        throw new Error(`Validation failed: ${validationErrors.join(' ')}`);
+      }
 
-    // ---- 7. Get GitHub token + open draft PR ------------------------------
-    const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id)
-    if (!ghToken) {
-      // Still record the LLM output so the user can copy/paste even without GH.
-      const branch = `mushi/fix-${dispatch.report_id.slice(0, 8)}`
+      // ---- 7. Get GitHub token + open draft PR ------------------------------
+      const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
+      if (!ghToken) {
+        // Still record the LLM output so the user can copy/paste even without GH.
+        const branch = `mushi/fix-${dispatch.report_id.slice(0, 8)}`;
+        await completeAttempt(db, fixAttemptId, {
+          status: 'completed',
+          branch,
+          files_changed: fix.files.map((f) => f.path),
+          lines_changed: totalLines,
+          summary: fix.summary,
+          rationale: fix.rationale,
+          llm_model: usedModel,
+          llm_input_tokens: inputTokens,
+          llm_output_tokens: outputTokens,
+          review_passed: !fix.needsHumanReview,
+        });
+        await db
+          .from('fix_dispatch_jobs')
+          .update({
+            status: 'completed',
+            finished_at: new Date().toISOString(),
+            error:
+              'No GITHUB_TOKEN configured — fix generated but not pushed. Add a GitHub installation token in Integrations.',
+          })
+          .eq('id', dispatch.id);
+        await trace.end();
+        return new Response(JSON.stringify({ ok: true, fixAttemptId, prUrl: null }), {
+          status: 200,
+        });
+      }
+
+      const prSpan = trace.span('github.pr');
+      const prResult = await createDraftPr({
+        token: ghToken,
+        owner: repo.owner,
+        repo: repo.repo,
+        defaultBranch: repo.defaultBranch,
+        reportId: dispatch.report_id,
+        fix,
+      });
+      prSpan.end({ prUrl: prResult.url });
+
+      // ---- 8. Persist + cleanup --------------------------------------------
       await completeAttempt(db, fixAttemptId, {
         status: 'completed',
-        branch,
-        files_changed: fix.files.map(f => f.path),
+        branch: prResult.branch,
+        pr_url: prResult.url,
+        pr_number: prResult.number,
+        commit_sha: prResult.commitSha,
+        files_changed: fix.files.map((f) => f.path),
         lines_changed: totalLines,
         summary: fix.summary,
         rationale: fix.rationale,
@@ -632,150 +805,454 @@ Deno.serve(withSentry('fix-worker', async (req) => {
         llm_input_tokens: inputTokens,
         llm_output_tokens: outputTokens,
         review_passed: !fix.needsHumanReview,
-      })
-      await db.from('fix_dispatch_jobs').update({
-        status: 'completed',
-        finished_at: new Date().toISOString(),
-        error: 'No GITHUB_TOKEN configured — fix generated but not pushed. Add a GitHub installation token in Integrations.',
-      }).eq('id', dispatch.id)
-      await trace.end()
-      return new Response(JSON.stringify({ ok: true, fixAttemptId, prUrl: null }), { status: 200 })
-    }
+      });
 
-    const prSpan = trace.span('github.pr')
-    const prResult = await createDraftPr({
-      token: ghToken,
-      owner: repo.owner,
-      repo: repo.repo,
-      defaultBranch: repo.defaultBranch,
-      reportId: dispatch.report_id,
-      fix,
-    })
-    prSpan.end({ prUrl: prResult.url })
-
-    // ---- 8. Persist + cleanup --------------------------------------------
-    await completeAttempt(db, fixAttemptId, {
-      status: 'completed',
-      branch: prResult.branch,
-      pr_url: prResult.url,
-      pr_number: prResult.number,
-      commit_sha: prResult.commitSha,
-      files_changed: fix.files.map(f => f.path),
-      lines_changed: totalLines,
-      summary: fix.summary,
-      rationale: fix.rationale,
-      llm_model: usedModel,
-      llm_input_tokens: inputTokens,
-      llm_output_tokens: outputTokens,
-      review_passed: !fix.needsHumanReview,
-    })
-
-    await db.from('fix_dispatch_jobs').update({
-      status: 'completed',
-      pr_url: prResult.url,
-      finished_at: new Date().toISOString(),
-    }).eq('id', dispatch.id)
-
-    await db.from('reports').update({
-      fix_branch: prResult.branch,
-      fix_pr_url: prResult.url,
-      status: 'fixing',
-    }).eq('id', dispatch.report_id)
-
-    // Spec-traceability: enqueue a targeted post-PR synthetic probe
-    // against the action this fix was meant to repair. We write a marker
-    // `synthetic_runs` row with status='skipped' so the synthetic-monitor
-    // cron picks it up on the next tick and re-runs the full assertion
-    // chain against the inventory's expected_outcome contract. Without
-    // this, the only verification path is the 15-minute reconciler — far
-    // too slow to catch a regression before reviewers merge the PR.
-    if (inventoryAnchor?.actionNodeId) {
       await db
-        .from('synthetic_runs')
-        .insert({
+        .from('fix_dispatch_jobs')
+        .update({
+          status: 'completed',
+          pr_url: prResult.url,
+          finished_at: new Date().toISOString(),
+        })
+        .eq('id', dispatch.id);
+
+      await db
+        .from('reports')
+        .update({
+          fix_branch: prResult.branch,
+          fix_pr_url: prResult.url,
+          status: 'fixing',
+        })
+        .eq('id', dispatch.report_id);
+
+      // Loop-closure: fan out `fix.proposed` to every project plugin so the
+      // outbound bridges (plugin-jira, plugin-linear, plugin-github-issues,
+      // plugin-slack, etc.) can post the draft PR link back to whatever
+      // tracker raised the original ticket. Without this dispatch, the only
+      // call site of `fix.proposed` is the manual `PATCH /v1/admin/fixes/:id`
+      // endpoint — which the admin UI never invokes — so plugins receive
+      // nothing for auto-worker fixes (the 99% path).
+      void dispatchPluginEvent(db, dispatch.project_id, 'fix.proposed', {
+        report: { id: dispatch.report_id },
+        fix: {
+          id: fixAttemptId,
+          agent: 'mushi-fix-worker',
+          branch: prResult.branch,
+          prUrl: prResult.url,
+          commitSha: prResult.commitSha,
+          summary: fix.summary,
+        },
+      }).catch((e) =>
+        log.warn('Plugin dispatch failed', { event: 'fix.proposed', err: String(e) }),
+      );
+
+      // Loop-closure (deferred-6): multi-repo coordination. If the project
+      // has >1 repos AND the RAG retrieval pulled in code from outside the
+      // primary repo's path globs, the fix we just opened is almost
+      // certainly incomplete — a frontend-only PR for a bug that also
+      // needs a backend change is going to fail CI and confuse the
+      // reviewer. We attach a `coordination_id` to this attempt and post
+      // a cross-link comment on the PR pointing at the sibling repos that
+      // probably need parallel changes. The actual fan-out (one
+      // FixOrchestrator per repo) lives in `@mushi-mushi/agents`'s
+      // MultiRepoFixOrchestrator and is the next-cluster work; the
+      // groundwork here makes that fan-out a *new fix_dispatch_jobs row
+      // per matched repo* away. Best-effort — never blocks the success
+      // path.
+      try {
+        await markCrossRepoSpan(db, ghToken, {
+          projectId: dispatch.project_id,
+          reportId: dispatch.report_id,
+          fixAttemptId,
+          primaryRepo: repo,
+          codeFiles,
+          prUrl: prResult.url,
+          prNumber: prResult.number,
+        });
+      } catch (err) {
+        log.warn('cross-repo span check failed (non-fatal)', {
+          fixAttemptId,
+          err: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // Spec-traceability: enqueue a targeted post-PR synthetic probe
+      // against the action this fix was meant to repair. We write a marker
+      // `synthetic_runs` row with status='skipped' so the synthetic-monitor
+      // cron picks it up on the next tick and re-runs the full assertion
+      // chain against the inventory's expected_outcome contract. Without
+      // this, the only verification path is the 15-minute reconciler — far
+      // too slow to catch a regression before reviewers merge the PR.
+      if (inventoryAnchor?.actionNodeId) {
+        await db
+          .from('synthetic_runs')
+          .insert({
+            project_id: dispatch.project_id,
+            action_node_id: inventoryAnchor.actionNodeId,
+            status: 'skipped',
+            error_message: 'queued_post_pr',
+            step_results: {
+              trigger: 'post_pr',
+              fix_attempt_id: fixAttemptId,
+              report_id: dispatch.report_id,
+              pr_url: prResult.url,
+              queued_at: new Date().toISOString(),
+            },
+          })
+          .then(
+            () => undefined,
+            (err: unknown) => {
+              log.warn('post_pr synthetic_runs insert failed (non-fatal)', {
+                fixAttemptId,
+                err: String(err),
+              });
+            },
+          );
+      }
+
+      // Bill the project for the fix attempt — one usage_event per draft PR
+      // we successfully open. The aggregator pushes these to Stripe Meter
+      // Events on the next 5-min cron tick. We never block the response on
+      // a usage-log failure — billing is best-effort vs. user-facing latency.
+      {
+        const { error: usageErr } = await db.from('usage_events').insert({
           project_id: dispatch.project_id,
-          action_node_id: inventoryAnchor.actionNodeId,
-          status: 'skipped',
-          error_message: 'queued_post_pr',
-          step_results: {
-            trigger: 'post_pr',
+          event_name: 'fixes_attempted',
+          quantity: 1,
+          metadata: {
             fix_attempt_id: fixAttemptId,
             report_id: dispatch.report_id,
             pr_url: prResult.url,
-            queued_at: new Date().toISOString(),
+            pr_number: prResult.number,
           },
-        })
-        .then(
-          () => undefined,
-          (err: unknown) => {
-            log.warn('post_pr synthetic_runs insert failed (non-fatal)', {
-              fixAttemptId,
-              err: String(err),
-            })
-          },
-        )
-    }
-
-    // Bill the project for the fix attempt — one usage_event per draft PR
-    // we successfully open. The aggregator pushes these to Stripe Meter
-    // Events on the next 5-min cron tick. We never block the response on
-    // a usage-log failure — billing is best-effort vs. user-facing latency.
-    {
-      const { error: usageErr } = await db.from('usage_events').insert({
-        project_id: dispatch.project_id,
-        event_name: 'fixes_attempted',
-        quantity: 1,
-        metadata: {
-          fix_attempt_id: fixAttemptId,
-          report_id: dispatch.report_id,
-          pr_url: prResult.url,
-          pr_number: prResult.number,
-        },
-      })
-      if (usageErr) {
-        log.warn('usage_events fixes_attempted insert failed (non-fatal)', {
-          err: usageErr.message,
-          projectId: dispatch.project_id,
-        })
+        });
+        if (usageErr) {
+          log.warn('usage_events fixes_attempted insert failed (non-fatal)', {
+            err: usageErr.message,
+            projectId: dispatch.project_id,
+          });
+        }
       }
+
+      await trace.end();
+
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          fixAttemptId,
+          prUrl: prResult.url,
+          branch: prResult.branch,
+          langfuseTraceId: trace.id,
+        }),
+        { status: 200 },
+      );
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const failureCategory = categorizeFailure(err, errMsg);
+      log.error('Fix worker failed', {
+        dispatchId: dispatch.id,
+        err: errMsg,
+        failureCategory,
+      });
+
+      await db
+        .from('fix_attempts')
+        .update({
+          status: 'failed',
+          error: errMsg.slice(0, 1000),
+          failure_category: failureCategory,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', fixAttemptId);
+
+      await failDispatch(db, dispatch.id, errMsg);
+
+      // Loop-closure: notify plugins so triagers see "agent tried and gave
+      // up" in Slack/Jira/Sentry rather than the report sitting silently in
+      // 'classified' forever. Same rationale as the success-path
+      // fix.proposed dispatch above.
+      void dispatchPluginEvent(db, dispatch.project_id, 'fix.failed', {
+        report: { id: dispatch.report_id },
+        fix: {
+          id: fixAttemptId,
+          agent: 'mushi-fix-worker',
+          error: errMsg.slice(0, 500),
+          failureCategory,
+        },
+      }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.failed', err: String(e) }));
+
+      await trace.end();
+
+      return new Response(JSON.stringify({ ok: false, error: errMsg.slice(0, 500) }), {
+        status: 500,
+      });
     }
-
-    await trace.end()
-
-    return new Response(JSON.stringify({
-      ok: true,
-      fixAttemptId,
-      prUrl: prResult.url,
-      branch: prResult.branch,
-      langfuseTraceId: trace.id,
-    }), { status: 200 })
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err)
-    log.error('Fix worker failed', { dispatchId: dispatch.id, err: errMsg })
-
-    await db.from('fix_attempts').update({
-      status: 'failed',
-      error: errMsg.slice(0, 1000),
-      completed_at: new Date().toISOString(),
-    }).eq('id', fixAttemptId)
-
-    await failDispatch(db, dispatch.id, errMsg)
-    await trace.end()
-
-    return new Response(JSON.stringify({ ok: false, error: errMsg.slice(0, 500) }), { status: 500 })
-  }
-}))
+  }),
+);
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-async function failDispatch(db: ReturnType<typeof getServiceClient>, dispatchId: string, error: string): Promise<void> {
-  await db.from('fix_dispatch_jobs').update({
-    status: 'failed',
-    error: error.slice(0, 500),
-    finished_at: new Date().toISOString(),
-  }).eq('id', dispatchId)
+/**
+ * Best-effort mapping from a thrown error to one of the
+ * fix_attempts.failure_category enum values. NULL is returned only when no
+ * pattern matches — `unknown` is reserved for "we tried and the categorizer
+ * didn't recognise it" so the operator can grep for "unknown" in the
+ * FixSummaryRow tile and decide whether to expand this list.
+ *
+ * Pattern order matters: more-specific HTTP / vendor codes are checked
+ * before generic substrings ("Validation failed:" before "failed").
+ */
+function categorizeFailure(err: unknown, msg: string): string {
+  const m = (msg || '').toLowerCase();
+  // AI-SDK structured-output failures — we throw `LLM call failed: …` and
+  // the inner error name is in the message.
+  if (m.includes('noobjectgeneratederror') || m.includes('no_object')) return 'llm_no_object';
+  if (m.includes('aijsonparseerror') || m.includes('jsonparseerror')) return 'llm_invalid_json';
+  if (m.includes('rate limit') || m.includes('rate_limit') || m.includes('429')) return 'llm_rate_limit';
+  // Validation gates — thrown by us, not the model.
+  if (m.startsWith('validation failed:')) {
+    if (m.includes('outside scope')) return 'scope_blocked';
+    if (m.includes('exceeds circuit breaker')) return 'validation_rejected';
+    if (m.includes('token-shaped')) return 'spec_violation';
+    return 'validation_rejected';
+  }
+  // Spec/inventory checker (validateAgainstSpec).
+  if (m.includes('spec violation') || m.includes('inventory contract')) return 'spec_violation';
+  // Sandbox lifecycle — these can come from agents/sandbox or claude code adapters.
+  if (m.includes('sandbox') && m.includes('timeout')) return 'sandbox_timeout';
+  if (m.includes('sandbox')) return 'sandbox_error';
+  // GitHub REST surface — every PR-creation path goes through Octokit and
+  // throws a `Request failed with status code 4xx` Error.
+  if (m.includes('github') || m.includes('octokit') || m.includes('pull_request')) {
+    if (m.includes('403')) return 'github_403';
+    if (m.includes('404')) return 'github_404';
+    if (m.includes('422')) return 'github_422';
+    return 'github_other_error';
+  }
+  // Context-floor gate / RAG.
+  if (m.includes('skipped_no_context') || m.includes('no grounding context')) return 'no_relevant_code';
+  if (m.includes('context assembly') || m.includes('rag failed')) return 'context_assembly_failed';
+  // LLM call failed but we couldn't pattern-match the kind.
+  if (m.startsWith('llm call failed') || m.includes('anthropic') || m.includes('openai')) {
+    return 'llm_other_error';
+  }
+  return 'unknown';
+}
+
+/**
+ * Loop-closure (deferred-6): when a project has multiple repos, detect
+ * which OTHER repos the RAG-retrieved code lives in and:
+ *
+ *   1. Create (or attach to) a `fix_coordinations` row so the admin UI
+ *      and the agents-package multi-repo orchestrator can group sibling
+ *      attempts.
+ *   2. Post a cross-link comment on the PR we just opened with a list
+ *      of the sibling repos that probably need parallel changes.
+ *   3. Insert a child `fix_dispatch_jobs` row per matched sibling repo
+ *      so the worker re-fires for that repo on the next sweeper tick.
+ *      The child carries `coordination_id` + a `target_repo_id` hint so
+ *      the worker can constrain its scopeDirectory accordingly.
+ *
+ * Idempotency: skip if the parent attempt already has a `coordination_id`
+ * (re-runs of the same dispatch don't multiply child jobs).
+ */
+async function markCrossRepoSpan(
+  db: ReturnType<typeof getServiceClient>,
+  ghToken: string,
+  args: {
+    projectId: string;
+    reportId: string;
+    fixAttemptId: string;
+    primaryRepo: ResolvedRepo;
+    codeFiles: Array<{ filePath: string }>;
+    prUrl: string;
+    prNumber: number;
+  },
+): Promise<void> {
+  const { projectId, reportId, fixAttemptId, primaryRepo, codeFiles, prUrl, prNumber } = args;
+  if (codeFiles.length === 0) return;
+
+  // Pull every project repo. Single-repo projects bail immediately.
+  const { data: allRepos } = await db
+    .from('project_repos')
+    .select('id, repo_url, default_branch, path_globs, is_primary')
+    .eq('project_id', projectId);
+  const repos = (allRepos ?? []) as Array<{
+    id: string;
+    repo_url: string;
+    default_branch: string | null;
+    path_globs: string[] | null;
+    is_primary: boolean;
+  }>;
+  if (repos.length <= 1) return;
+
+  // Match each RAG file against each repo's path_globs. A file matches a
+  // repo when ANY of its globs is a prefix of the file path (we use the
+  // simple prefix match the existing scopeDirectory check uses, which
+  // matches what the indexer writes).
+  const fileMatchByRepo = new Map<string, Set<string>>();
+  for (const r of repos) {
+    fileMatchByRepo.set(r.id, new Set());
+  }
+  for (const f of codeFiles) {
+    const path = f.filePath.replace(/\\/g, '/');
+    for (const r of repos) {
+      const globs = r.path_globs ?? [];
+      if (globs.length === 0) {
+        // No globs configured → treat as "matches everything" only for
+        // the primary, otherwise we'd lump every file into every repo.
+        if (r.is_primary) fileMatchByRepo.get(r.id)!.add(path);
+        continue;
+      }
+      for (const g of globs) {
+        const root = g.replace(/\/\*\*?$/, '').replace(/^\.?\//, '');
+        if (root.length === 0 || path.startsWith(root)) {
+          fileMatchByRepo.get(r.id)!.add(path);
+          break;
+        }
+      }
+    }
+  }
+
+  const primaryRepoRow = repos.find((r) => {
+    const parsed = parseGithubUrl(r.repo_url);
+    return parsed?.owner === primaryRepo.owner && parsed?.repo === primaryRepo.repo;
+  });
+  const siblings = repos.filter(
+    (r) =>
+      r.id !== primaryRepoRow?.id &&
+      (fileMatchByRepo.get(r.id)?.size ?? 0) > 0,
+  );
+
+  if (siblings.length === 0) return;
+
+  // Bail if this attempt is already coordinated (idempotency under
+  // webhook re-deliveries / manual retriggers).
+  const { data: existingAttempt } = await db
+    .from('fix_attempts')
+    .select('coordination_id')
+    .eq('id', fixAttemptId)
+    .maybeSingle();
+  if (existingAttempt?.coordination_id) return;
+
+  // Create (or fetch) the coordination row.
+  const { data: coord, error: coordErr } = await db
+    .from('fix_coordinations')
+    .insert({
+      project_id: projectId,
+      report_id: reportId,
+      status: 'in_progress',
+      plan: {
+        primary_repo_id: primaryRepoRow?.id ?? null,
+        primary_pr_url: prUrl,
+        sibling_repo_ids: siblings.map((s) => s.id),
+        sibling_repo_urls: siblings.map((s) => s.repo_url),
+        rag_files_seen: codeFiles.map((f) => f.filePath).slice(0, 50),
+      },
+    })
+    .select('id')
+    .single();
+  if (coordErr || !coord) {
+    log.warn('fix_coordinations insert failed (non-fatal)', {
+      fixAttemptId,
+      err: coordErr?.message,
+    });
+    return;
+  }
+
+  await db
+    .from('fix_attempts')
+    .update({ coordination_id: coord.id })
+    .eq('id', fixAttemptId);
+
+  // Fan out a child fix_dispatch_jobs per sibling. Each carries the
+  // coordination_id so the multi-repo worker (or a future fan-out
+  // sweeper) groups them; `target_repo_id` is a metadata hint stored
+  // in `dispatch_metadata` JSONB so the column doesn't need to exist.
+  for (const sib of siblings) {
+    const { error: dispatchErr } = await db.from('fix_dispatch_jobs').insert({
+      project_id: projectId,
+      report_id: reportId,
+      coordination_id: coord.id,
+      skill: 'fix',
+      status: 'queued',
+      dispatch_metadata: {
+        target_repo_id: sib.id,
+        target_repo_url: sib.repo_url,
+        coordinated_with_pr: prUrl,
+        sibling_count: siblings.length,
+      },
+    });
+    if (dispatchErr) {
+      log.warn('sibling dispatch insert failed (non-fatal)', {
+        siblingRepoId: sib.id,
+        err: dispatchErr.message,
+      });
+    }
+  }
+
+  // Post a cross-link comment on the primary PR — the reviewer needs to
+  // know "this is half the change". GitHub Issues API works for PRs.
+  if (primaryRepoRow) {
+    const body = [
+      `**Mushi: cross-repo coordination**`,
+      ``,
+      `This bug appears to span multiple repos in this project. Sibling fixes have been queued for:`,
+      ``,
+      ...siblings.map(
+        (s) =>
+          `- \`${s.repo_url}\` (${fileMatchByRepo.get(s.id)?.size ?? 0} matched file${fileMatchByRepo.get(s.id)?.size === 1 ? '' : 's'})`,
+      ),
+      ``,
+      `Coordination id: \`${coord.id}\` — track sibling PRs on the [Repo page](/repo).`,
+      ``,
+      `_Generated by mushi-mushi/fix-worker. Sibling fixes will appear as separate PRs on the linked repos within a few minutes; do not merge this PR until they're ready (or merge as a coordinated batch)._`,
+    ].join('\n');
+    try {
+      await fetch(
+        `https://api.github.com/repos/${primaryRepo.owner}/${primaryRepo.repo}/issues/${prNumber}/comments`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${ghToken}`,
+            'Content-Type': 'application/json',
+            Accept: 'application/vnd.github+json',
+          },
+          body: JSON.stringify({ body }),
+          signal: AbortSignal.timeout(8_000),
+        },
+      );
+    } catch (err) {
+      log.warn('cross-repo PR comment failed (non-fatal)', {
+        prUrl,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  log.info('cross-repo coordination created', {
+    fixAttemptId,
+    coordinationId: coord.id,
+    siblingCount: siblings.length,
+    primaryRepoId: primaryRepoRow?.id ?? null,
+  });
+}
+
+async function failDispatch(
+  db: ReturnType<typeof getServiceClient>,
+  dispatchId: string,
+  error: string,
+): Promise<void> {
+  await db
+    .from('fix_dispatch_jobs')
+    .update({
+      status: 'failed',
+      error: error.slice(0, 500),
+      finished_at: new Date().toISOString(),
+    })
+    .eq('id', dispatchId);
 }
 
 async function completeAttempt(
@@ -783,66 +1260,87 @@ async function completeAttempt(
   fixAttemptId: string,
   fields: Record<string, unknown>,
 ): Promise<void> {
-  await db.from('fix_attempts').update({
-    ...fields,
-    completed_at: new Date().toISOString(),
-  }).eq('id', fixAttemptId)
+  await db
+    .from('fix_attempts')
+    .update({
+      ...fields,
+      completed_at: new Date().toISOString(),
+    })
+    .eq('id', fixAttemptId);
 }
 
 async function resolveRepo(
   db: ReturnType<typeof getServiceClient>,
   projectId: string,
   settings: Record<string, unknown> | null,
+  targetRepoId: string | null = null,
 ): Promise<ResolvedRepo | null> {
-  // Prefer the multi-repo primary entry; fall back to legacy single-URL field.
-  const { data: primaryRepo } = await db
-    .from('project_repos')
-    .select('repo_url, default_branch, path_globs')
-    .eq('project_id', projectId)
-    .eq('is_primary', true)
-    .maybeSingle()
+  // Multi-repo (deferred-6): when the dispatch carries a target_repo_id
+  // hint, prefer that exact row over the project primary. This lets
+  // sibling dispatches fanned out by `markCrossRepoSpan` target the
+  // intended repo even though they share project_id with the primary.
+  let primaryRepo: { repo_url: string; default_branch: string | null; path_globs: string[] | null } | null = null;
+  if (targetRepoId) {
+    const { data: targeted } = await db
+      .from('project_repos')
+      .select('repo_url, default_branch, path_globs')
+      .eq('id', targetRepoId)
+      .eq('project_id', projectId) // belt-and-suspenders against forged hints
+      .maybeSingle();
+    primaryRepo = targeted ?? null;
+  }
 
-  const url = primaryRepo?.repo_url ?? (settings?.github_repo_url as string | undefined) ?? (settings?.codebase_repo_url as string | undefined) ?? ''
-  if (!url) return null
+  if (!primaryRepo) {
+    // Prefer the multi-repo primary entry; fall back to legacy single-URL field.
+    const { data: primary } = await db
+      .from('project_repos')
+      .select('repo_url, default_branch, path_globs')
+      .eq('project_id', projectId)
+      .eq('is_primary', true)
+      .maybeSingle();
+    primaryRepo = primary ?? null;
+  }
 
-  const parsed = parseGithubUrl(url)
-  if (!parsed) return null
+  const url =
+    primaryRepo?.repo_url ??
+    (settings?.github_repo_url as string | undefined) ??
+    (settings?.codebase_repo_url as string | undefined) ??
+    '';
+  if (!url) return null;
+
+  const parsed = parseGithubUrl(url);
+  if (!parsed) return null;
 
   // path_globs from project_repos can constrain which files the worker is
   // allowed to write. Empty/null means no restriction.
-  const globs = (primaryRepo?.path_globs as string[] | null) ?? null
-  const scopeDirectory = globs && globs.length > 0 && typeof globs[0] === 'string'
-    ? globs[0].replace(/\/\*\*?$/, '').replace(/^\.?\//, '')
-    : undefined
+  const globs = (primaryRepo?.path_globs as string[] | null) ?? null;
+  const scopeDirectory =
+    globs && globs.length > 0 && typeof globs[0] === 'string'
+      ? globs[0].replace(/\/\*\*?$/, '').replace(/^\.?\//, '')
+      : undefined;
 
   return {
     owner: parsed.owner,
     repo: parsed.repo,
     defaultBranch: primaryRepo?.default_branch ?? 'main',
     scopeDirectory,
-  }
+  };
 }
 
 function parseGithubUrl(url: string): { owner: string; repo: string } | null {
-  const cleaned = url.replace(/\.git$/, '').replace(/^git@github\.com:/, 'https://github.com/')
-  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+)/)
-  if (!match) return null
-  return { owner: match[1], repo: match[2] }
+  const cleaned = url.replace(/\.git$/, '').replace(/^git@github\.com:/, 'https://github.com/');
+  const match = cleaned.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2] };
 }
 
 function isFileInScope(filePath: string, scopeDir: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/')
-  if (TEST_PATTERNS.some(p => p.test(normalized))) return true
-  return normalized.startsWith(scopeDir.replace(/\\/g, '/'))
+  const normalized = filePath.replace(/\\/g, '/');
+  if (TEST_PATTERNS.some((p) => p.test(normalized))) return true;
+  return normalized.startsWith(scopeDir.replace(/\\/g, '/'));
 }
 
-const TEST_PATTERNS = [
-  /__tests__\//,
-  /\.test\./,
-  /\.spec\./,
-  /^test\//,
-  /^tests\//,
-]
+const TEST_PATTERNS = [/__tests__\//, /\.test\./, /\.spec\./, /^test\//, /^tests\//];
 
 // Belt-and-suspenders secret detector. The LLM has been instructed not to emit
 // secrets; this catches accidents.
@@ -851,9 +1349,9 @@ const SECRET_PATTERNS = [
   /ghp_[a-zA-Z0-9]{36}/,
   /AIza[a-zA-Z0-9_-]{35}/,
   /AKIA[A-Z0-9]{16}/,
-]
+];
 function containsObviousSecret(content: string): boolean {
-  return SECRET_PATTERNS.some(p => p.test(content))
+  return SECRET_PATTERNS.some((p) => p.test(content));
 }
 
 async function resolveGithubToken(
@@ -863,28 +1361,28 @@ async function resolveGithubToken(
 ): Promise<string | null> {
   // Resolution order: project-level vault ref → raw value in same column →
   // env fallback (self-host / founder dogfood). Never log the token.
-  void ownerUserId
+  void ownerUserId;
   const { data, error } = await db
     .from('project_settings')
     .select('github_installation_token_ref')
     .eq('project_id', projectId)
-    .maybeSingle()
+    .maybeSingle();
 
   if (!error && data?.github_installation_token_ref) {
-    const ref = String(data.github_installation_token_ref)
+    const ref = String(data.github_installation_token_ref);
     if (ref.startsWith('vault://')) {
-      const id = ref.slice('vault://'.length)
-      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id })
+      const id = ref.slice('vault://'.length);
+      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id });
       if (!vaultErr && typeof secret === 'string' && secret.length > 0) {
-        return secret
+        return secret;
       }
     } else if (ref.length > 0) {
       // Raw token persisted (dev / founder dogfood). Pipeline already warns
       // once via byok.ts; we just return.
-      return ref
+      return ref;
     }
   }
-  return Deno.env.get('GITHUB_TOKEN') ?? null
+  return Deno.env.get('GITHUB_TOKEN') ?? null;
 }
 
 /**
@@ -905,7 +1403,7 @@ async function loadInventoryAnchor(
   overrideActionNodeId: string | null,
 ): Promise<InventoryAnchor | null> {
   try {
-    let actionNodeId = overrideActionNodeId
+    let actionNodeId = overrideActionNodeId;
     if (!actionNodeId) {
       const { data: reportNode } = await db
         .from('graph_nodes')
@@ -913,8 +1411,8 @@ async function loadInventoryAnchor(
         .eq('project_id', projectId)
         .eq('node_type', 'report_group')
         .eq('label', reportId)
-        .maybeSingle()
-      if (!reportNode) return null
+        .maybeSingle();
+      if (!reportNode) return null;
       const { data: edge } = await db
         .from('graph_edges')
         .select('to_node_id')
@@ -922,21 +1420,21 @@ async function loadInventoryAnchor(
         .eq('from_node_id', reportNode.id)
         .eq('edge_type', 'reports_against')
         .limit(1)
-        .maybeSingle()
-      if (!edge?.to_node_id) return null
-      actionNodeId = edge.to_node_id as string
+        .maybeSingle();
+      if (!edge?.to_node_id) return null;
+      actionNodeId = edge.to_node_id as string;
     }
     const { data: action } = await db
       .from('graph_nodes')
       .select('id, label, metadata')
       .eq('id', actionNodeId)
       .eq('node_type', 'action')
-      .maybeSingle()
-    if (!action) return null
-    const meta = (action.metadata as Record<string, unknown> | null) ?? {}
+      .maybeSingle();
+    if (!action) return null;
+    const meta = (action.metadata as Record<string, unknown> | null) ?? {};
 
-    let pagePath: string | undefined
-    let pageId: string | undefined
+    let pagePath: string | undefined;
+    let pageId: string | undefined;
     const { data: triggerEdge } = await db
       .from('graph_edges')
       .select('from_node_id')
@@ -944,7 +1442,7 @@ async function loadInventoryAnchor(
       .eq('to_node_id', action.id)
       .eq('edge_type', 'triggers')
       .limit(1)
-      .maybeSingle()
+      .maybeSingle();
     if (triggerEdge?.from_node_id) {
       const { data: containsEdge } = await db
         .from('graph_edges')
@@ -953,22 +1451,22 @@ async function loadInventoryAnchor(
         .eq('to_node_id', triggerEdge.from_node_id)
         .eq('edge_type', 'contains')
         .limit(1)
-        .maybeSingle()
+        .maybeSingle();
       if (containsEdge?.from_node_id) {
         const { data: pageNode } = await db
           .from('graph_nodes')
           .select('metadata')
           .eq('id', containsEdge.from_node_id)
           .eq('node_type', 'page_v2')
-          .maybeSingle()
-        const pm = (pageNode?.metadata as Record<string, unknown> | null) ?? {}
-        pagePath = typeof pm.path === 'string' ? pm.path : undefined
-        pageId = typeof pm.page_id === 'string' ? pm.page_id : undefined
+          .maybeSingle();
+        const pm = (pageNode?.metadata as Record<string, unknown> | null) ?? {};
+        pagePath = typeof pm.path === 'string' ? pm.path : undefined;
+        pageId = typeof pm.page_id === 'string' ? pm.page_id : undefined;
       }
     }
 
-    let storyId: string | undefined
-    let storyTitle: string | undefined
+    let storyId: string | undefined;
+    let storyTitle: string | undefined;
     const { data: implementsEdge } = await db
       .from('graph_edges')
       .select('to_node_id')
@@ -976,18 +1474,18 @@ async function loadInventoryAnchor(
       .eq('from_node_id', action.id)
       .eq('edge_type', 'implements')
       .limit(1)
-      .maybeSingle()
+      .maybeSingle();
     if (implementsEdge?.to_node_id) {
       const { data: storyNode } = await db
         .from('graph_nodes')
         .select('label, metadata')
         .eq('id', implementsEdge.to_node_id)
         .eq('node_type', 'user_story')
-        .maybeSingle()
+        .maybeSingle();
       if (storyNode) {
-        storyId = (storyNode.label as string | null) ?? undefined
-        const sm = (storyNode.metadata as Record<string, unknown> | null) ?? {}
-        storyTitle = typeof sm.title === 'string' ? sm.title : undefined
+        storyId = (storyNode.label as string | null) ?? undefined;
+        const sm = (storyNode.metadata as Record<string, unknown> | null) ?? {};
+        storyTitle = typeof sm.title === 'string' ? sm.title : undefined;
       }
     }
 
@@ -1000,9 +1498,9 @@ async function loadInventoryAnchor(
       storyId,
       storyTitle,
       expectedOutcome: (meta.expected_outcome as Record<string, unknown> | null) ?? null,
-    }
+    };
   } catch {
-    return null
+    return null;
   }
 }
 
@@ -1013,70 +1511,74 @@ async function loadInventoryAnchor(
  * sees the same shape regardless of which path drafted the fix.
  */
 function formatInventoryAnchor(anchor: InventoryAnchor): string {
-  const lines: string[] = []
-  lines.push('## Inventory Spec Context (whitepaper §2.10 spec-traceability)')
+  const lines: string[] = [];
+  lines.push('## Inventory Spec Context (whitepaper §2.10 spec-traceability)');
   lines.push(
-    'This fix was dispatched against a tracked Action in the project\'s ' +
+    "This fix was dispatched against a tracked Action in the project's " +
       '`inventory.yaml`. Keep the diff scoped to making the action work as ' +
       'specified — do NOT refactor unrelated code or break sibling actions ' +
       'on the same page. The synthetic monitor will re-run the assertions ' +
       'below against staging immediately after the PR is opened.',
-  )
-  lines.push('')
-  lines.push(`- Action: \`${anchor.actionLabel}\``)
-  if (anchor.actionDescription) lines.push(`- Description: ${anchor.actionDescription}`)
+  );
+  lines.push('');
+  lines.push(`- Action: \`${anchor.actionLabel}\``);
+  if (anchor.actionDescription) lines.push(`- Description: ${anchor.actionDescription}`);
   if (anchor.pagePath) {
-    lines.push(`- Page: \`${anchor.pagePath}\`${anchor.pageId ? ` (id=\`${anchor.pageId}\`)` : ''}`)
+    lines.push(
+      `- Page: \`${anchor.pagePath}\`${anchor.pageId ? ` (id=\`${anchor.pageId}\`)` : ''}`,
+    );
   }
   if (anchor.storyTitle) {
-    lines.push(`- User story: ${anchor.storyTitle}${anchor.storyId ? ` (\`${anchor.storyId}\`)` : ''}`)
+    lines.push(
+      `- User story: ${anchor.storyTitle}${anchor.storyId ? ` (\`${anchor.storyId}\`)` : ''}`,
+    );
   }
-  const eo = anchor.expectedOutcome
+  const eo = anchor.expectedOutcome;
   if (eo && typeof eo === 'object') {
-    lines.push('')
-    lines.push('### Expected outcome contract (success criteria after fix)')
-    if (typeof eo.summary === 'string') lines.push(`- Summary: ${eo.summary}`)
-    const r = eo.response as Record<string, unknown> | undefined
+    lines.push('');
+    lines.push('### Expected outcome contract (success criteria after fix)');
+    if (typeof eo.summary === 'string') lines.push(`- Summary: ${eo.summary}`);
+    const r = eo.response as Record<string, unknown> | undefined;
     if (r) {
-      const statusIn = r.status_in as number[] | undefined
+      const statusIn = r.status_in as number[] | undefined;
       if (Array.isArray(statusIn) && statusIn.length > 0) {
-        lines.push(`- HTTP status MUST be one of: ${statusIn.join(', ')}`)
+        lines.push(`- HTTP status MUST be one of: ${statusIn.join(', ')}`);
       }
-      const jp = r.json_path as Array<Record<string, unknown>> | undefined
+      const jp = r.json_path as Array<Record<string, unknown>> | undefined;
       if (Array.isArray(jp) && jp.length > 0) {
-        lines.push('- Response body assertions:')
+        lines.push('- Response body assertions:');
         for (const c of jp) {
-          const valuePart = c.value === undefined ? '' : ` ${JSON.stringify(c.value)}`
-          lines.push(`  - \`${String(c.path)}\` ${String(c.op)}${valuePart}`)
+          const valuePart = c.value === undefined ? '' : ` ${JSON.stringify(c.value)}`;
+          lines.push(`  - \`${String(c.path)}\` ${String(c.op)}${valuePart}`);
         }
       }
     }
-    const d = eo.database as Record<string, unknown> | undefined
+    const d = eo.database as Record<string, unknown> | undefined;
     if (d?.table) {
-      const expect = (d.expect as string | undefined) ?? 'row_exists'
-      const where = d.where ? ` WHERE ${JSON.stringify(d.where)}` : ''
-      const min = d.min_count ? ` (min ${String(d.min_count)})` : ''
+      const expect = (d.expect as string | undefined) ?? 'row_exists';
+      const where = d.where ? ` WHERE ${JSON.stringify(d.where)}` : '';
+      const min = d.min_count ? ` (min ${String(d.min_count)})` : '';
       lines.push(
         `- Database: \`${(d.schema as string | undefined) ?? 'public'}.${String(d.table)}\` MUST ${expect}${where}${min}`,
-      )
+      );
     }
-    const u = eo.ui as Record<string, unknown> | undefined
+    const u = eo.ui as Record<string, unknown> | undefined;
     if (u) {
       if (typeof u.visible_text === 'string') {
-        lines.push(`- UI MUST show text containing: "${u.visible_text}"`)
+        lines.push(`- UI MUST show text containing: "${u.visible_text}"`);
       }
       if (typeof u.route_change_to === 'string') {
-        lines.push(`- UI MUST navigate to: \`${u.route_change_to}\``)
+        lines.push(`- UI MUST navigate to: \`${u.route_change_to}\``);
       }
     }
   } else {
-    lines.push('')
+    lines.push('');
     lines.push(
       '_No `expected_outcome` contract declared on this action. Add one to ' +
         '`inventory.yaml` so future fixes have explicit success criteria._',
-    )
+    );
   }
-  return lines.join('\n')
+  return lines.join('\n');
 }
 
 function buildUserPrompt(
@@ -1086,23 +1588,26 @@ function buildUserPrompt(
   repo: ResolvedRepo,
   webSnippets: FirecrawlSearchResult[] = [],
   inventoryAnchor: InventoryAnchor | null = null,
+  pastFixesContext = '',
 ): string {
-  const env = (report.environment ?? {}) as Record<string, unknown>
+  const env = (report.environment ?? {}) as Record<string, unknown>;
   const consoleErrors = ((report.console_logs ?? []) as Array<{ level: string; message: string }>)
-    .filter(l => l.level === 'error' || l.level === 'warn')
+    .filter((l) => l.level === 'error' || l.level === 'warn')
     .slice(0, 10)
-    .map(l => `[${l.level}] ${l.message}`)
-    .join('\n')
+    .map((l) => `[${l.level}] ${l.message}`)
+    .join('\n');
 
-  const failedRequests = ((report.network_logs ?? []) as Array<{ method: string; url: string; status: number }>)
-    .filter(l => l.status >= 400)
+  const failedRequests = (
+    (report.network_logs ?? []) as Array<{ method: string; url: string; status: number }>
+  )
+    .filter((l) => l.status >= 400)
     .slice(0, 10)
-    .map(l => `${l.method} ${l.url} → ${l.status}`)
-    .join('\n')
+    .map((l) => `${l.method} ${l.url} → ${l.status}`)
+    .join('\n');
 
-  const reproSteps = (report.reproduction_steps ?? []) as string[]
+  const reproSteps = (report.reproduction_steps ?? []) as string[];
 
-  const inventoryBlock = inventoryAnchor ? `\n${formatInventoryAnchor(inventoryAnchor)}\n` : ''
+  const inventoryBlock = inventoryAnchor ? `\n${formatInventoryAnchor(inventoryAnchor)}\n` : '';
 
   return `## Bug Report
 **Summary**: ${report.summary ?? '(none — see description)'}
@@ -1135,13 +1640,25 @@ ${failedRequests ? `## Failed network requests\n${failedRequests}\n` : ''}
 ## Relevant Code (RAG-retrieved)
 ${codeContext || '(No code context retrieved — propose what files to look at and set needsHumanReview=true.)'}
 
-${webSnippets.length > 0 ? `## Web Context (Firecrawl auto-augment)
+${
+  pastFixesContext
+    ? `## Past Similar Fixes (fix_corpus retrieval)
+These are diffs that previously fixed bugs in this same project that look semantically similar to the current report. Use them as STRONG hints for which files to touch and which patterns to apply — they're real, validated, merged fixes. Don't blindly copy line-for-line; the new bug may differ in subtle ways. But if the past fix touched a file that is also in the RAG-retrieved code above, that's almost certainly the right place to start.
+
+${pastFixesContext}
+`
+    : ''
+}${
+  webSnippets.length > 0
+    ? `## Web Context (Firecrawl auto-augment)
 The local RAG was sparse OR this report has been judged "stubborn" in the past, so we pulled the top ${webSnippets.length} web result${webSnippets.length === 1 ? '' : 's'} matching the symptom. Treat these as hints — verify against the actual code before relying on them, and never copy/paste verbatim if it would conflict with the project's existing style.
 
 ${webSnippets.map((s, i) => `### [${i + 1}] ${s.title}\n<${s.url}>\n${s.snippet}`).join('\n\n')}
-` : ''}
+`
+    : ''
+}
 ## Your Task
-Output a structured fix plan. Touch the minimum number of files. Match the existing code style. If you change behavior, add or update a test. If you are not confident, set needsHumanReview=true.`
+Output a structured fix plan. Touch the minimum number of files. Match the existing code style. If you change behavior, add or update a test. If you are not confident, set needsHumanReview=true.`;
 }
 
 // ----------------------------------------------------------------------------
@@ -1150,64 +1667,62 @@ Output a structured fix plan. Touch the minimum number of files. Match the exist
 // ----------------------------------------------------------------------------
 
 interface PrResult {
-  url: string
-  number: number
-  branch: string
-  commitSha: string
+  url: string;
+  number: number;
+  branch: string;
+  commitSha: string;
 }
 
 interface CreatePrInput {
-  token: string
-  owner: string
-  repo: string
-  defaultBranch: string
-  reportId: string
-  fix: FixOutput
+  token: string;
+  owner: string;
+  repo: string;
+  defaultBranch: string;
+  reportId: string;
+  fix: FixOutput;
 }
 
 async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
-  const { token, owner, repo, defaultBranch, reportId, fix } = input
-  const branch = `mushi/fix-${reportId.slice(0, 8)}-${Date.now().toString(36)}`
+  const { token, owner, repo, defaultBranch, reportId, fix } = input;
+  const branch = `mushi/fix-${reportId.slice(0, 8)}-${Date.now().toString(36)}`;
 
   const baseHeaders = {
-    'Authorization': `Bearer ${token}`,
-    'Accept': 'application/vnd.github+json',
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'Content-Type': 'application/json',
     'User-Agent': 'mushi-mushi-fix-worker/1.0',
-  }
+  };
 
   // Fetch the SHA of the default branch tip so we can branch from it.
   const refRes = await ghFetch(
     `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${defaultBranch}`,
     { headers: baseHeaders },
-  )
-  const baseSha = (refRes as { object: { sha: string } }).object.sha
+  );
+  const baseSha = (refRes as { object: { sha: string } }).object.sha;
 
   // Create the new branch.
-  await ghFetch(
-    `https://api.github.com/repos/${owner}/${repo}/git/refs`,
-    {
-      method: 'POST',
-      headers: baseHeaders,
-      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
-    },
-  )
+  await ghFetch(`https://api.github.com/repos/${owner}/${repo}/git/refs`, {
+    method: 'POST',
+    headers: baseHeaders,
+    body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: baseSha }),
+  });
 
   // Commit each file. Sequential keeps the commit log readable; the diffs
   // are small enough that parallelism isn't worth the rate-limit risk.
-  let lastCommitSha = baseSha
+  let lastCommitSha = baseSha;
   for (const file of fix.files) {
     // Need the existing file SHA if it exists (to update vs. create).
     const existing = await ghFetchOptional(
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}?ref=${encodeURIComponent(branch)}`,
       { headers: baseHeaders },
-    )
-    const existingSha = existing && typeof (existing as Record<string, unknown>).sha === 'string'
-      ? (existing as { sha: string }).sha
-      : undefined
+    );
+    const existingSha =
+      existing && typeof (existing as Record<string, unknown>).sha === 'string'
+        ? (existing as { sha: string }).sha
+        : undefined;
 
-    const putRes = await ghFetch(
+    const putRes = (await ghFetch(
       `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(file.path)}`,
       {
         method: 'PUT',
@@ -1219,25 +1734,22 @@ async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
           ...(existingSha ? { sha: existingSha } : {}),
         }),
       },
-    ) as { commit: { sha: string } }
-    lastCommitSha = putRes.commit.sha
+    )) as { commit: { sha: string } };
+    lastCommitSha = putRes.commit.sha;
   }
 
   // Open the draft PR. `draft: true` is the V5.3 default — humans approve.
-  const prRes = await ghFetch(
-    `https://api.github.com/repos/${owner}/${repo}/pulls`,
-    {
-      method: 'POST',
-      headers: baseHeaders,
-      body: JSON.stringify({
-        title: fix.summary,
-        head: branch,
-        base: defaultBranch,
-        draft: true,
-        body: buildPrBody(fix, reportId),
-      }),
-    },
-  ) as { number: number; html_url: string }
+  const prRes = (await ghFetch(`https://api.github.com/repos/${owner}/${repo}/pulls`, {
+    method: 'POST',
+    headers: baseHeaders,
+    body: JSON.stringify({
+      title: fix.summary,
+      head: branch,
+      base: defaultBranch,
+      draft: true,
+      body: buildPrBody(fix, reportId),
+    }),
+  })) as { number: number; html_url: string };
 
   // Best-effort labels: no-op on failure (e.g. permissions or label doesn't
   // exist). The PR itself is the load-bearing artifact.
@@ -1248,21 +1760,21 @@ async function createDraftPr(input: CreatePrInput): Promise<PrResult> {
       headers: baseHeaders,
       body: JSON.stringify({ labels: ['mushi-autofix'] }),
     },
-  )
+  );
 
   return {
     url: prRes.html_url,
     number: prRes.number,
     branch,
     commitSha: lastCommitSha,
-  }
+  };
 }
 
 function buildPrBody(fix: FixOutput, reportId: string): string {
-  const fileList = fix.files.map(f => `- \`${f.path}\` — ${f.reason}`).join('\n')
+  const fileList = fix.files.map((f) => `- \`${f.path}\` — ${f.reason}`).join('\n');
   const reviewBanner = fix.needsHumanReview
     ? '> ⚠️ **The agent flagged this fix as needing extra human review.** Read the rationale carefully before approving.\n\n'
-    : ''
+    : '';
   return `${reviewBanner}## Mushi Mushi Auto-Fix
 
 **Report**: \`${reportId}\`
@@ -1276,27 +1788,27 @@ ${fileList}
 ---
 *This PR was generated by Mushi Mushi using your project's BYOK LLM key. The agent operates within a circuit-breaker (max lines per file) and a structured-output schema — it cannot run shell commands or call arbitrary tools. Review every line before merging.*
 
-[Open report in admin console](mushi://reports/${reportId})`
+[Open report in admin console](mushi://reports/${reportId})`;
 }
 
 async function ghFetch(url: string, init: RequestInit): Promise<unknown> {
-  const res = await fetch(url, init)
+  const res = await fetch(url, init);
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`GitHub ${init.method ?? 'GET'} ${url} → ${res.status}: ${text.slice(0, 200)}`)
+    const text = await res.text();
+    throw new Error(`GitHub ${init.method ?? 'GET'} ${url} → ${res.status}: ${text.slice(0, 200)}`);
   }
-  return res.json()
+  return res.json();
 }
 
 async function ghFetchOptional(url: string, init: RequestInit): Promise<unknown | null> {
-  const res = await fetch(url, init)
-  if (res.status === 404) return null
+  const res = await fetch(url, init);
+  if (res.status === 404) return null;
   if (!res.ok) {
-    return null
+    return null;
   }
   try {
-    return await res.json()
+    return await res.json();
   } catch {
-    return null
+    return null;
   }
 }

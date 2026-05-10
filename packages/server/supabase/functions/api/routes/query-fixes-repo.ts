@@ -325,7 +325,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     let query = db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, error',
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, error, spec_validation_warnings, inventory_action_node_id, failure_category',
       )
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
@@ -394,6 +394,8 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
           prsOpen: 0,
           prsCiPassing: 0,
           prsMerged: 0,
+          specWarnings: 0,
+          failureBreakdown: [],
           days: [],
         },
       });
@@ -405,7 +407,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     const { data: rows } = await db
       .from('fix_attempts')
       .select(
-        'id, status, pr_url, pr_number, check_run_conclusion, started_at, completed_at, created_at',
+        'id, status, pr_url, pr_number, check_run_conclusion, started_at, completed_at, created_at, spec_validation_warnings, failure_category',
       )
       .in('project_id', projectIds)
       .gte('created_at', since.toISOString())
@@ -424,6 +426,32 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     // attempt's own status as the "open" gate; merge state lives elsewhere.
     const prsOpen = list.filter((r) => r.pr_url && r.status === 'completed').length;
     const prsCiPassing = list.filter((r) => r.check_run_conclusion === 'success').length;
+    // Loop-closure: count fix_attempts whose validateAgainstSpec gate raised
+    // at least one soft warning over the trailing 30d. Surfaced as a tile
+    // on the Fixes summary so operators can spot a trend ("12 fixes this
+    // week skipped the spec gate — investigate the inventory contract")
+    // before the warnings degrade into actual regressions.
+    const specWarnings = list.filter((r) => {
+      const w = r.spec_validation_warnings as unknown;
+      return Array.isArray(w) && w.length > 0;
+    }).length;
+
+    // Loop-closure: bucket the 30d failures by failure_category so the
+    // Fixes summary tile can render "12 sandbox_timeout / 4 scope_blocked /
+    // 2 spec_violation" instead of a single opaque "16 failed" number.
+    // Sorted desc by count so the dominant cause is always first.
+    const failureBucketMap = new Map<string, number>();
+    for (const r of list) {
+      if (r.status !== 'failed') continue;
+      const cat =
+        typeof r.failure_category === 'string' && r.failure_category.length > 0
+          ? r.failure_category
+          : 'unknown';
+      failureBucketMap.set(cat, (failureBucketMap.get(cat) ?? 0) + 1);
+    }
+    const failureBreakdown = [...failureBucketMap.entries()]
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count);
 
     const days: { day: string; total: number; completed: number; failed: number }[] = [];
     for (let i = 0; i < 30; i++) {
@@ -453,6 +481,8 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
         // Deprecated alias so a stale admin FE deployed before this rename
         // doesn't blank-out the tile. Drop after one release cycle.
         prsMerged: prsCiPassing,
+        specWarnings,
+        failureBreakdown,
         days,
       },
     });
