@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_91 configuration knobs across 18 sections · last regenerated 2026-05-09._
+_91 configuration knobs across 18 sections · last regenerated 2026-05-10._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -972,9 +972,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 `sso.provider_type`
 
-**Summary** — Which federation protocol the IdP speaks — `saml` (production) or `oidc` (currently gated).
+**Summary** — Which federation protocol the IdP speaks — `saml` (self-service) or `oidc` (audit-only — manual setup required).
 
-**How it works** — Determines which authn flow Mushi expects on the callback. SAML is the supported path; OIDC is wired in the API but returns 501 until the next release wave is shipped.
+**How it works** — Determines which authn flow Mushi expects on the callback. SAML is fully self-service: Mushi calls the GoTrue Admin API to register the provider and returns the canonical ACS URL + Entity ID. OIDC is stored for audit but Mushi cannot auto-register it (GoTrue's Admin API does not yet expose an OIDC endpoint); selecting it returns HTTP 202 with `status: 'manual_required'` so you can quote the config id in a Supabase support ticket.
 
 **Default** — `saml`
 

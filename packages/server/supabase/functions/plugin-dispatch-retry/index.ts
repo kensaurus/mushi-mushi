@@ -16,53 +16,54 @@
 // the 60s edge-function ceiling at concurrency CONCURRENCY.
 // ============================================================
 
-import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-import { getServiceClient } from '../_shared/db.ts'
-import { log } from '../_shared/logger.ts'
-import { withSentry } from '../_shared/sentry.ts'
-import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { startCronRun } from '../_shared/telemetry.ts'
+import { getServiceClient } from '../_shared/db.ts';
+import { log } from '../_shared/logger.ts';
+import { withSentry } from '../_shared/sentry.ts';
+import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { startCronRun } from '../_shared/telemetry.ts';
+import { notifyOperator } from '../_shared/operator-notify.ts';
 
 declare const Deno: {
-  serve(handler: (req: Request) => Response | Promise<Response>): void
-  env: { get(name: string): string | undefined }
-}
+  serve(handler: (req: Request) => Response | Promise<Response>): void;
+  env: { get(name: string): string | undefined };
+};
 
-const plog = log.child('plugin-dispatch-retry')
+const plog = log.child('plugin-dispatch-retry');
 
 // ──────────────────────────────────────────────────────────────────────────
 // Config
 // ──────────────────────────────────────────────────────────────────────────
 
-const BATCH_SIZE = 50
-const CONCURRENCY = 5
-const DISPATCH_TIMEOUT_MS = 8_000
-const RESPONSE_EXCERPT_MAX = 512
-const MAX_ATTEMPTS = 5
+const BATCH_SIZE = 50;
+const CONCURRENCY = 5;
+const DISPATCH_TIMEOUT_MS = 8_000;
+const RESPONSE_EXCERPT_MAX = 512;
+const MAX_ATTEMPTS = 5;
 
 /** Backoff minutes-from-original-attempt for attempts 1..5. Index 0 maps to
  *  the very first retry (after a failed initial dispatch). After attempt 5
  *  the row is finalised as 'error'. */
-const BACKOFF_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000]
+const BACKOFF_MS = [30_000, 120_000, 600_000, 3_600_000, 21_600_000];
 
 // ──────────────────────────────────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────────────────────────────────
 
 interface PendingRow {
-  id: number
-  delivery_id: string
-  project_id: string
-  plugin_slug: string
-  event: string
-  attempt: number
-  payload_digest: string
+  id: number;
+  delivery_id: string;
+  project_id: string;
+  plugin_slug: string;
+  event: string;
+  attempt: number;
+  payload_digest: string;
 }
 
 interface PluginRow {
-  webhook_url: string | null
-  webhook_secret_vault_ref: string | null
+  webhook_url: string | null;
+  webhook_secret_vault_ref: string | null;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -70,30 +71,30 @@ interface PluginRow {
 // ──────────────────────────────────────────────────────────────────────────
 
 async function loadSecret(db: SupabaseClient, ref: string): Promise<string | null> {
-  const name = ref.startsWith('vault://') ? ref.slice('vault://'.length) : ref
-  const { data, error } = await db.rpc('vault_lookup', { secret_name: name })
-  if (error) return null
-  return typeof data === 'string' ? data : null
+  const name = ref.startsWith('vault://') ? ref.slice('vault://'.length) : ref;
+  const { data, error } = await db.rpc('vault_lookup', { secret_name: name });
+  if (error) return null;
+  return typeof data === 'string' ? data : null;
 }
 
 async function signHmac(secret: string, payload: string): Promise<string> {
-  const enc = new TextEncoder()
+  const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
     enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload))
-  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('')
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(payload));
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
 interface RetryOutcome {
-  status: 'ok' | 'error' | 'timeout' | 'skipped'
-  httpStatus: number | null
-  durationMs: number
-  excerpt: string
+  status: 'ok' | 'error' | 'timeout' | 'skipped';
+  httpStatus: number | null;
+  durationMs: number;
+  excerpt: string;
 }
 
 async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutcome> {
@@ -102,15 +103,15 @@ async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutco
     .select('webhook_url, webhook_secret_vault_ref')
     .eq('project_id', row.project_id)
     .or(`plugin_slug.eq.${row.plugin_slug},plugin_name.eq.${row.plugin_slug}`)
-    .maybeSingle<PluginRow>()
+    .maybeSingle<PluginRow>();
 
   if (!plugin?.webhook_url || !plugin.webhook_secret_vault_ref) {
-    return { status: 'skipped', httpStatus: null, durationMs: 0, excerpt: 'plugin_uninstalled' }
+    return { status: 'skipped', httpStatus: null, durationMs: 0, excerpt: 'plugin_uninstalled' };
   }
 
-  const secret = await loadSecret(db, plugin.webhook_secret_vault_ref)
+  const secret = await loadSecret(db, plugin.webhook_secret_vault_ref);
   if (!secret) {
-    return { status: 'skipped', httpStatus: null, durationMs: 0, excerpt: 'missing_secret' }
+    return { status: 'skipped', httpStatus: null, durationMs: 0, excerpt: 'missing_secret' };
   }
 
   // Reconstruct the envelope. data is opaque to the worker — the receiver
@@ -123,10 +124,10 @@ async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutco
     projectId: row.project_id,
     pluginSlug: row.plugin_slug,
     data: { retryOf: row.delivery_id, attempt: row.attempt + 1 },
-  }
-  const rawBody = JSON.stringify(envelope)
-  const t = Date.now()
-  const sig = await signHmac(secret, `${t}.${rawBody}`)
+  };
+  const rawBody = JSON.stringify(envelope);
+  const t = Date.now();
+  const sig = await signHmac(secret, `${t}.${rawBody}`);
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -136,33 +137,33 @@ async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutco
     'X-Mushi-Plugin': row.plugin_slug,
     'X-Mushi-Delivery': row.delivery_id,
     'X-Mushi-Retry-Attempt': String(row.attempt + 1),
-  }
+  };
 
-  const start = Date.now()
-  let status: RetryOutcome['status'] = 'error'
-  let httpStatus: number | null = null
-  let excerpt = ''
+  const start = Date.now();
+  let status: RetryOutcome['status'] = 'error';
+  let httpStatus: number | null = null;
+  let excerpt = '';
 
   try {
-    const controller = new AbortController()
-    const tm = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS)
+    const controller = new AbortController();
+    const tm = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS);
     const res = await fetch(plugin.webhook_url, {
       method: 'POST',
       headers,
       body: rawBody,
       signal: controller.signal,
-    })
-    clearTimeout(tm)
-    httpStatus = res.status
-    const text = await res.text().catch(() => '')
-    excerpt = text.slice(0, RESPONSE_EXCERPT_MAX)
-    status = res.ok ? 'ok' : 'error'
+    });
+    clearTimeout(tm);
+    httpStatus = res.status;
+    const text = await res.text().catch(() => '');
+    excerpt = text.slice(0, RESPONSE_EXCERPT_MAX);
+    status = res.ok ? 'ok' : 'error';
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') status = 'timeout'
-    excerpt = String(err).slice(0, RESPONSE_EXCERPT_MAX)
+    if (err instanceof Error && err.name === 'AbortError') status = 'timeout';
+    excerpt = String(err).slice(0, RESPONSE_EXCERPT_MAX);
   }
 
-  return { status, httpStatus, durationMs: Date.now() - start, excerpt }
+  return { status, httpStatus, durationMs: Date.now() - start, excerpt };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -170,63 +171,73 @@ async function retryOne(db: SupabaseClient, row: PendingRow): Promise<RetryOutco
 // ──────────────────────────────────────────────────────────────────────────
 
 async function handler(req: Request): Promise<Response> {
-  const authResult = requireServiceRoleAuth(req)
-  if (authResult) return authResult
+  const authResult = requireServiceRoleAuth(req);
+  if (authResult) return authResult;
 
-  const db = getServiceClient()
-  const cron = await startCronRun(db, 'plugin-dispatch-retry', 'cron')
+  const db = getServiceClient();
+  const cron = await startCronRun(db, 'plugin-dispatch-retry', 'cron');
 
   try {
     // ── 1. Pull a batch of pending rows whose retry time has elapsed ───
-    const nowIso = new Date().toISOString()
+    const nowIso = new Date().toISOString();
     const { data: pending, error: pendingErr } = await db
       .from('plugin_dispatch_log')
       .select('id, delivery_id, project_id, plugin_slug, event, attempt, payload_digest')
       .eq('status', 'pending')
       .lte('next_retry_at', nowIso)
       .order('next_retry_at', { ascending: true })
-      .limit(BATCH_SIZE)
-    if (pendingErr) throw new Error(`pending fetch failed: ${pendingErr.message}`)
+      .limit(BATCH_SIZE);
+    if (pendingErr) throw new Error(`pending fetch failed: ${pendingErr.message}`);
 
-    const rows = (pending ?? []) as PendingRow[]
-    plog.info('plugin-dispatch-retry.start', { rows: rows.length })
+    const rows = (pending ?? []) as PendingRow[];
+    plog.info('plugin-dispatch-retry.start', { rows: rows.length });
 
-    let succeeded = 0
-    let failed = 0
-    let exhausted = 0
+    let succeeded = 0;
+    let failed = 0;
+    let exhausted = 0;
+    // Loop-closure: paged at the end of the run so a single dead webhook
+    // doesn't spam the operator channel on every retry tick. We collect
+    // unique (project, plugin) pairs that exhausted retries this tick
+    // and send one notification per pair below.
+    const exhaustedPairs = new Map<
+      string,
+      { projectId: string; pluginSlug: string; lastError: string }
+    >();
 
     for (let i = 0; i < rows.length; i += CONCURRENCY) {
-      const batch = rows.slice(i, i + CONCURRENCY)
+      const batch = rows.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(
         batch.map(async (row) => {
-          const outcome = await retryOne(db, row)
-          return { row, outcome }
+          const outcome = await retryOne(db, row);
+          return { row, outcome };
         }),
-      )
+      );
 
       for (const r of results) {
         if (r.status !== 'fulfilled') {
-          plog.warn('retry threw', { error: String(r.reason) })
-          continue
+          plog.warn('retry threw', { error: String(r.reason) });
+          continue;
         }
-        const { row, outcome } = r.value
-        const newAttempt = row.attempt + 1
+        const { row, outcome } = r.value;
+        const newAttempt = row.attempt + 1;
 
         // ── Decide next status / next_retry_at based on outcome ───────
-        const isFinalOk = outcome.status === 'ok'
-        const isPermanentFail = outcome.status === 'skipped' || newAttempt >= MAX_ATTEMPTS
-        const willRetry = !isFinalOk && !isPermanentFail
+        const isFinalOk = outcome.status === 'ok';
+        const isPermanentFail = outcome.status === 'skipped' || newAttempt >= MAX_ATTEMPTS;
+        const willRetry = !isFinalOk && !isPermanentFail;
         const nextStatus: 'ok' | 'pending' | 'error' = isFinalOk
           ? 'ok'
           : willRetry
             ? 'pending'
-            : 'error'
+            : 'error';
         // BACKOFF_MS is indexed 0..MAX_ATTEMPTS-1, lookup uses newAttempt-1
         // since attempt=1 was the original dispatch and attempt=2 is the
         // first retry.
         const nextRetryAt = willRetry
-          ? new Date(Date.now() + BACKOFF_MS[Math.min(newAttempt - 1, BACKOFF_MS.length - 1)]).toISOString()
-          : null
+          ? new Date(
+              Date.now() + BACKOFF_MS[Math.min(newAttempt - 1, BACKOFF_MS.length - 1)],
+            ).toISOString()
+          : null;
 
         const { error: updateErr } = await db
           .from('plugin_dispatch_log')
@@ -238,11 +249,11 @@ async function handler(req: Request): Promise<Response> {
             duration_ms: outcome.durationMs,
             next_retry_at: nextRetryAt,
           })
-          .eq('id', row.id)
-        if (updateErr) plog.warn('row update failed', { id: row.id, error: updateErr.message })
+          .eq('id', row.id);
+        if (updateErr) plog.warn('row update failed', { id: row.id, error: updateErr.message });
 
         if (isFinalOk) {
-          succeeded++
+          succeeded++;
           // Update the plugin row's last_delivery_at/status — only on
           // success or permanent-fail, never on intermediate retries.
           await db
@@ -252,9 +263,9 @@ async function handler(req: Request): Promise<Response> {
               last_delivery_status: 'ok',
             })
             .eq('project_id', row.project_id)
-            .or(`plugin_slug.eq.${row.plugin_slug},plugin_name.eq.${row.plugin_slug}`)
+            .or(`plugin_slug.eq.${row.plugin_slug},plugin_name.eq.${row.plugin_slug}`);
         } else if (isPermanentFail) {
-          exhausted++
+          exhausted++;
           await db
             .from('project_plugins')
             .update({
@@ -262,30 +273,82 @@ async function handler(req: Request): Promise<Response> {
               last_delivery_status: 'error',
             })
             .eq('project_id', row.project_id)
-            .or(`plugin_slug.eq.${row.plugin_slug},plugin_name.eq.${row.plugin_slug}`)
+            .or(`plugin_slug.eq.${row.plugin_slug},plugin_name.eq.${row.plugin_slug}`);
+          // Dedup by (project, plugin) so flooding 50 events through a
+          // dead webhook only pages once per tick. We coalesce to one
+          // notification at the end of the run.
+          exhaustedPairs.set(`${row.project_id}::${row.plugin_slug}`, {
+            projectId: row.project_id,
+            pluginSlug: row.plugin_slug,
+            lastError: outcome.excerpt || `HTTP ${outcome.httpStatus ?? 'unknown'}`,
+          });
         } else {
-          failed++
+          failed++;
+        }
+      }
+    }
+
+    // Loop-closure: page the operator once per (project, plugin) that
+    // exhausted retries this tick. Best-effort — Slack/Discord outages
+    // must not 500 the cron and force pg_cron into back-off.
+    if (exhaustedPairs.size > 0) {
+      const ADMIN_BASE = Deno.env.get('MUSHI_ADMIN_BASE_URL') ?? 'https://app.mushimushi.dev';
+      for (const pair of exhaustedPairs.values()) {
+        try {
+          await notifyOperator({
+            title: `Plugin delivery exhausted: ${pair.pluginSlug}`,
+            body: `Mushi gave up after ${MAX_ATTEMPTS} attempts (30s + 2m + 10m + 1h + 6h backoff). The plugin's *last_delivery_status* is now \`error\` and downstream events for this project will be dropped until the webhook is reachable again.`,
+            level: 'urgent',
+            fields: [
+              { label: 'Project', value: pair.projectId.slice(0, 8) },
+              { label: 'Plugin', value: pair.pluginSlug },
+              { label: 'Last error', value: pair.lastError.slice(0, 200) },
+            ],
+            url: `${ADMIN_BASE}/marketplace?project=${pair.projectId}`,
+            footer: 'mushi-mushi · plugin-dispatch-retry',
+          });
+        } catch (err) {
+          plog.warn('operator notify failed (non-fatal)', {
+            projectId: pair.projectId,
+            pluginSlug: pair.pluginSlug,
+            err: err instanceof Error ? err.message : String(err),
+          });
         }
       }
     }
 
     await cron.finish({
       rowsAffected: rows.length,
-      metadata: { rows: rows.length, succeeded, failed, exhausted },
-    })
+      metadata: {
+        rows: rows.length,
+        succeeded,
+        failed,
+        exhausted,
+        exhaustedPairs: exhaustedPairs.size,
+      },
+    });
     return new Response(
-      JSON.stringify({ ok: true, data: { processed: rows.length, succeeded, failed, exhausted } }),
+      JSON.stringify({
+        ok: true,
+        data: {
+          processed: rows.length,
+          succeeded,
+          failed,
+          exhausted,
+          exhaustedPairs: exhaustedPairs.size,
+        },
+      }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   } catch (err) {
-    await cron.fail(err)
+    await cron.fail(err);
     return new Response(
       JSON.stringify({ ok: false, error: { code: 'RETRY_FAILED', message: String(err) } }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   }
 }
 
 if (typeof Deno !== 'undefined') {
-  Deno.serve(withSentry('plugin-dispatch-retry', handler))
+  Deno.serve(withSentry('plugin-dispatch-retry', handler));
 }

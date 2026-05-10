@@ -183,3 +183,12 @@ verify_jwt = false
 # its work product is a real outbound email through the auth provider.
 [functions.invitation-reminders]
 verify_jwt = false
+
+# a2a-push-notify fires when a fix_dispatch_jobs row's status flips and the
+# row carries an A2A v1.0.0 PushNotificationConfig. Invoked exclusively by
+# `trg_fix_dispatch_jobs_a2a_push` via pg_net with the service-role bearer;
+# requireServiceRoleAuth gates the handler so external callers cannot replay
+# task notifications. JWT verification at the gateway stays off for the same
+# reason as the other internal pipeline functions above.
+[functions.a2a-push-notify]
+verify_jwt = false

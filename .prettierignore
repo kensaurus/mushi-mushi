@@ -3,3 +3,5 @@ dist
 .turbo
 pnpm-lock.yaml
 CHANGELOG.md
+deploy/helm/templates/
+deploy/helm/migrations/

@@ -569,16 +569,18 @@ export function KpiRow({
   cols = 4,
 }: {
   children: ReactNode
-  cols?: 3 | 4 | 5 | 6
+  cols?: 3 | 4 | 5 | 6 | 7
 }) {
   const colsCls =
-    cols === 6
-      ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6'
-      : cols === 5
-        ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
-        : cols === 3
-          ? 'grid-cols-2 md:grid-cols-3'
-          : 'grid-cols-2 md:grid-cols-4'
+    cols === 7
+      ? 'grid-cols-2 md:grid-cols-4 lg:grid-cols-7'
+      : cols === 6
+        ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6'
+        : cols === 5
+          ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+          : cols === 3
+            ? 'grid-cols-2 md:grid-cols-3'
+            : 'grid-cols-2 md:grid-cols-4'
   return <div className={`grid ${colsCls} gap-2`}>{children}</div>
 }
 
