@@ -3,8 +3,7 @@
 Native iOS SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.3.0 Surface stable; minor changes still possible
-> before V1.0.
+> **Status**: V0.4.0 Feature parity with the web SDK.
 
 ## Features
 
@@ -12,7 +11,11 @@ LLM-driven bug intake, classification, and autofix platform.
 - 📦 **Offline queue** that survives app restarts (file-backed, byte-capped)
 - 🎯 **Native bottom-sheet widget** with category picker and live min-length validation
 - 🌐 **Device + app context** auto-attached to every report
-- 🧪 **Tested** — `swift test` runs the offline-queue + persistence suite
+- 🧭 **Breadcrumb ring buffer** — 50-entry FIFO, auto-attached to every report
+- 🚨 **Proactive detection** — rage-tap and slow-screen triggers auto-open the widget
+- 🔒 **PII scrubber** — emails, JWTs, Stripe/OpenAI/Anthropic/AWS keys redacted before submission
+- ⚠️ **Exception normaliser** — `captureError()` now forwards name/message/stack/cause
+- 🧪 **Tested** — `swift test` runs the offline-queue, breadcrumb, PII, and exception suite
 
 ## Install
 

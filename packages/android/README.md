@@ -3,8 +3,7 @@
 Native Android (Kotlin) SDK for [Mushi Mushi](https://mushimushi.dev) — the
 open-source, LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.3.0 Surface stable; minor changes still possible
-> before V1.0.
+> **Status**: V0.4.0 Feature parity with the web SDK.
 
 ## Features
 
@@ -13,6 +12,10 @@ open-source, LLM-driven bug intake, classification, and autofix platform.
 - 🎯 **Bottom-sheet widget** (`MushiBottomSheet`) with category picker and
   live min-length validation
 - 🌐 **Device + app context** auto-attached to every report
+- 🧭 **Breadcrumb ring buffer** — 50-entry FIFO, auto-attached to every report
+- 🚨 **Proactive detection** — rage-tap and slow-screen triggers (`Choreographer`)
+- 🔒 **PII scrubber** — emails, JWTs, Stripe/OpenAI/Anthropic/AWS keys redacted before submission
+- ⚠️ **Exception normaliser** — `captureError()` now forwards name/message/stack/cause
 - 🔌 **Optional Sentry bridge** (`MushiSentryBridge`) — uses runtime
   reflection so consumers without Sentry pay no APK cost
 
