@@ -263,19 +263,19 @@ import { Mushi } from '@mushi-mushi/web';
 Mushi.init({ projectId: 'proj_xxx', apiKey: 'mushi_xxx' });
 ```
 
-#### iOS (Swift Package Manager — early dev)
+#### iOS (Swift Package Manager — v0.4.0)
 
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.3.0")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.4.0")
 import Mushi
 Mushi.configure(projectId: "proj_xxx", apiKey: "mushi_xxx")
 ```
 
-#### Android (Maven — early dev)
+#### Android (Maven — v0.4.0)
 
 ```kotlin
 dependencies {
-  implementation("dev.mushimushi:mushi-android:0.3.0")
+  implementation("dev.mushimushi:mushi-android:0.4.0")
 }
 Mushi.init(context = this, config = MushiConfig(projectId = "proj_xxx", apiKey = "mushi_xxx"))
 ```
@@ -423,7 +423,7 @@ Mushi is honest about what's still partial. Skim before you commit:
 | Graph backend        | SQL adjacency over `graph_nodes` / `graph_edges` ships in every deployment                                                                                                                                                                                                                                                                                                                                                                                                 | Apache AGE is a hosted-tier enhancement when the extension is installed (self-hosted Postgres 16 or Supabase Enterprise). Managed Supabase stays on SQL adjacency.                                                                                                                                                |
 | Inventory v2         | Hand-written `inventory.yaml`, SDK-driven discovery (`capture.discoverInventory`), Claude proposer, ESLint rules `no-dead-handler` + `no-mock-leak`, 5-gate composite GitHub check, synthetic monitor with explicit mutation opt-in, **Surface** mode in the graph, **`expected_outcome` contract end-to-end** (schema → fix-worker prompt → `validateAgainstSpec` pre-PR gate → targeted post-PR synthetic probe)                                                         | Inventory routes are gated behind _Advanced_ mode in the sidebar (sidebar → User stories) — promote when the team is ready. Synthetic mutations stay fail-closed unless `synthetic_monitor_allow_mutations = true` is set per-project.                                                                            |
 | Orchestrator interop | **MCP Streamable HTTP** at `/functions/v1/mcp` (2025-03-26 spec), **A2A v1.0.0 tasks + PushNotificationConfig** at `/v1/a2a/tasks` (pull via SSE _and_ push via signed webhook on every status change), **OpenAPI 3.1** at `/openapi.json`, AG-UI v0.4 SSE accepts API keys (`mcp:read`), `SandboxProvider` is an open contract with a third-party registry, JSON Schemas for `FixContext` / `FixResult` / `SandboxProvider` / `ExpectedOutcome` served at `/v1/schemas/*` | —                                                                                                                                                                                                                                                                                                                 |
-| Self-host (Helm)     | Single-pod deploy on any Kubernetes; pre-install Job applies all 128 SQL migrations from a bundled ConfigMap synced from `packages/server/supabase/migrations/` via `pnpm sync:helm-migrations` (CI guards drift).                                                                                                                                                                                                                                                         | Multi-region active/active is per-cluster + DNS today — a future PR will add a region-selector helper.                                                                                                                                                                                                            |
+| Self-host (Helm)     | Single-pod deploy on any Kubernetes; pre-install Job applies all 138 SQL migrations from a bundled ConfigMap synced from `packages/server/supabase/migrations/` via `pnpm sync:helm-migrations` (CI guards drift).                                                                                                                                                                                                                                                         | Multi-region active/active is per-cluster + DNS today — a future PR will add a region-selector helper.                                                                                                                                                                                                            |
 
 The orchestrator **refuses to run `local-noop` in production** unless you explicitly set `MUSHI_ALLOW_LOCAL_SANDBOX=1`. Pick `e2b` (or implement `SandboxProvider` yourself) before exposing autofix to production traffic.
 
@@ -471,7 +471,7 @@ cp .env.example .env   # ANTHROPIC_API_KEY, Supabase creds
 docker compose up -d
 ```
 
-[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 128 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
+[`SELF_HOSTED.md`](./SELF_HOSTED.md) is the long-form guide. A production-ready **Helm chart** lives at [`deploy/helm/`](./deploy/helm/README.md) — pre-install `Job` applies all 138 SQL migrations from a bundled ConfigMap (`pnpm sync:helm-migrations` keeps it fresh; CI guards drift). One `helm install` on any cluster.
 
 > **Internal edge functions** (`fast-filter`, `classify-report`, `fix-worker`, `judge-batch`, `intelligence-report`, `usage-aggregator`, `soc2-evidence`, `generate-synthetic`) authenticate via the shared `requireServiceRoleAuth` middleware. Never expose them with `--no-verify-jwt` in production. Only the public `api` function should face the internet — see [`packages/server/README.md`](./packages/server/README.md#internal-caller-authentication-sec-1).
 
@@ -491,8 +491,8 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | `npm i @mushi-mushi/react-native`     | React Native / Expo             | Shake-to-report, bottom-sheet widget, navigation capture, offline queue                                                                                                                    |
 | `npm i @mushi-mushi/capacitor`        | Capacitor / Ionic               | iOS + Android via Capacitor                                                                                                                                                                |
 | `pub add mushi_mushi`                 | Flutter / Dart                  | Shake-to-report, screenshot capture, offline queue — iOS + Android + Web                                                                                                                   |
-| Swift PM `.package(url:…)`            | iOS (Swift)                     | Native shake-to-report, `MushiConfig`, SwiftUI / UIKit early dev                                                                                                                           |
-| Gradle `dev.mushimushi:mushi-android` | Android (Kotlin/Java)           | Native shake-to-report, early dev                                                                                                                                                          |
+| Swift PM `.package(url:…)`            | iOS (Swift)                     | Native shake-to-report, breadcrumbs, proactive triggers, PII scrubbing — v0.4.0                                                                                                            |
+| Gradle `dev.mushimushi:mushi-android` | Android (Kotlin/Java)           | Native shake-to-report, breadcrumbs, proactive triggers, PII scrubbing — v0.4.0                                                                                                            |
 | `npm i @mushi-mushi/web`              | Vanilla / any framework         | Framework-agnostic SDK                                                                                                                                                                     |
 | `npm i @mushi-mushi/node`             | Node (Express / Fastify / Hono) | Server-side SDK — error-handler middleware, `uncaughtException` hook                                                                                                                       |
 | `npm i @mushi-mushi/adapters`         | Any Node webhook server         | Translate alerts from **11 sources** into Mushi reports — Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics |
