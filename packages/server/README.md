@@ -133,6 +133,58 @@ supabase/migrations/         PostgreSQL schema + RLS policies. Recent migrations
                                 (`WHERE inventory_action_node_id IS NOT NULL`) back the
                                 "show me every fix that touched this Action" admin
                                 drawer.
+                              - **`20260511120000_get_report_inventory_action`** —
+                                `public.get_report_inventory_action(p_report_id uuid)
+                                RETURNS jsonb`, called by `/v1/admin/reports/:id` to
+                                hydrate the FixCard "Origin — Inventory action" drawer
+                                without an extra graph round-trip. Two resolution paths:
+                                (1) `graph_nodes(node_type='report_group',
+                                label=reportId)` → `graph_edges(edge_type='reports_against')`
+                                → `graph_nodes(node_type='action')` (populated by
+                                `classify-report → linkReportToAction`), or
+                                (2) `fix_dispatch_jobs.inventory_action_node_id`
+                                fallback for reports dispatched without classification.
+                                Returns NULL when neither path resolves.
+                              - **`20260511120100_promote_candidate_atomic`** —
+                                `public.promote_prompt_candidate(uuid, text, text)`
+                                wraps the two-step `prompt_versions` deactivate-then-
+                                promote in a single transaction. Closes the partial-
+                                failure window where the Edge Function dying between
+                                UPDATEs left the (project, stage) pair with no active
+                                row and silently fell through to the hardcoded default.
+                              - **`20260511120200_seed_managed_prompts`** — seeds
+                                global defaults (`project_id IS NULL`) for the
+                                `inventory-propose` + `sentinel` stages so the new
+                                `getPromptForStage` fallback resolves a managed row on
+                                first call. Idempotent via `WHERE NOT EXISTS`.
+                              - **`20260511120300_updated_at_trigger_coverage`** —
+                                ensures every mutable table with an `updated_at` column
+                                has a `BEFORE UPDATE` trigger calling
+                                `public.set_updated_at()`. Covers
+                                `billing_customers`, `billing_subscriptions`,
+                                `fix_coordinations`, `mushi_runtime_config`,
+                                `organizations`, `pricing_plans`, `project_repos`,
+                                `region_routing` that previously relied on the column
+                                default and silently drifted on UPDATE.
+                              - **`20260511120400_fix_rls_initplan`** — rewrites the
+                                `discovery_events_service_all` +
+                                `inventory_proposals_{admin,service}_all` RLS policies
+                                to wrap `auth.role()` / `auth.uid()` in `(SELECT ...)`
+                                subqueries so the planner caches the result once per
+                                statement instead of recomputing per row
+                                (`auth_rls_initplan` advisor warning → 0). Also adds
+                                `idx_fix_corpus_report_id` to back the missing FK
+                                index Performance Advisor flagged.
+                              - **`20260511120500_revoke_anon_security_definer`** —
+                                revokes `EXECUTE` from `anon` on 24 sensitive
+                                `SECURITY DEFINER` functions (`vault_*`,
+                                `fix_dispatch_claim_next`, `mushi_age_*`, rate-limit
+                                helpers, `promote_prompt_candidate`). The functions
+                                run as the function owner, so any anon grant was an
+                                escalation path — they should only be reachable via
+                                `authenticated` (when the row-level check would
+                                require user context) or `service_role` (when only
+                                cron / internal callers need them).
 ```
 
 ## Development

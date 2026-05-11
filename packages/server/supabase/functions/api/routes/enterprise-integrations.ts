@@ -564,7 +564,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts');
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
-      const result = await adapter.poll(job);
+      const result = await adapter.poll(db, job);
 
       if (result.status === 'succeeded') {
         await db
@@ -704,7 +704,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       // old mirror-truth behaviour for deterministic tests.
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
-      const report = await validateTrainedModel(db, job, (s) => adapter.predict(job, s));
+      const report = await validateTrainedModel(db, job, (s) => adapter.predict(db, job, s));
       await logAudit(
         db,
         job.project_id,

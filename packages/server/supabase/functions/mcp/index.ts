@@ -441,6 +441,15 @@ async function dispatchRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonR
       case 'resources/read':
         result = await handleResourcesRead(req.params ?? {}, ctx)
         break
+      case 'resources/subscribe':
+        // Client wants push updates for a resource URI. We acknowledge the
+        // subscription here; actual push notifications are sent down the
+        // GET SSE pipe when the `inventories` table changes.
+        result = {}
+        break
+      case 'resources/unsubscribe':
+        result = {}
+        break
       case 'prompts/list':
         result = handlePromptsList()
         break
@@ -471,14 +480,15 @@ function handleInitialize(params: Record<string, unknown>): unknown {
     protocolVersion: negotiated,
     capabilities: {
       tools: { listChanged: false },
-      resources: { listChanged: false, subscribe: false },
+      resources: { listChanged: true, subscribe: true },
       prompts: { listChanged: false },
     },
     serverInfo: SERVER_INFO,
     instructions:
       'Mushi Mushi MCP server. Read-only by default; mutations require an API key with `mcp:write` scope. ' +
       'Spec-traceability (whitepaper §2.10): pass `inventoryActionNodeId` to `dispatch_fix` when you know the ' +
-      'action you want repaired so the agent has the contract verbatim in-prompt.',
+      'action you want repaired so the agent has the contract verbatim in-prompt. ' +
+      'Subscribe to `inventory://current` to get pushed updates whenever the inventory snapshot changes.',
   }
 }
 
@@ -523,6 +533,16 @@ function handleResourcesList(): unknown {
       { uri: 'project://dashboard', name: 'project_dashboard', description: 'PDCA snapshot', mimeType: 'application/json' },
       { uri: 'project://stats', name: 'project_stats', description: 'Report stats', mimeType: 'application/json' },
       { uri: 'project://settings', name: 'project_settings', description: 'Project settings', mimeType: 'application/json' },
+      {
+        uri: 'inventory://current',
+        name: 'inventory_current',
+        description:
+          'Current inventory.yaml snapshot — all pages, user stories, actions, and their ' +
+          'expected_outcome contracts. Subscribable: the MCP server pushes ' +
+          '`notifications/resources/updated` when a new inventory is ingested so orchestrators ' +
+          'never hold a stale contract.',
+        mimeType: 'application/json',
+      },
     ],
   }
 }
@@ -534,7 +554,12 @@ async function handleResourcesRead(params: Record<string, unknown>, ctx: CallCon
     uri === 'project://dashboard' ? '/v1/admin/dashboard'
     : uri === 'project://stats' ? '/v1/admin/stats'
     : uri === 'project://settings' ? '/v1/admin/settings'
-    : null
+    : uri === 'inventory://current'
+      ? (ctx.projectIdHint ? `/v1/admin/inventory/${encodeURIComponent(ctx.projectIdHint)}` : null)
+      : null
+  if (uri === 'inventory://current' && !ctx.projectIdHint) {
+    throw new McpError(ERR_INVALID_PARAMS, 'inventory://current requires a project context; set X-Mushi-Project header or pass projectId')
+  }
   if (!path) throw new McpError(ERR_INVALID_PARAMS, `unknown resource uri: ${uri}`)
   const data = await apiCall(path, { headers: ctx.authHeaders })
   return {
@@ -767,9 +792,62 @@ async function handler(req: Request): Promise<Response> {
       async start(controller) {
         const enc = new TextEncoder()
         controller.enqueue(enc.encode(`: mushi-mcp-stream open ${Date.now()}\n\n`))
-        const interval = setInterval(() => {
+
+        // Poll the `inventories` table for new snapshots and push
+        // `notifications/resources/updated` when one arrives.
+        // We use polling (15s interval) instead of Supabase Realtime because
+        // the Edge Function's SSE pipe already carries heartbeats on the same
+        // interval and adding a Realtime subscription would double the socket count.
+        let lastInventoryTs: string | null = null
+
+        const checkInventoryChange = async () => {
+          try {
+            const apiBase = Deno.env.get('SUPABASE_URL') ?? ''
+            const anonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+            // Use the project hint from auth headers when available.
+            const projectId = ctx.projectIdHint
+            if (!projectId || !apiBase) return
+            // Watch the row currently flagged `is_current` and use its
+            // `ingested_at` as the change-detector key. We only fire a
+            // notification when the active snapshot's identity changes —
+            // either because a new inventory was ingested OR because the
+            // `is_current` pointer was flipped to an older row (rare, but
+            // happens during rollback).
+            const q = new URLSearchParams({
+              select: 'id,ingested_at',
+              project_id: `eq.${projectId}`,
+              is_current: 'eq.true',
+              order: 'ingested_at.desc',
+              limit: '1',
+            })
+            const res = await fetch(`${apiBase}/rest/v1/inventories?${q}`, {
+              headers: {
+                apikey: anonKey,
+                Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? anonKey}`,
+              },
+            })
+            if (!res.ok) return
+            const rows = await res.json() as Array<{ id: string; ingested_at: string }>
+            if (!rows.length) return
+            // Fingerprint = id + ingested_at — catches both a new ingest
+            // (new id) and an is_current flip on an existing row.
+            const fingerprint = `${rows[0].id}@${rows[0].ingested_at}`
+            if (lastInventoryTs !== null && fingerprint !== lastInventoryTs) {
+              const notification = JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'notifications/resources/updated',
+                params: { uri: 'inventory://current' },
+              })
+              controller.enqueue(enc.encode(`data: ${notification}\n\n`))
+            }
+            lastInventoryTs = fingerprint
+          } catch { /* non-fatal: inventory push is best-effort */ }
+        }
+
+        const interval = setInterval(async () => {
           try {
             controller.enqueue(enc.encode(`: heartbeat ${Date.now()}\n\n`))
+            await checkInventoryChange()
           } catch {
             clearInterval(interval)
           }

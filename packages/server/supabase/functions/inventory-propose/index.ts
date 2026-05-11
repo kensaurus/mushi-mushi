@@ -46,6 +46,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
   validateInventoryObject,
   type Inventory,
@@ -242,10 +243,11 @@ async function runProposer(args: {
   modelId: string
   prompt: string
   previousIssues?: string
+  systemPrompt?: string
 }): Promise<{ inventory: Inventory; rationale: Record<string, string>; tokens: { in: number; out: number } }> {
   const anthropic = createAnthropic({ apiKey: args.apiKey })
   const messages: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: args.systemPrompt ?? SYSTEM_PROMPT },
     { role: 'user', content: args.prompt },
   ]
   if (args.previousIssues) {
@@ -341,6 +343,10 @@ async function proposeAndPersist(
   const modelId = modelOverride ?? ANTHROPIC_SONNET
   const prompt = buildUserPrompt(observations, current, app)
 
+  // Resolve the managed system prompt from prompt_versions (stage 'inventory-propose').
+  // Falls back to the hardcoded SYSTEM_PROMPT constant when no managed row exists.
+  const { promptTemplate: managedSystemPrompt } = await getPromptForStage(db, projectId, 'inventory-propose')
+
   // Up to 3 attempts: first clean, then 2 retries with the schema issues fed back.
   let attempt = 0
   let previousIssues: string | undefined
@@ -348,7 +354,7 @@ async function proposeAndPersist(
   let lastError: { message: string; summary?: string } | null = null
   while (attempt < 3) {
     try {
-      last = await runProposer({ apiKey, modelId, prompt, previousIssues })
+      last = await runProposer({ apiKey, modelId, prompt, previousIssues, systemPrompt: managedSystemPrompt ?? undefined })
       break
     } catch (err) {
       lastError = {
