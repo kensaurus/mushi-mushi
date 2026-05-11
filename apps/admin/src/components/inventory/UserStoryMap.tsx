@@ -37,6 +37,8 @@ interface Props {
   stories: Story[]
   findingsByNode?: Map<string, number>
   onSelectAction?: (a: StoryAction) => void
+  onRunGatesForStory?: (storyId: string) => void
+  onRunCrawlerForStory?: (storyId: string) => void
 }
 
 interface ActionMeta {
@@ -67,7 +69,7 @@ function actionIntent(a: StoryAction): string | null {
   return meta.intent ?? meta.action ?? null
 }
 
-export function UserStoryMap({ stories, findingsByNode, onSelectAction }: Props) {
+export function UserStoryMap({ stories, findingsByNode, onSelectAction, onRunGatesForStory, onRunCrawlerForStory }: Props) {
   if (!stories.length) {
     return (
       <div className="rounded-md border border-dashed border-edge-subtle p-6 text-center">
@@ -127,6 +129,32 @@ export function UserStoryMap({ stories, findingsByNode, onSelectAction }: Props)
                   >
                     {story.actions.length} actions
                   </Badge>
+                  {onRunGatesForStory && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRunGatesForStory(story.id)
+                      }}
+                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-colors"
+                      title="Run gates for the whole project (story-scoped runs coming soon)"
+                    >
+                      Run gates
+                    </button>
+                  )}
+                  {onRunCrawlerForStory && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRunCrawlerForStory(story.id)
+                      }}
+                      className="text-2xs px-1.5 py-0.5 rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-brand/40 hover:bg-surface-overlay transition-colors"
+                      title="Run crawler for the whole project (story-scoped runs coming soon)"
+                    >
+                      Run crawler
+                    </button>
+                  )}
                 </div>
               </div>
               {description && (

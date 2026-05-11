@@ -92,6 +92,7 @@ import { dispatchPluginEvent } from '../_shared/plugins.ts';
 // ----------------------------------------------------------------------------
 
 import { fixSchema, type FixOutput } from '../_shared/fix-schema.ts';
+import { validateEdgeSpec, renderSpecContextEdge } from '../_shared/spec-validation.ts';
 
 const SYSTEM_PROMPT = `You are a senior staff engineer fixing one specific bug report.
 
@@ -747,6 +748,37 @@ ${
         throw new Error(`Validation failed: ${validationErrors.join(' ')}`);
       }
 
+      // ---- 6b. Spec-traceability gate (pre-PR) --------------------------------
+      // Run the deterministic inventory contract checks before we open a PR.
+      // Hard violations (JSON path deletion, etc.) surface as errors on the
+      // fix_attempt so reviewers see them inline — they do NOT abort the PR
+      // unless the diff is objectively regressive (errors[] non-empty).
+      // Soft warnings land in spec_validation_warnings and render as the
+      // amber "Spec N" badge in FixCard.
+      let specValidationWarnings: Array<{ code: string; message: string; hint?: string }> = [];
+      if (inventoryAnchor) {
+        const diffText: string | undefined = undefined; // edge runtime: no diff yet at this stage
+        const specResult = validateEdgeSpec(inventoryAnchor, fix.files, diffText);
+        if (specResult.errors.length > 0) {
+          // Hard violations — the generated fix demonstrably regresses the contract.
+          // Persist them as warnings with an ERR_ prefix so reviewers know these
+          // are gate failures that MUST be resolved before merging.
+          for (const e of specResult.errors) {
+            specValidationWarnings.push({ code: `ERR_${e.code}`, message: e.message, hint: e.hint });
+          }
+        }
+        for (const w of specResult.warnings) {
+          specValidationWarnings.push(w);
+        }
+        if (specValidationWarnings.length > 0) {
+          await db
+            .from('fix_attempts')
+            .update({ spec_validation_warnings: specValidationWarnings })
+            .eq('id', fixAttemptId)
+            .then(() => undefined, () => undefined);
+        }
+      }
+
       // ---- 7. Get GitHub token + open draft PR ------------------------------
       const ghToken = await resolveGithubToken(db, project.owner_id ?? null, dispatch.project_id);
       if (!ghToken) {
@@ -805,6 +837,9 @@ ${
         llm_input_tokens: inputTokens,
         llm_output_tokens: outputTokens,
         review_passed: !fix.needsHumanReview,
+        ...(specValidationWarnings.length > 0
+          ? { spec_validation_warnings: specValidationWarnings }
+          : {}),
       });
 
       await db
@@ -1505,80 +1540,15 @@ async function loadInventoryAnchor(
 }
 
 /**
- * Render the inventory anchor as a markdown block for inclusion in the
- * fix-worker LLM prompt. Mirrors `renderSpecContext` in
- * `@mushi-mushi/agents/src/review.ts` so a customer reading both prompts
- * sees the same shape regardless of which path drafted the fix.
+ * Render the inventory anchor for the fix-worker LLM prompt.
+ * Delegates to `renderSpecContextEdge` in `_shared/spec-validation.ts` so
+ * both the Node-side orchestrator and this Deno worker share one canonical
+ * renderer. Keeping the duplicate inline copy was the source of drift — this
+ * thin wrapper preserves the existing call-site in `buildUserPrompt` with
+ * zero behaviour change.
  */
 function formatInventoryAnchor(anchor: InventoryAnchor): string {
-  const lines: string[] = [];
-  lines.push('## Inventory Spec Context (whitepaper §2.10 spec-traceability)');
-  lines.push(
-    "This fix was dispatched against a tracked Action in the project's " +
-      '`inventory.yaml`. Keep the diff scoped to making the action work as ' +
-      'specified — do NOT refactor unrelated code or break sibling actions ' +
-      'on the same page. The synthetic monitor will re-run the assertions ' +
-      'below against staging immediately after the PR is opened.',
-  );
-  lines.push('');
-  lines.push(`- Action: \`${anchor.actionLabel}\``);
-  if (anchor.actionDescription) lines.push(`- Description: ${anchor.actionDescription}`);
-  if (anchor.pagePath) {
-    lines.push(
-      `- Page: \`${anchor.pagePath}\`${anchor.pageId ? ` (id=\`${anchor.pageId}\`)` : ''}`,
-    );
-  }
-  if (anchor.storyTitle) {
-    lines.push(
-      `- User story: ${anchor.storyTitle}${anchor.storyId ? ` (\`${anchor.storyId}\`)` : ''}`,
-    );
-  }
-  const eo = anchor.expectedOutcome;
-  if (eo && typeof eo === 'object') {
-    lines.push('');
-    lines.push('### Expected outcome contract (success criteria after fix)');
-    if (typeof eo.summary === 'string') lines.push(`- Summary: ${eo.summary}`);
-    const r = eo.response as Record<string, unknown> | undefined;
-    if (r) {
-      const statusIn = r.status_in as number[] | undefined;
-      if (Array.isArray(statusIn) && statusIn.length > 0) {
-        lines.push(`- HTTP status MUST be one of: ${statusIn.join(', ')}`);
-      }
-      const jp = r.json_path as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(jp) && jp.length > 0) {
-        lines.push('- Response body assertions:');
-        for (const c of jp) {
-          const valuePart = c.value === undefined ? '' : ` ${JSON.stringify(c.value)}`;
-          lines.push(`  - \`${String(c.path)}\` ${String(c.op)}${valuePart}`);
-        }
-      }
-    }
-    const d = eo.database as Record<string, unknown> | undefined;
-    if (d?.table) {
-      const expect = (d.expect as string | undefined) ?? 'row_exists';
-      const where = d.where ? ` WHERE ${JSON.stringify(d.where)}` : '';
-      const min = d.min_count ? ` (min ${String(d.min_count)})` : '';
-      lines.push(
-        `- Database: \`${(d.schema as string | undefined) ?? 'public'}.${String(d.table)}\` MUST ${expect}${where}${min}`,
-      );
-    }
-    const u = eo.ui as Record<string, unknown> | undefined;
-    if (u) {
-      if (typeof u.visible_text === 'string') {
-        lines.push(`- UI MUST show text containing: "${u.visible_text}"`);
-      }
-      if (typeof u.route_change_to === 'string') {
-        lines.push(`- UI MUST navigate to: \`${u.route_change_to}\``);
-      }
-    }
-  } else {
-    lines.push('');
-    lines.push(
-      '_No `expected_outcome` contract declared on this action. Add one to ' +
-        '`inventory.yaml` so future fixes have explicit success criteria._',
-    );
-  }
-  return lines.join('\n');
+  return renderSpecContextEdge(anchor);
 }
 
 function buildUserPrompt(

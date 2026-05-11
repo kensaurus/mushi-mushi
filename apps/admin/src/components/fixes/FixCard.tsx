@@ -17,6 +17,16 @@ import { pluralizeWithCount } from '../../lib/format';
 import { ciBadge, type FixAttempt } from './types';
 import { FixAttemptFlow } from './FixAttemptFlow';
 
+interface InventoryActionSummary {
+  actionNodeId: string;
+  actionLabel: string;
+  actionDescription?: string | null;
+  pagePath?: string | null;
+  storyTitle?: string | null;
+  expectedOutcome?: Record<string, unknown> | null;
+  status?: string | null;
+}
+
 interface Props {
   fix: FixAttempt;
   isOpen: boolean;
@@ -24,9 +34,10 @@ interface Props {
   traceUrl: string | null;
   onToggle: () => void;
   onRetry: () => Promise<void>;
+  inventoryAction?: InventoryActionSummary | null;
 }
 
-export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: Props) {
+export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, inventoryAction }: Props) {
   const ci = ciBadge(fix);
   const totalTokens = (fix.llm_input_tokens ?? 0) + (fix.llm_output_tokens ?? 0);
   // Spec-traceability soft warnings (e.g. "diff didn't touch the contract's
@@ -101,6 +112,14 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
                 title={`Categorised by fix-worker.categorizeFailure(). Aggregated into the "Why fixes failed" tile on the Fixes summary so trends are visible at a glance.`}
               >
                 {fix.failure_category}
+              </Badge>
+            )}
+            {fix.inventory_action_node_id && !inventoryAction && (
+              <Badge
+                className="bg-info-subtle text-info font-mono"
+                title="This fix is linked to an inventory action. Expand to see the origin contract."
+              >
+                spec-linked
               </Badge>
             )}
           </div>
@@ -237,6 +256,45 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry }: 
                     </li>
                   ))}
                 </ul>
+              </div>
+            )}
+            {inventoryAction && (
+              <div>
+                <h4 className="text-2xs uppercase tracking-wide text-fg-faint mb-1">
+                  Origin — Inventory action
+                </h4>
+                <div className="rounded border border-edge bg-surface-overlay px-2 py-1.5 space-y-0.5 text-2xs">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="font-mono text-accent">{inventoryAction.actionLabel}</span>
+                    {inventoryAction.status && (
+                      <span
+                        className={
+                          inventoryAction.status === 'verified'
+                            ? 'text-ok'
+                            : inventoryAction.status === 'regressed'
+                            ? 'text-danger'
+                            : 'text-fg-muted'
+                        }
+                      >
+                        {inventoryAction.status}
+                      </span>
+                    )}
+                  </div>
+                  {inventoryAction.actionDescription && (
+                    <p className="text-fg-secondary">{inventoryAction.actionDescription}</p>
+                  )}
+                  {inventoryAction.pagePath && (
+                    <p className="text-fg-muted font-mono">{inventoryAction.pagePath}</p>
+                  )}
+                  {inventoryAction.storyTitle && (
+                    <p className="text-fg-faint">Story: {inventoryAction.storyTitle}</p>
+                  )}
+                  {inventoryAction.expectedOutcome && (
+                    <p className="text-ok/80 mt-0.5">
+                      ✓ expected_outcome contract attached — synthetic monitor will probe after merge
+                    </p>
+                  )}
+                </div>
               </div>
             )}
           </div>

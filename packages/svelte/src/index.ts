@@ -12,6 +12,9 @@ export interface MushiConfig {
   projectId: string
   apiKey: string
   endpoint?: string
+  capture?: {
+    discoverInventory?: boolean
+  }
 }
 
 function toCoreConfig(config: MushiConfig): CoreMushiConfig {
@@ -19,6 +22,7 @@ function toCoreConfig(config: MushiConfig): CoreMushiConfig {
     projectId: config.projectId,
     apiKey: config.apiKey,
     ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
+    ...(config.capture !== undefined ? { capture: config.capture } : {}),
   }
 }
 

@@ -7,6 +7,7 @@
 import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
 import { log as rootLog } from './logger.ts'
 import { estimateCallCostUsd } from './pricing.ts'
+import { otlpSpan, setGenAiAttributes, type GenAiProvider } from './otlp-exporter.ts'
 
 const log = rootLog.child('telemetry')
 
@@ -88,6 +89,14 @@ export interface LlmInvocationRecord {
    *  claim; this plus the judge-model fix closes the gap). */
   cacheCreationInputTokens?: number | null
   cacheReadInputTokens?: number | null
+  /**
+   * Optional W3C traceparent from the caller's inbound span. When set,
+   * `logLlmInvocation` automatically emits a child OTLP/GenAI span using
+   * the OpenTelemetry GenAI semantic conventions so every LLM call is
+   * visible in the user's APM without requiring callers to manually
+   * import `otlpSpan` + `setGenAiAttributes` individually.
+   */
+  otlpTraceparent?: string | null
 }
 
 export function logLlmInvocation(
@@ -115,6 +124,43 @@ export function logLlmInvocation(
     rec.inputTokens ?? 0,
     rec.outputTokens ?? 0,
   )
+
+  // P2: Emit OTLP/GenAI span on every LLM invocation so users see model usage
+  // in their APM without per-call boilerplate. Uses the caller's traceparent
+  // when available (creates a child span); falls back to a new root span.
+  // Fire-and-forget — OTLP is best-effort and must never block the DB write.
+  if (Deno.env.get('OTEL_EXPORTER_OTLP_ENDPOINT')) {
+    const provider: GenAiProvider = rec.usedModel.toLowerCase().startsWith('claude-')
+      ? 'anthropic'
+      : rec.usedModel.toLowerCase().startsWith('gpt-')
+      ? 'openai'
+      : 'unknown'
+    const span = otlpSpan(
+      `gen_ai.${rec.stage ?? rec.functionName ?? 'llm'}.invoke`,
+      rec.otlpTraceparent ?? null,
+      {
+        'gen_ai.system': provider,
+        'mushi.function': rec.functionName,
+        ...(rec.stage ? { 'mushi.stage': rec.stage } : {}),
+        ...(rec.projectId ? { 'mushi.project_id': rec.projectId } : {}),
+        ...(rec.reportId ? { 'mushi.report_id': rec.reportId } : {}),
+      },
+    )
+    setGenAiAttributes(span, {
+      operationName: 'chat',
+      provider,
+      requestModel: rec.primaryModel,
+      responseModel: rec.usedModel !== rec.primaryModel ? rec.usedModel : undefined,
+      inputTokens: rec.inputTokens,
+      outputTokens: rec.outputTokens,
+      cacheReadInputTokens: rec.cacheReadInputTokens,
+      cacheCreationInputTokens: rec.cacheCreationInputTokens,
+      costUsd,
+    })
+    span.setStatus(rec.status === 'success' ? 'ok' : 'error', rec.errorMessage ?? undefined)
+    span.end().catch(() => {}) // non-fatal
+  }
+
   return db.from('llm_invocations').insert({
     project_id: rec.projectId ?? null,
     report_id: rec.reportId ?? null,
