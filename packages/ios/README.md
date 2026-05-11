@@ -22,7 +22,7 @@ LLM-driven bug intake, classification, and autofix platform.
 ### Swift Package Manager (recommended)
 
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.3.0")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.4.0")
 ```
 
 then add `MushiMushi` to your target.
@@ -30,7 +30,7 @@ then add `MushiMushi` to your target.
 ### CocoaPods
 
 ```ruby
-pod 'MushiMushi', '~> 0.2'
+pod 'MushiMushi', '~> 0.4'
 ```
 
 ## Quickstart
@@ -75,6 +75,28 @@ Mushi.shared.report(
 do { try riskyOperation() }
 catch { Mushi.shared.captureError(error) }
 ```
+
+### Breadcrumbs
+
+Drop short notes onto the 50-entry ring buffer; every `report()` /
+`captureError()` flushes them with the payload (PII-scrubbed).
+
+```swift
+Mushi.shared.addBreadcrumb(category: .uiTap, message: "Tapped Save")
+Mushi.shared.addBreadcrumb(
+    category: .navigation,
+    level: .info,
+    message: "Settings → Profile",
+    data: ["from": "home"]
+)
+
+let crumbs = Mushi.shared.getBreadcrumbs()  // snapshot for debugging
+```
+
+Wire categories: `navigation`, `ui.tap`, `console`, `network`,
+`lifecycle`, `custom` — admin tooling treats `ui.tap` as the touch-device
+sibling of the web SDK's `ui.click`. The `data` map is `[String: String]`
+on iOS; non-string values are coerced to strings on the Capacitor bridge.
 
 If your app already uses Sentry, keep initializing Sentry in the host app and
 attach Mushi report metadata through `setMetadata` or `report(..., metadata:)`.

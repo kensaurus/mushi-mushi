@@ -97,7 +97,17 @@ export const reportSubmissionSchema = z.object({
    */
   breadcrumbs: z.array(z.object({
     timestamp: z.number(),
-    category: z.enum(['navigation', 'ui.click', 'console', 'xhr', 'fetch', 'lifecycle', 'custom']),
+    category: z.enum([
+      'navigation',
+      'ui.click',
+      'ui.tap',
+      'console',
+      'xhr',
+      'fetch',
+      'network',
+      'lifecycle',
+      'custom',
+    ]),
     level: z.enum(['debug', 'info', 'warning', 'error']),
     message: z.string().max(2000),
     data: z.record(z.unknown()).optional(),

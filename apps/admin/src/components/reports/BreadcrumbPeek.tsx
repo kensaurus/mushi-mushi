@@ -41,9 +41,14 @@ const LEVEL_TONE: Record<string, string> = {
 const CATEGORY_DOT: Record<string, string> = {
   navigation: 'bg-info',
   'ui.click': 'bg-brand',
+  // Native SDKs emit `ui.tap` instead of `ui.click` (touch devices) — same
+  // bucket in admin tooling.
+  'ui.tap': 'bg-brand',
   console: 'bg-warn',
   xhr: 'bg-fg-muted',
   fetch: 'bg-fg-muted',
+  // Native SDKs emit `network` instead of `xhr` / `fetch`.
+  network: 'bg-fg-muted',
   lifecycle: 'bg-ok',
   custom: 'bg-fg-secondary',
 }

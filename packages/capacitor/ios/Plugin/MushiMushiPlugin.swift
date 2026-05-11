@@ -156,7 +156,16 @@ public class MushiMushiPlugin: CAPPlugin {
             default: return .info
             }
         }()
-        let data = call.getObject("data") as? [String: String]
+        // Match Android's coercion: any JS value gets stringified so a
+        // `{ count: 5, ok: true }` payload doesn't silently get dropped on
+        // iOS (it would on a strict `[String: String]` cast since none of
+        // the values are Swift Strings).
+        let dataRaw = call.getObject("data") ?? [:]
+        let data: [String: String]? = dataRaw.isEmpty
+            ? nil
+            : dataRaw.reduce(into: [String: String]()) { acc, pair in
+                acc[pair.key] = String(describing: pair.value)
+            }
         Mushi.shared.addBreadcrumb(category: category, level: level, message: message, data: data)
         call.resolve()
     }

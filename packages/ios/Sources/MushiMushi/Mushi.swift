@@ -31,10 +31,13 @@ public final class Mushi {
     private var piiScrubber = PIIScrubber()
     // Added: network-aware delivery (Phase 2.4)
     private var networkMonitor: NWPathMonitor?
+    private let networkMonitorQueue = DispatchQueue(label: "mushi.network-monitor")
     #if os(iOS)
     private var proactiveDetector: ProactiveDetector?
     private weak var floatingButton: UIButton?
     private var foregroundObserver: NSObjectProtocol?
+    private var proactiveForegroundObserver: NSObjectProtocol?
+    private var proactiveKeyWindowObserver: NSObjectProtocol?
     #endif
 
     private init() {}
@@ -52,10 +55,12 @@ public final class Mushi {
         proactiveDetector?.destroy()
         proactiveDetector = nil
         removeFloatingButton()
-        if let foregroundObserver {
-            NotificationCenter.default.removeObserver(foregroundObserver)
-            self.foregroundObserver = nil
+        for observer in [foregroundObserver, proactiveForegroundObserver, proactiveKeyWindowObserver] {
+            if let observer { NotificationCenter.default.removeObserver(observer) }
         }
+        foregroundObserver = nil
+        proactiveForegroundObserver = nil
+        proactiveKeyWindowObserver = nil
         #endif
         installTriggers()
         startFlushTimer()
@@ -245,16 +250,42 @@ public final class Mushi {
         )
         let detector = ProactiveDetector(config: proactiveConfig)
         proactiveDetector = detector
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self, weak detector] in
-            guard let self, let detector else { return }
-            if let window = UIApplication.shared.connectedScenes
+
+        // Reset the slow-screen frame clock when the app foregrounds, so
+        // the multi-second pause while backgrounded doesn't fire as a
+        // false-positive slow_screen on the first post-resume frame.
+        proactiveForegroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.willEnterForegroundNotification,
+            object: nil,
+            queue: .main
+        ) { [weak detector] _ in detector?.resetFrameClock() }
+
+        // Install on the first key window we can find. Try at +0.5 / +2 / +5 s
+        // (covers slow splash + multi-window scene promotion); also listen for
+        // the first didBecomeKey notification as a belt-and-braces fallback.
+        let installIfPossible: () -> Bool = { [weak self, weak detector] in
+            guard let self, let detector else { return true }
+            guard let window = UIApplication.shared.connectedScenes
                 .compactMap({ $0 as? UIWindowScene })
                 .flatMap(\.windows)
-                .first(where: \.isKeyWindow) {
-                detector.install(in: window) { [weak self] type, context in
-                    self?.breadcrumbs.add(category: .lifecycle, level: .warning, message: "proactive:\(type)")
-                    self?.showWidget(category: "bug", metadata: ["proactiveTrigger": type, "proactiveContext": context])
-                }
+                .first(where: \.isKeyWindow) else { return false }
+            detector.install(in: window) { [weak self] type, context in
+                self?.breadcrumbs.add(category: .lifecycle, level: .warning, message: "proactive:\(type)")
+                self?.showWidget(category: "bug", metadata: ["proactiveTrigger": type, "proactiveContext": context])
+            }
+            return true
+        }
+        for delay in [0.5, 2.0, 5.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { _ = installIfPossible() }
+        }
+        proactiveKeyWindowObserver = NotificationCenter.default.addObserver(
+            forName: UIWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            if installIfPossible(), let observer = self?.proactiveKeyWindowObserver {
+                NotificationCenter.default.removeObserver(observer)
+                self?.proactiveKeyWindowObserver = nil
             }
         }
         #endif
@@ -335,7 +366,9 @@ public final class Mushi {
                 DispatchQueue.global().async { self?.apiClient?.flushQueue() }
             }
         }
-        monitor.start(queue: DispatchQueue(label: "mushi.network-monitor"))
+        // Reuse a single monitor queue across reconfigure calls — no per-call
+        // queue allocation.
+        monitor.start(queue: networkMonitorQueue)
         networkMonitor = monitor
     }
 

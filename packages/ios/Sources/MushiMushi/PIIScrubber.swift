@@ -40,6 +40,21 @@ private struct PiiPattern {
     let enabled: (PIIScrubberConfig) -> Bool
     let pattern: String
     let replacement: String
+    /// Mirrors `packages/core/src/pii-scrubber.ts` flags: only the
+    /// `aws_secret_access_key` pattern is case-insensitive (keeps lowercase
+    /// `aws_secret_access_key` and uppercase variants in scope) — every
+    /// other pattern is anchored to its real-world casing.
+    let caseInsensitive: Bool
+
+    init(enabled: @escaping (PIIScrubberConfig) -> Bool,
+         pattern: String,
+         replacement: String,
+         caseInsensitive: Bool = false) {
+        self.enabled = enabled
+        self.pattern = pattern
+        self.replacement = replacement
+        self.caseInsensitive = caseInsensitive
+    }
 }
 
 // Order mirrors the TS source: SSN → CC → vendor secrets → email → phone → IP.
@@ -49,7 +64,7 @@ private let orderedPatterns: [PiiPattern] = [
 
     // Vendor tokens
     PiiPattern(enabled: { $0.secretTokens }, pattern: "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b",                    replacement: "[REDACTED_AWS_KEY]"),
-    PiiPattern(enabled: { $0.secretTokens }, pattern: "(?:aws_secret_access_key|secret_access_key)[\"'\\s:=]+[A-Za-z0-9/+=]{40}\\b", replacement: "aws_secret_access_key=[REDACTED_AWS_SECRET]"),
+    PiiPattern(enabled: { $0.secretTokens }, pattern: "(?:aws_secret_access_key|secret_access_key)[\"'\\s:=]+[A-Za-z0-9/+=]{40}\\b", replacement: "aws_secret_access_key=[REDACTED_AWS_SECRET]", caseInsensitive: true),
     PiiPattern(enabled: { $0.secretTokens }, pattern: "\\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{24,}\\b",    replacement: "[REDACTED_STRIPE_KEY]"),
     PiiPattern(enabled: { $0.secretTokens }, pattern: "\\bpk_(?:live|test)_[A-Za-z0-9]{24,}\\b",           replacement: "[REDACTED_STRIPE_PK]"),
     PiiPattern(enabled: { $0.secretTokens }, pattern: "\\bxox[abpor]-[A-Za-z0-9-]{10,}\\b",                replacement: "[REDACTED_SLACK_TOKEN]"),
@@ -74,7 +89,7 @@ public final class PIIScrubber {
     public init(config: PIIScrubberConfig = PIIScrubberConfig()) {
         active = orderedPatterns.compactMap { p -> (NSRegularExpression, String)? in
             guard p.enabled(config) else { return nil }
-            let options: NSRegularExpression.Options = p.pattern.contains("(?i)") ? [] : .caseInsensitive
+            let options: NSRegularExpression.Options = p.caseInsensitive ? [.caseInsensitive] : []
             guard let re = try? NSRegularExpression(pattern: p.pattern, options: options) else { return nil }
             return (re, p.replacement)
         }

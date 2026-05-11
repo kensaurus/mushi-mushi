@@ -11,7 +11,8 @@ import QuartzCore
 ///
 /// Call `install(in:onTrigger:)` once in `Mushi.configure()`. The detector
 /// holds a weak reference to the root window so it doesn't keep the scene
-/// alive.
+/// alive, and to the last-tapped view so dismissed view controllers can be
+/// deallocated.
 public final class ProactiveDetector: NSObject {
 
     public struct Config {
@@ -21,6 +22,10 @@ public final class ProactiveDetector: NSObject {
         public var slowScreen: Bool
         /// Threshold in ms to flag a frame as slow. Default 200.
         public var slowScreenThresholdMs: Double
+        /// Frame deltas above this are discarded as "app was backgrounded";
+        /// `CADisplayLink` pauses while the app isn't visible and the first
+        /// resumed frame would otherwise look like a multi-second slow screen.
+        public var maxRealFrameDeltaMs: Double
         /// Maximum proactive triggers to fire per session before silencing.
         public var maxPerSession: Int
 
@@ -28,11 +33,13 @@ public final class ProactiveDetector: NSObject {
             rageTap: Bool = true,
             slowScreen: Bool = true,
             slowScreenThresholdMs: Double = 200,
+            maxRealFrameDeltaMs: Double = 2_000,
             maxPerSession: Int = 3
         ) {
             self.rageTap = rageTap
             self.slowScreen = slowScreen
             self.slowScreenThresholdMs = slowScreenThresholdMs
+            self.maxRealFrameDeltaMs = maxRealFrameDeltaMs
             self.maxPerSession = maxPerSession
         }
     }
@@ -45,7 +52,9 @@ public final class ProactiveDetector: NSObject {
 
     // Rage-tap state
     private var tapTimes: [TimeInterval] = []
-    private var lastTapView: UIView?
+    // weak so a dismissed UIViewController's view can deallocate even if it
+    // was the last tapped target on this detector.
+    private weak var lastTapView: UIView?
     private var tapGR: UITapGestureRecognizer?
 
     // Slow-screen state
@@ -63,17 +72,27 @@ public final class ProactiveDetector: NSObject {
 
         DispatchQueue.main.async { [weak self, weak window] in
             guard let self, let window else { return }
-            if self.config.rageTap {
+            if self.config.rageTap, self.tapGR == nil {
                 let gr = UITapGestureRecognizer(target: self, action: #selector(self.handleTap(_:)))
                 gr.cancelsTouchesInView = false
                 window.addGestureRecognizer(gr)
                 self.tapGR = gr
             }
-            if self.config.slowScreen {
+            if self.config.slowScreen, self.displayLink == nil {
                 let dl = CADisplayLink(target: self, selector: #selector(self.displayLinkFired(_:)))
                 dl.add(to: .main, forMode: .common)
                 self.displayLink = dl
+                self.lastTimestamp = 0
             }
+        }
+    }
+
+    /// Reset the slow-screen frame clock. Call from
+    /// `UIApplication.willEnterForegroundNotification` so the first frame
+    /// after backgrounding doesn't look like a multi-second slow screen.
+    public func resetFrameClock() {
+        DispatchQueue.main.async { [weak self] in
+            self?.lastTimestamp = 0
         }
     }
 
@@ -86,6 +105,9 @@ public final class ProactiveDetector: NSObject {
             }
             self.displayLink?.invalidate()
             self.displayLink = nil
+            self.lastTimestamp = 0
+            self.lastTapView = nil
+            self.tapTimes.removeAll()
         }
     }
 
@@ -121,7 +143,10 @@ public final class ProactiveDetector: NSObject {
         let ts = link.timestamp
         if lastTimestamp > 0 {
             let deltaMs = (ts - lastTimestamp) * 1000
-            if deltaMs > config.slowScreenThresholdMs {
+            // Drop background-resumption deltas: CADisplayLink pauses
+            // off-screen and the first frame after foreground always looks
+            // like a slow screen otherwise.
+            if deltaMs > config.slowScreenThresholdMs && deltaMs <= config.maxRealFrameDeltaMs {
                 fire("slow_screen", context: ["frameMs": Int(deltaMs)])
             }
         }

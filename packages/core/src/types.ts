@@ -380,13 +380,30 @@ export interface MushiBreadcrumb {
   /**
    * Coarse bucket for filtering / coloring in the report drawer.
    * - `navigation` — route or url change
-   * - `ui.click` — user clicked a `[data-testid]` element
+   * - `ui.click` — user clicked a `[data-testid]` element (web SDK)
+   * - `ui.tap` — user tapped a `UIView` / Android `View` (native SDKs)
    * - `console` — `console.error` / `console.warn` callsite
-   * - `xhr` / `fetch` — network request that errored or 4xx/5xx
+   * - `xhr` / `fetch` — network request that errored or 4xx/5xx (web SDK)
+   * - `network` — network failure on iOS / Android (native SDKs)
    * - `lifecycle` — Mushi SDK init / open / submit / queue
    * - `custom` — host called `Mushi.addBreadcrumb()`
+   *
+   * Admin tooling that filters by interaction should treat
+   * `ui.click` ∪ `ui.tap` as one bucket and `xhr` ∪ `fetch` ∪ `network`
+   * as one bucket. Native enums are platform-idiomatic (`tap` on touch
+   * devices, `network` because iOS/Android don't expose `XHR` / `fetch`
+   * separately) — every wire string is documented in the native READMEs.
    */
-  category: 'navigation' | 'ui.click' | 'console' | 'xhr' | 'fetch' | 'lifecycle' | 'custom';
+  category:
+    | 'navigation'
+    | 'ui.click'
+    | 'ui.tap'
+    | 'console'
+    | 'xhr'
+    | 'fetch'
+    | 'network'
+    | 'lifecycle'
+    | 'custom';
   /**
    * Severity — `info` is the default. `warning` / `error` map to a
    * coloured pill in the drawer; the Triage LLM uses these to decide

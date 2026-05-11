@@ -49,6 +49,27 @@ const handle = await Mushi.addListener('reportSubmitted', (payload) => {
 await Mushi.showWidget();
 ```
 
+### Breadcrumbs
+
+Append entries to the native ring buffer (50-entry FIFO, flushed with
+every report). The bridge round-trips through the iOS / Android
+`Mushi.addBreadcrumb()` so the same shape lands on every platform.
+
+```ts
+await Mushi.addBreadcrumb({
+  category: 'ui.tap',          // or 'navigation' | 'console' | 'network' | 'lifecycle' | 'custom'
+  level: 'info',               // optional — 'debug' | 'info' | 'warning' | 'error' (default 'info')
+  message: 'Tapped Save',
+  data: { screen: 'profile' }, // optional — non-string values are coerced to strings
+});
+
+const { breadcrumbs } = await Mushi.getBreadcrumbs();
+```
+
+> Native enums emit `ui.tap` and `network` (touch devices, native
+> network stacks); the web SDK emits `ui.click` / `xhr` / `fetch`.
+> Admin tooling treats them as the same buckets.
+
 ## Web fallback
 
 When the app runs in a browser preview (`ionic serve`), the plugin falls back
