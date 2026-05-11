@@ -48,9 +48,11 @@ export interface ReportBreadcrumb {
   category:
     | 'navigation'
     | 'ui.click'
+    | 'ui.tap'
     | 'console'
     | 'xhr'
     | 'fetch'
+    | 'network'
     | 'lifecycle'
     | 'custom'
     | string

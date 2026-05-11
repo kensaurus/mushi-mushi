@@ -241,7 +241,51 @@ Deno.serve(
       const env = scrubbedReport.environment ?? {};
 
       const sentryContext = report.sentry_event_id
-        ? `\n## Sentry Context\n- Event ID: ${report.sentry_event_id}\n- Replay ID: ${report.sentry_replay_id ?? 'none'}`
+        ? `\n## Sentry Context\n- Event ID: ${report.sentry_event_id}\n- Replay ID: ${report.sentry_replay_id ?? 'none'}${
+            (() => {
+              // Stage-2 Sentry breadcrumb injection (P1):
+              // `reports.breadcrumbs` is populated by the @mushi-mushi/web SDK
+              // forwarder, which proxies `Sentry.addBreadcrumb` and stamps the
+              // last ~50 events onto every classified report. We feed the most
+              // recent 10 *relevant* crumbs to the Stage-2 LLM so the
+              // classifier can correlate "user clicked X then saw error Y"
+              // without re-fetching from the Sentry API.
+              const crumbs = (report as { breadcrumbs?: unknown }).breadcrumbs
+              if (!Array.isArray(crumbs) || crumbs.length === 0) return ''
+              const relevant = (crumbs as Array<Record<string, unknown>>)
+                .filter((b) => {
+                  const lvl = String(b.level ?? '').toLowerCase()
+                  const cat = String(b.category ?? '').toLowerCase()
+                  return (
+                    lvl === 'error' ||
+                    lvl === 'warning' ||
+                    cat === 'navigation' ||
+                    cat === 'ui.click' ||
+                    cat === 'ui.tap' ||
+                    cat === 'fetch' ||
+                    cat === 'network'
+                  )
+                })
+                .slice(-10)
+                .map((b) => {
+                  // Sentry stamps `timestamp` as seconds-since-epoch (number);
+                  // tolerate both the number form and the ISO-string form some
+                  // SDK transports re-serialize to.
+                  const tsRaw = b.timestamp
+                  const ts = typeof tsRaw === 'number'
+                    ? new Date(tsRaw * 1000).toISOString()
+                    : typeof tsRaw === 'string'
+                      ? tsRaw
+                      : ''
+                  const msg = b.message ? String(b.message).slice(0, 120) : ''
+                  return `  [${b.level ?? '?'}][${b.category ?? '?'}] ${ts} ${msg}`
+                })
+                .join('\n')
+              return relevant
+                ? `\n- Recent breadcrumbs (filtered — last 10 errors/navigation/clicks/fetch):\n${relevant}`
+                : ''
+            })()
+          }`
         : '';
 
       // Wave S3 (PERF): fan out the two independent pre-prompt fetches.

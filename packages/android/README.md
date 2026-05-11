@@ -25,7 +25,7 @@ Add to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("dev.mushimushi:mushi-android:0.3.0")
+    implementation("dev.mushimushi:mushi-android:0.4.0")
     // Optional: enable Sentry bridge.
     implementation("io.sentry:sentry-android:7.18.1")
 }
@@ -73,6 +73,28 @@ Mushi.report(
 try { riskyOperation() }
 catch (t: Throwable) { Mushi.captureError(t) }
 ```
+
+### Breadcrumbs
+
+Drop short notes onto the 50-entry ring buffer; every `report()` /
+`captureError()` flushes them with the payload (PII-scrubbed).
+
+```kotlin
+Mushi.addBreadcrumb(MushiBreadcrumb.Category.UI_TAP, message = "Tapped Save")
+Mushi.addBreadcrumb(
+    MushiBreadcrumb.Category.NAVIGATION,
+    level = MushiBreadcrumb.Level.INFO,
+    message = "Settings → Profile",
+    data = mapOf("from" to "home"),
+)
+
+val crumbs = Mushi.getBreadcrumbs()  // snapshot for debugging
+```
+
+Wire categories: `navigation`, `ui.tap`, `console`, `network`,
+`lifecycle`, `custom` — admin tooling treats `ui.tap` as the touch-device
+sibling of the web SDK's `ui.click`. The `data` map is `Map<String,
+String>`; the Capacitor bridge coerces non-string JS values to strings.
 
 ## Permissions
 

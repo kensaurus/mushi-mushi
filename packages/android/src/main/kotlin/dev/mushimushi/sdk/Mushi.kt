@@ -295,8 +295,9 @@ object Mushi {
             currentActivity = activity
             installButtonIfNeeded(activity)
             proactiveDetector?.let { detector ->
-                val decorView = activity.window?.decorView ?: return@let
-                detector.install(decorView) { type, context ->
+                val window = activity.window ?: return@let
+                detector.resetFrameClock()
+                detector.install(window) { type, context ->
                     breadcrumbs.add(MushiBreadcrumb.Category.LIFECYCLE, MushiBreadcrumb.Level.WARNING,
                         "proactive:$type")
                     showWidget(category = "bug", metadata = mapOf(
@@ -306,7 +307,11 @@ object Mushi {
                 }
             }
         }
-        override fun onActivityPaused(activity: Activity) = Unit
+        override fun onActivityPaused(activity: Activity) {
+            if (currentActivity === activity) {
+                proactiveDetector?.uninstall()
+            }
+        }
         override fun onActivityStopped(activity: Activity) {
             if (floatingButtonOwner === activity) removeFloatingButton()
             if (currentActivity === activity) currentActivity = null

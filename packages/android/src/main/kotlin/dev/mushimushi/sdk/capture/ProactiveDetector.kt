@@ -3,6 +3,8 @@ package dev.mushimushi.sdk.capture
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
+import android.view.Window
+import java.lang.ref.WeakReference
 
 /**
  * Proactive trigger detection for Android. Mirrors `proactive-triggers.ts`
@@ -12,8 +14,11 @@ import android.view.View
  * - **Slow-screen**: a vsync frame that takes >200 ms, detected via
  *   [Choreographer.FrameCallback].
  *
- * Usage: call [install] once from [dev.mushimushi.sdk.Mushi.init], passing
- * the root [View] (e.g. `activity.window.decorView`).
+ * Usage: call [install] once per resumed [android.app.Activity], passing the
+ * activity's [Window]. Touch dispatch is observed via a [Window.Callback]
+ * wrapper, leaving the host's `View.OnTouchListener` chain untouched. Always
+ * call [uninstall] (or [destroy]) on `onPause`/`onDestroy` to drop the window
+ * reference and stop the frame callback.
  */
 class ProactiveDetector(private val config: Config = Config()) {
 
@@ -24,6 +29,12 @@ class ProactiveDetector(private val config: Config = Config()) {
         val slowScreen: Boolean = true,
         /** Threshold in ms to flag a frame as slow. */
         val slowScreenThresholdMs: Long = 200L,
+        /**
+         * Frame deltas above this are discarded as "app was backgrounded";
+         * Choreographer pauses while the app isn't visible and the first
+         * resumed frame would otherwise look like a multi-second slow screen.
+         */
+        val maxRealFrameDeltaMs: Long = 2_000L,
         /** Max proactive triggers fired per session. */
         val maxPerSession: Int = 3,
     )
@@ -35,21 +46,30 @@ class ProactiveDetector(private val config: Config = Config()) {
     private var callback: TriggerCallback? = null
     private var fired = 0
 
-    // Rage-tap state
+    // Rage-tap state — weak so we don't pin a destroyed Activity / View tree.
     private val tapTimes = mutableListOf<Long>()
-    @Volatile private var lastTapView: View? = null
+    private var lastTapView: WeakReference<View>? = null
 
     // Slow-screen state
     private var choreographer: Choreographer? = null
     private var lastFrameNano: Long = 0L
     private var frameCallbackInstalled = false
 
+    // Window-callback wrapper (chained, never replaces a host listener)
+    private var windowRef: WeakReference<Window>? = null
+    private var hostWindowCallback: Window.Callback? = null
+    private var installedWindowCallback: Window.Callback? = null
+
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
+            if (!frameCallbackInstalled) return
             if (fired < config.maxPerSession) {
                 if (lastFrameNano > 0L) {
                     val deltaMs = (frameTimeNanos - lastFrameNano) / 1_000_000L
-                    if (deltaMs > config.slowScreenThresholdMs) {
+                    // Drop background-resumption deltas: Choreographer pauses
+                    // off-screen and the first frame after foreground always
+                    // looks like a slow screen otherwise.
+                    if (deltaMs in (config.slowScreenThresholdMs + 1)..config.maxRealFrameDeltaMs) {
                         fire("slow_screen", mapOf("frameMs" to deltaMs))
                     }
                 }
@@ -60,39 +80,86 @@ class ProactiveDetector(private val config: Config = Config()) {
     }
 
     /**
-     * Install on the root [View]. The [view]'s [View.OnTouchListener] is used
-     * for rage-tap detection; an existing listener is chained rather than replaced.
+     * Install on the given [Window]. Touches are observed by chaining the
+     * window's existing [Window.Callback] (no `View.OnTouchListener` is
+     * replaced). Idempotent per window — re-installing on the same window
+     * is a no-op.
      *
      * Must be called on the main thread.
      */
-    fun install(view: View, callback: TriggerCallback) {
+    fun install(window: Window, callback: TriggerCallback) {
         this.callback = callback
-        if (config.rageTap) {
-            val existing = view.getTag(TAG_PREV_LISTENER) as? View.OnTouchListener
-            view.setOnTouchListener { v, event ->
-                onTouch(v, event)
-                existing?.onTouch(v, event) ?: false
-            }
-            view.setTag(TAG_PREV_LISTENER, existing)
+        if (config.rageTap && windowRef?.get() !== window) {
+            uninstallWindowCallback()
+            val host = window.callback
+            hostWindowCallback = host
+            val wrapper = TouchObservingWindowCallback(host) { ev -> onDispatchTouch(ev) }
+            window.callback = wrapper
+            installedWindowCallback = wrapper
+            windowRef = WeakReference(window)
         }
         if (config.slowScreen && !frameCallbackInstalled) {
             choreographer = Choreographer.getInstance()
-            choreographer?.postFrameCallback(frameCallback)
             frameCallbackInstalled = true
+            lastFrameNano = 0L
+            choreographer?.postFrameCallback(frameCallback)
         }
     }
 
+    /**
+     * Drop the window reference and remove our chained callback if the host
+     * hasn't already replaced it. Safe to call from `onPause`/`onStop`.
+     */
+    fun uninstall() {
+        uninstallWindowCallback()
+        windowRef = null
+        lastTapView = null
+        tapTimes.clear()
+    }
+
+    /**
+     * Reset the slow-screen frame clock. Call from `onActivityResumed` so
+     * the first post-foreground frame doesn't look like a multi-second
+     * slow screen — Choreographer pauses while the app is backgrounded.
+     */
+    fun resetFrameClock() {
+        lastFrameNano = 0L
+    }
+
     fun destroy() {
+        uninstall()
         callback = null
+        choreographer?.removeFrameCallback(frameCallback)
         choreographer = null
+        lastFrameNano = 0L
         frameCallbackInstalled = false
     }
 
-    private fun onTouch(view: View, event: MotionEvent) {
+    private fun uninstallWindowCallback() {
+        val window = windowRef?.get() ?: return
+        if (window.callback === installedWindowCallback) {
+            window.callback = hostWindowCallback
+        }
+        installedWindowCallback = null
+        hostWindowCallback = null
+    }
+
+    /** Called for every touch the host window dispatches. */
+    private fun onDispatchTouch(event: MotionEvent) {
         if (event.action != MotionEvent.ACTION_DOWN) return
         if (fired >= config.maxPerSession) return
-        val now = System.currentTimeMillis()
-        if (view === lastTapView) {
+        val window = windowRef?.get() ?: return
+        // Hit-test against the decor view to identify which view received the tap.
+        val decor = window.decorView
+        val hit = findHitView(decor, event.rawX.toInt(), event.rawY.toInt()) ?: decor
+        recordTap(hit)
+    }
+
+    /** Internal hook used by the dispatch path AND by tests. */
+    internal fun recordTap(view: View, now: Long = System.currentTimeMillis()) {
+        if (fired >= config.maxPerSession) return
+        val previous = lastTapView?.get()
+        if (previous === view) {
             tapTimes.add(now)
             tapTimes.removeAll { now - it > 500L }
             if (tapTimes.size >= 3) {
@@ -104,18 +171,32 @@ class ProactiveDetector(private val config: Config = Config()) {
                 tapTimes.clear()
             }
         } else {
-            lastTapView = view
+            lastTapView = WeakReference(view)
             tapTimes.clear()
             tapTimes.add(now)
         }
     }
 
+    private fun findHitView(root: View, x: Int, y: Int): View? {
+        if (root !is android.view.ViewGroup) return root
+        val out = IntArray(2)
+        for (i in (root.childCount - 1) downTo 0) {
+            val child = root.getChildAt(i) ?: continue
+            if (child.visibility != View.VISIBLE) continue
+            child.getLocationOnScreen(out)
+            val left = out[0]
+            val top = out[1]
+            val right = left + child.width
+            val bottom = top + child.height
+            if (x in left until right && y in top until bottom) {
+                return findHitView(child, x, y) ?: child
+            }
+        }
+        return root
+    }
+
     private fun fire(type: String, context: Map<String, Any>) {
         fired++
         callback?.onTrigger(type, context)
-    }
-
-    private companion object {
-        val TAG_PREV_LISTENER = View.generateViewId()
     }
 }
