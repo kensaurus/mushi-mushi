@@ -92,13 +92,13 @@
     "@mushi-mushi/core": "workspace:^"
   },
   "devDependencies": {
-    "@capacitor/core": "^6.2.0",
+    "@capacitor/core": "^6.2.1",
     "@mushi-mushi/eslint-config": "workspace:*",
     "@mushi-mushi/tsconfig": "workspace:*",
-    "eslint": "^10.2.0",
+    "eslint": "^10.3.0",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.4"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
   },
   "capacitor": {
     "ios": {
