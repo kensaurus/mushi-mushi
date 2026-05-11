@@ -18,7 +18,30 @@ data class MushiConfig(
     val minDescriptionLength: Int = 20,
     val offlineQueueMaxBytes: Long = 2L * 1024 * 1024,
     val theme: Theme = Theme(),
-    val triggerInset: TriggerInset = TriggerInset()
+    val triggerInset: TriggerInset = TriggerInset(),
+    val proactive: ProactiveConfig = ProactiveConfig(),
+    val pii: PIIConfig = PIIConfig(),
+)
+
+data class ProactiveConfig(
+    /** Detect ≥3 rapid taps on the same view. Default true. */
+    val rageTap: Boolean = true,
+    /** Detect frames taking >200 ms to render. Default true. */
+    val slowScreen: Boolean = true,
+    /** Slow-screen threshold in ms. Default 200. */
+    val slowScreenThresholdMs: Long = 200L,
+    /** Max proactive triggers fired per session before silencing. Default 3. */
+    val maxPerSession: Int = 3,
+)
+
+data class PIIConfig(
+    val emails: Boolean = true,
+    val phones: Boolean = true,
+    val creditCards: Boolean = true,
+    val ssns: Boolean = true,
+    val ipAddresses: Boolean = false,
+    val secretTokens: Boolean = true,
+    val ipv6: Boolean = false,
 )
 
 enum class TriggerMode { SHAKE, BUTTON, BOTH, NONE }

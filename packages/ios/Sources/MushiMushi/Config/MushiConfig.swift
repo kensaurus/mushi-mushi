@@ -19,6 +19,31 @@ public struct MushiConfig {
     public var offlineQueueMaxBytes: Int
     public var theme: Theme
     public var triggerInset: TriggerInset
+    public var proactive: ProactiveConfig
+    public var pii: PIIScrubberConfig
+
+    public struct ProactiveConfig {
+        /// Detect ≥3 rapid taps on the same view. Default true.
+        public var rageTap: Bool
+        /// Detect frames taking >200 ms to render. Default true.
+        public var slowScreen: Bool
+        /// Slow-screen threshold in ms. Default 200.
+        public var slowScreenThresholdMs: Double
+        /// Max proactive triggers filed per session before silencing. Default 3.
+        public var maxPerSession: Int
+
+        public init(
+            rageTap: Bool = true,
+            slowScreen: Bool = true,
+            slowScreenThresholdMs: Double = 200,
+            maxPerSession: Int = 3
+        ) {
+            self.rageTap = rageTap
+            self.slowScreen = slowScreen
+            self.slowScreenThresholdMs = slowScreenThresholdMs
+            self.maxPerSession = maxPerSession
+        }
+    }
 
     public enum TriggerMode {
         case shake
@@ -62,7 +87,9 @@ public struct MushiConfig {
         minDescriptionLength: Int = 20,
         offlineQueueMaxBytes: Int = 1_000_000,
         theme: Theme = Theme(),
-        triggerInset: TriggerInset = TriggerInset()
+        triggerInset: TriggerInset = TriggerInset(),
+        proactive: ProactiveConfig = ProactiveConfig(),
+        pii: PIIScrubberConfig = PIIScrubberConfig()
     ) {
         self.projectId = projectId
         self.apiKey = apiKey
@@ -76,5 +103,7 @@ public struct MushiConfig {
         self.offlineQueueMaxBytes = offlineQueueMaxBytes
         self.theme = theme
         self.triggerInset = triggerInset
+        self.proactive = proactive
+        self.pii = pii
     }
 }

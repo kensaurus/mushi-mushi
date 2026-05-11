@@ -27,9 +27,12 @@ public final class Mushi {
     private var flushTimer: Timer?
     private var user: [String: Any]?
     private var globalMetadata: [String: Any] = [:]
+    private var breadcrumbs = BreadcrumbCollector()
+    private var piiScrubber = PIIScrubber()
     // Added: network-aware delivery (Phase 2.4)
     private var networkMonitor: NWPathMonitor?
     #if os(iOS)
+    private var proactiveDetector: ProactiveDetector?
     private weak var floatingButton: UIButton?
     private var foregroundObserver: NSObjectProtocol?
     #endif
@@ -38,10 +41,16 @@ public final class Mushi {
 
     public func configure(with config: MushiConfig) {
         self.config = config
+        self.piiScrubber = PIIScrubber(config: config.pii)
+        if config.captureBreadcrumbs {
+            breadcrumbs = BreadcrumbCollector()
+        }
         let q = OfflineQueue(maxBytes: config.offlineQueueMaxBytes)
         self.queue = q
         self.apiClient = ApiClient(config: config, queue: q)
         #if os(iOS)
+        proactiveDetector?.destroy()
+        proactiveDetector = nil
         removeFloatingButton()
         if let foregroundObserver {
             NotificationCenter.default.removeObserver(foregroundObserver)
@@ -51,6 +60,23 @@ public final class Mushi {
         installTriggers()
         startFlushTimer()
         startNetworkMonitor()
+        breadcrumbs.add(category: .lifecycle, message: "Mushi configured")
+    }
+
+    /// Append a breadcrumb to the ring buffer. Included automatically on the
+    /// next `report()` call. Mirrors `Mushi.addBreadcrumb()` in the web SDK.
+    public func addBreadcrumb(
+        category: MushiBreadcrumb.Category,
+        level: MushiBreadcrumb.Level = .info,
+        message: String,
+        data: [String: String]? = nil
+    ) {
+        breadcrumbs.add(category: category, level: level, message: message, data: data)
+    }
+
+    /// Snapshot of the current breadcrumb ring buffer, oldest first.
+    public func getBreadcrumbs() -> [MushiBreadcrumb] {
+        breadcrumbs.getAll()
     }
 
     /// Attach app/user identity to subsequent native reports.
@@ -80,6 +106,7 @@ public final class Mushi {
 
     /// Submit a report with the given description and optional category.
     /// Captures device context and (if enabled) a screenshot automatically.
+    /// Attaches the breadcrumb ring buffer (PII-scrubbed) to the payload.
     public func report(
         description: String,
         category: String = "bug",
@@ -87,13 +114,32 @@ public final class Mushi {
     ) {
         guard let client = apiClient, let config else { return }
 
+        let scrubbedDescription = piiScrubber.scrub(description)
         var payload: [String: Any] = [
-            "description": description,
+            "description": scrubbedDescription,
             "category": category,
             "context": DeviceContext.capture()
         ]
         let mergedMetadata = mergeMetadata(metadata)
         if !mergedMetadata.isEmpty { payload["metadata"] = mergedMetadata }
+
+        if config.captureBreadcrumbs {
+            let crumbs = breadcrumbs.getAll().map { crumb -> [String: Any] in
+                var d: [String: Any] = [
+                    "timestamp": crumb.timestamp,
+                    "category": crumb.category.rawValue,
+                    "level": crumb.level.rawValue,
+                    "message": piiScrubber.scrub(crumb.message),
+                ]
+                if let data = crumb.data {
+                    d["data"] = data.mapValues { piiScrubber.scrub($0) }
+                }
+                return d
+            }
+            if !crumbs.isEmpty { payload["breadcrumbs"] = crumbs }
+        }
+
+        breadcrumbs.add(category: .lifecycle, message: "report submitted: \(category)")
 
         #if os(iOS)
         if config.captureScreenshot {
@@ -123,13 +169,15 @@ public final class Mushi {
         client.submitReport(payload)
     }
 
-    /// Capture a Swift `Error`. The error description is used as the report
-    /// body; full type info is forwarded via metadata.
+    /// Capture a Swift `Error`. Normalises the error (name/message/stack/cause)
+    /// and files a report with structured metadata — mirrors `captureException`
+    /// in the web SDK.
     public func captureError(_ error: Error, context: [String: Any]? = nil) {
+        let norm = normaliseError(error)
         var meta = context ?? [:]
-        meta["errorType"] = String(reflecting: type(of: error))
+        meta["error"] = normaliseExceptionToMetadata(norm)
         report(
-            description: String(describing: error),
+            description: norm.message,
             category: "bug",
             metadata: meta
         )
@@ -186,6 +234,28 @@ public final class Mushi {
             }
         } else {
             removeFloatingButton()
+        }
+
+        // Proactive triggers (rage-tap, slow-screen)
+        let proactiveConfig = ProactiveDetector.Config(
+            rageTap: config.proactive.rageTap,
+            slowScreen: config.proactive.slowScreen,
+            slowScreenThresholdMs: config.proactive.slowScreenThresholdMs,
+            maxPerSession: config.proactive.maxPerSession
+        )
+        let detector = ProactiveDetector(config: proactiveConfig)
+        proactiveDetector = detector
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self, weak detector] in
+            guard let self, let detector else { return }
+            if let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap(\.windows)
+                .first(where: \.isKeyWindow) {
+                detector.install(in: window) { [weak self] type, context in
+                    self?.breadcrumbs.add(category: .lifecycle, level: .warning, message: "proactive:\(type)")
+                    self?.showWidget(category: "bug", metadata: ["proactiveTrigger": type, "proactiveContext": context])
+                }
+            }
         }
         #endif
     }
