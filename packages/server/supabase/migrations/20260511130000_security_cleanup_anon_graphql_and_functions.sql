@@ -36,7 +36,10 @@
 -- ── 1. Remaining anon SECURITY DEFINER function REVOKEs ──────────────────────
 
 -- Set search_path so `vector` resolves to extensions.vector for match_fix_corpus.
-SET search_path = public, extensions;
+-- SET LOCAL is scoped to the current transaction (Supabase migrations run in a
+-- single transaction), so the search_path automatically resets on COMMIT and
+-- can't leak out if the migration is wrapped by an outer session.
+SET LOCAL search_path = public, extensions;
 
 REVOKE EXECUTE ON FUNCTION public.match_fix_corpus(vector, uuid, integer)                        FROM anon;
 REVOKE EXECUTE ON FUNCTION public.mushi_age_snapshot_drift(uuid)                                 FROM anon;
@@ -45,8 +48,6 @@ REVOKE EXECUTE ON FUNCTION public.mushi_age_upsert_node(uuid, uuid, text, text) 
 REVOKE EXECUTE ON FUNCTION public.project_members_autoadd_owner()                                FROM anon;
 REVOKE EXECUTE ON FUNCTION public.report_comments_fanout_to_reporter()                           FROM anon;
 REVOKE EXECUTE ON FUNCTION public.sync_project_api_key_owner()                                   FROM anon;
-
-RESET search_path;
 
 -- ── 2. Revoke anon SELECT on all tables that should not appear in GraphQL ─────
 
