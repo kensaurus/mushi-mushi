@@ -87,8 +87,8 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.6.1",
-    "prettier": "^3.5.3",
-    "turbo": "^2.9.7"
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.8"
   },
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"
