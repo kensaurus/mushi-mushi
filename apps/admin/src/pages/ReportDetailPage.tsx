@@ -29,6 +29,7 @@ import {
   IconGauge,
   IconTerminal,
   IconNetwork,
+  IconHealth,
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
@@ -335,6 +336,12 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
           />
         </Section>
 
+        {(report.sdk_package || report.sdk_version || report.app_version) && (
+          <Section title="Device & build" icon={<IconHealth />}>
+            <DeviceAndBuildPanel report={report} />
+          </Section>
+        )}
+
         <Section title="Performance metrics" icon={<IconGauge />}>
           <PerformanceMetrics metrics={report.performance_metrics} />
         </Section>
@@ -382,4 +389,51 @@ function describeTriageUpdate(updates: Record<string, string>): string | null {
     parts.push(updates.severity ? `severity \u2192 ${severityLabel(updates.severity)}` : 'severity cleared')
   }
   return parts.length > 0 ? parts.join(' \u00b7 ') : null
+}
+
+/** Platform chip colour map — mirrors the same sentiment used by InboxPage. */
+const PLATFORM_BADGE: Record<string, string> = {
+  ios:     'bg-info-muted text-info border-info/20',
+  android: 'bg-ok-muted text-ok border-ok/20',
+  web:     'bg-brand/15 text-brand border-brand/20',
+  macos:   'bg-surface-overlay text-fg-secondary border-edge-subtle',
+  windows: 'bg-surface-overlay text-fg-secondary border-edge-subtle',
+}
+
+/**
+ * Device & Build panel — renders SDK package, version, app version, and
+ * the resolved platform tag in a compact definition grid. Mirrors the
+ * density of EnvironmentFields so the two panels feel like one surface.
+ */
+function DeviceAndBuildPanel({ report }: { report: ReportDetail }) {
+  const platform = (report.environment?.platform ?? '').toLowerCase()
+  const rows: Array<{ label: string; value: string }> = [
+    report.sdk_package  ? { label: 'SDK',         value: report.sdk_package }  : null,
+    report.sdk_version  ? { label: 'SDK version',  value: report.sdk_version }  : null,
+    report.app_version  ? { label: 'App version',  value: report.app_version }  : null,
+    platform            ? { label: 'Platform',     value: platform }             : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>
+
+  if (rows.length === 0) return null
+
+  return (
+    <div className="space-y-1.5">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center gap-3">
+          <span className="text-2xs font-medium text-fg-muted w-24 shrink-0">{row.label}</span>
+          {row.label === 'Platform' ? (
+            <span
+              className={`inline-flex items-center px-1.5 py-0.5 rounded-sm border text-2xs font-semibold uppercase tracking-wider ${PLATFORM_BADGE[row.value] ?? 'bg-surface-overlay text-fg-secondary border-edge-subtle'}`}
+            >
+              {row.value}
+            </span>
+          ) : (
+            <code className="text-2xs font-mono text-fg bg-surface-overlay/60 px-1.5 py-0.5 rounded-sm">
+              {row.value}
+            </code>
+          )}
+        </div>
+      ))}
+    </div>
+  )
 }

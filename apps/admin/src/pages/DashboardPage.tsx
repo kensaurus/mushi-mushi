@@ -32,6 +32,8 @@ import { KpiRow } from '../components/dashboard/KpiRow'
 import { ChartsRow } from '../components/dashboard/ChartsRow'
 import { TriageAndFixRow } from '../components/dashboard/TriageAndFixRow'
 import { InsightsRow } from '../components/dashboard/InsightsRow'
+import { QaCoverageTile } from '../components/dashboard/QaCoverageTile'
+import { PlatformHealthTile } from '../components/dashboard/PlatformHealthTile'
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
@@ -289,6 +291,13 @@ export function DashboardPage() {
             integrations={data.integrations ?? []}
             activity={activity}
           />
+
+          {activeProjectId && (
+            <div className="grid gap-3 md:grid-cols-2">
+              <PlatformHealthTile projectId={activeProjectId} />
+              <QaCoverageTile projectId={activeProjectId} />
+            </div>
+          )}
         </>
       )}
     </div>

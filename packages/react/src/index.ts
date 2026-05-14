@@ -1,6 +1,7 @@
 export { MushiProvider, type MushiProviderProps } from './provider';
 export { useMushi, useMushiReady, useMushiReport } from './hooks';
 export { MushiErrorBoundary, type MushiErrorBoundaryProps } from './error-boundary';
+export { MushiTrigger, MushiAttach } from './trigger';
 
 // Re-export main class and types for convenience
 export { Mushi } from '@mushi-mushi/web';
