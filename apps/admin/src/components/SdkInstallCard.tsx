@@ -38,6 +38,7 @@ import {
   FRAMEWORKS,
   frameworkLabel,
   installCommand,
+  isMobileFramework,
   renderSnippet,
   type Framework,
   type ScreenshotMode,
@@ -63,7 +64,6 @@ interface Props {
 
 const POSITIONS: WidgetPosition[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 const THEMES: WidgetTheme[] = ['auto', 'light', 'dark']
-const TRIGGERS: WidgetTrigger[] = ['auto', 'edge-tab', 'attach', 'manual']
 const SCREENSHOT_MODES: ScreenshotMode[] = ['on-report', 'auto', 'off']
 const NATIVE_TRIGGER_MODES = ['shake', 'button', 'both', 'none'] as const
 
@@ -87,6 +87,7 @@ interface RemoteSdkConfig {
     theme?: WidgetTheme
     trigger?: WidgetTrigger
     triggerText?: string | null
+    attachToSelector?: string | null
   }
   capture?: SdkPreviewConfig['capture']
   native?: SdkPreviewConfig['native']
@@ -98,6 +99,7 @@ function fromRemoteConfig(remote: RemoteSdkConfig): SdkPreviewConfig {
     theme: remote.widget?.theme ?? DEFAULT_SDK_CONFIG.theme,
     trigger: remote.widget?.trigger ?? DEFAULT_SDK_CONFIG.trigger,
     triggerText: remote.widget?.triggerText ?? DEFAULT_SDK_CONFIG.triggerText,
+    attachToSelector: remote.widget?.attachToSelector ?? DEFAULT_SDK_CONFIG.attachToSelector,
     capture: {
       console: remote.capture?.console ?? DEFAULT_SDK_CONFIG.capture.console,
       network: remote.capture?.network ?? DEFAULT_SDK_CONFIG.capture.network,
@@ -120,6 +122,7 @@ function toRemoteConfig(config: SdkPreviewConfig, enabled: boolean): RemoteSdkCo
       theme: config.theme,
       trigger: config.trigger,
       triggerText: config.triggerText.trim() ? config.triggerText : null,
+      attachToSelector: config.attachToSelector.trim() || null,
     },
     capture: config.capture,
     native: config.native,
@@ -208,6 +211,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
     config.theme === DEFAULT_SDK_CONFIG.theme &&
     config.trigger === DEFAULT_SDK_CONFIG.trigger &&
     config.triggerText === DEFAULT_SDK_CONFIG.triggerText &&
+    config.attachToSelector === DEFAULT_SDK_CONFIG.attachToSelector &&
     config.capture.console === DEFAULT_SDK_CONFIG.capture.console &&
     config.capture.network === DEFAULT_SDK_CONFIG.capture.network &&
     config.capture.performance === DEFAULT_SDK_CONFIG.capture.performance &&
@@ -249,7 +253,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             <WidgetPreview config={config} />
           </div>
 
-          <ConfiguratorPanel config={config} enabled={enabled} onEnabledChange={setEnabled} onChange={setConfig} />
+          <ConfiguratorPanel config={config} enabled={enabled} framework={framework} onEnabledChange={setEnabled} onChange={setConfig} />
           <div className="flex items-center justify-between gap-2">
             <p className="text-2xs text-fg-faint">
               {loadingConfig ? 'Loading saved config…' : saveMessage ?? 'Saved config is served to SDKs at startup.'}
@@ -635,11 +639,13 @@ function WidgetPreview({ config }: { config: SdkPreviewConfig }) {
 function ConfiguratorPanel({
   config,
   enabled,
+  framework,
   onEnabledChange,
   onChange,
 }: {
   config: SdkPreviewConfig
   enabled: boolean
+  framework: Framework
   onEnabledChange: (next: boolean) => void
   onChange: (next: SdkPreviewConfig) => void
 }) {
@@ -702,32 +708,60 @@ function ConfiguratorPanel({
         </div>
       </fieldset>
 
-      <fieldset>
-        <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
-          Trigger mode
-          <ConfigHelp helpId="sdk-install.trigger_mode" />
-        </legend>
-        <div className="grid grid-cols-2 gap-1.5">
-          {TRIGGERS.map((trigger) => (
-            <button
-              key={trigger}
-              type="button"
-              onClick={() => update('trigger', trigger)}
-              className={`rounded-sm border px-2 py-1 text-left transition-colors ${
-                config.trigger === trigger
-                  ? 'border-brand bg-brand/15 text-brand'
-                  : 'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
-              }`}
-            >
-              {trigger}
-            </button>
-          ))}
-        </div>
-        <p className="mt-1 text-fg-faint inline-flex items-center gap-1">
-          Smart hide uses this mode as the desktop baseline.
-          <ConfigHelp helpId="sdk-install.smart_hide" />
-        </p>
-      </fieldset>
+      {!isMobileFramework(framework) && (
+        <fieldset>
+          <legend className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-1 inline-flex items-center gap-1">
+            Trigger mode
+            <ConfigHelp helpId="sdk-install.trigger_mode" />
+          </legend>
+          {/* 3-option chooser — recommended order mirrors the plan's guidance:
+              attach first (best headless UX), then auto (easy default), then
+              manual / edge-tab for advanced hosts. */}
+          <div className="space-y-1.5">
+            {([
+              { value: 'attach',   label: 'Attach to my button',   hint: 'Your button opens the reporter. No floating stamp.' },
+              { value: 'auto',     label: 'Floating stamp',         hint: 'SDK renders a bug-stamp in the chosen corner. Recommended: true.' },
+              { value: 'edge-tab', label: 'Edge tab',              hint: 'A vertical tab on the screen edge.' },
+              { value: 'manual',   label: 'Headless (manual)',      hint: 'Use <MushiTrigger> anywhere in your JSX.' },
+            ] as const).map(({ value, label, hint }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => update('trigger', value)}
+                title={hint}
+                className={`w-full rounded-sm border px-2 py-1.5 text-left text-2xs transition-colors flex items-center gap-2 ${
+                  config.trigger === value
+                    ? 'border-brand bg-brand/15 text-brand'
+                    : 'border-edge-subtle bg-surface-raised text-fg-muted hover:text-fg'
+                }`}
+              >
+                <span className={`inline-flex items-center justify-center w-3 h-3 rounded-full border shrink-0 ${config.trigger === value ? 'border-brand bg-brand' : 'border-fg-faint'}`}>
+                  {config.trigger === value && <span className="w-1.5 h-1.5 rounded-full bg-brand-fg" />}
+                </span>
+                <span className="font-medium">{label}</span>
+                {value === 'attach' && <span className="ml-auto text-3xs text-ok uppercase tracking-wider font-semibold">Recommended</span>}
+              </button>
+            ))}
+          </div>
+          {config.trigger === 'attach' && (
+            <label className="block mt-2">
+              <span className="text-fg-muted">CSS selector (optional)</span>
+              <input
+                type="text"
+                value={config.attachToSelector}
+                onChange={(e) => update('attachToSelector', e.target.value)}
+                placeholder="#report-button"
+                className="mt-1 w-full px-2 py-1 bg-surface-raised border border-edge-subtle rounded-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand font-mono text-2xs"
+              />
+              <p className="text-fg-faint text-3xs mt-0.5">Leave blank to set programmatically via <code>sdk.attachTo(el)</code>.</p>
+            </label>
+          )}
+          <p className="mt-1 text-fg-faint inline-flex items-center gap-1">
+            Smart hide uses this mode as the desktop baseline.
+            <ConfigHelp helpId="sdk-install.smart_hide" />
+          </p>
+        </fieldset>
+      )}
 
       {/* Theme + trigger text on one row */}
       <div className="grid grid-cols-2 gap-3">

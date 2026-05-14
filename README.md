@@ -65,6 +65,9 @@ Mushi v1 was the negative side: catch what your users _felt_ break and triage it
 - 🕸️ **Graph gets a Surface mode** — the same `Bug graph` toggles to a `Surface` view that overlays the positive inventory on the live knowledge graph so you can see the dead corners.
 - 🧭 **Spec traceability is end-to-end (2026-05-09 release).** `expected_outcome` is a real schema field — its assertions ride along with every fix dispatch, get rendered into the LLM prompt, gate the PR through `validateAgainstSpec`, and trigger a _targeted_ synthetic probe against the originating Action the moment the PR opens. Every `fix_attempt` row records the inventory `Action` it was meant to repair (`inventory_action_node_id`), so the admin "Where this fix came from" drawer can show the same spec the agent saw. See [How spec traceability works](#how-spec-traceability-works) below for the full chain.
 - 🔌 **First-class orchestrator interop.** Plug Mushi into Cursor, Claude Code, OpenAI Agents SDK, LangGraph, CrewAI, A2A v1.0.0 agents, or anything else: **MCP Streamable HTTP** at `/functions/v1/mcp` (2025-03-26 spec), **A2A `tasks` endpoints** at `/v1/a2a/tasks` (create / get / cancel / SSE subscribe), **OpenAPI 3.1** at `/openapi.json`, AG-UI v0.4 SSE accepts API keys (`mcp:read`), `SandboxProvider` is an open contract with a third-party registry, and JSON Schemas for `FixContext` / `FixResult` / `SandboxProvider` / `ExpectedOutcome` are served at `/v1/schemas/*`. See [Connecting your orchestrator](https://kensaur.us/mushi-mushi/docs/concepts/orchestrator-interop) for per-orchestrator recipes.
+- 🧩 **Headless SDK widget.** `MushiTrigger` and `MushiAttach` let you attach the feedback reporter to any button, icon, or menu item in your existing design system — no floating stamp, no fixed position, just your UI opening Mushi on click. Works in React (polymorphic `as` prop) and React Native (`cloneElement` injection). See [Headless integration](#headless-sdk-integration).
+- 🌐 **Multi-platform console.** Reports from iOS, Android, Web, and React Native are now filterable by platform and SDK package in the Reports list. Each report's detail drawer shows the "Device & Build" section with `sdk_version` and `app_version`. The Dashboard shows a **Platform Health** tile with 24h report volume per SDK.
+- 🤖 **QA Coverage Suite.** Define automated user-story tests as natural-language prompts or Playwright scripts, schedule them on cron, and run them via **Firecrawl Actions** (default, no setup), **Browserbase** (BYOK, cloud Chromium), or **local Playwright** (CLI). Pass/fail history appears on a dedicated `/qa-coverage` page and a dashboard tile. When you generate a Playwright test from a report, Mushi automatically creates a QA story so it runs on a weekly schedule as a regression guard. See [QA Coverage Suite](#qa-coverage-suite).
 
 Get started in any project that already has Mushi installed:
 
@@ -377,6 +380,114 @@ flowchart LR
 - **Your users get a way to tell you.** A 14 KB shake-to-report widget that doesn't pretend to be a chat bot and doesn't ask them to write a ticket.
 - **Your auto-fix is opt-in and reviewable.** The agent opens a _draft_ PR. You merge it, edit it, or close it — the loop never bypasses you.
 - **Your existing tools keep working.** Mushi sits next to Sentry; it does not replace it. Sentry breadcrumbs flow into Mushi's classifier, and Mushi reports flow back as Sentry User Feedback if you want them to.
+
+---
+
+## Headless SDK integration
+
+By default the SDK injects a floating 🐛 stamp button. If you want the reporter embedded in your own UI instead, use the headless primitives:
+
+### React — `MushiTrigger`
+
+```tsx
+import { MushiTrigger } from '@mushi-mushi/react'
+
+// Any element: button, anchor, div, custom component
+<MushiTrigger as="button" category="bug" className="my-feedback-btn">
+  Report a bug
+</MushiTrigger>
+
+// With Radix / shadcn
+<MushiTrigger as={Button} variant="ghost" size="sm">
+  Feedback
+</MushiTrigger>
+```
+
+All native props are forwarded. The `onClick` chain is preserved — if the host button calls `e.preventDefault()` Mushi will not open.
+
+### React — `MushiAttach`
+
+Attach the reporter to an element you can't wrap (third-party widget, portal):
+
+```tsx
+import { MushiAttach } from '@mushi-mushi/react'
+
+// Renders nothing — just wires the click listener
+<MushiAttach selector="#help-button" category="bug" />
+```
+
+### React Native — `MushiTrigger`
+
+```tsx
+import { MushiTrigger } from '@mushi-mushi/react-native'
+
+<MushiTrigger>
+  <Pressable style={styles.btn}>
+    <Text>Report a bug</Text>
+  </Pressable>
+</MushiTrigger>
+```
+
+### SDK Install Card
+
+The admin console's **SDK Install** page (Get started → Configure & install the SDK) has a four-option **Trigger mode** chooser: Attach to my button (recommended), Floating stamp, Edge tab, and Headless (manual). The snippet preview updates in real time to show the correct import and usage pattern.
+
+---
+
+## QA Coverage Suite
+
+Define user-story tests as prompts or Playwright scripts and schedule them to run automatically.
+
+### Quick start
+
+1. Go to **Check → QA Coverage** in the sidebar.
+2. Click **+ New story** and describe the test in natural language.
+3. Pick a provider (Firecrawl by default — no API key needed).
+4. The story runs hourly and results appear on the page and the Dashboard tile.
+
+### Providers
+
+| Provider | Requirements | Best for |
+|----------|-------------|---------|
+| `firecrawl_actions` | None (default) | Content verification, navigation checks, link health |
+| `browserbase` | `BYOK_BROWSERBASE_API_KEY` in project settings | Complex UI interactions, JavaScript-heavy SPAs |
+| `local` | CLI runner (`mushi-dev run-qa-stories`) | Full Playwright access, local-only environments |
+
+### Connecting to user stories
+
+When you click **Generate test from report** on a report, Mushi writes a Playwright script, opens a GitHub PR, and automatically creates a QA story for it — scheduled weekly as a regression guard.
+
+### BYOK (Bring Your Own Key)
+
+Story runners use your own API keys stored in `mushi_runtime_config`. No key → story is skipped with a clear reason. Key resolution order: project-level override → org-level override → Mushi platform default (Firecrawl only).
+
+### Dashboard integration
+
+The **QA Coverage** tile on `/dashboard` shows: total stories, % passing (≥80% pass rate), and the top failing story. Click "View all →" to open the full `/qa-coverage` page.
+
+### A2A failure notifications
+
+If a story fails and your project has an A2A endpoint configured, `qa-story-runner` pushes a structured failure notification to connected agents (Cursor, Claude Code, etc.) via the A2A protocol.
+
+---
+
+## Multi-platform console
+
+### Filtering reports by platform / SDK
+
+The Reports list (`/reports`) has **Platform** and **SDK** filter dropdowns. Options: iOS, Android, Web, macOS, Windows (platform); Web, React, React Native, Capacitor (SDK package). Selecting a value appends `?platform=ios` (or `?sdk_package=@mushi-mushi/react-native`) to the URL for shareability.
+
+### Device & Build panel
+
+Each report detail page shows a **Device & Build** section with:
+- `platform` — iOS / Android / Web / …
+- `sdk_package` — `@mushi-mushi/react`, `@mushi-mushi/react-native`, etc.
+- `sdk_version` — the SDK version that filed the report
+- `app_version` — the app's own version string (if provided)
+
+### Platform Health dashboard tile
+
+The **Platform Health · 24h** tile on `/dashboard` shows report volume, error counts, and SDK version list per platform, sourced from the `qa_platform_rollup_24h` materialized view (refreshed hourly). Click any row to drill into `/reports?platform=<platform>`.
 
 ---
 

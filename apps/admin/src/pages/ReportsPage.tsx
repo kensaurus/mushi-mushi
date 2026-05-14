@@ -52,6 +52,8 @@ export function ReportsPage() {
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
   const severity = searchParams.get('severity') ?? ''
+  const platform = searchParams.get('platform') ?? ''
+  const sdkPackage = searchParams.get('sdkPackage') ?? ''
   const component = searchParams.get('component') ?? ''
   const reporter = searchParams.get('reporter') ?? ''
   const sort = (searchParams.get('sort') as SortField | null) ?? 'created_at'
@@ -86,6 +88,8 @@ export function ReportsPage() {
     if (status) p.set('status', status)
     if (category) p.set('category', category)
     if (severity) p.set('severity', severity)
+    if (platform) p.set('platform', platform)
+    if (sdkPackage) p.set('sdkPackage', sdkPackage)
     if (component) p.set('component', component)
     if (reporter) p.set('reporter', reporter)
     if (q) p.set('q', q)
@@ -94,7 +98,7 @@ export function ReportsPage() {
     p.set('limit', String(PAGE_SIZE))
     p.set('offset', String(page * PAGE_SIZE))
     return p.toString()
-  }, [status, category, severity, component, reporter, q, sort, dir, page])
+  }, [status, category, severity, platform, sdkPackage, component, reporter, q, sort, dir, page])
 
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<{ reports: ReportRow[]; total: number }>(
     `/v1/admin/reports?${queryString}`,
@@ -521,7 +525,7 @@ export function ReportsPage() {
   if (reporter)
     contextChips.push({ key: 'reporter', label: 'Reporter', value: `${reporter.slice(0, 12)}…` })
 
-  const hasFilters = Boolean(status || category || severity || component || reporter || q)
+  const hasFilters = Boolean(status || category || severity || platform || sdkPackage || component || reporter || q)
   const queuedCount = reports.filter((r) => r.status === 'queued' || r.status === 'new').length
   const criticalQueuedCount = reports.filter(
     (r) => (r.status === 'queued' || r.status === 'new') && r.severity === 'critical',
@@ -697,6 +701,8 @@ export function ReportsPage() {
         status={status}
         category={category}
         severity={severity}
+        platform={platform}
+        sdkPackage={sdkPackage}
         contextChips={contextChips}
         hasFilters={hasFilters}
         onSetFilter={setFilter}

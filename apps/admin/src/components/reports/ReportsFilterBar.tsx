@@ -30,6 +30,10 @@ interface Props {
   status: string
   category: string
   severity: string
+  /** Filter by `environment->>platform`, e.g. `ios | android | web`. */
+  platform?: string
+  /** Filter by `sdk_package`, e.g. `@mushi-mushi/react-native`. */
+  sdkPackage?: string
   contextChips: ContextChip[]
   hasFilters: boolean
   onSetFilter: (key: string, value: string) => void
@@ -43,6 +47,8 @@ export function ReportsFilterBar({
   status,
   category,
   severity,
+  platform = '',
+  sdkPackage = '',
   contextChips,
   hasFilters,
   onSetFilter,
@@ -73,6 +79,20 @@ export function ReportsFilterBar({
       value: severityLabel(severity),
       onClear: () => onSetFilter('severity', ''),
       tone: severity === 'critical' || severity === 'high' ? ('danger' as const) : ('warn' as const),
+    },
+    platform && {
+      key: 'platform',
+      label: 'Platform',
+      value: platform,
+      onClear: () => onSetFilter('platform', ''),
+      tone: 'brand' as const,
+    },
+    sdkPackage && {
+      key: 'sdkPackage',
+      label: 'SDK',
+      value: sdkPackage,
+      onClear: () => onSetFilter('sdkPackage', ''),
+      tone: 'neutral' as const,
     },
     ...contextChips.map((chip) => ({
       key: chip.key,
@@ -113,6 +133,31 @@ export function ReportsFilterBar({
           options={FILTER_OPTIONS.severities}
           onChange={(e) => onSetFilter('severity', e.currentTarget.value)}
         />
+        <select
+          value={platform}
+          onChange={(e) => onSetFilter('platform', e.currentTarget.value)}
+          aria-label="Filter by platform"
+          className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
+        >
+          <option value="">All platforms</option>
+          <option value="ios">iOS</option>
+          <option value="android">Android</option>
+          <option value="web">Web</option>
+          <option value="macos">macOS</option>
+          <option value="windows">Windows</option>
+        </select>
+        <select
+          value={sdkPackage}
+          onChange={(e) => onSetFilter('sdkPackage', e.currentTarget.value)}
+          aria-label="Filter by SDK"
+          className="bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1 text-xs text-fg-secondary hover:border-edge focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/40 motion-safe:transition-colors motion-safe:duration-150"
+        >
+          <option value="">All SDKs</option>
+          <option value="@mushi-mushi/web">Web</option>
+          <option value="@mushi-mushi/react">React</option>
+          <option value="@mushi-mushi/react-native">React Native</option>
+          <option value="@mushi-mushi/capacitor">Capacitor</option>
+        </select>
         {hasFilters && (
           <button
             type="button"

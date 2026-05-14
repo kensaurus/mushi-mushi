@@ -55,6 +55,7 @@ const PublicIntegrationsPage = lazy(() => import('./pages/PublicIntegrationsPage
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
+const QaCoveragePage = lazy(() => import('./pages/QaCoveragePage').then(m => ({ default: m.QaCoveragePage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
@@ -230,6 +231,7 @@ export function App() {
                   <Route path="/mcp" element={<McpPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
                   <Route path="/health" element={<HealthPage />} />
+                  <Route path="/qa-coverage" element={<QaCoveragePage />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
