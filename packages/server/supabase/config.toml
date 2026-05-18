@@ -192,3 +192,14 @@ verify_jwt = false
 # reason as the other internal pipeline functions above.
 [functions.a2a-push-notify]
 verify_jwt = false
+
+# qa-story-runner is invoked every minute by pg_cron
+# (`qa-story-runner-tick` → `mushi.edge_function_post('qa-story-runner', …)`)
+# with the internal-caller token from `public.mushi_runtime_config`. That
+# token is the shared secret `MUSHI_INTERNAL_CALLER_SECRET` mirror — not a
+# real Supabase JWT — so the platform gateway *must not* try to verify it.
+# Without this entry the gateway returns 401 on every cron tick, the function
+# body never executes, and the public.cron_runs table stays empty (silent
+# failure). Auth is enforced inside the handler via requireServiceRoleAuth.
+[functions.qa-story-runner]
+verify_jwt = false

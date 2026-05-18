@@ -252,23 +252,61 @@ async function runBrowserbase(story: QaStory, apiKey: string): Promise<RunResult
 // ── Main handler ──────────────────────────────────────────────────────────
 Deno.serve(
   withSentry('qa-story-runner', async (req: Request) => {
-    requireServiceRoleAuth(req)
-    const { cronRunId, finish } = await startCronRun('qa-story-runner')
-    rlog.info({ cronRunId }, 'qa-story-runner invoked')
+    // `requireServiceRoleAuth` returns a 401 `Response` on failure (it does
+    // NOT throw). A previous revision called it for side effect only and
+    // discarded the return value, which would have run the cron body
+    // unauthenticated if the platform gateway had not blocked the request
+    // first. Return the 401 response directly so the runtime contract
+    // matches the helper's signature and an env misconfiguration (e.g.
+    // MUSHI_INTERNAL_CALLER_SECRET missing) surfaces as a clean 401
+    // instead of silently producing data with no auth.
+    const authFailure = requireServiceRoleAuth(req)
+    if (authFailure) return authFailure
 
+    // Resolve the Supabase client FIRST. `startCronRun` requires it as the
+    // first positional arg — every other cron-driven function in this repo
+    // (retention-sweep, judge-batch, intelligence-report, …) follows that
+    // pattern. A previous revision of this file called
+    // `startCronRun('qa-story-runner')` without `db`, which caused
+    // `db.from is not a function` inside the helper and surfaced as
+    // Sentry MUSHI-MUSHI-SERVER-5 (4 events, regressed substatus). The
+    // destructure also pulled the wrong shape — the helper returns
+    // `{ finish, fail }`, not `{ cronRunId, finish }` — so even on the
+    // happy path the `finish` callback was undefined and the cron-run
+    // row stayed stuck in `running` forever, masking real failures.
     const db = getServiceClient()
+    const cron = await startCronRun(db, 'qa-story-runner', 'cron')
+    rlog.info({}, 'qa-story-runner invoked')
+
     const now = new Date()
 
     try {
-      // Fetch all enabled stories with their project base URL
+      // Fetch all enabled stories.
+      //
+      // History: a previous revision attempted
+      //   .select('*, projects!inner(id, base_url:mushi_runtime_config!inner(config))')
+      // which is malformed against the live schema in three ways:
+      //   (1) there is no FK between `projects` and `mushi_runtime_config`
+      //       (the latter is a global key/value bag, not per-project);
+      //   (2) `mushi_runtime_config` has no `config` column — its columns
+      //       are `(key text, value text, updated_at timestamptz)`;
+      //   (3) `projects` itself has no `base_url` column.
+      // PostgREST therefore rejected every cron tick with a relationship-
+      // resolution error, which `cron.fail()` stringified as
+      // `"[object Object]"` (PostgrestError is a plain object, not Error)
+      // — making the failure invisible in `public.cron_runs` while
+      // silently dropping every queued story run on the floor.
+      // The pulled-in join data was never read either — the per-story
+      // base URL is sourced from the DEFAULT_BASE_URL env var below.
+      // Drop the join and select only what we actually need.
       const { data: stories, error: storiesErr } = await db
         .from('qa_stories')
-        .select('*, projects!inner(id, base_url:mushi_runtime_config!inner(config))')
+        .select('*')
         .eq('enabled', true)
 
       if (storiesErr) {
         rlog.error({ err: storiesErr }, 'Failed to fetch qa_stories')
-        await finish('error', { message: storiesErr.message })
+        await cron.fail(storiesErr)
         return new Response('Internal error', { status: 500 })
       }
 
@@ -395,13 +433,16 @@ Deno.serve(
         rlog.info({ storyId: story.id, runId, status: result.status }, 'story run complete')
       }
 
-      await finish('ok', { due: dueStories.length })
+      await cron.finish({
+        rowsAffected: dueStories.length,
+        metadata: { due: dueStories.length, total: stories?.length ?? 0 },
+      })
       return new Response(JSON.stringify({ ok: true, due: dueStories.length }), {
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (err) {
       rlog.error({ err }, 'qa-story-runner fatal error')
-      await finish('error', { message: err instanceof Error ? err.message : String(err) })
+      await cron.fail(err)
       return new Response('Internal error', { status: 500 })
     }
   }),

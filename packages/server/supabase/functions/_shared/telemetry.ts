@@ -204,45 +204,139 @@ export interface CronRunHandle {
   fail: (error: unknown) => Promise<void>
 }
 
+/**
+ * Produce a useful one-line string from any value passed to `cron.fail(err)`.
+ *
+ * Previous behaviour was `err instanceof Error ? err.message : String(err)`,
+ * which for PostgREST-style errors (`{ message, code, details, hint }` plain
+ * objects, not Error instances) collapsed to the useless string
+ * `"[object Object]"` — exactly what surfaced in `public.cron_runs` for
+ * `qa-story-runner`'s qa_stories query, making the real failure invisible.
+ *
+ * Order of preference, conservative on PII:
+ *   1. Real Error instance → `.message`.
+ *   2. PostgREST-shaped object (`{ message, code, details, hint }`) →
+ *      flatten to `"<message> (code: X, hint: Y)"`.
+ *   3. Plain object with a `.message` string → that message.
+ *   4. Object without `.message` → `JSON.stringify(err)` capped at 1 KiB so
+ *      runaway payloads can't fill `cron_runs.error_message`.
+ *   5. Primitives → `String(err)`.
+ *
+ * Exported so other cron functions can call it directly when they want to
+ * embed a structured error into their own telemetry without re-implementing
+ * the truncation/PII rules.
+ */
+export function stringifyCronError(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (err === null || err === undefined) return String(err)
+  if (typeof err !== 'object') return String(err)
+
+  const e = err as { message?: unknown; code?: unknown; hint?: unknown; details?: unknown }
+  if (typeof e.message === 'string' && e.message.length > 0) {
+    const parts: string[] = [e.message]
+    const meta: string[] = []
+    if (typeof e.code === 'string' && e.code.length > 0) meta.push(`code: ${e.code}`)
+    if (typeof e.hint === 'string' && e.hint.length > 0) meta.push(`hint: ${e.hint}`)
+    if (typeof e.details === 'string' && e.details.length > 0) meta.push(`details: ${e.details}`)
+    if (meta.length > 0) parts.push(`(${meta.join(', ')})`)
+    return parts.join(' ').slice(0, 1024)
+  }
+
+  try {
+    return JSON.stringify(err).slice(0, 1024)
+  } catch {
+    return '[unserializable error]'
+  }
+}
+
 export async function startCronRun(
   db: SupabaseClient,
   jobName: string,
   trigger: 'cron' | 'manual' | 'http' = 'http',
 ): Promise<CronRunHandle> {
   const startedAt = new Date()
-  const { data, error } = await db
-    .from('cron_runs')
-    .insert({ job_name: jobName, trigger, status: 'running', started_at: startedAt.toISOString() })
-    .select('id')
-    .single()
 
-  if (error) {
-    log.warn('cron_runs insert failed', { jobName, error: error.message })
+  // Defensive: caught Sentry MUSHI-MUSHI-SERVER-5 (regressed) where
+  // qa-story-runner called `startCronRun('qa-story-runner')` — i.e.
+  // forgot to pass `db` first. The literal string then flowed into
+  // `db.from(...)` and crashed the whole request with
+  // `TypeError: db.from is not a function`. The TS signature catches it
+  // at the IDE but the cron function ships compiled JS and the bad
+  // call slipped past review. Telemetry must never break the function
+  // it's instrumenting — return a no-op handle on misuse, log loudly so
+  // the mistake surfaces in observability without taking down the job.
+  if (!db || typeof (db as { from?: unknown }).from !== 'function') {
+    log.warn('startCronRun called without a Supabase client; cron telemetry disabled for this run', {
+      jobName,
+      trigger,
+      receivedType: typeof db,
+    })
+    return {
+      finish: async () => {},
+      fail: async () => {},
+    }
   }
 
-  const runId = data?.id as string | undefined
+  let runId: string | undefined
+  try {
+    const { data, error } = await db
+      .from('cron_runs')
+      .insert({ job_name: jobName, trigger, status: 'running', started_at: startedAt.toISOString() })
+      .select('id')
+      .single()
+
+    if (error) {
+      log.warn('cron_runs insert failed', { jobName, error: error.message })
+    }
+
+    runId = data?.id as string | undefined
+  } catch (err) {
+    // Network / abort / schema-cache misses can reject the promise; we
+    // must not propagate so the job body still runs.
+    log.warn('cron_runs insert threw', {
+      jobName,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
 
   return {
     async finish({ rowsAffected, metadata }) {
       if (!runId) return
       const finishedAt = new Date()
-      await db.from('cron_runs').update({
-        finished_at: finishedAt.toISOString(),
-        duration_ms: finishedAt.getTime() - startedAt.getTime(),
-        status: 'success',
-        rows_affected: rowsAffected ?? null,
-        metadata: metadata ?? {},
-      }).eq('id', runId)
+      try {
+        await db.from('cron_runs').update({
+          finished_at: finishedAt.toISOString(),
+          duration_ms: finishedAt.getTime() - startedAt.getTime(),
+          status: 'success',
+          rows_affected: rowsAffected ?? null,
+          metadata: metadata ?? {},
+        }).eq('id', runId)
+      } catch (err) {
+        log.warn('cron_runs finish update threw', {
+          jobName,
+          runId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      }
     },
     async fail(err) {
       if (!runId) return
       const finishedAt = new Date()
-      await db.from('cron_runs').update({
-        finished_at: finishedAt.toISOString(),
-        duration_ms: finishedAt.getTime() - startedAt.getTime(),
-        status: 'error',
-        error_message: err instanceof Error ? err.message : String(err),
-      }).eq('id', runId)
+      try {
+        await db.from('cron_runs').update({
+          finished_at: finishedAt.toISOString(),
+          duration_ms: finishedAt.getTime() - startedAt.getTime(),
+          status: 'error',
+          error_message: stringifyCronError(err),
+        }).eq('id', runId)
+      } catch (updateErr) {
+        log.warn('cron_runs fail update threw', {
+          jobName,
+          runId,
+          originalError: stringifyCronError(err),
+          updateError: updateErr instanceof Error ? updateErr.message : String(updateErr),
+        })
+      }
     },
   }
 }
