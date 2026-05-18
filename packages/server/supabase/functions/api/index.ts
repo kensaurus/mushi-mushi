@@ -24,6 +24,7 @@ import { registerA2ATaskRoutes } from './routes/a2a-tasks.ts';
 import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
+import { registerRewardsRoutes } from './routes/rewards.ts';
 
 ensureSentry('api');
 
@@ -391,6 +392,8 @@ registerAdminOpsRoutes(app);
 registerInventoryRoutes(app);
 
 registerQaCoverageRoutes(app);
+
+registerRewardsRoutes(app);
 
 registerA2ATaskRoutes(app);
 
