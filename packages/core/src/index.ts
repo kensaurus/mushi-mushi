@@ -44,6 +44,8 @@ export type {
   MushiOnDeviceClassifierResult,
   MushiBreadcrumb,
   MushiSentryContext,
+  MushiBetaModeConfig,
+  MushiBetaChangelogEntry,
 } from './types';
 
 export {

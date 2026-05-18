@@ -384,4 +384,105 @@ export const stripeFromEnv = (): StripeConfig => ({
   portalReturnUrl: Deno.env.get('STRIPE_PORTAL_RETURN_URL') ?? 'https://app.mushimushi.dev/settings/billing',
 })
 
+// ----------------------------------------------------------------
+// Stripe Connect Express — reward monetary payouts
+// Used by reward-payout-aggregator/ and POST /v1/sdk/me/payout/onboard
+// ----------------------------------------------------------------
+
+export interface StripeConnectAccount {
+  id: string
+  charges_enabled: boolean
+  payouts_enabled: boolean
+  details_submitted: boolean
+  requirements: { currently_due: string[]; eventually_due: string[]; disabled_reason: string | null }
+}
+
+export const createConnectAccount = (
+  cfg: StripeConfig,
+  args: { email?: string; country?: string; endUserId: string; metadata?: Record<string, string> },
+): Promise<StripeConnectAccount> =>
+  stripeFetch(cfg, '/accounts', {
+    method: 'POST',
+    body: form({
+      type: 'express',
+      ...(args.email ? { email: args.email } : {}),
+      country: args.country ?? 'US',
+      'capabilities[transfers][requested]': 'true',
+      'metadata[mushi_end_user_id]': args.endUserId,
+      'metadata[source]': 'mushi-rewards',
+      ...Object.fromEntries(
+        Object.entries(args.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]),
+      ),
+    }),
+  })
+
+export interface StripeAccountLink {
+  url: string
+  expires_at: number
+}
+
+export const createConnectOnboardingLink = (
+  cfg: StripeConfig,
+  args: { accountId: string; returnUrl: string; refreshUrl: string },
+): Promise<StripeAccountLink> =>
+  stripeFetch(cfg, '/account_links', {
+    method: 'POST',
+    body: form({
+      account: args.accountId,
+      type: 'account_onboarding',
+      return_url: args.returnUrl,
+      refresh_url: args.refreshUrl,
+    }),
+  })
+
+export const retrieveConnectAccount = (
+  cfg: StripeConfig,
+  accountId: string,
+): Promise<StripeConnectAccount> =>
+  stripeFetch(cfg, `/accounts/${encodeURIComponent(accountId)}`)
+
+export interface StripeTransfer {
+  id: string
+  amount: number
+  currency: string
+  destination: string
+  created: number
+}
+
+export const createConnectTransfer = async (
+  cfg: StripeConfig,
+  args: {
+    amountCents: number
+    currency: string
+    destination: string
+    idempotencyKey: string
+    metadata?: Record<string, string>
+  },
+): Promise<StripeTransfer> => {
+  const body = form({
+    amount: args.amountCents,
+    currency: args.currency,
+    destination: args.destination,
+    ...Object.fromEntries(
+      Object.entries(args.metadata ?? {}).map(([k, v]) => [`metadata[${k}]`, v]),
+    ),
+  })
+  const res = await fetch(`${STRIPE_API}/transfers`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cfg.secretKey}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Stripe-Version': '2025-08-27.basil',
+      // Idempotency key prevents double-transfer on retries
+      'Idempotency-Key': args.idempotencyKey,
+    },
+    body: body.toString(),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`stripe /transfers -> ${res.status}: ${text}`)
+  }
+  return (await res.json()) as StripeTransfer
+}
+
 declare const Deno: { env: { get(name: string): string | undefined } }

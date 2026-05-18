@@ -7,6 +7,7 @@ import type {
   MushiReporterReport,
   MushiRuntimeSdkConfig,
   MushiSdkVersionInfo,
+  MushiTierResult,
 } from './types';
 
 export interface ApiClientOptions {
@@ -215,6 +216,57 @@ export function createApiClient(options: ApiClientOptions): MushiApiClient {
         `/v1/reporter/reports/${reportId}/reply`,
         reporterToken,
         { body },
+      );
+    },
+
+    // ─── Rewards program (P1) ──────────────────────────────────
+
+    async submitActivity(userId, events, opts?: { userTraits?: { email?: string; name?: string; provider?: string }; reporterTokenHash?: string; optedIn?: boolean; hostJwt?: string }) {
+      return request<{ accepted: number; total: number }>(
+        'POST',
+        '/v1/sdk/activity',
+        {
+          user_id: userId,
+          user_traits: opts?.userTraits,
+          opted_in: opts?.optedIn,
+          reporter_token_hash: opts?.reporterTokenHash,
+          // P2: JWT for monetary verification; omitted when null
+          ...(opts?.hostJwt ? { host_jwt: opts.hostJwt } : {}),
+          events,
+        },
+        1, // best-effort, 1 retry
+        'discovery',
+      );
+    },
+
+    async getMyPoints(userId) {
+      return request<{ total_points: number; points_30d: number; points_lifetime: number; tier: MushiTierResult | null }>(
+        'GET',
+        `/v1/sdk/me/points?userId=${encodeURIComponent(userId)}`,
+        undefined,
+        1,
+        'reporter-poll',
+      );
+    },
+
+    async getMyTier(userId) {
+      return request<MushiTierResult | null>(
+        'GET',
+        `/v1/sdk/me/tier?userId=${encodeURIComponent(userId)}`,
+        undefined,
+        1,
+        'reporter-poll',
+      );
+    },
+
+    async getMyHistory(userId, opts) {
+      const qs = new URLSearchParams({ userId, ...(opts?.limit ? { limit: String(opts.limit) } : {}) });
+      return request<{ items: unknown[]; total: number }>(
+        'GET',
+        `/v1/sdk/me/history?${qs}`,
+        undefined,
+        1,
+        'reporter-poll',
       );
     },
   };

@@ -194,6 +194,7 @@ const NAV: NavSection[] = [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
       { label: 'Members',    path: '/organization/members', icon: IconProjects, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
+      { label: 'Rewards',    path: '/rewards',    icon: IconSparkle },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
       { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },

@@ -8,6 +8,7 @@ import { reportSubmissionSchema } from '../_shared/schemas.ts';
 import { checkAntiGaming } from '../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../_shared/telemetry.ts';
 import { awardPoints } from '../_shared/reputation.ts';
+import { resolveEndUser } from '../_shared/end-user-resolver.ts';
 import { createNotification, buildNotificationMessage } from '../_shared/notifications.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
 import { dbError } from './shared.ts';
@@ -355,6 +356,46 @@ export async function ingestReport(
       errHint: (insertError as { hint?: string }).hint,
     });
     return { ok: false, error: 'Failed to store report' };
+  }
+
+  // Link the report to an end_user if the SDK sent identify() data.
+  // Fire-and-forget: linkage must never block ingest. On success the
+  // report row is back-patched with the end_user_id so the rewards
+  // pipeline and admin Contributors tab can attribute points correctly.
+  const reporterUserId = (report.metadata as Record<string, unknown> | undefined)?.user as
+    | { id?: string; email?: string; name?: string; provider?: string }
+    | undefined;
+  if (reporterUserId?.id) {
+    void (async () => {
+      try {
+        const { data: proj } = await db
+          .from('projects')
+          .select('organization_id')
+          .eq('id', projectId)
+          .single();
+        const organizationId = proj?.organization_id;
+        if (!organizationId) return;
+        const endUser = await resolveEndUser(db, {
+          organizationId,
+          externalUserId: reporterUserId.id!,
+          traits: {
+            email: reporterUserId.email ?? null,
+            name: reporterUserId.name ?? null,
+            provider: reporterUserId.provider ?? null,
+          },
+          reporterTokenHash: tokenHash,
+        });
+        if (endUser?.id) {
+          await db
+            .from('reports')
+            .update({ end_user_id: endUser.id })
+            .eq('id', reportId);
+          log.info('Report linked to end_user', { reportId, endUserId: endUser.id });
+        }
+      } catch (err) {
+        log.warn('end_user linkage failed', { reportId, err: String(err) });
+      }
+    })();
   }
 
   // Insert into processing queue

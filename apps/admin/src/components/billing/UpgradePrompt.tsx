@@ -97,6 +97,26 @@ const FEATURE_COPY: Record<FeatureFlag, { title: string; tagline: string; bullet
       'Synthetic probes and status reconciler keep verified actions honest in prod.',
     ],
   },
+  rewards_program: {
+    title: 'Rewards program',
+    tagline:
+      'Incentivize users to report bugs, explore your app, and give feedback — award points, tier badges, and host-side credits.',
+    bullets: [
+      'Configurable point rules per action (bug report, page visit, drill completion, etc.).',
+      'Tier ladder — Free → Explorer → Contributor → Champion — with HMAC-signed host webhooks.',
+      'Anti-fraud velocity caps and per-user lifetime limits built in.',
+    ],
+  },
+  rewards_monetary: {
+    title: 'Monetary rewards (Stripe Connect)',
+    tagline:
+      'Pay top contributors directly via Stripe Connect Express — configurable per-tier USD amounts.',
+    bullets: [
+      'Stripe Connect Express onboarding — contributors receive funds to their bank account.',
+      'Monthly payout aggregator with configurable per-tier amounts.',
+      'Payout liability dashboard and dispute resolution flow.',
+    ],
+  },
 }
 
 interface InlineProps {

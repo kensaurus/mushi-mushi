@@ -570,3 +570,9 @@ export function IconChevronUp(p: IconProps) {
   </>)
 }
 
+export function IconChevronRight(p: IconProps) {
+  return wrap(p, <>
+    <path d="M5.5 3l5 5-5 5" />
+  </>)
+}
+
