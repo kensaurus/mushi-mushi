@@ -1,12 +1,13 @@
 Pod::Spec.new do |s|
   s.name             = 'MushiMushi'
-  s.version          = '0.3.0'
+  s.version          = '0.4.0'
   s.summary          = 'Native iOS SDK for the Mushi Mushi LLM-driven bug intake & autofix platform.'
   s.description      = <<-DESC
     MushiMushi is an LLM-driven bug intake, classification, and autofix
     platform. This pod provides the native iOS SDK: shake-to-report,
-    screenshot capture, offline queue, device context, and the native
-    bottom-sheet widget.
+    screenshot capture, offline queue, device context, native
+    bottom-sheet widget, breadcrumb ring buffer, rage-tap / slow-screen
+    proactive detection, PII scrubbing, and exception normalisation.
   DESC
 
   s.homepage         = 'https://github.com/kensaurus/mushi-mushi'

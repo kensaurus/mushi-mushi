@@ -87,6 +87,14 @@ const NUDGE_COPY: Record<FeatureFlag, { tagline: string; pillLabel: string }> = 
     tagline: 'Bidirectional inventory + agent gates ship with Pro.',
     pillLabel: 'PRO',
   },
+  rewards_program: {
+    tagline: 'Rewards program — points, tiers, and webhooks — requires Starter.',
+    pillLabel: 'STARTER',
+  },
+  rewards_monetary: {
+    tagline: 'Monetary payouts via Stripe Connect require Pro.',
+    pillLabel: 'PRO',
+  },
 }
 
 function ctaCopy(upgradeTo: UpgradeTarget | null | undefined): string {

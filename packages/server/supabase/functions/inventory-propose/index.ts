@@ -46,6 +46,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { ANTHROPIC_SONNET } from '../_shared/models.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 import {
   validateInventoryObject,
   type Inventory,
@@ -108,6 +109,17 @@ interface ProposeBody {
   triggered_by?: string
   /** Override the default model for experimentation. */
   model?: string
+  /**
+   * Loop-closure (deferred-5): when set to `'drift_watch'` the function
+   * scans every project with `inventory.yaml` ingested AND
+   * `discovery_observed_inventory` data, and re-fires the proposer ONLY
+   * for projects where the live SDK observations diverge from the
+   * stored inventory by ≥ MUSHI_INVENTORY_DRIFT_ROUTES routes for ≥
+   * MUSHI_INVENTORY_DRIFT_HOURS hours. Projects without drift incur
+   * zero LLM cost. Invoked by the `mushi-inventory-drift-watch` pg_cron
+   * entry (migration 20260510020000).
+   */
+  mode?: 'single' | 'drift_watch'
 }
 
 /**
@@ -231,10 +243,11 @@ async function runProposer(args: {
   modelId: string
   prompt: string
   previousIssues?: string
+  systemPrompt?: string
 }): Promise<{ inventory: Inventory; rationale: Record<string, string>; tokens: { in: number; out: number } }> {
   const anthropic = createAnthropic({ apiKey: args.apiKey })
   const messages: Array<{ role: 'system' | 'user'; content: string }> = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: args.systemPrompt ?? SYSTEM_PROMPT },
     { role: 'user', content: args.prompt },
   ]
   if (args.previousIssues) {
@@ -330,6 +343,10 @@ async function proposeAndPersist(
   const modelId = modelOverride ?? ANTHROPIC_SONNET
   const prompt = buildUserPrompt(observations, current, app)
 
+  // Resolve the managed system prompt from prompt_versions (stage 'inventory-propose').
+  // Falls back to the hardcoded SYSTEM_PROMPT constant when no managed row exists.
+  const { promptTemplate: managedSystemPrompt } = await getPromptForStage(db, projectId, 'inventory-propose')
+
   // Up to 3 attempts: first clean, then 2 retries with the schema issues fed back.
   let attempt = 0
   let previousIssues: string | undefined
@@ -337,7 +354,7 @@ async function proposeAndPersist(
   let lastError: { message: string; summary?: string } | null = null
   while (attempt < 3) {
     try {
-      last = await runProposer({ apiKey, modelId, prompt, previousIssues })
+      last = await runProposer({ apiKey, modelId, prompt, previousIssues, systemPrompt: managedSystemPrompt ?? undefined })
       break
     } catch (err) {
       lastError = {
@@ -432,6 +449,12 @@ async function handler(req: Request): Promise<Response> {
       headers: { 'Content-Type': 'application/json' },
     })
   }
+  const db = getServiceClient()
+
+  if (body.mode === 'drift_watch') {
+    return handleDriftWatch(db, body)
+  }
+
   if (!body.project_id) {
     return new Response(JSON.stringify({ ok: false, error: { code: 'MISSING_PROJECT' } }), {
       status: 400,
@@ -439,7 +462,6 @@ async function handler(req: Request): Promise<Response> {
     })
   }
 
-  const db = getServiceClient()
   try {
     const result = await proposeAndPersist(
       db,
@@ -458,6 +480,124 @@ async function handler(req: Request): Promise<Response> {
       { status: 500, headers: { 'Content-Type': 'application/json' } },
     )
   }
+}
+
+/**
+ * Drift-watch sweep: scan every project with both an ingested inventory
+ * AND live SDK passive-discovery data, and re-fire the proposer only
+ * when the observed routes diverge from the stored inventory by N+ routes.
+ *
+ * Cost shape: a single sweep only INVOKES the LLM for projects that
+ * actually drifted. The 80%+ "no drift" path is a single SQL aggregate
+ * per project plus a small set comparison — sub-second, zero LLM tokens.
+ *
+ * Cooldown: skip projects that already have an open `inventory_proposals`
+ * draft younger than 7 days. Operators reviewing one draft don't need a
+ * second one stacked on top before they've decided.
+ */
+async function handleDriftWatch(db: SupabaseClient, body: ProposeBody): Promise<Response> {
+  const driftRouteThreshold = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_ROUTES') ?? '5')
+  const driftCooldownDays = Number(Deno.env.get('MUSHI_INVENTORY_DRIFT_COOLDOWN_DAYS') ?? '7')
+
+  // Find every project that HAS a current inventory.yaml. Projects
+  // without one already get a different proposal flow (the bootstrap
+  // path) and we don't want to fire the drift watcher there.
+  const { data: candidates } = await db
+    .from('inventories')
+    .select('project_id, parsed')
+    .eq('is_current', true)
+
+  const results: Array<{
+    projectId: string
+    drifted: number
+    proposalId?: string
+    skipped?: string
+    error?: string
+  }> = []
+
+  for (const cand of candidates ?? []) {
+    const projectId = cand.project_id as string
+    const parsed = cand.parsed as Inventory | null
+    if (!parsed) {
+      results.push({ projectId, drifted: 0, skipped: 'invalid_inventory' })
+      continue
+    }
+
+    // Cooldown — skip projects with an open draft proposal.
+    const cutoff = new Date(Date.now() - driftCooldownDays * 86400_000).toISOString()
+    const { data: openDraft } = await db
+      .from('inventory_proposals')
+      .select('id')
+      .eq('project_id', projectId)
+      .eq('status', 'draft')
+      .gte('created_at', cutoff)
+      .limit(1)
+      .maybeSingle()
+    if (openDraft) {
+      results.push({ projectId, drifted: 0, skipped: 'open_draft_in_cooldown' })
+      continue
+    }
+
+    // Compute the route diff. The current inventory's pages.* slugs are
+    // canonical; the observed view groups by URL pathname. We treat a
+    // route as "drifted" if it appears in observations but NOT in any
+    // page slug. Trailing slashes / leading slashes are normalised.
+    const stored = new Set(
+      (parsed.pages ?? []).map((p) =>
+        String(p.slug ?? p.path ?? '').replace(/^\/+|\/+$/g, '').toLowerCase(),
+      ),
+    )
+    const { data: observed } = await db
+      .from('discovery_observed_inventory')
+      .select('route')
+      .eq('project_id', projectId)
+      .gte('observation_count', 3) // require some real traffic, not a single hit
+    const observedRoutes = (observed ?? []).map((r) =>
+      String(r.route ?? '').replace(/^\/+|\/+$/g, '').toLowerCase(),
+    )
+    const drifted = observedRoutes.filter((r) => r.length > 0 && !stored.has(r))
+
+    if (drifted.length < driftRouteThreshold) {
+      results.push({ projectId, drifted: drifted.length, skipped: 'below_threshold' })
+      continue
+    }
+
+    rlog.info('drift detected — re-firing proposer', {
+      projectId,
+      driftedCount: drifted.length,
+      driftedSample: drifted.slice(0, 5),
+    })
+    try {
+      const result = await proposeAndPersist(db, projectId, body.triggered_by ?? 'cron:drift-watch', body.model)
+      results.push({ projectId, drifted: drifted.length, proposalId: result.proposalId })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      rlog.warn('drift-watch propose failed (continuing)', { projectId, err: msg })
+      results.push({ projectId, drifted: drifted.length, error: msg.slice(0, 200) })
+    }
+  }
+
+  const fired = results.filter((r) => r.proposalId).length
+  const skipped = results.filter((r) => r.skipped).length
+  rlog.info('drift-watch sweep complete', {
+    candidates: candidates?.length ?? 0,
+    fired,
+    skipped,
+    failed: results.filter((r) => r.error).length,
+  })
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      data: {
+        candidatesChecked: candidates?.length ?? 0,
+        fired,
+        skipped,
+        results,
+      },
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json' } },
+  )
 }
 
 if (typeof Deno !== 'undefined') {

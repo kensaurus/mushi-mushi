@@ -14,6 +14,9 @@ export interface MushiConfig {
   projectId: string
   apiKey: string
   endpoint?: string
+  capture?: {
+    discoverInventory?: boolean
+  }
 }
 
 const MUSHI_KEY: InjectionKey<MushiSDKInstance> = Symbol('mushi')
@@ -23,6 +26,7 @@ function toCoreConfig(config: MushiConfig): CoreMushiConfig {
     projectId: config.projectId,
     apiKey: config.apiKey,
     ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
+    ...(config.capture !== undefined ? { capture: config.capture } : {}),
   }
 }
 

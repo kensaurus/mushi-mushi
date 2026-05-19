@@ -3,8 +3,7 @@
 Native iOS SDK for [Mushi Mushi](https://mushimushi.dev) — the open-source,
 LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.3.0 Surface stable; minor changes still possible
-> before V1.0.
+> **Status**: V0.4.0 Feature parity with the web SDK.
 
 ## Features
 
@@ -12,14 +11,18 @@ LLM-driven bug intake, classification, and autofix platform.
 - 📦 **Offline queue** that survives app restarts (file-backed, byte-capped)
 - 🎯 **Native bottom-sheet widget** with category picker and live min-length validation
 - 🌐 **Device + app context** auto-attached to every report
-- 🧪 **Tested** — `swift test` runs the offline-queue + persistence suite
+- 🧭 **Breadcrumb ring buffer** — 50-entry FIFO, auto-attached to every report
+- 🚨 **Proactive detection** — rage-tap and slow-screen triggers auto-open the widget
+- 🔒 **PII scrubber** — emails, JWTs, Stripe/OpenAI/Anthropic/AWS keys redacted before submission
+- ⚠️ **Exception normaliser** — `captureError()` now forwards name/message/stack/cause
+- 🧪 **Tested** — `swift test` runs the offline-queue, breadcrumb, PII, and exception suite
 
 ## Install
 
 ### Swift Package Manager (recommended)
 
 ```swift
-.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.3.0")
+.package(url: "https://github.com/kensaurus/mushi-mushi.git", from: "0.4.0")
 ```
 
 then add `MushiMushi` to your target.
@@ -27,7 +30,7 @@ then add `MushiMushi` to your target.
 ### CocoaPods
 
 ```ruby
-pod 'MushiMushi', '~> 0.2'
+pod 'MushiMushi', '~> 0.4'
 ```
 
 ## Quickstart
@@ -72,6 +75,28 @@ Mushi.shared.report(
 do { try riskyOperation() }
 catch { Mushi.shared.captureError(error) }
 ```
+
+### Breadcrumbs
+
+Drop short notes onto the 50-entry ring buffer; every `report()` /
+`captureError()` flushes them with the payload (PII-scrubbed).
+
+```swift
+Mushi.shared.addBreadcrumb(category: .uiTap, message: "Tapped Save")
+Mushi.shared.addBreadcrumb(
+    category: .navigation,
+    level: .info,
+    message: "Settings → Profile",
+    data: ["from": "home"]
+)
+
+let crumbs = Mushi.shared.getBreadcrumbs()  // snapshot for debugging
+```
+
+Wire categories: `navigation`, `ui.tap`, `console`, `network`,
+`lifecycle`, `custom` — admin tooling treats `ui.tap` as the touch-device
+sibling of the web SDK's `ui.click`. The `data` map is `[String: String]`
+on iOS; non-string values are coerced to strings on the Capacitor bridge.
 
 If your app already uses Sentry, keep initializing Sentry in the host app and
 attach Mushi report metadata through `setMetadata` or `report(..., metadata:)`.

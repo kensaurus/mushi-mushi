@@ -67,6 +67,14 @@ export interface MushiCapacitorWidgetOptions {
   metadata?: Record<string, unknown>;
 }
 
+export interface MushiCapacitorBreadcrumb {
+  timestamp?: number;
+  category: 'navigation' | 'ui.tap' | 'console' | 'network' | 'lifecycle' | 'custom';
+  level?: 'debug' | 'info' | 'warning' | 'error';
+  message: string;
+  data?: Record<string, string>;
+}
+
 export interface MushiCapacitorPlugin {
   /** Initialize the plugin. Idempotent. */
   configure(options: MushiCapacitorPluginConfig): Promise<void>;
@@ -91,6 +99,17 @@ export interface MushiCapacitorPlugin {
 
   /** Force a flush of the offline queue. */
   flushQueue(): Promise<{ delivered: number }>;
+
+  /**
+   * Append a breadcrumb to the native ring buffer. Mirrors `Mushi.addBreadcrumb()`
+   * from the web SDK — the same 50-entry FIFO is flushed with every report.
+   */
+  addBreadcrumb(crumb: MushiCapacitorBreadcrumb): Promise<void>;
+
+  /**
+   * Return a snapshot of the current native breadcrumb ring buffer, oldest first.
+   */
+  getBreadcrumbs(): Promise<{ breadcrumbs: MushiCapacitorBreadcrumb[] }>;
 
   /** Listener API — fired on every successful report submission. */
   addListener(

@@ -37,7 +37,15 @@ import {
   useMemo,
   type ReactNode,
 } from 'react'
-import { createApiClient, DEFAULT_API_ENDPOINT, type MushiReport, type MushiApiClient } from '@mushi-mushi/core'
+import {
+  createApiClient,
+  DEFAULT_API_ENDPOINT,
+  type MushiReport,
+  type MushiApiClient,
+  type MushiRewardsConfig,
+  type MushiReputationResult,
+  type MushiTierResult,
+} from '@mushi-mushi/core'
 import { setupConsoleCapture } from './capture/console-capture'
 import { setupNetworkCapture } from './capture/network-capture'
 import { getDeviceInfo } from './capture/device-info'
@@ -66,6 +74,7 @@ export interface MushiRNConfig {
     maxQueueSize?: number
     retryIntervalMs?: number
   }
+  rewards?: MushiRewardsConfig
 }
 
 export interface MushiRNInstance {
@@ -76,6 +85,22 @@ export interface MushiRNInstance {
   getDeviceInfo(): ReturnType<typeof getDeviceInfo>
   getConsoleEntries(): ReturnType<ReturnType<typeof setupConsoleCapture>['getEntries']>
   getNetworkEntries(): ReturnType<ReturnType<typeof setupNetworkCapture>['getEntries']>
+
+  // v0.10.0: missing methods that glot.it had to workaround in apps/mobile/src/native/mushi.ts
+  /** Set the current authenticated user. Equivalent to Mushi.identify() on web. */
+  identify(userId: string, traits?: { email?: string; name?: string; provider?: string; [k: string]: unknown }): void
+  /** Attach arbitrary key/value metadata to subsequent reports. */
+  setMetadata(key: string, value: unknown): void
+  /** Set the current screen context attached to subsequent reports. */
+  setScreen(screen: { name: string; route?: string; feature?: string }): void
+
+  // Rewards program (P1)
+  /** Manually record a host-defined activity event. */
+  recordActivity(action: string, metadata?: Record<string, unknown>): void
+  /** Returns the current user's tier. */
+  getTier(): Promise<MushiTierResult | null>
+  /** Returns the current user's reputation + point totals. */
+  getReputation(): Promise<MushiReputationResult | null>
 }
 
 const MushiContext = createContext<MushiRNInstance | null>(null)
@@ -225,6 +250,36 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     [config.projectId, config.apiKey, apiEndpoint],
   )
 
+  // v0.10.0: user identity state (was missing, causing workarounds in glot.it)
+  const userRef = useRef<{ id: string; email?: string; name?: string; provider?: string } | null>(null)
+  const metadataRef = useRef<Record<string, unknown>>({})
+  const screenRef = useRef<{ name: string; route?: string; feature?: string } | null>(null)
+
+  // Rewards: activity queue
+  const activityQueueRef = useRef<Array<{ action: string; metadata?: Record<string, unknown> }>>([])
+  const rewardsFlushRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    const rewards = config.rewards
+    if (!rewards?.enabled || !rewards.trackActivity) return
+    const flushMs = Math.max(30_000, rewards.flushIntervalMs ?? 300_000)
+    rewardsFlushRef.current = setInterval(async () => {
+      const userId = userRef.current?.id
+      const client = apiClientRef.current
+      if (!userId || !client || activityQueueRef.current.length === 0) return
+      const batch = activityQueueRef.current.splice(0, 100)
+      await client.submitActivity(userId, batch, {
+        userTraits: userRef.current ?? undefined,
+        optedIn: true,
+      }).catch(() => {
+        activityQueueRef.current.unshift(...batch.slice(0, 50))
+      })
+    }, flushMs)
+    return () => {
+      if (rewardsFlushRef.current) clearInterval(rewardsFlushRef.current)
+    }
+  }, [config.rewards?.enabled, config.rewards?.trackActivity, config.rewards?.flushIntervalMs])
+
   const instance: MushiRNInstance = useMemo(
     () => ({
       open,
@@ -234,8 +289,51 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
       getDeviceInfo,
       getConsoleEntries: () => consoleRef.current?.getEntries() ?? [],
       getNetworkEntries: () => networkRef.current?.getEntries() ?? [],
+
+      // v0.10.0: new identity methods (these were causing workarounds in apps/mobile/src/native/mushi.ts)
+      identify(userId, traits) {
+        userRef.current = {
+          id: userId,
+          email: traits?.email,
+          name: traits?.name,
+          provider: traits?.provider,
+        }
+      },
+      setMetadata(key, value) {
+        metadataRef.current[key] = value
+      },
+      setScreen(screen) {
+        screenRef.current = screen
+      },
+
+      // Rewards (P1)
+      recordActivity(action, metadata) {
+        if (!config.rewards?.enabled) return
+        activityQueueRef.current.push({ action, metadata })
+      },
+      async getTier() {
+        const userId = userRef.current?.id
+        const client = apiClientRef.current
+        if (!userId || !client) return null
+        const res = await client.getMyTier(userId)
+        return res.ok ? (res.data as MushiTierResult) : null
+      },
+      async getReputation() {
+        const userId = userRef.current?.id
+        const client = apiClientRef.current
+        if (!userId || !client) return null
+        const res = await client.getMyPoints(userId)
+        if (!res.ok) return null
+        return {
+          totalPoints: (res.data as { total_points: number }).total_points ?? 0,
+          points30d: (res.data as { points_30d: number }).points_30d ?? 0,
+          reputation: 1.0,
+          confirmedBugs: 0,
+          totalReports: 0,
+        }
+      },
     }),
-    [open, close, attachTo, submitReport],
+    [open, close, attachTo, submitReport, config.rewards?.enabled],
   )
 
   const trigger = config.widget?.trigger ?? 'button'

@@ -363,7 +363,10 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     // judge-batch). Cheaper to fetch alongside the report than as a separate round-trip.
     // Also pull the linked fix attempts + judge eval so the PDCA receipt strip
     // on the report detail page can render without another network hop.
-    const [invocationsRes, fixesRes, judgeRes] = await Promise.all([
+    // Inventory anchor: walk graph_edges to find the action node this report is
+    // filed against (edge type='reports_against') and return its metadata so
+    // MCP get_fix_context.inventoryAction is always populated when one exists.
+    const [invocationsRes, fixesRes, judgeRes, inventoryAnchorRes] = await Promise.all([
       db
         .from('llm_invocations')
         .select(
@@ -375,7 +378,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       db
         .from('fix_attempts')
         .select(
-          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id',
+          'id, status, agent, pr_url, pr_number, branch, commit_sha, files_changed, lines_changed, review_passed, check_run_status, check_run_conclusion, pr_state, llm_model, error, started_at, completed_at, created_at, langfuse_trace_id, inventory_action_node_id, spec_validation_warnings',
         )
         .eq('report_id', reportId)
         .order('created_at', { ascending: false })
@@ -387,6 +390,19 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      // Resolve the inventory action this report was filed against via
+      // `get_report_inventory_action` (migration 20260511120000). The RPC
+      // walks two paths in order:
+      //   1. graph_nodes(node_type='report_group', label=reportId)
+      //        → graph_edges(edge_type='reports_against')
+      //        → graph_nodes(node_type='action')
+      //      (populated by classify-report → linkReportToAction)
+      //   2. fix_dispatch_jobs.inventory_action_node_id fallback
+      //      (covers reports that were dispatched but never classified)
+      // Returns NULL when neither path resolves — UI shows no Origin drawer.
+      db
+        .rpc('get_report_inventory_action', { p_report_id: reportId })
+        .maybeSingle(),
     ]);
 
     return c.json({
@@ -396,6 +412,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         llm_invocations: invocationsRes.data ?? [],
         fix_attempts: fixesRes.data ?? [],
         judge_eval: judgeRes.data ?? null,
+        inventory_action: inventoryAnchorRes.data ?? null,
       },
     });
   });

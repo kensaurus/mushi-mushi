@@ -74,6 +74,40 @@ export interface MushiWidgetConfig {
   brandFooter?: boolean;
   /** How the widget should surface SDK freshness warnings. Defaults to auto. */
   outdatedBanner?: 'auto' | 'banner' | 'console-only' | 'off';
+  /**
+   * Beta mode: injects discreet "early access" messaging into the widget panel.
+   * Shows a beta strip on the category step and a contact footer on the success
+   * step. Designed to reduce user frustration with in-progress apps while
+   * actively inviting feedback.
+   */
+  betaMode?: MushiBetaModeConfig;
+}
+
+export interface MushiBetaModeConfig {
+  enabled?: boolean;
+  /** Display name of the app shown in the beta strip. Defaults to 'This app'. */
+  appName?: string;
+  /** Contact email shown on success step for direct founder/dev reach. */
+  contactEmail?: string;
+  /** Override the default beta strip message. */
+  message?: string;
+  /**
+   * Optional perks shown to the user for opting in as a beta tester.
+   * e.g. ['Early access to new lessons', 'Priority bug fix queue'].
+   */
+  perks?: string[];
+  /**
+   * Version-tied release notes rendered as a collapsible "What's new in this build"
+   * row in the widget. Closes the feedback loop — "did you fix what I reported?"
+   * Only the first entry (latest) is shown by default.
+   */
+  changelogItems?: MushiBetaChangelogEntry[];
+}
+
+export interface MushiBetaChangelogEntry {
+  version: string;
+  date?: string;
+  items: string[];
 }
 
 export interface MushiWidgetInset {
@@ -278,9 +312,68 @@ export interface MushiOfflineConfig {
 
 export interface MushiRewardsConfig {
   enabled?: boolean;
-  requireAuth?: boolean;
+  /**
+   * P1: when true the SDK auto-tracks route navigations, [data-testid] clicks,
+   * and session dwell time and flushes them to POST /v1/sdk/activity.
+   * Default false. Requires opted_in_to_rewards = true from the end user.
+   */
+  trackActivity?: boolean;
+  /**
+   * Activity batch flush interval in ms. Default 300_000 (5 min).
+   * Minimum 30_000 (30s) — smaller values are clamped.
+   */
+  flushIntervalMs?: number;
+  /**
+   * Show a tier + points footer in the SDK widget.
+   * Default false.
+   */
+  showInWidget?: boolean;
+  /**
+   * Whether to show a "+X pts" toast notification on each award.
+   * Default true when enabled.
+   */
   showNotifications?: boolean;
+  /**
+   * 'auto'     — immediately opt the user in when identify() is called.
+   * 'explicit' — SDK surfaces a one-time consent prompt. Default 'explicit'.
+   */
+  consentMode?: 'auto' | 'explicit';
+  /**
+   * P2: callback that returns a host-app JWT for server-side identity
+   * verification before monetary rewards are issued. Return null to skip
+   * verification for non-monetary actions.
+   */
+  verifyUserToken?: () => Promise<string | null>;
+  /**
+   * @deprecated Superseded by server-side reward_webhooks table.
+   * Kept for backwards compatibility; has no effect from v0.10.0.
+   */
   webhookOnReward?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Rewards — public types returned by SDK instance methods
+// ---------------------------------------------------------------------------
+
+export interface MushiReputationResult {
+  totalPoints: number;
+  points30d: number;
+  reputation: number;
+  confirmedBugs: number;
+  totalReports: number;
+}
+
+export interface MushiTierResult {
+  id: string;
+  slug: string;
+  displayName: string;
+  pointsThreshold: number;
+  perks: Record<string, unknown>;
+}
+
+export interface MushiActivityEvent {
+  action: string;
+  metadata?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,13 +473,30 @@ export interface MushiBreadcrumb {
   /**
    * Coarse bucket for filtering / coloring in the report drawer.
    * - `navigation` — route or url change
-   * - `ui.click` — user clicked a `[data-testid]` element
+   * - `ui.click` — user clicked a `[data-testid]` element (web SDK)
+   * - `ui.tap` — user tapped a `UIView` / Android `View` (native SDKs)
    * - `console` — `console.error` / `console.warn` callsite
-   * - `xhr` / `fetch` — network request that errored or 4xx/5xx
+   * - `xhr` / `fetch` — network request that errored or 4xx/5xx (web SDK)
+   * - `network` — network failure on iOS / Android (native SDKs)
    * - `lifecycle` — Mushi SDK init / open / submit / queue
    * - `custom` — host called `Mushi.addBreadcrumb()`
+   *
+   * Admin tooling that filters by interaction should treat
+   * `ui.click` ∪ `ui.tap` as one bucket and `xhr` ∪ `fetch` ∪ `network`
+   * as one bucket. Native enums are platform-idiomatic (`tap` on touch
+   * devices, `network` because iOS/Android don't expose `XHR` / `fetch`
+   * separately) — every wire string is documented in the native READMEs.
    */
-  category: 'navigation' | 'ui.click' | 'console' | 'xhr' | 'fetch' | 'lifecycle' | 'custom';
+  category:
+    | 'navigation'
+    | 'ui.click'
+    | 'ui.tap'
+    | 'console'
+    | 'xhr'
+    | 'fetch'
+    | 'network'
+    | 'lifecycle'
+    | 'custom';
   /**
    * Severity — `info` is the default. `warning` / `error` map to a
    * coloured pill in the drawer; the Triage LLM uses these to decide
@@ -767,6 +877,29 @@ export interface MushiSDKInstance {
 
   /** Remove a single tag, or all tags when called with no argument. */
   clearTag(key?: string): void;
+
+  // ─── Rewards program (P1) ───────────────────────────────────
+
+  /**
+   * Returns the current user's reputation + legacy point totals from the
+   * reporter_reputation table. Available even when the rewards program is
+   * disabled (legacy surface).
+   */
+  getReputation(): Promise<MushiReputationResult | null>;
+
+  /**
+   * Returns the current user's tier from the rewards program.
+   * Returns null when the user has not yet been identified or the project
+   * has rewards_enabled = false.
+   */
+  getTier(): Promise<MushiTierResult | null>;
+
+  /**
+   * Manually record a host-defined activity event (e.g. 'lesson_completed').
+   * The SDK batches these and flushes to POST /v1/sdk/activity.
+   * No-op when rewards are disabled or the user has not opted in.
+   */
+  recordActivity(action: string, metadata?: Record<string, unknown>): void;
 }
 
 export interface MushiCaptureExceptionOptions {
@@ -828,6 +961,43 @@ export interface MushiApiClient {
     reporterToken: string,
     body: string,
   ): Promise<MushiApiResponse<{ comment: MushiReporterComment }>>;
+
+  // ─── Rewards program (P1) ───────────────────────────────────
+
+  /**
+   * Submit a batch of activity events for the current user.
+   * Requires rewards to be enabled on the project.
+   */
+  submitActivity(
+    userId: string,
+    events: MushiActivityEvent[],
+    opts?: {
+      userTraits?: { email?: string; name?: string; provider?: string };
+      reporterTokenHash?: string;
+      optedIn?: boolean;
+      /** P2: host-app JWT; when present the server attempts verifyHostJwt
+       *  and updates end_users.jwt_verified_at if valid. Required for
+       *  monetary payout eligibility. */
+      hostJwt?: string;
+    },
+  ): Promise<MushiApiResponse<{ accepted: number; total: number }>>;
+
+  /** Fetch the current user's point totals (requires userId). */
+  getMyPoints(userId: string): Promise<MushiApiResponse<{
+    total_points: number;
+    points_30d: number;
+    points_lifetime: number;
+    tier: MushiTierResult | null;
+  }>>;
+
+  /** Fetch the current user's tier (requires userId). */
+  getMyTier(userId: string): Promise<MushiApiResponse<MushiTierResult | null>>;
+
+  /** Fetch the current user's activity history (requires userId). */
+  getMyHistory(
+    userId: string,
+    opts?: { limit?: number },
+  ): Promise<MushiApiResponse<{ items: unknown[]; total: number }>>;
 }
 
 /**

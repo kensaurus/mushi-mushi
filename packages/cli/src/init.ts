@@ -87,7 +87,9 @@ export async function runInit(options: InitOptions = {}): Promise<void> {
   writeEnvFile(cwd, credentials.apiKey, credentials.projectId, framework)
   persistCliConfig(credentials.apiKey, credentials.projectId)
 
-  printNextSteps(framework, credentials.apiKey, credentials.projectId)
+  const enableRewards = await maybeEnableRewards(options)
+
+  printNextSteps(framework, credentials.apiKey, credentials.projectId, enableRewards)
 
   await maybeSendTestReport(credentials, options)
 
@@ -363,13 +365,33 @@ function persistCliConfig(apiKey: string, projectId: string): void {
   saveConfig({ ...existing, apiKey, projectId })
 }
 
-function printNextSteps(framework: Framework, apiKey: string, projectId: string): void {
+function printNextSteps(framework: Framework, apiKey: string, projectId: string, enableRewards = false): void {
   p.note(framework.snippet(apiKey, projectId), 'Add this to your app:')
+
+  if (enableRewards) {
+    const badgeSnippet = framework.id === 'react'
+      ? `// Add to your user menu or profile UI:\nimport { MushiRewardsBadge } from '@mushi-mushi/react';\n\n// Inside your component:\n<MushiRewardsBadge showPoints />`
+      : `// Add to your user menu:\n// import { MushiRewardsBadge } from '@mushi-mushi/react';\n// <MushiRewardsBadge showPoints />`
+    p.note(badgeSnippet, 'Rewards badge snippet:')
+    p.log.info('Enable rewards in your project settings at https://kensaur.us/mushi-mushi/rewards')
+    p.log.info('Users will earn points for bug reports, screen navigation, and app activity.')
+  }
 
   p.log.message('Verify the install:')
   p.log.message('  • Start your dev server')
   p.log.message('  • Look for the 🐛 button in the bottom-right corner (or shake on mobile)')
   p.log.message('  • Submit a test report — it should appear at https://kensaur.us/mushi-mushi/reports')
+}
+
+async function maybeEnableRewards(options: InitOptions): Promise<boolean> {
+  if (options.yes) return false // non-interactive: opt out by default
+
+  const answer = await p.confirm({
+    message: 'Enable Mushi Rewards? (users earn points for bug reports + app activity)',
+    initialValue: false,
+  })
+  if (p.isCancel(answer)) return false
+  return Boolean(answer)
 }
 
 /**

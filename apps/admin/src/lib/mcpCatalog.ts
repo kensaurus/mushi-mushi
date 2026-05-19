@@ -213,6 +213,40 @@ export const TOOL_CATALOG: ToolSpec[] = [
     hints: { readOnly: false, destructive: true, idempotent: true, openWorld: true },
     useCase: 'Dismiss this duplicate / mark it fixed.',
   },
+  // --- Rewards (P3) -------------------------------------------------------
+  {
+    name: 'list_top_contributors',
+    title: 'Top contributors leaderboard',
+    description:
+      'Return the top N contributors for the organization, ranked by points in a time window (30d | 90d | all). Each row includes display name, tier, total points, report count, and anti-fraud flag. ' +
+      'Use this to identify your most engaged power users, write them a thank-you message, or decide who deserves a bonus.',
+    scope: 'mcp:read',
+    hints: { readOnly: true, idempotent: true, openWorld: true },
+    useCase: 'Who are my top 10 contributors this month?',
+  },
+  {
+    name: 'award_bonus_points',
+    title: 'Award bonus points',
+    description:
+      'Award ad-hoc bonus points to a contributor by their external user id (as passed to Mushi.identify()). ' +
+      'Points are applied server-side, audit-logged, and trigger tier re-evaluation. ' +
+      'Requires mcp:write scope. Use this to thank a contributor who found a critical bug or to run a one-off promotional campaign.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
+    useCase: 'Give this contributor 500 bonus points for the critical bug they found.',
+  },
+  {
+    name: 'set_tier',
+    title: 'Override contributor tier',
+    description:
+      'Override a contributor\'s tier by tier slug (e.g. "champion"). This is an admin escape hatch for manual promotions — ' +
+      'normal tier transitions happen automatically via point thresholds. ' +
+      'The override is logged in end_user_activity with action=tier_override_manual. ' +
+      'Requires mcp:write scope.',
+    scope: 'mcp:write',
+    hints: { readOnly: false, destructive: false, idempotent: true, openWorld: true },
+    useCase: 'Manually promote this user to Champion tier as a thank-you.',
+  },
 ]
 
 export interface ResourceSpec {

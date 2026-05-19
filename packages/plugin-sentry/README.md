@@ -55,17 +55,26 @@ express().post('/mushi/webhook', expressMiddleware(handler)).listen(3000)
 
 ## Subscribed events
 
-- `report.classified` — captures an event in Sentry when severity ≥ threshold.
+- `report.classified` — forwarded to Sentry as **User Feedback** via
+  `POST /api/0/projects/{org}/{project}/user-feedback/` when an
+  `sentryAuthToken` + a valid `sentry_event_id` are both present on the
+  report. The feedback is then attached to the originating Sentry issue so
+  triage sees the user's words next to the existing event. When either is
+  missing the plugin falls back to the legacy Store endpoint and captures
+  a fresh event with the deterministic fingerprint below.
 - `fix.proposed` — annotates Sentry only if `markInProgress: true`.
 - `fix.applied` — captures an `info` event with `mushi.fixed=true`, and
   (when an auth token is supplied) resolves the matching Sentry issue.
 
 ## Fingerprinting
 
-Every captured event uses a deterministic fingerprint of
-`['mushi', projectId, reportId]` so Sentry de-dupes the user report into a
-single issue across re-deliveries. Tags include `mushi.report_id`,
-`mushi.event`, `mushi.severity`, and (on fixes) `mushi.pr_url`.
+Captured events (Store-endpoint fallback path, not User Feedback) use a
+deterministic fingerprint of `['mushi', projectId, reportId]` so Sentry
+de-dupes the user report into a single issue across re-deliveries. Tags
+include `mushi.report_id`, `mushi.event`, `mushi.severity`, and (on fixes)
+`mushi.pr_url`. The User Feedback path uses Sentry's native event grouping
+instead — feedback attaches to whichever issue owns the linked
+`sentry_event_id`.
 
 ## License
 

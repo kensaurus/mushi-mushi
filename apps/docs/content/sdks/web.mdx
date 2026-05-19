@@ -32,3 +32,79 @@ See [Quickstart → Vanilla JS](/quickstart/web) for setup. Notable extras:
 - **`pii`** — built-in scrubber masks emails, phones, SSNs,
   credit-card-shaped strings, and JWTs by default. Add custom regex via
   `pii.customPatterns`.
+
+---
+
+## Identifying users & the Rewards program
+
+Call `identify()` as soon as your auth state resolves. The SDK links all
+subsequent reports and activity events to that user identity server-side.
+
+```typescript
+// On login / auth state change
+const { user } = await supabase.auth.getUser()
+if (user) {
+  mushi.identify(user.id, {
+    email: user.email,
+    name: user.user_metadata?.full_name,
+    provider: 'supabase',
+  })
+}
+```
+
+`identify()` is idempotent — calling it again with the same `userId` updates
+the stored traits. Calling it with a new `userId` flushes any buffered events
+for the previous session first.
+
+### Enabling the Rewards program
+
+Add a `rewards` block to your `init()` config:
+
+```typescript
+import { init } from '@mushi-mushi/web'
+
+const mushi = init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'YOUR_PUBLIC_API_KEY',
+  rewards: {
+    enabled: true,
+    trackActivity: true,        // auto-capture page_view, navigate, session_start
+    consentMode: 'explicit',    // 'explicit' | 'auto'
+    showInWidget: true,         // show tier + points in the bug-report widget
+    showNotifications: true,    // "+X pts" toast on each award
+    flushIntervalMs: 300_000,   // how often to POST activity (min 30s)
+  },
+})
+```
+
+`trackActivity: true` automatically captures:
+
+| Action | Trigger |
+|--------|---------|
+| `session_start` | First SDK init after 30 min idle, capped 3×/day |
+| `page_view` | Every `history.pushState` / `popstate` event |
+| `navigate` | `<a>` clicks and programmatic router pushes |
+| `button_press` | Clicks on `[data-mushi-track]` or `[data-testid]` elements |
+
+For custom actions:
+
+```typescript
+mushi.submitActivity([
+  { action: 'lesson_complete', metadata: { lessonId: 'l_123', score: 0.9 } },
+])
+```
+
+### Querying points & tier
+
+```typescript
+// Current user's points
+const points = await mushi.getReputation()
+// → { totalPoints, points30d, reputation, confirmedBugs, totalReports }
+
+// Current tier
+const tier = await mushi.getTier()
+// → { id, slug, displayName, pointsThreshold, perks } | null
+```
+
+See [Concepts → Rewards & contributor identity](/concepts/rewards) for the
+full data model, anti-gaming integration, and webhook reference.

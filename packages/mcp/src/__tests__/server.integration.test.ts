@@ -108,6 +108,7 @@ describe('MCP protocol handshake', () => {
     const { tools } = await client.listTools()
     const names = tools.map(t => t.name).sort()
     expect(names).toEqual([
+      'award_bonus_points',
       'dispatch_fix',
       'fix_suggest',
       'get_blast_radius',
@@ -122,8 +123,10 @@ describe('MCP protocol handshake', () => {
       'inventory_diff',
       'inventory_findings',
       'inventory_get',
+      'list_top_contributors',
       'run_nl_query',
       'search_reports',
+      'set_tier',
       'submit_fix_result',
       'test_gen_from_report',
       'transition_status',
@@ -143,6 +146,8 @@ describe('MCP protocol handshake', () => {
       'trigger_judge',
       'test_gen_from_report',
       'transition_status',
+      'award_bonus_points',
+      'set_tier',
     ])
     for (const t of tools) {
       expect(t.annotations, `${t.name} annotations`).toBeTruthy()

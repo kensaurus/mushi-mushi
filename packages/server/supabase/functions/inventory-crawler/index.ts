@@ -131,10 +131,15 @@ async function loadProject(db: SupabaseClient, projectId: string): Promise<Crawl
 }
 
 function buildHeaders(auth: AuthConfig | null): Record<string, string> {
+  // HTTP header values are ByteString-only (RFC 7230 §3.2.4 — visible-ASCII
+  // + HTAB + SP). Em-dash (U+2014) and other Unicode punctuation throws
+  // `TypeError: 'headers' of 'RequestInit' (Argument 2) is not a valid
+  // ByteString` at fetch() time, breaking the entire crawl. Use the ASCII
+  // double-hyphen instead.
   const base: Record<string, string> = {
     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'User-Agent':
-      'MushiMushiCrawler/1.0 (+https://mushimushi.dev/docs/crawler — opt-in via robots.txt)',
+      'MushiMushiCrawler/1.0 (+https://mushimushi.dev/docs/crawler -- opt-in via robots.txt)',
   }
   if (!auth) return base
   if (auth.type === 'cookie') {

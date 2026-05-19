@@ -99,3 +99,141 @@ import { Callout } from 'nextra/components'
 </Callout>
 
 See [Quickstart → React Native](/quickstart/react-native) for the end-to-end setup.
+
+---
+
+## Identifying users
+
+Call `identify()` inside your auth state listener. On bare React Native this
+is typically a Supabase `onAuthStateChange` subscriber; on Expo it's wherever
+you consume the session from your auth context.
+
+```tsx filename="navigation/AuthGate.tsx"
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect } from 'react'
+import { supabase } from '../lib/supabase'
+
+export function AuthGate({ children }) {
+  const sdk = useMushi()
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user) {
+          sdk?.identify(session.user.id, {
+            email: session.user.email,
+            name: session.user.user_metadata?.full_name,
+            provider: 'supabase',
+          })
+        }
+      }
+    )
+    return () => subscription.unsubscribe()
+  }, [sdk])
+
+  return children
+}
+```
+
+`identify()` is idempotent. Calling it with the same `userId` on each session
+restore is safe — the server upserts the `end_users` row and updates
+`last_seen_at`.
+
+---
+
+## Enabling the Rewards program
+
+```tsx filename="App.tsx"
+import { MushiProvider } from '@mushi-mushi/react-native'
+
+export default function App() {
+  return (
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        widget: { trigger: 'both' },
+        capture: { console: true, network: true },
+        rewards: {
+          enabled: true,
+          trackActivity: true,    // auto-captures screen changes via setScreen()
+          consentMode: 'explicit',
+          showInWidget: true,
+        },
+      }}
+    >
+      <AuthGate>
+        <RootNavigator />
+      </AuthGate>
+    </MushiProvider>
+  )
+}
+```
+
+### Wiring screen tracking
+
+Call `setScreen()` on every navigation event to feed `page_view` and
+`navigate` activity events automatically:
+
+```tsx filename="navigation/RootNavigator.tsx"
+import { useMushi } from '@mushi-mushi/react-native'
+import { NavigationContainer } from '@react-navigation/native'
+
+export function RootNavigator() {
+  const sdk = useMushi()
+
+  return (
+    <NavigationContainer
+      onStateChange={(state) => {
+        const routeName = getActiveRouteName(state)
+        sdk?.setScreen(routeName)
+      }}
+    >
+      {/* … */}
+    </NavigationContainer>
+  )
+}
+```
+
+### Custom activity events
+
+```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+
+function LessonScreen({ lessonId }) {
+  const sdk = useMushi()
+
+  const onComplete = () => {
+    sdk?.submitActivity([
+      { action: 'lesson_complete', metadata: { lessonId } },
+    ])
+  }
+
+  return <Button title="Complete" onPress={onComplete} />
+}
+```
+
+---
+
+## Querying reputation & tier
+
+```tsx
+import { useMushi } from '@mushi-mushi/react-native'
+import { useEffect, useState } from 'react'
+
+function ProfileBadge() {
+  const sdk = useMushi()
+  const [tier, setTier] = useState(null)
+
+  useEffect(() => {
+    sdk?.getTier().then(setTier)
+  }, [sdk])
+
+  if (!tier) return null
+  return <Text>{tier.displayName}</Text>
+}
+```
+
+The `MushiRewardsBadge` component from `@mushi-mushi/react` is web-only
+(uses `<span>`). On React Native, render tier data from `getTier()` and
+`getReputation()` directly using your own `<Text>` / `<View>` elements.

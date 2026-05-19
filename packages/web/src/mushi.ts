@@ -28,6 +28,13 @@ import {
 
 import { MushiWidget } from './widget';
 import {
+  initRewards,
+  updateRewardsUser,
+  enqueue as enqueueActivity,
+  getTier as getRewardsTier,
+  type RewardsContext,
+} from './rewards';
+import {
   createConsoleCapture,
   createNetworkCapture,
   createScreenshotCapture,
@@ -615,6 +622,14 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         level: 'info',
         message: `Mushi report sent (${result.data?.reportId ?? report.id})`,
       });
+      // Award points for the report submission. This is client-side so
+      // the activity batch is flushed on the next tick with the correct
+      // user_id already set via identify(). The server awards 50 pts by
+      // default (configurable via the rewards rules dashboard).
+      enqueueActivity({
+        action: 'report_submit',
+        metadata: { category, reportId: result.data?.reportId ?? report.id },
+      });
       // Bidirectional Sentry linkage. After a successful submit we tag
       // Sentry's current scope so any subsequent Sentry events show
       // the Mushi correlation (`mushi.report_id` tag) and the issue
@@ -861,6 +876,50 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         level: 'info',
         message: `Mushi.identify(${userId})`,
       });
+
+      // Wire rewards program when enabled
+      if (activeConfig.rewards?.enabled) {
+        const rewardsCtx: RewardsContext = {
+          client: apiClient,
+          config: activeConfig.rewards,
+          projectId: bootstrapConfig.projectId,
+          userId,
+          traits: traits
+            ? { email: traits.email as string | undefined, name: traits.name as string | undefined, provider: traits.provider as string | undefined }
+            : undefined,
+        };
+        if (userInfo.id === userId) {
+          // First identify → full init
+          initRewards(rewardsCtx);
+        } else {
+          // Already initialized; just update user context
+          updateRewardsUser(userId, rewardsCtx.traits);
+        }
+
+        // Fetch reputation to hydrate the in-widget rewards nudge and success
+        // points display. Fire-and-forget: never blocks the identify call.
+        if (activeConfig.rewards.showInWidget !== false) {
+          void apiClient.getMyPoints(userId).then((res) => {
+            if (!res.ok) return;
+            const d = res.data as {
+              total_points?: number;
+              tier?: { slug?: string; display_name?: string; points_threshold?: number } | null;
+              next_tier?: { display_name?: string; points_threshold?: number } | null;
+              report_submit_pts?: number;
+            };
+            widget.setRewardsState({
+              tier: d.tier
+                ? { slug: d.tier.slug ?? 'free', displayName: d.tier.display_name ?? 'Free', pointsThreshold: d.tier.points_threshold ?? 0 }
+                : null,
+              nextTier: d.next_tier
+                ? { displayName: d.next_tier.display_name ?? '', pointsThreshold: d.next_tier.points_threshold ?? 0 }
+                : null,
+              totalPoints: d.total_points ?? 0,
+              pointsForReport: d.report_submit_pts ?? 50,
+            });
+          }).catch(() => { /* non-fatal */ });
+        }
+      }
     },
 
     addBreadcrumb(crumb) {
@@ -894,6 +953,31 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       // and on app-level "logout" handlers).
       for (const k of Object.keys(stickyTags)) delete stickyTags[k];
     },
+
+    // ─── Rewards program (P1) ──────────────────────────────────
+
+    async getReputation() {
+      if (!userInfo?.id) return null;
+      const res = await apiClient.getMyPoints(userInfo.id);
+      if (!res.ok) return null;
+      return {
+        totalPoints: (res.data as { total_points: number }).total_points ?? 0,
+        points30d: (res.data as { points_30d: number }).points_30d ?? 0,
+        reputation: 1.0,
+        confirmedBugs: 0,
+        totalReports: 0,
+      };
+    },
+
+    async getTier() {
+      if (!userInfo?.id) return null;
+      return getRewardsTier(userInfo.id);
+    },
+
+    recordActivity(action, metadata) {
+      if (!activeConfig.rewards?.enabled) return;
+      enqueueActivity({ action, metadata });
+    },
   };
 
   return sdk;
@@ -909,6 +993,9 @@ function mergeRuntimeConfig(config: MushiConfig, runtime: MushiRuntimeSdkConfig)
       ...config.widget,
       ...runtime.widget,
       ...(widgetTrigger ? { trigger: widgetTrigger } : {}),
+      // betaMode is local-only: set by the host app, not the dashboard.
+      // Restore it after the runtime spread so it is never silently cleared.
+      ...(config.widget?.betaMode ? { betaMode: config.widget.betaMode } : {}),
     },
     capture: {
       ...config.capture,
@@ -1156,6 +1243,9 @@ function createNoopInstance(): MushiSDKInstance {
     setTag: () => {},
     setTags: () => {},
     clearTag: () => {},
+    getReputation: async () => null,
+    getTier: async () => null,
+    recordActivity: () => {},
   };
 }
 

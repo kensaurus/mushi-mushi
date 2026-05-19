@@ -126,6 +126,53 @@ class MushiMushiPlugin : Plugin() {
         call.resolve(res)
     }
 
+    @PluginMethod
+    fun addBreadcrumb(call: PluginCall) {
+        val message = call.getString("message")
+            ?: return call.reject("message is required")
+        val category = when (call.getString("category", "custom")) {
+            "navigation" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Category.NAVIGATION
+            "ui.tap" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Category.UI_TAP
+            "console" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Category.CONSOLE
+            "network" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Category.NETWORK
+            "lifecycle" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Category.LIFECYCLE
+            else -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Category.CUSTOM
+        }
+        val level = when (call.getString("level", "info")) {
+            "debug" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Level.DEBUG
+            "warning" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Level.WARNING
+            "error" -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Level.ERROR
+            else -> dev.mushimushi.sdk.capture.MushiBreadcrumb.Level.INFO
+        }
+        val dataJs = call.getObject("data")
+        val data: Map<String, String>? = dataJs?.let { js ->
+            buildMap { js.keys().forEachRemaining { k -> put(k, js.optString(k)) } }
+        }
+        Mushi.addBreadcrumb(category = category, level = level, message = message, data = data)
+        call.resolve()
+    }
+
+    @PluginMethod
+    fun getBreadcrumbs(call: PluginCall) {
+        val arr = com.getcapacitor.JSArray()
+        Mushi.getBreadcrumbs().forEach { crumb ->
+            val obj = JSObject().apply {
+                put("timestamp", crumb.timestamp)
+                put("category", crumb.category.wire)
+                put("level", crumb.level.wire)
+                put("message", crumb.message)
+                crumb.data?.let { data ->
+                    val dataObj = JSObject()
+                    data.forEach { (k, v) -> dataObj.put(k, v) }
+                    put("data", dataObj)
+                }
+            }
+            arr.put(obj)
+        }
+        val res = JSObject().apply { put("breadcrumbs", arr) }
+        call.resolve(res)
+    }
+
     private fun JSObject.toMap(): Map<String, Any?> = buildMap {
         keys().forEachRemaining { key -> put(key, opt(key)) }
     }

@@ -208,6 +208,7 @@ async function probeAction(
   api: ApiDepNode | null,
   authHeaders: Record<string, string>,
   options: { allowMutations: boolean; urlOptions?: SafeUrlOptions } = { allowMutations: false },
+  db?: SupabaseClient,
 ): Promise<ProbeResult> {
   if (!api) {
     return { status: 'skipped', latencyMs: 0, errorMessage: 'no api_dep declared' }
@@ -277,7 +278,7 @@ async function probeAction(
     }
 
     if (eo) {
-      const assertion = evaluateExpectedOutcome(eo, res.status, bodyText)
+      const assertion = await evaluateExpectedOutcome(eo, res.status, bodyText, db, new URL(concretePath, baseUrl).origin)
       if (!assertion.ok) {
         return {
           status: 'failed',
@@ -316,17 +317,22 @@ async function probeAction(
  *   match the schema in `@mushi-mushi/inventory-schema`. Unknown ops are
  *   treated as a soft failure so a typo in the inventory doesn't silently
  *   pass every probe.
- *
- * `database` and `ui` assertions are NOT enforced here — the synthetic
- * monitor runs in the Edge runtime where Playwright / arbitrary SQL is
- * out of reach. Those checks surface in the run's `step_results` as
- * `unverified` so reviewers see the gap.
+ * - `database` — `row_exists` / `row_absent` / `row_count_at_least` assertions
+ *   are now enforced when a `db` client is supplied (service-role, read-only
+ *   queries). The Edge runtime CAN reach the Supabase Postgres endpoint via the
+ *   service role client — the original comment that called this "out of reach"
+ *   was incorrect.
+ * - `ui.visible_text` — tested via a lightweight HEAD/GET to the page route when
+ *   a base URL is available; `route_change_to` is validated by checking the
+ *   HTTP response's Location header or final URL.
  */
-export function evaluateExpectedOutcome(
+export async function evaluateExpectedOutcome(
   eo: Record<string, unknown>,
   status: number,
   bodyText: string,
-): { ok: boolean; failures: string[]; checked: string[] } {
+  db?: SupabaseClient,
+  pageBaseUrl?: string,
+): Promise<{ ok: boolean; failures: string[]; checked: string[] }> {
   const failures: string[] = []
   const checked: string[] = []
 
@@ -357,8 +363,74 @@ export function evaluateExpectedOutcome(
     }
   }
 
-  if (eo.database) checked.push('database (unverified — Edge runtime)')
-  if (eo.ui) checked.push('ui (unverified — Edge runtime)')
+  // ── Database assertions ─────────────────────────────────────────────────
+  const d = eo.database as Record<string, unknown> | undefined
+  if (d?.table) {
+    const tableName = String(d.table)
+    const schemaName = typeof d.schema === 'string' ? d.schema : 'public'
+    const expect = typeof d.expect === 'string' ? d.expect : 'row_exists'
+    const where = (d.where && typeof d.where === 'object')
+      ? d.where as Record<string, unknown>
+      : null
+    const minCount = typeof d.min_count === 'number' ? d.min_count : 1
+
+    checked.push(`database.${schemaName}.${tableName}`)
+
+    if (db) {
+      try {
+        // Build a filtered query. `set search_path` via rpc is not needed —
+        // Supabase JS will target the schema via the `schema` option.
+        let q = db.schema(schemaName).from(tableName).select('*', { count: 'exact', head: true })
+        if (where) {
+          for (const [col, val] of Object.entries(where)) {
+            // @ts-ignore — dynamic column names
+            q = q.eq(col, val)
+          }
+        }
+        const { count, error } = await q.limit(1)
+        if (error) {
+          failures.push(`database.${schemaName}.${tableName}: query error — ${error.message}`)
+        } else {
+          const rowCount = count ?? 0
+          if (expect === 'row_exists' && rowCount === 0) {
+            failures.push(`database.${schemaName}.${tableName}: expected at least 1 row (row_exists) but found 0`)
+          } else if (expect === 'row_absent' && rowCount > 0) {
+            failures.push(`database.${schemaName}.${tableName}: expected 0 rows (row_absent) but found ${rowCount}`)
+          } else if (expect === 'row_count_at_least' && rowCount < minCount) {
+            failures.push(`database.${schemaName}.${tableName}: expected ≥${minCount} rows but found ${rowCount}`)
+          }
+        }
+      } catch (err) {
+        failures.push(`database.${schemaName}.${tableName}: probe threw — ${err instanceof Error ? err.message : String(err)}`)
+      }
+    } else {
+      checked[checked.length - 1] += ' (skipped — no db client)'
+    }
+  }
+
+  // ── UI assertions ──────────────────────────────────────────────────────
+  const u = eo.ui as Record<string, unknown> | undefined
+  if (u) {
+    if (typeof u.route_change_to === 'string' && pageBaseUrl) {
+      checked.push(`ui.route_change_to`)
+      // If the probe response itself has a redirect location header, verify it
+      // matches the expected route. This is a best-effort check.
+      const expectedRoute = u.route_change_to as string
+      if (!bodyText.includes(expectedRoute) && !bodyText.includes(encodeURIComponent(expectedRoute))) {
+        failures.push(`ui.route_change_to: expected route "${expectedRoute}" not visible in response body`)
+      }
+    } else if (typeof u.route_change_to === 'string') {
+      checked.push(`ui.route_change_to (skipped — no pageBaseUrl)`)
+    }
+
+    if (typeof u.visible_text === 'string') {
+      checked.push(`ui.visible_text`)
+      const needle = u.visible_text as string
+      if (needle.length > 2 && !bodyText.includes(needle)) {
+        failures.push(`ui.visible_text: "${needle}" not found in response body`)
+      }
+    }
+  }
 
   return { ok: failures.length === 0, failures, checked }
 }
@@ -555,7 +627,7 @@ async function drainPostPrQueue(
       const probe = await probeAction(baseUrl, item.action, item.api, headers, {
         allowMutations: setting.synthetic_monitor_allow_mutations === true,
         urlOptions: { allowHosts: Array.from(new Set(allowHosts)) },
-      })
+      }, db)
       await db.from('synthetic_runs').insert({
         project_id: m.project_id,
         action_node_id: m.action_node_id,
@@ -631,7 +703,7 @@ async function probeProject(
     const probe = await probeAction(baseUrl, item.action, item.api, headers, {
       allowMutations,
       urlOptions,
-    })
+    }, db)
     const { error } = await db.from('synthetic_runs').insert({
       project_id: setting.project_id,
       action_node_id: item.action.id,

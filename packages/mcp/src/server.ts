@@ -619,6 +619,84 @@ export function createMushiServer(config: MushiServerConfig): McpServer {
     }),
   )
 
+  // --- Rewards tools (P3) -------------------------------------------------
+
+  server.registerTool(
+    'list_top_contributors',
+    {
+      title: titleOf('list_top_contributors'),
+      description: descOf('list_top_contributors'),
+      inputSchema: {
+        limit: z.number().int().min(1).max(100).optional().default(10).describe('Max rows to return (default 10, max 100)'),
+        range: z.enum(['30d', '90d', 'all']).optional().default('30d').describe('Time window for points calculation'),
+      },
+      annotations: annotationsFor('list_top_contributors'),
+    },
+    async ({ limit, range }) => ({
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify(
+          await apiCall(`/v1/admin/rewards/leaderboard?range=${range}&limit=${limit}`),
+          null, 2,
+        ),
+      }],
+    }),
+  )
+
+  server.registerTool(
+    'award_bonus_points',
+    {
+      title: titleOf('award_bonus_points'),
+      description: descOf('award_bonus_points'),
+      inputSchema: {
+        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+        points: z.number().int().min(1).max(50000).describe('Bonus points to award (max 50,000 per call)'),
+        reason: z.string().max(200).describe('Human-readable reason, logged to end_user_activity'),
+      },
+      annotations: annotationsFor('award_bonus_points'),
+    },
+    async ({ external_user_id, points, reason }) => ({
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify(
+          await apiCall('/v1/admin/rewards/bonus-points', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ external_user_id, points, reason }),
+          }),
+          null, 2,
+        ),
+      }],
+    }),
+  )
+
+  server.registerTool(
+    'set_tier',
+    {
+      title: titleOf('set_tier'),
+      description: descOf('set_tier'),
+      inputSchema: {
+        external_user_id: z.string().describe('The host-app user id as passed to Mushi.identify()'),
+        tier_slug: z.string().describe('Tier slug to assign, e.g. "champion", "contributor", "explorer"'),
+        reason: z.string().max(200).optional().describe('Optional reason for manual override'),
+      },
+      annotations: annotationsFor('set_tier'),
+    },
+    async ({ external_user_id, tier_slug, reason }) => ({
+      content: [{
+        type: 'text' as const,
+        text: JSON.stringify(
+          await apiCall('/v1/admin/rewards/set-tier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ external_user_id, tier_slug, reason }),
+          }),
+          null, 2,
+        ),
+      }],
+    }),
+  )
+
   server.resource(
     'project_integration_health',
     'project://integration-health',

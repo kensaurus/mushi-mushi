@@ -8,6 +8,8 @@ export default {
   'multi-repo-fixes': 'Multi-repo coordinated fixes',
   'judge-loop': 'Judge & self-improvement',
   'anti-gaming': 'Anti-gaming & reputation',
+  rewards: 'Rewards & contributor identity',
   'inventory-and-gates': 'Inventory & gates',
   'orchestrator-interop': 'Connecting your orchestrator',
+  'closed-loop': 'Closed-loop evolution — the thesis',
 }

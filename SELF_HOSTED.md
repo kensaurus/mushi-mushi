@@ -63,6 +63,87 @@ npx supabase functions deploy intelligence-report --no-verify-jwt
 npx supabase functions deploy generate-synthetic --no-verify-jwt
 ```
 
+### Closed-loop evolution functions (Phase 1–6)
+
+All six phases of the closed-loop pipeline have self-hosted parity. Deploy them with:
+
+```bash
+# Phase 1 — Mistake clustering + lessons
+npx supabase functions deploy mistake-clusterer --no-verify-jwt
+npx supabase functions deploy mistake-summarizer --no-verify-jwt
+
+# Phase 2 — Release builder
+npx supabase functions deploy release-builder --no-verify-jwt
+
+# Phase 3 — PDCA autonomous iteration
+npx supabase functions deploy pdca-runner --no-verify-jwt
+
+# Phase 4 — Contract drift detection
+npx supabase functions deploy contract-graph-builder --no-verify-jwt
+npx supabase functions deploy drift-walker --no-verify-jwt
+
+# Phase 5 — A/B experiment analyzer
+npx supabase functions deploy experiment-analyzer --no-verify-jwt
+
+# Phase 6 — Anomaly detection
+npx supabase functions deploy anomaly-detector --no-verify-jwt
+```
+
+#### Required secrets for closed-loop functions
+
+```bash
+# Already required for classify-report:
+npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+npx supabase secrets set OPENAI_API_KEY=sk-...
+
+# Required for mistake-clusterer + pdca-runner (OpenAI embeddings):
+npx supabase secrets set OPENAI_API_KEY=sk-...
+```
+
+#### Recommended pg_cron schedules
+
+Use `mushi.edge_function_post(fn_name, body)` — the same helper every
+healthy cron job on the hosted project uses. **Do not** use
+`current_setting('app.settings.supabase_url')` / `service_role_key`; those
+GUCs return NULL on hosted Supabase and pg_cron will fail silently every
+tick with `null value in column "url" of relation "http_request_queue"`.
+
+Prerequisites (once per project):
+
+```sql
+-- Mirror the internal caller token + project URL into mushi_runtime_config
+-- (the hosted project already has these; self-hosted operators set them once):
+INSERT INTO public.mushi_runtime_config (key, value) VALUES
+  ('supabase_url', 'https://YOUR_PROJECT_REF.supabase.co'),
+  ('service_role_key', 'YOUR_INTERNAL_CALLER_SECRET')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now();
+```
+
+Schedules:
+
+```sql
+-- Mistake clusterer: every 6 hours
+SELECT cron.schedule(
+  'mushi-mistake-clusterer',
+  '0 */6 * * *',
+  $$ SELECT mushi.edge_function_post('mistake-clusterer', '{}'::jsonb); $$
+);
+
+-- Drift walker: daily at 03:00 UTC (per project — adapt body)
+SELECT cron.schedule(
+  'mushi-drift-walker',
+  '0 3 * * *',
+  $$ SELECT mushi.edge_function_post('drift-walker', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$
+);
+
+-- Anomaly detector: hourly
+SELECT cron.schedule(
+  'mushi-anomaly-detector',
+  '0 * * * *',
+  $$ SELECT mushi.edge_function_post('anomaly-detector', '{"project_id":"YOUR_PROJECT_ID"}'::jsonb); $$
+);
+```
+
 > **Re-deploys overwrite source.** Supabase keeps the file bundle as the source
 > of truth; if a deploy uploads a stale `index.ts` (e.g. you forgot to save before
 > deploying) the function will silently miss new routes. After deploying, smoke

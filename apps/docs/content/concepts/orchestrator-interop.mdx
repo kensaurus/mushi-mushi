@@ -2,7 +2,7 @@
 title: 'Connecting your orchestrator (MCP / A2A / REST / AG-UI)'
 ---
 
-import { Callout } from 'nextra/components'
+import { Callout } from 'nextra/components';
 
 # Connecting your orchestrator
 
@@ -72,10 +72,10 @@ your client:
       "url": "https://api.mushimushi.dev/functions/v1/mcp",
       "headers": {
         "X-Mushi-Api-Key": "mushi_live_…",
-        "X-Mushi-Project-Id": "proj_…"
-      }
-    }
-  }
+        "X-Mushi-Project-Id": "proj_…",
+      },
+    },
+  },
 }
 ```
 
@@ -87,18 +87,19 @@ require the `mcp:write` scope; everything else is fine on `mcp:read`.
 ### A2A v1.0.0 — Tasks resource
 
 Google's Agent2Agent v1.0.0 spec (March 2026) requires `tasks/{id}` GET
-+ `tasks/{id}:cancel` + `tasks/{id}:subscribe`. Mushi implements all of
-them on top of the existing `fix_dispatch_jobs` table — every A2A Task
-IS a fix dispatch job, with status names translated at the edge:
 
-| Mushi `fix_dispatch_jobs.status` | A2A `Task.state` |
-| -------------------------------- | ---------------- |
-| `queued` | `submitted` |
-| `running` | `working` |
-| `completed` | `completed` |
-| `failed` | `failed` |
-| `cancelled` | `canceled` (sic: A2A spec spelling) |
-| `skipped` | `completed` (with `result.skipped: true`) |
+- `tasks/{id}:cancel` + `tasks/{id}:subscribe`. Mushi implements all of
+  them on top of the existing `fix_dispatch_jobs` table — every A2A Task
+  IS a fix dispatch job, with status names translated at the edge:
+
+| Mushi `fix_dispatch_jobs.status` | A2A `Task.state`                          |
+| -------------------------------- | ----------------------------------------- |
+| `queued`                         | `submitted`                               |
+| `running`                        | `working`                                 |
+| `completed`                      | `completed`                               |
+| `failed`                         | `failed`                                  |
+| `cancelled`                      | `canceled` (sic: A2A spec spelling)       |
+| `skipped`                        | `completed` (with `result.skipped: true`) |
 
 ```bash
 # Create a Task
@@ -122,6 +123,46 @@ curl -N https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks/<id>:subscribe 
 curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks/<id>:cancel \
   -H "X-Mushi-Api-Key: mushi_live_…"
 ```
+
+### Push notifications (A2A v1.0.0 PushNotificationConfig)
+
+Pull (SSE) is fine for a long-running orchestrator process. If you'd rather receive task updates on a callback URL — webhooks instead of an open connection — pass `configuration.pushNotificationConfig` on create:
+
+```bash
+curl -X POST https://api.mushimushi.dev/functions/v1/api/v1/a2a/tasks \
+  -H "X-Mushi-Api-Key: mushi_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill": "dispatch_fix",
+    "input": {
+      "reportId": "00000000-0000-0000-0000-000000000abc",
+      "projectId": "00000000-0000-0000-0000-000000000def"
+    },
+    "configuration": {
+      "pushNotificationConfig": {
+        "url": "https://orchestrator.example.com/a2a/callback",
+        "token": "optional-bearer-forwarded-as-Authorization"
+      }
+    }
+  }'
+```
+
+A Postgres trigger fires on every status change (`queued → working → completed | failed | canceled`) and the `a2a-push-notify` edge function POSTs the A2A Task envelope to your URL with [Standard Webhooks](https://www.standardwebhooks.com/) headers:
+
+```
+POST https://orchestrator.example.com/a2a/callback
+Content-Type: application/json
+webhook-id: <uuid>
+webhook-timestamp: <unix-secs>
+webhook-signature: v1,<base64-hmac-sha256>      ← signed with `token` (or per-project Vault secret)
+X-Mushi-Event: a2a.task.completed
+X-Mushi-Schema: a2a/v1.0.0/task
+Authorization: Bearer <your token, if provided>
+```
+
+Pull _and_ push are supported simultaneously — subscribe to the SSE stream AND configure a push URL if you want belt-and-suspenders delivery. Every push attempt (success, error, timeout, skipped) lands in `a2a_push_deliveries` so operators can debug callback failures from the admin UI without grepping logs.
+
+Push URLs **must** be `https://` and on the public internet (RFC-1918 / loopback hosts are blocked unless `MUSHI_ALLOW_INTERNAL_PUSH=1` is set in self-hosted dev clusters).
 
 Today only `skill: "dispatch_fix"` is implemented as an A2A Task — the
 agent card lists every advertised skill, but the others (`judge_fix`,
@@ -174,11 +215,11 @@ subscribers, CI integrations).
 Non-TS orchestrators (Python LangGraph, Go agents, A2A skill cards)
 can consume the agent contracts as draft-07 JSON Schemas served at:
 
-| URL | Contract |
-| --- | -------- |
-| `/v1/schemas/fix-context.json` | `FixContext` — what the agent receives at dispatch |
-| `/v1/schemas/fix-result.json` | `FixResult` — what the agent returns |
-| `/v1/schemas/sandbox-provider.json` | `SandboxProvider` — pluggable sandbox runtime |
+| URL                                 | Contract                                              |
+| ----------------------------------- | ----------------------------------------------------- |
+| `/v1/schemas/fix-context.json`      | `FixContext` — what the agent receives at dispatch    |
+| `/v1/schemas/fix-result.json`       | `FixResult` — what the agent returns                  |
+| `/v1/schemas/sandbox-provider.json` | `SandboxProvider` — pluggable sandbox runtime         |
 | `/v1/schemas/expected-outcome.json` | `ExpectedOutcome` — the spec contract on every Action |
 
 Browse the full index at `GET /v1/schemas` for shape `{ schemas: [{ name, url, $id }] }`. Schemas are also exported from `@mushi-mushi/agents` as `AGENT_JSON_SCHEMAS`.
@@ -191,17 +232,16 @@ Browse the full index at `GET /v1/schemas` for shape `{ schemas: [{ name, url, $
 Sealos DevBox, internal corp envs) register at runtime:
 
 ```ts filename="bootstrap.ts"
-import {
-  registerSandboxProvider,
-  type SandboxProvider,
-} from '@mushi-mushi/agents'
+import { registerSandboxProvider, type SandboxProvider } from '@mushi-mushi/agents';
 
 const corpProvider: SandboxProvider = {
   name: 'corp-firecracker',
-  createSandbox: async (config, onAudit) => { /* … */ },
-}
+  createSandbox: async (config, onAudit) => {
+    /* … */
+  },
+};
 
-registerSandboxProvider('corp-firecracker', () => corpProvider)
+registerSandboxProvider('corp-firecracker', () => corpProvider);
 // project_settings.sandbox_provider = 'corp-firecracker' now resolves to your adapter
 ```
 
@@ -211,28 +251,28 @@ helpful message for unregistered ids.
 
 ## Per-orchestrator recipes
 
-| Orchestrator | Recommended path | Why |
-| ------------ | ---------------- | --- |
-| **Cursor / Cursor Agents** | stdio MCP | Already supported, ~20 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config |
-| **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP | Same path, same surface |
-| **OpenAI Agents SDK** (TS / Python) | Streamable HTTP MCP | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits |
-| **ChatGPT Agent** | Streamable HTTP MCP | Same — no subprocess in the hosted runtime |
-| **Mastra** | stdio MCP via `MCPClient` | Same |
-| **CrewAI / AutoGen** | Outbound webhook + REST callback | CrewAI's strength is multi-agent crews reacting to events. Subscribe to `report.classified` via the plugin SDK pattern; trigger your crew on the event; call `POST /v1/admin/fixes/dispatch` to round-trip a fix |
-| **LangGraph** | REST + AG-UI SSE | Use `/v1/admin/*` inside a LangGraph node with API-key auth. AG-UI SSE is no longer JWT-only — subscribe directly with the same key |
-| **A2A v1.0.0 agents** | A2A `tasks` + agent card | Discovery via `/.well-known/agent-card`; delegation via `POST /v1/a2a/tasks`. The Mushi agent card advertises the skill catalog and the A2A endpoint URLs |
+| Orchestrator                                        | Recommended path                 | Why                                                                                                                                                                                                              |
+| --------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cursor / Cursor Agents**                          | stdio MCP                        | Already supported, ~20 tools instantly. Add `@mushi-mushi/mcp` to `mcpServers` in agent config                                                                                                                   |
+| **Claude Agent SDK / Claude Desktop / Claude Code** | stdio MCP                        | Same path, same surface                                                                                                                                                                                          |
+| **OpenAI Agents SDK** (TS / Python)                 | Streamable HTTP MCP              | Per OpenAI's MCP guide, Streamable HTTP and stdio are preferred over deprecated SSE. Mushi's hosted MCP at `/functions/v1/mcp` fits                                                                              |
+| **ChatGPT Agent**                                   | Streamable HTTP MCP              | Same — no subprocess in the hosted runtime                                                                                                                                                                       |
+| **Mastra**                                          | stdio MCP via `MCPClient`        | Same                                                                                                                                                                                                             |
+| **CrewAI / AutoGen**                                | Outbound webhook + REST callback | CrewAI's strength is multi-agent crews reacting to events. Subscribe to `report.classified` via the plugin SDK pattern; trigger your crew on the event; call `POST /v1/admin/fixes/dispatch` to round-trip a fix |
+| **LangGraph**                                       | REST + AG-UI SSE                 | Use `/v1/admin/*` inside a LangGraph node with API-key auth. AG-UI SSE is no longer JWT-only — subscribe directly with the same key                                                                              |
+| **A2A v1.0.0 agents**                               | A2A `tasks` + agent card         | Discovery via `/.well-known/agent-card`; delegation via `POST /v1/a2a/tasks`. The Mushi agent card advertises the skill catalog and the A2A endpoint URLs                                                        |
 
 ## Spec traceability flows out automatically
 
 Every inbound surface accepts the optional `inventoryActionNodeId`
 spec-traceability anchor (whitepaper §2.10):
 
-| Surface | How to pass it |
-| ------- | -------------- |
-| REST `POST /v1/admin/fixes/dispatch` | `body.inventoryActionNodeId` |
-| MCP `dispatch_fix` tool | `arguments.inventoryActionNodeId` |
-| A2A `POST /v1/a2a/tasks` | `body.input.inventoryActionNodeId` |
-| GitHub Action | `inventory-action-node-id: '<uuid>'` input on `command: dispatch-fix` |
+| Surface                              | How to pass it                                                        |
+| ------------------------------------ | --------------------------------------------------------------------- |
+| REST `POST /v1/admin/fixes/dispatch` | `body.inventoryActionNodeId`                                          |
+| MCP `dispatch_fix` tool              | `arguments.inventoryActionNodeId`                                     |
+| A2A `POST /v1/a2a/tasks`             | `body.input.inventoryActionNodeId`                                    |
+| GitHub Action                        | `inventory-action-node-id: '<uuid>'` input on `command: dispatch-fix` |
 
 In every case the worker recovers the inventory `Action` (walking the
 `reports_against` graph edge if the caller didn't pin it), threads the
@@ -240,7 +280,7 @@ In every case the worker recovers the inventory `Action` (walking the
 as a deterministic pre-PR gate, and queues a targeted post-PR synthetic
 probe scoped to that Action.
 
-External orchestrators that want to *read* the contract before drafting
+External orchestrators that want to _read_ the contract before drafting
 a fix can call the MCP `get_fix_context` tool — it now returns the
 linked Action with its `expected_outcome` so the orchestrator can
 compose its own prompt around the same contract.

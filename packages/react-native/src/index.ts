@@ -11,6 +11,9 @@ export type { MushiBottomSheetProps } from './components/MushiBottomSheet'
 export { MushiFloatingButton } from './components/MushiFloatingButton'
 export type { MushiFloatingButtonProps } from './components/MushiFloatingButton'
 
+export { MushiTrigger } from './components/MushiTrigger'
+export type { MushiTriggerProps } from './components/MushiTrigger'
+
 export { getDeviceInfo } from './capture/device-info'
 export type { DeviceInfo } from './capture/device-info'
 

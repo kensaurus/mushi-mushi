@@ -131,4 +131,56 @@ public class MushiMushiPlugin: CAPPlugin {
             call.resolve(["delivered": delivered])
         }
     }
+
+    @objc func addBreadcrumb(_ call: CAPPluginCall) {
+        guard let message = call.getString("message") else {
+            call.reject("message is required"); return
+        }
+        let categoryStr = call.getString("category") ?? "custom"
+        let category: MushiBreadcrumb.Category = {
+            switch categoryStr {
+            case "navigation": return .navigation
+            case "ui.tap": return .uiTap
+            case "console": return .console
+            case "network": return .network
+            case "lifecycle": return .lifecycle
+            default: return .custom
+            }
+        }()
+        let levelStr = call.getString("level") ?? "info"
+        let level: MushiBreadcrumb.Level = {
+            switch levelStr {
+            case "debug": return .debug
+            case "warning": return .warning
+            case "error": return .error
+            default: return .info
+            }
+        }()
+        // Match Android's coercion: any JS value gets stringified so a
+        // `{ count: 5, ok: true }` payload doesn't silently get dropped on
+        // iOS (it would on a strict `[String: String]` cast since none of
+        // the values are Swift Strings).
+        let dataRaw = call.getObject("data") ?? [:]
+        let data: [String: String]? = dataRaw.isEmpty
+            ? nil
+            : dataRaw.reduce(into: [String: String]()) { acc, pair in
+                acc[pair.key] = String(describing: pair.value)
+            }
+        Mushi.shared.addBreadcrumb(category: category, level: level, message: message, data: data)
+        call.resolve()
+    }
+
+    @objc func getBreadcrumbs(_ call: CAPPluginCall) {
+        let crumbs: [[String: Any]] = Mushi.shared.getBreadcrumbs().map { crumb in
+            var dict: [String: Any] = [
+                "timestamp": crumb.timestamp,
+                "category": crumb.category.rawValue,
+                "level": crumb.level.rawValue,
+                "message": crumb.message
+            ]
+            if let data = crumb.data { dict["data"] = data }
+            return dict
+        }
+        call.resolve(["breadcrumbs": crumbs])
+    }
 }

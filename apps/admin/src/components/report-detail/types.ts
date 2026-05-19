@@ -48,9 +48,11 @@ export interface ReportBreadcrumb {
   category:
     | 'navigation'
     | 'ui.click'
+    | 'ui.tap'
     | 'console'
     | 'xhr'
     | 'fetch'
+    | 'network'
     | 'lifecycle'
     | 'custom'
     | string
@@ -150,4 +152,11 @@ export interface ReportDetail {
     sentry?: ReportSentryContext
     [k: string]: unknown
   } | null
+  // ── Device & Build fields (populated from SDK telemetry columns) ──
+  /** SDK package name, e.g. `@mushi-mushi/react-native`. */
+  sdk_package?: string | null
+  /** SDK package version, e.g. `0.9.2`. */
+  sdk_version?: string | null
+  /** Host app version string from the SDK, e.g. `2.4.1` or `(234)`. */
+  app_version?: string | null
 }
