@@ -78,7 +78,7 @@ function thompsonUpdate(variants: Array<{ alpha: number; beta: number; converted
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('experiment-analyzer', async (req: Request) => {
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
     const authErr = requireServiceRoleAuth(req)
     if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr

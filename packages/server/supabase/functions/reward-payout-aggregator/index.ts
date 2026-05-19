@@ -198,7 +198,7 @@ async function runAggregator(): Promise<{
   return stats
 }
 
-Deno.serve(withSentry(async (req: Request) => {
+Deno.serve(withSentry('reward-payout-aggregator', async (req: Request) => {
   const authError = requireServiceRoleAuth(req)
   if (authError) return authError
 

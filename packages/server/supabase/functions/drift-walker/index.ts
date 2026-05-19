@@ -18,7 +18,7 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('drift-walker', async (req: Request) => {
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
     const authErr = requireServiceRoleAuth(req)
     if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr

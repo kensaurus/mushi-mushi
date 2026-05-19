@@ -24,7 +24,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { ANTHROPIC_SONNET, ANTHROPIC_HAIKU, OPENAI_MINI } from '../_shared/models.ts'
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('mistake-summarizer', async (req: Request) => {
     if (req.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 })
     }

@@ -69,8 +69,21 @@ export function registerReleasesRoutes(app: Hono) {
       body: JSON.stringify(body.data),
     })
 
-    const data = await res.json()
-    if (!res.ok) return c.json({ ok: false, error: data.error ?? 'release-builder failed' }, 500)
+    // The Supabase edge runtime returns a plain-text "Internal Server Error" body
+    // (not JSON) when the callee crashes before its own handler runs. Calling
+    // res.json() unconditionally on such a response throws SyntaxError and
+    // surfaces as MUSHI-MUSHI-SERVER-Z. Read as text first, then try to parse.
+    const raw = await res.text()
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(raw) as Record<string, unknown>
+    } catch {
+      return c.json(
+        { ok: false, error: `release-builder error (${res.status}): ${raw.slice(0, 200)}` },
+        502,
+      )
+    }
+    if (!res.ok) return c.json({ ok: false, error: (data.error as string | undefined) ?? 'release-builder failed' }, 500)
     return c.json({ ok: true, data: data.data ?? data })
   })
 

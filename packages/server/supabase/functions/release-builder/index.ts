@@ -22,6 +22,7 @@ import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { ANTHROPIC_SONNET, OPENAI_PRIMARY } from '../_shared/models.ts'
+import { resolveLlmKey } from '../_shared/byok.ts'
 
 const bodySchema = z.object({
   project_id: z.string().uuid(),
@@ -32,7 +33,7 @@ const bodySchema = z.object({
 })
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('release-builder', async (req: Request) => {
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
     const authErr = requireServiceRoleAuth(req)
@@ -87,10 +88,16 @@ Deno.serve(
       })
       .join('\n')
 
-    // Generate changelog body with LLM
+    // Generate changelog body with LLM — BYOK-first, env fallback
     let bodyMd = ''
+    const [anthropicResolved, openaiResolved] = await Promise.all([
+      resolveLlmKey(db, project_id, 'anthropic'),
+      resolveLlmKey(db, project_id, 'openai'),
+    ])
+
     try {
-      const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+      if (!anthropicResolved) throw new Error('No Anthropic key')
+      const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
       const { text } = await generateText({
         model: anthropic(ANTHROPIC_SONNET),
         prompt: `You are writing a user-facing changelog for software version ${version}.
@@ -120,7 +127,11 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
       })
     } catch {
       try {
-        const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+        if (!openaiResolved) throw new Error('No OpenAI key')
+        const openai = createOpenAI({
+          apiKey: openaiResolved.key,
+          ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+        })
         const { text } = await generateText({
           model: openai(OPENAI_PRIMARY),
           prompt: `Write a markdown changelog for version ${version} with these fixed reports:\n${reportSummaries || '(none)'}`,

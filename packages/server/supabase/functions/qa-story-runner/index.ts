@@ -305,7 +305,7 @@ Deno.serve(
         .eq('enabled', true)
 
       if (storiesErr) {
-        rlog.error({ err: storiesErr }, 'Failed to fetch qa_stories')
+        rlog.error('Failed to fetch qa_stories', { err: storiesErr })
         await cron.fail(storiesErr)
         return new Response('Internal error', { status: 500 })
       }
@@ -441,7 +441,7 @@ Deno.serve(
         headers: { 'Content-Type': 'application/json' },
       })
     } catch (err) {
-      rlog.error({ err }, 'qa-story-runner fatal error')
+      rlog.error('qa-story-runner fatal error', { err })
       await cron.fail(err)
       return new Response('Internal error', { status: 500 })
     }

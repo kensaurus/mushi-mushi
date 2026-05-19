@@ -100,7 +100,7 @@ function cosineDistance(a: number[], b: number[]): number {
 }
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('mistake-clusterer', async (req: Request) => {
     if (req.method !== 'POST') {
       return new Response('Method Not Allowed', { status: 405 })
     }

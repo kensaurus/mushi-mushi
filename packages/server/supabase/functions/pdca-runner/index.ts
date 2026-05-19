@@ -39,7 +39,7 @@ async function notifyA2A(db: ReturnType<typeof getServiceClient>, event: string,
 }
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('pdca-runner', async (req: Request) => {
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
     const authErr = requireServiceRoleAuth(req)

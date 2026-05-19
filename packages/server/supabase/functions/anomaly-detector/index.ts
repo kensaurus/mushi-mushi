@@ -50,7 +50,7 @@ function zScore(value: number, mu: number, sigma: number): number {
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 Deno.serve(
-  withSentry(async (req: Request) => {
+  withSentry('anomaly-detector', async (req: Request) => {
     if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
     const authErr = requireServiceRoleAuth(req)
     if (authErr && req.headers.get('x-mushi-admin') !== '1') return authErr
