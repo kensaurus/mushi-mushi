@@ -46,7 +46,7 @@ class BreadcrumbCollectorTest {
         bc.add(MushiBreadcrumb.Category.LIFECYCLE, message = "one")
         val snapshot = bc.getAll().toMutableList()
         snapshot.clear()
-        assertEquals(1, bc.count, "Mutating the snapshot must not affect the internal buffer")
+        assertEquals("Mutating the snapshot must not affect the internal buffer", 1, bc.count)
     }
 
     @Test

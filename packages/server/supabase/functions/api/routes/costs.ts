@@ -27,7 +27,7 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
       .from('llm_cost_usd')
       .select('*', { count: 'exact' })
       .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
+      .order('occurred_at', { ascending: false })
       .range((page - 1) * limit, page * limit - 1)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true, data, total: count, page, limit })
@@ -37,22 +37,30 @@ export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
     const projectId = c.req.query('project_id')
     if (!projectId) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
 
-    const { data, error } = await db().rpc('execute_sql', {
-      sql: `
-        select
-          date_trunc('day', created_at) as day,
-          operation,
-          model,
-          sum(cost_usd)::numeric(12,6) as total_cost_usd,
-          count(*) as calls
-        from llm_cost_usd
-        where project_id = '${projectId.replace(/'/g, "''")}'
-        group by 1, 2, 3
-        order by 1 desc, 4 desc
-        limit 200
-      `,
-    })
+    // Fetch raw rows and aggregate in JS — llm_cost_usd is a low-cardinality
+    // table so this is cheap and avoids a raw-SQL RPC.
+    const { data: rows, error } = await db()
+      .from('llm_cost_usd')
+      .select('occurred_at, operation, model, cost_usd')
+      .eq('project_id', projectId)
+      .order('occurred_at', { ascending: false })
+      .limit(2000)
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+
+    // Group by day × operation × model
+    const agg = new Map<string, { day: string; operation: string; model: string; total_cost_usd: number; calls: number }>()
+    for (const row of (rows ?? [])) {
+      const day = row.occurred_at?.slice(0, 10) ?? 'unknown'
+      const key = `${day}|${row.operation}|${row.model}`
+      const existing = agg.get(key)
+      if (existing) {
+        existing.total_cost_usd += row.cost_usd ?? 0
+        existing.calls += 1
+      } else {
+        agg.set(key, { day, operation: row.operation, model: row.model, total_cost_usd: row.cost_usd ?? 0, calls: 1 })
+      }
+    }
+    const data = Array.from(agg.values()).sort((a, b) => b.day.localeCompare(a.day))
     return c.json({ ok: true, data })
   })
 

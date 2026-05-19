@@ -37,7 +37,7 @@ interface CostRow {
   input_tokens: number
   output_tokens: number
   cost_usd: number
-  created_at: string
+  occurred_at: string
 }
 
 interface SummaryRow {
@@ -56,7 +56,7 @@ export function CostPage() {
   const projectId = searchParams.get('project_id') || activeProjectSignal
 
   usePublishPageContext({
-    route: '/costs',
+    route: '/cost',
     title: 'Costs',
     summary: 'LLM cost tracking — token usage, spend by model, and cost-per-call analytics.',
     filters: { project_id: projectId ?? undefined },
@@ -151,7 +151,9 @@ export function CostPage() {
             <div className="grid grid-cols-2 gap-4">
               <Card className="p-4">
                 <p className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">By operation</p>
-                {summaryLoading ? <TableSkeleton rows={3} /> : (
+                {summaryLoading ? <TableSkeleton rows={3} /> : Object.keys(byOp).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">No LLM calls yet — operations will appear here once edge functions run.</p>
+                ) : (
                   <table className="w-full text-sm">
                     <tbody>
                       {Object.entries(byOp).sort(([, a], [, b]) => b - a).map(([op, cost]) => (
@@ -167,7 +169,9 @@ export function CostPage() {
 
               <Card className="p-4">
                 <p className="mb-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">By model</p>
-                {summaryLoading ? <TableSkeleton rows={3} /> : (
+                {summaryLoading ? <TableSkeleton rows={3} /> : Object.keys(byModel).length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic py-2">No model usage yet — models will appear here once edge functions run.</p>
+                ) : (
                   <table className="w-full text-sm">
                     <tbody>
                       {Object.entries(byModel).sort(([, a], [, b]) => b - a).map(([model, cost]) => (
@@ -207,7 +211,7 @@ export function CostPage() {
                           <td className="px-3 py-1.5 text-right tabular-nums">{r.input_tokens.toLocaleString()}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{r.output_tokens.toLocaleString()}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">${Number(r.cost_usd).toFixed(5)}</td>
-                          <td className="px-3 py-1.5 text-muted-foreground"><RelativeTime value={r.created_at} /></td>
+                          <td className="px-3 py-1.5 text-muted-foreground"><RelativeTime value={r.occurred_at} /></td>
                         </tr>
                       ))}
                     </tbody>

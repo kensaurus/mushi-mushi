@@ -34,6 +34,10 @@ minimumReleaseAgeExclude:
   # in every <=3.1.0 release and we run npm audit signatures + provenance
   # in CI as compensating controls.
   - "fast-uri"
+  # devalue 5.8.1 fixes GHSA-77vg-94rm-hx3p (DoS via sparse array). Patch
+  # shipped 2026-05-15; exempt from 7-day cooldown — CI dependency-review
+  # and npm audit --audit-level=high both gate on this advisory.
+  - "devalue"
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies
