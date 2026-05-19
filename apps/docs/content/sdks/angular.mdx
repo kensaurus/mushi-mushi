@@ -4,10 +4,73 @@ title: '@mushi-mushi/angular'
 
 # `@mushi-mushi/angular`
 
-Angular service + DI provider. Wraps `@mushi-mushi/web`.
+Angular service + DI provider. Wraps `@mushi-mushi/web` — everything in the web SDK is available, with an idiomatic Angular surface.
 
-```ts
-import { provideMushi, MushiService } from '@mushi-mushi/angular'
+```bash
+npm install @mushi-mushi/angular
 ```
 
-See [Quickstart → Angular](/quickstart/angular).
+See [Quickstart → Angular](/quickstart/angular) for the full setup walkthrough.
+
+## API surface
+
+```ts
+import { provideMushi, MushiService, MushiReportDirective } from '@mushi-mushi/angular'
+```
+
+| Export | Purpose |
+| --- | --- |
+| `provideMushi(config)` | App-level provider — call in `bootstrapApplication` or `AppModule.providers` |
+| `MushiService` | Injectable singleton — `submit()`, `identify()`, `submitActivity()` |
+| `MushiReportDirective` | `mushiReport` attribute directive — attaches report trigger to any element |
+
+## Setup (standalone bootstrap)
+
+```ts
+// main.ts
+import { bootstrapApplication } from '@angular/platform-browser'
+import { provideMushi } from '@mushi-mushi/angular'
+import { AppComponent } from './app/app.component'
+
+bootstrapApplication(AppComponent, {
+  providers: [
+    provideMushi({
+      projectId: 'YOUR_PROJECT_ID',
+      apiKey: 'YOUR_PUBLIC_API_KEY',
+    }),
+  ],
+})
+```
+
+## Identifying users
+
+```ts
+// auth.service.ts
+import { Injectable, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
+
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private readonly mushi = inject(MushiService)
+
+  onSignIn(user: { id: string; email: string; name: string }) {
+    this.mushi.identify(user.id, { email: user.email, name: user.name })
+  }
+}
+```
+
+## Submitting a report
+
+```ts
+import { Component, inject } from '@angular/core'
+import { MushiService } from '@mushi-mushi/angular'
+
+@Component({ ... })
+export class FeedbackButtonComponent {
+  private readonly mushi = inject(MushiService)
+
+  async reportIssue() {
+    await this.mushi.submit({ title: 'Something feels off', severity: 'p2' })
+  }
+}
+```

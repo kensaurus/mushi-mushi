@@ -2,30 +2,62 @@
 title: Roadmap
 ---
 
+import { Callout } from 'nextra/components'
+
 # Roadmap
 
-Mushi is built in the open against a public roadmap. The whitepaper
-documents 120% of what the code currently ships — code catches up
-release by release.
+Mushi is built in the open. The whitepaper documents the full architectural target — code catches up release by release.
+
+<Callout type="info">
+  **Currently shipping:** v0.8.0 (Wave C complete). See the [Changelog](/changelog) for what landed.
+</Callout>
 
 ## Live boards
 
-- **[Public roadmap board](https://github.com/users/kensaurus/projects/1)**
-  — every active issue, sorted by Wave + milestone.
-- **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** —
-  file a bug, feature request, or RFC.
-- **[Discussions](https://github.com/kensaurus/mushi-mushi/discussions)**
-  — design conversation, Q&A, show-and-tell.
+- **[Public roadmap board](https://github.com/users/kensaurus/projects/1)** — every active issue, sorted by Wave + milestone.
+- **[Open issues](https://github.com/kensaurus/mushi-mushi/issues)** — file a bug, feature request, or RFC.
+- **[Discussions](https://github.com/kensaurus/mushi-mushi/discussions)** — design conversation, Q&A, show-and-tell.
 
-## Release plan (V5.3 → V6.0)
+## Release waves
 
-| Phase | Theme | Status |
-| ---- | -------------------------------------------------- | ---------- |
-| **A** | Vision air-gap, MCP correctness, RAG, sandbox ✓   | Shipped    |
-| **B** | WASM SLM, real-time collab, AG-UI, fine-tune ✓    | Shipped    |
-| **C** | Mobile parity, A2A, SOC 2, residency, BYOK ✓      | Shipped    |
-| **D** | Marketplace, docs, Cloud, multi-repo fixes        | In-flight  |
-| **E** | v1.0.0 GA + whitepaper V6.0                       | Next       |
+| Wave | Theme | Status |
+| --- | --- | --- |
+| **A** | Vision air-gap, MCP correctness, RAG, sandbox | ✅ Shipped |
+| **B** | WASM SLM classifier, real-time collab, AG-UI, fine-tuning pipeline | ✅ Shipped |
+| **C** | Mobile parity (RN + iOS + Android + Flutter + Capacitor), A2A protocol, SOC 2 readiness, data residency pinning, BYOK, BYO storage | ✅ Shipped (v0.8.0) |
+| **D** | Plugin marketplace GA, docs site, Mushi Cloud GA, multi-repo coordinated fixes, PDCA console enhancements, QA coverage stories | 🔄 In-flight |
+| **E** | v1.0.0 GA, whitepaper V6.0, self-hosting one-click | ⏭ Next |
 
-See the [Whitepaper](https://github.com/kensaurus/mushi-mushi/blob/master/MushiMushi_Whitepaper_V5.md)
-for the full architectural target.
+## Wave D details (in-flight)
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Plugin marketplace GA | 🔄 In-flight | 12 first-party plugins shipping, SDK + builder docs live |
+| PDCA console improvements | ✅ Done | Drift scanner, iterate loop, QA coverage stories, PDCA runner |
+| Docs site rewrite | ✅ Done | Scenario-first admin docs, SDK reference, migration guides |
+| Mushi Cloud GA | 🔄 In-flight | Metered billing via Stripe, multi-region, plan management |
+| Multi-repo coordinated fixes | 🔄 In-flight | `fix-worker` cross-repo diffing |
+| `@mushi-mushi/mcp-ci` GA | ✅ Done | CI-aware MCP tool surface |
+| `@mushi-mushi/inventory-auth-runner` | ✅ Done | Auth-gated story runner |
+
+## Wave E (v1.0.0 GA) — planned
+
+- Self-hosting one-click deploy (Railway / Render button)
+- `mushi doctor` CLI command for self-hosters
+- Whitepaper V6.0 with full A2A protocol spec
+- SLA + enterprise support tier
+- `@mushi-mushi/*` 1.0.0 stable API locks (semver)
+
+## Completed highlights (v0.8.0)
+
+- **Native SDKs** — iOS (Swift, CocoaPods + SPM), Android (Kotlin, Maven Central), Flutter (pub.dev), Capacitor
+- **A2A discovery** — `a2a-push-notify` edge function; agents can subscribe to Mushi events as A2A peers
+- **SOC 2 readiness module** — retention policies, DSAR, RLS coverage snapshots, quarterly evidence pack
+- **Data residency** — US / EU / JP region pinning at project creation
+- **BYO storage** — S3, Cloudflare R2, GCS, MinIO, or Supabase Storage per project
+- **BYOK** — project-scoped Anthropic + OpenAI keys via Supabase Vault
+- **PDCA runner** — closed-loop iteration engine: fix → judge → promote, visible in the Iterate console page
+- **Drift scanner** — `drift-walker` + `contract-graph-builder` detect API contract drift against live routes
+- **QA coverage stories** — define and schedule user-story tests from the admin console
+
+See the [Whitepaper](https://github.com/kensaurus/mushi-mushi/blob/main/MushiMushi_Whitepaper_V5.md) for the full architectural target.

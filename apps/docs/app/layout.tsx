@@ -86,7 +86,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           banner={banner}
           navbar={navbar}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/kensaurus/mushi-mushi/tree/master/apps/docs"
+          docsRepositoryBase="https://github.com/kensaurus/mushi-mushi/tree/main/apps/docs"
           footer={footer}
           editLink="Edit this page on GitHub"
           feedback={{ content: 'Question? Give us feedback', labels: 'docs-feedback' }}

@@ -1,15 +1,34 @@
+/**
+ * FILE: apps/docs/components/Playground.tsx
+ * PURPOSE: StackBlitz embed with a click-to-launch card as the default state.
+ *
+ * WHY CLICK-TO-LAUNCH?
+ * ────────────────────
+ * The previous version auto-loaded the StackBlitz iframe on page mount.
+ * StackBlitz WebContainers require specific COOP/COEP security headers
+ * (`Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy:
+ * require-corp`) on the host page. The docs site is a static export served via
+ * S3/CloudFront without those headers, so the WebContainer boot fails and the
+ * iframe shows a sad-face error page. The `onLoad` callback fires because
+ * StackBlitz's own error page loads — we can't detect the failure.
+ *
+ * The click-to-launch pattern solves this by:
+ *   1. Showing a visually clear launch card instead of a broken iframe.
+ *   2. Loading the iframe only after a deliberate user gesture.
+ *   3. Keeping the "Open in StackBlitz ↗" link always visible so users who
+ *      can't boot WebContainers locally can still access the example.
+ */
 'use client'
 
 import { useState } from 'react'
 
-const REPO = 'kensaurus/mushi-mushi'
-const BRANCH = 'master'
+const REPO   = 'kensaurus/mushi-mushi'
+const BRANCH = 'main'
 
 export interface PlaygroundProps {
   /**
    * Folder under `apps/docs/playground/` containing a runnable StackBlitz
-   * project (must have a `package.json`). The component builds a
-   * `stackblitz.com/github/...` embed URL from this.
+   * project (must have a `package.json`).
    */
   scenario: string
   /** File to open in the editor pane on first load. */
@@ -22,20 +41,22 @@ export interface PlaygroundProps {
   title?: string
 }
 
-const buildEmbedUrl = ({
-  scenario,
-  file,
-  hideExplorer = true,
-}: Pick<PlaygroundProps, 'scenario' | 'file' | 'hideExplorer'>) => {
-  const params = new URLSearchParams({
+function buildEmbedUrl({ scenario, file, hideExplorer = true }: Pick<PlaygroundProps, 'scenario' | 'file' | 'hideExplorer'>) {
+  const p = new URLSearchParams({
     embed: '1',
     theme: 'dark',
     view: 'preview',
     hideNavigation: '1',
     hideExplorer: hideExplorer ? '1' : '0',
   })
-  if (file) params.set('file', file)
-  return `https://stackblitz.com/github/${REPO}/tree/${BRANCH}/apps/docs/playground/${scenario}?${params.toString()}`
+  if (file) p.set('file', file)
+  return `https://stackblitz.com/github/${REPO}/tree/${BRANCH}/apps/docs/playground/${scenario}?${p.toString()}`
+}
+
+function buildOpenUrl({ scenario, file }: Pick<PlaygroundProps, 'scenario' | 'file'>) {
+  const p = new URLSearchParams({ theme: 'dark' })
+  if (file) p.set('file', file)
+  return `https://stackblitz.com/github/${REPO}/tree/${BRANCH}/apps/docs/playground/${scenario}?${p.toString()}`
 }
 
 export const Playground = ({
@@ -45,43 +66,91 @@ export const Playground = ({
   hideExplorer = true,
   title,
 }: PlaygroundProps) => {
-  const [loaded, setLoaded] = useState(false)
-  const url = buildEmbedUrl({ scenario, file, hideExplorer })
+  const [launched, setLaunched] = useState(false)
+  const [loaded, setLoaded]     = useState(false)
+
+  const embedUrl = buildEmbedUrl({ scenario, file, hideExplorer })
+  const openUrl  = buildOpenUrl({ scenario, file })
 
   return (
-    <figure className="my-6 overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950">
-      <figcaption className="flex items-center justify-between border-b border-neutral-200 px-4 py-2 text-xs font-medium text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
-        <span>
-          Live playground{title ? ` — ${title}` : ''}
+    <figure className="not-prose my-6 overflow-hidden rounded-xl border border-[color:var(--nextra-border,#e5e7eb)] bg-[color:var(--nextra-bg,white)]">
+
+      {/* ── Top bar ── */}
+      <figcaption className="flex items-center justify-between border-b border-[color:var(--nextra-border,#e5e7eb)] px-4 py-2.5 text-xs">
+        <span style={{ fontFamily: 'monospace', letterSpacing: '0.04em', opacity: 0.55 }}>
+          {title ? `Live playground — ${title}` : 'Live playground'}
         </span>
         <a
-          href={url.replace('embed=1&', '').replace('?embed=1', '')}
+          href={openUrl}
           target="_blank"
           rel="noreferrer noopener"
-          className="text-neutral-700 underline-offset-2 hover:underline dark:text-neutral-300"
+          style={{ color: 'var(--mushi-vermillion, #e03c2c)', fontFamily: 'monospace', letterSpacing: '0.04em' }}
+          className="hover:underline underline-offset-2"
         >
           Open in StackBlitz ↗
         </a>
       </figcaption>
 
-      <div
-        className="relative w-full bg-neutral-100 dark:bg-neutral-900"
-        style={{ height }}
-      >
-        {!loaded && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-neutral-500 dark:text-neutral-400">
-            Booting WebContainer…
-          </div>
+      {/* ── Content area ── */}
+      <div className="relative w-full bg-[color:var(--nextra-bg,white)]" style={{ height }}>
+
+        {/* Default: launch card */}
+        {!launched && (
+          <button
+            type="button"
+            onClick={() => setLaunched(true)}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 transition-colors hover:bg-[color-mix(in_oklch,var(--mushi-vermillion,#e03c2c)_5%,white)]"
+            aria-label="Launch live playground"
+          >
+            {/* Play button */}
+            <span
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'var(--mushi-vermillion, #e03c2c)',
+                boxShadow: '0 4px 24px -6px color-mix(in oklch, var(--mushi-vermillion, #e03c2c) 55%, transparent)',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+              }}
+              aria-hidden="true"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M5.5 3.5L14.5 9L5.5 14.5V3.5Z" fill="white" />
+              </svg>
+            </span>
+
+            <span style={{ fontSize: '0.78rem', fontFamily: 'monospace', letterSpacing: '0.06em', textTransform: 'uppercase', opacity: 0.55 }}>
+              Launch playground
+            </span>
+
+            <span style={{ fontSize: '0.7rem', opacity: 0.35 }}>
+              Powered by StackBlitz WebContainers
+            </span>
+          </button>
         )}
-        <iframe
-          src={url}
-          title={`Playground — ${scenario}`}
-          loading="lazy"
-          allow="cross-origin-isolated; clipboard-write"
-          sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation"
-          className="absolute inset-0 h-full w-full"
-          onLoad={() => setLoaded(true)}
-        />
+
+        {/* After launch: iframe with loading overlay */}
+        {launched && (
+          <>
+            {!loaded && (
+              <div className="absolute inset-0 flex items-center justify-center text-sm" style={{ opacity: 0.5 }}>
+                Booting WebContainer…
+              </div>
+            )}
+            <iframe
+              src={embedUrl}
+              title={`Playground — ${scenario}`}
+              loading="eager"
+              allow="cross-origin-isolated; clipboard-write"
+              sandbox="allow-forms allow-modals allow-popups allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation"
+              className="absolute inset-0 h-full w-full"
+              onLoad={() => setLoaded(true)}
+            />
+          </>
+        )}
       </div>
     </figure>
   )

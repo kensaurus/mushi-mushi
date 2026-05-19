@@ -22,8 +22,12 @@ device to a merged PR.
 | `@mushi-mushi/react-native` | `fast-filter` *(spam triage)* | `pgvector` embeddings | Slack |
 | Native iOS / Android / Flutter | `classify-report` *(2-stage LLM)* | Apache AGE graph | GitHub *(scoped App)* |
 | `@mushi-mushi/capacitor` | `judge-batch` *(nightly cron)* | `blast_radius_cache` MV | Langfuse *(traces)* |
-| `@mushi-mushi/mcp` *(agent surface)* | `fix-orchestrator` *(sandbox PR)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
-|  | `intelligence-report` *(weekly digest)* |  |  |
+| `@mushi-mushi/mcp` *(agent surface)* | `fix-worker` *(sandbox PR + LLM agent)* | Supabase Vault *(BYOK + plugin secrets)* | Marketplace plugins *(PagerDuty, Linear, …)* |
+|  | `intelligence-report` *(weekly digest)* | `contract_snapshots` *(drift baseline)* | Firecrawl *(research + crawl)* |
+|  | `drift-walker` *(live crawl diff)* | `pdca_runs` + `fix_attempts` | Browserbase *(QA story execution)* |
+|  | `contract-graph-builder` *(snapshot builder)* | `qa_stories` + `qa_story_runs` |  |
+|  | `pdca-runner` *(Plan→Do→Check→Act)* | `integration_health_history` |  |
+|  | `qa-story-runner` *(scheduled user-story tests)* |  |  |
 |  | `soc2-evidence` *(control snapshot)* |  |  |
 
 **Edges that matter** (everything else flows top-to-bottom inside a column):
@@ -32,15 +36,17 @@ device to a merged PR.
 - `api → fast-filter → classify-report` is the canonical ingest path.
 - `classify-report → pgvector + Apache AGE + plugins` happens in parallel.
 - `judge-batch` reads from and writes back into `classify-report`'s prompts.
-- `fix-orchestrator → GitHub` only fires after a human approves the triage.
+- `fix-worker → GitHub` only fires after a human approves the triage decision.
+- `pdca-runner` orchestrates `fix-worker` autonomously — one PDCA run may spawn multiple fix-worker calls.
+- `drift-walker → contract-graph-builder` compares a fresh crawl against the stored `contract_snapshots` baseline.
 - `api → Supabase Vault` resolves BYOK secrets per-request, never cached.
-- All three LLM-touching functions stream traces to Langfuse.
+- All LLM-touching functions stream traces to Langfuse.
 
 ## Component summary
 
-- **Edge gateway (Hono on Supabase Edge Functions)** authenticates with API
-  keys (public reports) or JWT (admin), enforces rate limits, and routes
-  to specialised functions.
+- **Edge gateway (`api`, Hono on Supabase Edge Functions)** authenticates with API
+  keys (public SDK reports) or JWT (admin console), enforces rate limits, and routes
+  to specialised functions. All admin routes live under `/v1/admin/*`.
 - **`fast-filter`** triages high-volume garbage (form spam, duplicate one-liners)
   with the cheapest model the project's BYOK plan permits.
 - **`classify-report`** runs the canonical two-stage classifier. Stage 1
@@ -50,13 +56,26 @@ device to a merged PR.
 - **`judge-batch`** is a nightly cron that scores classifier accuracy with a
   separate judge model, feeding the prompt-A/B framework that promotes new
   prompt versions automatically when they win statistically.
-- **`fix-orchestrator`** dispatches approved triage decisions to a sandbox
-  (E2B today, Modal/Cloudflare Sandbox SDK adapters available) where an
-  agent — speaking either MCP (`tools/call`) or REST — drafts code, opens
-  a PR via a scoped GitHub App.
+- **`fix-worker`** dispatches approved triage decisions to a sandboxed LLM agent
+  (Anthropic / OpenAI BYOK) that generates code patches, validates them against
+  a Zod schema, and opens a draft PR via a scoped GitHub App. Validation failures
+  include Zod issue detail in `fix_attempts.error` for debugging.
+- **`pdca-runner`** orchestrates autonomous Plan → Do → Check → Act cycles:
+  crawls a target URL, identifies issues, calls `fix-worker` for each, verifies
+  the result, and writes per-run + per-iteration records to `pdca_runs`.
+- **`drift-walker`** fetches the live app (using `contract-graph-builder`) and
+  diffs the result against the stored `contract_snapshots` baseline. Structured
+  error codes (`BUILDER_FAILED`, `SNAPSHOT_MISSING`) flow through to the
+  [Drift scanner](/admin/drift) UI.
+- **`contract-graph-builder`** crawls a URL via Firecrawl and builds a contract
+  graph (routes, components, API endpoints). Called by `drift-walker` and also
+  when the SDK registers a new inventory snapshot.
+- **`qa-story-runner`** executes `qa_stories` records on schedule (pg_cron, every
+  minute) using Firecrawl, Browserbase, or local Playwright. Writes results to
+  `qa_story_runs` and `qa_story_evidence` with screenshots.
 - **`intelligence-report`** generates weekly bug-intelligence digests with
-  optional cross-customer benchmarking (k-anonymity enforced via
-  materialized view).
+  optional cross-customer benchmarking (k-anonymity enforced via materialized view).
+  Runs with `verify_jwt = false`; authenticated via service-role header internally.
 - **`soc2-evidence`** snapshots control state for SOC 2 Type 1 readiness.
 
 ## Knowledge graph

@@ -4,18 +4,65 @@ title: 'dev.mushimushi:sdk (Android)'
 
 # `dev.mushimushi:sdk` (Android)
 
-Native Kotlin SDK on Maven Central.
+Native Kotlin SDK on Maven Central. Uses `SensorManager` for shake detection, Jetpack Compose for the report UI, and `WorkManager` for a resilient offline queue.
 
-```kotlin
-Mushi.configure(this, projectId = "…", apiKey = "…", enableShakeToReport = true)
-Mushi.submitReport(description = "…")
+```gradle
+// build.gradle.kts (app module)
+dependencies {
+    implementation("dev.mushimushi:sdk:0.8.+")
+}
 ```
 
-Highlights:
+See [Quickstart → Android](/quickstart/android) for the full setup walkthrough.
 
-- Shake detection via `SensorManager` (no third-party gesture lib).
-- Bottom-sheet capture UI rendered with Compose.
-- `WorkManager`-style retry queue.
-- Optional Sentry breadcrumb bridge.
+## API surface
 
-See [Quickstart → Android](/quickstart/android).
+| Method | Purpose |
+| --- | --- |
+| `Mushi.configure(context, projectId, apiKey, ...)` | Boot the SDK — call once in `Application.onCreate()` |
+| `Mushi.identify(userId, traits)` | Link reports to a user |
+| `Mushi.submitReport(description, severity)` | Programmatic report submission |
+| `Mushi.showReportSheet()` | Show the bottom-sheet capture UI imperatively |
+| `Mushi.submitActivity(events)` | Rewards-program activity events |
+| `MushiReportFab` | Jetpack Compose FAB that triggers the report sheet |
+
+## Setup
+
+```kotlin
+// MyApplication.kt
+import dev.mushimushi.Mushi
+
+class MyApplication : Application() {
+    override fun onCreate() {
+        super.onCreate()
+        Mushi.configure(
+            context = this,
+            projectId = "YOUR_PROJECT_ID",
+            apiKey = "YOUR_PUBLIC_API_KEY",
+            enableShakeToReport = true,
+        )
+    }
+}
+```
+
+## Identifying users
+
+```kotlin
+// After sign-in
+Mushi.identify(
+    userId = user.id,
+    traits = mapOf("email" to user.email, "name" to user.displayName),
+)
+```
+
+## Offline queue
+
+Reports created without network access are persisted via `WorkManager` with exponential backoff. The queue cap is 50 reports — oldest entries are dropped if exceeded.
+
+## Sentry bridge
+
+```kotlin
+Mushi.attachSentryBridge()
+```
+
+Forwards each Mushi report as a Sentry breadcrumb and tags the active Sentry scope with the `report_id` so a single Sentry issue links back to the Mushi report.

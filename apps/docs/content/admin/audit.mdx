@@ -1,0 +1,125 @@
+---
+title: Audit log
+---
+
+# Audit log
+
+**Route:** `/audit`
+
+> **Scenario 1:** A fix-worker PR was opened for the wrong repository last night and
+> you want to know which admin action or agent run triggered it.
+>
+> **Scenario 2:** Your security team wants to know who generated API keys in the last
+> 30 days and whether any were revoked.
+
+The audit log is an immutable record of every action taken in the system — by humans,
+agents, and automated pipelines. Every entry is timestamped, attributed, and expandable
+to show the full before/after payload.
+
+---
+
+## What's logged
+
+Every action that mutates data produces an audit entry. Examples:
+
+| Action | Description |
+|--------|-------------|
+| `report.created` | A new report was ingested |
+| `report.triaged` | A human triaged a report |
+| `fix.dispatched` | A fix-worker run was started |
+| `fix.completed` | A fix-worker run succeeded |
+| `fix.failed` | A fix-worker run failed |
+| `lesson.promoted` | A mistake cluster was promoted to a lesson |
+| `key.created` | An API key was generated |
+| `key.revoked` | An API key was revoked |
+| `sso.registered` | An SSO provider was added |
+| `project.deleted` | A project was deleted |
+| `pdca.run.started` | A PDCA run was queued |
+| `user.invited` | A teammate was invited |
+
+---
+
+## Columns
+
+| Column | Description |
+|--------|-------------|
+| **Time** | Timestamp (relative + absolute on hover) |
+| **Action** | Colour-coded badge — green for success, red for failures, amber for warnings |
+| **Actor** | Email address for human actors, function name for agents, "system" for cron |
+| **Resource** | `type:id-prefix` — the object the action affected |
+| **▶** | Expand to see the full JSON metadata payload and complete resource ID |
+
+---
+
+## Hero metrics
+
+Three stat cards at the top of the page show counts for the selected time window:
+**Total events**, **FAIL events**, **WARN events**.
+
+---
+
+## Filtering
+
+| Filter | Options |
+|--------|---------|
+| **Action** | Dropdown of all action types |
+| **Resource type** | `report`, `fix`, `lesson`, `key`, `project`, `user`, etc. |
+| **Actor type** | Human / Agent / System |
+| **When** | Last 1h / 24h / 7d / 30d / all time |
+| **Actor email** | Type and press Enter to filter to a specific person |
+| **Search** | Free-text search on action and resource (press Enter or blur) |
+
+Active filters appear as chips in a rail below the toolbar. Click the **×** on any chip
+to remove it, or **Clear all** to reset.
+
+---
+
+## Expanding a row
+
+Click any row to expand it and see the full JSON metadata payload. This includes the
+before/after state for mutations, the triggering agent ID, and any error detail for
+failed actions.
+
+---
+
+## Export
+
+Click **Export CSV** to download all entries matching the current filters. The export
+includes all columns plus the full metadata JSON.
+
+---
+
+## Common tasks
+
+### Tracing an unexpected fix-worker action
+1. Set **Action** filter to `fix.dispatched`.
+2. Set **When** to `last 24h`.
+3. Find the relevant entry — expand it to see the `report_id`, `triggered_by` (human or agent), and `project_id`.
+4. Click the `report_id` in the payload to navigate directly to the report.
+
+### Security review: who created API keys this month
+1. Set **Action** to `key.created`.
+2. Set **When** to `last 30d`.
+3. Set **Actor type** to `Human`.
+4. Review the Actor column — each entry shows the email of who generated the key.
+5. Click **Export CSV** to share with your security team.
+
+### Finding out when a project was deleted
+1. Set **Action** to `project.deleted`.
+2. Expand the row — the payload includes the full project name, slug, and the actor who confirmed deletion.
+
+---
+
+## API
+
+```bash
+GET /v1/admin/audit?action=&resource_type=&actor=&actor_type=&since=&q=&limit=50&offset=
+```
+
+---
+
+## Related pages
+
+- [Compliance](/admin/compliance) — SOC 2 evidence exports that reference audit data
+- [Fix orchestrator](/admin/fixes) — detailed fix-worker run logs
+- [Organization members](/admin/teams) — see who has access and can generate entries
