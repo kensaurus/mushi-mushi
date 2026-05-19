@@ -194,6 +194,12 @@ export function InventoryPage() {
     untestedComponents: Number(summary.unknown ?? 0),
   })
 
+  // Gate-run and reconcile both operate at the WHOLE-PROJECT level today.
+  // The downstream inventory-gates / inventory-crawler edge functions don't
+  // accept a story filter yet — adding one is a feature, not an audit fix.
+  // The per-story buttons in UserStoryMap are kept as a contextual shortcut
+  // ("I'm reading this story, run gates from right here") but the toast
+  // copy is honest about the actual scope so users aren't misled.
   const runGates = async () => {
     if (!projectId) return
     const res = await apiFetch(`/v1/admin/inventory/${projectId}/gates/run`, {
@@ -214,9 +220,13 @@ export function InventoryPage() {
 
   const reconcile = async () => {
     if (!projectId) return
-    const res = await apiFetch(`/v1/admin/inventory/${projectId}/reconcile`, { method: 'POST', body: '{}' })
+    const res = await apiFetch(`/v1/admin/inventory/${projectId}/reconcile`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    })
     if (res.ok) toast.success('Crawler started', 'Drift tab updates when the crawl finishes.')
-    else toast.push({ tone: 'error', message: 'Reconcile failed', description: res.error?.message ?? '' })
+    else
+      toast.push({ tone: 'error', message: 'Reconcile failed', description: res.error?.message ?? '' })
   }
 
   const ingestYaml = async (yaml: string) => {
@@ -426,10 +436,10 @@ export function InventoryPage() {
         action={nba}
         trailing={
           <div className="flex flex-wrap gap-2" data-dav-anchor="inventory:act">
-            <Btn type="button" size="sm" variant="ghost" onClick={runGates}>
+            <Btn type="button" size="sm" variant="ghost" onClick={() => void runGates()}>
               Run gates
             </Btn>
-            <Btn type="button" size="sm" variant="ghost" onClick={reconcile}>
+            <Btn type="button" size="sm" variant="ghost" onClick={() => void reconcile()}>
               Run crawler
             </Btn>
           </div>
@@ -469,6 +479,8 @@ export function InventoryPage() {
             stories={stories}
             findingsByNode={findingsByNode}
             onSelectAction={(a) => void openActionDrawer(a)}
+            onRunGatesForStory={() => void runGates()}
+            onRunCrawlerForStory={() => void reconcile()}
           />
         </div>
       )}

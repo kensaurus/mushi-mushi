@@ -31,6 +31,19 @@ import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/ty
 import { usePageCopy } from '../lib/copy'
 import { useStaggeredAppear } from '../lib/useStaggeredAppear'
 
+interface InventoryActionNode {
+  actionNodeId?: string
+  id?: string
+  actionLabel?: string
+  label?: string
+  actionDescription?: string | null
+  pagePath?: string | null
+  storyTitle?: string | null
+  expectedOutcome?: Record<string, unknown> | null
+  status?: string | null
+  metadata?: Record<string, unknown>
+}
+
 type StatusBucket = 'all' | 'inflight' | 'pr_open' | 'merged' | 'failed'
 
 const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
@@ -66,6 +79,7 @@ export function FixesPage() {
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
   const [summary, setSummary] = useState<FixSummary | null>(null)
   const [timelines, setTimelines] = useState<Record<string, FixTimelineEvent[]>>({})
+  const [inventoryActions, setInventoryActions] = useState<Record<string, InventoryActionNode | null>>({})
   const [loading, setLoading] = useState(true)
   const [isValidating, setIsValidating] = useState(true)
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null)
@@ -163,6 +177,33 @@ export function FixesPage() {
       cancelled = true
     }
   }, [expanded, fixes])
+
+  // Lazily fetch the inventory action node when a fix with an anchor is expanded.
+  // Cached by action node ID so re-opening any fix pointing to the same action
+  // is instant. Null sentinel prevents re-fetching nodes that returned 404.
+  //
+  // The /v1/admin/graph/node/:nodeId endpoint returns { node: {...} } — we
+  // unwrap to the inner node so callers don't have to know about the envelope.
+  useEffect(() => {
+    if (!expanded) return
+    const fix = fixes.find((f) => f.id === expanded)
+    const nodeId = fix?.inventory_action_node_id
+    if (!nodeId) return
+    if (inventoryActions[nodeId] !== undefined) return
+    let cancelled = false
+    apiFetch<{ node: InventoryActionNode }>(`/v1/admin/graph/node/${nodeId}`)
+      .then((res) => {
+        if (cancelled) return
+        const node = res.ok && res.data?.node ? res.data.node : null
+        setInventoryActions((prev) => ({ ...prev, [nodeId]: node }))
+      })
+      .catch(() => {
+        setInventoryActions((prev) => ({ ...prev, [nodeId]: null }))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [expanded, fixes, inventoryActions])
 
   const platform = usePlatformIntegrations()
 
@@ -481,6 +522,23 @@ export function FixesPage() {
                     traceUrl={platform.traceUrl(fix.langfuse_trace_id)}
                     onToggle={() => setExpanded(expanded === fix.id ? null : fix.id)}
                     onRetry={() => retryOne(fix.report_id)}
+                    inventoryAction={
+                      fix.inventory_action_node_id
+                        ? (() => {
+                            const n = inventoryActions[fix.inventory_action_node_id]
+                            if (!n) return n
+                            return {
+                              actionNodeId: (n.actionNodeId ?? n.id ?? fix.inventory_action_node_id) as string,
+                              actionLabel: (n.actionLabel ?? n.label ?? 'Unknown action') as string,
+                              actionDescription: n.actionDescription ?? (n.metadata?.['action'] as string | null) ?? null,
+                              pagePath: n.pagePath ?? (n.metadata?.['page_path'] as string | null) ?? null,
+                              storyTitle: n.storyTitle ?? (n.metadata?.['story_title'] as string | null) ?? null,
+                              expectedOutcome: (n.expectedOutcome ?? (n.metadata?.['expected_outcome'] as Record<string, unknown> | null) ?? null),
+                              status: n.status ?? (n.metadata?.['status'] as string | null) ?? null,
+                            }
+                          })()
+                        : undefined
+                    }
                   />
                 </div>
               ))}

@@ -773,6 +773,236 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       letter-spacing: 0.02em;
     }
 
+    /* ── Rewards nudge (category step) ───────────────────────────── */
+    .mushi-rewards-nudge {
+      border-top: 1px solid ${rule};
+      padding: 10px 0 4px;
+      margin-top: 6px;
+    }
+    .mushi-rewards-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .mushi-tier-pip {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .mushi-rewards-tier-name {
+      font-family: ${fontMono};
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: ${ink};
+    }
+    .mushi-rewards-pts-count {
+      font-family: ${fontMono};
+      font-size: 11px;
+      color: ${inkMuted};
+      margin-right: auto;
+    }
+    .mushi-rewards-pts-earn {
+      font-family: ${fontMono};
+      font-size: 10px;
+      color: ${vermillion};
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .mushi-tier-bar-track {
+      height: 3px;
+      background: ${ruleStrong};
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 5px;
+    }
+    .mushi-tier-bar-fill {
+      height: 100%;
+      background: ${vermillion};
+      border-radius: 2px;
+      transition: width 600ms ${easeStamp};
+    }
+    .mushi-rewards-next-label {
+      font-family: ${fontMono};
+      font-size: 10px;
+      color: ${inkMuted};
+      text-align: right;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Rewards on success step ─────────────────────────────────── */
+    .mushi-success-rewards {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid ${rule};
+      width: 100%;
+    }
+    .mushi-success-pts-award {
+      font-family: ${fontMono};
+      font-size: 22px;
+      font-weight: 700;
+      color: ${vermillion};
+      text-align: center;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+      opacity: 0;
+      animation: mushi-pts-pop 420ms ${easeStamp} 900ms forwards;
+    }
+    .success-bar { margin: 0 0 5px; }
+
+    @keyframes mushi-pts-pop {
+      from { opacity: 0; transform: scale(0.75) translateY(6px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* ─── Beta mode strip (category step) ─────────────────────────────── */
+
+    .mushi-beta-strip {
+      margin: 0 16px 2px;
+      padding: 9px 12px;
+      background: rgba(99, 102, 241, 0.07);
+      border: 1px solid rgba(99, 102, 241, 0.18);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .mushi-beta-strip-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mushi-beta-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #b45309;
+      font-family: var(--mushi-font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      line-height: 1.6;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .mushi-beta-tag {
+        background: rgba(245, 158, 11, 0.12);
+        border-color: rgba(245, 158, 11, 0.28);
+        color: #fbbf24;
+      }
+    }
+
+    .mushi-beta-msg {
+      font-size: 11px;
+      color: var(--mushi-text-dim);
+      line-height: 1.45;
+    }
+
+    .mushi-beta-contact-hint {
+      font-size: 10px;
+      color: var(--mushi-text-dim);
+      opacity: 0.72;
+      font-family: var(--mushi-font-mono);
+    }
+
+    .mushi-beta-perks {
+      list-style: none;
+      margin: 2px 0 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mushi-beta-perks li {
+      font-size: 10.5px;
+      color: #4f46e5;
+      font-weight: 500;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .mushi-beta-perks li {
+        color: #818cf8;
+      }
+    }
+
+    /* ─── Beta changelog (collapsible What's new) ──────────────────────── */
+
+    .mushi-changelog {
+      margin-top: 5px;
+    }
+
+    .mushi-changelog-summary {
+      font-size: 10.5px;
+      color: var(--mushi-text-dim);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      user-select: none;
+    }
+
+    .mushi-changelog-summary::before {
+      content: '▶';
+      font-size: 7px;
+      opacity: 0.6;
+      transition: transform 0.15s ease;
+    }
+
+    .mushi-changelog[open] .mushi-changelog-summary::before {
+      transform: rotate(90deg);
+    }
+
+    .mushi-changelog-list {
+      margin: 5px 0 0 4px;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .mushi-changelog-list li {
+      font-size: 10.5px;
+      color: var(--mushi-text-dim);
+      line-height: 1.5;
+    }
+
+    /* ─── Beta success footer ───────────────────────────────────────────── */
+
+    .mushi-beta-success-footer {
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: rgba(99, 102, 241, 0.06);
+      border: 1px solid rgba(99, 102, 241, 0.14);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      text-align: left;
+    }
+
+    .mushi-beta-success-line {
+      font-size: 11px;
+      color: var(--mushi-text-dim);
+      line-height: 1.5;
+    }
+
+    .mushi-beta-success-dim {
+      opacity: 0.65;
+      font-size: 10.5px;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *,
       *::before,
@@ -783,6 +1013,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       }
       .mushi-success-stamp circle { stroke-dashoffset: 0; }
       .mushi-success-stamp-label { opacity: 1; }
+      .mushi-success-pts-award { opacity: 1; }
     }
   `;
 }

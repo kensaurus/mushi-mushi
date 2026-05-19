@@ -159,7 +159,7 @@ export default defineConfig({
             return 'vendor-react'
           }
           // Error instrumentation — on every page, but independently updated.
-          if (id.includes('@sentry/')) return 'vendor-sentry'
+          if (id.includes('@sentry/') || id.includes('@sentry-internal/')) return 'vendor-sentry'
           // Supabase + api surface — on every page that hits the API.
           if (id.includes('@supabase/')) return 'vendor-supabase'
           // Charts: Recharts + d3 — loaded only by Health, Billing, Dashboard.
@@ -169,6 +169,10 @@ export default defineConfig({
           // Maps — only by the handful of pages that render geography.
           if (id.includes('mapbox-gl') || id.includes('maplibre-gl') || id.includes('@mapbox/')) {
             return 'vendor-maps'
+          }
+          // Animation — framer-motion / motion-dom; loaded by pages with transitions.
+          if (id.includes('framer-motion') || id.includes('motion-dom') || id.includes('motion-utils')) {
+            return 'vendor-motion'
           }
           // Markdown + syntax highlighting — only by Report detail + Prompt lab.
           if (id.includes('react-markdown') || id.includes('remark-') || id.includes('rehype-') || id.includes('shiki') || id.includes('highlight.js')) {

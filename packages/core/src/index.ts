@@ -16,6 +16,9 @@ export type {
   MushiIntegrationsConfig,
   MushiOfflineConfig,
   MushiRewardsConfig,
+  MushiReputationResult,
+  MushiTierResult,
+  MushiActivityEvent,
   MushiReportCategory,
   MushiReportStatus,
   MushiReport,
@@ -44,6 +47,8 @@ export type {
   MushiOnDeviceClassifierResult,
   MushiBreadcrumb,
   MushiSentryContext,
+  MushiBetaModeConfig,
+  MushiBetaChangelogEntry,
 } from './types';
 
 export {

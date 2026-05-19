@@ -121,6 +121,12 @@ async function handler(req: Request): Promise<Response> {
     }
     const allRouting = (routingRows ?? []) as RoutingRow[]
 
+    // ── 2b. Load active reward_webhooks (P3 extension) ──────────────────
+    const { data: rewardWebhookRows } = await db
+      .from('reward_webhooks')
+      .select('id, project_id, organization_id, url, secret_hash, enabled')
+      .eq('enabled', true)
+
     // ── 3. Build probe task list ────────────────────────────────────────
     const tasks: ProbeTask[] = []
 
@@ -136,6 +142,19 @@ async function handler(req: Request): Promise<Response> {
       // Find the matching settings row (or use empty defaults).
       const settings = allSettings.find((s) => s.project_id === r.project_id) ?? ({} as PlatformSettingsRow)
       tasks.push({ projectId: r.project_id, kind, settings, routingConfig: r.config })
+    }
+
+    // Add reward_webhook probes (P3)
+    for (const wh of (rewardWebhookRows ?? []) as Array<{ id: string; project_id: string | null; organization_id: string; url: string; secret_hash: string | null; enabled: boolean }>) {
+      const projectId = wh.project_id ?? allSettings.find((s) => s.project_id)?.project_id
+      if (!projectId) continue
+      const settings = allSettings.find((s) => s.project_id === projectId) ?? ({} as PlatformSettingsRow)
+      tasks.push({
+        projectId,
+        kind: 'reward_webhook' as const,
+        settings,
+        routingConfig: { webhook_url: wh.url, secret_hash: wh.secret_hash ?? undefined },
+      })
     }
 
     // ── 4. Server-level probes (anthropic / openai) ─────────────────────

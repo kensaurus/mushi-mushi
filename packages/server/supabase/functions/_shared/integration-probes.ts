@@ -31,9 +31,10 @@ export type IntegrationKind =
   | 'linear'
   | 'github_issues'
   | 'pagerduty'
+  | 'reward_webhook'
 
 export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
-export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty']
+export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty', 'reward_webhook']
 export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [...PLATFORM_KINDS, ...ROUTING_KINDS]
 
 export interface ProbeResult {
@@ -337,6 +338,57 @@ export async function probeIntegration(
   } catch (err) {
     status = 'down'
     detail = String(err).slice(0, 200)
+  }
+
+  // ── reward_webhook ────────────────────────────────────────────────────────
+  if (kind === 'reward_webhook') {
+    const url = routingConfig['webhook_url'] as string | undefined
+    const secretHash = routingConfig['secret_hash'] as string | undefined
+
+    if (!url) {
+      detail = 'No webhook URL configured — add one in Rewards → Settings.'
+    } else {
+      // Send a signed ping event. The host should return 2xx; any other status
+      // surfaces as degraded. We don't require the host to process pings —
+      // just that the endpoint is reachable.
+      const body = JSON.stringify({ event: 'reward.health_ping', timestamp: new Date().toISOString() })
+      let sig = 'none'
+      if (secretHash) {
+        // secretHash is stored as hex-encoded HMAC key (first 16 chars = probe ID)
+        sig = `sha256=probe-${secretHash.slice(0, 16)}`
+      }
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Mushi-Signature-256': sig,
+            'X-Mushi-Event': 'reward.health_ping',
+          },
+          body,
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        if (res.status >= 200 && res.status < 300) {
+          status = 'ok'
+          detail = `Endpoint reachable — ${res.status}`
+        } else if (res.status === 401 || res.status === 403) {
+          // Signature mismatch is expected since we don't have the plaintext secret;
+          // treat a 4xx as "reachable but signature rejected" → degraded, not down.
+          status = 'degraded'
+          detail = `Endpoint reachable but rejected probe (${res.status}). Signature verification working.`
+        } else if (res.status >= 500) {
+          status = 'down'
+          detail = `Host webhook endpoint returned ${res.status}`
+        } else {
+          status = 'degraded'
+          detail = `Unexpected response: ${res.status}`
+        }
+      } catch (err) {
+        status = 'down'
+        detail = `Connection failed: ${String(err)}`
+      }
+    }
   }
 
   return { status, detail, httpStatus, latencyMs: Date.now() - start }

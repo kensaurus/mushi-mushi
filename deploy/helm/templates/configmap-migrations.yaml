@@ -1,0 +1,38 @@
+# FILE: configmap-migrations.yaml
+# PURPOSE: Bundle every SQL migration as a ConfigMap so the pre-install
+#          and pre-upgrade Job (`job-migrate.yaml`) can apply them in
+#          alphabetical order against the configured Postgres.
+#
+#          The .sql files are mirrored into `deploy/helm/migrations/`
+#          from `packages/server/supabase/migrations/` by
+#          `scripts/sync-helm-migrations.mjs`. Run that script before
+#          `helm package` to refresh the snapshot. CI also runs it in
+#          --check mode so a stale chart is caught at PR time.
+#
+#          Why a ConfigMap (vs. baking into an image): the migration
+#          set evolves on every release while the migrate image is
+#          frozen. Decoupling lets ops bump the chart version without
+#          rebuilding `supabase/postgres`, and the rendered manifest
+#          stays auditable (`helm template | grep -A2 'kind: ConfigMap'`).
+#
+#          Size budget: a single ConfigMap caps at ~1 MiB. Current
+#          payload is ~550 KiB across ~130 files so we have ~50% head-
+#          room. If we breach it later we'll shard by year prefix.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-migrations
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+{{- range $path, $bytes := .Files.Glob "migrations/*.sql" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

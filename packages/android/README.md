@@ -3,8 +3,7 @@
 Native Android (Kotlin) SDK for [Mushi Mushi](https://mushimushi.dev) — the
 open-source, LLM-driven bug intake, classification, and autofix platform.
 
-> **Status**: V0.3.0 Surface stable; minor changes still possible
-> before V1.0.
+> **Status**: V0.4.0 Feature parity with the web SDK.
 
 ## Features
 
@@ -13,6 +12,10 @@ open-source, LLM-driven bug intake, classification, and autofix platform.
 - 🎯 **Bottom-sheet widget** (`MushiBottomSheet`) with category picker and
   live min-length validation
 - 🌐 **Device + app context** auto-attached to every report
+- 🧭 **Breadcrumb ring buffer** — 50-entry FIFO, auto-attached to every report
+- 🚨 **Proactive detection** — rage-tap and slow-screen triggers (`Choreographer`)
+- 🔒 **PII scrubber** — emails, JWTs, Stripe/OpenAI/Anthropic/AWS keys redacted before submission
+- ⚠️ **Exception normaliser** — `captureError()` now forwards name/message/stack/cause
 - 🔌 **Optional Sentry bridge** (`MushiSentryBridge`) — uses runtime
   reflection so consumers without Sentry pay no APK cost
 
@@ -22,7 +25,7 @@ Add to your app's `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("dev.mushimushi:mushi-android:0.3.0")
+    implementation("dev.mushimushi:mushi-android:0.4.0")
     // Optional: enable Sentry bridge.
     implementation("io.sentry:sentry-android:7.18.1")
 }
@@ -70,6 +73,28 @@ Mushi.report(
 try { riskyOperation() }
 catch (t: Throwable) { Mushi.captureError(t) }
 ```
+
+### Breadcrumbs
+
+Drop short notes onto the 50-entry ring buffer; every `report()` /
+`captureError()` flushes them with the payload (PII-scrubbed).
+
+```kotlin
+Mushi.addBreadcrumb(MushiBreadcrumb.Category.UI_TAP, message = "Tapped Save")
+Mushi.addBreadcrumb(
+    MushiBreadcrumb.Category.NAVIGATION,
+    level = MushiBreadcrumb.Level.INFO,
+    message = "Settings → Profile",
+    data = mapOf("from" to "home"),
+)
+
+val crumbs = Mushi.getBreadcrumbs()  // snapshot for debugging
+```
+
+Wire categories: `navigation`, `ui.tap`, `console`, `network`,
+`lifecycle`, `custom` — admin tooling treats `ui.tap` as the touch-device
+sibling of the web SDK's `ui.click`. The `data` map is `Map<String,
+String>`; the Capacitor bridge coerces non-string JS values to strings.
 
 ## Permissions
 

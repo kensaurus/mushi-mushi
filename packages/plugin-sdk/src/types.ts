@@ -16,6 +16,11 @@ export type MushiEventName =
   | 'fix.failed'
   | 'judge.score_recorded'
   | 'sla.breached'
+  // Rewards program (P1+)
+  | 'reward.points_awarded'
+  | 'reward.tier_changed'
+  | 'reward.payout_requested'
+  | 'reward.payout_paid'
 
 export interface MushiEventEnvelope<T = unknown> {
   /** Event name; one of `MushiEventName`. */

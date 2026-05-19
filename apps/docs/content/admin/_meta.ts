@@ -1,6 +1,7 @@
 export default {
   index: 'Tour',
   reports: 'Reports & triage',
+  rewards: 'Rewards program',
   graph: 'Knowledge graph',
   fixes: 'Fix orchestrator',
   judge: 'Judge dashboard',

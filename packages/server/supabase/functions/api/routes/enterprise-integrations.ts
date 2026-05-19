@@ -214,21 +214,45 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       }
     }
 
-    // OIDC: GoTrue Admin SSO API only supports SAML today. We persist the
-    // config so the operator sees their intent recorded, with a clear
-    // pending-status hint in the UI.
+    // OIDC: GoTrue's Admin SSO API only exposes SAML registration today —
+    // OIDC providers must be wired up by Supabase support per-tenant. We
+    // still persist the row + audit-log the request (so the operator's
+    // change history is complete and so we have evidence to back up
+    // their support ticket), but we deliberately mark the
+    // registration_status as 'manual_required' (not 'pending', which
+    // would imply Mushi will get to it on the next tick) and respond
+    // with **202 Accepted** + a clear hint. 202 is the honest HTTP
+    // status: we have received the request and stored it, but the work
+    // is not complete and may require an out-of-band action.
+    //
+    // When the GoTrue OIDC admin endpoint ships, drop the env-var gate
+    // below and inline the registration the same way SAML does.
+    await db
+      .from('enterprise_sso_configs')
+      .update({
+        registration_status: 'manual_required',
+        registration_error:
+          'OIDC requires manual provisioning by Supabase support. SAML 2.0 is fully self-service today.',
+      })
+      .eq('id', configRow.id);
+
     await logAudit(db, project.id, userId, 'settings.updated', 'sso', configRow.id, {
       action: 'sso_added',
       providerType: body.providerType,
+      autoRegistered: false,
     });
-    return c.json({
-      ok: true,
-      data: {
-        id: configRow.id,
-        status: 'pending',
-        hint: 'OIDC is recorded but not yet auto-registered. Contact support to enable OIDC for your tenant, or use SAML for self-service.',
+
+    return c.json(
+      {
+        ok: true,
+        data: {
+          id: configRow.id,
+          status: 'manual_required',
+          hint: 'OIDC config saved for audit. Mushi cannot auto-register OIDC providers — open a Supabase support ticket and reference this config id, or switch to SAML 2.0 for self-service.',
+        },
       },
-    });
+      202,
+    );
   });
 
   // Allow disconnecting an SSO provider. We deregister from GoTrue first,
@@ -540,7 +564,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       const { resolveVendor, getAdapter } = await import('../_shared/fine-tune-vendor.ts');
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
-      const result = await adapter.poll(job);
+      const result = await adapter.poll(db, job);
 
       if (result.status === 'succeeded') {
         await db
@@ -680,7 +704,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       // old mirror-truth behaviour for deterministic tests.
       const vendor = resolveVendor(job.base_model);
       const adapter = getAdapter(vendor);
-      const report = await validateTrainedModel(db, job, (s) => adapter.predict(job, s));
+      const report = await validateTrainedModel(db, job, (s) => adapter.predict(db, job, s));
       await logAudit(
         db,
         job.project_id,
@@ -1130,17 +1154,22 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     // (Jira, Linear, GitHub, PagerDuty) share the same distributed trace.
     const storedTraceparent =
       typeof (report.metadata as Record<string, unknown> | null)?.traceparent === 'string'
-        ? (report.metadata as Record<string, unknown>).traceparent as string
-        : extractInboundTraceparent(c.req.header('traceparent'))
+        ? ((report.metadata as Record<string, unknown>).traceparent as string)
+        : extractInboundTraceparent(c.req.header('traceparent'));
 
-    const results = await createExternalIssue(db, report.project_id, {
-      id: report.id,
-      summary: report.summary ?? '',
-      description: report.description ?? '',
-      category: report.category,
-      severity: report.severity ?? 'medium',
-      component: report.component,
-    }, storedTraceparent);
+    const results = await createExternalIssue(
+      db,
+      report.project_id,
+      {
+        id: report.id,
+        summary: report.summary ?? '',
+        description: report.description ?? '',
+        category: report.category,
+        severity: report.severity ?? 'medium',
+        component: report.component,
+      },
+      storedTraceparent,
+    );
 
     await logAudit(db, report.project_id, userId, 'integration.synced', 'report', reportId, {
       results,
@@ -1358,66 +1387,71 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
    * the old secret complete normally; new dispatches pick up the new
    * secret on their next vault_lookup call.
    */
-  app.post('/v1/admin/plugins/:slug/rotate-secret', jwtAuth, requireFeature('plugins'), async (c) => {
-    const userId = c.get('userId') as string;
-    const slug = c.req.param('slug');
-    const db = getServiceClient();
-    const resolvedProject = await resolveOwnedProject(c, db, userId);
-    if ('response' in resolvedProject) return resolvedProject.response;
-    const project = resolvedProject.project;
+  app.post(
+    '/v1/admin/plugins/:slug/rotate-secret',
+    jwtAuth,
+    requireFeature('plugins'),
+    async (c) => {
+      const userId = c.get('userId') as string;
+      const slug = c.req.param('slug');
+      const db = getServiceClient();
+      const resolvedProject = await resolveOwnedProject(c, db, userId);
+      if ('response' in resolvedProject) return resolvedProject.response;
+      const project = resolvedProject.project;
 
-    const { data: pluginRow, error: lookupErr } = await db
-      .from('project_plugins')
-      .select('plugin_slug, plugin_name, webhook_secret_vault_ref')
-      .eq('project_id', project.id)
-      .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
-      .maybeSingle();
-    if (lookupErr) return dbError(c, lookupErr);
-    if (!pluginRow) {
-      return c.json(
-        { ok: false, error: { code: 'NOT_FOUND', message: 'Plugin not installed' } },
-        404,
-      );
-    }
-
-    // Canonical secret_name: prefer the existing vault_ref (rotation in
-    // place), fall back to the slug-derived path for legacy rows that
-    // were installed without a webhook secret.
-    const secretName = pluginRow.webhook_secret_vault_ref?.startsWith('vault://')
-      ? pluginRow.webhook_secret_vault_ref.slice('vault://'.length)
-      : `mushi/plugin/${project.id}/${pluginRow.plugin_slug ?? pluginRow.plugin_name}`;
-
-    const newSecretBytes = new Uint8Array(32);
-    crypto.getRandomValues(newSecretBytes);
-    const newSecret = Array.from(newSecretBytes, (b) => b.toString(16).padStart(2, '0')).join('');
-
-    const { error: vaultErr } = await db.rpc('vault_store_secret', {
-      secret_name: secretName,
-      secret_value: newSecret,
-    });
-    if (vaultErr) {
-      return c.json(
-        { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
-        500,
-      );
-    }
-
-    // If the plugin was previously installed without a secret, point the
-    // row at the freshly written vault entry so dispatch() picks it up.
-    if (!pluginRow.webhook_secret_vault_ref) {
-      await db
+      const { data: pluginRow, error: lookupErr } = await db
         .from('project_plugins')
-        .update({ webhook_secret_vault_ref: `vault://${secretName}` })
+        .select('plugin_slug, plugin_name, webhook_secret_vault_ref')
         .eq('project_id', project.id)
-        .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`);
-    }
+        .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`)
+        .maybeSingle();
+      if (lookupErr) return dbError(c, lookupErr);
+      if (!pluginRow) {
+        return c.json(
+          { ok: false, error: { code: 'NOT_FOUND', message: 'Plugin not installed' } },
+          404,
+        );
+      }
 
-    await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
-      action: 'rotate_secret',
-    }).catch(() => {});
+      // Canonical secret_name: prefer the existing vault_ref (rotation in
+      // place), fall back to the slug-derived path for legacy rows that
+      // were installed without a webhook secret.
+      const secretName = pluginRow.webhook_secret_vault_ref?.startsWith('vault://')
+        ? pluginRow.webhook_secret_vault_ref.slice('vault://'.length)
+        : `mushi/plugin/${project.id}/${pluginRow.plugin_slug ?? pluginRow.plugin_name}`;
 
-    return c.json({ ok: true, data: { secret: newSecret } });
-  });
+      const newSecretBytes = new Uint8Array(32);
+      crypto.getRandomValues(newSecretBytes);
+      const newSecret = Array.from(newSecretBytes, (b) => b.toString(16).padStart(2, '0')).join('');
+
+      const { error: vaultErr } = await db.rpc('vault_store_secret', {
+        secret_name: secretName,
+        secret_value: newSecret,
+      });
+      if (vaultErr) {
+        return c.json(
+          { ok: false, error: { code: 'VAULT_WRITE_FAILED', message: vaultErr.message } },
+          500,
+        );
+      }
+
+      // If the plugin was previously installed without a secret, point the
+      // row at the freshly written vault entry so dispatch() picks it up.
+      if (!pluginRow.webhook_secret_vault_ref) {
+        await db
+          .from('project_plugins')
+          .update({ webhook_secret_vault_ref: `vault://${secretName}` })
+          .eq('project_id', project.id)
+          .or(`plugin_slug.eq.${slug},plugin_name.eq.${slug}`);
+      }
+
+      await logAudit(db, project.id, userId, 'settings.updated', 'plugin', slug, {
+        action: 'rotate_secret',
+      }).catch(() => {});
+
+      return c.json({ ok: true, data: { secret: newSecret } });
+    },
+  );
 
   // ============================================================
   // D1: Plugin marketplace browse + dispatch log
@@ -1992,9 +2026,8 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
 
     // Optional filter: ?projectId=<uuid> to scope to a single project.
     const filterProjectId = c.req.query('projectId');
-    const scopedIds = filterProjectId && projectIds.includes(filterProjectId)
-      ? [filterProjectId]
-      : projectIds;
+    const scopedIds =
+      filterProjectId && projectIds.includes(filterProjectId) ? [filterProjectId] : projectIds;
 
     // Return the most recent health row per (project_id, kind).
     // We use a subquery in JS since Supabase JS client doesn't expose
@@ -2013,8 +2046,13 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     // Dedupe: keep only the newest row per (project_id, kind).
     const seen = new Set<string>();
     const channels: Array<{
-      projectId: string; kind: string; status: string;
-      latencyMs: number | null; checkedAt: string; message: string | null; source: string | null;
+      projectId: string;
+      kind: string;
+      status: string;
+      latencyMs: number | null;
+      checkedAt: string;
+      message: string | null;
+      source: string | null;
     }> = [];
     for (const row of rows ?? []) {
       const key = `${row.project_id}:${row.kind}`;
@@ -2031,9 +2069,13 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       });
     }
 
-    const staleSince = channels.length > 0
-      ? channels.reduce((min, c) => c.checkedAt < min ? c.checkedAt : min, channels[0].checkedAt)
-      : null;
+    const staleSince =
+      channels.length > 0
+        ? channels.reduce(
+            (min, c) => (c.checkedAt < min ? c.checkedAt : min),
+            channels[0].checkedAt,
+          )
+        : null;
 
     const hasError = channels.some((ch) => ch.status === 'error');
     const hasDegraded = channels.some((ch) => ch.status === 'degraded');

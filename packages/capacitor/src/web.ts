@@ -9,6 +9,7 @@ import {
 } from '@mushi-mushi/core';
 
 import type {
+  MushiCapacitorBreadcrumb,
   MushiCapacitorPlugin,
   MushiCapacitorPluginConfig,
   MushiCapacitorReport,
@@ -135,5 +136,14 @@ export class WebMushi extends WebPlugin implements MushiCapacitorPlugin {
     // offline queue on the web path. Native platforms flush their SQLite
     // queue here; the web fallback always reports zero.
     return { delivered: 0 };
+  }
+
+  async addBreadcrumb(_crumb: MushiCapacitorBreadcrumb): Promise<void> {
+    // Web fallback: breadcrumbs are managed by the @mushi-mushi/web SDK on
+    // the browser side. No-op here so cross-platform calls don't throw.
+  }
+
+  async getBreadcrumbs(): Promise<{ breadcrumbs: MushiCapacitorBreadcrumb[] }> {
+    return { breadcrumbs: [] };
   }
 }

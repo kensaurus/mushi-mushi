@@ -13,35 +13,36 @@
  *   GITHUB_APP_WEBHOOK_SECRET    — secret configured on the App
  */
 
-import { Hono } from 'npm:hono@4'
-import { createClient } from 'npm:@supabase/supabase-js@2'
-import { chunk, shouldIndex, sha256Hex } from '../_shared/code-indexer.ts'
-import { createEmbeddingBatch } from '../_shared/embeddings.ts'
-import { log as rootLog } from '../_shared/logger.ts'
-import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts'
-import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { Hono } from 'npm:hono@4';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+import { chunk, shouldIndex, sha256Hex } from '../_shared/code-indexer.ts';
+import { createEmbedding, createEmbeddingBatch } from '../_shared/embeddings.ts';
+import { log as rootLog } from '../_shared/logger.ts';
+import { ensureSentry, sentryHonoErrorHandler } from '../_shared/sentry.ts';
+import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { dispatchPluginEvent } from '../_shared/plugins.ts';
 
-ensureSentry('webhooks-github-indexer')
+ensureSentry('webhooks-github-indexer');
 
-const log = rootLog.child('webhooks-github-indexer')
-const app = new Hono()
-app.onError(sentryHonoErrorHandler)
+const log = rootLog.child('webhooks-github-indexer');
+const app = new Hono();
+app.onError(sentryHonoErrorHandler);
 
 function getDb() {
   return createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     { auth: { persistSession: false } },
-  )
+  );
 }
 
 async function verifySignature(req: Request, raw: string): Promise<boolean> {
-  const secret = Deno.env.get('GITHUB_APP_WEBHOOK_SECRET')
-  if (!secret) return false
-  const sig = req.headers.get('X-Hub-Signature-256') ?? ''
-  if (!sig.startsWith('sha256=')) return false
-  const expected = await hmacSha256Hex(secret, raw)
-  return timingSafeEqual(sig.slice(7), expected)
+  const secret = Deno.env.get('GITHUB_APP_WEBHOOK_SECRET');
+  if (!secret) return false;
+  const sig = req.headers.get('X-Hub-Signature-256') ?? '';
+  if (!sig.startsWith('sha256=')) return false;
+  const expected = await hmacSha256Hex(secret, raw);
+  return timingSafeEqual(sig.slice(7), expected);
 }
 
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
@@ -51,16 +52,18 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message))
-  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let mismatch = 0
-  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  return mismatch === 0
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return mismatch === 0;
 }
 
 /**
@@ -68,22 +71,28 @@ function timingSafeEqual(a: string, b: string): boolean {
  * we sign in-process via Web Crypto rather than pulling jose into the bundle.
  */
 async function mintInstallationToken(installationId: number): Promise<string> {
-  const appId = Deno.env.get('GITHUB_APP_ID')
-  const pem = Deno.env.get('GITHUB_APP_PRIVATE_KEY')
-  if (!appId || !pem) throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY required')
+  const appId = Deno.env.get('GITHUB_APP_ID');
+  const pem = Deno.env.get('GITHUB_APP_PRIVATE_KEY');
+  if (!appId || !pem) throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY required');
 
-  const now = Math.floor(Date.now() / 1000)
-  const header = { alg: 'RS256', typ: 'JWT' }
-  const payload = { iat: now - 30, exp: now + 540, iss: appId }
+  const now = Math.floor(Date.now() / 1000);
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const payload = { iat: now - 30, exp: now + 540, iss: appId };
   const enc = (obj: unknown) =>
-    btoa(JSON.stringify(obj)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-  const data = `${enc(header)}.${enc(payload)}`
+    btoa(JSON.stringify(obj)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  const data = `${enc(header)}.${enc(payload)}`;
 
-  const key = await importPkcs8(pem)
-  const sig = await crypto.subtle.sign({ name: 'RSASSA-PKCS1-v1_5' }, key, new TextEncoder().encode(data))
+  const key = await importPkcs8(pem);
+  const sig = await crypto.subtle.sign(
+    { name: 'RSASSA-PKCS1-v1_5' },
+    key,
+    new TextEncoder().encode(data),
+  );
   const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '')
-  const jwt = `${data}.${sigB64}`
+    .replaceAll('+', '-')
+    .replaceAll('/', '_')
+    .replace(/=+$/, '');
+  const jwt = `${data}.${sigB64}`;
 
   const res = await fetch(
     `https://api.github.com/app/installations/${installationId}/access_tokens`,
@@ -95,25 +104,25 @@ async function mintInstallationToken(installationId: number): Promise<string> {
         'X-GitHub-Api-Version': '2022-11-28',
       },
     },
-  )
-  if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`)
-  const body = await res.json() as { token: string }
-  return body.token
+  );
+  if (!res.ok) throw new Error(`installation token mint failed: ${res.status}`);
+  const body = (await res.json()) as { token: string };
+  return body.token;
 }
 
 async function importPkcs8(pem: string): Promise<CryptoKey> {
   const stripped = pem
     .replace(/-----BEGIN [A-Z ]+-----/, '')
     .replace(/-----END [A-Z ]+-----/, '')
-    .replace(/\s+/g, '')
-  const der = Uint8Array.from(atob(stripped), c => c.charCodeAt(0))
+    .replace(/\s+/g, '');
+  const der = Uint8Array.from(atob(stripped), (c) => c.charCodeAt(0));
   return await crypto.subtle.importKey(
     'pkcs8',
     der,
     { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
     false,
     ['sign'],
-  )
+  );
 }
 
 /**
@@ -128,7 +137,7 @@ function encodeRepoPath(path: string): string {
     .split('/')
     .filter((seg) => seg.length > 0)
     .map(encodeURIComponent)
-    .join('/')
+    .join('/');
 }
 
 async function fetchFileContents(
@@ -147,18 +156,18 @@ async function fetchFileContents(
         'X-GitHub-Api-Version': '2022-11-28',
       },
     },
-  )
-  if (res.status === 404) return null
+  );
+  if (res.status === 404) return null;
   if (!res.ok) {
-    log.warn('contents fetch failed', { path, status: res.status })
-    return null
+    log.warn('contents fetch failed', { path, status: res.status });
+    return null;
   }
-  const text = await res.text()
-  if (text.length > 500_000) return null
-  return text
+  const text = await res.text();
+  if (text.length > 500_000) return null;
+  return text;
 }
 
-app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }))
+app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }));
 
 /**
  * Append one row to `fix_events` for a given fix_attempt. Idempotent via
@@ -171,17 +180,25 @@ app.get('/webhooks-github-indexer/health', (c) => c.json({ ok: true }))
 async function emitFixEvent(
   db: ReturnType<typeof getDb>,
   row: {
-    fix_attempt_id: string
-    project_id: string
+    fix_attempt_id: string;
+    project_id: string;
     kind:
-      | 'dispatched' | 'started' | 'branch' | 'commit' | 'pr_opened'
-      | 'ci_started' | 'ci_resolved' | 'pr_state_changed' | 'completed' | 'failed'
-    status?: 'ok' | 'fail' | 'pending' | null
-    label: string
-    detail?: string | null
-    at?: string | null
-    dedupe_key?: string | null
-    payload?: Record<string, unknown> | null
+      | 'dispatched'
+      | 'started'
+      | 'branch'
+      | 'commit'
+      | 'pr_opened'
+      | 'ci_started'
+      | 'ci_resolved'
+      | 'pr_state_changed'
+      | 'completed'
+      | 'failed';
+    status?: 'ok' | 'fail' | 'pending' | null;
+    label: string;
+    detail?: string | null;
+    at?: string | null;
+    dedupe_key?: string | null;
+    payload?: Record<string, unknown> | null;
   },
 ): Promise<void> {
   const { error } = await db.from('fix_events').insert({
@@ -194,11 +211,11 @@ async function emitFixEvent(
     at: row.at ?? new Date().toISOString(),
     dedupe_key: row.dedupe_key ?? null,
     payload: row.payload ?? null,
-  })
+  });
   if (error) {
     // Unique-violation on dedupe_key is expected on retries — don't warn.
     if (error.code !== '23505') {
-      log.warn('fix_events insert failed (non-fatal)', { err: error.message, kind: row.kind })
+      log.warn('fix_events insert failed (non-fatal)', { err: error.message, kind: row.kind });
     }
   }
 }
@@ -210,43 +227,47 @@ async function emitFixEvent(
  * webhook so the graph can show the full lifecycle (draft -> open -> merged).
  * Merges still fall through to the billing-specific handler below.
  */
-async function handlePullRequestState(payload: {
-  action?: string
-  pull_request?: {
-    merged?: boolean
-    html_url?: string
-    number?: number
-    draft?: boolean
-    state?: string
-    delivery_id?: string
-  }
-  repository?: { full_name?: string }
-}, deliveryId: string): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url
-  if (!prUrl) return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 })
+async function handlePullRequestState(
+  payload: {
+    action?: string;
+    pull_request?: {
+      merged?: boolean;
+      html_url?: string;
+      number?: number;
+      draft?: boolean;
+      state?: string;
+      delivery_id?: string;
+    };
+    repository?: { full_name?: string };
+  },
+  deliveryId: string,
+): Promise<Response> {
+  const prUrl = payload.pull_request?.html_url;
+  if (!prUrl)
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
 
-  const db = getDb()
+  const db = getDb();
   const { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, pr_state')
     .eq('pr_url', prUrl)
-    .maybeSingle()
+    .maybeSingle();
   if (!attempt) {
     return new Response(
       JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
       { status: 202, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   }
 
   // Derive the new lifecycle state.
-  let newState: 'open' | 'closed' | 'merged' | 'draft'
-  if (payload.pull_request?.merged) newState = 'merged'
-  else if (payload.pull_request?.state === 'closed') newState = 'closed'
-  else if (payload.pull_request?.draft) newState = 'draft'
-  else newState = 'open'
+  let newState: 'open' | 'closed' | 'merged' | 'draft';
+  if (payload.pull_request?.merged) newState = 'merged';
+  else if (payload.pull_request?.state === 'closed') newState = 'closed';
+  else if (payload.pull_request?.draft) newState = 'draft';
+  else newState = 'open';
 
   if (attempt.pr_state !== newState) {
-    await db.from('fix_attempts').update({ pr_state: newState }).eq('id', attempt.id)
+    await db.from('fix_attempts').update({ pr_state: newState }).eq('id', attempt.id);
   }
 
   await emitFixEvent(db, {
@@ -258,18 +279,18 @@ async function handlePullRequestState(payload: {
     detail: `#${payload.pull_request?.number ?? '—'}`,
     dedupe_key: `pr:${deliveryId}`,
     payload: { action: payload.action, state: newState },
-  })
+  });
 
   // If this is a merge, delegate to the existing billing handler so we still
   // record the `fixes_succeeded` usage_event.
   if (newState === 'merged') {
-    return await handleFixPrMerged(payload)
+    return await handleFixPrMerged(payload);
   }
 
   return new Response(
     JSON.stringify({ ok: true, fix_attempt_id: attempt.id, pr_state: newState }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  );
 }
 
 /**
@@ -279,53 +300,60 @@ async function handlePullRequestState(payload: {
  * `check_run_conclusion` up to date so the legacy synth path in the
  * timeline endpoint stays consistent for pre-`fix_events` attempts.
  */
-async function handleCheckRun(payload: {
-  action?: string
-  check_run?: {
-    id?: number
-    name?: string
-    status?: string
-    conclusion?: string | null
-    completed_at?: string | null
-    started_at?: string | null
-    html_url?: string | null
-    head_sha?: string | null
-    pull_requests?: Array<{ head?: { ref?: string } }>
-  }
-  repository?: { full_name?: string }
-}, deliveryId: string): Promise<Response> {
-  const run = payload.check_run
-  if (!run) return new Response(JSON.stringify({ ok: true, ignored: 'no_check_run' }), { status: 202 })
+async function handleCheckRun(
+  payload: {
+    action?: string;
+    check_run?: {
+      id?: number;
+      name?: string;
+      status?: string;
+      conclusion?: string | null;
+      completed_at?: string | null;
+      started_at?: string | null;
+      html_url?: string | null;
+      head_sha?: string | null;
+      pull_requests?: Array<{ head?: { ref?: string } }>;
+    };
+    repository?: { full_name?: string };
+  },
+  deliveryId: string,
+): Promise<Response> {
+  const run = payload.check_run;
+  if (!run)
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_check_run' }), { status: 202 });
 
-  const headRef = run.pull_requests?.[0]?.head?.ref
-  const headSha = run.head_sha
+  const headRef = run.pull_requests?.[0]?.head?.ref;
+  const headSha = run.head_sha;
   if (!headRef && !headSha) {
-    return new Response(JSON.stringify({ ok: true, ignored: 'check_run_no_ref' }), { status: 202 })
+    return new Response(JSON.stringify({ ok: true, ignored: 'check_run_no_ref' }), { status: 202 });
   }
 
-  const db = getDb()
+  const db = getDb();
   // Prefer matching by branch name; fall back to commit SHA for CI runs
   // that only report a detached head.
-  const q = db.from('fix_attempts').select('id, project_id')
-  const { data: attempt } = await (
-    headRef ? q.eq('branch', headRef).maybeSingle() : q.eq('commit_sha', headSha).maybeSingle()
-  )
+  const q = db.from('fix_attempts').select('id, project_id');
+  const { data: attempt } = await (headRef
+    ? q.eq('branch', headRef).maybeSingle()
+    : q.eq('commit_sha', headSha).maybeSingle());
   if (!attempt) {
     return new Response(
       JSON.stringify({ ok: true, ignored: 'check_not_a_mushi_fix', headRef, headSha }),
       { status: 202, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   }
 
-  const status = (run.status ?? '').toLowerCase()
-  const conclusion = (run.conclusion ?? '').toLowerCase()
-  const resolved = conclusion.length > 0
+  const status = (run.status ?? '').toLowerCase();
+  const conclusion = (run.conclusion ?? '').toLowerCase();
+  const resolved = conclusion.length > 0;
 
-  await db.from('fix_attempts').update({
-    check_run_status: status || null,
-    check_run_conclusion: conclusion || null,
-    check_run_updated_at: new Date().toISOString(),
-  }).eq('id', attempt.id)
+  await db
+    .from('fix_attempts')
+    .update({
+      check_run_status: status || null,
+      check_run_conclusion: conclusion || null,
+      check_run_updated_at: new Date().toISOString(),
+    })
+    .eq('id', attempt.id);
 
   await emitFixEvent(db, {
     fix_attempt_id: attempt.id,
@@ -337,12 +365,12 @@ async function handleCheckRun(payload: {
     at: run.completed_at ?? run.started_at ?? new Date().toISOString(),
     dedupe_key: `check_run:${run.id ?? deliveryId}:${resolved ? 'done' : 'start'}`,
     payload: { name: run.name, url: run.html_url },
-  })
+  });
 
   return new Response(
     JSON.stringify({ ok: true, fix_attempt_id: attempt.id, ci: resolved ? conclusion : status }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  );
 }
 
 /**
@@ -354,33 +382,33 @@ async function handleCheckRun(payload: {
 async function emitCommitEventsForPush(
   db: ReturnType<typeof getDb>,
   payload: {
-    ref?: string
+    ref?: string;
     commits?: Array<{
-      id?: string
-      message?: string
-      timestamp?: string
-      added?: string[]
-      modified?: string[]
-      removed?: string[]
-    }>
-    head_commit?: { id?: string; timestamp?: string }
+      id?: string;
+      message?: string;
+      timestamp?: string;
+      added?: string[];
+      modified?: string[];
+      removed?: string[];
+    }>;
+    head_commit?: { id?: string; timestamp?: string };
   },
   deliveryId: string,
 ): Promise<void> {
-  const branch = (payload.ref ?? '').replace(/^refs\/heads\//, '')
-  if (!branch || !payload.commits?.length) return
+  const branch = (payload.ref ?? '').replace(/^refs\/heads\//, '');
+  if (!branch || !payload.commits?.length) return;
 
   const { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, commit_sha')
     .eq('branch', branch)
-    .maybeSingle()
-  if (!attempt) return
+    .maybeSingle();
+  if (!attempt) return;
 
   for (const commit of payload.commits) {
-    if (!commit.id) continue
+    if (!commit.id) continue;
     const changedCount =
-      (commit.added?.length ?? 0) + (commit.modified?.length ?? 0) + (commit.removed?.length ?? 0)
+      (commit.added?.length ?? 0) + (commit.modified?.length ?? 0) + (commit.removed?.length ?? 0);
     await emitFixEvent(db, {
       fix_attempt_id: attempt.id,
       project_id: attempt.project_id,
@@ -391,7 +419,7 @@ async function emitCommitEventsForPush(
       at: commit.timestamp ?? new Date().toISOString(),
       dedupe_key: `commit:${commit.id}`,
       payload: { files: changedCount },
-    })
+    });
   }
 
   // Keep the canonical commit_sha pointing at HEAD of the push so the
@@ -400,11 +428,11 @@ async function emitCommitEventsForPush(
     await db
       .from('fix_attempts')
       .update({ commit_sha: payload.head_commit.id })
-      .eq('id', attempt.id)
+      .eq('id', attempt.id);
   }
   // deliveryId is kept in the dedupe_key for branches where the head_commit
   // isn't known (rare — GitHub always sets head_commit on push events).
-  void deliveryId
+  void deliveryId;
 }
 
 /**
@@ -419,32 +447,85 @@ async function emitCommitEventsForPush(
  * write so GitHub doesn't retry the webhook for non-billing reasons.
  */
 async function handleFixPrMerged(payload: {
-  pull_request?: { html_url?: string; number?: number }
-  repository?: { full_name?: string }
+  pull_request?: { html_url?: string; number?: number };
+  repository?: { full_name?: string };
 }): Promise<Response> {
-  const prUrl = payload.pull_request?.html_url
-  if (!prUrl) return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 })
+  const prUrl = payload.pull_request?.html_url;
+  if (!prUrl)
+    return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
 
-  const db = getDb()
+  const db = getDb();
   const { data: attempt } = await db
     .from('fix_attempts')
-    .select('id, project_id')
+    .select(
+      'id, project_id, report_id, agent, branch, commit_sha, summary, rationale, files_changed',
+    )
     .eq('pr_url', prUrl)
-    .maybeSingle()
+    .maybeSingle();
 
   if (!attempt) {
     return new Response(
       JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
       { status: 202, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   }
 
   // Mark the fix attempt as merged so the dashboard PDCA cockpit + the
-  // intelligence reports can show "successful fixes" downstream.
-  await db.from('fix_attempts')
+  // intelligence reports can show "successful fixes" downstream. We
+  // capture whether this is the first time the row flips to merged; that
+  // distinction gates the `fix.applied` plugin dispatch below so a
+  // GitHub redelivery (same PR, same merge) doesn't re-fire the event
+  // and re-resolve the upstream Sentry/Jira issue.
+  const { data: mergedRow } = await db
+    .from('fix_attempts')
     .update({ merged_at: new Date().toISOString() })
     .eq('id', attempt.id)
     .is('merged_at', null)
+    .select('id')
+    .maybeSingle();
+  const justMerged = !!mergedRow;
+
+  // Loop-closure: dispatch `fix.applied` exactly once per merge so the
+  // outbound plugin bridges (plugin-sentry auto-resolve, plugin-jira
+  // transition-to-Done, plugin-linear close-issue, plugin-bugsnag
+  // resolve-error, etc.) receive the signal. Previously this dispatch
+  // only existed inside `PATCH /v1/admin/fixes/:id` — an endpoint the
+  // admin UI never calls — so the README claim "resolves the upstream
+  // tracker when Mushi merges" was effectively dead for the auto-worker
+  // path (the 99% path). The unique-via-`is(merged_at, null)` write
+  // above guarantees this fires exactly once even on webhook retries.
+  if (justMerged) {
+    void dispatchPluginEvent(db, attempt.project_id, 'fix.applied', {
+      report: { id: attempt.report_id },
+      fix: {
+        id: attempt.id,
+        agent: attempt.agent,
+        branch: attempt.branch,
+        prUrl,
+        prNumber: payload.pull_request?.number,
+        commitSha: attempt.commit_sha,
+        repository: payload.repository?.full_name,
+      },
+    }).catch((e) => log.warn('Plugin dispatch failed', { event: 'fix.applied', err: String(e) }));
+
+    // Loop-closure: index the merged fix into `fix_corpus` so future fix
+    // attempts can retrieve "past similar fixes that worked" via the
+    // `match_fix_corpus` RPC. We only do this on `justMerged` so a webhook
+    // redelivery doesn't double-write the same row (the merged_at write
+    // above is idempotent; this one piggybacks on the same gate).
+    //
+    // Best-effort: a failure here must NOT 500 the webhook, otherwise
+    // GitHub will retry forever and the billing usage_event below also
+    // never lands. We swallow + log.
+    try {
+      await indexFixIntoCorpus(db, attempt, prUrl);
+    } catch (err) {
+      log.warn('fix_corpus indexing failed (non-fatal)', {
+        fix_attempt_id: attempt.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 
   // Idempotency check — if we already billed this PR, skip the second insert.
   const { data: existing } = await db
@@ -454,13 +535,13 @@ async function handleFixPrMerged(payload: {
     .eq('event_name', 'fixes_succeeded')
     .contains('metadata', { fix_attempt_id: attempt.id })
     .limit(1)
-    .maybeSingle()
+    .maybeSingle();
 
   if (existing) {
-    return new Response(
-      JSON.stringify({ ok: true, deduped: true, fix_attempt_id: attempt.id }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
+    return new Response(JSON.stringify({ ok: true, deduped: true, fix_attempt_id: attempt.id }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   const { error: usageErr } = await db.from('usage_events').insert({
@@ -473,20 +554,119 @@ async function handleFixPrMerged(payload: {
       pr_number: payload.pull_request?.number,
       repository: payload.repository?.full_name,
     },
-  })
+  });
 
   if (usageErr) {
     log.warn('usage_events fixes_succeeded insert failed (non-fatal)', {
       err: usageErr.message,
       projectId: attempt.project_id,
       prUrl,
-    })
+    });
   }
 
   return new Response(
     JSON.stringify({ ok: true, fix_attempt_id: attempt.id, project_id: attempt.project_id }),
     { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  );
+}
+
+/**
+ * Loop-closure helper: turn a merged fix_attempt into a `fix_corpus` row
+ * that the fix-worker can retrieve as "past similar fixes" context for
+ * future PDCA cycles. This is the highest-quality teaching example we
+ * can produce — a real bug, a real diff, validated by a human merge.
+ *
+ * Idempotency: caller already gates on `justMerged`; on top of that we
+ * `select existing → bail` so a manual re-trigger (e.g. operator running
+ * the webhook test endpoint) doesn't double-index. Embedding cost is
+ * paid once per unique merge.
+ *
+ * The bug summary comes from `reports.summary` (set by the classify
+ * worker) so the embedding reflects what the user *meant*, not what the
+ * fix authors wrote — the goal is "find me a fix for this NEW bug that
+ * looks like an OLD bug we already fixed", which is symmetric on the
+ * report side.
+ */
+async function indexFixIntoCorpus(
+  db: ReturnType<typeof getDb>,
+  attempt: {
+    id: string;
+    project_id: string;
+    report_id: string;
+    summary: string | null;
+    rationale: string | null;
+    files_changed: string[] | null;
+  },
+  _prUrl: string,
+): Promise<void> {
+  // Bail if we already indexed this fix.
+  const { data: existing } = await db
+    .from('fix_corpus')
+    .select('id')
+    .eq('fix_attempt_id', attempt.id)
+    .maybeSingle();
+  if (existing) return;
+
+  const { data: report } = await db
+    .from('reports')
+    .select('summary, description')
+    .eq('id', attempt.report_id)
+    .maybeSingle();
+
+  const bugSummary =
+    (report?.summary && String(report.summary).trim()) ||
+    (report?.description && String(report.description).slice(0, 240).trim()) ||
+    '(no report summary)';
+  const fixSummary = (attempt.summary && String(attempt.summary).trim()) || '(no fix summary)';
+  const rationale = (attempt.rationale && String(attempt.rationale).trim()) || null;
+
+  // Truncate to fit text-embedding-3-small's 8191-token window. Practical
+  // cap: ~7000 chars keeps us well under the limit even with multibyte
+  // characters and lets the bug + fix + rationale all carry weight.
+  const embeddingInput = [
+    `Bug: ${bugSummary}`,
+    `Fix: ${fixSummary}`,
+    rationale ? `Rationale: ${rationale}` : null,
+    Array.isArray(attempt.files_changed) && attempt.files_changed.length > 0
+      ? `Files: ${attempt.files_changed.slice(0, 20).join(', ')}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 7000);
+
+  let embedding: number[] | null = null;
+  try {
+    embedding = await createEmbedding(embeddingInput, { projectId: attempt.project_id });
+  } catch (err) {
+    // Non-fatal — we still insert the row sans embedding so the audit
+    // trail is intact; a backfill cron can re-embed later.
+    log.warn('fix_corpus embedding failed (will insert without)', {
+      fix_attempt_id: attempt.id,
+      err: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  const { error } = await db.from('fix_corpus').insert({
+    project_id: attempt.project_id,
+    fix_attempt_id: attempt.id,
+    report_id: attempt.report_id,
+    bug_summary: bugSummary.slice(0, 1000),
+    fix_summary: fixSummary.slice(0, 1000),
+    rationale: rationale ? rationale.slice(0, 4000) : null,
+    files_changed: Array.isArray(attempt.files_changed) ? attempt.files_changed : [],
+    embedding_input: embeddingInput,
+    embedding: embedding ?? null,
+    embedding_model: 'text-embedding-3-small',
+    merged_at: new Date().toISOString(),
+  });
+
+  if (error) {
+    log.warn('fix_corpus insert failed', {
+      fix_attempt_id: attempt.id,
+      err: error.message,
+    });
+  }
 }
 
 /**
@@ -504,21 +684,21 @@ async function resolveProjectGithubToken(
     .from('project_settings')
     .select('github_installation_token_ref')
     .eq('project_id', projectId)
-    .maybeSingle()
+    .maybeSingle();
 
   if (!error && data?.github_installation_token_ref) {
-    const ref = String(data.github_installation_token_ref)
+    const ref = String(data.github_installation_token_ref);
     if (ref.startsWith('vault://')) {
-      const id = ref.slice('vault://'.length)
-      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id })
+      const id = ref.slice('vault://'.length);
+      const { data: secret, error: vaultErr } = await db.rpc('vault_get_secret', { secret_id: id });
       if (!vaultErr && typeof secret === 'string' && secret.length > 0) {
-        return secret
+        return secret;
       }
     } else if (ref.length > 0) {
-      return ref
+      return ref;
     }
   }
-  return Deno.env.get('GITHUB_TOKEN') ?? null
+  return Deno.env.get('GITHUB_TOKEN') ?? null;
 }
 
 /**
@@ -534,48 +714,52 @@ async function resolveProjectGithubToken(
  * `project_settings.github_installation_token_ref` so repos can be indexed
  * without going through the App flow.
  */
-async function handleSweep(req: Request, parsedBody: { project_id?: string } | null): Promise<Response> {
+async function handleSweep(
+  req: Request,
+  parsedBody: { project_id?: string } | null,
+): Promise<Response> {
   // Accept either the auto-injected SUPABASE_SERVICE_ROLE_KEY (edge-to-edge
   // calls) or MUSHI_INTERNAL_CALLER_SECRET (pg_cron → pg_net callers, which
   // cannot read the reserved Supabase env var). See packages/server/README.md
   // §"Internal-caller authentication" for the rationale.
-  const unauthorized = requireServiceRoleAuth(req)
-  if (unauthorized) return unauthorized
+  const unauthorized = requireServiceRoleAuth(req);
+  if (unauthorized) return unauthorized;
 
-  const db = getDb()
-  const staleAfterHours = Number(Deno.env.get('MUSHI_REPO_INDEX_STALE_HOURS') ?? '24')
-  const cutoff = new Date(Date.now() - staleAfterHours * 3_600_000).toISOString()
-  const limit = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_BATCH') ?? '5')
+  const db = getDb();
+  const staleAfterHours = Number(Deno.env.get('MUSHI_REPO_INDEX_STALE_HOURS') ?? '24');
+  const cutoff = new Date(Date.now() - staleAfterHours * 3_600_000).toISOString();
+  const limit = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_BATCH') ?? '5');
 
   // Optional body filter: `{ mode:'sweep', project_id? }` scopes the sweep to a
   // single project (used by the new `/v1/admin/projects/:id/codebase/enable`
   // endpoint to index-now without blocking the whole hourly batch).
-  let scopedProjectId: string | null = null
+  let scopedProjectId: string | null = null;
   if (parsedBody?.project_id && /^[0-9a-f-]{36}$/i.test(parsedBody.project_id)) {
-    scopedProjectId = parsedBody.project_id
+    scopedProjectId = parsedBody.project_id;
   }
 
   let query = db
     .from('project_repos')
     .select('id, project_id, repo_url, default_branch, github_app_installation_id, last_indexed_at')
-    .eq('indexing_enabled', true)
+    .eq('indexing_enabled', true);
 
   if (scopedProjectId) {
-    query = query.eq('project_id', scopedProjectId)
+    query = query.eq('project_id', scopedProjectId);
   } else {
     query = query
       .or(`last_indexed_at.is.null,last_indexed_at.lt.${cutoff}`)
       .order('last_indexed_at', { ascending: true, nullsFirst: true })
-      .limit(limit)
+      .limit(limit);
   }
 
-  const { data: repos, error } = await query
+  const { data: repos, error } = await query;
 
   if (error) {
-    log.error('sweep: project_repos query failed', { error: error.message })
+    log.error('sweep: project_repos query failed', { error: error.message });
     return new Response(JSON.stringify({ ok: false, error: error.message }), {
-      status: 500, headers: { 'Content-Type': 'application/json' },
-    })
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   // The per-repo sweep is CPU+IO bound (tree walk + per-file contents +
@@ -592,89 +776,116 @@ async function handleSweep(req: Request, parsedBody: { project_id?: string } | n
   // last_indexed_at chip, and single-repo sweeps almost always fit inside
   // 150s.
   const runSweep = async (): Promise<Array<{ repo: string; ok: boolean; error?: string }>> => {
-    const summary: Array<{ repo: string; ok: boolean; error?: string }> = []
+    const summary: Array<{ repo: string; ok: boolean; error?: string }> = [];
     for (const repo of repos ?? []) {
-      const [owner, name] = String(repo.repo_url).split('/').slice(-2)
+      const [owner, name] = String(repo.repo_url).split('/').slice(-2);
       if (!owner || !name) {
-        summary.push({ repo: repo.repo_url, ok: false, error: 'bad_repo_url' })
-        continue
+        summary.push({ repo: repo.repo_url, ok: false, error: 'bad_repo_url' });
+        continue;
       }
 
-      let token: string | null = null
+      let token: string | null = null;
       try {
         token = repo.github_app_installation_id
           ? await mintInstallationToken(Number(repo.github_app_installation_id))
-          : await resolveProjectGithubToken(db, repo.project_id)
+          : await resolveProjectGithubToken(db, repo.project_id);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        log.warn('sweep: App install token mint failed; falling back to PAT', { repo: repo.repo_url, error: msg })
-        token = await resolveProjectGithubToken(db, repo.project_id)
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn('sweep: App install token mint failed; falling back to PAT', {
+          repo: repo.repo_url,
+          error: msg,
+        });
+        token = await resolveProjectGithubToken(db, repo.project_id);
       }
 
       if (!token) {
-        summary.push({ repo: repo.repo_url, ok: false, error: 'no_token' })
-        await db.from('project_repos').update({
-          last_index_attempt_at: new Date().toISOString(),
-          last_index_error: 'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved',
-        }).eq('id', repo.id)
-        continue
+        summary.push({ repo: repo.repo_url, ok: false, error: 'no_token' });
+        await db
+          .from('project_repos')
+          .update({
+            last_index_attempt_at: new Date().toISOString(),
+            last_index_error:
+              'no_token: neither github_app_installation_id nor project_settings.github_installation_token_ref resolved',
+          })
+          .eq('id', repo.id);
+        continue;
       }
 
       try {
-        const stats = await sweepIndexRepo(db, repo.project_id, token, owner, name, repo.default_branch ?? 'main')
+        const stats = await sweepIndexRepo(
+          db,
+          repo.project_id,
+          token,
+          owner,
+          name,
+          repo.default_branch ?? 'main',
+        );
         if (stats.inserted === 0 && stats.failed > 0) {
-          const msg = stats.lastError ?? 'all chunk embeddings failed'
+          const msg = stats.lastError ?? 'all chunk embeddings failed';
           log.error('sweep: repo index failed', {
             repo: repo.repo_url,
             error: msg,
             failed: stats.failed,
             skipped: stats.skipped,
-          })
-          await db.from('project_repos').update({
-            last_index_attempt_at: new Date().toISOString(),
-            last_index_error: msg.slice(0, 500),
-          }).eq('id', repo.id)
-          summary.push({ repo: repo.repo_url, ok: false, error: msg, ...stats })
+          });
+          await db
+            .from('project_repos')
+            .update({
+              last_index_attempt_at: new Date().toISOString(),
+              last_index_error: msg.slice(0, 500),
+            })
+            .eq('id', repo.id);
+          summary.push({ repo: repo.repo_url, ok: false, error: msg, ...stats });
         } else {
-          await db.from('project_repos').update({
-            last_indexed_at: new Date().toISOString(),
-            last_index_attempt_at: new Date().toISOString(),
-            last_index_error: stats.failed > 0 ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500) : null,
-          }).eq('id', repo.id)
-          summary.push({ repo: repo.repo_url, ok: true, ...stats })
+          await db
+            .from('project_repos')
+            .update({
+              last_indexed_at: new Date().toISOString(),
+              last_index_attempt_at: new Date().toISOString(),
+              last_index_error:
+                stats.failed > 0
+                  ? (stats.lastError ?? 'partial: some chunks failed').slice(0, 500)
+                  : null,
+            })
+            .eq('id', repo.id);
+          summary.push({ repo: repo.repo_url, ok: true, ...stats });
         }
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg })
-        await db.from('project_repos').update({
-          last_index_attempt_at: new Date().toISOString(),
-          last_index_error: msg.slice(0, 500),
-        }).eq('id', repo.id)
-        summary.push({ repo: repo.repo_url, ok: false, error: msg })
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error('sweep: repo index failed', { repo: repo.repo_url, error: msg });
+        await db
+          .from('project_repos')
+          .update({
+            last_index_attempt_at: new Date().toISOString(),
+            last_index_error: msg.slice(0, 500),
+          })
+          .eq('id', repo.id);
+        summary.push({ repo: repo.repo_url, ok: false, error: msg });
       }
     }
-    return summary
-  }
+    return summary;
+  };
 
-  const ranOutOfBand = !scopedProjectId
-  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }).EdgeRuntime
+  const ranOutOfBand = !scopedProjectId;
+  const edgeRuntime = (globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } })
+    .EdgeRuntime;
   if (ranOutOfBand && edgeRuntime && typeof edgeRuntime.waitUntil === 'function') {
     edgeRuntime.waitUntil(
       runSweep().catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err)
-        log.error('sweep: background task crashed', { error: msg })
+        const msg = err instanceof Error ? err.message : String(err);
+        log.error('sweep: background task crashed', { error: msg });
       }),
-    )
+    );
     return new Response(
       JSON.stringify({ ok: true, queued: repos?.length ?? 0, mode: 'background' }),
       { status: 202, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   }
 
-  const summary = await runSweep()
+  const summary = await runSweep();
   return new Response(JSON.stringify({ ok: true, swept: summary.length, results: summary }), {
     headers: { 'Content-Type': 'application/json' },
-  })
+  });
 }
 
 /**
@@ -703,18 +914,18 @@ async function sweepIndexRepo(
         'X-GitHub-Api-Version': '2022-11-28',
       },
     },
-  )
-  if (!treeRes.ok) throw new Error(`tree fetch ${treeRes.status}`)
-  const tree = await treeRes.json() as {
-    tree?: Array<{ path: string; type: string }>
-    truncated?: boolean
-  }
-  const files = (tree.tree ?? []).filter(t => t.type === 'blob' && shouldIndex(t.path))
-  let inserted = 0
-  let skipped = 0
-  let failed = 0
-  let lastError: string | undefined
-  const cap = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300')
+  );
+  if (!treeRes.ok) throw new Error(`tree fetch ${treeRes.status}`);
+  const tree = (await treeRes.json()) as {
+    tree?: Array<{ path: string; type: string }>;
+    truncated?: boolean;
+  };
+  const files = (tree.tree ?? []).filter((t) => t.type === 'blob' && shouldIndex(t.path));
+  let inserted = 0;
+  let skipped = 0;
+  let failed = 0;
+  let lastError: string | undefined;
+  const cap = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_FILE_CAP') ?? '300');
   // Batched embedding sweep (MUSHI-MUSHI-INDEXER-429 fix):
   //
   // Why batching: the previous loop fired one embedding API call per chunk
@@ -737,8 +948,8 @@ async function sweepIndexRepo(
   // additional layer of resilience on top of `createEmbeddingBatch`'s
   // built-in exponential backoff. The default 250ms gives ~4 batches/s
   // (~384 inputs/s) which is well inside the published limits.
-  const batchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96')
-  const throttleMs = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_THROTTLE_MS') ?? '250')
+  const batchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96');
+  const throttleMs = Number(Deno.env.get('MUSHI_REPO_INDEX_SWEEP_THROTTLE_MS') ?? '250');
 
   // Phase 1: walk the file tree and collect every chunk. We materialise the
   // whole list before embedding so we can size batches deterministically.
@@ -747,20 +958,23 @@ async function sweepIndexRepo(
   // that's ~900 KB worst case; comfortable inside the Edge Function memory
   // budget.
   interface PendingChunk {
-    path: string
-    chunk: ReturnType<typeof chunk>[number]
-    text: string
+    path: string;
+    chunk: ReturnType<typeof chunk>[number];
+    text: string;
   }
-  const pending: PendingChunk[] = []
+  const pending: PendingChunk[] = [];
   for (const f of files.slice(0, cap)) {
-    const source = await fetchFileContents(token, owner, repo, f.path, branch)
-    if (!source) { skipped++; continue }
+    const source = await fetchFileContents(token, owner, repo, f.path, branch);
+    if (!source) {
+      skipped++;
+      continue;
+    }
     for (const ch of chunk(f.path, source)) {
       pending.push({
         path: f.path,
         chunk: ch,
         text: `${f.path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
-      })
+      });
     }
   }
 
@@ -769,68 +983,79 @@ async function sweepIndexRepo(
   // and continue with the next batch — same all-or-nothing semantics as
   // before, just amortised across many chunks per failure.
   for (let i = 0; i < pending.length; i += batchSize) {
-    const batch = pending.slice(i, i + batchSize)
-    let embeddings: number[][]
+    const batch = pending.slice(i, i + batchSize);
+    let embeddings: number[][];
     try {
-      embeddings = await createEmbeddingBatch(batch.map((b) => b.text), { projectId })
+      embeddings = await createEmbeddingBatch(
+        batch.map((b) => b.text),
+        { projectId },
+      );
     } catch (err) {
-      failed += batch.length
-      lastError = err instanceof Error ? err.message : String(err)
+      failed += batch.length;
+      lastError = err instanceof Error ? err.message : String(err);
       log.warn('sweep: batch embed failed (non-fatal)', {
         repo: `${owner}/${repo}`,
         batchSize: batch.length,
         firstPath: batch[0]?.path,
         error: lastError.slice(0, 240),
-      })
-      continue
+      });
+      continue;
     }
     for (let j = 0; j < batch.length; j++) {
-      const { path, chunk: ch } = batch[j]
-      const embedding = embeddings[j]
-      const contentHash = await sha256Hex(ch.body)
-      const { error } = await db.from('project_codebase_files').upsert({
-        project_id: projectId,
-        file_path: path,
-        symbol_name: ch.symbolName,
-        signature: ch.signature,
-        line_start: ch.lineStart,
-        line_end: ch.lineEnd,
-        language: ch.language,
-        content_hash: contentHash,
-        content_preview: ch.body.slice(0, 600),
-        embedding,
-        embedding_model: 'text-embedding-3-small',
-        last_modified: new Date().toISOString(),
-        tombstoned_at: null,
-      }, { onConflict: 'project_id,file_path,symbol_name' })
-      if (error) { skipped++; continue }
-      inserted++
+      const { path, chunk: ch } = batch[j];
+      const embedding = embeddings[j];
+      const contentHash = await sha256Hex(ch.body);
+      const { error } = await db.from('project_codebase_files').upsert(
+        {
+          project_id: projectId,
+          file_path: path,
+          symbol_name: ch.symbolName,
+          signature: ch.signature,
+          line_start: ch.lineStart,
+          line_end: ch.lineEnd,
+          language: ch.language,
+          content_hash: contentHash,
+          content_preview: ch.body.slice(0, 600),
+          embedding,
+          embedding_model: 'text-embedding-3-small',
+          last_modified: new Date().toISOString(),
+          tombstoned_at: null,
+        },
+        { onConflict: 'project_id,file_path,symbol_name' },
+      );
+      if (error) {
+        skipped++;
+        continue;
+      }
+      inserted++;
     }
     if (throttleMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, throttleMs))
+      await new Promise((resolve) => setTimeout(resolve, throttleMs));
     }
   }
-  return { inserted, skipped, failed, lastError }
+  return { inserted, skipped, failed, lastError };
 }
 
 app.post('/webhooks-github-indexer', async (c) => {
-  const raw = await c.req.text()
+  const raw = await c.req.text();
 
   // Sweep mode: cron-invoked, no GitHub signature; auth via service-role bearer.
   if (raw.length > 0) {
     try {
-      const peek = JSON.parse(raw) as { mode?: string; project_id?: string }
+      const peek = JSON.parse(raw) as { mode?: string; project_id?: string };
       if (peek?.mode === 'sweep') {
-        return await handleSweep(c.req.raw, peek)
+        return await handleSweep(c.req.raw, peek);
       }
-    } catch { /* fall through to webhook handling */ }
+    } catch {
+      /* fall through to webhook handling */
+    }
   }
 
-  if (!await verifySignature(c.req.raw, raw)) {
-    return c.json({ error: 'invalid signature' }, 401)
+  if (!(await verifySignature(c.req.raw, raw))) {
+    return c.json({ error: 'invalid signature' }, 401);
   }
-  const event = c.req.header('X-GitHub-Event') ?? 'unknown'
-  const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID()
+  const event = c.req.header('X-GitHub-Event') ?? 'unknown';
+  const deliveryId = c.req.header('X-GitHub-Delivery') ?? crypto.randomUUID();
 
   // pull_request.*: covers opened / reopened / converted_to_draft /
   // ready_for_review / closed. Each updates `fix_attempts.pr_state`, emits a
@@ -838,80 +1063,84 @@ app.post('/webhooks-github-indexer', async (c) => {
   // `fixes_succeeded` usage_event via `handleFixPrMerged`.
   if (event === 'pull_request') {
     const prPayload = JSON.parse(raw) as {
-      action?: string
+      action?: string;
       pull_request?: {
-        merged?: boolean
-        html_url?: string
-        number?: number
-        draft?: boolean
-        state?: string
-      }
-      repository?: { full_name?: string }
-    }
+        merged?: boolean;
+        html_url?: string;
+        number?: number;
+        draft?: boolean;
+        state?: string;
+      };
+      repository?: { full_name?: string };
+    };
     const supportedActions = new Set([
-      'opened', 'reopened', 'ready_for_review', 'converted_to_draft', 'closed',
-    ])
+      'opened',
+      'reopened',
+      'ready_for_review',
+      'converted_to_draft',
+      'closed',
+    ]);
     if (!supportedActions.has(prPayload.action ?? '')) {
-      return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202)
+      return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202);
     }
-    return await handlePullRequestState(prPayload, deliveryId)
+    return await handlePullRequestState(prPayload, deliveryId);
   }
 
   // check_run.*: emits ci_started / ci_resolved fix_events and keeps the
   // fix_attempts.check_run_* columns fresh for the legacy synth path.
   if (event === 'check_run') {
     const crPayload = JSON.parse(raw) as {
-      action?: string
+      action?: string;
       check_run?: {
-        id?: number
-        name?: string
-        status?: string
-        conclusion?: string | null
-        completed_at?: string | null
-        started_at?: string | null
-        html_url?: string | null
-        head_sha?: string | null
-        pull_requests?: Array<{ head?: { ref?: string } }>
-      }
-      repository?: { full_name?: string }
-    }
-    return await handleCheckRun(crPayload, deliveryId)
+        id?: number;
+        name?: string;
+        status?: string;
+        conclusion?: string | null;
+        completed_at?: string | null;
+        started_at?: string | null;
+        html_url?: string | null;
+        head_sha?: string | null;
+        pull_requests?: Array<{ head?: { ref?: string } }>;
+      };
+      repository?: { full_name?: string };
+    };
+    return await handleCheckRun(crPayload, deliveryId);
   }
 
   if (event !== 'push' && event !== 'installation_repositories') {
-    return c.json({ ok: true, ignored: event }, 202)
+    return c.json({ ok: true, ignored: event }, 202);
   }
 
   const payload = JSON.parse(raw) as {
-    repository?: { full_name?: string; owner?: { login?: string }; name?: string }
-    installation?: { id?: number }
-    after?: string
-    commits?: Array<{ added?: string[]; modified?: string[]; removed?: string[] }>
-  }
+    repository?: { full_name?: string; owner?: { login?: string }; name?: string };
+    installation?: { id?: number };
+    after?: string;
+    commits?: Array<{ added?: string[]; modified?: string[]; removed?: string[] }>;
+  };
 
-  const installationId = payload.installation?.id
-  const owner = payload.repository?.owner?.login
-  const repo = payload.repository?.name
-  const ref = payload.after
+  const installationId = payload.installation?.id;
+  const owner = payload.repository?.owner?.login;
+  const repo = payload.repository?.name;
+  const ref = payload.after;
   if (!installationId || !owner || !repo || !ref) {
-    return c.json({ error: 'missing webhook fields' }, 400)
+    return c.json({ error: 'missing webhook fields' }, 400);
   }
 
-  const db = getDb()
-  const repoFullName = `${owner}/${repo}`
+  const db = getDb();
+  const repoFullName = `${owner}/${repo}`;
   const { data: project } = await db
     .from('project_integrations')
     .select('project_id')
     .eq('integration_type', 'github')
     .contains('config', { repo: repoFullName })
-    .single()
+    .single();
 
   if (!project?.project_id) {
-    return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName }, 202)
+    return c.json({ ok: true, ignored: 'no_project_for_repo', repoFullName }, 202);
   }
 
-  const token = await mintInstallationToken(installationId)
-  const projectId = project.project_id as string
+  const token = await mintInstallationToken(installationId);
+  const projectId = project.project_id as string;
 
   // Emit `commit` fix_events if this push is on a branch we're tracking
   // (i.e. fix_attempts.branch == ref). Runs before the embedding pipeline so
@@ -921,38 +1150,39 @@ app.post('/webhooks-github-indexer', async (c) => {
       db,
       JSON.parse(raw) as Parameters<typeof emitCommitEventsForPush>[1],
       deliveryId,
-    )
+    );
   } catch (err) {
     log.warn('emitCommitEventsForPush failed (non-fatal)', {
       err: err instanceof Error ? err.message : String(err),
-    })
+    });
   }
 
-  const added = new Set<string>()
-  const removed = new Set<string>()
+  const added = new Set<string>();
+  const removed = new Set<string>();
   for (const commit of payload.commits ?? []) {
-    for (const p of [...(commit.added ?? []), ...(commit.modified ?? [])]) added.add(p)
-    for (const p of (commit.removed ?? [])) removed.add(p)
+    for (const p of [...(commit.added ?? []), ...(commit.modified ?? [])]) added.add(p);
+    for (const p of commit.removed ?? []) removed.add(p);
   }
 
-  let inserted = 0
-  let tombstoned = 0
-  let upsertFailures = 0
-  let tombstoneFailures = 0
-  const languageCounts: Record<string, number> = {}
+  let inserted = 0;
+  let tombstoned = 0;
+  let upsertFailures = 0;
+  let tombstoneFailures = 0;
+  const languageCounts: Record<string, number> = {};
 
   for (const path of removed) {
-    if (!shouldIndex(path)) continue
-    const { error } = await db.from('project_codebase_files')
+    if (!shouldIndex(path)) continue;
+    const { error } = await db
+      .from('project_codebase_files')
       .update({ tombstoned_at: new Date().toISOString() })
       .eq('project_id', projectId)
-      .eq('file_path', path)
+      .eq('file_path', path);
     if (error) {
-      tombstoneFailures++
-      log.warn('tombstone failed', { projectId, path, error: error.message })
-      continue
+      tombstoneFailures++;
+      log.warn('tombstone failed', { projectId, path, error: error.message });
+      continue;
     }
-    tombstoned++
+    tombstoned++;
   }
 
   // Same batching strategy as the sweep path (MUSHI-MUSHI-INDEXER-429): a
@@ -960,30 +1190,33 @@ app.post('/webhooks-github-indexer', async (c) => {
   // webhook payload, and per-chunk embeddings will eat through the TPM
   // budget. We collect all chunks first, then embed in batches of 96.
   interface PendingPushChunk {
-    path: string
-    chunk: ReturnType<typeof chunk>[number]
-    text: string
+    path: string;
+    chunk: ReturnType<typeof chunk>[number];
+    text: string;
   }
-  const pendingChunks: PendingPushChunk[] = []
+  const pendingChunks: PendingPushChunk[] = [];
   for (const path of added) {
-    if (!shouldIndex(path)) continue
-    const source = await fetchFileContents(token, owner, repo, path, ref)
-    if (!source) continue
+    if (!shouldIndex(path)) continue;
+    const source = await fetchFileContents(token, owner, repo, path, ref);
+    if (!source) continue;
     for (const ch of chunk(path, source)) {
       pendingChunks.push({
         path,
         chunk: ch,
         text: `${path}::${ch.symbolName ?? 'whole'}\n${ch.body}`,
-      })
+      });
     }
   }
 
-  const pushBatchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96')
+  const pushBatchSize = Number(Deno.env.get('MUSHI_REPO_INDEX_BATCH_SIZE') ?? '96');
   for (let i = 0; i < pendingChunks.length; i += pushBatchSize) {
-    const batch = pendingChunks.slice(i, i + pushBatchSize)
-    let embeddings: number[][]
+    const batch = pendingChunks.slice(i, i + pushBatchSize);
+    let embeddings: number[][];
     try {
-      embeddings = await createEmbeddingBatch(batch.map((b) => b.text), { projectId })
+      embeddings = await createEmbeddingBatch(
+        batch.map((b) => b.text),
+        { projectId },
+      );
     } catch (err) {
       // Push embeddings are best-effort — log and move on. The next push
       // event for the same path will re-attempt indexing.
@@ -993,57 +1226,71 @@ app.post('/webhooks-github-indexer', async (c) => {
         batchSize: batch.length,
         firstPath: batch[0]?.path,
         error: err instanceof Error ? err.message : String(err),
-      })
-      continue
+      });
+      continue;
     }
     for (let j = 0; j < batch.length; j++) {
-      const { path, chunk: ch } = batch[j]
-      const embedding = embeddings[j]
-      const contentHash = await sha256Hex(ch.body)
+      const { path, chunk: ch } = batch[j];
+      const embedding = embeddings[j];
+      const contentHash = await sha256Hex(ch.body);
       // onConflict matches uq_codebase_chunks (project_id, file_path, symbol_name)
       // NULLS NOT DISTINCT — see migration 20260418000300_codebase_indexer.sql.
-      const { error } = await db.from('project_codebase_files').upsert({
-        project_id: projectId,
-        file_path: path,
-        symbol_name: ch.symbolName,
-        signature: ch.signature,
-        line_start: ch.lineStart,
-        line_end: ch.lineEnd,
-        language: ch.language,
-        content_hash: contentHash,
-        content_preview: ch.body.slice(0, 600),
-        embedding,
-        embedding_model: 'text-embedding-3-small',
-        last_modified: new Date().toISOString(),
-        tombstoned_at: null,
-      }, { onConflict: 'project_id,file_path,symbol_name' })
+      const { error } = await db.from('project_codebase_files').upsert(
+        {
+          project_id: projectId,
+          file_path: path,
+          symbol_name: ch.symbolName,
+          signature: ch.signature,
+          line_start: ch.lineStart,
+          line_end: ch.lineEnd,
+          language: ch.language,
+          content_hash: contentHash,
+          content_preview: ch.body.slice(0, 600),
+          embedding,
+          embedding_model: 'text-embedding-3-small',
+          last_modified: new Date().toISOString(),
+          tombstoned_at: null,
+        },
+        { onConflict: 'project_id,file_path,symbol_name' },
+      );
       if (error) {
-        upsertFailures++
+        upsertFailures++;
         log.error('chunk upsert failed', {
           projectId,
           path,
           symbolName: ch.symbolName,
           error: error.message,
-        })
-        continue
+        });
+        continue;
       }
-      inserted++
-      languageCounts[ch.language] = (languageCounts[ch.language] ?? 0) + 1
+      inserted++;
+      languageCounts[ch.language] = (languageCounts[ch.language] ?? 0) + 1;
     }
   }
 
-  log.info('indexed push', { projectId, repoFullName, ref, inserted, tombstoned, upsertFailures, tombstoneFailures })
+  log.info('indexed push', {
+    projectId,
+    repoFullName,
+    ref,
+    inserted,
+    tombstoned,
+    upsertFailures,
+    tombstoneFailures,
+  });
 
   // If every attempted write failed, fail loudly so the webhook is retried —
   // a silent 200 here is what masked the original onConflict mismatch.
-  const attempted = inserted + upsertFailures
+  const attempted = inserted + upsertFailures;
   if (attempted > 0 && inserted === 0) {
-    return c.json({
-      ok: false,
-      error: { code: 'ALL_UPSERTS_FAILED', message: 'Every chunk upsert failed; check logs.' },
-      projectId,
-      attempted,
-    }, 500)
+    return c.json(
+      {
+        ok: false,
+        error: { code: 'ALL_UPSERTS_FAILED', message: 'Every chunk upsert failed; check logs.' },
+        projectId,
+        attempted,
+      },
+      500,
+    );
   }
 
   return c.json({
@@ -1054,7 +1301,7 @@ app.post('/webhooks-github-indexer', async (c) => {
     upsertFailures,
     tombstoneFailures,
     languages: languageCounts,
-  })
-})
+  });
+});
 
-Deno.serve(app.fetch)
+Deno.serve(app.fetch);

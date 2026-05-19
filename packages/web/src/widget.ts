@@ -58,6 +58,14 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+export interface WidgetRewardsState {
+  tier: { slug: string; displayName: string; pointsThreshold: number } | null;
+  nextTier: { displayName: string; pointsThreshold: number } | null;
+  totalPoints: number;
+  /** Expected base points for a `report_submit` action (default 50). */
+  pointsForReport: number;
+}
+
 export interface WidgetCallbacks {
   onSubmit(data: { category: MushiReportCategory; description: string; intent?: string }): void;
   onOpen(): void;
@@ -106,6 +114,7 @@ export class MushiWidget {
    *  root) for up to ~3.3s after destroy. */
   private successTimer: ReturnType<typeof setTimeout> | null = null;
   private autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+  private rewardsState: WidgetRewardsState | null = null;
 
   constructor(config: MushiWidgetConfig = {}, callbacks: WidgetCallbacks, private readonly sdkVersion = '0.7.0') {
     this.config = {
@@ -135,6 +144,7 @@ export class MushiWidget {
       draggable: config.draggable ?? false,
       brandFooter: config.brandFooter ?? true,
       outdatedBanner: config.outdatedBanner ?? 'auto',
+      betaMode: config.betaMode ?? {},
     };
     this.callbacks = callbacks;
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
@@ -178,6 +188,7 @@ export class MushiWidget {
       ...(config.draggable !== undefined ? { draggable: config.draggable } : {}),
       ...(config.brandFooter !== undefined ? { brandFooter: config.brandFooter } : {}),
       ...(config.outdatedBanner !== undefined ? { outdatedBanner: config.outdatedBanner } : {}),
+      ...(config.betaMode !== undefined ? { betaMode: config.betaMode } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     this.syncAttachedLaunchers();
@@ -265,6 +276,11 @@ export class MushiWidget {
 
   setSdkFreshness(info: { latest: string | null; current: string; deprecated: boolean; message?: string | null }): void {
     this.sdkFreshness = info;
+    if (this.isOpen) this.render();
+  }
+
+  setRewardsState(state: WidgetRewardsState | null): void {
+    this.rewardsState = state;
     if (this.isOpen) this.render();
   }
 
@@ -551,6 +567,7 @@ export class MushiWidget {
 
     return `
       ${this.renderHeader({ title: t.step1.heading, step: STEP_NUMBER.category })}
+      ${this.config.betaMode?.enabled ? this.renderBetaStrip() : ''}
       <div class="mushi-body" role="radiogroup" aria-label="${t.step1.heading}">
         <button type="button" class="mushi-option-btn mushi-reports-entry" data-action="reports">
           <span class="mushi-option-icon" aria-hidden="true">\uD83D\uDCEC</span>
@@ -561,8 +578,57 @@ export class MushiWidget {
           <span class="mushi-option-arrow" aria-hidden="true">\u2192</span>
         </button>
         ${categories}
+        ${this.rewardsState ? this.renderRewardsNudge() : ''}
       </div>
       ${this.renderStepIndicator(STEP_NUMBER.category)}
+    `;
+  }
+
+  /** Collapsible "What's new" changelog row. Closes the reporter feedback loop. */
+  private renderBetaChangelog(): string {
+    const entries = this.config.betaMode?.changelogItems;
+    if (!entries?.length) return '';
+    const latest = entries[0];
+    const items = latest.items.map((item) => `<li>\u2022 ${escapeHtml(item)}</li>`).join('');
+    const label = latest.date
+      ? `What\u2019s new in ${escapeHtml(latest.version)} \u00B7 ${escapeHtml(latest.date)}`
+      : `What\u2019s new in ${escapeHtml(latest.version)}`;
+    return `
+      <details class="mushi-changelog">
+        <summary class="mushi-changelog-summary">${label}</summary>
+        <ul class="mushi-changelog-list">${items}</ul>
+      </details>
+    `;
+  }
+
+  /**
+   * Discreet beta status strip: communicates "work in progress", invites
+   * feedback, and sets expectations — reducing user frustration while
+   * nudging the reciprocity instinct ("your reports help us build this").
+   */
+  private renderBetaStrip(): string {
+    const beta = this.config.betaMode!;
+    const appName = escapeHtml(beta.appName ?? 'This app');
+    const message = beta.message
+      ? escapeHtml(beta.message)
+      : `${appName} is in early development — updates ship weekly`;
+    const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
+    const perks = beta.perks ?? [];
+
+    return `
+      <div class="mushi-beta-strip" role="note" aria-label="Beta status">
+        <div class="mushi-beta-strip-row">
+          <span class="mushi-beta-tag" aria-hidden="true">BETA</span>
+          <span class="mushi-beta-msg">${message}</span>
+        </div>
+        ${email ? `<div class="mushi-beta-contact-hint">Reports go to ${email} · reviewed by the team</div>` : ''}
+        ${perks.length > 0 ? `
+          <ul class="mushi-beta-perks" aria-label="Beta tester perks">
+            ${perks.map((p) => `<li>\u2713 ${escapeHtml(p)}</li>`).join('')}
+          </ul>
+        ` : ''}
+        ${this.renderBetaChangelog()}
+      </div>
     `;
   }
 
@@ -696,7 +762,105 @@ export class MushiWidget {
           </div>
           <div class="mushi-success-headline">${t.widget.submitted}</div>
           <div class="mushi-success-meta">REPORT \u00B7 ${time}</div>
+          ${this.rewardsState ? this.renderSuccessRewards() : ''}
+          ${this.config.betaMode?.enabled ? this.renderBetaSuccessFooter() : ''}
         </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Reciprocity footer on the success step: closes the feedback loop by
+   * attributing where the report goes, sets a response expectation, and
+   * reinforces the "beta tester" identity (Peak-End Rule — the last thing
+   * the user sees shapes their entire impression of the interaction).
+   */
+  private renderBetaSuccessFooter(): string {
+    const beta = this.config.betaMode!;
+    const email = beta.contactEmail ? escapeHtml(beta.contactEmail) : null;
+    const appName = escapeHtml(beta.appName ?? 'the team');
+    return `
+      <div class="mushi-beta-success-footer" role="note" aria-label="Beta feedback acknowledgement">
+        ${email
+          ? `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${email}</div>`
+          : `<div class="mushi-beta-success-line">\uD83D\uDCEC Sent to ${appName}</div>`
+        }
+        <div class="mushi-beta-success-line mushi-beta-success-dim">We aim to review within 48h · thank you for helping build this</div>
+      </div>
+    `;
+  }
+
+  private tierColor(slug: string): string {
+    const colors: Record<string, string> = {
+      free: '#6b7280',
+      explorer: '#3b82f6',
+      contributor: '#8b5cf6',
+      champion: '#f59e0b',
+    };
+    return colors[slug] ?? '#6c47ff';
+  }
+
+  /** Compact rewards nudge rendered at the bottom of the category-step body. */
+  private renderRewardsNudge(): string {
+    const { tier, nextTier, totalPoints, pointsForReport } = this.rewardsState!;
+    const tierName = tier?.displayName ?? 'Free';
+    const tierSlug = tier?.slug ?? 'free';
+    const color = this.tierColor(tierSlug);
+
+    let pct = 100;
+    let nextLabel = '';
+    if (nextTier) {
+      const base = tier?.pointsThreshold ?? 0;
+      const ceiling = nextTier.pointsThreshold;
+      pct = ceiling > base ? Math.round(Math.min(1, (totalPoints - base) / (ceiling - base)) * 100) : 100;
+      const remaining = Math.max(0, ceiling - totalPoints);
+      nextLabel = `${remaining.toLocaleString()} pts to ${escapeHtml(nextTier.displayName)}`;
+    }
+
+    return `
+      <div class="mushi-rewards-nudge" aria-label="Rewards progress">
+        <div class="mushi-rewards-row">
+          <span class="mushi-tier-pip" style="background:${color}" aria-hidden="true"></span>
+          <span class="mushi-rewards-tier-name">${escapeHtml(tierName)}</span>
+          <span class="mushi-rewards-pts-count">${totalPoints.toLocaleString()} pts</span>
+          <span class="mushi-rewards-pts-earn">+${pointsForReport} pts for a report</span>
+        </div>
+        ${nextTier ? `
+          <div class="mushi-tier-bar-track" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
+            <div class="mushi-tier-bar-fill" style="width:${pct}%"></div>
+          </div>
+          <div class="mushi-rewards-next-label">${nextLabel}</div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  /** Points earned + tier progress shown on the success step. */
+  private renderSuccessRewards(): string {
+    const { tier, nextTier, totalPoints, pointsForReport } = this.rewardsState!;
+    const projected = totalPoints + pointsForReport;
+
+    let pctAfter = 100;
+    let nextLabel = '';
+    if (nextTier) {
+      const base = tier?.pointsThreshold ?? 0;
+      const ceiling = nextTier.pointsThreshold;
+      pctAfter = ceiling > base ? Math.round(Math.min(1, (projected - base) / (ceiling - base)) * 100) : 100;
+      const remaining = Math.max(0, ceiling - projected);
+      nextLabel = remaining > 0
+        ? `${remaining.toLocaleString()} pts to ${escapeHtml(nextTier.displayName)}`
+        : `\uD83C\uDF89 ${escapeHtml(nextTier.displayName)} reached!`;
+    }
+
+    return `
+      <div class="mushi-success-rewards">
+        <div class="mushi-success-pts-award">+${pointsForReport} pts</div>
+        ${nextTier ? `
+          <div class="mushi-tier-bar-track success-bar" role="progressbar" aria-valuenow="${pctAfter}" aria-valuemin="0" aria-valuemax="100" aria-label="Progress to ${escapeHtml(nextTier.displayName)}">
+            <div class="mushi-tier-bar-fill" style="width:${pctAfter}%"></div>
+          </div>
+          <div class="mushi-rewards-next-label">${nextLabel}</div>
+        ` : ''}
       </div>
     `;
   }

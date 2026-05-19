@@ -7,13 +7,197 @@ title: '@mushi-mushi/react'
 React provider + hooks. Wraps `@mushi-mushi/web`.
 
 ```tsx
-import { MushiProvider, useMushi, useMushiReport } from '@mushi-mushi/react'
+import {
+  MushiProvider,
+  useMushi,
+  useMushiReport,
+  useReputation,
+  useTier,
+  MushiRewardsBadge,
+} from '@mushi-mushi/react'
 ```
 
-| Export             | Purpose                                              |
-| ------------------ | ---------------------------------------------------- |
-| `<MushiProvider>`  | App-level boot — accepts the same config as core     |
-| `useMushi()`       | Access the singleton (rate-limit aware, suspense-safe)|
-| `useMushiReport()` | Returns `{ submit, isSubmitting, lastError }`        |
+| Export                  | Purpose                                               |
+| ----------------------- | ----------------------------------------------------- |
+| `<MushiProvider>`       | App-level boot — accepts the same config as core      |
+| `useMushi()`            | Access the singleton (rate-limit aware, suspense-safe)|
+| `useMushiReport()`      | Returns `{ submit, isSubmitting, lastError }`         |
+| `useReputation()`       | Current user's point totals (polls on mount)          |
+| `useTier()`             | Current user's tier object (polls on mount)           |
+| `<MushiRewardsBadge />` | Polymorphic tier + points badge component             |
 
 See [Quickstart → React](/quickstart/react).
+
+---
+
+## Identifying users
+
+Call `mushi.identify()` on auth state change — typically inside a
+`useEffect` that watches your auth context:
+
+```tsx filename="lib/auth-watcher.tsx"
+import { useMushi } from '@mushi-mushi/react'
+import { useSession } from './auth'  // your auth hook
+
+export function AuthWatcher() {
+  const sdk = useMushi()
+  const { user } = useSession()
+
+  useEffect(() => {
+    if (user && sdk) {
+      sdk.identify(user.id, {
+        email: user.email,
+        name: user.name,
+        provider: 'supabase',
+      })
+    }
+  }, [user, sdk])
+
+  return null
+}
+```
+
+Mount `<AuthWatcher />` inside `<MushiProvider>` so `sdk` is always defined.
+
+---
+
+## Enabling the Rewards program
+
+```tsx filename="app/layout.tsx"
+import { MushiProvider } from '@mushi-mushi/react'
+
+export default function RootLayout({ children }) {
+  return (
+    <MushiProvider
+      projectId="YOUR_PROJECT_ID"
+      apiKey="YOUR_PUBLIC_API_KEY"
+      config={{
+        rewards: {
+          enabled: true,
+          trackActivity: true,
+          consentMode: 'explicit',
+          showInWidget: true,
+        },
+      }}
+    >
+      {children}
+    </MushiProvider>
+  )
+}
+```
+
+---
+
+## `useReputation()`
+
+Returns the current user's reputation totals, or `null` if rewards are
+disabled or no user has been identified.
+
+```tsx
+import { useReputation } from '@mushi-mushi/react'
+
+function PointsDisplay() {
+  const reputation = useReputation()
+  if (!reputation) return null
+
+  return (
+    <p>
+      {reputation.totalPoints.toLocaleString()} pts total ·{' '}
+      {reputation.points30d} this month
+    </p>
+  )
+}
+```
+
+**Return type:**
+
+```typescript
+interface MushiReputationResult {
+  totalPoints: number     // all-time total (never negative)
+  points30d: number       // rolling 30-day window
+  reputation: number      // anonymous token-hash reputation score
+  confirmedBugs: number   // reports that reached 'confirmed' or 'fixed'
+  totalReports: number    // all reports submitted
+}
+```
+
+---
+
+## `useTier()`
+
+Returns the current user's tier, or `null`.
+
+```tsx
+import { useTier } from '@mushi-mushi/react'
+
+function TierBanner() {
+  const tier = useTier()
+  if (!tier) return null
+  return <p>You're a {tier.displayName}!</p>
+}
+```
+
+**Return type:**
+
+```typescript
+interface MushiTierResult {
+  id: string               // DB UUID
+  slug: string             // 'free' | 'explorer' | 'contributor' | 'champion'
+  displayName: string      // e.g. 'Explorer'
+  pointsThreshold: number  // minimum points to reach this tier
+  perks: Record<string, unknown>  // your custom perks payload
+}
+```
+
+---
+
+## `<MushiRewardsBadge />`
+
+Drop-in badge that renders the current user's tier name (and optionally
+their point total). Polymorphic — renders as a `<span>` by default.
+
+```tsx
+import { MushiRewardsBadge } from '@mushi-mushi/react'
+
+// Minimal — just the tier name
+<MushiRewardsBadge />
+
+// With point count
+<MushiRewardsBadge showPoints />
+
+// As a div, with custom class
+<MushiRewardsBadge as="div" className="my-badge" showPoints />
+```
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `as` | `ElementType` | `'span'` | Rendered HTML/React element |
+| `showPoints` | `boolean` | `false` | Append ` · N pts` to the tier name |
+| `loadingFallback` | `ReactNode` | `null` | Rendered while tier data is loading |
+| `className` | `string` | — | CSS class on the outer element |
+
+The badge colour is driven by tier slug (`free` → grey, `explorer` → blue,
+`contributor` → purple, `champion` → amber). Override with CSS if needed.
+
+---
+
+## Submitting custom activity
+
+Access the singleton to fire custom events:
+
+```tsx
+import { useMushi } from '@mushi-mushi/react'
+
+function LessonCard({ lessonId }) {
+  const sdk = useMushi()
+
+  const onComplete = async () => {
+    await sdk?.submitActivity([
+      { action: 'lesson_complete', metadata: { lessonId } },
+    ])
+  }
+
+  return <button onClick={onComplete}>Complete lesson</button>
+}

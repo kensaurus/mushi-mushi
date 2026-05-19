@@ -36,6 +36,9 @@ export interface SdkPreviewConfig {
   theme: WidgetTheme
   trigger: WidgetTrigger
   triggerText: string
+  /** CSS selector used when trigger === 'attach'. Only emitted in the
+   *  snippet when non-empty. Defaults to '' so omitted = pick at runtime. */
+  attachToSelector: string
   capture: {
     console: boolean
     network: boolean
@@ -56,6 +59,7 @@ export const DEFAULT_SDK_CONFIG: SdkPreviewConfig = {
   theme: 'auto',
   trigger: 'auto',
   triggerText: '\u{1F41B}',
+  attachToSelector: '',
   capture: {
     console: true,
     network: true,
@@ -150,6 +154,10 @@ function widgetLines(cfg: SdkPreviewConfig, indent: string): string {
   if (cfg.position !== d.position) lines.push(`${indent}  position: '${cfg.position}',`)
   if (cfg.theme !== d.theme) lines.push(`${indent}  theme: '${cfg.theme}',`)
   if (cfg.trigger !== d.trigger) lines.push(`${indent}  trigger: '${cfg.trigger}',`)
+  // Emit attachToSelector only when trigger is 'attach' and a value was provided.
+  if (cfg.trigger === 'attach' && cfg.attachToSelector.trim()) {
+    lines.push(`${indent}  attachToSelector: ${JSON.stringify(cfg.attachToSelector.trim())},`)
+  }
   // Empty / whitespace-only input means "I cleared the box" — the preview
   // already falls back to the default 🐛 in that case (see SdkInstallCard's
   // `config.triggerText.trim() ? config.triggerText : '\u{1F41B}'`, which
@@ -186,14 +194,32 @@ export function renderSnippet(
     const widget = widgetLines(cfg, innerIndent)
     const capture = captureLines(cfg.capture, innerIndent)
     const extras = `${widget}${capture}`
-    return `import { MushiProvider } from '@mushi-mushi/react'
+    const isHeadless = cfg.trigger === 'manual' || cfg.trigger === 'hidden'
+    const isAttach = cfg.trigger === 'attach'
+    const triggerImport = isHeadless
+      ? `\nimport { MushiTrigger } from '@mushi-mushi/react'`
+      : isAttach
+        ? `\nimport { MushiAttach } from '@mushi-mushi/react'`
+        : ''
+    const triggerUsage = isHeadless
+      ? `
+  {/* Open the reporter from your own button — no floating stamp */}
+  <MushiTrigger category="bug" className="my-report-btn">
+    Report a bug
+  </MushiTrigger>`
+      : isAttach
+        ? `
+  {/* Attach the reporter to an existing DOM element */}
+  <MushiAttach selector="${cfg.attachToSelector.trim() || '#report-button'}" />`
+        : ''
+    return `import { MushiProvider } from '@mushi-mushi/react'${triggerImport}
 
 function App() {
   return (
     <MushiProvider config={{
       projectId: '${projectId}',
       apiKey: '${key}',
-${extras}    }}>
+${extras}    }}>${triggerUsage}
       <YourApp />
     </MushiProvider>
   )

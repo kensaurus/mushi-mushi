@@ -4,6 +4,18 @@
  *          client. Three call sites use it (ProjectsPage, OnboardingPage,
  *          ProjectSwitcher inline create) and all three used to duplicate
  *          the same six-line POST + toast + reload dance.
+ *
+ * ERROR SHAPE
+ * -----------
+ * Two-channel reporting: a transient toast (always) + an `error` state
+ * the caller can read to render a structured `<ErrorAlert>` with the
+ * actual server `{ code, message }` payload. The structured channel is
+ * what makes the difference between "Something went wrong" and "You
+ * need to be an owner or admin of an organization to create a project
+ * — [Create a team]". Beta users have started hitting `NO_ORGANIZATION`
+ * after signup and the toast alone disappears before they can act on
+ * it. The error state survives until the next attempt or until the
+ * caller explicitly clears it via `clearError()`.
  */
 
 import { useCallback, useState } from 'react'
@@ -15,6 +27,24 @@ import { useToast } from './toast'
 interface CreatedProject {
   id: string
   slug: string
+}
+
+/**
+ * Stable surface error code from the api edge function. Kept loose
+ * (`string`) at the public boundary because new error codes ship from
+ * the backend independently; only the ones the UI branches on are
+ * enumerated for documentation / IDE-completion.
+ */
+export type CreateProjectErrorCode =
+  | 'NO_ORGANIZATION'
+  | 'FORBIDDEN'
+  | 'INVALID_ORGANIZATION_ID'
+  | 'INVALID_NAME'
+  | (string & {})
+
+export interface CreateProjectError {
+  code: CreateProjectErrorCode
+  message: string
 }
 
 interface Options {
@@ -29,19 +59,43 @@ export function useCreateProject({ onCreated, autoSelect = true }: Options = {})
   const toast = useToast()
   const [searchParams, setSearchParams] = useSearchParams()
   const [creating, setCreating] = useState(false)
+  const [error, setError] = useState<CreateProjectError | null>(null)
+
+  const clearError = useCallback(() => setError(null), [])
 
   const create = useCallback(
     async (rawName: string): Promise<CreatedProject | null> => {
       const name = rawName.trim()
-      if (!name) return null
+      if (!name) {
+        // Surface a structured error for the empty-name case so the
+        // caller can render the same `<ErrorAlert>` and keep the UX
+        // consistent with server-side validation failures.
+        const empty: CreateProjectError = {
+          code: 'INVALID_NAME',
+          message: 'Project name is required.',
+        }
+        setError(empty)
+        return null
+      }
       setCreating(true)
+      setError(null)
       try {
         const res = await apiFetch<CreatedProject>('/v1/admin/projects', {
           method: 'POST',
           body: JSON.stringify({ name }),
         })
         if (!res.ok || !res.data) {
-          throw new Error(res.error?.message ?? 'Create failed')
+          const structured: CreateProjectError = {
+            code: res.error?.code ?? 'UNKNOWN',
+            message: res.error?.message ?? 'Create failed',
+          }
+          setError(structured)
+          // Keep the toast so the user still gets the at-a-glance feedback,
+          // but make the message specific so it's useful at the toast layer
+          // too — the previous "Failed to create project — Create failed"
+          // string was actively unhelpful.
+          toast.error('Couldn\u2019t create project', structured.message)
+          return null
         }
         toast.success('Project created', name)
         if (autoSelect) {
@@ -53,7 +107,15 @@ export function useCreateProject({ onCreated, autoSelect = true }: Options = {})
         onCreated?.(res.data)
         return res.data
       } catch (err) {
-        toast.error('Failed to create project', err instanceof Error ? err.message : String(err))
+        // Network / fetch-level failure (offline, CORS, DNS, etc).
+        // Surface it as a transport error code so callers can branch
+        // separately from a backend rejection.
+        const structured: CreateProjectError = {
+          code: 'NETWORK_ERROR',
+          message: err instanceof Error ? err.message : String(err),
+        }
+        setError(structured)
+        toast.error('Couldn\u2019t reach the server', structured.message)
         return null
       } finally {
         setCreating(false)
@@ -62,5 +124,5 @@ export function useCreateProject({ onCreated, autoSelect = true }: Options = {})
     [toast, autoSelect, onCreated, searchParams, setSearchParams],
   )
 
-  return { create, creating }
+  return { create, creating, error, clearError }
 }

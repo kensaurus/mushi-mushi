@@ -2369,18 +2369,87 @@ export function Kbd({ children }: { children: ReactNode }) {
 /* ── ErrorAlert ────────────────────────────────────────────────────────── */
 
 interface ErrorAlertProps {
+  /**
+   * Short label that names *what* failed (e.g. "Couldn't create project").
+   * Renders bold above the longer `message`. Optional so the legacy
+   * single-message call sites keep working unchanged.
+   */
+  title?: string
   message?: string
+  /**
+   * Stable error code from the API (e.g. `NO_ORGANIZATION`). Surfaced as a
+   * monospace caption so users can quote it in bug reports — beta users
+   * who hit a rough edge are far more likely to ping the maintainer with
+   * something we can grep for if the code is visible inline rather than
+   * buried in DevTools network panel.
+   */
+  code?: string
   onRetry?: () => void
+  /**
+   * Inline recovery affordances rendered next to "Retry". Each entry
+   * becomes a small ghost button that runs `onClick`. Use this for
+   * context-aware paths out of the error (e.g. `NO_ORGANIZATION` →
+   * "Create a team", `FORBIDDEN` → "Switch team"). Callers wire the
+   * navigation themselves via `useNavigate` so this component stays
+   * router-agnostic.
+   */
+  actions?: Array<{
+    label: string
+    onClick: () => void
+  }>
+  children?: React.ReactNode
 }
 
-export function ErrorAlert({ message = 'Something went wrong. Please try again.', onRetry }: ErrorAlertProps) {
+export function ErrorAlert({
+  title,
+  message = 'Something went wrong. Please try again.',
+  code,
+  onRetry,
+  actions,
+  children,
+}: ErrorAlertProps) {
   return (
-    <Card className="p-4 border-danger/30 bg-danger-muted/10">
-      <p className="text-sm text-danger">{message}</p>
-      {onRetry && (
-        <Btn variant="ghost" size="sm" className="mt-2" onClick={onRetry}>Retry</Btn>
-      )}
+    <div role="alert" aria-live="polite">
+    <Card
+      className="p-4 border-danger/30 bg-danger-muted/10"
+    >
+      <div className="flex items-start gap-3">
+        <div
+          aria-hidden="true"
+          className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-danger/15 text-danger text-xs font-bold"
+        >
+          !
+        </div>
+        <div className="min-w-0 flex-1 space-y-1">
+          {title && <h4 className="text-sm font-semibold text-danger">{title}</h4>}
+          <p className="text-sm text-danger leading-relaxed">{message}</p>
+          {code && (
+            <p className="font-mono text-3xs uppercase tracking-wider text-danger/70">
+              code: {code}
+            </p>
+          )}
+          {children}
+          {(onRetry || (actions && actions.length > 0)) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {onRetry && (
+                <Btn variant="ghost" size="sm" onClick={onRetry}>Retry</Btn>
+              )}
+              {actions?.map((a, i) => (
+                <Btn
+                  key={`${a.label}-${i}`}
+                  variant="ghost"
+                  size="sm"
+                  onClick={a.onClick}
+                >
+                  {a.label}
+                </Btn>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </Card>
+    </div>
   )
 }
 

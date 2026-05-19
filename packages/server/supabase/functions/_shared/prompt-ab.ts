@@ -223,7 +223,17 @@ export async function recordPromptResult(
 }
 
 /**
- * Promote a candidate prompt to active, deactivating the previous active prompt.
+ * Atomically promote a candidate prompt to active, deactivating the previous
+ * active row in the same Postgres transaction via the `promote_prompt_candidate`
+ * RPC (migration 20260511120100).
+ *
+ * The previous two-step approach had a partial-failure window: if the Edge
+ * Function was killed between the two UPDATEs, no row was active and every
+ * subsequent prompt lookup silently fell through to the hardcoded default,
+ * poisoning the A/B results without any error surfacing in logs.
+ *
+ * The RPC raises an exception when the candidate row is not found, so the
+ * `error` returned here is always a real, actionable signal.
  */
 export async function promoteCandidate(
   db: SupabaseClient,
@@ -231,31 +241,16 @@ export async function promoteCandidate(
   stage: string,
   candidateVersion: string,
 ): Promise<void> {
-  // Deactivate old active prompt
-  await db
-    .from('prompt_versions')
-    .update({ is_active: false })
-    .eq('project_id', projectId)
-    .eq('stage', stage)
-    .eq('is_active', true)
-    .neq('version', candidateVersion)
-
-  // Promote candidate
-  const { error } = await db
-    .from('prompt_versions')
-    .update({
-      is_active: true,
-      is_candidate: false,
-      traffic_percentage: 100,
-    })
-    .eq('project_id', projectId)
-    .eq('stage', stage)
-    .eq('version', candidateVersion)
+  const { error } = await db.rpc('promote_prompt_candidate', {
+    p_project_id: projectId,
+    p_stage: stage,
+    p_candidate_version: candidateVersion,
+  })
 
   if (error) {
-    log.error('Failed to promote candidate', { projectId, stage, candidateVersion, error: error.message })
+    log.error('Failed to promote candidate (atomic RPC)', { projectId, stage, candidateVersion, error: error.message })
   } else {
-    log.info('Candidate promoted to active', { projectId, stage, candidateVersion })
+    log.info('Candidate promoted to active (atomic)', { projectId, stage, candidateVersion })
   }
 }
 
