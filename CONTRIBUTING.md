@@ -84,6 +84,33 @@ pnpm changeset
 
 Select the affected packages, the semver bump type, and write a summary. The changeset file gets committed with your PR.
 
+## Release flow
+
+Releases are fully automated. Maintainers don't run `npm publish` by hand.
+
+1. PRs land on `master` with one or more changeset files in `.changeset/`.
+2. `release.yml` runs on every push to `master`. It opens (or updates) a `chore: version packages` PR that bumps every affected `package.json`, rolls up the changelogs, and deletes the consumed changesets.
+3. Merging that "Version Packages" PR re-fires `release.yml`. The publish step authenticates to npm via **OpenID Connect (OIDC) Trusted Publishers** — no long-lived `NPM_TOKEN` is exchanged — and every tarball ships with a **Sigstore provenance attestation** uploaded to the public transparency log.
+
+If GitHub's anti-loop protection suppresses the auto re-fire (the squash merge can be attributed to `github-actions[bot]`), trigger the workflow manually: **Actions → release → Run workflow → master**.
+
+### Adding a brand-new publishable package
+
+Trusted Publisher bindings are configured **per package** on `npmjs.com` and require the package to already exist on the registry. New packages therefore need a one-time bootstrap before OIDC can take over.
+
+1. Add the package under `packages/<name>/` with a real `version`, `files`, `publishConfig.access: "public"`, `LICENSE`, and the standard fields enforced by `pnpm check:publish-readiness`.
+2. Build it locally: `pnpm install && pnpm -r build`.
+3. Mint a short-lived granular access token at `https://www.npmjs.com/settings/<your-user>/tokens/granular-access-tokens/new` — **Bypass 2FA: ON**, **Read and write: All packages**, **Expiration: 7 days**.
+4. Bootstrap-publish:
+   ```bash
+   NPM_TOKEN=npm_xxx pnpm bootstrap:new-package
+   ```
+   The script auto-detects which workspace packages are missing on npm and publishes them via `pnpm publish --no-provenance` (so `workspace:^` specifiers get rewritten to real semver in the tarball).
+5. The script prints one URL per freshly-published package. Open each, click **GitHub Actions** under "Trusted Publisher", confirm the auto-filled fields (`<owner>` / `<repo>` / `release.yml`), and tap your security key.
+6. Revoke the bootstrap token at `https://www.npmjs.com/settings/<your-user>/tokens`.
+
+From the next changeset bump onward, that package publishes through the normal `release.yml` flow with full OIDC provenance — same as the rest.
+
 ## Code Style
 
 - **TypeScript strict mode** — no `any` unless absolutely necessary

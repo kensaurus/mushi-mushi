@@ -23,11 +23,11 @@
   },
   "devDependencies": {
     "@mushi-mushi/tsconfig": "workspace:*",
-    "@supabase/supabase-js": "^2.103.3",
-    "supabase": "^2.22.0",
-    "typescript": "^6.0.2",
-    "vitest": "^4.1.4",
-    "yaml": "^2.5.1",
+    "@supabase/supabase-js": "^2.105.1",
+    "supabase": "^2.98.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
+    "yaml": "^2.8.4",
     "zod": "^3.25.76"
   },
   "author": "Kenji Sakuramoto",

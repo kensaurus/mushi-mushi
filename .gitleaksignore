@@ -13,3 +13,14 @@
 # the working tree. The fingerprint below pins the historical commit so
 # the renamed value continues to allow the gitleaks gate to pass.
 189035fa6b8c38656469c9c68ff4a0ce7bd7d26a:packages/adapters/src/__tests__/bugsnag.test.ts:generic-api-key:5
+
+# PII scrubber test fixtures (Android + iOS): hand-crafted "JWT-shaped"
+# strings used to verify that PIIScrubber.scrub() redacts JWTs. Header is
+# `{"alg":"HS256"}` base64, payload is `{"sub":"user"}` base64, signature
+# is a non-cryptographic hex/alphanum string — no secret was ever signed.
+# Working tree (a42de0a..) constructs the value via string concatenation
+# so future scans see only the split parts; these fingerprints pin the
+# historical commit cb2768f0 where the literal first appeared so PR-range
+# scans stop flagging the same already-audited finding.
+cb2768f0fc5b62c34809228937620c61f19a793d:packages/android/src/test/kotlin/dev/mushimushi/sdk/pii/PIIScrubberTest.kt:jwt:16
+cb2768f0fc5b62c34809228937620c61f19a793d:packages/ios/Tests/MushiMushiTests/PIIScrubberTests.swift:jwt:12

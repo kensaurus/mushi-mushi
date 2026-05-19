@@ -312,4 +312,93 @@ sourcemaps
     })
   })
 
+// ─── sync-lessons command ────────────────────────────────────────────────────
+// Pulls promoted lessons from the Mushi API and writes .mushi/lessons.json
+// into the current repo. Designed to be called from CI or mushi-cron.
+
+program
+  .command('sync-lessons')
+  .description('Sync promoted lessons from Mushi into .mushi/lessons.json in this repo')
+  .option('--cwd <path>', 'Target directory (default: current working dir)')
+  .option('--dry-run', 'Print what would be written without writing')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (opts: { cwd?: string; dryRun?: boolean; json?: boolean }) => {
+    const { writeFile, mkdir } = await import('node:fs/promises')
+    const nodePath = await import('node:path')
+
+    const config = loadConfig()
+    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+    if (!config.projectId) { console.error('Set projectId via `mushi config projectId <id>`'); process.exit(1) }
+
+    const cwd = opts.cwd ?? process.cwd()
+    const target = nodePath.join(cwd, '.mushi', 'lessons.json')
+
+    // Fetch from API
+    const res = await apiCall(
+      `/v1/admin/lessons?projectId=${config.projectId}&limit=500`,
+      config,
+    ) as { ok?: boolean; data?: LessonRow[]; error?: string }
+
+    if (!res.ok || !res.data) {
+      console.error('Failed to fetch lessons:', res.error ?? JSON.stringify(res))
+      process.exit(1)
+    }
+
+    const lessons: LessonsJson['lessons'] = res.data.map((l) => ({
+      id: l.id,
+      rule: l.rule_text,
+      anti_pattern: l.anti_pattern ?? undefined,
+      severity: l.severity,
+      frequency: l.frequency,
+      last_reinforced: l.last_reinforced_at?.slice(0, 10) ?? '',
+      cluster_id: l.cluster_id ?? undefined,
+    }))
+
+    const output: LessonsJson = {
+      schema_version: '1',
+      project_id: config.projectId,
+      generated_at: new Date().toISOString(),
+      lessons,
+    }
+
+    if (opts.dryRun) {
+      console.log(JSON.stringify(output, null, 2))
+      return
+    }
+
+    await mkdir(nodePath.dirname(target), { recursive: true })
+    await writeFile(target, JSON.stringify(output, null, 2) + '\n', 'utf8')
+
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: true, path: target, count: lessons.length }))
+    } else {
+      console.log(`✓ Wrote ${lessons.length} lessons to ${target}`)
+    }
+  })
+
+interface LessonRow {
+  id: string
+  rule_text: string
+  anti_pattern?: string | null
+  severity: 'info' | 'warn' | 'critical'
+  frequency: number
+  last_reinforced_at?: string
+  cluster_id?: string | null
+}
+
+interface LessonsJson {
+  schema_version: '1'
+  project_id: string
+  generated_at: string
+  lessons: Array<{
+    id: string
+    rule: string
+    anti_pattern?: string
+    severity: 'info' | 'warn' | 'critical'
+    frequency: number
+    last_reinforced: string
+    cluster_id?: string
+  }>
+}
+
 program.parse()

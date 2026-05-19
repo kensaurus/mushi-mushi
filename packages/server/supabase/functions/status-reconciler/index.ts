@@ -33,62 +33,64 @@
 // installed by `20260504000000_v2_bidirectional_graph.sql`.
 // ============================================================
 
-import type { SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 
-import { getServiceClient } from '../_shared/db.ts'
-import { log } from '../_shared/logger.ts'
-import { withSentry } from '../_shared/sentry.ts'
-import { requireServiceRoleAuth } from '../_shared/auth.ts'
-import { startCronRun } from '../_shared/telemetry.ts'
-import type { Status } from '../_shared/inventory.ts'
+import { getServiceClient } from '../_shared/db.ts';
+import { log } from '../_shared/logger.ts';
+import { withSentry } from '../_shared/sentry.ts';
+import { requireServiceRoleAuth } from '../_shared/auth.ts';
+import { startCronRun } from '../_shared/telemetry.ts';
+import type { Status } from '../_shared/inventory.ts';
+import { notifyOperator } from '../_shared/operator-notify.ts';
+import { dispatchPluginEvent } from '../_shared/plugins.ts';
 
 declare const Deno: {
-  serve(handler: (req: Request) => Response | Promise<Response>): void
-  env: { get(name: string): string | undefined }
-}
+  serve(handler: (req: Request) => Response | Promise<Response>): void;
+  env: { get(name: string): string | undefined };
+};
 
-const rlog = log.child('status-reconciler')
+const rlog = log.child('status-reconciler');
 
 interface ProjectRow {
-  id: string
+  id: string;
 }
 
 interface ActionNodeRow {
-  id: string
-  project_id: string
-  label: string
-  metadata: Record<string, unknown> | null
+  id: string;
+  project_id: string;
+  label: string;
+  metadata: Record<string, unknown> | null;
 }
 
 interface FindingRow {
-  node_id: string | null
-  rule_id: string | null
-  gate: string
-  severity: string
+  node_id: string | null;
+  rule_id: string | null;
+  gate: string;
+  severity: string;
 }
 
 interface SentinelRow {
-  test_file: string
-  test_name: string
-  verdict: 'approved' | 'rejected' | 'unknown'
+  test_file: string;
+  test_name: string;
+  verdict: 'approved' | 'rejected' | 'unknown';
 }
 
 interface SyntheticRow {
-  action_node_id: string
-  status: 'passed' | 'failed' | 'error' | 'skipped'
-  ran_at: string
+  action_node_id: string;
+  status: 'passed' | 'failed' | 'error' | 'skipped';
+  ran_at: string;
 }
 
 interface TestEdgeRow {
-  source_node_id: string
-  target_node_id: string
-  metadata: Record<string, unknown> | null
+  source_node_id: string;
+  target_node_id: string;
+  metadata: Record<string, unknown> | null;
 }
 
 interface TestNodeRow {
-  id: string
-  label: string
-  metadata: Record<string, unknown> | null
+  id: string;
+  label: string;
+  metadata: Record<string, unknown> | null;
 }
 
 interface DerivationContext {
@@ -96,33 +98,33 @@ interface DerivationContext {
    *  recent passing-or-failing run. Keys are the gate rule names: e.g.
    *  'no-dead-handler', 'no-mock-leak', 'api-contract-mismatch',
    *  'crawl-missing-in-app', 'status-claim-violation'. */
-  findingsByRule: Map<string, Set<string>>
+  findingsByRule: Map<string, Set<string>>;
   /** action node id → most-recent synthetic run (single, latest). */
-  latestSynthetic: Map<string, SyntheticRow>
+  latestSynthetic: Map<string, SyntheticRow>;
   /** test node id → Sentinel verdict for that test, defaulting to
    *  'unknown' when the auditor has not evaluated it yet. */
-  sentinelByTest: Map<string, SentinelRow['verdict']>
+  sentinelByTest: Map<string, SentinelRow['verdict']>;
   /** action node id → list of verifying test node ids (via verified_by
    *  edges). Empty when the action has no declared coverage. */
-  testsByAction: Map<string, string[]>
+  testsByAction: Map<string, string[]>;
   /** action node id → previous derived status. Used to detect
    *  verified→regressed transitions. */
-  previousStatus: Map<string, Status>
+  previousStatus: Map<string, Status>;
 }
 
-const ALL_STATUSES: Status[] = ['stub', 'mocked', 'wired', 'verified', 'regressed', 'unknown']
+const ALL_STATUSES: Status[] = ['stub', 'mocked', 'wired', 'verified', 'regressed', 'unknown'];
 
 function metaStatus(meta: Record<string, unknown> | null): Status {
-  const s = meta?.['status']
-  if (typeof s === 'string' && (ALL_STATUSES as string[]).includes(s)) return s as Status
-  return 'unknown'
+  const s = meta?.['status'];
+  if (typeof s === 'string' && (ALL_STATUSES as string[]).includes(s)) return s as Status;
+  return 'unknown';
 }
 
 function metaTestidFromTestNode(label: string): { file: string; name: string } | null {
   // test node label format: "<file>::<name>"
-  const idx = label.indexOf('::')
-  if (idx < 0) return null
-  return { file: label.slice(0, idx), name: label.slice(idx + 2) }
+  const idx = label.indexOf('::');
+  if (idx < 0) return null;
+  return { file: label.slice(0, idx), name: label.slice(idx + 2) };
 }
 
 /**
@@ -143,59 +145,57 @@ export function deriveStatus(
   hasApiEdge: boolean,
   ctx: DerivationContext,
 ): Status {
-  const tests = ctx.testsByAction.get(actionId) ?? []
-  const synthetic = ctx.latestSynthetic.get(actionId) ?? null
+  const tests = ctx.testsByAction.get(actionId) ?? [];
+  const synthetic = ctx.latestSynthetic.get(actionId) ?? null;
 
-  const deadHandler = ctx.findingsByRule.get('no-dead-handler')?.has(actionId) ?? false
-  const mockLeak = ctx.findingsByRule.get('no-mock-leak')?.has(actionId) ?? false
-  const contractMismatch =
-    ctx.findingsByRule.get('api-contract-mismatch')?.has(actionId) ?? false
-  const claimViolation =
-    ctx.findingsByRule.get('status-claim-violation')?.has(actionId) ?? false
+  const deadHandler = ctx.findingsByRule.get('no-dead-handler')?.has(actionId) ?? false;
+  const mockLeak = ctx.findingsByRule.get('no-mock-leak')?.has(actionId) ?? false;
+  const contractMismatch = ctx.findingsByRule.get('api-contract-mismatch')?.has(actionId) ?? false;
+  const claimViolation = ctx.findingsByRule.get('status-claim-violation')?.has(actionId) ?? false;
 
-  if (deadHandler) return 'stub'
+  if (deadHandler) return 'stub';
 
   // Tests must ALL be approved for the verified path to remain open.
-  let allApproved = tests.length > 0
-  let anyRejected = false
+  let allApproved = tests.length > 0;
+  let anyRejected = false;
   for (const t of tests) {
-    const v = ctx.sentinelByTest.get(t) ?? 'unknown'
-    if (v === 'approved') continue
-    allApproved = false
-    if (v === 'rejected') anyRejected = true
+    const v = ctx.sentinelByTest.get(t) ?? 'unknown';
+    if (v === 'approved') continue;
+    allApproved = false;
+    if (v === 'rejected') anyRejected = true;
   }
 
-  const previous = ctx.previousStatus.get(actionId) ?? 'unknown'
+  const previous = ctx.previousStatus.get(actionId) ?? 'unknown';
 
   // Synthetic regression takes precedence — once we see a real prod
   // failure, the status is regressed regardless of unit test state.
   if (synthetic && synthetic.status !== 'passed' && previous === 'verified') {
-    return 'regressed'
+    return 'regressed';
   }
 
   if (allApproved) {
-    if (synthetic && synthetic.status !== 'passed') return 'regressed'
-    return 'verified'
+    if (synthetic && synthetic.status !== 'passed') return 'regressed';
+    return 'verified';
   }
 
-  if (mockLeak) return 'mocked'
-  if (contractMismatch || claimViolation) return 'wired'
+  if (mockLeak) return 'mocked';
+  if (contractMismatch || claimViolation) return 'wired';
 
   if (hasApiEdge) {
-    if (anyRejected) return 'wired'
-    return 'wired'
+    if (anyRejected) return 'wired';
+    return 'wired';
   }
 
-  if (tests.length > 0 && anyRejected) return 'wired'
+  if (tests.length > 0 && anyRejected) return 'wired';
 
   if (!hasApiEdge && !deadHandler && tests.length === 0) {
     // No api edge, no tests, no dead-handler — could be a hardcoded
     // mock or a static stub. Lean toward "mocked" only when the
     // scanner saw a mock leak; otherwise unknown.
-    return mockLeak ? 'mocked' : 'unknown'
+    return mockLeak ? 'mocked' : 'unknown';
   }
 
-  return 'unknown'
+  return 'unknown';
 }
 
 async function loadProjectsToReconcile(db: SupabaseClient): Promise<ProjectRow[]> {
@@ -204,12 +204,12 @@ async function loadProjectsToReconcile(db: SupabaseClient): Promise<ProjectRow[]
   const { data, error } = await db
     .from('projects')
     .select('id, project_settings!inner(inventory_v2_enabled)')
-    .eq('project_settings.inventory_v2_enabled', true)
+    .eq('project_settings.inventory_v2_enabled', true);
   if (error) {
-    rlog.warn('projects load failed', { error: error.message })
-    return []
+    rlog.warn('projects load failed', { error: error.message });
+    return [];
   }
-  return (data ?? []).map((row) => ({ id: row.id as string }))
+  return (data ?? []).map((row) => ({ id: row.id as string }));
 }
 
 async function buildContextForProject(
@@ -224,34 +224,35 @@ async function buildContextForProject(
       sentinelByTest: new Map(),
       testsByAction: new Map(),
       previousStatus: new Map(),
-    }
+    };
   }
 
   // 1. Most-recent gate findings (last 24h) per rule, scoped to the
   //    project. We bound the lookback so a stale finding from a long-
   //    abandoned branch can't keep an action red forever — a follow-up
   //    clean run wipes the finding by virtue of being absent.
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const { data: rawFindings } = await db
     .from('gate_findings')
     .select('node_id, rule_id, severity, gate_runs!inner(gate)')
     .eq('project_id', projectId)
     .gte('created_at', cutoff)
     .eq('allowlisted', false)
-    .returns<Array<FindingRow & { gate_runs: { gate: string } }>>()
+    .returns<Array<FindingRow & { gate_runs: { gate: string } }>>();
 
-  const findingsByRule = new Map<string, Set<string>>()
+  const findingsByRule = new Map<string, Set<string>>();
   for (const f of rawFindings ?? []) {
-    if (!f.node_id) continue
-    const key = f.rule_id ?? `${(f as unknown as { gate_runs: { gate: string } }).gate_runs.gate}-finding`
-    const set = findingsByRule.get(key) ?? new Set<string>()
-    set.add(f.node_id)
-    findingsByRule.set(key, set)
+    if (!f.node_id) continue;
+    const key =
+      f.rule_id ?? `${(f as unknown as { gate_runs: { gate: string } }).gate_runs.gate}-finding`;
+    const set = findingsByRule.get(key) ?? new Set<string>();
+    set.add(f.node_id);
+    findingsByRule.set(key, set);
   }
 
   // 2. Latest synthetic run per action (last 7 days).
-  const synthCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const latestSynthetic = new Map<string, SyntheticRow>()
+  const synthCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const latestSynthetic = new Map<string, SyntheticRow>();
   const { data: synthRows } = await db
     .from('synthetic_runs')
     .select('action_node_id, status, ran_at')
@@ -259,9 +260,9 @@ async function buildContextForProject(
     .gte('ran_at', synthCutoff)
     .order('ran_at', { ascending: false })
     .limit(2000)
-    .returns<SyntheticRow[]>()
+    .returns<SyntheticRow[]>();
   for (const row of synthRows ?? []) {
-    if (!latestSynthetic.has(row.action_node_id)) latestSynthetic.set(row.action_node_id, row)
+    if (!latestSynthetic.has(row.action_node_id)) latestSynthetic.set(row.action_node_id, row);
   }
 
   // 3. verified_by edges + sentinel verdicts.
@@ -270,49 +271,52 @@ async function buildContextForProject(
     .select('source_node_id, target_node_id, metadata')
     .eq('project_id', projectId)
     .eq('edge_type', 'verified_by')
-    .returns<TestEdgeRow[]>()
-  const testsByAction = new Map<string, string[]>()
-  const testIds = new Set<string>()
+    .returns<TestEdgeRow[]>();
+  const testsByAction = new Map<string, string[]>();
+  const testIds = new Set<string>();
   for (const edge of edges ?? []) {
-    if (!actionIds.includes(edge.source_node_id)) continue
-    const arr = testsByAction.get(edge.source_node_id) ?? []
-    arr.push(edge.target_node_id)
-    testsByAction.set(edge.source_node_id, arr)
-    testIds.add(edge.target_node_id)
+    if (!actionIds.includes(edge.source_node_id)) continue;
+    const arr = testsByAction.get(edge.source_node_id) ?? [];
+    arr.push(edge.target_node_id);
+    testsByAction.set(edge.source_node_id, arr);
+    testIds.add(edge.target_node_id);
   }
 
-  let testNodes: TestNodeRow[] = []
+  let testNodes: TestNodeRow[] = [];
   if (testIds.size > 0) {
     const { data: nodes } = await db
       .from('graph_nodes')
       .select('id, label, metadata')
       .in('id', Array.from(testIds))
-      .returns<TestNodeRow[]>()
-    testNodes = nodes ?? []
+      .returns<TestNodeRow[]>();
+    testNodes = nodes ?? [];
   }
 
-  const sentinelByTest = new Map<string, SentinelRow['verdict']>()
+  const sentinelByTest = new Map<string, SentinelRow['verdict']>();
   if (testNodes.length > 0) {
-    const labels = testNodes.map((n) => metaTestidFromTestNode(n.label)).filter(
-      (v): v is { file: string; name: string } => v !== null,
-    )
+    const labels = testNodes
+      .map((n) => metaTestidFromTestNode(n.label))
+      .filter((v): v is { file: string; name: string } => v !== null);
     if (labels.length > 0) {
       const { data: verdicts } = await db
         .from('sentinel_verdicts')
         .select('test_file, test_name, verdict, evaluated_at')
         .eq('project_id', projectId)
-        .in('test_file', labels.map((l) => l.file))
+        .in(
+          'test_file',
+          labels.map((l) => l.file),
+        )
         .order('evaluated_at', { ascending: false })
-        .returns<Array<SentinelRow & { evaluated_at: string }>>()
-      const verdictMap = new Map<string, SentinelRow['verdict']>()
+        .returns<Array<SentinelRow & { evaluated_at: string }>>();
+      const verdictMap = new Map<string, SentinelRow['verdict']>();
       for (const v of verdicts ?? []) {
-        const k = `${v.test_file}::${v.test_name}`
-        if (!verdictMap.has(k)) verdictMap.set(k, v.verdict)
+        const k = `${v.test_file}::${v.test_name}`;
+        if (!verdictMap.has(k)) verdictMap.set(k, v.verdict);
       }
       for (const tn of testNodes) {
-        const parsed = metaTestidFromTestNode(tn.label)
-        if (!parsed) continue
-        sentinelByTest.set(tn.id, verdictMap.get(`${parsed.file}::${parsed.name}`) ?? 'unknown')
+        const parsed = metaTestidFromTestNode(tn.label);
+        if (!parsed) continue;
+        sentinelByTest.set(tn.id, verdictMap.get(`${parsed.file}::${parsed.name}`) ?? 'unknown');
       }
     }
   }
@@ -323,25 +327,25 @@ async function buildContextForProject(
     .from('graph_nodes')
     .select('id, metadata')
     .in('id', actionIds)
-    .returns<Array<{ id: string; metadata: Record<string, unknown> | null }>>()
-  const previousStatus = new Map<string, Status>()
+    .returns<Array<{ id: string; metadata: Record<string, unknown> | null }>>();
+  const previousStatus = new Map<string, Status>();
   for (const row of actionRows ?? []) {
-    previousStatus.set(row.id, metaStatus(row.metadata))
+    previousStatus.set(row.id, metaStatus(row.metadata));
   }
 
-  return { findingsByRule, latestSynthetic, sentinelByTest, testsByAction, previousStatus }
+  return { findingsByRule, latestSynthetic, sentinelByTest, testsByAction, previousStatus };
 }
 
 interface ReconcileStats {
-  projectId: string
-  examined: number
-  changed: number
-  toVerified: number
-  toRegressed: number
-  toStub: number
-  toMocked: number
-  toWired: number
-  toUnknown: number
+  projectId: string;
+  examined: number;
+  changed: number;
+  toVerified: number;
+  toRegressed: number;
+  toStub: number;
+  toMocked: number;
+  toWired: number;
+  toUnknown: number;
 }
 
 async function reconcileProject(db: SupabaseClient, projectId: string): Promise<ReconcileStats> {
@@ -355,18 +359,18 @@ async function reconcileProject(db: SupabaseClient, projectId: string): Promise<
     toMocked: 0,
     toWired: 0,
     toUnknown: 0,
-  }
+  };
 
   const { data: actions } = await db
     .from('graph_nodes')
     .select('id, project_id, label, metadata')
     .eq('project_id', projectId)
     .eq('node_type', 'action')
-    .returns<ActionNodeRow[]>()
-  if (!actions || actions.length === 0) return stats
+    .returns<ActionNodeRow[]>();
+  if (!actions || actions.length === 0) return stats;
 
-  const actionIds = actions.map((a) => a.id)
-  const ctx = await buildContextForProject(db, projectId, actionIds)
+  const actionIds = actions.map((a) => a.id);
+  const ctx = await buildContextForProject(db, projectId, actionIds);
 
   // Look up which actions have at least one calls-edge (api_dep). One
   // round trip; cheaper than per-action loops.
@@ -375,61 +379,211 @@ async function reconcileProject(db: SupabaseClient, projectId: string): Promise<
     .select('source_node_id')
     .eq('project_id', projectId)
     .eq('edge_type', 'calls')
-    .returns<Array<{ source_node_id: string }>>()
-  const hasApiEdge = new Set<string>()
-  for (const e of callsEdges ?? []) hasApiEdge.add(e.source_node_id)
+    .returns<Array<{ source_node_id: string }>>();
+  const hasApiEdge = new Set<string>();
+  for (const e of callsEdges ?? []) hasApiEdge.add(e.source_node_id);
 
   const transitions: Array<{
-    project_id: string
-    node_id: string
-    from_status: string | null
-    to_status: Status
-    trigger: string
-    evidence: Record<string, unknown>
-  }> = []
+    project_id: string;
+    node_id: string;
+    from_status: string | null;
+    to_status: Status;
+    trigger: string;
+    evidence: Record<string, unknown>;
+  }> = [];
+
+  // Loop-closure: regressions (`verified → regressed`) used to flip the
+  // node metadata silently — only the operator who happened to load the
+  // /inventory page would notice. Collect the regressing actions here and
+  // page the operator + auto-create a triage report below.
+  const regressedActions: Array<{
+    id: string;
+    label: string;
+    evidence: Record<string, unknown>;
+  }> = [];
 
   for (const action of actions) {
-    stats.examined += 1
-    const previous = metaStatus(action.metadata)
-    const derived = deriveStatus(action.id, hasApiEdge.has(action.id), ctx)
+    stats.examined += 1;
+    const previous = metaStatus(action.metadata);
+    const derived = deriveStatus(action.id, hasApiEdge.has(action.id), ctx);
 
-    if (derived === previous) continue
+    if (derived === previous) continue;
 
-    stats.changed += 1
-    if (derived === 'verified') stats.toVerified += 1
-    else if (derived === 'regressed') stats.toRegressed += 1
-    else if (derived === 'stub') stats.toStub += 1
-    else if (derived === 'mocked') stats.toMocked += 1
-    else if (derived === 'wired') stats.toWired += 1
-    else if (derived === 'unknown') stats.toUnknown += 1
+    stats.changed += 1;
+    if (derived === 'verified') stats.toVerified += 1;
+    else if (derived === 'regressed') stats.toRegressed += 1;
+    else if (derived === 'stub') stats.toStub += 1;
+    else if (derived === 'mocked') stats.toMocked += 1;
+    else if (derived === 'wired') stats.toWired += 1;
+    else if (derived === 'unknown') stats.toUnknown += 1;
 
-    const newMeta = { ...(action.metadata ?? {}), status: derived, last_status_change: new Date().toISOString() }
+    const newMeta = {
+      ...(action.metadata ?? {}),
+      status: derived,
+      last_status_change: new Date().toISOString(),
+    };
     const { error: updErr } = await db
       .from('graph_nodes')
       .update({ metadata: newMeta })
-      .eq('id', action.id)
+      .eq('id', action.id);
     if (updErr) {
-      rlog.warn('graph_node update failed', { actionId: action.id, error: updErr.message })
-      continue
+      rlog.warn('graph_node update failed', { actionId: action.id, error: updErr.message });
+      continue;
     }
+    const evidence = collectEvidence(action.id, hasApiEdge.has(action.id), ctx);
     transitions.push({
       project_id: projectId,
       node_id: action.id,
       from_status: previous,
       to_status: derived,
       trigger: 'reconciler',
-      evidence: collectEvidence(action.id, hasApiEdge.has(action.id), ctx),
-    })
-  }
+      evidence,
+    });
 
-  if (transitions.length > 0) {
-    const { error: histErr } = await db.from('status_history').insert(transitions)
-    if (histErr) {
-      rlog.warn('status_history insert failed', { projectId, error: histErr.message })
+    // Only the verified→regressed edge is an "alert" — every other
+    // transition (e.g. unknown→wired, wired→mocked) is just normal status
+    // discovery and would generate noise if paged.
+    if (previous === 'verified' && derived === 'regressed') {
+      regressedActions.push({ id: action.id, label: action.label, evidence });
     }
   }
 
-  return stats
+  if (transitions.length > 0) {
+    const { error: histErr } = await db.from('status_history').insert(transitions);
+    if (histErr) {
+      rlog.warn('status_history insert failed', { projectId, error: histErr.message });
+    }
+  }
+
+  if (regressedActions.length > 0) {
+    await alertOnRegressions(db, projectId, regressedActions);
+  }
+
+  return stats;
+}
+
+/**
+ * For every action that just flipped verified → regressed, page the
+ * operator (Slack/Discord) and write a triage report so the regression
+ * funnels through the same PDCA loop as user-shaken-phone reports.
+ *
+ * Both side-effects are best-effort: Slack/webhook outages and
+ * `reports`-table RLS issues must NEVER prevent the reconciler from
+ * finishing the rest of the project.
+ *
+ * Idempotency for the triage report is via a short-window dedup
+ * (same node, same regression, within 6h) keyed on the action node id —
+ * the reconciler runs every 5 minutes so without dedup we'd spam a
+ * fresh triage report each tick until the regression is fixed.
+ */
+async function alertOnRegressions(
+  db: SupabaseClient,
+  projectId: string,
+  regressed: Array<{ id: string; label: string; evidence: Record<string, unknown> }>,
+): Promise<void> {
+  const ADMIN_BASE = Deno.env.get('MUSHI_ADMIN_BASE_URL') ?? 'https://app.mushimushi.dev';
+  // Dedup window — a regression that's still regressing 6h later is the
+  // same incident; don't open a fresh triage report on every reconciler
+  // tick or operators will drown.
+  const DEDUP_WINDOW_MS = 6 * 60 * 60 * 1000;
+  const sinceIso = new Date(Date.now() - DEDUP_WINDOW_MS).toISOString();
+
+  for (const action of regressed) {
+    try {
+      // Dedup check: any open `reports` row this project already has
+      // tagged with the same regressed action node id within the dedup
+      // window? If so, skip the create — but still page once per regression
+      // streak so the operator sees the recurrence in chat.
+      const { data: existing } = await db
+        .from('reports')
+        .select('id')
+        .eq('project_id', projectId)
+        .gte('created_at', sinceIso)
+        .contains('environment', { regressed_action_node_id: action.id })
+        .limit(1)
+        .maybeSingle();
+
+      if (!existing) {
+        const description = [
+          `[Regression] Action "${action.label}" was previously verified and is now regressed.`,
+          '',
+          'Evidence:',
+          `- Latest synthetic: ${String(action.evidence.latest_synthetic ?? 'unknown')}`,
+          `- Test count: ${String(action.evidence.test_count ?? 0)}`,
+          `- Has API edge: ${String(action.evidence.has_api_edge ?? false)}`,
+          `- Findings: ${(Array.isArray(action.evidence.findings) ? action.evidence.findings : []).join(', ') || 'none'}`,
+          '',
+          `Open in admin: ${ADMIN_BASE}/inventory?action=${action.id}`,
+        ].join('\n');
+
+        // `reports.category` is a hard CHECK constraint of
+        // ('bug','slow','visual','confusing','other'), so we use 'bug'
+        // and lean on `bug_ontology_tags` + `environment.source` for the
+        // regression-specific signal. Same pattern the
+        // library-modernizer uses for its auto-created findings.
+        const { error: reportErr } = await db.from('reports').insert({
+          project_id: projectId,
+          category: 'bug',
+          summary: `Regression detected: ${action.label}`,
+          description,
+          component: action.label,
+          severity: 'high',
+          status: 'classified',
+          confidence: 0.95,
+          bug_ontology_tags: ['regression', 'auto-detected'],
+          reporter_token_hash: 'cron:status-reconciler',
+          environment: {
+            source: 'status-reconciler',
+            regressed_action_node_id: action.id,
+            evidence: action.evidence,
+          },
+        });
+
+        if (reportErr) {
+          rlog.warn('regression triage report insert failed (non-fatal)', {
+            projectId,
+            actionId: action.id,
+            error: reportErr.message,
+          });
+        } else {
+          // Fan out report.created so plugin-jira / plugin-linear can
+          // open a tracker ticket for the regression — same downstream
+          // path as a real user report.
+          void dispatchPluginEvent(db, projectId, 'report.created', {
+            source: 'status-reconciler',
+            regressedActionNodeId: action.id,
+            actionLabel: action.label,
+          }).catch((e) =>
+            rlog.warn('plugin dispatch failed for regression', {
+              actionId: action.id,
+              err: String(e),
+            }),
+          );
+        }
+      }
+
+      // Always page on regression — even when we deduped the report,
+      // the operator wants to know "this thing is still broken at tick N".
+      await notifyOperator({
+        title: `Action regressed: ${action.label}`,
+        body: `An inventory action that was previously *verified* just flipped to *regressed*. ${existing ? 'A triage report already exists in the last 6h — investigate the open report.' : 'A triage report has been auto-created so plugin bridges can open a tracker ticket.'}`,
+        level: 'urgent',
+        fields: [
+          { label: 'Project', value: projectId.slice(0, 8) },
+          { label: 'Synthetic', value: String(action.evidence.latest_synthetic ?? 'unknown') },
+          { label: 'Tests', value: String(action.evidence.test_count ?? 0) },
+        ],
+        url: `${ADMIN_BASE}/inventory?action=${action.id}`,
+        footer: 'mushi-mushi · status-reconciler',
+      });
+    } catch (err) {
+      rlog.warn('regression alert side-effect failed (non-fatal)', {
+        projectId,
+        actionId: action.id,
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
 }
 
 function collectEvidence(
@@ -437,7 +591,7 @@ function collectEvidence(
   hasApiEdge: boolean,
   ctx: DerivationContext,
 ): Record<string, unknown> {
-  const tests = ctx.testsByAction.get(actionId) ?? []
+  const tests = ctx.testsByAction.get(actionId) ?? [];
   return {
     has_api_edge: hasApiEdge,
     test_count: tests.length,
@@ -446,19 +600,19 @@ function collectEvidence(
     findings: Array.from(ctx.findingsByRule.entries())
       .filter(([, set]) => set.has(actionId))
       .map(([rule]) => rule),
-  }
+  };
 }
 
 async function handler(req: Request): Promise<Response> {
-  const authResp = requireServiceRoleAuth(req)
-  if (authResp) return authResp
+  const authResp = requireServiceRoleAuth(req);
+  if (authResp) return authResp;
 
-  const db = getServiceClient()
-  const cron = await startCronRun(db, 'status-reconciler', 'cron')
+  const db = getServiceClient();
+  const cron = await startCronRun(db, 'status-reconciler', 'cron');
 
   try {
-    const projects = await loadProjectsToReconcile(db)
-    rlog.info('reconcile.start', { project_count: projects.length })
+    const projects = await loadProjectsToReconcile(db);
+    rlog.info('reconcile.start', { project_count: projects.length });
 
     const aggregate = {
       projects: projects.length,
@@ -470,41 +624,41 @@ async function handler(req: Request): Promise<Response> {
       toMocked: 0,
       toWired: 0,
       toUnknown: 0,
-    }
-    const perProject: ReconcileStats[] = []
+    };
+    const perProject: ReconcileStats[] = [];
     for (const proj of projects) {
       try {
-        const s = await reconcileProject(db, proj.id)
-        perProject.push(s)
-        aggregate.examined += s.examined
-        aggregate.changed += s.changed
-        aggregate.toVerified += s.toVerified
-        aggregate.toRegressed += s.toRegressed
-        aggregate.toStub += s.toStub
-        aggregate.toMocked += s.toMocked
-        aggregate.toWired += s.toWired
-        aggregate.toUnknown += s.toUnknown
+        const s = await reconcileProject(db, proj.id);
+        perProject.push(s);
+        aggregate.examined += s.examined;
+        aggregate.changed += s.changed;
+        aggregate.toVerified += s.toVerified;
+        aggregate.toRegressed += s.toRegressed;
+        aggregate.toStub += s.toStub;
+        aggregate.toMocked += s.toMocked;
+        aggregate.toWired += s.toWired;
+        aggregate.toUnknown += s.toUnknown;
       } catch (err) {
-        rlog.error('project reconcile failed', { project_id: proj.id, error: String(err) })
+        rlog.error('project reconcile failed', { project_id: proj.id, error: String(err) });
       }
     }
 
-    await cron.finish({ rowsAffected: aggregate.changed, metadata: aggregate })
-    rlog.info('reconcile.done', aggregate)
+    await cron.finish({ rowsAffected: aggregate.changed, metadata: aggregate });
+    rlog.info('reconcile.done', aggregate);
     return new Response(JSON.stringify({ ok: true, data: { aggregate, perProject } }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' },
-    })
+    });
   } catch (err) {
-    await cron.fail(err)
-    rlog.error('reconcile.failed', { error: String(err) })
+    await cron.fail(err);
+    rlog.error('reconcile.failed', { error: String(err) });
     return new Response(
       JSON.stringify({ ok: false, error: { code: 'RECONCILE_FAILED', message: String(err) } }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },
-    )
+    );
   }
 }
 
 if (typeof Deno !== 'undefined') {
-  Deno.serve(withSentry('status-reconciler', handler))
+  Deno.serve(withSentry('status-reconciler', handler));
 }

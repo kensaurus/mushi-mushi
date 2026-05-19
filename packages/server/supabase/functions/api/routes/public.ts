@@ -1141,7 +1141,7 @@ export function registerPublicRoutes(app: Hono): void {
 
     const { data: comments, error } = await db
       .from('report_comments')
-      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
+      .select('id, author_kind, author_name, body, visible_to_reporter, feedback_signal, created_at')
       .eq('report_id', reportId)
       .or(`visible_to_reporter.eq.true,reporter_token_hash.eq.${auth.tokenHash}`)
       .order('created_at', { ascending: true });
@@ -1161,7 +1161,45 @@ export function registerPublicRoutes(app: Hono): void {
 
     const body = await c.req.json().catch(() => ({}));
     const text = typeof body.body === 'string' ? body.body.trim() : '';
-    if (!text) return c.json({ ok: false, error: { code: 'EMPTY_REPLY', message: 'Reply body is required' } }, 400);
+    // Loop-closure (deferred-4): the reporter SDK widget can attach a
+    // structured chip via `feedback_signal`. Either field can be present
+    // on its own — a chip-only reaction with no text is a valid 1-click
+    // signal ("confirms"); a text-only reply is the legacy path. The DB
+    // CHECK constraint enforces the enum; we additionally validate it
+    // here so the API rejects obvious garbage with a 400 instead of
+    // bouncing through Postgres for the error message.
+    const FEEDBACK_SIGNALS = new Set([
+      'confirms',
+      'wrong_target',
+      'agent_fixed_wrong_thing',
+      'already_fixed',
+      'noise',
+    ]);
+    const rawSignal = typeof body.feedback_signal === 'string' ? body.feedback_signal : null;
+    if (rawSignal && !FEEDBACK_SIGNALS.has(rawSignal)) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'INVALID_FEEDBACK_SIGNAL',
+            message: `feedback_signal must be one of: ${[...FEEDBACK_SIGNALS].join(', ')}`,
+          },
+        },
+        400,
+      );
+    }
+    if (!text && !rawSignal) {
+      return c.json(
+        {
+          ok: false,
+          error: {
+            code: 'EMPTY_REPLY',
+            message: 'Reply must include a body, a feedback_signal chip, or both.',
+          },
+        },
+        400,
+      );
+    }
 
     const db = getServiceClient();
     const { data: report, error: reportError } = await db
@@ -1182,10 +1220,16 @@ export function registerPublicRoutes(app: Hono): void {
         author_kind: 'reporter',
         reporter_token_hash: auth.tokenHash,
         author_name: 'Reporter',
-        body: text.slice(0, 10000),
+        // Chip-only replies still need a body for the audit trail —
+        // synthesise a human-readable phrase from the signal so the
+        // admin UI doesn't render an empty bubble.
+        body: (text || (rawSignal ? `[${rawSignal}]` : '')).slice(0, 10000),
         visible_to_reporter: true,
+        feedback_signal: rawSignal,
       })
-      .select('id, author_kind, author_name, body, visible_to_reporter, created_at')
+      .select(
+        'id, author_kind, author_name, body, visible_to_reporter, feedback_signal, created_at',
+      )
       .single();
     if (error) return dbError(c, error);
     return c.json({ ok: true, data: { comment } }, 201);

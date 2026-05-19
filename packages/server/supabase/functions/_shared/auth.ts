@@ -452,3 +452,12 @@ export function adminOrApiKey(options: AdminOrApiKeyOptions = {}) {
     await jwtAuth(c, next)
   }
 }
+
+/**
+ * Extract the active org ID from the request context.
+ * The admin SPA stamps every request with the `X-Mushi-Org-Id` header.
+ * Returns null when the header is absent (public / SDK routes).
+ */
+export function getOrgIdFromContext(c: { req: { header: (k: string) => string | undefined } }): string | null {
+  return c.req.header('x-mushi-org-id') ?? c.req.header('X-Mushi-Org-Id') ?? null
+}

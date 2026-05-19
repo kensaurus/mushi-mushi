@@ -2,6 +2,50 @@
   "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
+      "id": "2026-05-10-data-pipeline-loop-closure",
+      "date": "2026-05-10",
+      "title": "Closing the data pipeline loop — failure categories, fix RAG, drift watch, multi-repo",
+      "summary": "Every fix attempt now categorises why it failed, the fix-worker learns from past merged fixes, inventory drift auto-proposes updates, structured reporter feedback feeds the prompt-tune loop, and a single bug can fan out fixes across multiple linked repos.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "\"Why fixes failed\" KPI on /fixes — every failed attempt is now bucketed (sandbox_timeout, llm_invalid_json, github_403, scope_blocked, …) with a hover histogram, so the dominant failure mode is one glance away."
+        },
+        {
+          "tone": "feature",
+          "text": "Past-fix RAG — every merged PR is embedded into a fix_corpus and the next dispatch retrieves the closest prior fixes as in-context examples for the LLM. Fewer hallucinated diffs, more on-pattern PRs."
+        },
+        {
+          "tone": "feature",
+          "text": "Inventory drift watch — an hourly cron compares discovered routes against your accepted inventory.yaml and auto-opens a draft proposal when they diverge. No more stale spec."
+        },
+        {
+          "tone": "feature",
+          "text": "Structured reporter feedback — replies on /reports/:id can now carry a confirms / wrong_target / noise signal that the prompt-tune loop ingests as ground truth alongside merge outcomes."
+        },
+        {
+          "tone": "feature",
+          "text": "Multi-repo coordination — a fix that touches files outside the primary repo now spawns child dispatch jobs against every linked sibling repo and cross-links the PRs in a coordination thread."
+        },
+        {
+          "tone": "feature",
+          "text": "Standard Webhooks push notifications — A2A tasks can subscribe a customer URL and receive webhook-id / webhook-timestamp / webhook-signature events without polling SSE."
+        },
+        {
+          "tone": "fix",
+          "text": "Inventory crawler no longer throws \"not a valid ByteString\" on first crawl — non-ASCII characters are stripped from the User-Agent header to comply with RFC 7230."
+        },
+        {
+          "tone": "fix",
+          "text": "Stripe metering cron is back — usage_events now sync to Stripe Meter Events every hour, fixing the silent gap that left billable usage stuck in 'pending' since the last migration wave."
+        },
+        {
+          "tone": "fix",
+          "text": "Resolved two production-only crashes in /v1/admin/integrations and idempotency upsert that only surfaced after a stale edge bundle deploy."
+        }
+      ]
+    },
+    {
       "id": "2026-05-07-sidebar-and-sdk-health",
       "date": "2026-05-07",
       "title": "Sidebar polish, SDK heartbeat, and a hotkey-discoverable inbox",

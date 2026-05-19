@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { pluralize, pluralizeWithCount } from '../lib/format'
@@ -312,6 +312,7 @@ const INDEX_HEALTH_TONE: Record<IndexHealth, string> = {
 
 export function ProjectsPage() {
   const toast = useToast()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
 
@@ -391,7 +392,12 @@ export function ProjectsPage() {
   // we're surfacing here.
   const adminHost = data?.admin_host ?? null
 
-  const { create: createProjectRaw, creating } = useCreateProject({
+  const {
+    create: createProjectRaw,
+    creating,
+    error: createError,
+    clearError: clearCreateError,
+  } = useCreateProject({
     onCreated: () => {
       setNewName('')
       reload()
@@ -709,21 +715,66 @@ export function ProjectsPage() {
         />
       )}
 
-      <div className="flex gap-2 items-end">
-        <div className="flex-1">
-          <Input
-            label="Project name"
-            helpId="projects.create_project"
-            type="text"
-            placeholder="New project name (e.g. Acme iOS app)"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && createProject()}
-          />
+      <div className="space-y-2">
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <Input
+              label="Project name"
+              helpId="projects.create_project"
+              type="text"
+              placeholder="New project name (e.g. Acme iOS app)"
+              value={newName}
+              onChange={(e) => {
+                setNewName(e.target.value)
+                if (createError) clearCreateError()
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && createProject()}
+              aria-invalid={createError ? true : undefined}
+              aria-describedby={createError ? 'projects-create-error' : undefined}
+            />
+          </div>
+          <Btn onClick={createProject} disabled={creating || !newName.trim()}>
+            {creating ? 'Creating...' : 'Create project'}
+          </Btn>
         </div>
-        <Btn onClick={createProject} disabled={creating || !newName.trim()}>
-          {creating ? 'Creating...' : 'Create project'}
-        </Btn>
+        {createError && (
+          <div id="projects-create-error">
+            <ErrorAlert
+              title={
+                createError.code === 'NO_ORGANIZATION'
+                  ? 'No writable team found'
+                  : createError.code === 'FORBIDDEN'
+                  ? 'Not allowed in this team'
+                  : createError.code === 'NETWORK_ERROR'
+                  ? 'Couldn\u2019t reach the server'
+                  : 'Couldn\u2019t create project'
+              }
+              message={createError.message}
+              code={createError.code}
+              actions={(() => {
+                if (createError.code === 'NO_ORGANIZATION') {
+                  return [
+                    { label: 'Open team settings', onClick: () => navigate('/organization/members') },
+                    { label: 'Dismiss', onClick: clearCreateError },
+                  ]
+                }
+                if (createError.code === 'FORBIDDEN') {
+                  return [
+                    { label: 'Switch team', onClick: () => navigate('/organization/members') },
+                    { label: 'Dismiss', onClick: clearCreateError },
+                  ]
+                }
+                if (createError.code === 'NETWORK_ERROR') {
+                  return [
+                    { label: 'Try again', onClick: () => void createProjectRaw(newName) },
+                    { label: 'Dismiss', onClick: clearCreateError },
+                  ]
+                }
+                return [{ label: 'Dismiss', onClick: clearCreateError }]
+              })()}
+            />
+          </div>
+        )}
       </div>
 
       {projects.length === 0 ? (

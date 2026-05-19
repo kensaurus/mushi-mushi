@@ -58,6 +58,9 @@
     "check:dead-buttons": "node scripts/check-dead-buttons.mjs",
     "check:publish-readiness": "node scripts/check-publish-readiness.mjs",
     "check:license-headers": "node scripts/check-license-headers.mjs",
+    "bootstrap:new-package": "node scripts/bootstrap-new-package.mjs",
+    "sync:helm-migrations": "node scripts/sync-helm-migrations.mjs",
+    "check:helm-migrations": "node scripts/sync-helm-migrations.mjs --check",
     "check:edge-fn-imports": "node scripts/check-edge-fn-imports.mjs",
     "e2e": "pnpm --filter @mushi-mushi/e2e-dogfood e2e"
   },
@@ -75,17 +78,19 @@
       "@xmldom/xmldom@<0.9.10": ">=0.9.10",
       "uuid@<14.0.0": ">=14.0.0",
       "postcss@<8.5.10": ">=8.5.10",
-      "next@<15.5.14": ">=15.5.14",
+      "next@<15.5.18": ">=15.5.18",
+      "devalue@<5.8.1": ">=5.8.1",
       "hono@<4.12.16": ">=4.12.16",
       "ip-address@<=10.1.0": ">=10.1.1",
-      "fast-uri@<3.1.2": ">=3.1.2"
+      "fast-uri@<3.1.2": ">=3.1.2",
+      "protobufjs@<=7.5.5": ">=7.5.6"
     }
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "jiti": "^2.6.1",
-    "prettier": "^3.5.3",
-    "turbo": "^2.9.7"
+    "prettier": "^3.8.3",
+    "turbo": "^2.9.8"
   },
   "bugs": {
     "url": "https://github.com/kensaurus/mushi-mushi/issues"

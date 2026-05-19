@@ -25,6 +25,7 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 import type { FineTuningJobRow, ExportSampleRow } from './fine-tune.ts'
+import { resolveLlmKey } from './byok.ts'
 
 /** Production vendors. `stub` is test-only; getAdapter() refuses it unless
  *  MUSHI_ALLOW_STUB_FINE_TUNE=1 is set.  */
@@ -46,8 +47,8 @@ export interface VendorPollResult {
 
 export interface VendorAdapter {
   submit(db: SupabaseClient, job: FineTuningJobRow): Promise<VendorSubmitResult>
-  poll(job: FineTuningJobRow): Promise<VendorPollResult>
-  predict(job: FineTuningJobRow, input: ExportSampleRow): Promise<{
+  poll(db: SupabaseClient, job: FineTuningJobRow): Promise<VendorPollResult>
+  predict(db: SupabaseClient, job: FineTuningJobRow, input: ExportSampleRow): Promise<{
     category: string
     severity: string | null
     summary: string | null
@@ -102,17 +103,29 @@ export function getAdapter(vendor: VendorName): VendorAdapter {
 
 const OPENAI_BASE = 'https://api.openai.com/v1'
 
-function openaiKey(): string {
-  const key = Deno.env.get('OPENAI_API_KEY')
-  if (!key) throw new Error('OPENAI_API_KEY is not configured — fine-tune submit aborted')
-  return key
+async function resolveOpenAIKey(db: SupabaseClient, projectId: string): Promise<string> {
+  // Prefer per-project BYOK key; fall back to env for self-hosted / dev.
+  // `resolveLlmKey` returns `{ key, source, hint, baseUrl? } | null` — we
+  // care about the raw token here, but the `source` is implicit (audit log
+  // happens upstream in the route that initiates the fine-tune).
+  const resolved = await resolveLlmKey(db, projectId, 'openai').catch(() => null)
+  if (resolved?.key) return resolved.key
+  // Deno-only: callers are Edge Functions. The legacy `process.env` branch
+  // would never resolve at runtime (no Node global) and was a latent bug.
+  const env = Deno.env.get('OPENAI_API_KEY') ?? ''
+  if (!env) {
+    throw new Error(
+      'No OpenAI API key available — configure BYOK in Settings or set OPENAI_API_KEY env var',
+    )
+  }
+  return env
 }
 
-async function openaiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+async function openaiFetch(key: string, path: string, init: RequestInit = {}): Promise<Response> {
   const res = await fetch(`${OPENAI_BASE}${path}`, {
     ...init,
     headers: {
-      authorization: `Bearer ${openaiKey()}`,
+      authorization: `Bearer ${key}`,
       ...(init.headers ?? {}),
     },
   })
@@ -127,6 +140,8 @@ const openaiAdapter: VendorAdapter = {
   async submit(db, job) {
     if (!job.export_storage_path) throw new Error('job has no export_storage_path — run export step first')
 
+    const apiKey = await resolveOpenAIKey(db, job.project_id)
+
     // Pull the JSONL back out of Supabase storage and stream it to OpenAI's
     // /files endpoint. Edge Functions have strict memory limits (~128 MB),
     // so fine-tune datasets bigger than that must be uploaded out-of-band —
@@ -140,13 +155,13 @@ const openaiAdapter: VendorAdapter = {
     const form = new FormData()
     form.append('purpose', 'fine-tune')
     form.append('file', dl, `${job.id}.jsonl`)
-    const fileRes = await openaiFetch('/files', { method: 'POST', body: form })
+    const fileRes = await openaiFetch(apiKey, '/files', { method: 'POST', body: form })
     const fileJson = await fileRes.json() as { id: string }
 
     // Strip any provider prefix (`openai:gpt-4o-mini` → `gpt-4o-mini`).
     const baseModel = job.base_model.replace(/^openai:/, '')
 
-    const ftRes = await openaiFetch('/fine_tuning/jobs', {
+    const ftRes = await openaiFetch(apiKey, '/fine_tuning/jobs', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -166,10 +181,11 @@ const openaiAdapter: VendorAdapter = {
     return { vendor: 'openai', vendorJobId: ftJson.id, status: ftJson.status }
   },
 
-  async poll(job) {
+  async poll(db, job) {
     const vendorJobId = (job.metrics as Record<string, unknown> | null)?.vendor_job_id as string | undefined
     if (!vendorJobId) throw new Error('no vendor_job_id on job — submit has not run')
-    const res = await openaiFetch(`/fine_tuning/jobs/${vendorJobId}`)
+    const apiKey = await resolveOpenAIKey(db, job.project_id)
+    const res = await openaiFetch(apiKey, `/fine_tuning/jobs/${vendorJobId}`)
     const body = await res.json() as { status: string; fine_tuned_model: string | null; error?: { message?: string } | null }
 
     if (body.status === 'succeeded') {
@@ -181,11 +197,12 @@ const openaiAdapter: VendorAdapter = {
     return { vendor: 'openai', status: 'running', fineTunedModelId: null, error: null, rawStatus: body.status }
   },
 
-  async predict(job, input) {
+  async predict(db, job, input) {
     const modelId = job.fine_tuned_model_id
     if (!modelId) throw new Error('job.fine_tuned_model_id is empty — cannot predict without a trained model')
 
-    const res = await openaiFetch('/chat/completions', {
+    const apiKey = await resolveOpenAIKey(db, job.project_id)
+    const res = await openaiFetch(apiKey, '/chat/completions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -229,10 +246,10 @@ const stubAdapter: VendorAdapter = {
   async submit(_db, job) {
     return { vendor: 'stub', vendorJobId: `stub-${job.id}`, status: 'training' }
   },
-  async poll(_job) {
+  async poll(_db, _job) {
     return { vendor: 'stub', status: 'succeeded', fineTunedModelId: 'stub-model', error: null, rawStatus: 'succeeded' }
   },
-  async predict(_job, input) {
+  async predict(_db, _job, input) {
     return { category: input.category, severity: input.severity, summary: input.summary, component: input.component }
   },
 }

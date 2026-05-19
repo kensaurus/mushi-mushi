@@ -451,6 +451,30 @@ async function handler(req: Request): Promise<Response> {
       branch: pr.branch,
     })
 
+    // Also create a qa_stories row so the generated test surfaces in the
+    // QA Coverage suite. This is fire-and-forget — a failure here does not
+    // roll back the PR that was already opened.
+    try {
+      const storyName = (report as { summary?: string }).summary
+        ? `Regression: ${(report as { summary?: string }).summary!.slice(0, 100)}`
+        : `Regression test from report ${reportId.slice(0, 8)}`
+      await db.from('qa_stories').insert({
+        project_id: projectId,
+        name: storyName,
+        prompt: buildUserPrompt(report as Record<string, unknown>, repo).slice(0, 2000),
+        script: generated.contents,
+        script_lang: 'playwright-ts',
+        browser_provider: 'local',
+        schedule_cron: '0 6 * * 1',   // weekly Monday 06:00 — regression guards are low-frequency
+        byok_provider: null,
+        enabled: true,
+        user_story_node_id: null,
+      })
+      log.info('qa_stories row created for generated test', { projectId, reportId })
+    } catch (qaErr) {
+      log.warn('Failed to create qa_stories row (non-fatal)', { projectId, reportId, err: String(qaErr) })
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,

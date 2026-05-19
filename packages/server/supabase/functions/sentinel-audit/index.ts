@@ -39,6 +39,8 @@ import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { resolveLlmKey } from '../_shared/byok.ts'
 import { logLlmInvocation } from '../_shared/telemetry.ts'
+import { ANTHROPIC_HAIKU } from '../_shared/models.ts'
+import { getPromptForStage } from '../_shared/prompt-ab.ts'
 
 declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void
@@ -47,7 +49,7 @@ declare const Deno: {
 
 const rlog = log.child('sentinel-audit')
 
-const SENTINEL_MODEL = 'claude-3-5-haiku-20241022'
+const SENTINEL_MODEL = ANTHROPIC_HAIKU
 
 // Whitepaper Appendix E Sentinel system prompt — copied verbatim so the
 // behaviour stays auditable without re-reading the function body.
@@ -144,11 +146,15 @@ suggested_assertions. Otherwise verdict=approved with a one-sentence reason.`
   }
   const anthropic = createAnthropic({ apiKey })
 
+  // Resolve the managed system prompt from prompt_versions (stage 'sentinel').
+  // Falls back to the hardcoded SENTINEL_SYSTEM_PROMPT constant when no row exists.
+  const { promptTemplate: managedSystemPrompt } = await getPromptForStage(db, projectId, 'sentinel')
+
   try {
     const { object: result, usage } = await generateObject({
       model: anthropic(SENTINEL_MODEL),
       schema: verdictSchema,
-      system: SENTINEL_SYSTEM_PROMPT,
+      system: managedSystemPrompt ?? SENTINEL_SYSTEM_PROMPT,
       prompt,
     })
     await logLlmInvocation(db, {
