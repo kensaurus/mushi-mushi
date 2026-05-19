@@ -15,7 +15,9 @@
  *   - Titles are kept identical so deep-link cards match the docs hero.
  */
 
-const DOCS_BASE = 'https://docs.mushimushi.dev/migrations'
+import { RESOLVED_DOCS_URL } from './env'
+
+const DOCS_BASE = `${RESOLVED_DOCS_URL}/migrations`
 
 export interface AdminMigrationGuideMeta {
   slug: string

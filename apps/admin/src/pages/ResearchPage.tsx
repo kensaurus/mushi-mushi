@@ -70,6 +70,7 @@ export function ResearchPage() {
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<{ code?: string; message: string } | null>(null)
   const [active, setActive] = useState<SearchResponse | null>(null)
   const [attachInput, setAttachInput] = useState<Record<string, string>>({})
   const [modeFilter, setModeFilter] = useState<SessionMode>('all')
@@ -110,18 +111,22 @@ export function ResearchPage() {
     })
     setSearching(false)
     if (res.ok && res.data) {
+      setSearchError(null)
       setActive(res.data)
       loadHistory()
     } else {
       const code = res.error?.code
+      // Keep a persistent inline error so the user can act without the toast disappearing.
+      setSearchError({ code, message: res.error?.message ?? 'Search failed' })
+      // Also toast for instant visibility.
       if (code === 'FIRECRAWL_NOT_CONFIGURED') {
-        toast.error('Add a Firecrawl API key in Settings → Firecrawl (BYOK) first.')
+        toast.error('Firecrawl not configured — add an API key in Settings → BYOK.')
       } else if (code === 'FIRECRAWL_AUTH_FAILED') {
         toast.error('Firecrawl rejected the key. Re-check Settings → Firecrawl.')
       } else if (code === 'RATE_LIMITED') {
         toast.error('Firecrawl rate-limited — try again shortly.')
       } else {
-        toast.error('Search failed', res.error?.message)
+        toast.error('Search failed')
       }
     }
   }
@@ -215,6 +220,30 @@ export function ResearchPage() {
             </button>
           ))}
         </div>
+        {searchError && (
+          <ErrorAlert
+            title={
+              searchError.code === 'FIRECRAWL_NOT_CONFIGURED'
+                ? 'Firecrawl not configured'
+                : searchError.code === 'FIRECRAWL_AUTH_FAILED'
+                  ? 'Firecrawl authentication failed'
+                  : searchError.code === 'RATE_LIMITED'
+                    ? 'Rate limited'
+                    : 'Search failed'
+            }
+            message={
+              searchError.code === 'FIRECRAWL_NOT_CONFIGURED'
+                ? 'Add a Firecrawl API key in Settings → BYOK to enable web research.'
+                : searchError.code === 'FIRECRAWL_AUTH_FAILED'
+                  ? 'The stored Firecrawl key was rejected. Re-enter it in Settings → BYOK → Firecrawl.'
+                  : searchError.code === 'RATE_LIMITED'
+                    ? 'Firecrawl rate-limited your project. Wait 30 s then retry.'
+                    : (searchError.message ?? 'An unexpected search error occurred.')
+            }
+            code={searchError.code}
+            onRetry={searchError.code === 'RATE_LIMITED' ? () => runSearch(query) : undefined}
+          />
+        )}
       </Section>
 
       {active && (
@@ -344,6 +373,7 @@ export function ResearchPage() {
                         type="button"
                         onClick={() => loadSession(s.id)}
                         className="text-2xs text-accent hover:underline"
+                        aria-label={`Open session: ${s.query}`}
                       >
                         Open →
                       </button>

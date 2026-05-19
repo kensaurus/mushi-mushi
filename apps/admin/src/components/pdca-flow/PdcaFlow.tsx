@@ -244,8 +244,8 @@ function PdcaFlowCanvas({
   const edges: Edge<PdcaEdgeData>[] = useMemo(
     // replayKey isn't read by buildEdges, but bumping it is how the parent
     // asks us to remount/reanimate the edges (replay button).
-    () => buildEdges(focusStage, runningStage, stages),
-    [focusStage, runningStage, stages, replayKey],
+    () => buildEdges(focusStage, runningStage, stages, variant),
+    [focusStage, runningStage, stages, replayKey, variant],
   )
 
   const onNodeClick = useCallback(

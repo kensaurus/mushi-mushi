@@ -781,6 +781,31 @@ export function registerAdminOpsRoutes(app: Hono): void {
       return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
     const body = await c.req.json().catch(() => ({}));
 
+    const provider: string = (body.provider as string | undefined) ?? ''
+    const S3_LIKE = ['s3', 'r2', 'cloudflare-r2']
+    if (S3_LIKE.includes(provider)) {
+      const bucket: string = (body.bucket as string | undefined) ?? ''
+      const region: string = (body.region as string | undefined) ?? ''
+      if (!bucket.trim())
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'bucket is required for S3/R2 providers.' } },
+          400,
+        )
+      if (!region.trim())
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'region is required for S3/R2 providers.' } },
+          400,
+        )
+    }
+    if (provider === 'gcs') {
+      const bucket: string = (body.bucket as string | undefined) ?? ''
+      if (!bucket.trim())
+        return c.json(
+          { ok: false, error: { code: 'VALIDATION_ERROR', message: 'bucket is required for GCS.' } },
+          400,
+        )
+    }
+
     const allowed = [
       'provider',
       'bucket',

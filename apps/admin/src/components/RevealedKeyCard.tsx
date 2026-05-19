@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Btn, Badge } from './ui'
 import { useToast } from '../lib/toast'
+import { RESOLVED_MCP_API_URL } from '../lib/env'
 
 type Mode = 'raw' | 'env' | 'cursor'
 
@@ -43,7 +44,7 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
           command: 'npx',
           args: ['-y', 'mushi-mcp@latest'],
           env: {
-            MUSHI_API_ENDPOINT: 'https://api.mushimushi.dev',
+            MUSHI_API_ENDPOINT: RESOLVED_MCP_API_URL,
             MUSHI_API_KEY: apiKey,
             MUSHI_PROJECT_ID: projectId,
           },
@@ -58,7 +59,7 @@ function buildCursorJson(projectId: string, projectName: string, apiKey: string)
 function buildEnvLocal(projectId: string, apiKey: string): string {
   return [
     '# Mushi MCP — drop into .env.local (gitignored). The MCP binary picks these up on spawn.',
-    'MUSHI_API_ENDPOINT=https://api.mushimushi.dev',
+    `MUSHI_API_ENDPOINT=${RESOLVED_MCP_API_URL}`,
     `MUSHI_API_KEY=${apiKey}`,
     `MUSHI_PROJECT_ID=${projectId}`,
     '',

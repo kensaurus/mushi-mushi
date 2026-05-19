@@ -1462,7 +1462,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const { data, error } = await db
       .from('plugin_registry')
       .select(
-        'slug, name, short_description, long_description, publisher, source_url, manifest, required_scopes, install_count, category, is_official',
+        'slug, name, short_description, long_description, publisher, source_url, manifest, required_scopes, install_count, category, is_official, version',
       )
       .eq('is_listed', true)
       .order('is_official', { ascending: false })

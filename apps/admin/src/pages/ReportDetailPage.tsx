@@ -55,6 +55,7 @@ import { ReportRelatedFooter } from '../components/report-detail/ReportRelatedFo
 import { SentryContextPanel } from '../components/report-detail/SentryContextPanel'
 import { deriveRecommendation } from '../components/report-detail/deriveRecommendation'
 import type { ReportDetail } from '../components/report-detail/types'
+import { RESOLVED_DOCS_URL } from '../lib/env'
 
 export function ReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -182,7 +183,7 @@ export function ReportDetailPage() {
           }
           primary={{ href: '/reports', label: 'Back to reports' }}
           secondary={{
-            href: 'https://kensaur.us/mushi-mushi/docs/concepts/judge-loop',
+            href: `${RESOLVED_DOCS_URL}/concepts/judge-loop`,
             label: 'Open docs',
             external: true,
           }}

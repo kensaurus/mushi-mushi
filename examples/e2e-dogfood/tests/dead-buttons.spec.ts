@@ -50,6 +50,17 @@ const PAGES_UNDER_TEST = [
   '/audit',
   '/dlq',
   '/queue',
+  // Pages with recent bug fixes — added to catch regressions early.
+  '/drift',
+  '/iterate',
+  '/research',
+  '/releases',
+  '/rewards',
+  '/lessons',
+  '/anomalies',
+  '/experiments',
+  '/cost',
+  '/qa-coverage',
 ]
 
 test.describe('Wave T dead-button sweep', () => {

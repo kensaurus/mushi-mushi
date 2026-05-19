@@ -18,12 +18,23 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
+import { resolveLlmKey } from '../_shared/byok.ts'
 
+// Fixed-key dimensions schema so OpenAI structured-output validation passes
+// (z.record() generates additionalProperties which OpenAI rejects in strict mode).
+// .catch() on numbers clamps any out-of-range values the LLM might return.
+const clampedScore = z.number().catch(0.5).transform(v => Math.max(0, Math.min(1, v)))
 const rubricSchema = z.object({
-  overall_score: z.number().min(0).max(1),
-  dimensions: z.record(z.number().min(0).max(1)),
-  critique_text: z.string().max(2000),
-  top_issues: z.array(z.string()).max(5),
+  overall_score: clampedScore,
+  dimensions: z.object({
+    clarity: clampedScore,
+    visual_hierarchy: clampedScore,
+    usability: clampedScore,
+    accessibility: clampedScore,
+    consistency: clampedScore,
+  }).catch({ clarity: 0.5, visual_hierarchy: 0.5, usability: 0.5, accessibility: 0.5, consistency: 0.5 }),
+  critique_text: z.string().catch('').transform(s => s.slice(0, 4000)),
+  top_issues: z.array(z.string()).catch([]).transform(a => a.slice(0, 10)),
 })
 
 async function notifyA2A(db: ReturnType<typeof getServiceClient>, event: string, payload: unknown) {
@@ -48,7 +59,7 @@ Deno.serve(
     const db = getServiceClient()
     const body = await req.json().catch(() => ({}))
 
-    let runId: string | null = body.run_id ?? null
+    let runId: string | null = (body.run_id as string) ?? null
 
     // If no run_id given, pick oldest queued run
     if (!runId) {
@@ -102,8 +113,34 @@ Deno.serve(
       currentInput = `<!-- Could not fetch ${run.target_url} -->`
     }
 
-    const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
-    const openai = createOpenAI({ apiKey: Deno.env.get('OPENAI_API_KEY') })
+    const [anthropicResolved, openaiResolved] = await Promise.all([
+      resolveLlmKey(db, run.project_id as string, 'anthropic'),
+      resolveLlmKey(db, run.project_id as string, 'openai'),
+    ])
+
+    if (!anthropicResolved && !openaiResolved) {
+      const noKeyMsg = 'No LLM API keys configured — add Anthropic or OpenAI keys in Settings → LLM Keys'
+      await db.from('pdca_runs').update({
+        status: 'failed',
+        final_score: 0,
+        finished_at: new Date().toISOString(),
+        error_detail: noKeyMsg,
+      }).eq('id', runId)
+      return new Response(
+        JSON.stringify({ ok: false, error: noKeyMsg }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      )
+    }
+
+    const anthropic = anthropicResolved
+      ? createAnthropic({ apiKey: anthropicResolved.key })
+      : null
+    const openai = openaiResolved
+      ? createOpenAI({
+          apiKey: openaiResolved.key,
+          ...(openaiResolved.baseUrl ? { baseURL: openaiResolved.baseUrl } : {}),
+        })
+      : null
 
     const primaryModel = run.primary_model as string
     const judgeModel = run.judge_model as string
@@ -118,6 +155,7 @@ Deno.serve(
 
     for (let i = 0; i < iterationsTarget; i++) {
       const iterStart = Date.now()
+      let anthropicCriticErr = ''
       try {
         // Producer
         const historyCtx = iterations.length > 0
@@ -126,17 +164,23 @@ Deno.serve(
 
         let draft = ''
         try {
+          if (!anthropic) throw new Error('No Anthropic key')
           const { text } = await generateText({
             model: anthropic(primaryModel),
-            prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
-            maxTokens: 3000,
+            prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 4000)}\n\nReturn only improved markup (max 800 tokens).`,
+            maxTokens: 800,
+            abortSignal: AbortSignal.timeout(55_000),
           })
           draft = text.trim()
-        } catch {
+        } catch (producerErr) {
+          const errMsg = producerErr instanceof Error ? producerErr.message : String(producerErr)
+          console.error('[pdca-runner] producer Anthropic error:', errMsg)
+          if (!openai) throw new Error(`Producer Anthropic failed (${errMsg}) and no OpenAI fallback available`)
+          // gpt-5.4 uses max_completion_tokens, not max_tokens — omit maxTokens to avoid SDK param mismatch
           const { text } = await generateText({
             model: openai('gpt-5.4'),
-            prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 6000)}\n\nReturn only improved markup.`,
-            maxTokens: 3000,
+            prompt: `You are a senior UI engineer.\nGoal: ${goal}${historyCtx}\n\nCurrent page:\n${currentInput.slice(0, 4000)}\n\nReturn only improved markup (max 800 tokens).`,
+            abortSignal: AbortSignal.timeout(55_000),
           })
           draft = text.trim()
         }
@@ -145,33 +189,40 @@ Deno.serve(
         let critiqueResult: z.infer<typeof rubricSchema>
         let costUsd = 0
         try {
+          if (!anthropic) throw new Error('No Anthropic key')
           const { object, usage } = await generateObject({
             model: anthropic(judgeModel),
             schema: rubricSchema,
-            prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
+            prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 4000)}\n\nEvaluate critically.`,
+            abortSignal: AbortSignal.timeout(55_000),
           })
           critiqueResult = object
           costUsd = (usage.promptTokens / 1_000_000) * 3 + (usage.completionTokens / 1_000_000) * 15
-        } catch {
+        } catch (criticErr) {
+          anthropicCriticErr = criticErr instanceof Error ? criticErr.message : String(criticErr)
+          console.error('[pdca-runner] critic Anthropic error:', anthropicCriticErr)
+          if (!openai) throw new Error(`Critic Anthropic failed (${anthropicCriticErr}) and no OpenAI fallback available`)
           const { object, usage } = await generateObject({
             model: openai('gpt-5.4'),
             schema: rubricSchema,
-            prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 5000)}\n\nEvaluate critically.`,
+            prompt: `${personaPrompt}\n\nGoal: ${goal}\n\nPage:\n${draft.slice(0, 4000)}\n\nEvaluate critically. Each score is 0.0–1.0.`,
+            abortSignal: AbortSignal.timeout(55_000),
           })
           critiqueResult = object
           costUsd = (usage.promptTokens / 1_000_000) * 2.5 + (usage.completionTokens / 1_000_000) * 10
         }
 
         // Persist iteration
-        await db.from('pdca_iterations').insert({
+        const { error: iterInsertErr } = await db.from('pdca_iterations').insert({
           run_id: runId,
           iteration_n: i + 1,
           critique_text: critiqueResult.critique_text,
           score: critiqueResult.overall_score,
-          score_breakdown: critiqueResult.dimensions,
+          score_breakdown: critiqueResult.dimensions ?? {},
           model_cost_usd: costUsd,
           ms_elapsed: Date.now() - iterStart,
         })
+        if (iterInsertErr) throw new Error(`pdca_iterations insert failed: ${iterInsertErr.message}`)
 
         // Update run progress
         await db.from('pdca_runs').update({ current_iteration: i + 1 }).eq('id', runId)
@@ -205,9 +256,14 @@ Deno.serve(
         lastScore = critiqueResult.overall_score
 
       } catch (err) {
-        console.error(`[pdca-runner] iteration ${i + 1} error:`, err)
+        const errMsg = err instanceof Error ? err.message : String(err)
+        const detail = anthropicCriticErr
+          ? `${errMsg} [anthropic_critic: ${anthropicCriticErr}]`
+          : errMsg
+        console.error(`[pdca-runner] iteration ${i + 1} error:`, detail)
         finalStatus = 'failed'
         exitReason = 'error'
+        await db.from('pdca_runs').update({ error_detail: detail }).eq('id', runId)
         break
       }
     }

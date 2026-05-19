@@ -6,12 +6,14 @@ import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { dbError, resolveOwnedProject } from '../shared.ts';
+import { resolveLlmKey } from '../../_shared/byok.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
   normalizeSdkConfig,
   type SdkConfigRow,
 } from '../helpers.ts';
+import { probeFirecrawl, firecrawlSearch } from '../../_shared/firecrawl.ts';
 
 export function registerSettingsResearchRoutes(app: Hono): void {
   // Settings admin endpoints
@@ -364,7 +366,6 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
     // Reuse the same resolver path the LLM pipeline takes. If this returns null
     // the user has no BYOK and no env fallback — surface that as 'untested'.
-    const { resolveLlmKey } = await import('../../_shared/byok.ts');
     const resolved = await resolveLlmKey(db, project.id, provider);
     if (!resolved) {
       return c.json(
@@ -444,6 +445,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       latency_ms: latencyMs,
       message: detail || `HTTP ${httpStatus}`,
       source: 'manual',
+      checked_at: now,
     });
 
     return c.json({
@@ -643,7 +645,6 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { probeFirecrawl } = await import('../_shared/firecrawl.ts');
     const probe = await probeFirecrawl(db, project.id);
 
     const now = new Date().toISOString();
@@ -713,7 +714,6 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
 
-    const { firecrawlSearch } = await import('../_shared/firecrawl.ts');
 
     let results: Array<{ url: string; title: string; snippet: string; markdown?: string }> = [];
     let errCode: string | null = null;

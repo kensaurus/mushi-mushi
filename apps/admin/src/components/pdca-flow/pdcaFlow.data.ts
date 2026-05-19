@@ -63,6 +63,9 @@ export interface PdcaEdgeData extends Record<string, unknown> {
    *  stuck on this segment." Derived from the target stage's tone at the
    *  data layer so the edge component stays presentational. */
   failing?: boolean
+  /** When true the edge uses a slow, gentle marching-ants rhythm (onboarding
+   *  explainer variant) rather than the fast live-data pace. */
+  slow?: boolean
 }
 
 // Fixed positions. ReactFlow coordinates — we center each node manually
@@ -173,6 +176,7 @@ export function buildEdges(
   focusStage: PdcaStageId | null | undefined,
   runningStage: PdcaStageId | null | undefined = null,
   stages: PdcaStage[] = [],
+  variant: PdcaFlowVariant = 'live',
 ): Edge<PdcaEdgeData>[] {
   // P → D → C → A → P. The last edge closes the loop so users see that
   // shipped fixes re-enter the Plan stage as new signal.
@@ -183,6 +187,7 @@ export function buildEdges(
     ['act', 'plan'],
   ]
   const DANGER_HEX = '#ef4444'
+  const isOnboarding = variant === 'onboarding'
   const toneById = new Map(stages.map((s) => [s.id, s.tone]))
   return pairs.map(([source, target]) => {
     // Paint the segment red when the *target* stage is urgent — that's
@@ -197,14 +202,15 @@ export function buildEdges(
       type: 'pdcaGradient',
       sourceHandle: 'out',
       targetHandle: 'in',
-      animated: source === focusStage || source === runningStage || failing,
-      // Colored arrowhead matching the target stage so the eye follows the
-      // gradient to its destination. markerEnd is sized larger than the RF
-      // default (10×10) to stay readable at the canvas's default fitView scale.
+      // Onboarding: always animate all edges with a gentle slow rhythm so
+      // the explainer diagram reads as a living loop rather than a static chart.
+      animated: isOnboarding || source === focusStage || source === runningStage || failing,
+      // Colored arrowhead matching the target stage. Sized at 22×22 (up from
+      // the RF default 10×10) to remain readable at the canvas's fitView scale.
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        width: 18,
-        height: 18,
+        width: 22,
+        height: 22,
         color: arrowColor,
       },
       data: {
@@ -214,6 +220,7 @@ export function buildEdges(
         targetStageId: target,
         flowing: source === runningStage,
         failing,
+        slow: isOnboarding,
       },
     }
   })

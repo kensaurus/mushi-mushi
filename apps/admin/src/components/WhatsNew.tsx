@@ -15,17 +15,21 @@ import { useCallback, useEffect, useState } from 'react'
 import { Modal } from './Modal'
 import { Badge } from './ui'
 
-interface ChangelogHighlight {
+export interface ChangelogHighlight {
   tone: 'feature' | 'fix' | 'breaking' | 'note'
   text: string
 }
 
-interface ChangelogEntry {
+export interface ChangelogEntry {
   id: string
   date: string
   title: string
   summary?: string
   highlights?: ChangelogHighlight[]
+  /** @mushi-mushi/web version that shipped with this entry — used to drive the
+   *  live SDK version pill in VersionBadge without requiring a full admin rebuild.
+   *  Omit for admin-only entries that don't correspond to an npm release. */
+  sdkVersion?: string
 }
 
 interface ChangelogFile {
@@ -100,6 +104,9 @@ export function useWhatsNew() {
 
   const newest = entries[0]?.date ?? null
   const hasUnread = Boolean(newest && (!lastSeen || newest > lastSeen))
+  // Walk entries newest-first for the first one that carries an sdkVersion so
+  // admin-only entries (no sdkVersion) don't mask the last real SDK release.
+  const latestSdkVersion = entries.find((e) => e.sdkVersion)?.sdkVersion ?? null
 
   const openPanel = useCallback(() => {
     setOpen(true)
@@ -111,7 +118,7 @@ export function useWhatsNew() {
 
   const closePanel = useCallback(() => setOpen(false), [])
 
-  return { entries, hasUnread, open, openPanel, closePanel, newest }
+  return { entries, hasUnread, open, openPanel, closePanel, newest, latestSdkVersion }
 }
 
 export function WhatsNewModal({
@@ -131,9 +138,17 @@ export function WhatsNewModal({
         <div className="space-y-4">
           {entries.map((entry) => (
             <section key={entry.id} className="space-y-2">
-              <div className="flex items-baseline gap-2">
+              <div className="flex items-baseline gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-fg">{entry.title}</h3>
                 <span className="text-2xs font-mono text-fg-faint tabular-nums">{entry.date}</span>
+                {entry.sdkVersion && (
+                  <span
+                    className="text-2xs font-mono tabular-nums text-cyan-300/80"
+                    title={`@mushi-mushi/web v${entry.sdkVersion}`}
+                  >
+                    SDK v{entry.sdkVersion}
+                  </span>
+                )}
               </div>
               {entry.summary && (
                 <p className="text-xs text-fg-secondary leading-relaxed">{entry.summary}</p>

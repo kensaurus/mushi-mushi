@@ -18,6 +18,7 @@ import { Component } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
 import { Sentry } from '../lib/sentry'
 import { EditorialErrorState } from './EditorialErrorState'
+import { RESOLVED_DOCS_URL } from '../lib/env'
 
 interface Props {
   children: ReactNode
@@ -93,7 +94,7 @@ export class ErrorBoundary extends Component<Props, State> {
           }
           primary={{ href: '/', label: 'Back to home' }}
           secondary={{
-            href: 'https://kensaur.us/mushi-mushi/docs/',
+            href: `${RESOLVED_DOCS_URL}/`,
             label: 'Open docs',
             external: true,
           }}

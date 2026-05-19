@@ -16,6 +16,7 @@ import type { Hono } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
+import { resolveLlmKey } from '../../_shared/byok.ts'
 
 export function registerLessonsRoutes(app: Hono) {
   // ─── List lessons ────────────────────────────────────────────────────────
@@ -214,11 +215,16 @@ export function registerLessonsRoutes(app: Hono) {
     const { diff_text, max_tokens, project_id, top_k } = body.data
     const db = getServiceClient()
 
-    // Embed the diff text
-    const openaiKey = Deno.env.get('OPENAI_API_KEY')
-    if (!openaiKey) return c.json({ ok: false, error: 'OPENAI_API_KEY not configured' }, 500)
+    // Resolve OpenAI key — BYOK-first, env fallback
+    const resolvedOpenai = project_id
+      ? await resolveLlmKey(db, project_id, 'openai')
+      : null
+    const openaiKey = resolvedOpenai?.key ?? Deno.env.get('OPENAI_API_KEY')
+    if (!openaiKey) return c.json({ ok: false, error: 'OPENAI_API_KEY not configured — add it in Settings → LLM Keys' }, 500)
 
-    const embedRes = await fetch('https://api.openai.com/v1/embeddings', {
+    // Use BYOK base URL if set (e.g. OpenRouter), otherwise OpenAI default
+    const embedBaseUrl = resolvedOpenai?.baseUrl ?? 'https://api.openai.com'
+    const embedRes = await fetch(`${embedBaseUrl}/v1/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${openaiKey}` },
       body: JSON.stringify({ model: 'text-embedding-3-small', input: diff_text.slice(0, 8000) }),

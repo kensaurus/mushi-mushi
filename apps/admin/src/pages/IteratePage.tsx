@@ -54,6 +54,8 @@ interface PdcaRun {
   finished_at: string | null
   final_score: number | null
   created_at: string
+  /** Written by pdca-runner on failure; contains the real error message for debugging. */
+  error_detail?: string | null
   iterations?: PdcaIteration[]
 }
 
@@ -152,9 +154,19 @@ export function IteratePage() {
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null } }
   }, [activeRuns.length, reloadRuns])
 
+  const refreshSelectedRun = useCallback(async (runId: string) => {
+    const res = await apiFetch<PdcaRun>(`/v1/admin/pdca/${runId}`)
+    if (res.ok && res.data) setSelectedRun(res.data)
+    else if (!res.ok) toast.error(res.error?.message ?? 'Failed to refresh run details')
+  }, [toast])
+
   const openDetail = useCallback(async (run: PdcaRun) => {
-    const res = await apiFetch<{ data: PdcaRun }>(`/v1/admin/pdca/${run.id}`)
-    setSelectedRun(res.data?.data ?? run)
+    // apiFetch<T> returns { ok, data: T } where data is already the unwrapped
+    // payload from the server's { ok, data: { ...run, iterations } } response.
+    // The previous <{ data: PdcaRun }> type + `res.data?.data` double-unwrap
+    // caused iterations to be undefined, falling back to the list row.
+    const res = await apiFetch<PdcaRun>(`/v1/admin/pdca/${run.id}`)
+    setSelectedRun(res.ok && res.data ? res.data : run)
     setDrawerOpen(true)
   }, [])
 
@@ -239,9 +251,9 @@ export function IteratePage() {
           onClose={() => { setDrawerOpen(false); setSelectedRun(null) }}
           onAbort={abortRun}
           onTrigger={triggerRun}
-          onRefresh={async () => {
-            const res = await apiFetch<{ data: PdcaRun }>(`/v1/admin/pdca/${selectedRun.id}`)
-            if (res.ok && res.data) setSelectedRun(res.data as unknown as PdcaRun)
+          onRefresh={() => {
+            reloadRuns()
+            void refreshSelectedRun(selectedRun.id)
           }}
         />
       )}
@@ -294,7 +306,7 @@ function RunsTab({
               <th className="px-3 py-2 text-left">Progress</th>
               <th className="px-3 py-2 text-left">Final Score</th>
               <th className="px-3 py-2 text-left">Created</th>
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2" scope="col" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
@@ -527,6 +539,13 @@ function RunDetailDrawer({
           )}
         </div>
 
+        {run.status === 'failed' && run.error_detail && (
+          <ErrorAlert
+            title="Run failed"
+            message={run.error_detail}
+          />
+        )}
+
         {scores.length > 0 && (
           <div>
             <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Score timeline</p>
@@ -540,7 +559,7 @@ function RunDetailDrawer({
                     onClick={() => setActiveIter(iterations[i])}
                     className={`flex-1 min-w-[6px] rounded-t-sm transition-opacity ${colour} ${activeIter?.iteration_n === i + 1 ? 'opacity-100 ring-2 ring-ring' : 'opacity-60 hover:opacity-100'}`}
                     style={{ height: `${Math.max(h, 4)}%` }}
-                    title={`Iteration ${i + 1}: ${h}%`}
+                    aria-label={`Iteration ${i + 1}: ${h}%`}
                   />
                 )
               })}

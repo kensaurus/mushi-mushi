@@ -52,7 +52,7 @@ export function ProjectNarrativeStrip({ projectName, sdkInstalled, hasReports, h
             : 'Watch a real user-felt bug travel from your app to a merged pull request, in four stages.'}
         </h2>
 
-        <ol className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+        <ol className="mt-4 pt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           {stages.map((stage, i) => (
             <NarrativeStage
               key={stage.id}
@@ -76,21 +76,42 @@ interface NarrativeStageProps {
 function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
   const meta = PDCA_STAGES[stage.id]
   const tone = stage.state === 'done'
-    ? `border-ok/40 bg-ok-muted/15`
+    ? 'border-ok/40 bg-ok-muted/15'
     : isCurrent
-      ? `${meta.tintBorder} ${meta.tintBg} ring-2 ring-offset-1 ring-offset-surface ${meta.ring}`
-      : 'border-edge-subtle bg-surface-raised/30 opacity-75'
-  const badge = stage.state === 'done'
+      ? `${meta.tintBorder} ${meta.tintBg} ring-2 ring-offset-1 ring-offset-surface ${meta.ring} shadow-lg`
+      : 'border-edge-subtle bg-surface-raised/30 opacity-60'
+  const badgeCls = stage.state === 'done'
     ? 'bg-ok text-ok-fg'
     : isCurrent
       ? `${meta.badgeBg} ${meta.badgeFg}`
       : 'bg-surface-overlay text-fg-muted'
   return (
     <li className={`relative rounded-md border p-3 ${tone}`}>
+      {/* Colored top accent stripe on the active card */}
+      {isCurrent && stage.state !== 'done' && (
+        <div
+          aria-hidden="true"
+          className={`absolute inset-x-0 top-0 h-0.5 rounded-t-md opacity-80 ${meta.badgeBg}`}
+        />
+      )}
+
+      {/* "YOU ARE HERE" — centered pill with pulsing location dot */}
+      {isCurrent && stage.state !== 'done' && (
+        <span
+          className={`absolute -top-3.5 left-1/2 -translate-x-1/2 inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-0.5 text-3xs font-bold uppercase tracking-widest shadow-sm ${meta.text} ${meta.tintBg} ${meta.tintBorder}`}
+        >
+          <span className="relative flex h-1.5 w-1.5 shrink-0" aria-hidden="true">
+            <span className={`absolute inline-flex h-full w-full rounded-full opacity-60 motion-safe:animate-ping ${meta.badgeBg}`} />
+            <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${meta.badgeBg}`} />
+          </span>
+          You are here
+        </span>
+      )}
+
       <header className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold leading-none ${badge}`}
+          className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold leading-none ${badgeCls}`}
         >
           {stage.state === 'done' ? '✓' : meta.letter}
         </span>
@@ -109,15 +130,15 @@ function NarrativeStage({ stage, isCurrent, connector }: NarrativeStageProps) {
           <span aria-hidden="true">→</span>
         </Link>
       )}
-      {isCurrent && stage.state !== 'done' && (
-        <span className={`absolute -top-2 right-2 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${meta.text} ${meta.tintBg} border ${meta.tintBorder}`}>
-          You are here
-        </span>
-      )}
+
+      {/* Connector arrow to next stage */}
       {connector && (
-        <span aria-hidden="true" className="hidden lg:flex absolute top-1/2 -right-1.5 -translate-y-1/2 h-4 w-4 items-center justify-center text-fg-faint">
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <path d="M3 7h7m0 0L7 4m3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <span
+          aria-hidden="true"
+          className="hidden lg:flex absolute top-1/2 -right-2 -translate-y-1/2 z-10 h-5 w-4 items-center justify-center text-fg-muted"
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M2 7h9M8 3.5L11.5 7 8 10.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
       )}

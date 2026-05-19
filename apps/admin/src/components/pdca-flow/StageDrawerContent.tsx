@@ -347,10 +347,17 @@ function DoDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =>
                     key={f.id}
                     className="rounded-md border border-danger/30 bg-danger-muted/10 p-2 text-2xs"
                   >
-                    <p className="text-danger font-mono leading-snug line-clamp-2">
+                    <p className="text-danger font-mono leading-snug break-words whitespace-pre-wrap">
                       {f.error ?? 'Unknown failure'}
                     </p>
-                    <div className="mt-1 flex gap-1">
+                    <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-1.5 gap-y-0.5 text-3xs text-fg-muted font-mono">
+                      <dt>id</dt><dd className="truncate" title={f.id}>{f.id.slice(0, 8)}…</dd>
+                      {f.llm_model && <><dt>model</dt><dd>{f.llm_model}</dd></>}
+                      {f.agent && <><dt>agent</dt><dd>{f.agent}</dd></>}
+                      {f.started_at && <><dt>started</dt><dd>{new Date(f.started_at).toLocaleTimeString()}</dd></>}
+                      {f.completed_at && <><dt>finished</dt><dd>{new Date(f.completed_at).toLocaleTimeString()}</dd></>}
+                    </dl>
+                    <div className="mt-1.5 flex gap-1">
                       <Btn
                         size="sm"
                         variant="ghost"

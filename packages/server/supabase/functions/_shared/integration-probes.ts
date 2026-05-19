@@ -188,7 +188,11 @@ export async function probeIntegration(
           },
           body: JSON.stringify({
             model: HEALTH_PROBE_OPENAI_MODEL,
-            max_tokens: 1,
+            // gpt-4o and newer models (including gpt-5.4-mini) reject the
+            // legacy `max_tokens` parameter — use `max_completion_tokens`.
+            // Keep the budget small (10 tokens) so the probe is fast and cheap;
+            // 1 was too restrictive and caused a 400 on some model variants.
+            max_completion_tokens: 10,
             messages: [{ role: 'user', content: 'ping' }],
           }),
           signal: AbortSignal.timeout(5_000),

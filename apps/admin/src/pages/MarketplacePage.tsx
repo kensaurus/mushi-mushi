@@ -168,7 +168,7 @@ export function MarketplacePage() {
         body: JSON.stringify({
           pluginName: installTarget.name,
           pluginSlug: installTarget.slug,
-          pluginVersion: '1.0.0',
+          pluginVersion: installTarget.version,
           webhookUrl: draftWebhookUrl,
           webhookSecret: draftWebhookSecret,
           subscribedEvents: events,

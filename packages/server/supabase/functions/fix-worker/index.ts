@@ -702,23 +702,34 @@ ${
         // for NoObjectGeneratedError — otherwise the wrapping Error below loses
         // `.text` (the raw model output) and `.cause.issues` (the Zod failures)
         // and the operator sees only "LLM call failed: AI_NoObjectGeneratedError"
-        // with nothing to act on. Log structured fields to Sentry before
-        // re-throwing so the first recurrence is already actionable.
+        // with nothing to act on. Extract Zod issues, log to Sentry, AND embed
+        // in the thrown message so `fix_dispatch_jobs.error` is actionable.
         if (NoObjectGeneratedError.isInstance(llmErr)) {
           const cause = llmErr.cause as
             | { issues?: Array<{ path: (string | number)[]; message: string; code?: string }> }
             | undefined;
+          const zodIssues = cause?.issues?.slice(0, 5).map((i) => ({
+            path: i.path.join('.'),
+            code: i.code,
+            message: i.message,
+          })) ?? null;
           log.error('Fix worker structured-output schema violation', {
             dispatchId: dispatch.id,
             model: usedModel,
             modelResponse: (llmErr as { text?: string }).text?.slice(0, 800) ?? null,
-            zodIssues:
-              cause?.issues?.slice(0, 5).map((i) => ({
-                path: i.path.join('.'),
-                code: i.code,
-                message: i.message,
-              })) ?? null,
+            zodIssues,
           });
+          llmSpan.end({ error: 'NoObjectGeneratedError', zodIssueCount: zodIssues?.length ?? 0 });
+          // Build an actionable human-readable summary so the dispatch job's
+          // error column and admin UI give the operator something to act on.
+          const issueSummary = zodIssues && zodIssues.length > 0
+            ? zodIssues.map(i => `${i.path || 'root'}: ${i.message}`).join('; ')
+            : 'LLM output did not match the fix schema';
+          throw new Error(
+            `LLM schema violation — the model produced output that failed Zod validation. ` +
+            `Check that the report has indexable code context (Settings → Integrations → GitHub). ` +
+            `Zod issues: ${issueSummary}`,
+          );
         }
         llmSpan.end({ error: String(llmErr).slice(0, 500) });
         throw new Error(`LLM call failed: ${String(llmErr).slice(0, 300)}`);

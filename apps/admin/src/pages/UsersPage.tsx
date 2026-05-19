@@ -38,6 +38,7 @@ import {
 } from '../components/ui'
 import { EditorialErrorState } from '../components/EditorialErrorState'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { RESOLVED_DOCS_URL } from '../lib/env'
 
 interface SuperAdminUser {
   user_id: string
@@ -168,7 +169,7 @@ export function UsersPage() {
         lead="The route you typed doesn't match any page in the console. It may have moved, been renamed, or never existed — head back to the dashboard or check the docs for the canonical name."
         primary={{ href: '/dashboard', label: 'Back to dashboard' }}
         secondary={{
-          href: 'https://kensaur.us/mushi-mushi/docs/',
+          href: `${RESOLVED_DOCS_URL}/`,
           label: 'Open docs',
           external: true,
         }}
@@ -246,6 +247,7 @@ export function UsersPage() {
                   <th className="px-3 py-2 font-medium text-right">Reports · 30d</th>
                   <th className="px-3 py-2 font-medium">Last report</th>
                   <th className="px-3 py-2 font-medium">Last sign-in</th>
+                  <th className="px-2 py-2 w-6" scope="col" aria-label="Actions" />
                 </tr>
               </thead>
               <tbody>

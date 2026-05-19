@@ -271,7 +271,7 @@ function FindingsTab({
               <th className="px-3 py-2 text-left">Path</th>
               <th className="px-3 py-2 text-left">Message</th>
               <th className="px-3 py-2 text-left">Found</th>
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2" scope="col" aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
@@ -333,27 +333,39 @@ function SnapshotsTab({ snapshots, loading, projectId }: { snapshots: ContractSn
 
 // ─── Scanner tab ─────────────────────────────────────────────────────────────
 
+const SCAN_ERROR_TIPS: Record<string, string> = {
+  BUILDER_FAILED: 'The contract snapshot builder failed. Check that the project URL is reachable and that OpenAPI / inventory-crawler has run at least once.',
+  BUILDER_UNREACHABLE: 'The contract-graph-builder edge function could not be reached. Verify the Supabase project is healthy and the function is deployed.',
+  NO_SNAPSHOT: 'The builder returned without a snapshot ID. This usually means a transient DB write failure — retry in a few seconds.',
+  DB_INSERT_FAILED: 'Supabase rejected the snapshot insert. Check the Supabase Dashboard → Logs → Postgres for constraint or quota errors.',
+}
+
 function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => void }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ findings_inserted: number; findings_found: number; snapshot_id: string } | null>(null)
+  const [scanError, setScanError] = useState<{ code?: string; message: string } | null>(null)
   const [maxPaths, setMaxPaths] = useState(200)
 
   const run = async () => {
     if (!projectId) { toast.error('Select a project first'); return }
     setLoading(true)
     setResult(null)
+    setScanError(null)
     try {
       const res = await apiFetch<{ findings_inserted: number; findings_found: number; snapshot_id: string }>(
         '/v1/admin/drift/scan',
         { method: 'POST', body: JSON.stringify({ project_id: projectId, max_paths: maxPaths }) },
       )
-      if (!res.ok) throw new Error(res.error?.message ?? 'Scan failed')
+      if (!res.ok) {
+        setScanError({ code: res.error?.code, message: res.error?.message ?? 'Scan failed' })
+        return
+      }
       setResult(res.data ?? { findings_inserted: 0, findings_found: 0, snapshot_id: '' })
       toast.success(`Scan complete — ${res.data?.findings_inserted ?? 0} new findings`)
       onDone()
     } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Scan failed')
+      setScanError({ message: e instanceof Error ? e.message : 'Scan failed' })
     } finally {
       setLoading(false)
     }
@@ -391,6 +403,20 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
             snapshot: {result.snapshot_id?.slice(0, 8)}…
           </p>
         </div>
+      )}
+      {scanError && (
+        <ErrorAlert
+          title="Scan failed"
+          message={scanError.message}
+          code={scanError.code}
+          onRetry={run}
+        >
+          {scanError.code && SCAN_ERROR_TIPS[scanError.code] && (
+            <p className="mt-2 text-xs text-danger/80">
+              {SCAN_ERROR_TIPS[scanError.code]}
+            </p>
+          )}
+        </ErrorAlert>
       )}
     </Card>
   )

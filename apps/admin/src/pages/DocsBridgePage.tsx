@@ -30,7 +30,7 @@ import { useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { RESOLVED_API_URL } from '../lib/env'
+import { RESOLVED_API_URL, RESOLVED_DOCS_URL } from '../lib/env'
 import { getActiveProjectIdSnapshot } from '../lib/activeProject'
 import { getActiveOrgIdSnapshot } from '../lib/activeOrg'
 
@@ -44,15 +44,19 @@ type BridgeStatus = 'pending' | 'sent' | 'invalid_origin' | 'missing_opener' | '
  * same env knob on the admin (Vite-prefixed) so the two stay in lockstep:
  *   VITE_DOCS_ORIGIN_ALLOWLIST="https://docs.example.com,https://staging.example.com"
  * Defaults are unchanged so existing deployments keep working untouched. */
+// Primary docs origin is derived from RESOLVED_DOCS_URL so self-hosted
+// operators who set VITE_DOCS_URL don't need to also set VITE_DOCS_ORIGIN_ALLOWLIST.
+const resolvedDocsOrigin = new URL(RESOLVED_DOCS_URL).origin
 const DEFAULT_DOCS_ORIGINS = [
-  'https://docs.mushimushi.dev',
+  resolvedDocsOrigin,
+  'https://docs.mushimushi.dev', // canonical cloud fallback always allowed
   'https://kensaur.us',
   'https://www.kensaur.us',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
-] as const
+]
 
 const ALLOWED_DOCS_ORIGINS = new Set<string>(
   (() => {

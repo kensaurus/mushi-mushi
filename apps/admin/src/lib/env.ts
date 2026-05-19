@@ -56,6 +56,21 @@ export const RESOLVED_LANGFUSE_HOST = stripTrailingSlash(
   (import.meta.env.VITE_LANGFUSE_HOST ?? '').trim() || 'https://cloud.langfuse.com',
 )
 
+// Public docs site root. Used in every help link, CTA, and deep-link across
+// the admin console. Self-hosted operators can point this at their own docs
+// mirror via VITE_DOCS_URL (e.g. https://docs.example.com).
+export const RESOLVED_DOCS_URL = stripTrailingSlash(
+  (import.meta.env.VITE_DOCS_URL ?? '').trim() || 'https://kensaur.us/mushi-mushi/docs',
+)
+
+// The endpoint that the `mushi-mcp` binary and SDK should call. This is the
+// *public* API hostname shown in MCP config snippets — distinct from
+// RESOLVED_API_URL (which is the internal Supabase functions URL used by the
+// admin SPA itself). Self-hosted operators override this via VITE_MCP_API_URL.
+export const RESOLVED_MCP_API_URL = stripTrailingSlash(
+  (import.meta.env.VITE_MCP_API_URL ?? '').trim() || 'https://api.mushimushi.dev',
+)
+
 /**
  * Build a deep-link to a Langfuse trace. Returns null when no traceId is set
  * so the caller can render a disabled badge instead of a dead link.

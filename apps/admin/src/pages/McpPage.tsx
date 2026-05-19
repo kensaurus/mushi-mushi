@@ -43,6 +43,7 @@ import {
   type ToolSpec,
   type McpScope,
 } from '../lib/mcpCatalog'
+import { RESOLVED_MCP_API_URL } from '../lib/env'
 
 interface McpStatus {
   activeProject: { id: string; name: string } | null
@@ -123,7 +124,7 @@ function buildCursorJson(projectId: string, projectName: string): string {
           command: 'npx',
           args: ['-y', 'mushi-mcp@latest'],
           env: {
-            MUSHI_API_ENDPOINT: 'https://api.mushimushi.dev',
+            MUSHI_API_ENDPOINT: RESOLVED_MCP_API_URL,
             MUSHI_API_KEY: 'paste-your-key-here',
             MUSHI_PROJECT_ID: projectId,
           },
@@ -138,7 +139,7 @@ function buildCursorJson(projectId: string, projectName: string): string {
 function buildEnvBlock(projectId: string): string {
   return [
     '# Mushi MCP — paste into .env.local (gitignored).',
-    'MUSHI_API_ENDPOINT=https://api.mushimushi.dev',
+    `MUSHI_API_ENDPOINT=${RESOLVED_MCP_API_URL}`,
     'MUSHI_API_KEY=paste-your-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
     '',
@@ -214,6 +215,7 @@ export function McpPage() {
   const toast = useToast()
   const [snippetMode, setSnippetMode] = useState<'cursor' | 'env'>('cursor')
   const [copied, setCopied] = useState(false)
+  const [snippetEverCopied, setSnippetEverCopied] = useState(false)
 
   const { data, loading, error } = usePageData<ProjectsResponse>('/v1/admin/projects', { deps: [activeId] })
   const status = useMemo(() => deriveStatus(data, activeId), [data, activeId])
@@ -222,6 +224,7 @@ export function McpPage() {
     try {
       await navigator.clipboard.writeText(payload)
       setCopied(true)
+      setSnippetEverCopied(true)
       toast.success(`${label} copied.`)
       window.setTimeout(() => setCopied(false), 1500)
     } catch {
@@ -238,7 +241,7 @@ export function McpPage() {
 
   const step1Tone: QuickstartStepProps['tone'] = status.hasReadKey ? 'done' : 'next'
   const step2Tone: QuickstartStepProps['tone'] = status.hasReadKey ? 'next' : 'idle'
-  const step3Tone: QuickstartStepProps['tone'] = 'idle'
+  const step3Tone: QuickstartStepProps['tone'] = snippetEverCopied ? 'next' : 'idle'
 
   return (
     <div className="space-y-5">
@@ -376,12 +379,16 @@ export function McpPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-edge-subtle pb-2">
+        <div className="flex items-center gap-1 border-b border-edge-subtle pb-2" role="tablist" aria-label="Snippet format">
           <ConfigHelp helpId="mcp.snippet_mode" />
           {(['cursor', 'env'] as const).map((m) => (
             <button
               key={m}
               type="button"
+              role="tab"
+              aria-selected={snippetMode === m}
+              aria-controls={`mcp-snippet-panel-${m}`}
+              id={`mcp-snippet-tab-${m}`}
               onClick={() => setSnippetMode(m)}
               data-testid={`mcp-snippet-mode-${m}`}
               className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
@@ -395,7 +402,11 @@ export function McpPage() {
           ))}
         </div>
 
-        <div>
+        <div
+          role="tabpanel"
+          id={`mcp-snippet-panel-${snippetMode}`}
+          aria-labelledby={`mcp-snippet-tab-${snippetMode}`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">
               {snippetMode === 'cursor' ? 'Drop into your IDE settings' : 'Drop into your repo root'}

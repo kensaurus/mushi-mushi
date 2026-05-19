@@ -18,6 +18,8 @@ import { TravelingDotsEdge } from '../flow-primitives/TravelingDotsEdge'
 const DASH_LENGTH = 8
 const GAP_LENGTH = 4
 const ANIMATION_DURATION = '0.6s'
+/** Gentler rhythm for the onboarding explainer — visually alive but not distracting. */
+const ANIMATION_DURATION_SLOW = '2.4s'
 
 // Stroke widths: inactive edges are now clearly visible at rest so the user
 // can follow the loop without hovering. Active/selected edges jump up one
@@ -60,6 +62,8 @@ function PdcaGradientEdgeInner({
   const isActive = Boolean(animated)
   const isFlowing = Boolean(edgeData.flowing)
   const isFailing = Boolean(edgeData.failing)
+  const isSlow = Boolean(edgeData.slow)
+  const animDuration = isSlow ? ANIMATION_DURATION_SLOW : ANIMATION_DURATION
 
   // Failure dominates flow styling: swap the gradient for the danger hue
   // + shorten the dash so the eye catches the stall before reading copy.
@@ -87,6 +91,17 @@ function PdcaGradientEdgeInner({
         `}</style>
       )}
 
+      {/* Slow-animation variant (onboarding) injects its own longer keyframe
+          so the rhythm is gentle rather than the fast live-data pace. */}
+      {isActive && isSlow && (
+        <style>{`
+          @keyframes ${keyframeName} {
+            from { stroke-dashoffset: ${(DASH_LENGTH + GAP_LENGTH) * 3}; }
+            to { stroke-dashoffset: 0; }
+          }
+        `}</style>
+      )}
+
       {/* Track — always-on wide-but-faint stripe so the loop path is visible
           even for inactive edges. Rendered first so the gradient sits on top. */}
       <path
@@ -106,9 +121,9 @@ function PdcaGradientEdgeInner({
         fill="none"
         strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
-          opacity: isActive ? (isFailing ? 0.4 : 0.3) : 0.13,
+          opacity: isActive ? (isFailing ? 0.4 : isSlow ? 0.2 : 0.3) : 0.13,
           filter: 'blur(2.5px)',
-          animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
+          animation: isActive ? `${keyframeName} ${animDuration} linear infinite` : 'none',
         }}
       />
 
@@ -120,8 +135,8 @@ function PdcaGradientEdgeInner({
         fill="none"
         strokeDasharray={isActive ? (isFailing ? failingDash : dashArray) : 'none'}
         style={{
-          opacity: isActive || selected ? 1 : 0.88,
-          animation: isActive ? `${keyframeName} ${ANIMATION_DURATION} linear infinite` : 'none',
+          opacity: isActive || selected ? (isSlow ? 0.75 : 1) : 0.88,
+          animation: isActive ? `${keyframeName} ${animDuration} linear infinite` : 'none',
         }}
         markerEnd={markerEnd}
       />

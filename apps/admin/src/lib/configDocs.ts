@@ -61,6 +61,8 @@
  *               in `configDocs.test.ts` for `README.md` anchors.
  */
 
+import { RESOLVED_DOCS_URL } from './env'
+
 export interface ConfigDoc {
   /** Stable id used by `<ConfigHelp helpId="…">`. Format:
    *  `^[a-z][a-z0-9-]*(\.[a-z][a-z0-9_-]*)+$`. */
@@ -189,7 +191,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       "Stay on Sonnet 4.6 unless cost is biting (drop to Haiku) or you're finding misses on subtle pattern reports (try Opus on a small slice via Prompt Lab first).",
     learnMore: {
       label: 'Architecture overview',
-      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+      href: `${RESOLVED_DOCS_URL}/concepts/architecture`,
     },
   },
   {
@@ -209,7 +211,7 @@ const SETTINGS_GENERAL: ConfigDoc[] = [
       'Raise to 0.90+ if you suspect Stage 1 is dropping real reports (check Anti-Gaming for "fast-filter rejected" with low confidence margins). Lower to ~0.70 if a public-facing form is flooding the queue with obvious noise.',
     learnMore: {
       label: 'Architecture overview',
-      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+      href: `${RESOLVED_DOCS_URL}/concepts/architecture`,
     },
   },
   {
@@ -250,7 +252,7 @@ const SETTINGS_BYOK: ConfigDoc[] = [
       "Set on day 1 if your plan is BYOK-only. Rotate when an engineer with key access leaves, or when Anthropic's usage console shows unfamiliar traffic.",
     learnMore: {
       label: 'Self-hosting & BYOK setup',
-      href: 'https://kensaur.us/mushi-mushi/docs/self-hosting',
+      href: `${RESOLVED_DOCS_URL}/self-hosting`,
     },
   },
   {
@@ -1161,7 +1163,7 @@ const PROMPT_LAB: ConfigDoc[] = [
       "Start a new version at 5%, watch the eval scores for 24h, then ramp 25→50→100. Don't flip 0→100 — you lose the ability to A/B against the previous champion.",
     learnMore: {
       label: 'Architecture overview',
-      href: 'https://kensaur.us/mushi-mushi/docs/concepts/architecture',
+      href: `${RESOLVED_DOCS_URL}/concepts/architecture`,
     },
   },
   {
@@ -1480,7 +1482,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       'Use `attach` for mature production apps with a help menu. Use `edge-tab` when bottom nav or chat widgets compete with the default corner trigger. Use `manual` on regulated or fullscreen flows.',
     learnMore: {
       label: 'Trigger modes',
-      href: 'https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes',
+      href: `${RESOLVED_DOCS_URL}/concepts/trigger-modes`,
     },
   },
   {
@@ -1495,7 +1497,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       'Enable on consumer apps where the report button competes with bottom navigation, media controls, chat bubbles, or primary checkout CTAs.',
     learnMore: {
       label: 'Trigger modes',
-      href: 'https://kensaur.us/mushi-mushi/docs/concepts/trigger-modes',
+      href: `${RESOLVED_DOCS_URL}/concepts/trigger-modes`,
     },
   },
   {
@@ -1581,7 +1583,7 @@ const SDK_INSTALL: ConfigDoc[] = [
       'Pure UI toggle. Web frameworks (React/Vue/Svelte/Vanilla) wire up `Mushi.init()` from `@mushi-mushi/web` via the right adapter so framework error boundaries get hooked. Mobile frameworks (React Native / Expo) ship their own `<MushiProvider>` from `@mushi-mushi/react-native`. Capacitor uses the dedicated `@mushi-mushi/capacitor` plugin with `Mushi.configure(...)` and a follow-up `npx cap sync`.',
     default: { value: 'react' },
     whenToChange:
-      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see https://docs.mushimushi.dev/migrations/capacitor-to-react-native.',
+      'Pick whatever your app uses. Vanilla is the right answer for non-framework apps. For Capacitor → React Native migrations, see ${RESOLVED_DOCS_URL}/migrations/capacitor-to-react-native.',
   },
 ];
 

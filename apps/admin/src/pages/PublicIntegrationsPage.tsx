@@ -17,8 +17,9 @@ import {
   type MarketingLinkProps,
   type MarketingTheme,
 } from '@mushi-mushi/marketing-ui'
+import { RESOLVED_DOCS_URL } from '../lib/env'
 
-const DOCS_BASE = 'https://kensaur.us/mushi-mushi/docs'
+const DOCS_BASE = RESOLVED_DOCS_URL
 const REPO_BASE = 'https://github.com/kensaurus/mushi-mushi'
 const CONTACT_EMAIL = 'kensaurus@gmail.com'
 

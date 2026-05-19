@@ -18,6 +18,7 @@ import { loginPathForLocation } from './lib/authRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
 import { BetaBanner } from './components/BetaBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
+import { RESOLVED_DOCS_URL } from './lib/env'
 
 // Wrap Routes ONCE, at the level where the real (parametrized) route
 // definitions live — i.e. the inner Routes mounted under the auth gate.
@@ -130,7 +131,7 @@ function NotFoundPage() {
       }
       primary={home}
       secondary={{
-        href: 'https://kensaur.us/mushi-mushi/docs/',
+        href: `${RESOLVED_DOCS_URL}/`,
         label: 'Open docs',
         external: true,
       }}

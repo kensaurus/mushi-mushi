@@ -16,6 +16,9 @@ export interface MarketplacePlugin {
   install_count: number
   category: string
   is_official: boolean
+  /** Semantic version from plugin_registry.version — sent to the install endpoint
+   *  so the installed_plugins row records which catalog version was installed. */
+  version: string
 }
 
 export interface InstalledPlugin {

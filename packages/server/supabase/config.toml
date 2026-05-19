@@ -213,6 +213,13 @@ verify_jwt = false
 [functions.mistake-summarizer]
 verify_jwt = false
 
+[functions.intelligence-report]
+# Invoked server-to-server from the `api` function using the service-role key.
+# Supabase's JWT gateway would reject the service-role key as "invalid JWT" because
+# it is not a signed JWT. verify_jwt = false hands auth to requireServiceRoleAuth()
+# inside the function which validates the bearer against SUPABASE_SERVICE_ROLE_KEY.
+verify_jwt = false
+
 [functions.release-builder]
 verify_jwt = false
 

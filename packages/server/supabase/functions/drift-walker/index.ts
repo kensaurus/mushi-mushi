@@ -33,18 +33,33 @@ Deno.serve(
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
     // 1. Build/refresh contract snapshot
-    const builderRes = await fetch(`${supabaseUrl}/functions/v1/contract-graph-builder`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
-      body: JSON.stringify({ project_id: projectId }),
-    })
-    const builderJson = await builderRes.json()
-    const snapshotId: string | null = builderJson.snapshot_id ?? null
+    let builderJson: Record<string, unknown> = {}
+    try {
+      const builderRes = await fetch(`${supabaseUrl}/functions/v1/contract-graph-builder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+        body: JSON.stringify({ project_id: projectId }),
+      })
+      builderJson = await builderRes.json().catch(() => ({ ok: false, error: { message: `HTTP ${builderRes.status}` } })) as Record<string, unknown>
+      if (!builderRes.ok) {
+        const errDetail = (builderJson.error as { message?: string } | undefined)?.message ?? JSON.stringify(builderJson)
+        return new Response(
+          JSON.stringify({ ok: false, error: { code: 'BUILDER_FAILED', message: `contract-graph-builder failed: ${errDetail}` } }),
+          { status: 500, headers: { 'content-type': 'application/json' } },
+        )
+      }
+    } catch (fetchErr) {
+      return new Response(
+        JSON.stringify({ ok: false, error: { code: 'BUILDER_UNREACHABLE', message: `contract-graph-builder unreachable: ${String(fetchErr)}` } }),
+        { status: 500, headers: { 'content-type': 'application/json' } },
+      )
+    }
+    const snapshotId: string | null = (builderJson.snapshot_id as string | null) ?? null
 
     if (!snapshotId) {
       return new Response(
-        JSON.stringify({ error: 'contract-graph-builder failed', detail: builderJson }),
-        { status: 500 },
+        JSON.stringify({ ok: false, error: { code: 'NO_SNAPSHOT', message: 'contract-graph-builder did not return a snapshot_id', detail: builderJson } }),
+        { status: 500, headers: { 'content-type': 'application/json' } },
       )
     }
 

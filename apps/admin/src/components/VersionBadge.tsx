@@ -19,6 +19,19 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { useWhatsNew } from './WhatsNew'
 import { Badge } from './ui'
 
+// When the changelog carries a sdkVersion for the latest entry that differs
+// from the build-time constant, it means the SDK has been released since this
+// admin bundle was last built. We surface this with a subtle "↑ newer" label
+// so operators notice without being alarmed.
+function resolveDisplayVersion(
+  changelogVersion: string | null,
+  buildVersion: string,
+): { version: string; isNewer: boolean } {
+  if (!changelogVersion) return { version: buildVersion, isNewer: false }
+  const isNewer = changelogVersion !== buildVersion
+  return { version: changelogVersion, isNewer }
+}
+
 interface VersionBadgeProps {
   whatsNew: ReturnType<typeof useWhatsNew>
 }
@@ -116,6 +129,14 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
     }
   }, [open])
 
+  // Live SDK version from changelog (runtime-fetched) takes precedence over
+  // the build-time constant. If they differ, the changelog version is newer —
+  // the SDK was published after the last admin deploy.
+  const { version: sdkDisplayVersion, isNewer: sdkIsNewer } = resolveDisplayVersion(
+    whatsNew.latestSdkVersion,
+    __SDK_WEB_VERSION__,
+  )
+
   const latest = whatsNew.entries[0]
   const topHighlights = (latest?.highlights ?? []).slice(0, 3)
 
@@ -145,8 +166,8 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={`Versions — SDK (@mushi-mushi/web) ${__SDK_WEB_VERSION__}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}`}
-        title={`npm @mushi-mushi/web ${__SDK_WEB_VERSION__} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}`}
+        aria-label={`Versions — SDK (@mushi-mushi/web) ${sdkDisplayVersion}, Admin console ${__APP_VERSION__}${whatsNew.hasUnread ? ', new updates available' : ''}${sdkIsNewer ? ' (SDK updated since last admin deploy)' : ''}`}
+        title={`npm @mushi-mushi/web ${sdkDisplayVersion}${sdkIsNewer ? ` (build refs ${__SDK_WEB_VERSION__})` : ''} · Admin app ${__APP_VERSION__} · ${__BUILD_SHA__}`}
         className={`group relative inline-flex items-center gap-1.5 h-6 px-2 rounded-full border border-cyan-500/35 bg-gradient-to-r from-cyan-500/10 via-surface-raised/50 to-fuchsia-500/10 shadow-[0_0_18px_oklch(0.55_0.12_260/0.28)] hover:shadow-[0_0_22px_oklch(0.55_0.14_260/0.38)] hover:border-cyan-400/45 motion-safe:transition-[box-shadow,border-color,background-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
           open ? 'bg-surface-overlay border-fuchsia-400/40' : ''
         }`}
@@ -158,7 +179,7 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           title="@mushi-mushi/web (browser SDK on npm)"
         >
           <span className={NEON_SDK_LABEL}>SDK </span>
-          <span className={NEON_SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={NEON_SDK_VER}>{sdkDisplayVersion}</span>
         </span>
         <span
           aria-hidden
@@ -171,8 +192,17 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
           className="hidden lg:inline font-mono text-2xs leading-none"
           title="@mushi-mushi/web"
         >
-          <span className={NEON_SDK_VER}>{__SDK_WEB_VERSION__}</span>
+          <span className={NEON_SDK_VER}>{sdkDisplayVersion}</span>
         </span>
+        {sdkIsNewer && (
+          <span
+            aria-hidden
+            className="hidden lg:inline text-2xs text-cyan-300/70 leading-none"
+            title={`SDK updated to ${sdkDisplayVersion} since this admin was last deployed (build refs ${__SDK_WEB_VERSION__})`}
+          >
+            ↑
+          </span>
+        )}
         <span aria-hidden className="hidden lg:inline text-fg-faint/80 text-2xs leading-none">
           ·
         </span>
@@ -214,6 +244,11 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
               <div className="mt-1.5 space-y-0.5">
                 <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
                   <span className="text-cyan-300 font-medium">SDK</span> = <code className="font-mono text-fg-secondary">@mushi-mushi/web</code> on npm (what you embed).
+                  {sdkIsNewer && (
+                    <span className="ml-1 text-cyan-300/80 font-medium">
+                      v{sdkDisplayVersion} <span className="font-mono text-3xs">↑ updated since last deploy</span>
+                    </span>
+                  )}
                 </p>
                 <p className="text-2xs text-fg-muted leading-snug max-w-[16rem]">
                   <span className="text-fuchsia-300 font-medium">Admin</span> = this dashboard SPA (operator console).
@@ -223,6 +258,11 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             <div className="text-right shrink-0">
               <p className="text-3xs font-mono text-fg-muted leading-none">{__BUILD_SHA__}</p>
               <p className="mt-1 text-3xs text-fg-faint leading-none">{__BUILD_DATE__}</p>
+              {sdkIsNewer && (
+                <p className="mt-1 text-3xs text-cyan-300/70 leading-none" title={`Build references SDK ${__SDK_WEB_VERSION__}; changelog reports ${sdkDisplayVersion} is live`}>
+                  SDK ref: {__SDK_WEB_VERSION__}
+                </p>
+              )}
               <a
                 href={REPO_URL}
                 target="_blank"
@@ -291,9 +331,17 @@ export function VersionBadge({ whatsNew }: VersionBadgeProps) {
             </div>
             {latest ? (
               <div className="mt-1.5">
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-baseline gap-2 flex-wrap">
                   <h3 className="text-xs font-semibold text-fg leading-snug truncate">{latest.title}</h3>
                   <span className="text-3xs font-mono tabular-nums text-fg-faint shrink-0">{latest.date}</span>
+                  {latest.sdkVersion && (
+                    <span
+                      className="text-3xs font-mono tabular-nums text-cyan-300/80 shrink-0"
+                      title={`@mushi-mushi/web v${latest.sdkVersion}`}
+                    >
+                      SDK v{latest.sdkVersion}
+                    </span>
+                  )}
                 </div>
                 {topHighlights.length > 0 && (
                   <ul className="mt-1.5 space-y-1">

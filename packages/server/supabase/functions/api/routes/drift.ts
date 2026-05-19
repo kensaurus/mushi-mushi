@@ -61,7 +61,14 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
       body: JSON.stringify({ project_id, max_paths }),
     })
     const json = await res.json()
-    if (!res.ok) return c.json({ ok: false, error: { code: 'UPSTREAM_ERROR', message: JSON.stringify(json) } }, res.status)
+    if (!res.ok) {
+      // Forward the structured error from drift-walker (BUILDER_FAILED,
+      // BUILDER_UNREACHABLE, NO_SNAPSHOT, etc.) so the admin UI's
+      // SCAN_ERROR_TIPS lookup can provide actionable guidance.
+      const code: string = (json?.error?.code as string | undefined) ?? 'UPSTREAM_ERROR'
+      const message: string = (json?.error?.message as string | undefined) ?? JSON.stringify(json)
+      return c.json({ ok: false, error: { code, message } }, res.status as 500)
+    }
     return c.json({ ok: true, ...json })
   })
 

@@ -4,6 +4,7 @@
     {
       "id": "2026-05-10-data-pipeline-loop-closure",
       "date": "2026-05-10",
+      "sdkVersion": "1.0.0",
       "title": "Closing the data pipeline loop — failure categories, fix RAG, drift watch, multi-repo",
       "summary": "Every fix attempt now categorises why it failed, the fix-worker learns from past merged fixes, inventory drift auto-proposes updates, structured reporter feedback feeds the prompt-tune loop, and a single bug can fan out fixes across multiple linked repos.",
       "highlights": [
@@ -48,6 +49,7 @@
     {
       "id": "2026-05-07-sidebar-and-sdk-health",
       "date": "2026-05-07",
+      "sdkVersion": "1.0.0",
       "title": "Sidebar polish, SDK heartbeat, and a hotkey-discoverable inbox",
       "summary": "Collapsible chrome, count badges on Notifications/Queue/Health, an SDK connectivity card on every project, the rebuilt Inbox UX, and an end-to-end WCAG-AA contrast pass.",
       "highlights": [
@@ -88,6 +90,7 @@
     {
       "id": "2026-05-05-mushi-v2-inventory",
       "date": "2026-05-05",
+      "sdkVersion": "0.9.0",
       "title": "Mushi v2 — bidirectional inventory + agentic-failure gates",
       "summary": "A declarative inventory.yaml of stories, pages, and actions, five composite gates, a synthetic monitor, and a new Surface mode in the graph that overlays the positive inventory on the live bug map.",
       "highlights": [
@@ -120,6 +123,7 @@
     {
       "id": "2026-05-07-billing-and-support-polish",
       "date": "2026-05-07",
+      "sdkVersion": "1.0.0",
       "title": "Billing clarity + support tickets you can talk to",
       "summary": "Quota severity, complimentary admin accounts, plan-aware sparkline trends, a clickable support ticket history with admin replies, and inline create flows for projects and teams in the global header.",
       "highlights": [
@@ -164,6 +168,7 @@
     {
       "id": "2026-04-22-wave-1-2-3",
       "date": "2026-04-22",
+      "sdkVersion": "0.8.0",
       "title": "Live-everywhere overhaul",
       "summary": "Realtime on every list page, saved views, sparkline KPIs, and a light/dark/system theme.",
       "highlights": [
