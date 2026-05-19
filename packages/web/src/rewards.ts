@@ -13,7 +13,7 @@
 // All state is keyed by projectId so multi-instance setups don't bleed.
 // ============================================================
 
-import type { MushiApiClient, MushiRewardsConfig, MushiTierResult, MushiActivityEvent } from '../../core/src/types';
+import type { MushiApiClient, MushiRewardsConfig, MushiTierResult, MushiActivityEvent } from '@mushi-mushi/core';
 
 const MIN_FLUSH_INTERVAL = 30_000;
 const DEFAULT_FLUSH_INTERVAL = 300_000; // 5 min
@@ -36,7 +36,6 @@ let currentUserId: string | null = null;
 let currentUserTraits: { email?: string; name?: string; provider?: string } | null = null;
 let reporterTokenHash: string | null = null;
 let apiClient: MushiApiClient | null = null;
-let rewardsConfig: MushiRewardsConfig | null = null;
 let optedIn = false;
 let tierCache: MushiTierResult | null = null;
 let tierCacheTime = 0;
@@ -114,7 +113,6 @@ export interface RewardsContext {
 /** Called by createInstance() when a user is identified and rewards are enabled. */
 export function initRewards(ctx: RewardsContext): void {
   apiClient = ctx.client;
-  rewardsConfig = ctx.config;
   currentUserId = ctx.userId;
   currentUserTraits = ctx.traits ?? null;
   reporterTokenHash = ctx.reporterToken ?? null;

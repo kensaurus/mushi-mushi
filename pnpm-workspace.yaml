@@ -38,6 +38,10 @@ minimumReleaseAgeExclude:
   # shipped 2026-05-15; exempt from 7-day cooldown — CI dependency-review
   # and npm audit --audit-level=high both gate on this advisory.
   - "devalue"
+  # protobufjs 7.5.6 fixes GHSA-66ff-xgx4-vchm / GHSA-jvwf-75h9-cwgg /
+  # GHSA-75px-5xx7-5xc7 / GHSA-685m-2w69-288q (4 HIGH CVEs). Exempt from
+  # 7-day cooldown — same compensating controls as devalue above.
+  - "protobufjs"
 
 # strictDepBuilds: fail-fast on any dep that tries to run a postinstall
 # hook the workspace hasn't pre-approved (via .npmrc → onlyBuiltDependencies
