@@ -2,11 +2,11 @@
 
 # Mushi Mushi
 
-**The bug your monitoring can't see, in your queue with a draft fix.**
+**Sentry sees what code throws. Mushi sees what users feel — and remembers what fixed it last time.**
 
-Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android.
+Sentry catches what your code throws. Datadog catches what your infrastructure does. Firebase catches what your users _click_. Mushi catches what your users _feel_ — the dead button, the 12-second screen, the layout that breaks on one Android. And then it _learns_: every report is embedded, clustered with similar ones, and promoted to a named learning rule that is injected into your next PR review and your next AI agent run.
 
-Mushi is the **synthesis layer**: the one signal none of your existing tools capture, with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **12 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier) so every tool in your stack stays in the loop.
+Mushi is the **antifragile closed-loop layer**: every bug report makes the next one less likely to recur, because the fix is encoded as a permanent rule the next developer and the next agent inherit. It ships with inbound adapters for **11 monitoring sources** (Sentry, Datadog, Bugsnag, Rollbar, Crashlytics, New Relic, Honeycomb, Grafana Loki, AWS CloudWatch, Opsgenie, Firebase Analytics) and **12 outbound plugins** (Sentry, Slack, Jira, Linear, PagerDuty, Discord, Microsoft Teams, GitHub Issues, Bugsnag, Rollbar, Crashlytics, Zapier) so every tool in your stack stays in the loop.
 
 [![npm](https://img.shields.io/npm/v/@mushi-mushi/react?label=%40mushi-mushi%2Freact&color=cb3837)](https://www.npmjs.com/package/@mushi-mushi/react)
 [![CI](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml/badge.svg)](https://github.com/kensaurus/mushi-mushi/actions/workflows/ci.yml)
@@ -68,6 +68,16 @@ Mushi v1 was the negative side: catch what your users _felt_ break and triage it
 - 🧩 **Headless SDK widget.** `MushiTrigger` and `MushiAttach` let you attach the feedback reporter to any button, icon, or menu item in your existing design system — no floating stamp, no fixed position, just your UI opening Mushi on click. Works in React (polymorphic `as` prop) and React Native (`cloneElement` injection). See [Headless integration](#headless-sdk-integration).
 - 🌐 **Multi-platform console.** Reports from iOS, Android, Web, and React Native are now filterable by platform and SDK package in the Reports list. Each report's detail drawer shows the "Device & Build" section with `sdk_version` and `app_version`. The Dashboard shows a **Platform Health** tile with 24h report volume per SDK.
 - 🤖 **QA Coverage Suite.** Define automated user-story tests as natural-language prompts or Playwright scripts, schedule them on cron, and run them via **Firecrawl Actions** (default, no setup), **Browserbase** (BYOK, cloud Chromium), or **local Playwright** (CLI). Pass/fail history appears on a dedicated `/qa-coverage` page and a dashboard tile. When you generate a Playwright test from a report, Mushi automatically creates a QA story so it runs on a weekly schedule as a regression guard. See [QA Coverage Suite](#qa-coverage-suite).
+- 🧠 **Closed-loop evolution (Phases 0–6).** The antifragile layer that turns every bug into institutional memory:
+  - **Lessons** (`/lessons`) — vector-clustered mistake DB; BIRCH-style streaming clusterer promotes coherent clusters to named learning rules; `mushi sync-lessons` writes `.mushi/lessons.json` into your repo; `lessons.query` MCP tool injects token-budget-ranked rules into PR review.
+  - **Releases** (`/releases`) — auto-draft changelogs with reporter attribution; SDK toast credits beta users when their report ships.
+  - **Iterate** (`/iterate`) — PDCA producer/critic loop with selectable personas (Tufte, NN/g, WCAG, …); live progress + draft-PR exit.
+  - **Drift** (`/drift`) — Stagehand-based contract walker compares live app behaviour against inventory + OpenAPI + DB schema; findings feed back into the lesson library.
+  - **Experiments** (`/experiments`) — sticky A/B assignments via `mushi.experiment()`; CUPED + mSPRT analysis with SRM alarms.
+  - **Anomalies** (`/anomalies`) — STL + Page-Hinkley + isolation-forest detectors on inbound adapter metrics; confirmed regressions auto-open reports.
+  - **Cost** (`/cost`) — LLM spend breakdown across clustering, judging, PDCA, drift, and anomaly pipelines.
+  - **Docs** — [`closed-loop.mdx`](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop) essay + `EvolutionDiagram` / `LoopComparison` landing components. See [Why a closed loop](#why-a-closed-loop) below.
+- 🧪 **Beta expectations.** The console shows a persistent beta banner with a one-click **Report a bug** mailto (`kensaurus@gmail.com`). Project creation surfaces structured error codes (`NO_ORGANIZATION`, `FORBIDDEN`, …) with recovery actions instead of generic toasts. Personal workspaces auto-provision on signup so first-time users can create a project immediately.
 
 Get started in any project that already has Mushi installed:
 
@@ -83,6 +93,22 @@ Get started in any project that already has Mushi installed:
 Inside your IDE the same commands are exposed as MCP tools via [`@mushi-mushi/mcp`](./packages/mcp/), so Cursor / Claude Code / Copilot can run them on your behalf. From the admin UI you click _Run gates_ / _Run crawler_ directly on each row of the User stories page.
 
 Full schema in [`@mushi-mushi/inventory-schema`](./packages/inventory-schema/), ESLint rules in [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi/), the auth-bootstrap helper in [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner/).
+
+---
+
+## Why a closed loop
+
+Software development has followed one model for 50 years: a bug is reported, fixed, and forgotten — the lesson evaporates. The next developer joins and makes the same mistake. The next user files the same ticket. The cost is real and it compounds.
+
+Three ideas justify a different model:
+
+**Black Box Thinking** (Matthew Syed, 2015, p. 9) — Aviation's NTSB turns every crash into institutional memory by dissecting each failure, naming each cause, and encoding it as a rule the next generation inherits. Software has no equivalent layer. Mushi is that layer: every bug report is named, clustered with similar ones, promoted to a lesson, and injected into the next PR review so neither human nor AI agent can repeat the same class of mistake.
+
+**Antifragile** (Nassim Nicholas Taleb, 2012, p. 230) — *"Innovations emerge as a consequence of trial-and-error and then become encoded in heuristics and practical knowhow."* A Mushi-equipped project is antifragile: each encoded lesson makes the next agent run less likely to repeat the same class of error. The more bugs the system absorbs, the richer the lesson library — the better it gets at absorbing the next unit of stress.
+
+**Cumulative selection** (Richard Dawkins, *Climbing Mount Improbable*, 1996, p. 74) — *"Cumulative selection is the key to all of evolution. … Each improvement, however slight, is retained and passed on."* Mushi operationalises this for software: catch the bug → embed it → cluster similar bugs → name the cluster → promote it to a learning rule → inject the rule into the next PR review and the next AI agent → reward the user who found it → repeat. Each iteration starts from a better baseline than the last.
+
+[Full thesis → Concepts / Closed-loop evolution](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop)
 
 ---
 

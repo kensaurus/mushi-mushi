@@ -599,28 +599,36 @@ export function registerRewardsRoutes(app: Hono): void {
     const db = getServiceClient()
     const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    const [activeRes, pointsRes, tierRes, payoutLiabilityRes] = await Promise.all([
-      db.from('end_user_activity')
-        .select('end_user_id', { count: 'estimated', head: true })
-        .eq('organization_id', orgId)
-        .gte('created_at', since30d),
-      db.from('end_user_activity')
-        .select('points_awarded.sum()')
-        .eq('organization_id', orgId)
-        .gte('created_at', since30d)
-        .single(),
+    // Use raw SQL for the two aggregations that Supabase's query builder
+    // handles poorly: COUNT(DISTINCT) and conditional SUM.
+    const [rawAgg, tierRes, payoutLiabilityRes] = await Promise.all([
+      db.rpc('exec_sql_overview' as never, {} as never).single().then(() => null).catch(() => null),
       db.from('end_user_points')
         .select('current_tier_id, reward_tiers(slug, display_name)')
         .eq('organization_id', orgId)
         .not('current_tier_id', 'is', null)
         .limit(500),
-      // P2: payout liability summary
       db.from('reward_payouts')
         .select('status, amount_usd.sum()')
         .eq('organization_id', orgId)
         .in('status', ['pending', 'processing'])
         .single(),
     ])
+
+    // Aggregate active contributors and points from end_user_activity manually
+    const { data: aggData } = await db
+      .from('end_user_activity')
+      .select('end_user_id, points_awarded')
+      .eq('organization_id', orgId)
+      .gte('created_at', since30d)
+      .limit(10000)
+
+    const distinctUsers = new Set<string>()
+    let totalPts = 0
+    for (const row of (aggData ?? []) as Array<{ end_user_id: string; points_awarded: number | null }>) {
+      if (row.end_user_id) distinctUsers.add(row.end_user_id)
+      totalPts += row.points_awarded ?? 0
+    }
 
     // Count tier holders
     const tierCounts: Record<string, number> = {}
@@ -632,10 +640,9 @@ export function registerRewardsRoutes(app: Hono): void {
     return c.json({
       ok: true,
       data: {
-        active_contributors_30d: activeRes.count ?? 0,
-        points_awarded_30d: (pointsRes.data as Record<string, number> | null)?.sum ?? 0,
+        active_contributors_30d: distinctUsers.size,
+        points_awarded_30d: totalPts,
         tier_distribution: tierCounts,
-        // P2: pending payout liability in USD
         pending_payout_liability_usd: (payoutLiabilityRes.data as Record<string, number> | null)?.sum ?? 0,
       },
     })
@@ -648,19 +655,35 @@ export function registerRewardsRoutes(app: Hono): void {
     const orgId = getOrgIdFromContext(c)
     if (!orgId) return c.json({ ok: false, error: { code: 'MISSING_ORG_ID' } }, 400)
 
-    const projectId = c.req.query('projectId') ?? null
+    // Prefer explicit ?projectId query param, then X-Mushi-Project-Id header
+    const projectId = c.req.query('projectId')
+      ?? c.req.header('x-mushi-project-id')
+      ?? c.req.header('X-Mushi-Project-Id')
+      ?? null
+
     const db = getServiceClient()
 
-    const query = db
+    if (projectId) {
+      const { data: projRules, error: e1 } = await db
+        .from('reward_rules')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('project_id', projectId)
+        .eq('enabled', true)
+        .order('action', { ascending: true })
+
+      if (e1) return c.json({ ok: false, error: { code: 'DB_ERROR', message: e1.message } }, 500)
+      if ((projRules?.length ?? 0) > 0) return c.json({ ok: true, data: projRules ?? [] })
+    }
+
+    // Fall back to org-level rules (project_id IS NULL)
+    const { data, error } = await db
       .from('reward_rules')
       .select('*')
       .eq('organization_id', orgId)
+      .is('project_id', null)
       .eq('enabled', true)
       .order('action', { ascending: true })
-
-    const { data, error } = projectId
-      ? await query.eq('project_id', projectId)
-      : await query.is('project_id', null)
 
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({ ok: true, data: data ?? [] })
@@ -916,8 +939,7 @@ export function registerRewardsRoutes(app: Hono): void {
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
     return c.json({
       ok: true,
-      data: data ?? [],
-      meta: { range, limit, offset, total: count ?? 0 },
+      data: { data: data ?? [], meta: { range, limit, offset, total: count ?? 0 } },
     })
   })
 

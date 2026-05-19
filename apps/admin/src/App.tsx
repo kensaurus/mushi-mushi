@@ -16,6 +16,7 @@ import { ToastProvider } from './lib/toast'
 import { UpgradePromptHost } from './components/billing/UpgradePrompt'
 import { loginPathForLocation } from './lib/authRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
+import { BetaBanner } from './components/BetaBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
 
 // Wrap Routes ONCE, at the level where the real (parametrized) route
@@ -58,6 +59,13 @@ const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default:
 const QaCoveragePage = lazy(() => import('./pages/QaCoveragePage').then(m => ({ default: m.QaCoveragePage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
 const RewardsPage = lazy(() => import('./pages/RewardsPage').then(m => ({ default: m.RewardsPage })))
+const LessonsPage = lazy(() => import('./pages/LessonsPage').then(m => ({ default: m.LessonsPage })))
+const ReleasesPage = lazy(() => import('./pages/ReleasesPage').then(m => ({ default: m.ReleasesPage })))
+const IteratePage = lazy(() => import('./pages/IteratePage').then(m => ({ default: m.IteratePage })))
+const DriftPage = lazy(() => import('./pages/DriftPage').then(m => ({ default: m.DriftPage })))
+const ExperimentsPage = lazy(() => import('./pages/ExperimentsPage').then(m => ({ default: m.ExperimentsPage })))
+const AnomaliesPage = lazy(() => import('./pages/AnomaliesPage').then(m => ({ default: m.AnomaliesPage })))
+const CostPage = lazy(() => import('./pages/CostPage').then(m => ({ default: m.CostPage })))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
 const BillingPage = lazy(() => import('./pages/BillingPage').then(m => ({ default: m.BillingPage })))
 const OrganizationSettingsPage = lazy(() => import('./pages/OrganizationSettingsPage').then(m => ({ default: m.OrganizationSettingsPage })))
@@ -162,6 +170,13 @@ export function App() {
   return (
     <AuthProvider>
       <ToastProvider>
+      {/* BetaBanner mounts above ResilienceLayer so it's the very first
+          row on screen across every route — public landing, login,
+          authenticated app shell. Self-dismissing per device for 7 days
+          so it doesn't nag returning users but reliably resurfaces the
+          "Report a bug" channel for anyone who hits a fresh rough edge
+          (see BetaBanner.tsx for the rationale). */}
+      <BetaBanner />
       <ResilienceLayer />
       <UpgradePromptHost />
       <PasswordRecoveryGate>
@@ -235,6 +250,13 @@ export function App() {
                   <Route path="/qa-coverage" element={<QaCoveragePage />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />
                   <Route path="/rewards" element={<RewardsPage />} />
+                  <Route path="/lessons" element={<LessonsPage />} />
+                  <Route path="/releases" element={<ReleasesPage />} />
+                  <Route path="/iterate" element={<IteratePage />} />
+                  <Route path="/drift" element={<DriftPage />} />
+                  <Route path="/experiments" element={<ExperimentsPage />} />
+                  <Route path="/anomalies" element={<AnomaliesPage />} />
+                  <Route path="/cost" element={<CostPage />} />
                   <Route path="/notifications" element={<NotificationsPage />} />
                   <Route path="/billing" element={<BillingPage />} />
                   <Route path="/organization/members" element={<OrganizationSettingsPage />} />

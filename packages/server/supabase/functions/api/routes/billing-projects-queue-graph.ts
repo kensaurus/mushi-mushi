@@ -5,7 +5,7 @@ import { toSseEvent, sanitizeSseString, sseHeartbeat } from '../../_shared/sse.t
 import { AguiEmitter } from '../../_shared/agui.ts';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
-import { reportError } from '../../_shared/sentry.ts';
+import { reportError, reportMessage } from '../../_shared/sentry.ts';
 import { apiKeyAuth, jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import {
   requireFeature,
@@ -1284,6 +1284,48 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       organizationId = writable?.organization_id ?? null;
     }
 
+    // Lazy bootstrap: a brand-new signup may have arrived before the
+    // `on_auth_user_created_personal_org` trigger could materialise
+    // their personal workspace (or the trigger may have failed — the
+    // 20260520300000_personal_org_on_signup migration intentionally
+    // swallows exceptions so a bad trigger run never blocks signup).
+    // Rather than dead-end the user on "NO_ORGANIZATION" with no
+    // recovery path in the UI, materialise the personal org on the
+    // fly via the same idempotent helper the trigger uses, then
+    // continue. Only triggers when (a) the caller didn't pass an
+    // explicit org hint AND (b) they have zero writable memberships
+    // — never silently widens scope of an explicit choice.
+    if (!organizationId && !orgIdHint) {
+      // The factory lives in `private.bootstrap_personal_org` (same
+      // convention as touch_org_member_activity / has_org_role etc),
+      // but PostgREST only exposes schemas listed in `api.schemas`
+      // (default: public, graphql_public). To avoid widening the
+      // PostgREST allowlist just for this one call, we ship a thin
+      // SECURITY DEFINER wrapper at `public.bootstrap_personal_org`
+      // (migration 20260520310000_personal_org_public_wrapper) that
+      // delegates to the private function. The wrapper is service-role
+      // only so an authenticated user can never call it with someone
+      // else's user id.
+      const { data: personalOrgId, error: bootstrapErr } = await db
+        .rpc('bootstrap_personal_org', { p_user_id: userId });
+      if (!bootstrapErr && typeof personalOrgId === 'string') {
+        organizationId = personalOrgId;
+      } else if (bootstrapErr) {
+        // Surface the DB error so it shows up in Sentry / postgres logs
+        // — the user still sees the friendlier NO_ORGANIZATION below.
+        try {
+          reportMessage(
+            `admin.projects.create.bootstrap_personal_org failed: ${bootstrapErr.message}`,
+            'warning',
+          );
+        } catch {
+          // Sentry init can race on cold-start of the edge function.
+          // We must never let a telemetry failure prevent the user
+          // from seeing the actionable error message below.
+        }
+      }
+    }
+
     if (!organizationId) {
       return c.json(
         {
@@ -1297,11 +1339,28 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       );
     }
 
-    const slug = name
+    // Slug derivation:
+    //   1. Lowercase, collapse non-alphanumerics to '-', trim leading /
+    //      trailing dashes — the historical shape.
+    //   2. If the user typed something like "!!!" or all-emoji that
+    //      reduces to an empty string, fall back to a short random tail
+    //      so we never write an empty slug. Empty slugs broke the slug
+    //      UNIQUE constraint as soon as a second emoji-named project
+    //      landed AND surfaced in the URL as `/projects//settings`,
+    //      which the React Router stopped resolving cleanly.
+    //   3. Cap the length at 48 chars so the slug fits in the URL bar
+    //      and in the audit log without truncation. Random suffixes
+    //      append AFTER the trim so a long-name + collision retry
+    //      below stays under the column cap.
+    let slug = name
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+      .replace(/^-|-$/g, '')
+      .slice(0, 48);
+    if (!slug) {
+      slug = `project-${crypto.randomUUID().slice(0, 8)}`;
+    }
     const { data, error } = await db
       .from('projects')
       .insert({

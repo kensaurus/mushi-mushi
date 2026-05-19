@@ -47,12 +47,21 @@ export function OnboardingPage() {
   const [keyCopied, setKeyCopied] = useState(false)
   const [testStatus, setTestStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [testRanAt, setTestRanAt] = useState<string | null>(null)
+  // Local "operational" error used by the API key / test-report cards that
+  // don't have a hook of their own. Project creation has its own structured
+  // error channel via `useCreateProject` below so its surface is
+  // intentionally separate (the recovery affordances differ per code).
   const [error, setError] = useState('')
 
   // Must be called unconditionally on every render — the skeleton/error
   // early-returns below would otherwise produce a different hook count
   // between first (loading) and subsequent (loaded) renders.
-  const { create: createProjectRaw, creating } = useCreateProject({
+  const {
+    create: createProjectRaw,
+    creating,
+    error: createError,
+    clearError: clearCreateError,
+  } = useCreateProject({
     onCreated: () => {
       setProjectName('')
       setup.reload()
@@ -80,9 +89,68 @@ export function OnboardingPage() {
 
   async function createProject() {
     setError('')
-    const result = await createProjectRaw(projectName)
-    if (!result) setError('Failed to create project')
+    // `useCreateProject` already populates `createError` on failure with a
+    // structured `{ code, message }` payload, so the page no longer needs
+    // a bare boolean "Failed to create project" duplicate — the inline
+    // `<ErrorAlert>` below reads that structured channel and renders the
+    // actual server message plus context-aware recovery actions.
+    await createProjectRaw(projectName)
   }
+
+  // Recovery actions for the project-create error card. Branches on the
+  // stable error code from `useCreateProject` so a user who hits e.g.
+  // `NO_ORGANIZATION` after signup gets a one-click path into the
+  // organization-members screen (which is where the "+ New team" affordance
+  // lives) rather than a dead-end danger banner. Keeping the branch table
+  // co-located with the consumer keeps each page in control of its own
+  // recovery copy without polluting the hook.
+  const createErrorActions = (() => {
+    if (!createError) return undefined
+    switch (createError.code) {
+      case 'NO_ORGANIZATION':
+        return [
+          {
+            label: 'Open team settings',
+            onClick: () => navigate('/organization/members'),
+          },
+          { label: 'Dismiss', onClick: clearCreateError },
+        ]
+      case 'FORBIDDEN':
+        return [
+          {
+            label: 'Switch team',
+            onClick: () => navigate('/organization/members'),
+          },
+          { label: 'Dismiss', onClick: clearCreateError },
+        ]
+      case 'NETWORK_ERROR':
+        return [
+          { label: 'Try again', onClick: () => void createProjectRaw(projectName) },
+          { label: 'Dismiss', onClick: clearCreateError },
+        ]
+      default:
+        return [{ label: 'Dismiss', onClick: clearCreateError }]
+    }
+  })()
+
+  // Helper copy keyed by error code. Falls back to the raw server message
+  // when we don't have a hand-tuned explanation. The goal is to translate
+  // backend-shaped strings into "what does this mean for me, the user".
+  const createErrorTitle = (() => {
+    if (!createError) return undefined
+    switch (createError.code) {
+      case 'NO_ORGANIZATION':
+        return 'No writable team found'
+      case 'FORBIDDEN':
+        return 'Not allowed in this team'
+      case 'INVALID_NAME':
+        return 'Project name required'
+      case 'NETWORK_ERROR':
+        return 'Couldn\u2019t reach the server'
+      default:
+        return 'Couldn\u2019t create project'
+    }
+  })()
 
   async function generateKey() {
     if (!project) return
@@ -252,16 +320,30 @@ export function OnboardingPage() {
                 helpId="onboarding.project_name"
                 placeholder="e.g. My SaaS App"
                 value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                onChange={(e) => {
+                  setProjectName(e.target.value)
+                  if (createError) clearCreateError()
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && createProject()}
                 autoFocus
+                aria-invalid={createError ? true : undefined}
+                aria-describedby={createError ? 'onboarding-create-error' : undefined}
               />
             </div>
             <Btn onClick={createProject} loading={creating} disabled={creating || !projectName.trim()}>
               Create
             </Btn>
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {createError && (
+            <div id="onboarding-create-error">
+              <ErrorAlert
+                title={createErrorTitle}
+                message={createError.message}
+                code={createError.code}
+                actions={createErrorActions}
+              />
+            </div>
+          )}
         </Card>
       )}
 

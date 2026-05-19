@@ -78,4 +78,27 @@ describe('POST /v1/admin/projects org-id contract (Sentry MUSHI-MUSHI-SERVER-M)'
     expect(handler).toContain("'admin'");
     expect(handler).toContain('FORBIDDEN');
   });
+
+  // The lazy-bootstrap fallback (added 2026-05-19 in
+  // 20260520300000_personal_org_on_signup +
+  // 20260520310000_personal_org_public_wrapper) closes the gap where a
+  // brand-new signup hits POST /v1/admin/projects before the auth-
+  // trigger could materialise their personal org. Pins the wiring so a
+  // future refactor doesn't silently drop the rescue path and resurrect
+  // the "You need to be an owner or admin of an organization to create
+  // a project" dead-end that hit the beta on 2026-05-18.
+  it('lazy-bootstraps a personal org when the caller has no writable membership', () => {
+    expect(handler).toContain('bootstrap_personal_org');
+    // The fallback must run BEFORE the NO_ORGANIZATION 400 so a
+    // first-time user lands on the happy path instead of the error.
+    // Anchor on the code-shaped tokens (`rpc('bootstrap_personal_org'`
+    // and `code: 'NO_ORGANIZATION'`) rather than the bare strings so a
+    // future explanatory comment that mentions either name in prose
+    // doesn't flip the index ordering and falsify the test.
+    const bootstrapIdx = handler.indexOf("rpc('bootstrap_personal_org'");
+    const earlyReturnIdx = handler.indexOf("code: 'NO_ORGANIZATION'");
+    expect(bootstrapIdx).toBeGreaterThan(0);
+    expect(earlyReturnIdx).toBeGreaterThan(0);
+    expect(bootstrapIdx).toBeLessThan(earlyReturnIdx);
+  });
 });

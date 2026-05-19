@@ -25,6 +25,16 @@ import { registerOpenApiRoute } from './routes/openapi.ts';
 import { registerSchemaRoutes } from './routes/schemas.ts';
 import { registerQaCoverageRoutes } from './routes/qa-coverage.ts';
 import { registerRewardsRoutes } from './routes/rewards.ts';
+// ---------------------------------------------------------------------------
+// Closed-loop evolution + experiment routes.
+// middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
+import { registerLessonsRoutes } from './routes/lessons.ts';
+import { registerReleasesRoutes } from './routes/releases.ts';
+import { registerPdcaRoutes } from './routes/pdca.ts';
+import { registerDriftRoutes } from './routes/drift.ts';
+import { registerExperimentsRoutes } from './routes/experiments.ts';
+import { registerAnomaliesRoutes } from './routes/anomalies.ts';
+import { registerCostsRoutes } from './routes/costs.ts';
 
 ensureSentry('api');
 
@@ -394,6 +404,15 @@ registerInventoryRoutes(app);
 registerQaCoverageRoutes(app);
 
 registerRewardsRoutes(app);
+
+// Closed-loop evolution + experiment routes.
+registerLessonsRoutes(app);
+registerReleasesRoutes(app);
+registerPdcaRoutes(app);
+registerDriftRoutes(app);
+registerExperimentsRoutes(app);
+registerAnomaliesRoutes(app);
+registerCostsRoutes(app);
 
 registerA2ATaskRoutes(app);
 

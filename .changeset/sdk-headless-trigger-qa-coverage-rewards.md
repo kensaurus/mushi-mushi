@@ -8,119 +8,78 @@
 "@mushi-mushi/vue": patch
 "@mushi-mushi/svelte": patch
 "@mushi-mushi/angular": patch
-"@mushi-mushi/cli": patch
+"@mushi-mushi/cli": minor
 "@mushi-mushi/plugin-sdk": patch
 "@mushi-mushi/plugin-sentry": patch
 ---
 
-Release the unreleased SDK backlog accumulated since v0.5.0 (`cf27d81`,
-2026-05-10). Twelve commits landed on master without a matching
-changeset; this entry captures them in one coherent release so the
-public changelog and downstream consumers stay in sync.
+Release the full SDK + closed-loop evolution backlog since v0.5.0
+(`cf27d81`, 2026-05-10). Covers headless SDK, QA Coverage Suite,
+rewards program, native 0.4.0 parity, closed-loop Phases 0–6, and
+operator UX hardening for beta users.
 
-### Headless SDK (minor)
+### Headless SDK (minor — core / web / react / react-native)
 
 `MushiTrigger` (React + React Native) and `MushiAttach` (React) — wrap
 any element or DOM selector to trigger the Mushi widget without the
 floating button. The matching `SdkInstallCard` in the console now
 generates copy/paste snippets for both patterns.
 
-### QA Coverage Suite (minor)
+### QA Coverage Suite (minor — core / web)
 
 Automated user-story tests run on cron through Playwright, Browserbase,
 or Firecrawl. Ships with `qa_stories` / `qa_story_runs` /
 `qa_story_evidence` schema, the `qa-story-runner` edge function, a
 pluggable browser-provider abstraction, and the full admin UI
-(`QaCoveragePage` + `QaCoverageTile`, live-polling drawer, evidence
-viewer, assertion-failure table).
+(`QaCoveragePage` + `QaCoverageTile`).
 
-### Rewards program (minor)
+### Rewards program (minor — core / web / react / react-native)
 
-End-user rewards across all layers: `end_users`, `reward_rules`,
-`reward_tiers`, `end_user_points`, `end_user_activity`,
-`reward_webhooks` (with the `apply_activity_points` trigger keeping
-denormalized totals in sync), GDPR `export_end_user_data()` RPC and
-DELETE cascade, configurable point rules (replacing the hardcoded
-`POINT_TABLE`) with a 60s in-memory cache + `invalidateRuleCache()`
-escape hatch, and new API scopes `activity:write` / `rewards:read`.
-Stripe Connect onboarding + monetary payouts gated on Enterprise
-entitlement; monthly cron via the `reward-payout-aggregator` edge
-function.
+End-user rewards across all layers: configurable point rules,
+GDPR export, Stripe Connect payouts (Enterprise-gated), multi-step
+quests, SDK activity batching + tier badges, MCP catalog tools
+(`list_top_contributors`, `award_bonus_points`, `set_tier`).
 
-### Native parity bump (Cocoapods / Maven only — not in this npm release)
+### Closed-loop evolution — CLI + MCP (minor)
 
-iOS and Android SDKs reached 0.4.0 web parity (BreadcrumbCollector,
-ProactiveDetector, PIIScrubber, ExceptionNormaliser). The Capacitor
-wrapper now re-exports `addBreadcrumb` / `getBreadcrumbs` and the
-new native APIs through `@mushi-mushi/capacitor` (web fallbacks
-no-op). Subsequent P0/P1 fixes addressed slow-screen false positives
-on backgrounding, Android `decorView.OnTouchListener` clobber via a
-chained `Window.Callback`, activity/view leaks via weak references,
-iOS Capacitor's silent `[String: Any] -> [String: String]` cast
-dropping non-string breadcrumb data, and iOS `Mushi` singleton
-thread-safety (mirrors Android's `synchronized(this)` discipline via
-a private `NSLock`).
+- **`mushi sync-lessons`** — pulls promoted lessons from
+  `/v1/admin/lessons` and writes `.mushi/lessons.json` into the
+  connected repo (supports `--dry-run` and `--json`). Designed for
+  CI and scheduled refresh PRs.
+- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+  token-budget-ranked lesson injection into agent / PR-review flows;
+  expanded catalog surface for Migration Hub and closed-loop resources.
 
-### Data pipeline loop closure (mostly server, surfaced patches in plugins/SDK)
+### Native parity (Capacitor minor; iOS/Android via Cocoapods/Maven)
 
-`fix_corpus` (pgvector) + `match_fix_corpus` RPC give the fix-worker
-in-context retrieval of the 3 most semantically similar past PRs.
-`fix_attempts.failure_category` (CHECK enum) categorises failures
-(`sandbox_timeout` / `llm_invalid_json` / `github_403` /
-`scope_blocked` / `embedding_failed` / `rag_empty` / …) and feeds the
-new `failureBreakdown` histogram in `/v1/admin/fixes/summary`.
-`report_comments.feedback_signal` lets reporters mark replies as
-`confirms` / `wrong_target` / `noise` so the loop closes against
-human signal.
-
-### Spec-traceability (patch)
-
-`_shared/spec-validation.ts` mirrors `agents/review.ts`'s
-`validateAgainstSpec` so the Deno fix-worker runs the same pre-PR
-contract gate without importing the Node-only `@mushi-mushi/agents`
-package. Hard violations land on
-`fix_attempts.spec_validation_warnings` as `ERR_*` codes; soft warnings
-keep rendering as the existing amber "Spec N" badge.
-
-### MCP server (minor)
-
-`packages/mcp/src/catalog.ts` and `server.ts` gain ~108 lines of new
-capability surface — the MCP server now exposes the Migration Hub
-catalog and additional admin resources to AI agents speaking the
-Model Context Protocol.
+Capacitor re-exports `addBreadcrumb` / `getBreadcrumbs` and the 0.4.0
+native parity modules (BreadcrumbCollector, ProactiveDetector,
+PIIScrubber, ExceptionNormaliser). iOS/Android SDKs ship at 0.4.0 via
+native package managers — not npm.
 
 ### Plugin packaging (patch)
 
-PR #98 fixed the six new plugin packages (`plugin-bugsnag`,
-`plugin-crashlytics`, `plugin-discord`, `plugin-github-issues`,
-`plugin-msteams`, `plugin-rollbar`) that had shipped with
-`"@mushi-mushi/plugin-sdk": "workspace:*"` — Changesets only rewrites
-`workspace:^` and `workspace:~` specifiers to real semver ranges at
-publish time, so `workspace:*` leaked into the published tarball and
-broke `npm install` for end users with `EUNSUPPORTEDPROTOCOL`. The
-publish-time guard `scripts/check-workspace-protocol.mjs` is what
-caught the regression; pattern now matches the rest of the
-publishable plugins.
+PR #98 fixed six plugin packages that shipped with `workspace:*`
+instead of `workspace:^`, which broke `npm install` for end users.
 
-### Adjacent
+### Patch surfaces
 
-- Patch + minor dependency bumps across the workspace respecting the
-  7-day cooldown (`@sentry/vite-plugin`, `@tailwindcss/vite`, `jose`,
-  `postcss`, `react-router-dom`, `svelte`, `tailwindcss`, `turbo`,
-  `typescript`, `vite`, `vitest`).
-- 7 pending database migrations applied (rule promotion atomicity,
-  managed-prompt seeds, `updated_at` trigger coverage,
-  RLS-initplan rewrites, anon SECURITY DEFINER revokes, `pg_graphql`
-  anon-SELECT lockdown). Net Supabase advisor improvement:
-  222 WARN → 123 WARN (remaining are intentional).
+- `@mushi-mushi/{vue,svelte,angular}` — re-export headless trigger helpers.
+- `@mushi-mushi/plugin-sentry` — expanded inbound adapter surface.
+- `@mushi-mushi/plugin-sdk` — event schema extensions for rewards +
+  experiment hooks.
 
-### Notes for reviewers
+### Server + admin (not in this npm release)
 
-This changeset bundles real shipped work — every commit referenced
-above is already on the branch and was tested at the time of merge.
-It does not pull in any uncommitted WIP from the working tree (e.g.
-admin's in-progress `LessonsPage` / `DriftPage` / `BetaBanner`, the
-new edge functions that aren't wired into `api/index.ts` yet, or the
-unpublished `mushi sync-lessons` CLI command). Those land in
-subsequent changesets when their underlying server endpoints exist
-and have been tested end-to-end.
+The following ship via Supabase Edge Functions + admin deploy, not npm:
+
+- Closed-loop Phases 1–6: mistake clustering, releases + credits, PDCA
+  iterate loop, contract drift walker, A/B experiments, anomaly detection,
+  `/cost` panel.
+- Beta banner + structured project-create error UX + personal-org
+  bootstrap on signup.
+- Seven new admin tabs: `/lessons`, `/releases`, `/iterate`, `/drift`,
+  `/experiments`, `/anomalies`, `/cost`.
+- Docs: `closed-loop.mdx`, `EvolutionDiagram`, `LoopComparison`.
+- `SELF_HOSTED.md` updated with `mushi.edge_function_post()` cron
+  patterns (replaces broken `current_setting('app.settings.*')` GUCs).

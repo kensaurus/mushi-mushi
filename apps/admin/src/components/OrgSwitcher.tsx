@@ -99,7 +99,67 @@ export function OrgSwitcher() {
     )
   }
   const orgs = data?.organizations ?? []
-  if (orgs.length === 0) return null
+  // Empty-state branch — previously the switcher returned `null` when a
+  // user had zero org memberships. That stranded brand-new signups whose
+  // personal-org trigger hadn't fired yet: with no switcher rendered
+  // there was no in-product way to discover "+ New team", and the
+  // POST /v1/admin/projects 400 ("You need to be an owner or admin of
+  // an organization to create a project") had no recovery path in the
+  // UI. The signup trigger added in 20260520300000_personal_org_on_signup
+  // makes this state almost impossible going forward; the api edge
+  // function's lazy-bootstrap fallback closes the rest of the gap. We
+  // keep this branch as a third line of defense so a future regression
+  // never silently dead-ends the user again.
+  if (orgs.length === 0) {
+    return (
+      <div ref={containerRef} className="relative">
+        {creating ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!newName.trim() || submitting) return
+              void createOrg(newName)
+            }}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-1"
+          >
+            <input
+              ref={newNameInputRef}
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  e.stopPropagation()
+                  setCreating(false)
+                }
+              }}
+              placeholder="Team name"
+              maxLength={120}
+              className="w-32 min-w-0 rounded-sm border border-edge bg-surface-root px-2 py-0.5 text-2xs text-fg placeholder:text-fg-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+              aria-label="New team name"
+            />
+            <button
+              type="submit"
+              disabled={!newName.trim() || submitting}
+              className="rounded-sm bg-brand px-2 py-0.5 text-2xs font-semibold text-brand-fg hover:bg-brand-hover disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
+            >
+              {submitting ? '…' : 'Create'}
+            </button>
+          </form>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex items-center gap-1.5 rounded-sm border border-brand/30 bg-brand/5 px-2 py-1 text-2xs font-medium text-brand hover:bg-brand/10 motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+            title="You don't have any organizations yet — create your first team or workspace to start a project."
+          >
+            <span aria-hidden className="text-sm leading-none">+</span>
+            <span>Create team</span>
+          </button>
+        )}
+      </div>
+    )
+  }
 
   const activeId = searchParams.get(ACTIVE_ORG_QUERY_PARAM) ?? getActiveOrgIdSnapshot() ?? orgs[0].id
   const active = orgs.find((o) => o.id === activeId) ?? orgs[0]

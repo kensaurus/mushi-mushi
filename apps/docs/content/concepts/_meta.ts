@@ -11,4 +11,5 @@ export default {
   rewards: 'Rewards & contributor identity',
   'inventory-and-gates': 'Inventory & gates',
   'orchestrator-interop': 'Connecting your orchestrator',
+  'closed-loop': 'Closed-loop evolution — the thesis',
 }

@@ -385,6 +385,77 @@ const TOOLS: Record<string, ToolDef> = {
       })
     },
   },
+
+  // Phase 1c — token-budget lessons.query
+  query_lessons: {
+    scope: 'mcp:read',
+    description:
+      'Token-budget retrieval of relevant learning rules (lessons) for a given code diff or PR context. ' +
+      'Returns ranked lessons packed within max_tokens using bi-encoder retrieval + severity-weighted scoring. ' +
+      'Use this before opening a PR, writing a fix, or asking "what mistakes should I avoid in this area of code?"',
+    inputSchema: {
+      type: 'object',
+      required: ['diff_text'],
+      properties: {
+        diff_text: {
+          type: 'string',
+          description: 'The PR diff, code snippet, or description of the change being made.',
+        },
+        max_tokens: {
+          type: 'number',
+          description: 'Maximum tokens to use for the returned lessons context (default 3000, max 8000).',
+        },
+        top_k: {
+          type: 'number',
+          description: 'Max number of lessons to return (default 15, max 50).',
+        },
+        project_id: {
+          type: 'string',
+          description: 'Filter lessons to a specific project UUID. Uses the caller\'s default project if omitted.',
+        },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true },
+    handler: async (args, ctx) => {
+      requireString(args.diff_text, 'diff_text')
+      return apiCall('/v1/admin/lessons/query', {
+        method: 'POST',
+        headers: ctx.authHeaders,
+        body: JSON.stringify({
+          diff_text: args.diff_text,
+          max_tokens: (args.max_tokens as number) ?? 3000,
+          top_k: (args.top_k as number) ?? 15,
+          project_id: (args.project_id as string) ?? ctx.projectIdHint,
+        }),
+      })
+    },
+  },
+
+  // Phase 1 — get lessons list
+  list_lessons: {
+    scope: 'mcp:read',
+    description:
+      'List promoted learning rules (lessons) for the current project. Each lesson represents a named pattern ' +
+      'of mistakes that has been encoded from bug reports. Use this to understand what systemic issues have ' +
+      'been identified and encoded as heuristics.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        severity: { type: 'string', enum: ['info', 'warn', 'critical'] },
+        limit: { type: 'number' },
+        project_id: { type: 'string' },
+      },
+    },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+    handler: async (args, ctx) => {
+      const params = new URLSearchParams()
+      if (typeof args.severity === 'string') params.set('severity', args.severity)
+      params.set('limit', String(Math.min((args.limit as number) ?? 50, 200)))
+      if (typeof args.project_id === 'string') params.set('projectId', args.project_id)
+      else if (ctx.projectIdHint) params.set('projectId', ctx.projectIdHint)
+      return apiCall(`/v1/admin/lessons?${params}`, { headers: ctx.authHeaders })
+    },
+  },
 }
 
 // ----------------------------------------------------------------------------

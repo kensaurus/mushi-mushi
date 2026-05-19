@@ -203,3 +203,30 @@ verify_jwt = false
 # failure). Auth is enforced inside the handler via requireServiceRoleAuth.
 [functions.qa-story-runner]
 verify_jwt = false
+
+# Closed-loop evolution (Phases 1–6): cron + manual triggers use the
+# internal-caller token from mushi_runtime_config, not a Supabase JWT.
+# Auth is enforced inside each handler via requireServiceRoleAuth.
+[functions.mistake-clusterer]
+verify_jwt = false
+
+[functions.mistake-summarizer]
+verify_jwt = false
+
+[functions.release-builder]
+verify_jwt = false
+
+[functions.pdca-runner]
+verify_jwt = false
+
+[functions.contract-graph-builder]
+verify_jwt = false
+
+[functions.drift-walker]
+verify_jwt = false
+
+[functions.experiment-analyzer]
+verify_jwt = false
+
+[functions.anomaly-detector]
+verify_jwt = false
