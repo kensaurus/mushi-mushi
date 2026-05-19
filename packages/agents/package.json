@@ -25,12 +25,19 @@
     }
   },
   "devDependencies": {
+    "@ai-sdk/anthropic": "^3.0.76",
+    "@ai-sdk/openai": "^3.0.63",
+    "@browserbasehq/sdk": "^2.10.0",
+    "@mendable/firecrawl-js": "^4.22.2",
     "@mushi-mushi/eslint-config": "workspace:*",
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.19.17",
+    "ai": "^6.0.177",
     "eslint": "^10.3.0",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "zod": "^4.4.3"
   },
   "author": "Kenji Sakuramoto",
   "repository": {

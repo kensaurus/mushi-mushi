@@ -72,7 +72,7 @@ const rubricSchema = z.object({
   overall_score: z.number().min(0).max(1).describe(
     'Overall quality score 0-1 (1 = excellent, 0 = poor)',
   ),
-  dimensions: z.record(z.number().min(0).max(1)).describe(
+  dimensions: z.record(z.string(), z.number().min(0).max(1)).describe(
     'Per-dimension scores matching the persona rubric',
   ),
   critique_text: z.string().max(2000).describe(
@@ -118,7 +118,7 @@ export class PdcaRunner {
         const draft = await this.produce(currentInput, iterations, personaPrompt)
 
         // ── Critic step ────────────────────────────────────────
-        const { critique, score, breakdown, costUsd } = await this.critique(
+        const { critique, costUsd } = await this.critique(
           draft,
           iterations,
           personaPrompt,
@@ -192,7 +192,7 @@ export class PdcaRunner {
   private async produce(
     input: string,
     history: PdcaIteration[],
-    personaPrompt: string,
+    _personaPrompt: string,
   ): Promise<string> {
     const primaryModel = this.config.primaryModel ?? 'claude-sonnet-4-6'
 
@@ -218,14 +218,14 @@ Return ONLY the improved markup — no explanation, no markdown code fences, jus
       const { text } = await generateText({
         model: this.anthropic(primaryModel),
         prompt,
-        maxTokens: 4000,
+        maxOutputTokens: 4000,
       })
       return text.trim()
     } catch {
       const { text } = await generateText({
         model: this.openai('gpt-5.4'),
         prompt,
-        maxTokens: 4000,
+        maxOutputTokens: 4000,
       })
       return text.trim()
     }
@@ -235,9 +235,9 @@ Return ONLY the improved markup — no explanation, no markdown code fences, jus
 
   private async critique(
     draft: string,
-    history: PdcaIteration[],
+    _history: PdcaIteration[],
     personaPrompt: string,
-  ): Promise<{ critique: z.infer<typeof rubricSchema>; score: number; breakdown: Record<string, number>; costUsd: number }> {
+  ): Promise<{ critique: z.infer<typeof rubricSchema>; costUsd: number }> {
     const judgeModel = this.config.judgeModel ?? 'claude-sonnet-4-6'
 
     const prompt = `${personaPrompt}
@@ -261,7 +261,7 @@ Evaluate this against the persona criteria above. Be specific, critical, and act
         prompt,
       })
       result = object
-      costUsd = (usage.promptTokens / 1_000_000) * 3 + (usage.completionTokens / 1_000_000) * 15
+      costUsd = ((usage.inputTokens ?? 0) / 1_000_000) * 3 + ((usage.outputTokens ?? 0) / 1_000_000) * 15
     } catch {
       const { object, usage } = await generateObject({
         model: this.openai('gpt-5.4'),
@@ -269,13 +269,11 @@ Evaluate this against the persona criteria above. Be specific, critical, and act
         prompt,
       })
       result = object
-      costUsd = (usage.promptTokens / 1_000_000) * 2.5 + (usage.completionTokens / 1_000_000) * 10
+      costUsd = ((usage.inputTokens ?? 0) / 1_000_000) * 2.5 + ((usage.outputTokens ?? 0) / 1_000_000) * 10
     }
 
     return {
       critique: result,
-      score: result.overall_score,
-      breakdown: result.dimensions,
       costUsd,
     }
   }
