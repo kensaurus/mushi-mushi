@@ -12,7 +12,7 @@
  * Cron: scheduled by pg_cron (e.g. daily at 03:00 UTC)
  */
 
-import { walkContractDrift } from '../../../../../../packages/agents/src/drift-agent.ts'
+import { walkContractDrift } from '../_shared/drift-agent.ts'
 import { getServiceClient } from '../_shared/db.ts'
 import { withSentry } from '../_shared/sentry.ts'
 import { requireServiceRoleAuth } from '../_shared/auth.ts'
