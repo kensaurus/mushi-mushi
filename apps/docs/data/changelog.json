@@ -1,10 +1,28 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.1",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.1.0"
+    ],
     "highlights": [
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
       {
         "title": "`mushi sync-lessons`",
         "description": "— pulls promoted lessons from"
@@ -14,7 +32,20 @@
         "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.1.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.1.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.1.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.0",
@@ -77,6 +108,30 @@
     ]
   },
   {
+    "majorMinor": "0.11",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.11.0"
+    ],
+    "highlights": [
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.11.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.9",
     "headline": null,
     "pending": false,
@@ -104,15 +159,41 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.3",
       "0.8.2",
       "0.8.1",
       "0.8.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.8.2"
+        "version": "0.8.3"
       },
       {
         "name": "@mushi-mushi/core",
@@ -128,11 +209,11 @@
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.8.2"
+        "version": "0.8.3"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.8.2"
+        "version": "0.8.3"
       },
       {
         "name": "@mushi-mushi/web",
@@ -147,10 +228,23 @@
     "versions": [
       "0.7.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      }
+    ],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/cli",
         "version": "0.7.0"
       },
       {
@@ -184,6 +278,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.6.5",
       "0.6.4",
       "0.6.3",
       "0.6.2",
@@ -191,6 +286,14 @@
       "0.6.0"
     ],
     "highlights": [
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
       {
         "title": "Launcher README",
         "description": "adds a Socket.dev badge and a new \"Supply-chain &"
@@ -214,12 +317,16 @@
     ],
     "packages": [
       {
+        "name": "@mushi-mushi/capacitor",
+        "version": "0.6.0"
+      },
+      {
         "name": "@mushi-mushi/cli",
         "version": "0.6.1"
       },
       {
         "name": "mushi-mushi",
-        "version": "0.6.4"
+        "version": "0.6.5"
       }
     ]
   },
@@ -228,6 +335,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.4",
       "0.5.3",
       "0.5.2",
       "0.5.1",
@@ -297,6 +405,10 @@
         "version": "0.5.1"
       },
       {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.5.0"
+      },
+      {
         "name": "@mushi-mushi/react",
         "version": "0.5.0"
       },
@@ -306,7 +418,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.3"
+        "version": "0.5.4"
       },
       {
         "name": "mushi-mushi",
@@ -403,7 +515,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
-        "version": "0.4.0"
+        "version": "0.4.1"
       },
       {
         "name": "@mushi-mushi/react",
@@ -655,7 +767,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",

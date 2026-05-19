@@ -1,5 +1,102 @@
 # @mushi-mushi/mcp
 
+## 0.5.0
+
+### Minor Changes
+
+- 9b63b98: Release the full SDK + closed-loop evolution backlog since v0.5.0
+  (`cf27d81`, 2026-05-10). Covers headless SDK, QA Coverage Suite,
+  rewards program, native 0.4.0 parity, closed-loop Phases 0–6, and
+  operator UX hardening for beta users.
+
+  ### Headless SDK (minor — core / web / react / react-native)
+
+  `MushiTrigger` (React + React Native) and `MushiAttach` (React) — wrap
+  any element or DOM selector to trigger the Mushi widget without the
+  floating button. The matching `SdkInstallCard` in the console now
+  generates copy/paste snippets for both patterns.
+
+  ### QA Coverage Suite (minor — core / web)
+
+  Automated user-story tests run on cron through Playwright, Browserbase,
+  or Firecrawl. Ships with `qa_stories` / `qa_story_runs` /
+  `qa_story_evidence` schema, the `qa-story-runner` edge function, a
+  pluggable browser-provider abstraction, and the full admin UI
+  (`QaCoveragePage` + `QaCoverageTile`).
+
+  ### Rewards program (minor — core / web / react / react-native)
+
+  End-user rewards across all layers: configurable point rules,
+  GDPR export, Stripe Connect payouts (Enterprise-gated), multi-step
+  quests, SDK activity batching + tier badges, MCP catalog tools
+  (`list_top_contributors`, `award_bonus_points`, `set_tier`).
+
+  ### Closed-loop evolution — CLI + MCP (minor)
+  - **`mushi sync-lessons`** — pulls promoted lessons from
+    `/v1/admin/lessons` and writes `.mushi/lessons.json` into the
+    connected repo (supports `--dry-run` and `--json`). Designed for
+    CI and scheduled refresh PRs.
+  - **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+    token-budget-ranked lesson injection into agent / PR-review flows;
+    expanded catalog surface for Migration Hub and closed-loop resources.
+
+  ### Native parity (Capacitor minor; iOS/Android via Cocoapods/Maven)
+
+  Capacitor re-exports `addBreadcrumb` / `getBreadcrumbs` and the 0.4.0
+  native parity modules (BreadcrumbCollector, ProactiveDetector,
+  PIIScrubber, ExceptionNormaliser). iOS/Android SDKs ship at 0.4.0 via
+  native package managers — not npm.
+
+  ### Plugin packaging (patch)
+
+  PR #98 fixed six plugin packages that shipped with `workspace:*`
+  instead of `workspace:^`, which broke `npm install` for end users.
+
+  ### Patch surfaces
+  - `@mushi-mushi/{vue,svelte,angular}` — re-export headless trigger helpers.
+  - `@mushi-mushi/plugin-sentry` — expanded inbound adapter surface.
+  - `@mushi-mushi/plugin-sdk` — event schema extensions for rewards +
+    experiment hooks.
+
+  ### Server + admin (not in this npm release)
+
+  The following ship via Supabase Edge Functions + admin deploy, not npm:
+  - Closed-loop Phases 1–6: mistake clustering, releases + credits, PDCA
+    iterate loop, contract drift walker, A/B experiments, anomaly detection,
+    `/cost` panel.
+  - Beta banner + structured project-create error UX + personal-org
+    bootstrap on signup.
+  - Seven new admin tabs: `/lessons`, `/releases`, `/iterate`, `/drift`,
+    `/experiments`, `/anomalies`, `/cost`.
+  - Docs: `closed-loop.mdx`, `EvolutionDiagram`, `LoopComparison`.
+  - `SELF_HOSTED.md` updated with `mushi.edge_function_post()` cron
+    patterns (replaces broken `current_setting('app.settings.*')` GUCs).
+
+### Patch Changes
+
+- Fix Hermes compatibility in `@mushi-mushi/react-native` and add smart framework auto-detection in the admin console.
+
+  **Breaking fix (Hermes / React Native 0.76+)**
+
+  `MushiProvider` crashed on startup in all Hermes-based apps (React Native 0.76+, Expo SDK 52+, including all iOS/Android apps built with the New Architecture). Root cause: `provider.tsx` used `new Function("specifier", "return import(specifier)")` to lazy-load `expo-sensors` and `@react-native-community/netinfo`. Hermes (AOT-only, no `eval`) rejects this pattern with `SyntaxError: Invalid expression` at evaluation time, preventing the widget from ever mounting.
+
+  Fix: replace both `new Function()` dynamic imports with `require()` calls wrapped in `try/catch`. `require()` is Metro + Hermes-correct for optional peer dependencies.
+
+  **New: Smart framework auto-detection in the admin console**
+
+  The SDK install card and MCP setup page now include a "Detect my framework" accordion — paste your `package.json` and the admin console:
+  - Auto-selects the correct framework tab (React, Vue, Svelte, React Native, Expo, Capacitor, Vanilla JS)
+  - Detects monorepo tools (npm/yarn/pnpm workspaces, Turborepo, Nx, Lerna, Rush) and surfaces workspace-specific install guidance
+  - Warns about known issues including this Hermes bug (when `@mushi-mushi/react-native ≤0.8.x` is detected in the pasted `package.json`)
+  - Provides ELI5 step-by-step setup guidance
+
+  **CLI improvement (`@mushi-mushi/mcp`)**
+
+  When `MUSHI_PROJECT_ID` is not set, `npx mushi-mcp` now prints a clear, actionable error message with step-by-step instructions for finding the project ID in the admin console.
+
+- Updated dependencies [9b63b98]
+  - @mushi-mushi/core@1.1.0
+
 ## 0.4.0
 
 ### Minor Changes
