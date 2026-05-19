@@ -71,7 +71,7 @@ export function registerReleasesRoutes(app: Hono) {
 
     const data = await res.json()
     if (!res.ok) return c.json({ ok: false, error: data.error ?? 'release-builder failed' }, 500)
-    return c.json(data)
+    return c.json({ ok: true, data: data.data ?? data })
   })
 
   // ─── Release detail ────────────────────────────────────────────────────────

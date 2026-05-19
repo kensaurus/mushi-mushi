@@ -70,6 +70,12 @@ interface QueryResult {
   total_candidates: number
 }
 
+/** List routes return `{ ok, data: T[], meta }`; usePageData exposes `data` as `T[]`. */
+function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
+  if (!payload) return []
+  return Array.isArray(payload) ? payload : (payload.data ?? [])
+}
+
 // ─── Severity pill ─────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: string }) {
@@ -114,8 +120,8 @@ function LessonsTab() {
   )
 
   const lessons = showRetired === 'active'
-    ? (data?.data ?? [])
-    : (retiredData?.data ?? [])
+    ? listRows(data)
+    : listRows(retiredData)
 
   const handleRetire = useCallback(async (id: string, currentlyRetired: boolean) => {
     setRetiring(id)
@@ -286,7 +292,7 @@ function ClustersTab() {
   const [promoting, setPromoting] = useState<string | null>(null)
   const toast = useToast()
 
-  const clusters = data?.data ?? []
+  const clusters = listRows(data)
 
   const handlePromote = useCallback(async (cluster: Cluster) => {
     if (!cluster.suggested_rule) {

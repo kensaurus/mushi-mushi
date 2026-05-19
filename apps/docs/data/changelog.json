@@ -1,35 +1,20 @@
 [
   {
-    "majorMinor": "1.1",
-    "headline": "Rewards program — turn reporters into contributors",
-    "pending": false,
-    "versions": ["1.1.0"],
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
     "highlights": [
       {
-        "title": "Rewards program",
-        "description": "— Points-based engagement system. Users earn points for activity (navigations, button presses, session starts) and bug reports. Configure rules, tiers, multipliers, and quests from the admin console. New `/rewards` admin page with 8 tabs: Overview, Activity Rules, Tier Ladder, Contributors, Quests, Retention, Simulator, and Settings."
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
       },
       {
-        "title": "`identify(userId, traits?)`",
-        "description": "— New SDK method on all platforms (Web, React, React Native). Links the authenticated user to their Mushi `end_users` record so reports, activity, and points attribute correctly. Events queued before `identify()` are back-filled on the next flush."
-      },
-      {
-        "title": "`submitActivity(events[])`",
-        "description": "— Batch-submit custom activity events. Pair with `trackActivity: true` in config to also auto-capture `session_start`, `page_view`, `navigate`, and `button_press` without code changes."
-      },
-      {
-        "title": "`useReputation()` / `useTier()` React hooks",
-        "description": "— Query the current user's point totals and tier inside any React component. `<MushiRewardsBadge />` is a polymorphic drop-in badge that renders the tier name and optional point count."
-      },
-      {
-        "title": "GDPR endpoints",
-        "description": "— `GET /v1/sdk/me/export` (data portability), `DELETE /v1/sdk/me` (erasure), `POST /v1/sdk/me/consent` (withdraw / re-grant opt-in). Consent mode `explicit` shows a one-time prompt; `auto` opts in on first `identify()`."
-      },
-      {
-        "title": "P2: JWT identity verification + monetary payouts",
-        "description": "— `verifyUserToken` callback supplies a host-app JWT for server-side JWKS verification before monetary-eligible awards are issued. Stripe Connect Express onboarding, payout aggregator, and liability dashboard included."
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       }
-    ]
+    ],
+    "packages": []
   },
   {
     "majorMinor": "1.0",

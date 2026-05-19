@@ -30,6 +30,12 @@ import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useActiveProjectSignal } from '../lib/activeProject'
 
+/** List routes return `{ ok, data: T[], meta }`; usePageData exposes `data` as `T[]`. */
+function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
+  if (!payload) return []
+  return Array.isArray(payload) ? payload : (payload.data ?? [])
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 interface Release {
@@ -259,7 +265,7 @@ function ReleasesList({ status }: { status: 'draft' | 'published' }) {
   )
   const [selected, setSelected] = useState<Release | null>(null)
 
-  const releases = data?.data ?? []
+  const releases = listRows(data)
 
   if (error) return <ErrorAlert message={error} />
   if (loading) return <TableSkeleton rows={5} />

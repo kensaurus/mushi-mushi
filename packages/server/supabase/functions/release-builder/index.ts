@@ -59,7 +59,7 @@ Deno.serve(
     // Find resolved reports in the window
     const { data: resolvedReports } = await db
       .from('reports')
-      .select('id, title, description, severity, category, reporter_token_hash')
+      .select('id, summary, description, severity, category, reporter_token_hash, end_user_id')
       .eq('project_id', project_id)
       .eq('status', 'fixed')
       .gte('updated_at', windowStart.toISOString())
@@ -68,25 +68,22 @@ Deno.serve(
 
     const reports = resolvedReports ?? []
 
-    // Try to match reporter tokens → end_users for attribution
-    const reporterTokens = [...new Set(reports.map((r) => r.reporter_token_hash).filter(Boolean))]
-    const { data: endUsers } = reporterTokens.length > 0
-      ? await db
-        .from('end_users')
-        .select('id, display_name, external_user_id, reporter_token_hash')
-        .in('reporter_token_hash', reporterTokens)
+    // Match reporters via reports.end_user_id (reporter_token_hash is not on end_users)
+    const endUserIds = [...new Set(reports.map((r) => r.end_user_id).filter(Boolean))] as string[]
+    const { data: endUsers } = endUserIds.length > 0
+      ? await db.from('end_users').select('id, display_name, external_user_id').in('id', endUserIds)
       : { data: [] }
 
-    const tokenToUser = new Map<string, { id: string; display_name: string | null }>(
-      (endUsers ?? []).map((u) => [u.reporter_token_hash as string, { id: u.id as string, display_name: u.display_name as string | null }]),
+    const userById = new Map<string, { id: string; display_name: string | null }>(
+      (endUsers ?? []).map((u) => [u.id as string, { id: u.id as string, display_name: u.display_name as string | null }]),
     )
 
     // Build report summaries for LLM
     const reportSummaries = reports
       .map((r) => {
-        const user = r.reporter_token_hash ? tokenToUser.get(r.reporter_token_hash) : null
+        const user = r.end_user_id ? userById.get(r.end_user_id) : null
         const by = user?.display_name ?? (user ? `User-${user.id.slice(-4)}` : 'anonymous')
-        return `- [${r.severity}] ${r.title ?? r.description?.slice(0, 80) ?? 'Untitled report'} (reported by ${by})`
+        return `- [${r.severity}] ${r.summary ?? r.description?.slice(0, 80) ?? 'Untitled report'} (reported by ${by})`
       })
       .join('\n')
 
@@ -132,7 +129,7 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
         bodyMd = text.trim()
       } catch {
         bodyMd = reports.length > 0
-          ? `## Bug fixes\n\n${reports.map((r) => `- ${r.title ?? r.description?.slice(0, 60)}`).join('\n')}`
+          ? `## Bug fixes\n\n${reports.map((r) => `- ${r.summary ?? r.description?.slice(0, 60)}`).join('\n')}`
           : 'No changes tracked for this release.'
       }
     }
@@ -147,7 +144,7 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
         body_md: bodyMd,
         status: 'draft',
         fixed_report_ids: reports.map((r) => r.id),
-        credited_reporter_ids: [...tokenToUser.values()].map((u) => u.id),
+        credited_reporter_ids: [...userById.values()].map((u) => u.id),
       })
       .select()
       .single()
@@ -160,9 +157,9 @@ Keep it warm, human, and specific. Avoid developer jargon. Max 400 words.`,
 
     // Create release_credits rows
     const creditRows = reports
-      .filter((r) => r.reporter_token_hash && tokenToUser.has(r.reporter_token_hash!))
+      .filter((r) => r.end_user_id && userById.has(r.end_user_id))
       .map((r) => {
-        const user = tokenToUser.get(r.reporter_token_hash!)!
+        const user = userById.get(r.end_user_id!)!
         return {
           release_id: release.id,
           end_user_id: user.id,

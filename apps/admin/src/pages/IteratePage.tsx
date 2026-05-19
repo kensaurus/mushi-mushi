@@ -89,6 +89,11 @@ function statusBadge(status: PdcaRun['status']) {
   return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
 }
 
+function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
+  if (!payload) return []
+  return Array.isArray(payload) ? payload : (payload.data ?? [])
+}
+
 function scoreBar(score: number | null) {
   if (score == null) return <span className="text-muted-foreground text-xs">—</span>
   const pct = Math.round(score * 100)
@@ -132,7 +137,7 @@ export function IteratePage() {
     { deps: [projectId] },
   )
 
-  const runs = runsData?.data ?? []
+  const runs = listRows(runsData)
   const activeRuns = runs.filter(r => r.status === 'running' || r.status === 'queued')
 
   // Auto-refresh while there are active runs
@@ -236,7 +241,7 @@ export function IteratePage() {
           onTrigger={triggerRun}
           onRefresh={async () => {
             const res = await apiFetch<{ data: PdcaRun }>(`/v1/admin/pdca/${selectedRun.id}`)
-            if (res.ok && res.data) setSelectedRun(res.data.data)
+            if (res.ok && res.data) setSelectedRun(res.data as PdcaRun)
           }}
         />
       )}

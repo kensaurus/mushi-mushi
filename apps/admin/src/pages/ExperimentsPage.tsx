@@ -90,6 +90,11 @@ function statusBadge(s: Experiment['status']) {
   return <Badge className={STATUS_CLS[s]}>{STATUS_LABEL[s]}</Badge>
 }
 
+function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
+  if (!payload) return []
+  return Array.isArray(payload) ? payload : (payload.data ?? [])
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function ExperimentsPage() {
@@ -119,7 +124,7 @@ export function ExperimentsPage() {
     { deps: [projectId] },
   )
 
-  const experiments = expData?.data ?? []
+  const experiments = listRows(expData)
   const running = experiments.filter(e => e.status === 'running').length
 
   const launch = useCallback(async (id: string) => {
@@ -201,7 +206,7 @@ export function ExperimentsPage() {
           onStop={stop}
           onRefresh={async () => {
             const res = await apiFetch<{ data: Experiment }>(`/v1/admin/experiments/${selected.id}`)
-            if (res.ok && res.data) setSelected(res.data.data)
+            if (res.ok && res.data) setSelected(res.data as Experiment)
           }}
         />
       )}
@@ -286,12 +291,12 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
     if (!projectId) { toast.error('Select a project'); return }
     setLoading(true)
     try {
-      const expRes = await apiFetch<{ data: { id: string } }>('/v1/admin/experiments', {
+      const expRes = await apiFetch<{ id: string }>('/v1/admin/experiments', {
         method: 'POST',
         body: JSON.stringify({ ...form, project_id: projectId }),
       })
       if (!expRes.ok) throw new Error(expRes.error?.message ?? 'Create failed')
-      const expId = expRes.data!.data.id
+      const expId = (expRes.data as { id: string }).id
       for (const v of variants) {
         await apiFetch(`/v1/admin/experiments/${expId}/variants`, {
           method: 'POST',

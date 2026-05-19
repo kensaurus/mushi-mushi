@@ -76,6 +76,11 @@ function severityBadge(s: DriftFinding['severity']) {
   return <Badge className={SEVERITY_CLS[s]}>{SEVERITY_LABEL[s]}</Badge>
 }
 
+function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
+  if (!payload) return []
+  return Array.isArray(payload) ? payload : (payload.data ?? [])
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function DriftPage() {
@@ -114,8 +119,8 @@ export function DriftPage() {
     { deps: [projectId] },
   )
 
-  const findings = findingsData?.data ?? []
-  const snapshots = snapshotsData?.data ?? []
+  const findings = listRows(findingsData)
+  const snapshots = listRows(snapshotsData)
 
   const critical = findings.filter(f => f.severity === 'critical').length
   const warn = findings.filter(f => f.severity === 'warn').length

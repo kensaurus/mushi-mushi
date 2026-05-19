@@ -73,6 +73,11 @@ function methodBadge(m: string) {
   return <Badge className={METHOD_CLS[m] ?? 'bg-muted text-muted-foreground'}>{m}</Badge>
 }
 
+function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
+  if (!payload) return []
+  return Array.isArray(payload) ? payload : (payload.data ?? [])
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function AnomaliesPage() {
@@ -108,8 +113,8 @@ export function AnomaliesPage() {
     { deps: [projectId] },
   )
 
-  const anomalies = anomalyData?.data ?? []
-  const metrics = metricsData?.data ?? []
+  const anomalies = listRows(anomalyData)
+  const metrics = listRows(metricsData)
 
   const confirm = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/anomalies/${id}`, {
