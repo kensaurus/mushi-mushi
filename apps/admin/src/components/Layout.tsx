@@ -15,6 +15,10 @@ import {
   IconAudit, IconFineTuning, IconSettings, IconMenu, IconClose,
   IconSignOut, IconHealth, IconShield, IconBell, IconIntelligence, IconBilling,
   IconCompliance, IconStorage, IconMarketplace, IconGlobe, IconSparkle, IconGit,
+  // unique glyphs for the closed-loop + workspace sections
+  IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
+  IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
+  IconInbox, IconGauge, IconUser,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
@@ -126,7 +130,7 @@ const NAV: NavSection[] = [
       // "what should I do next?" across the whole PDCA surface. Pinned above
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
-      { label: 'Inbox',       path: '/inbox',      icon: IconBell,      beginner: true, quickstartLabel: 'Inbox' },
+      { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
     ],
   },
   {
@@ -168,12 +172,12 @@ const NAV: NavSection[] = [
     items: [
       { label: 'Judge',        path: '/judge',        icon: IconJudge,        beginner: true },
       { label: 'Health',       path: '/health',       icon: IconHealth,       beginner: true },
-      { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconHealth,       beginner: true },
-      { label: 'Lessons',      path: '/lessons',      icon: IconIntelligence, beginner: true },
-      { label: 'Drift',        path: '/drift',        icon: IconShield,       beginner: true },
-      { label: 'Experiments',  path: '/experiments',  icon: IconSparkle },
-      { label: 'Anomalies',    path: '/anomalies',    icon: IconHealth,  beginner: true },
-      { label: 'Releases',     path: '/releases',     icon: IconSparkle },
+      { label: 'QA Coverage',  path: '/qa-coverage',  icon: IconQaCoverage,   beginner: true },
+      { label: 'Lessons',      path: '/lessons',      icon: IconLessons,      beginner: true },
+      { label: 'Drift',        path: '/drift',        icon: IconDrift,        beginner: true },
+      { label: 'Experiments',  path: '/experiments',  icon: IconExperiments },
+      { label: 'Anomalies',    path: '/anomalies',    icon: IconAnomalies,    beginner: true },
+      { label: 'Releases',     path: '/releases',     icon: IconReleases },
       { label: 'Intelligence', path: '/intelligence', icon: IconIntelligence },
       { label: 'Research',     path: '/research',     icon: IconGlobe },
     ],
@@ -184,9 +188,9 @@ const NAV: NavSection[] = [
     stage: 'A',
     hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
     items: [
-      { label: 'Iterate',       path: '/iterate',       icon: IconSparkle,      beginner: true },
+      { label: 'Iterate',       path: '/iterate',       icon: IconIterate,      beginner: true },
       { label: 'Integrations',  path: '/integrations',  icon: IconIntegrations, beginner: true },
-      { label: 'MCP',           path: '/mcp',           icon: IconIntegrations, beginner: true },
+      { label: 'MCP',           path: '/mcp',           icon: IconMcp,          beginner: true },
       { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
       { label: 'Notifications', path: '/notifications', icon: IconBell },
     ],
@@ -198,10 +202,10 @@ const NAV: NavSection[] = [
     defaultCollapsed: true,
     items: [
       { label: 'Projects',   path: '/projects',   icon: IconProjects },
-      { label: 'Members',    path: '/organization/members', icon: IconProjects, requiresFeature: 'teams' },
+      { label: 'Members',    path: '/organization/members', icon: IconMembers, requiresFeature: 'teams' },
       { label: 'Settings',   path: '/settings',   icon: IconSettings, beginner: true },
-      { label: 'Rewards',    path: '/rewards',    icon: IconSparkle },
-      { label: 'LLM Cost',   path: '/cost',       icon: IconBilling },
+      { label: 'Rewards',    path: '/rewards',    icon: IconRewards },
+      { label: 'LLM Cost',   path: '/cost',       icon: IconGauge },
       { label: 'Billing',    path: '/billing',    icon: IconBilling },
       { label: 'SSO',        path: '/sso',        icon: IconSSO, requiresFeature: 'sso' },
       { label: 'Compliance', path: '/compliance', icon: IconCompliance, requiresFeature: 'soc2' },
@@ -212,7 +216,7 @@ const NAV: NavSection[] = [
       // the sidebar for everyone except super-admins (kensaurus@…).
       // The page itself re-checks the role + the gateway returns 404
       // for non-operators, so this is just a usability gate.
-      { label: 'Users',      path: '/users',      icon: IconShield, superAdmin: true },
+      { label: 'Users',      path: '/users',      icon: IconUser, superAdmin: true },
     ],
   },
 ]

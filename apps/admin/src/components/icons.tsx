@@ -576,3 +576,122 @@ export function IconChevronRight(p: IconProps) {
   </>)
 }
 
+// Inbox tray — "Inbox": arrow dropping into a tray. Distinct from IconBell
+// (used by Notifications) so the two items always read differently in the sidebar.
+export function IconInbox(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2 9.5h3l1.5 2.5h3L11 9.5h3" />
+    <rect x="2" y="3" width="12" height="9.5" rx="1" />
+    <line x1="8" y1="4.5" x2="8" y2="8.5" strokeLinecap="round" />
+    <polyline points="5.5,6.5 8,9 10.5,6.5" strokeLinecap="round" />
+  </>)
+}
+
+// Open book — "Lessons": two curved pages with a spine in the middle.
+// Distinct from IconIntelligence (bar chart) and IconReports (flat doc).
+export function IconLessons(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 4.5V13" />
+    <path d="M8 4.5c-1-1.4-3-1.8-5-.8v9c2-1 4-.6 5 .8" />
+    <path d="M8 4.5c1-1.4 3-1.8 5-.8v9c-2-1-4-.6-5 .8" />
+  </>)
+}
+
+// Diverging fork — "Drift": one path splitting into two arrows.
+// Evokes contract schema diverging from implementation.
+export function IconDrift(p: IconProps) {
+  return wrap(p, <>
+    <line x1="2.5" y1="8" x2="7" y2="8" />
+    <path d="M7 8 L13 4.5" />
+    <path d="M7 8 L13 11.5" />
+    <circle cx="2.5" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    <polyline points="11,3 13,4.5 11.5,6.5" />
+    <polyline points="11,13 13,11.5 11.5,9.5" />
+  </>)
+}
+
+// Spike anomaly — "Anomalies": flat baseline with one sharp spike above.
+// Immediately reads as "something unusual happened on this chart".
+export function IconAnomalies(p: IconProps) {
+  return wrap(p, <>
+    <polyline points="2,11 5,11 6.5,8.5 8,2.5 9.5,8.5 11,11 14,11" />
+    <line x1="2" y1="13" x2="14" y2="13" strokeOpacity="0.4" />
+  </>)
+}
+
+// Git price-tag — "Releases": a tag polygon with a round pin hole, the
+// universal shape for version tags (v1.2.3 / git-tag / package release).
+export function IconReleases(p: IconProps) {
+  return wrap(p, <>
+    <path d="M3 3h5l5.5 5.5-5 5L3 8V3z" />
+    <circle cx="5.5" cy="5.5" r="1.2" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Flask / beaker — "Experiments": standard lab-equipment glyph for A/B tests.
+// Distinct from all other sidebar icons; bubbles inside read as "active test".
+export function IconExperiments(p: IconProps) {
+  return wrap(p, <>
+    <path d="M6.5 2v4.8L3.2 12a1.3 1.3 0 0 0 1.1 2h7.4a1.3 1.3 0 0 0 1.1-2L9.5 6.8V2" />
+    <line x1="5.5" y1="2" x2="10.5" y2="2" />
+    <circle cx="7" cy="10.5" r="0.8" fill="currentColor" stroke="none" />
+    <circle cx="9.5" cy="12" r="0.8" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Two-headed cycle arrow — "Iterate": PDCA loop; rotate-left arc on top,
+// rotate-right arc on bottom so the shape reads as a full 360° improvement cycle.
+export function IconIterate(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2.5 7.5a5.5 5.5 0 0 1 9.3-4" />
+    <polyline points="9.5,2 11.8,3.5 10.5,5.8" />
+    <path d="M13.5 8.5a5.5 5.5 0 0 1-9.3 4" />
+    <polyline points="6.5,14 4.2,12.5 5.5,10.2" />
+  </>)
+}
+
+// Trophy cup — "Rewards": classic award glyph with handles, stem, and base.
+export function IconRewards(p: IconProps) {
+  return wrap(p, <>
+    <path d="M5 2h6v5a3 3 0 0 1-6 0V2z" />
+    <path d="M3 2h2M11 2h2" />
+    <rect x="6.5" y="9.5" width="3" height="2" rx="0.3" />
+    <rect x="5" y="11.5" width="6" height="1.5" rx="0.5" />
+  </>)
+}
+
+// Plug with two prongs — "MCP": electric connector evokes the
+// Model-Context-Protocol socket. Distinct from IconIntegrations (4-arm branch).
+export function IconMcp(p: IconProps) {
+  return wrap(p, <>
+    <rect x="4" y="5" width="8" height="5.5" rx="1.5" />
+    <line x1="6" y1="5" x2="6" y2="3" />
+    <line x1="10" y1="5" x2="10" y2="3" />
+    <path d="M6.5 10.5v1.8a1.5 1.5 0 0 0 3 0v-1.8" />
+  </>)
+}
+
+// Two silhouettes — "Members": foreground person (solid) + partial background person.
+// Distinct from IconProjects (briefcase) and IconUser (single silhouette).
+export function IconMembers(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="5.5" cy="5" r="2" />
+    <path d="M1.5 13c0-2.2 1.8-3.8 4-3.8s4 1.6 4 3.8" />
+    <circle cx="11.5" cy="4.5" r="1.8" />
+    <path d="M14.5 12c0-2-1.3-3.3-3-3.3" strokeOpacity="0.55" />
+  </>)
+}
+
+// Clipboard + magnifying glass — "QA Coverage": audit-and-search combo glyph.
+// Distinct from IconHealth (heartbeat), IconShield, and IconJudge (star).
+export function IconQaCoverage(p: IconProps) {
+  return wrap(p, <>
+    <path d="M9 2.5H5a1 1 0 0 0-1 1V12a1 1 0 0 0 1 1h4" />
+    <path d="M6 2.5v1.5h4V2.5" />
+    <line x1="5.5" y1="6.5" x2="9" y2="6.5" />
+    <line x1="5.5" y1="8.5" x2="7.5" y2="8.5" />
+    <circle cx="11" cy="10" r="2.5" />
+    <line x1="12.8" y1="11.8" x2="14.5" y2="13.5" />
+  </>)
+}
+
