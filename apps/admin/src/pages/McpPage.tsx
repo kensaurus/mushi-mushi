@@ -29,7 +29,7 @@ import {
   Btn,
   EmptyState,
 } from '../components/ui'
-import { IconIntegrations, IconCheck, IconArrowRight } from '../components/icons'
+import { IconIntegrations, IconCheck, IconArrowRight, IconCopy } from '../components/icons'
 import { CopyButton } from '../components/ui'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
@@ -216,6 +216,7 @@ export function McpPage() {
   const [snippetMode, setSnippetMode] = useState<'cursor' | 'env'>('cursor')
   const [copied, setCopied] = useState(false)
   const [snippetEverCopied, setSnippetEverCopied] = useState(false)
+  const [idCopied, setIdCopied] = useState(false)
 
   const { data, loading, error } = usePageData<ProjectsResponse>('/v1/admin/projects', { deps: [activeId] })
   const status = useMemo(() => deriveStatus(data, activeId), [data, activeId])
@@ -232,9 +233,23 @@ export function McpPage() {
     }
   }
 
+  async function copyProjectId() {
+    const id = status.activeProject?.id
+    if (!id) return
+    try {
+      await navigator.clipboard.writeText(id)
+      setIdCopied(true)
+      toast.success('Project ID copied.')
+      window.setTimeout(() => setIdCopied(false), 1500)
+    } catch {
+      toast.error('Clipboard blocked — select the text and copy manually.')
+    }
+  }
+
   const projectId = status.activeProject?.id ?? '<your-project-id>'
   const projectName = status.activeProject?.name ?? 'project'
   const snippet = snippetMode === 'cursor' ? buildCursorJson(projectId, projectName) : buildEnvBlock(projectId)
+  const hasRealProjectId = Boolean(status.activeProject?.id)
 
   const readTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:read')
   const writeTools = TOOL_CATALOG.filter((t) => t.scope === 'mcp:write')
@@ -367,64 +382,210 @@ export function McpPage() {
       </Card>
 
       {/* ── Install card ─────────────────────────────────────────────
-          Tabs match the SDK-snippet tabs on /onboarding so the two
-          beginner surfaces feel like a single IA. */}
+          Three values are needed: endpoint, API key, and project ID.
+          We surface all three with explicit labels + copy affordances so
+          users never have to hunt for where each value comes from. */}
       <Card className="p-5 space-y-4" data-testid="mcp-install">
         <div>
-          <h3 className="text-sm font-semibold text-fg">Install snippet</h3>
+          <h3 className="text-sm font-semibold text-fg">Configuration values</h3>
           <p className="text-xs text-fg-muted mt-1">
-            The id of the project you're currently viewing is pre-filled. Replace{' '}
-            <code className="mx-0.5 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary font-mono text-2xs">paste-your-key-here</code>{' '}
-            with a key generated on <Link to="/projects" className="text-accent hover:underline">/projects</Link>.
+            Three env vars wire the MCP binary to this project. All three are pre-filled below once you select a project and generate a key.
           </p>
         </div>
 
-        <div className="flex items-center gap-1 border-b border-edge-subtle pb-2" role="tablist" aria-label="Snippet format">
-          <ConfigHelp helpId="mcp.snippet_mode" />
-          {(['cursor', 'env'] as const).map((m) => (
+        {/* ── Three-value reference table ───────────────────────────
+            Shows every required env var, where it comes from, and
+            lets users copy the value in one click. The project ID
+            row is the answer to "where do I find MUSHI_PROJECT_ID?" */}
+        <div className="rounded-md border border-edge-subtle overflow-hidden" data-testid="mcp-config-table">
+          {/* MUSHI_API_ENDPOINT */}
+          <div className="grid grid-cols-[1fr_auto] gap-x-3 items-center px-3 py-2.5 border-b border-edge-subtle bg-surface-raised/30">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="text-2xs font-mono font-semibold text-fg">MUSHI_API_ENDPOINT</code>
+                <span className="text-3xs text-fg-faint bg-surface-overlay border border-edge-subtle rounded-sm px-1.5 py-0.5">fixed</span>
+              </div>
+              <p className="text-2xs text-fg-muted mt-0.5 leading-snug">The public API hostname. Same for every project.</p>
+              <code className="text-2xs font-mono text-fg-secondary truncate block">{RESOLVED_MCP_API_URL}</code>
+            </div>
             <button
-              key={m}
               type="button"
-              role="tab"
-              aria-selected={snippetMode === m}
-              aria-controls={`mcp-snippet-panel-${m}`}
-              id={`mcp-snippet-tab-${m}`}
-              onClick={() => setSnippetMode(m)}
-              data-testid={`mcp-snippet-mode-${m}`}
-              className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
-                snippetMode === m
-                  ? 'bg-brand text-brand-fg font-medium'
-                  : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
-              }`}
+              onClick={async () => {
+                await navigator.clipboard.writeText(RESOLVED_MCP_API_URL).catch(() => {})
+                toast.success('Endpoint copied.')
+              }}
+              className="shrink-0 p-1.5 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
+              aria-label="Copy API endpoint"
             >
-              {m === 'cursor' ? '.cursor/mcp.json' : '.env.local'}
+              <IconCopy className="h-3.5 w-3.5" />
             </button>
-          ))}
+          </div>
+
+          {/* MUSHI_API_KEY */}
+          <div className="grid grid-cols-[1fr_auto] gap-x-3 items-center px-3 py-2.5 border-b border-edge-subtle bg-surface-raised/30">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="text-2xs font-mono font-semibold text-fg">MUSHI_API_KEY</code>
+                <span className="text-3xs text-warn bg-warn-muted/20 border border-warn/30 rounded-sm px-1.5 py-0.5">secret — one-time reveal</span>
+              </div>
+              <p className="text-2xs text-fg-muted mt-0.5 leading-snug">
+                Generated on{' '}
+                <Link to="/projects" className="text-accent hover:underline">Projects</Link>.
+                {' '}Choose <strong className="text-fg-secondary">MCP read</strong> (browse) or{' '}
+                <strong className="text-fg-secondary">MCP read + write</strong> (dispatch fixes).
+                Shown once at generation — copy it from the card that appears.
+              </p>
+            </div>
+            <Link
+              to="/projects"
+              className="shrink-0 px-2 py-1 rounded-sm text-2xs text-accent hover:underline"
+              aria-label="Go to Projects to generate a key"
+            >
+              Generate →
+            </Link>
+          </div>
+
+          {/* MUSHI_PROJECT_ID — the one users always ask about */}
+          <div
+            className={`grid grid-cols-[1fr_auto] gap-x-3 items-center px-3 py-2.5 ${
+              hasRealProjectId
+                ? 'bg-ok-muted/10 border-ok/20'
+                : 'bg-info-muted/10 border-info/20'
+            }`}
+            data-testid="mcp-project-id-row"
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <code className="text-2xs font-mono font-semibold text-fg">MUSHI_PROJECT_ID</code>
+                {hasRealProjectId ? (
+                  <span className="text-3xs text-ok bg-ok-muted/30 border border-ok/30 rounded-sm px-1.5 py-0.5">pre-filled ✓</span>
+                ) : (
+                  <span className="text-3xs text-info bg-info-muted/20 border border-info/30 rounded-sm px-1.5 py-0.5">select a project first</span>
+                )}
+              </div>
+              <p className="text-2xs text-fg-muted mt-0.5 leading-snug">
+                The UUID that scopes all agent reads and writes to this project.
+                {hasRealProjectId ? (
+                  <span> Found under <strong className="text-fg-secondary">{projectName}</strong> on{' '}
+                    <Link to="/projects" className="text-accent hover:underline">Projects</Link>.
+                  </span>
+                ) : (
+                  <span>{' '}
+                    Use the <strong className="text-fg-secondary">project switcher</strong> at the top of the page,
+                    or go to <Link to="/projects" className="text-accent hover:underline">Projects</Link> to create one.
+                  </span>
+                )}
+              </p>
+              {hasRealProjectId && (
+                <code className="text-2xs font-mono text-ok truncate block mt-0.5" data-testid="mcp-project-id-value">
+                  {projectId}
+                </code>
+              )}
+            </div>
+            {hasRealProjectId ? (
+              <button
+                type="button"
+                onClick={copyProjectId}
+                className="shrink-0 p-1.5 rounded-sm transition-colors text-ok hover:text-ok-fg hover:bg-ok/20"
+                aria-label="Copy project ID"
+                data-testid="mcp-copy-project-id"
+              >
+                {idCopied ? <IconCheck className="h-3.5 w-3.5" /> : <IconCopy className="h-3.5 w-3.5" />}
+              </button>
+            ) : (
+              <Link
+                to="/projects"
+                className="shrink-0 px-2 py-1 rounded-sm text-2xs text-accent hover:underline"
+                aria-label="Go to Projects to get your project ID"
+              >
+                Get ID →
+              </Link>
+            )}
+          </div>
         </div>
 
-        <div
-          role="tabpanel"
-          id={`mcp-snippet-panel-${snippetMode}`}
-          aria-labelledby={`mcp-snippet-tab-${snippetMode}`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">
-              {snippetMode === 'cursor' ? 'Drop into your IDE settings' : 'Drop into your repo root'}
-            </span>
-            <CopyButton
-              onCopy={() => copy(snippet, snippetMode === 'cursor' ? '.cursor/mcp.json block' : '.env.local block')}
-              copied={copied}
-              label={snippetMode === 'cursor' ? 'Copy .cursor/mcp.json block' : 'Copy .env.local block'}
-              copiedLabel="Snippet copied"
-              data-testid="mcp-snippet-copy"
-            />
+        {/* ── Snippet tabs ──────────────────────────────────────────
+            Pre-assembled ready-to-paste blocks so users never need
+            to hand-construct JSON or remember env var names. */}
+        <div>
+          <h4 className="text-xs font-semibold text-fg mb-1">Ready-to-paste snippet</h4>
+          <p className="text-xs text-fg-muted mb-3">
+            All three values assembled for you.{' '}
+            {!hasRealProjectId && (
+              <span className="text-warn">
+                Select a project first — the placeholder{' '}
+                <code className="font-mono text-2xs">{'<your-project-id>'}</code> won't work as-is.
+              </span>
+            )}
+            {hasRealProjectId && (
+              <span>
+                Replace <code className="mx-0.5 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary font-mono text-2xs">paste-your-key-here</code>{' '}
+                with the key from{' '}
+                <Link to="/projects" className="text-accent hover:underline">Projects</Link>.
+              </span>
+            )}
+          </p>
+
+          <div className="flex items-center gap-1 border-b border-edge-subtle pb-2" role="tablist" aria-label="Snippet format">
+            <ConfigHelp helpId="mcp.snippet_mode" />
+            {(['cursor', 'env'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={snippetMode === m}
+                aria-controls={`mcp-snippet-panel-${m}`}
+                id={`mcp-snippet-tab-${m}`}
+                onClick={() => setSnippetMode(m)}
+                data-testid={`mcp-snippet-mode-${m}`}
+                className={`px-2.5 py-1 rounded-sm text-xs transition-colors ${
+                  snippetMode === m
+                    ? 'bg-brand text-brand-fg font-medium'
+                    : 'text-fg-muted hover:text-fg hover:bg-surface-overlay'
+                }`}
+              >
+                {m === 'cursor' ? '.cursor/mcp.json' : '.env.local'}
+              </button>
+            ))}
           </div>
-          <pre
-            className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
-            data-testid="mcp-snippet"
+
+          <div
+            role="tabpanel"
+            id={`mcp-snippet-panel-${snippetMode}`}
+            aria-labelledby={`mcp-snippet-tab-${snippetMode}`}
+            className="mt-2"
           >
-            {snippet}
-          </pre>
+            <div className="flex items-center justify-between">
+              <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">
+                {snippetMode === 'cursor' ? 'Drop into .cursor/mcp.json in your IDE settings' : 'Drop into .env.local in your repo root'}
+              </span>
+              <CopyButton
+                onCopy={() => copy(snippet, snippetMode === 'cursor' ? '.cursor/mcp.json block' : '.env.local block')}
+                copied={copied}
+                label={snippetMode === 'cursor' ? 'Copy .cursor/mcp.json block' : 'Copy .env.local block'}
+                copiedLabel="Snippet copied"
+                data-testid="mcp-snippet-copy"
+              />
+            </div>
+            <pre
+              className="bg-surface-raised border border-edge-subtle rounded-sm px-3 py-2 mt-1 text-2xs font-mono text-fg-secondary overflow-auto whitespace-pre-wrap wrap-anywhere max-h-64 select-all"
+              data-testid="mcp-snippet"
+            >
+              {snippet}
+            </pre>
+            {snippetMode === 'cursor' && (
+              <p className="mt-1.5 text-2xs text-fg-muted">
+                Paste this into <code className="font-mono">.cursor/mcp.json</code> (or Cursor Settings → MCP), then restart your IDE.
+                Run <code className="font-mono">list mushi tools</code> in the agent to confirm the handshake.
+              </p>
+            )}
+            {snippetMode === 'env' && (
+              <p className="mt-1.5 text-2xs text-fg-muted">
+                Paste into <code className="font-mono">.env.local</code> (gitignored). The <code className="font-mono">mushi-mcp</code> binary
+                reads these on start — no other config needed.
+              </p>
+            )}
+          </div>
         </div>
       </Card>
 
