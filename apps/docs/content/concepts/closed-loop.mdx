@@ -88,13 +88,14 @@ A Mushi-equipped project is antifragile: each bug report not only gets fixed, it
 
 <EvolutionDiagram />
 
-1. **A user feels friction** (a dead button, a slow screen, a layout that breaks on one phone) and shakes the app or clicks the feedback stamp.
-2. **Mushi SDK captures** the moment: screenshot, session breadcrumbs, device info, the current route.
-3. **The server embeds the report** with `text-embedding-3-small` and runs the BIRCH-style streaming clusterer.
-4. **Similar reports collapse** into a `mistake_cluster`. When the cluster reaches coherence ≥ 0.75 and size ≥ 3, the judge model promotes it to a **`lesson`** with auto-generated name + summary + one-shot rule.
-5. **The lesson is injected** into the next PR review (token-budget packed to ≤ 3 000 tokens) and into the next agentic fix run — so neither human reviewers nor the AI agent can repeat the same class of mistake.
-6. **The user is credited** in the changelog: *"Fixed by Kenji: the Settings page back-button was double-counting the safe-area inset"*. The SDK shows a toast on the next session.
-7. **Drift and anomaly detectors** run continuously, generating candidate reports for issues no user has noticed yet. Those reports enter the same pipeline at step 2 — the loop closes without waiting for a human to file a ticket.
+1. **A user feels friction** (a dead button, a slow screen, a layout that breaks on one phone) and shakes the app or clicks the feedback stamp. — *Source: SDK or [Anti-gaming](/admin/anti-gaming) for synthetic probes.*
+2. **Mushi SDK captures** the moment: screenshot, session breadcrumbs, device info, the current route. — *Visible in [Reports & triage](/admin/reports).*
+3. **The server embeds the report** with `text-embedding-3-small` and runs the BIRCH-style streaming clusterer. — *Architecture: `classify-report` edge function.*
+4. **Similar reports collapse** into a `mistake_cluster`. When the cluster reaches coherence ≥ 0.75 and size ≥ 3, the judge model promotes it to a **`lesson`** with auto-generated name + summary + one-shot rule. — *Visible in [Judge dashboard](/admin/judge) and [Lessons](/admin/lessons).*
+5. **The lesson is injected** into the next PR review (token-budget packed to ≤ 3 000 tokens) and into the next agentic fix run — so neither human reviewers nor the AI agent can repeat the same class of mistake. — *Triggered from [Fix orchestrator](/admin/fixes) or autonomously via [Iterate (PDCA)](/admin/iterate).*
+6. **The user is credited** in the changelog: *"Fixed by Kenji: the Settings page back-button was double-counting the safe-area inset"*. The SDK shows a toast on the next session. — *Managed in [Releases](/admin/releases) and [Rewards](/admin/rewards).*
+7. **Drift and anomaly detectors** run continuously, generating candidate reports for issues no user has noticed yet. Those reports enter the same pipeline at step 2 — the loop closes without waiting for a human to file a ticket. — *[Drift scanner](/admin/drift) and [Anomaly detection](/admin/anomalies).*
+8. **The PDCA loop runs** on a schedule or on demand: crawl the live URL, plan improvements, fix them, verify. — *[Iterate (PDCA)](/admin/iterate) page; powered by the `pdca-runner` edge function.*
 
 ---
 

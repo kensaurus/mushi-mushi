@@ -35,6 +35,6 @@ export default {
   '-- Reference': { type: 'separator', title: 'Reference' },
   changelog: { title: 'Changelog', theme: { toc: false } },
   roadmap: 'Roadmap',
-  whitepaper: { title: 'Whitepaper ↗', href: 'https://github.com/kensaurus/mushi-mushi/blob/master/MushiMushi_Whitepaper_V5.md' },
+  whitepaper: { title: 'Whitepaper ↗', href: 'https://github.com/kensaurus/mushi-mushi/blob/main/MushiMushi_Whitepaper_V5.md' },
   github: { title: 'GitHub ↗', href: 'https://github.com/kensaurus/mushi-mushi' },
 }

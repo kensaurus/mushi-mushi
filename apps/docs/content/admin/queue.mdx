@@ -1,0 +1,137 @@
+---
+title: Processing queue
+---
+
+import { Callout } from 'nextra/components'
+
+# Processing queue
+
+**Route:** `/queue`
+
+> **Scenario:** You open Mushi on a Monday morning and the Inbox shows an Ops alert:
+> "14 items in dead-letter". The fix-worker was hitting an API timeout overnight and
+> reports piled up without being classified. This page is where you diagnose what broke
+> and replay the affected items.
+
+The Processing queue is the operational view of every item flowing through Mushi's
+ingest and fix pipelines. Use it to monitor throughput, identify failures, retry stuck
+items, and recover from outages.
+
+---
+
+## What "dead-letter" means
+
+An item reaches `dead_letter` status after exhausting all automatic retries. Mushi
+won't touch it again until you manually retry it. This is intentional — automatic
+infinite retries can amplify a misconfiguration into a cost spiral.
+
+When you see dead-letter items:
+1. Read the **Last error** on one of the cards to understand why it failed.
+2. Fix the root cause (wrong API key, rate limit, misconfigured repo URL).
+3. Click **Retry** per item, or use **Retry page** to replay all failed items on the
+   current page at once.
+
+---
+
+## KPI tiles (14-day sparklines)
+
+| Tile | Healthy baseline | Warning sign |
+|------|-----------------|-------------|
+| **Dead-letter** | 0 | Any non-zero number |
+| **Failed** | Low — occasional transient failures are normal | Rising trend day-over-day |
+| **Pending** | Small queue that clears within minutes | Growing pile-up = processing is slow or stuck |
+| **Running** | 1–5 at any time | > 20 may indicate a processing loop |
+| **Completed** | Rising trend = healthy throughput | Flat + rising failed = systematic failure |
+
+---
+
+## Throughput chart
+
+The 14-day bar chart shows **completed** (blue) vs **failed** (red) items per day.
+A healthy pipeline has a tall completed bar and a tiny failed bar each day.
+
+**What to look for:**
+- A day where failed > completed → something broke that day. Cross-reference the
+  **Audit log** for key changes or deploys.
+- Flat completed bars for 2+ days → the pipeline may be paused. Check if your BYOK
+  keys expired.
+
+---
+
+## Stage breakdown
+
+Counts per pipeline stage: `classify`, `embed`, `fix`, `judge`, etc. If one stage has
+a disproportionate backlog, that's the bottleneck. Example:
+
+- **classify has 200 pending, fix has 0** → classification is backed up. Check the
+  classify prompt in [Prompt lab](/admin/prompt-lab) and the LLM key in [Health](/admin/health).
+
+---
+
+## Item cards
+
+Paginated list (20 per page). Each card shows:
+- **Status badge** and **stage**
+- **Last error** — often tells you exactly what went wrong
+- **Payload** (truncated) — the report or fix request data
+- **Timestamps** — created, last attempt, next scheduled retry
+
+Click any card to expand and see the full payload and error trace.
+
+Use the **Status** and **Stage** dropdowns to filter to just the items you care about.
+
+---
+
+## Bulk actions
+
+| Button | When to use it |
+|--------|---------------|
+| **Retry page** | After fixing the root cause — replay all failed items on the current page |
+| **Flush queued** | After a rate-limit incident — replays items the circuit-breaker parked to protect your API quota |
+| **Recover stranded** | When items show `running` for > 10 minutes — the processing function crashed mid-run and the status was never updated |
+
+<Callout type="warning">
+Use **Recover stranded** only when items have genuinely been stuck for > 10 minutes.
+Running it on healthy items can cause duplicate processing if a function is just slow.
+</Callout>
+
+---
+
+## Common tasks
+
+### Monday morning: 14 dead-letter items
+1. Filter to `dead_letter`. Expand the first card — read **Last error**.
+2. Example error: *"GitHub token expired"* → go to [Integrations](/admin/integrations) → update the token.
+3. Come back, filter to `dead_letter` → **Retry page** → watch the status column — items should transition to `running` then `completed`.
+4. If they fail again: the root cause isn't fixed. Repeat the diagnosis.
+
+### "Items have been stuck at running for 30 minutes"
+1. Filter to `running`. Check timestamps — if created > 30 min ago, they're stranded.
+2. Click **Recover stranded**. This marks them `failed` and re-queues them.
+3. Watch the Failed count — they should retry and (if the root cause is gone) complete.
+
+### Monitoring after a deploy
+1. After deploying, open the queue and set a 5-minute mental timer.
+2. If the **Pending** tile rises and doesn't fall: your classify function may be
+   failing. Check [Integration health](/admin/health) → recent LLM calls.
+
+---
+
+## API
+
+```bash
+GET  /v1/admin/queue?status=&stage=&page=&pageSize=
+GET  /v1/admin/queue/summary
+GET  /v1/admin/queue/throughput
+POST /v1/admin/queue/:id/retry
+POST /v1/admin/queue/flush-queued
+POST /v1/admin/queue/recover
+```
+
+---
+
+## Related pages
+
+- [Integration health](/admin/health) — LLM provider errors are the most common queue failure cause
+- [Integrations](/admin/integrations) — GitHub token expiry is the second most common
+- [Audit log](/admin/audit) — cross-reference queue failures with admin actions

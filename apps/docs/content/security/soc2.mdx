@@ -2,28 +2,68 @@
 title: SOC 2 readiness
 ---
 
+import { Callout } from 'nextra/components'
+
 # SOC 2 readiness
 
-Mushi ships a SOC 2 Type 1 readiness module. It is *not* a certification
-on its own — but it gives auditors the evidence they need.
+> **Scenario:** Your enterprise customer's procurement team asks for a SOC 2 Type 1 evidence pack. You need to prove that access, retention, and encryption controls are documented and enforced.
 
-## What's automated
+Mushi ships a SOC 2 Type 1 readiness module. It is not a third-party certification on its own — but it generates the evidence auditors need and keeps it current automatically.
 
-| Concern                     | Mechanism                                          |
-| --------------------------- | -------------------------------------------------- |
-| Access — who/what/when      | `audit_log` table, append-only, RLS on by user     |
-| RLS policy coverage         | `mushi_rls_coverage_snapshot()` cron, daily        |
-| Data retention              | `data_retention_policies` per project; nightly cron|
-| DSAR (data subject access)  | `request_dsar()` SQL fn → tarball signed URL       |
-| Evidence pack               | `soc2-evidence` Edge Function → quarterly snapshot |
-| Encryption-in-transit       | TLS-only (Supabase enforces)                       |
-| Encryption-at-rest          | pgsodium for PII columns; Supabase disk encryption |
-| Backup / DR                 | Supabase point-in-time recovery                    |
+<Callout type="info">
+  All evidence is visible in the admin console at **Compliance → SOC 2**. A single button regenerates the quarterly pack on demand.
+</Callout>
+
+## Automated controls
+
+| Control | Mechanism | Frequency |
+| --- | --- | --- |
+| Access — who / what / when | `audit_log` table, append-only, RLS per user | Real-time |
+| RLS policy coverage | `mushi_rls_coverage_snapshot()` — verifies every public table has at least one policy | Daily cron |
+| Data retention | `data_retention_policies` per project; nightly hard-delete cron | Nightly |
+| DSAR (data subject access) | `request_dsar()` SQL fn → signed tarball URL | On-demand |
+| Evidence pack | `soc2-evidence` Edge Function → quarterly snapshot in `soc2_evidence` | Quarterly + on-demand |
+| Encryption-in-transit | TLS 1.2+ enforced by Supabase edge | Always |
+| Encryption-at-rest | `pgsodium` for PII columns; Supabase disk encryption for all storage | Always |
+| Backup / DR | Supabase point-in-time recovery | Daily |
+| No cross-region row transfer | Nightly attestation written to `soc2_evidence` | Nightly |
 
 ## Audit dashboard
 
 In the admin console: **Compliance → SOC 2**.
 
-Lists the latest evidence pack, RLS coverage delta, retention cron
-status, and outstanding DSAR requests. A single button regenerates the
-quarterly evidence pack on demand.
+- **Evidence pack** — last generated date, size, download link (signed URL, 24h TTL).
+- **RLS coverage delta** — lists any table where coverage changed since the last snapshot.
+- **Retention cron status** — last run, rows deleted, next scheduled run.
+- **DSAR requests** — list of pending requests with a one-click "generate tarball" action.
+
+## Generating an evidence pack manually
+
+```sql
+-- Via the SQL editor or MCP
+select soc2_evidence_snapshot();
+```
+
+Or click **Regenerate** in the admin console. The new pack appears in `soc2_evidence` within ~30 seconds.
+
+## Data retention policies
+
+Retention is configured per project in **Compliance → Data retention**:
+
+| Column | Default | Notes |
+| --- | --- | --- |
+| `reports` | 365 days | Configurable; 0 = keep forever |
+| `fix_attempts` | 180 days | — |
+| `embeddings` | 365 days | — |
+| `audit_log` | 2555 days (7 years) | Not configurable — required for SOC 2 |
+
+The nightly cron hard-deletes rows older than the configured window and logs the count to `soc2_evidence`.
+
+## DSAR (Data Subject Access Request)
+
+```sql
+select request_dsar('user@example.com');
+-- Returns a signed URL to a tarball of all rows referencing that email.
+```
+
+The tarball includes: `reports`, `reporter_identities`, `activity_events`, `audit_log` rows where `actor_email = ?`. PII columns are decrypted in the export (the tarball itself is signed and expires in 48h).

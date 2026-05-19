@@ -1,0 +1,113 @@
+---
+title: Onboarding
+---
+
+import { Steps, Callout } from 'nextra/components'
+
+# Onboarding
+
+**Route:** `/onboarding`
+
+> **Scenario:** You signed up 5 minutes ago. Your goal: get a real bug report from your
+> app into Mushi before your afternoon standup. This page takes you from zero to your
+> first classified report in under 10 minutes.
+
+The Onboarding wizard is the fastest path to a live pipeline. Work through the steps in
+order — each step unlocks the next.
+
+---
+
+## Setup checklist
+
+A progress strip tracks your completion status across five steps. Completed steps show
+a green tick; the current step glows.
+
+<Steps>
+### Create a project
+Enter a project name and click **Create**. A project is created immediately and becomes
+the active project.
+
+### Generate an API key
+Click **Generate API key** to create an SDK-scoped key. The key is shown in plaintext
+exactly once — copy it immediately. It is stored as a prefix-only hash after you
+navigate away.
+
+### Test the connection
+Click **Submit test report** to send a synthetic report through the full ingest pipeline.
+A status chip shows `idle` → `running` → `pass` / `fail`. A `pass` means the key is
+valid, the classify function ran, and the report appeared in the Reports queue.
+
+Click **Send another** to fire additional test reports.
+
+### Install the SDK
+The **SDK install configurator** shows framework-specific install snippets (React,
+Next.js, React Native, Flutter, etc.) pre-filled with your API key and project ID.
+Copy and paste into your codebase.
+
+### Go to dashboard
+Once all steps are complete, a **Go to Dashboard** button appears. The setup checklist
+banner on the dashboard will clear.
+</Steps>
+
+---
+
+## PDCA Flow explainer
+
+The onboarding page includes a static PDCA Flow diagram (the same diagram as on the
+dashboard, but with outcome copy instead of live counts) so new users understand what
+the four pipeline stages mean before they see live data.
+
+---
+
+<Callout type="info">
+**One-time key reveal** — the plaintext API key is shown exactly once after generation.
+Copy it before clicking away. If you lose it, generate a new key from the [Projects](/admin/projects)
+page — you can't recover the old one.
+</Callout>
+
+---
+
+## Troubleshooting the test report
+
+If the test report shows `fail`:
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `401 Unauthorized` | Wrong API key in the SDK install | Re-copy the key from the reveal card |
+| `429 Too Many Requests` | You've hit the hourly rate limit | Wait 60 seconds, try again |
+| Status stuck at `running` | Classifier BYOK key missing | Go to [Settings](/admin/settings) → BYOK tab → add Anthropic key |
+| Success but no report in Reports page | Wrong project selected in the SDK snippet | Check `projectId` in your install code |
+
+---
+
+## What happens after setup
+
+Once the SDK sends its first real report from your app:
+1. The dashboard **First Report** hero card appears and disappears.
+2. The report is classified and appears in the [Reports & triage](/admin/reports) queue.
+3. The setup checklist on the dashboard marks "First report" as complete.
+
+---
+
+## Restarting the tour
+
+Click **Restart tour** at the bottom of the page to reset the checklist state and walk
+through setup again. This does not delete any existing projects or data.
+
+---
+
+## API
+
+```bash
+POST /v1/admin/projects               { name }
+POST /v1/admin/projects/:id/keys      { scope: 'ingest' }
+POST /v1/admin/projects/:id/test-report
+```
+
+---
+
+## Related pages
+
+- [Projects](/admin/projects) — manage multiple projects and keys
+- [Settings](/admin/settings) — BYOK keys and SDK config after initial setup
+- [Dashboard](/admin/dashboard) — where you land after completing onboarding

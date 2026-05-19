@@ -4,24 +4,55 @@ title: Linear
 
 # Linear plugin
 
-Files a Linear issue every time the classifier categorises a report.
+Files a Linear issue automatically when the Mushi classifier categorises a report.
 
 ## Setup
 
-1. Create a Linear API key → **Settings → API → Personal API keys**.
+1. Create a Linear API key: **Settings → API → Personal API keys** → **New key**.
 2. In Mushi: **Marketplace → Linear → Install**.
-3. Provide:
-   - `apiKey` — pasted into Vault, never echoed back
-   - `teamId` — the Linear team to file under
-   - `labelMap` *(optional)* — JSON object mapping
-     `taxonomy_path → label_id[]`
+3. Fill in:
+   - **`apiKey`** — pasted into Vault, never echoed back to the UI
+   - **`teamId`** — the Linear team to file issues under (find it in Linear → Settings → Team → copy the team ID from the URL)
+   - **`labelMap`** *(optional)* — JSON object mapping `taxonomy_path → label_id[]`
 
 ## Behaviour
 
-- **`report.classified`** → creates a Linear issue with:
-  - title = the report title
-  - description = Markdown summary + report URL
-  - priority = `p0→1, p1→2, p2→3, p3→4`
-  - labels = `labelMap[taxonomy_path] ?? []`
-- **`report.status_changed → resolved`** → moves the linked Linear
-  issue to *Done*, leaving a comment with the merged PR URL.
+| Event | Action |
+| --- | --- |
+| `report.classified` | Creates a Linear issue with title, Markdown summary, report link, and priority |
+| `report.status_changed → resolved` | Moves the linked Linear issue to *Done*, adds a comment with the merged PR URL |
+
+Linear issue fields:
+
+| Linear field | Mushi source |
+| --- | --- |
+| `title` | report `title` |
+| `description` | Markdown summary + report permalink |
+| `priority` | `p0 → 1 (Urgent)`, `p1 → 2 (High)`, `p2 → 3 (Medium)`, `p3 → 4 (Low)` |
+| `labelIds` | `labelMap[taxonomy_path] ?? []` |
+
+## Label mapping example
+
+Map Mushi taxonomy paths to Linear label IDs so issues are automatically triage-labelled:
+
+```json
+{
+  "ui/layout": ["lab_abc123"],
+  "performance/slow-load": ["lab_def456", "lab_perf789"],
+  "crash/anr": ["lab_crash999"]
+}
+```
+
+Find label IDs via the Linear API:
+
+```bash
+curl -X POST https://api.linear.app/graphql \
+  -H "Authorization: $LINEAR_API_KEY" \
+  -d '{"query": "{ issueLabels { nodes { id name } } }"}'
+```
+
+## Troubleshooting
+
+- **Issues not created** — check **Marketplace → Linear → Deliveries**. A `401` means the API key is expired; a `404` means the `teamId` is wrong.
+- **Priority not mapping** — Linear priorities are numeric (1–4). If your Linear project uses custom priorities, the mapping falls back to the default scale.
+- **Duplicate issues** — Mushi only fires `report.classified` once per report. If you see duplicates, check for multiple Linear plugin installs on the same project.

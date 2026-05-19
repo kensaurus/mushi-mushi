@@ -2,31 +2,82 @@
 title: Edge Functions deploy
 ---
 
+import { Callout } from 'nextra/components'
+
 # Edge Functions deploy
 
-```bash
-supabase functions deploy api
-supabase functions deploy fast-filter
-supabase functions deploy classify-report
-supabase functions deploy judge-batch
-supabase functions deploy fix-orchestrator
-supabase functions deploy intelligence-report
-supabase functions deploy soc2-evidence
-supabase functions deploy generate-synthetic
-```
-
-Set the per-function secrets:
+Mushi ships 14 Supabase Edge Functions. Deploy them from `packages/server/`:
 
 ```bash
-supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
-supabase secrets set OPENAI_API_KEY=sk-…
-supabase secrets set LANGFUSE_PUBLIC_KEY=pk-…
-supabase secrets set LANGFUSE_SECRET_KEY=sk-…
-supabase secrets set SENTRY_DSN=https://…@sentry.io/…
-supabase secrets set GITHUB_APP_ID=…
-supabase secrets set GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"
-supabase secrets set E2B_API_KEY=…
+cd packages/server
+
+npx supabase functions deploy api
+npx supabase functions deploy classify-report
+npx supabase functions deploy fix-worker
+npx supabase functions deploy judge-batch
+npx supabase functions deploy intelligence-report
+npx supabase functions deploy drift-walker
+npx supabase functions deploy contract-graph-builder
+npx supabase functions deploy pdca-runner
+npx supabase functions deploy qa-story-runner
+npx supabase functions deploy generate-synthetic
+npx supabase functions deploy inventory-crawler
+npx supabase functions deploy inventory-propose
+npx supabase functions deploy inventory-gates
+npx supabase functions deploy a2a-push-notify
+npx supabase functions deploy test-gen-from-report
 ```
 
-Tenants can override `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` per project
-via [BYOK](/security/byok).
+<Callout type="warning">
+  Run every deploy command from `packages/server/` — the Supabase CLI looks for `supabase/functions/` relative to the current directory. Running from the repo root will fail with "entrypoint path does not exist".
+</Callout>
+
+## Function inventory
+
+| Function | Trigger | What it does |
+| --- | --- | --- |
+| `api` | HTTP (Hono gateway) | All admin console API calls — routes under `/v1/` |
+| `classify-report` | `reports` INSERT | LLM triage: severity, category, blast-radius |
+| `fix-worker` | `fix_attempts` INSERT | Generates a git-diff fix via `generateObject` + Zod validation |
+| `judge-batch` | cron | Grades fix quality; writes `judge_results` |
+| `intelligence-report` | cron / manual | Weekly LLM narrative from KPI trends |
+| `drift-walker` | HTTP | Crawls live routes and compares them against `inventory_nodes` |
+| `contract-graph-builder` | HTTP | Fetches Postgres schema via `execute_sql` RPC and builds the API contract graph |
+| `pdca-runner` | `pdca_runs` INSERT | Runs one PDCA iteration: fix → judge → promote cycle |
+| `qa-story-runner` | cron (every minute) | Runs QA Coverage stories on schedule via Firecrawl / Browserbase |
+| `generate-synthetic` | cron | Playwright-based synthetic smoke tests |
+| `inventory-crawler` | cron / manual | Crawls app routes to populate `inventory_nodes` |
+| `inventory-propose` | manual | Proposes user-story inventory from crawl data |
+| `inventory-gates` | manual | Runs gate checks (dead handlers, mock leaks) |
+| `a2a-push-notify` | manual / agents | Sends A2A protocol notifications to connected agents |
+| `test-gen-from-report` | manual | Generates a Playwright test from a report, opens draft PR |
+
+## Required secrets
+
+Set all secrets before deploying — functions read them at cold-start:
+
+```bash
+cd packages/server
+
+npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-…
+npx supabase secrets set OPENAI_API_KEY=sk-…
+npx supabase secrets set LANGFUSE_PUBLIC_KEY=pk-lf-…
+npx supabase secrets set LANGFUSE_SECRET_KEY=sk-lf-…
+npx supabase secrets set LANGFUSE_HOST=https://cloud.langfuse.com
+npx supabase secrets set SENTRY_DSN=https://…@sentry.io/…
+npx supabase secrets set GITHUB_APP_ID=…
+npx supabase secrets set GITHUB_APP_PRIVATE_KEY="$(cat path/to/key.pem)"
+npx supabase secrets set E2B_API_KEY=…
+npx supabase secrets set FIRECRAWL_API_KEY=…
+```
+
+Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [BYOK](/security/byok).
+
+## JWT verification
+
+Most functions require a valid user JWT (`verify_jwt = true`, the default). Two functions bypass this because they're called by a cron with no user context:
+
+- `intelligence-report` — set `verify_jwt = false` in `supabase/config.toml`
+- `pdca-runner` — uses the service-role key directly
+
+See `packages/server/supabase/config.toml` for the canonical settings.

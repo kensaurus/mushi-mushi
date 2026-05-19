@@ -1,0 +1,146 @@
+---
+title: MCP
+---
+
+import { Callout } from 'nextra/components'
+
+# MCP — Model Context Protocol
+
+**Route:** `/mcp`
+
+The MCP page helps you wire Mushi into AI coding assistants (Cursor, Claude, Windsurf,
+etc.) as a Model Context Protocol server. Once connected, your AI agent can read
+reports, query the knowledge graph, dispatch fixes, and promote lessons — all from
+inside the IDE.
+
+---
+
+## Quickstart
+
+The page opens with a 3-step quickstart strip. Steps are state-aware — step 1 shows as
+complete if you already have an `mcp:read` key.
+
+<Steps>
+### 1. Generate an API key
+Click **Generate an API key** → opens the [Projects](/admin/projects) page → create a
+key with `MCP read` or `MCP read+write` scope.
+
+### 2. Install the MCP server
+Copy the snippet from the **Install** card and paste it into your AI tool's config.
+
+### 3. Use it
+Open your AI assistant and ask it to query Mushi. The tool catalogue card shows exactly
+what the agent can do.
+</Steps>
+
+---
+
+## Install snippets
+
+Two format tabs are available:
+
+### `.cursor/mcp.json`
+```json
+{
+  "mcpServers": {
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "@mushi-mushi/mcp", "--project-id", "<your-project-id>"],
+      "env": { "MUSHI_API_KEY": "your-mcp-key" }
+    }
+  }
+}
+```
+
+### `.env.local`
+```bash
+MUSHI_MCP_PROJECT_ID=<your-project-id>
+MUSHI_MCP_API_KEY=your-mcp-key
+```
+
+Both formats are pre-filled with your active project ID. Click **Copy** to copy to
+clipboard.
+
+---
+
+## Key status
+
+Two badges in the quickstart strip show whether you have:
+- `mcp:read` key — required for all read operations
+- `mcp:write` key — required for dispatch, promote, and other write operations
+
+---
+
+## Tool catalogue
+
+### Read tools (`mcp:read` scope required)
+
+| Tool | Description |
+|------|-------------|
+| `mushi_list_reports` | List open/triaged reports with filters |
+| `mushi_get_report` | Fetch a single report with full context |
+| `mushi_list_lessons` | Retrieve active learning rules |
+| `mushi_search_lessons` | Semantic search over the lesson library |
+| `mushi_get_graph` | Fetch the knowledge graph for a component |
+| `mushi_list_fixes` | List fix-worker runs and their status |
+| `mushi_get_fix` | Get a single fix-worker run with diff |
+| `mushi_query` | Natural-language query against report data |
+
+### Write tools (`mcp:write` scope required)
+
+| Tool | Description |
+|------|-------------|
+| `mushi_dispatch_fix` | Dispatch a triaged report to the fix-worker |
+| `mushi_promote_lesson` | Promote a candidate cluster to a lesson |
+| `mushi_create_report` | Submit a report programmatically |
+| `mushi_retire_lesson` | Retire an outdated lesson |
+
+<Callout type="warning">
+Write tools mutate production data. Store `mcp:write` keys only in server-side
+environments (CI, edge functions, backend processes) — never in a frontend `.env.local`
+that ships to users.
+</Callout>
+
+---
+
+## Resources
+
+Mushi exposes MCP resources that agents can read without calling a tool:
+
+| Resource | URI | Description |
+|----------|-----|-------------|
+| Lessons file | `mushi://lessons` | The full `.mushi/lessons.json` content |
+| Open reports | `mushi://reports/open` | Current open report list |
+| Project config | `mushi://project` | Active project metadata |
+
+---
+
+## Prompts
+
+Mushi registers slash-command prompts in MCP-compatible tools:
+
+| Command | Description |
+|---------|-------------|
+| `/mushi-fix` | Fetch the most relevant open report and propose a fix |
+| `/mushi-lessons` | List the top 10 active lessons for the current codebase |
+| `/mushi-report` | File a new report from the agent's current context |
+
+---
+
+## Use cases
+
+Five annotated use-case cards on the page show how real teams use the MCP integration:
+
+1. **Morning triage** — agent reads open reports and prioritises by severity
+2. **PR-time lesson injection** — agent fetches relevant lessons before writing code
+3. **Automated dispatch** — CI pipeline dispatches fix on every new `critical` report
+4. **Knowledge graph navigation** — agent explores related bugs before touching a component
+5. **Changelog generation** — agent drafts a release note from fixed reports
+
+---
+
+## Related pages
+
+- [Projects](/admin/projects) — generate MCP API keys
+- [SDKs → MCP](/sdks/mcp) — the `@mushi-mushi/mcp` package reference
+- [Fix orchestrator](/admin/fixes) — what happens after `mushi_dispatch_fix`

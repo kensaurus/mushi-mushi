@@ -4,13 +4,67 @@ title: 'mushi_mushi (Flutter)'
 
 # `mushi_mushi` (Flutter)
 
-Pure-Dart SDK on pub.dev. `RepaintBoundary`-driven screenshot capture,
-shake detection via `sensors_plus`, same offline-queue contract as the JS
-core SDK.
+Pure-Dart SDK on [pub.dev](https://pub.dev/packages/mushi_mushi). `RepaintBoundary`-driven screenshot capture, shake detection via `sensors_plus`, same offline-queue contract as the JS core SDK.
 
-```dart
-await Mushi.instance.configure(projectId: '…', apiKey: '…', enableShakeToReport: true);
-await Mushi.instance.submitReport(description: '…');
+```yaml
+# pubspec.yaml
+dependencies:
+  mushi_mushi: ^0.8.0
 ```
 
-See [Quickstart → Flutter](/quickstart/flutter).
+See [Quickstart → Flutter](/quickstart/flutter) for the full setup walkthrough.
+
+## API surface
+
+| Method | Purpose |
+| --- | --- |
+| `Mushi.instance.configure(...)` | Boot the SDK — call once in `main()` before `runApp()` |
+| `Mushi.instance.identify(userId, traits)` | Link reports to a user |
+| `Mushi.instance.submitReport(description, severity)` | Programmatic report submission |
+| `Mushi.instance.submitActivity(events)` | Rewards-program activity events |
+| `MushiReportButton()` | Drop-in widget — shake-to-report + tap-to-report |
+
+## Setup
+
+```dart
+// main.dart
+import 'package:mushi_mushi/mushi_mushi.dart';
+import 'package:flutter/material.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Mushi.instance.configure(
+    projectId: 'YOUR_PROJECT_ID',
+    apiKey: 'YOUR_PUBLIC_API_KEY',
+    enableShakeToReport: true,
+  );
+  runApp(const MyApp());
+}
+```
+
+## Identifying users
+
+```dart
+// After sign-in
+await Mushi.instance.identify(
+  user.id,
+  traits: {'email': user.email, 'name': user.displayName},
+);
+```
+
+## Submitting a report
+
+```dart
+await Mushi.instance.submitReport(
+  description: 'The checkout button does nothing.',
+  severity: MushiSeverity.p2,
+);
+```
+
+## Screenshot capture
+
+The SDK uses `RepaintBoundary` to capture the current widget tree into a PNG before submission. Wrap sensitive screens in `ExcludeFromSemantics` and set `excludeFromCapture: true` on your `MushiReportButton` if needed.
+
+## Offline queue
+
+Reports created without network access are persisted to `flutter_secure_storage` and flushed automatically when connectivity resumes. The queue cap is 50 reports (configurable via `maxOfflineQueueSize`).
