@@ -364,7 +364,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
     // Reuse the same resolver path the LLM pipeline takes. If this returns null
     // the user has no BYOK and no env fallback — surface that as 'untested'.
-    const { resolveLlmKey } = await import('../_shared/byok.ts');
+    const { resolveLlmKey } = await import('../../_shared/byok.ts');
     const resolved = await resolveLlmKey(db, project.id, provider);
     if (!resolved) {
       return c.json(
