@@ -241,7 +241,7 @@ export function IteratePage() {
           onTrigger={triggerRun}
           onRefresh={async () => {
             const res = await apiFetch<{ data: PdcaRun }>(`/v1/admin/pdca/${selectedRun.id}`)
-            if (res.ok && res.data) setSelectedRun(res.data as PdcaRun)
+            if (res.ok && res.data) setSelectedRun(res.data as unknown as PdcaRun)
           }}
         />
       )}

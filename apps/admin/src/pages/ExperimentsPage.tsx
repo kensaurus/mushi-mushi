@@ -206,7 +206,7 @@ export function ExperimentsPage() {
           onStop={stop}
           onRefresh={async () => {
             const res = await apiFetch<{ data: Experiment }>(`/v1/admin/experiments/${selected.id}`)
-            if (res.ok && res.data) setSelected(res.data as Experiment)
+            if (res.ok && res.data) setSelected(res.data as unknown as Experiment)
           }}
         />
       )}
