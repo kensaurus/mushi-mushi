@@ -18,7 +18,15 @@ import {
   ResultChip,
   type ResultChipTone,
   FreshnessPill,
+  SegmentedControl,
+  StatCard,
 } from '../components/ui'
+import { JudgeStatusBanner } from '../components/judge/JudgeStatusBanner'
+import {
+  EMPTY_JUDGE_STATS,
+  type JudgeStats,
+  type JudgeTabId,
+} from '../components/judge/JudgeStatsTypes'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { ResponsiveTable } from '../components/ResponsiveTable'
 import {
@@ -130,6 +138,34 @@ interface Distribution {
   total: number
 }
 
+const JUDGE_TABS: Array<{ id: JudgeTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture banner, workflow, and run-judge CTA.',
+  },
+  {
+    id: 'trend',
+    label: 'Trend',
+    description: '12-week score sparkline, dimension bars, and distribution histogram.',
+  },
+  {
+    id: 'evaluations',
+    label: 'Evaluations',
+    description: 'Per-report judge grades — filter disagreements or lowest scores.',
+  },
+  {
+    id: 'prompts',
+    label: 'Prompts',
+    description: 'Prompt-version leaderboard ranked by mean judge score.',
+  },
+]
+
+function resolveJudgeTab(value: string | null): JudgeTabId {
+  if (value === 'trend' || value === 'evaluations' || value === 'prompts') return value
+  return 'overview'
+}
+
 function ScoreBar({
   label,
   value,
@@ -221,8 +257,33 @@ function ScorePill({ value }: { value: number | null }) {
 
 export function JudgePage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveJudgeTab(tabParam)
+  const activeTabMeta = JUDGE_TABS.find((t) => t.id === activeTab) ?? JUDGE_TABS[0]
   const disagreementOnly = searchParams.get('filter') === 'disagreement'
   const toast = useToast()
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<JudgeStats>('/v1/admin/judge/stats')
+  const stats = { ...EMPTY_JUDGE_STATS, ...statsData }
+
+  const setActiveTab = useCallback(
+    (tab: JudgeTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -282,11 +343,12 @@ export function JudgePage() {
   const error = merged.error
 
   const loadAll = useCallback(() => {
+    reloadStats()
     weeksQuery.reload()
     evalsQuery.reload()
     promptsQuery.reload()
     distQuery.reload()
-  }, [weeksQuery, evalsQuery, promptsQuery, distQuery])
+  }, [reloadStats, weeksQuery, evalsQuery, promptsQuery, distQuery])
 
   async function runNow() {
     setRunning(true)
@@ -341,8 +403,54 @@ export function JudgePage() {
         ],
   })
 
+  const disagreementRate = evalsRaw.length > 0
+    ? evalsRaw.filter((e) => e.classification_agreed === false).length / evalsRaw.length
+    : null
+  const staleHoursAgo = evalsRaw[0]?.created_at
+    ? Math.floor((Date.now() - new Date(evalsRaw[0].created_at).getTime()) / 3_600_000)
+    : null
+  const heroAction = useNextBestAction({
+    scope: 'judge',
+    disagreementRate,
+    sampledCount: evalsRaw.length,
+    staleHoursAgo,
+  })
+
+  const tabOptions = useMemo(
+    () =>
+      JUDGE_TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'evaluations' && stats.disagreementCount > 0
+            ? stats.disagreementCount
+            : t.id === 'prompts' && stats.promptVersionCount > 0
+              ? stats.promptVersionCount
+              : undefined,
+      })),
+    [stats.disagreementCount, stats.promptVersionCount],
+  )
+
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading judge">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load judge stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters showKpiStrip label="Loading judge" />
-  if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'judge data'}: ${error}`} onRetry={merged.retry} />
+  if (error) return <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'judge data'}: ${error}`} onRetry={loadAll} />
 
   const latest = weeks[0]
   const previous = weeks[1]
@@ -358,43 +466,212 @@ export function JudgePage() {
   // fromIso/toIso bounds the filter logic can consume.
   const trendTimestamps = [...weeks].reverse().map((w) => (w as { week?: string }).week ?? '')
 
-  // Shared inputs for the hero + action bar — kept as plain consts so the
-  // NBA hook is only called once per render (react-hooks/exhaustive-deps
-  // stays happy and downstream widgets read a single source of truth).
-  const disagreementRate = evalsRaw.length > 0
-    ? evalsRaw.filter((e) => e.classification_agreed === false).length / evalsRaw.length
-    : null
-  const staleHoursAgo = evals[0]?.created_at
-    ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
-    : null
-  const heroAction = useNextBestAction({
-    scope: 'judge',
-    disagreementRate,
-    sampledCount: evalsRaw.length,
-    staleHoursAgo,
-  })
   const overallScore = latest?.avg_score
   const heroSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
     overallScore == null
       ? 'neutral'
-      : overallScore >= 4.2
+      : overallScore >= 0.8
         ? 'ok'
-        : overallScore >= 3.5
+        : overallScore >= 0.6
           ? 'warn'
           : 'crit'
   const lastEval = evals[0]
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'no_evals'
+        ? 'brand'
+        : stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
+          ? 'danger'
+          : stats.topPriority === 'disagreements' || stats.topPriority === 'stale'
+            ? 'warn'
+            : stats.topPriority === 'healthy'
+              ? 'ok'
+              : 'info'
+
+  const trendPanel = (
+    <>
+      <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
+        <Section
+          title="Score trend (12w)"
+          action={
+            <ChartActionsMenu
+              label="Score trend"
+              exportFilename={`judge-score-trend-${new Date().toISOString().slice(0, 10)}.csv`}
+              onExportCsv={() => {
+                const header = 'week_start,avg_score,avg_accuracy,avg_severity,avg_component,avg_repro,eval_count'
+                const rows = weeks.map((w) =>
+                  [w.week_start, w.avg_score, w.avg_accuracy, w.avg_severity, w.avg_component, w.avg_repro, w.eval_count].join(','),
+                )
+                return [header, ...rows].join('\n')
+              }}
+              openFilterTo="/judge?tab=evaluations&filter=disagreement"
+              openFilterLabel="Browse disagreements"
+            />
+          }
+        >
+          {weeks.length === 0 ? (
+            <EmptyState
+              icon={<HeroJudgeScale />}
+              title="No evaluations yet"
+              description="Run judge now to score classified reports. Weekly trend and dimension bars appear here after the first batch."
+              hints={[
+                'Run judge now scores the most recent reports against the active prompt.',
+                'Aim for ≥80% mean score before promoting a candidate prompt.',
+              ]}
+            />
+          ) : (
+            <>
+              <div className="relative">
+                <LineSparkline
+                  values={trendValues}
+                  timestamps={trendTimestamps.every(Boolean) ? trendTimestamps : undefined}
+                  onRangeSelect={
+                    trendTimestamps.every(Boolean)
+                      ? ({ fromIso, toIso }) => {
+                          const next = new URLSearchParams(window.location.search)
+                          next.set('from', fromIso)
+                          next.set('to', toIso)
+                          window.history.pushState(null, '', `${window.location.pathname}?${next.toString()}`)
+                        }
+                      : undefined
+                  }
+                  accent="text-brand"
+                  height={72}
+                  showAxes
+                  scaleToData
+                  valueFormat="percent"
+                  yAxisCaption="Score"
+                  xAxisCaption="Week"
+                  showPeakLabel
+                  ariaLabel="Weekly judge score trend"
+                />
+                {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
+                  <ChartAnnotations
+                    events={chartEvents}
+                    fromIso={trendTimestamps[0]}
+                    toIso={trendTimestamps[trendTimestamps.length - 1]}
+                    ariaLabel="Judge score annotations"
+                  />
+                )}
+              </div>
+              {latest && (
+                <>
+                  <div className="mt-3 space-y-1">
+                    <ScoreBar label="Overall" value={latest.avg_score} color={SCORE_COLORS.overall} description={DIMENSION_TOOLTIPS.Score} />
+                    <ScoreBar label="Accuracy" value={latest.avg_accuracy} color={SCORE_COLORS.accuracy} description={DIMENSION_TOOLTIPS.Acc} />
+                    <ScoreBar label="Severity" value={latest.avg_severity} color={SCORE_COLORS.severity} description={DIMENSION_TOOLTIPS.Sev} />
+                    <ScoreBar label="Component" value={latest.avg_component} color={SCORE_COLORS.component} description={DIMENSION_TOOLTIPS.Comp} />
+                    <ScoreBar label="Repro" value={latest.avg_repro} color={SCORE_COLORS.repro} description={DIMENSION_TOOLTIPS.Repro} />
+                  </div>
+                  <ScoreTrendLegend />
+                </>
+              )}
+            </>
+          )}
+        </Section>
+
+        <Section title="Score distribution">
+          {dist && dist.total > 0 ? (
+            <>
+              <Histogram
+                buckets={dist.buckets}
+                labels={['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']}
+                accent="bg-brand/70"
+                height={100}
+                showAxes
+                valueFormat="count"
+                yAxisCaption="Evals"
+                xAxisCaption="Score (0–10)"
+              />
+              <p className="text-2xs text-fg-faint mt-2">
+                {dist.total} evals · 0–100 scale, deciles
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-fg-muted">No scored evaluations yet.</p>
+          )}
+        </Section>
+      </div>
+
+      {weeks.length > 0 && (
+        <Section title="Weekly history">
+          <ResponsiveTable className="-mx-3">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-fg-muted text-left border-b border-edge">
+                  <th className="py-1.5 px-3 font-medium">Week</th>
+                  <th className="py-1.5 px-3 font-medium text-right"><HeaderTip short="Score" /></th>
+                  <th className="py-1.5 px-3 font-medium text-right"><HeaderTip short="Accuracy" full={DIMENSION_TOOLTIPS.Acc} /></th>
+                  <th className="py-1.5 px-3 font-medium text-right"><HeaderTip short="Severity" full={DIMENSION_TOOLTIPS.Sev} /></th>
+                  <th className="py-1.5 px-3 font-medium text-right"><HeaderTip short="Component" full={DIMENSION_TOOLTIPS.Comp} /></th>
+                  <th className="py-1.5 px-3 font-medium text-right"><HeaderTip short="Repro" /></th>
+                  <th className="py-1.5 px-3 font-medium text-right">Evals</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeks.map((w) => (
+                  <tr key={w.week_start} className="border-b border-edge-subtle text-fg-secondary">
+                    <td className="py-1.5 px-3">{w.week_start}</td>
+                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_score} /></td>
+                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_accuracy} /></td>
+                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_severity} /></td>
+                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_component} /></td>
+                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_repro} /></td>
+                    <td className="py-1.5 px-3 text-right font-mono tabular-nums">{w.eval_count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ResponsiveTable>
+        </Section>
+      )}
+    </>
+  )
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-judge">
       <PageHeader
         title={copy?.title ?? 'Judge'}
-        projectScope={projectName}
-        description={copy?.description ?? 'Independent grading of every classified report — calibrate confidence and catch silent regressions.'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.'
+        }
       >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.totalEvaluations === 0
+              ? 'NO EVALS'
+              : stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
+                ? 'DRIFT'
+                : stats.disagreementCount > 0
+                  ? `${stats.disagreementCount} DISAGREE`
+                  : stats.latestWeekScore != null
+                    ? `${Math.round(stats.latestWeekScore * 100)}%`
+                    : 'OK'}
+        </Badge>
         <FreshnessPill
-          at={evalsQuery.lastFetchedAt ?? weeksQuery.lastFetchedAt}
-          isValidating={evalsQuery.isValidating || weeksQuery.isValidating || promptsQuery.isValidating || distQuery.isValidating}
+          at={statsFetchedAt ?? evalsQuery.lastFetchedAt ?? weeksQuery.lastFetchedAt}
+          isValidating={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating || promptsQuery.isValidating || distQuery.isValidating}
         />
+        <Btn size="sm" variant="ghost" onClick={loadAll} loading={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}>
+          Refresh
+        </Btn>
         <Btn
           size="sm"
           variant="primary"
@@ -413,19 +690,111 @@ export function JudgePage() {
         )}
       </PageHeader>
 
-      {/*
-        Decide / Act / Verify hero — replaces the chart-first layout so
-        operators see state + next step + proof-of-life before any
-        visualisations. Charts still live below so drill-down remains
-        one scroll away.
-      */}
+      <JudgeStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={loadAll}
+        refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
+        onRunJudge={runNow}
+        running={running}
+      />
+
+      <SegmentedControl<JudgeTabId>
+        size="sm"
+        ariaLabel="Judge sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="JUDGE SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            label="This week"
+            value={stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—'}
+            accent={
+              stats.latestWeekScore != null && stats.latestWeekScore >= 0.8
+                ? 'text-ok'
+                : stats.latestWeekScore != null && stats.latestWeekScore >= 0.6
+                  ? 'text-warn'
+                  : stats.latestWeekScore != null
+                    ? 'text-danger'
+                    : undefined
+            }
+            hint={`${stats.latestWeekEvalCount} evals`}
+          />
+          <StatCard
+            label="Total evals"
+            value={stats.totalEvaluations}
+            accent={stats.totalEvaluations > 0 ? 'text-brand' : undefined}
+            hint="All time on project"
+          />
+          <StatCard
+            label="Disagreements"
+            value={stats.disagreementCount}
+            accent={stats.disagreementCount > 0 ? 'text-warn' : 'text-ok'}
+            hint={stats.disagreementRatePct != null ? `${stats.disagreementRatePct}% rate` : 'classifier vs user'}
+          />
+          <StatCard
+            label="WoW drift"
+            value={stats.weekOverWeekDriftPct != null ? `${stats.weekOverWeekDriftPct}%` : '—'}
+            accent={
+              stats.weekOverWeekDriftPct != null && stats.weekOverWeekDriftPct >= 5
+                ? 'text-danger'
+                : undefined
+            }
+            hint="Week-over-week score change"
+          />
+          <StatCard
+            label="Classified"
+            value={stats.classifiedReports}
+            accent={stats.classifiedReports > 0 && stats.totalEvaluations === 0 ? 'text-brand' : undefined}
+            hint="Ready for judge"
+          />
+          <StatCard
+            label="Prompts"
+            value={stats.promptVersionCount}
+            accent={stats.activePromptCount > 0 ? 'text-ok' : undefined}
+            hint={`${stats.activePromptCount} active`}
+          />
+        </div>
+      </Section>
+
+      {stats.topPriorityTo && stats.topPriority !== 'healthy' && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'no_evals'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {stats.topPriority === 'no_evals' || stats.topPriority === 'stale' ? (
+              <Btn size="sm" variant="ghost" onClick={runNow} loading={running} disabled={running}>
+                Run judge now
+              </Btn>
+            ) : (
+              <Link to={stats.topPriorityTo}>
+                <Btn size="sm" variant="ghost">Take action →</Btn>
+              </Link>
+            )}
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <>
       <PageHero
         scope="judge"
         title={copy?.title ?? 'Judge'}
         kicker="Independent grading"
         decide={{
-          label: overallScore == null ? 'No evaluations yet' : `Overall score ${overallScore.toFixed(2)}/5`,
-          metric: overallScore == null ? '—' : overallScore.toFixed(2),
+          label: overallScore == null ? 'No evaluations yet' : `Overall score ${Math.round(overallScore * 100)}%`,
+          metric: overallScore == null ? '—' : `${Math.round(overallScore * 100)}%`,
           summary: overallScore == null
             ? 'Run a judge batch to populate scores. Fresh runs every Mon/Thu are recommended.'
             : drift >= 0.05
@@ -436,7 +805,7 @@ export function JudgePage() {
           evidence: overallScore != null ? {
             kind: 'metric-breakdown',
             items: [
-              { label: 'Avg score', value: overallScore.toFixed(2), tone: overallScore >= 4.2 ? 'ok' : overallScore >= 3.5 ? 'warn' : 'crit' },
+              { label: 'Avg score', value: `${Math.round(overallScore * 100)}%`, tone: overallScore >= 0.8 ? 'ok' : overallScore >= 0.6 ? 'warn' : 'crit' },
               { label: 'Evaluations', value: totalEvals, tone: 'neutral' },
               { label: 'Weeks tracked', value: weeks.length, tone: 'neutral' },
               ...(disagreementRate != null ? [{ label: 'Disagreement', value: `${(disagreementRate * 100).toFixed(1)}%`, tone: disagreementRate > 0.2 ? 'warn' as const : 'ok' as const }] : []),
@@ -529,136 +898,20 @@ export function JudgePage() {
       </KpiRow>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[2fr_1fr]">
-        <Section
-          title="Score trend (12w)"
-          action={
-            <ChartActionsMenu
-              label="Score trend"
-              exportFilename={`judge-score-trend-${new Date().toISOString().slice(0, 10)}.csv`}
-              onExportCsv={() => {
-                const header = 'week_start,avg_score,avg_accuracy,avg_severity,avg_component,avg_repro,eval_count'
-                const rows = weeks.map((w) =>
-                  [w.week_start, w.avg_score, w.avg_accuracy, w.avg_severity, w.avg_component, w.avg_repro, w.eval_count].join(','),
-                )
-                return [header, ...rows].join('\n')
-              }}
-              openFilterTo="/judge?filter=disagreement"
-              openFilterLabel="Browse disagreements"
-            />
-          }
-        >
-          {weeks.length === 0 ? (
-            <EmptyState
-              icon={<HeroJudgeScale />}
-              title="No evaluations yet"
-              description="The judge is an independent LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Once it's run, you'll see weekly scores, prompt-version trends, and which classifier prompt is winning."
-              hints={[
-                'Run judge now scores the most recent reports against the active prompt.',
-                'Aim for ≥80% mean score before promoting a candidate prompt.',
-              ]}
-            />
-          ) : (
-            <>
-              <div className="relative">
-                <LineSparkline
-                  values={trendValues}
-                  timestamps={trendTimestamps.every(Boolean) ? trendTimestamps : undefined}
-                  onRangeSelect={
-                    trendTimestamps.every(Boolean)
-                      ? ({ fromIso, toIso }) => {
-                          const next = new URLSearchParams(window.location.search)
-                          next.set('from', fromIso)
-                          next.set('to', toIso)
-                          window.history.pushState(null, '', `${window.location.pathname}?${next.toString()}`)
-                        }
-                      : undefined
-                  }
-                  accent="text-brand"
-                  height={72}
-                  showAxes
-                  scaleToData
-                  valueFormat="percent"
-                  yAxisCaption="Score"
-                  xAxisCaption="Week"
-                  showPeakLabel
-                  ariaLabel="Weekly judge score trend"
-                />
-                {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
-                  <ChartAnnotations
-                    events={chartEvents}
-                    fromIso={trendTimestamps[0]}
-                    toIso={trendTimestamps[trendTimestamps.length - 1]}
-                    ariaLabel="Judge score annotations"
-                  />
-                )}
-              </div>
-              {latest && (
-                <>
-                  <div className="mt-3 space-y-1">
-                    <ScoreBar
-                      label="Overall"
-                      value={latest.avg_score}
-                      color={SCORE_COLORS.overall}
-                      description={DIMENSION_TOOLTIPS.Score}
-                    />
-                    <ScoreBar
-                      label="Accuracy"
-                      value={latest.avg_accuracy}
-                      color={SCORE_COLORS.accuracy}
-                      description={DIMENSION_TOOLTIPS.Acc}
-                    />
-                    <ScoreBar
-                      label="Severity"
-                      value={latest.avg_severity}
-                      color={SCORE_COLORS.severity}
-                      description={DIMENSION_TOOLTIPS.Sev}
-                    />
-                    <ScoreBar
-                      label="Component"
-                      value={latest.avg_component}
-                      color={SCORE_COLORS.component}
-                      description={DIMENSION_TOOLTIPS.Comp}
-                    />
-                    <ScoreBar
-                      label="Repro"
-                      value={latest.avg_repro}
-                      color={SCORE_COLORS.repro}
-                      description={DIMENSION_TOOLTIPS.Repro}
-                    />
-                  </div>
-                  <ScoreTrendLegend />
-                </>
-              )}
-            </>
-          )}
-        </Section>
+      {weeks.length === 0 && evals.length === 0 && prompts.length === 0 && (
+        <Card className="p-3 border-info/20 bg-info-muted/10">
+          <p className="text-xs text-fg-muted">
+            Tip: judge runs nightly via cron. Use <strong>Run judge now</strong> to seed
+            evaluations immediately on a fresh project.
+          </p>
+        </Card>
+      )}
+        </>
+      )}
 
-        <Section title="Score distribution">
-          {dist && dist.total > 0 ? (
-            <>
-              <Histogram
-                buckets={dist.buckets}
-                labels={['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']}
-                accent="bg-brand/70"
-                height={100}
-                showAxes
-                valueFormat="count"
-                yAxisCaption="Evals"
-                xAxisCaption="Score (0–10)"
-              />
-              <p className="text-2xs text-fg-faint mt-2">
-                {dist.total} evals · 0–100 scale, deciles
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-fg-muted">
-              No scored evaluations yet.
-            </p>
-          )}
-        </Section>
-      </div>
+      {activeTab === 'trend' && trendPanel}
 
+      {activeTab === 'prompts' && (
       <Section title="Prompt leaderboard">
         {prompts.length === 0 ? (
           <p className="text-xs text-fg-muted">
@@ -681,10 +934,11 @@ export function JudgePage() {
                 {prompts.map((p) => {
                   const isSelected =
                     promptFilter?.version === p.version && promptFilter?.stage === p.stage
-                  const toggle = () =>
-                    setPromptFilter(
-                      isSelected ? null : { version: p.version, stage: p.stage },
-                    )
+                  const toggle = () => {
+                    const next = isSelected ? null : { version: p.version, stage: p.stage }
+                    setPromptFilter(next)
+                    if (next) setActiveTab('evaluations')
+                  }
                   return (
                     <tr
                       key={p.id}
@@ -735,7 +989,9 @@ export function JudgePage() {
           </ResponsiveTable>
         )}
       </Section>
+      )}
 
+      {activeTab === 'evaluations' && (
       <Section
         title="Recent evaluations"
         action={
@@ -886,58 +1142,8 @@ export function JudgePage() {
           </ResponsiveTable>
         )}
       </Section>
-
-      {weeks.length > 0 && (
-        <Section title="Weekly history">
-          <ResponsiveTable className="-mx-3">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-fg-muted text-left border-b border-edge">
-                  <th className="py-1.5 px-3 font-medium">Week</th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Score" />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Accuracy" full={DIMENSION_TOOLTIPS.Acc} />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Severity" full={DIMENSION_TOOLTIPS.Sev} />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Component" full={DIMENSION_TOOLTIPS.Comp} />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">
-                    <HeaderTip short="Repro" />
-                  </th>
-                  <th className="py-1.5 px-3 font-medium text-right">Evals</th>
-                </tr>
-              </thead>
-              <tbody>
-                {weeks.map((w) => (
-                  <tr key={w.week_start} className="border-b border-edge-subtle text-fg-secondary">
-                    <td className="py-1.5 px-3">{w.week_start}</td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_score} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_accuracy} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_severity} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_component} /></td>
-                    <td className="py-1.5 px-3 text-right"><ScorePill value={w.avg_repro} /></td>
-                    <td className="py-1.5 px-3 text-right font-mono tabular-nums">{w.eval_count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ResponsiveTable>
-        </Section>
       )}
 
-      {weeks.length === 0 && evals.length === 0 && prompts.length === 0 && (
-        <Card className="p-3 border-info/20 bg-info-muted/10">
-          <p className="text-xs text-fg-muted">
-            Tip: judge runs nightly via cron. Use <strong>Run judge now</strong> to seed
-            evaluations immediately on a fresh project.
-          </p>
-        </Card>
-      )}
     </div>
   )
 }
