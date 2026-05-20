@@ -53,7 +53,7 @@ export interface ExploreSearchHit {
   signature: string | null
   line_start: number | null
   line_end: number | null
-  content_preview: string
+  content_preview: string | null
   layer: ExploreLayer
   similarity: number
 }

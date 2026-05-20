@@ -17,7 +17,7 @@
  *     beginner mode and the bare word in advanced.
  */
 
-import { useAdminMode } from './mode'
+import { useAdminMode, type AdminMode } from './mode'
 
 interface PageCopy {
   /** Page-header title (overrides the in-page title in beginner mode). */
@@ -116,7 +116,7 @@ export const COPY: CopyRegistry = {
         title: 'About the inbox',
         whatIsIt: 'A single dashboard that shows every action waiting for you — bugs to triage, fixes to review, and connections to set up.',
         useCases: [
-          'Start every morning here — see what actually needs you today',
+          'Start every morning here — see what actually needs your attention today',
           'Jump to the highest-priority bug in one click',
           'Quickly check if everything is on track or if something is stuck',
         ],
@@ -687,6 +687,126 @@ export const COPY: CopyRegistry = {
   // audience, so we don't touch sections/help here. Keeping the registry
   // flat makes it obvious what beginner mode adds rather than what it strips.
   advanced: {
+    '/inbox': {
+      title: 'Inbox',
+      description: 'Cross-stage action queue — triage backlog, open PRs, integration gaps, PDCA coverage.',
+    },
+    '/projects': {
+      title: 'Projects',
+      description: 'Multi-tenant project registry — API keys, SDK heartbeat, per-project deep links.',
+    },
+    '/queue': {
+      title: 'Processing queue',
+      description: 'DLQ + stuck pipeline items. Retry, inspect failure stage, flush backlog.',
+    },
+    '/inventory': {
+      title: 'Inventory',
+      description: 'Crawled user-story map, gate runs, wired/mocked coverage, findings backlog.',
+    },
+    '/query': {
+      title: 'NL query',
+      description: 'Natural-language → SQL against project telemetry. Exportable result sets.',
+    },
+    '/research': {
+      title: 'Research',
+      description: 'LLM synthesis over reports, fixes, and indexed codebase context.',
+    },
+    '/repo': {
+      title: 'Repo',
+      description: 'GitHub OAuth, default branch, fix-worker target repo health.',
+    },
+    '/sso': {
+      title: 'SSO',
+      description: 'SAML/OIDC + social IdP enforcement for the organization.',
+    },
+    '/audit': {
+      title: 'Audit log',
+      description: 'Append-only mutation trail — human + agent actors, CSV export.',
+    },
+    '/prompt-lab': {
+      title: 'Prompt lab',
+      description: 'Versioned classifier/fix prompts with shadow tests on live reports.',
+    },
+    '/intelligence': {
+      title: 'Intelligence',
+      description: 'Weekly LLM narrative — KPI trends, regressions, recommended actions.',
+    },
+    '/compliance': {
+      title: 'Compliance',
+      description: 'Retention, PII masking, residency, and evidence export controls.',
+    },
+    '/storage': {
+      title: 'Storage',
+      description: 'Screenshot / attachment browser with per-report lineage.',
+    },
+    '/marketplace': {
+      title: 'Marketplace',
+      description: 'Installable platform plugins — Sentry, Linear, Slack, …',
+    },
+    '/mcp': {
+      title: 'MCP',
+      description: 'Model Context Protocol endpoints for external agent consumers.',
+    },
+    '/qa-coverage': {
+      title: 'QA coverage',
+      description: 'Scheduled Playwright / Firecrawl / Browserbase story runs + 24h pass rate.',
+    },
+    '/anti-gaming': {
+      title: 'Anti-gaming',
+      description: 'Heuristics for synthetic / duplicate / low-signal report abuse.',
+    },
+    '/rewards': {
+      title: 'Rewards',
+      description: 'Contributor incentives tied to merged fix throughput.',
+    },
+    '/lessons': {
+      title: 'Lessons',
+      description: 'Post-incident learnings linked to report fingerprints.',
+    },
+    '/releases': {
+      title: 'Releases',
+      description: 'Release ↔ regression correlation and deploy-window overlays.',
+    },
+    '/iterate': {
+      title: 'Iterate',
+      description: 'Prompt / policy iteration loop with A/B harness on historical reports.',
+    },
+    '/drift': {
+      title: 'Drift',
+      description: 'Classifier output drift vs judge baseline — alert on regression.',
+    },
+    '/experiments': {
+      title: 'Experiments',
+      description: 'Feature-flagged pipeline variants with cohort metrics.',
+    },
+    '/anomalies': {
+      title: 'Anomalies',
+      description: 'Statistical spikes in intake, latency, or failure rate.',
+    },
+    '/cost': {
+      title: 'Cost',
+      description: 'LLM spend by function, model, and project — daily rollups.',
+    },
+    '/notifications': {
+      title: 'Notifications',
+      description: 'Routing rules, delivery log, and channel health probes.',
+    },
+    '/billing': {
+      title: 'Billing',
+      description: 'Plan entitlements, usage meters, Stripe subscription state.',
+    },
+    '/organization/members': {
+      title: 'Members',
+      description: 'Org roster, roles (viewer → owner), invite lifecycle.',
+    },
+    '/explore': {
+      title: 'Codebase atlas',
+      description: 'Indexed file graph, import edges, semantic search over symbols.',
+    },
+    '/users': {
+      title: 'Users',
+      description: 'Operator directory — signups, plans, last-seen activity.',
+    },
     '/dashboard': {
       title: 'PDCA cockpit',
       description: 'Plan → Do → Check → Act, with 14d intake, LLM cost, judge trend, fix throughput.',
@@ -726,6 +846,27 @@ export const COPY: CopyRegistry = {
   },
 }
 
+/** Merge advanced overrides onto beginner base so help/sections survive mode switch. */
+function mergePageCopy(path: string, mode: AdminMode): PageCopy | null {
+  const beginner = COPY.beginner[path]
+  if (mode === 'quickstart') {
+    return COPY.quickstart[path] ?? beginner ?? null
+  }
+  if (mode === 'beginner') {
+    return beginner ?? null
+  }
+  const advanced = COPY.advanced[path]
+  if (!advanced && !beginner) return null
+  if (!advanced) return beginner ?? null
+  if (!beginner) return advanced
+  return {
+    ...beginner,
+    ...advanced,
+    sections: { ...beginner.sections, ...advanced.sections },
+    help: advanced.help ?? beginner.help,
+  }
+}
+
 /**
  * Pulls a page's copy block. Falls back to undefined when no override
  * exists for the active mode, so callers can do
@@ -735,13 +876,7 @@ export const COPY: CopyRegistry = {
  */
 export function usePageCopy(path: string): PageCopy | null {
   const { mode } = useAdminMode()
-  // Quickstart only overrides 4 routes; everything else falls back to
-  // beginner copy (still plain-language) so quickstart users don't see
-  // raw advanced jargon when they deep-link into a non-quickstart page.
-  if (mode === 'quickstart') {
-    return COPY.quickstart[path] ?? COPY.beginner[path] ?? null
-  }
-  return COPY[mode][path] ?? null
+  return mergePageCopy(path, mode)
 }
 
 /**

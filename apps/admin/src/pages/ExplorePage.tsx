@@ -10,8 +10,8 @@
  * architectural layer (clicking the pill again deselects).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -73,7 +73,7 @@ export function ExplorePage() {
   // unconditionally from activeProjectId, so the "not indexed" empty state
   // is accurate when viewing a non-active project via URL param.
   const setup = useSetupStatus(projectId || activeProjectId)
-  const indexedFileCount = (setup.activeProject as Record<string, unknown> | null)?.indexed_file_count as number | undefined
+  const indexedFileCount = setup.activeProject?.indexed_file_count
 
   const { resolved: theme } = useTheme()
 
@@ -90,17 +90,13 @@ export function ExplorePage() {
     ? `/v1/admin/projects/${projectId}/codebase/explore${density === 'symbols' ? '?symbols=1' : ''}`
     : null
 
+  // usePageData already refetches when exploreUrl changes (density and projectId
+  // are both encoded in the URL). No extra effect is needed — a second reload()
+  // call here would cause a duplicate in-flight request on every change.
   const exploreQuery = usePageData<ExplorePayload>(exploreUrl)
   const payload = exploreQuery.data
   const loading = exploreQuery.loading
   const error = exploreQuery.error
-
-  // Reload when density or project changes
-  const reloadRef = useRef(exploreQuery.reload)
-  reloadRef.current = exploreQuery.reload
-  useEffect(() => {
-    if (projectId) reloadRef.current()
-  }, [density, projectId])
 
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []
@@ -432,10 +428,24 @@ export function ExplorePage() {
           <div className="text-sm font-medium text-fg">Codebase not indexed yet</div>
           <div className="text-2xs text-fg-muted max-w-md mx-auto">
             Enable codebase indexing in{' '}
-            <a href="/settings" className="text-brand hover:underline">Settings → Codebase Indexing</a>
+            <Link to="/settings" className="text-brand hover:underline">Settings → Codebase Indexing</Link>
             {' '}or run{' '}
             <code className="text-2xs font-mono bg-surface-overlay px-1 rounded">mushi index</code>
             {' '}in your project directory.
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <Link
+              to="/settings"
+              className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+            >
+              Open indexing settings →
+            </Link>
+            <Link
+              to="/onboarding"
+              className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-sm border border-edge text-fg-secondary hover:bg-surface-overlay"
+            >
+              Setup checklist
+            </Link>
           </div>
         </div>
       )}

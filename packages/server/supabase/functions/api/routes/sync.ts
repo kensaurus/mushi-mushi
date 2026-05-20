@@ -86,18 +86,28 @@ export function registerSyncRoutes(app: Hono) {
     // always accurate even when a project has > max_rows (Supabase default 1000)
     // reports. Running them all in parallel keeps the latency equivalent to a
     // single round-trip.
-    const STATUS_BUCKETS = ['new', 'triaged', 'in_progress', 'resolved', 'dismissed'] as const
+    //
+    // STATUS_BUCKETS must match the DB CHECK constraint on reports.status
+    // (see phase0_initial_schema.sql). The user-facing labels returned to the
+    // CLI map the internal pipeline statuses to readable names.
+    const STATUS_BUCKETS = [
+      'new', 'pending', 'submitted', 'queued',
+      'classified', 'grouped', 'fixing', 'fixed', 'dismissed',
+    ] as const
+    // Severity can be NULL for reports that haven't been classified yet.
+    // We count each named bucket plus an explicit 'unset' bucket for NULLs.
     const SEVERITY_BUCKETS = ['critical', 'high', 'medium', 'low'] as const
 
     // Each status/severity bucket query throws on DB error so Promise.all rejects
     // fast. Fix/lesson queries use the non-throwing pattern and are checked below.
     let statusResults: Array<{ key: string; count: number }>
     let severityResults: Array<{ key: string; count: number }>
+    let unsetSeverityCount: number
     let fixCount: number
     let mergedFixCount: number
     let lessonCount: number
     try {
-      const [sRes, sevRes, fixCountRes, mergedFixRes, lessonCountRes] = await Promise.all([
+      const [sRes, sevRes, unsetSevRes, fixCountRes, mergedFixRes, lessonCountRes] = await Promise.all([
         Promise.all(
           STATUS_BUCKETS.map((s) =>
             db.from('reports').select('*', { count: 'exact', head: true })
@@ -118,6 +128,13 @@ export function registerSyncRoutes(app: Hono) {
               }),
           ),
         ),
+        // Count reports with no severity assigned yet (NULL severity).
+        db.from('reports').select('*', { count: 'exact', head: true })
+          .eq('project_id', projectId).is('severity', null)
+          .then((r) => {
+            if (r.error) throw new Error(`stats severity unset: ${r.error.message}`)
+            return r
+          }),
         db.from('fixes').select('*', { count: 'exact', head: true }).eq('project_id', projectId),
         db.from('fixes').select('*', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'merged'),
         db.from('lessons').select('*', { count: 'exact', head: true }).eq('project_id', projectId).is('retired_at', null),
@@ -129,6 +146,7 @@ export function registerSyncRoutes(app: Hono) {
 
       statusResults = sRes
       severityResults = sevRes
+      unsetSeverityCount = unsetSevRes.count ?? 0
       fixCount = fixCountRes.count ?? 0
       mergedFixCount = mergedFixRes.count ?? 0
       lessonCount = lessonCountRes.count ?? 0
@@ -138,7 +156,10 @@ export function registerSyncRoutes(app: Hono) {
     }
 
     const byStatus = Object.fromEntries(statusResults.map((r) => [r.key, r.count]))
-    const bySeverity = Object.fromEntries(severityResults.map((r) => [r.key, r.count]))
+    const bySeverity = {
+      ...Object.fromEntries(severityResults.map((r) => [r.key, r.count])),
+      unset: unsetSeverityCount,
+    }
 
     return c.json({
       ok: true,
@@ -385,6 +406,7 @@ export function registerSyncRoutes(app: Hono) {
 
     const chunks = chunk(filePath, source)
     let inserted = 0
+    const chunkErrors: string[] = []
     for (const ch of chunks) {
       try {
         const text = `${filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`
@@ -406,13 +428,27 @@ export function registerSyncRoutes(app: Hono) {
           },
           { onConflict: 'project_id,file_path,symbol_name', ignoreDuplicates: false },
         )
-        if (!error) inserted++
-      } catch {
-        // Individual chunk failures don't abort the whole file — log via Sentry
-        // in production via the edge-function wrapper, continue with remaining chunks.
+        if (error) {
+          chunkErrors.push(`${filePath}#${ch.symbolName ?? 'whole'}: ${error.message}`)
+        } else {
+          inserted++
+        }
+      } catch (err) {
+        // Individual chunk failures don't abort the whole file. Collect errors
+        // so the response includes a partial-success payload and callers can
+        // detect degraded indexing without silent data loss.
+        const msg = err instanceof Error ? err.message : String(err)
+        chunkErrors.push(`${filePath}#${ch.symbolName ?? 'whole'}: ${msg}`)
       }
     }
 
-    return c.json({ ok: true, data: { chunks: inserted, file_path: filePath } })
+    return c.json({
+      ok: true,
+      data: {
+        chunks: inserted,
+        file_path: filePath,
+        ...(chunkErrors.length > 0 ? { chunk_errors: chunkErrors } : {}),
+      },
+    })
   })
 }

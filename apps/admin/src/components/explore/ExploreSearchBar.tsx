@@ -80,6 +80,10 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
       onHighlight(new Set(hits.map((h) => h.id)))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Search failed')
+      // Clear stale results and highlights so the error state is consistent —
+      // showing old hits while an error banner is displayed is misleading.
+      setResults([])
+      onHighlight(new Set())
     } finally {
       setSearching(false)
     }
