@@ -1,11 +1,18 @@
 [
   {
-    "majorMinor": "next",
-    "headline": "pending (pending release)",
-    "pending": true,
-    "versions": [],
+    "majorMinor": "1.3",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.3.0"
+    ],
     "highlights": [],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.3.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.2",
