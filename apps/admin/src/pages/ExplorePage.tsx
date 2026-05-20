@@ -10,7 +10,7 @@
  * architectural layer (clicking the pill again deselects).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -432,6 +432,20 @@ export function ExplorePage() {
             {' '}or run{' '}
             <code className="text-2xs font-mono bg-surface-overlay px-1 rounded">mushi index</code>
             {' '}in your project directory.
+          </div>
+          <div className="flex items-center justify-center gap-2 pt-1">
+            <Link
+              to="/settings"
+              className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
+            >
+              Open indexing settings →
+            </Link>
+            <Link
+              to="/onboarding"
+              className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-sm border border-edge text-fg-secondary hover:bg-surface-overlay"
+            >
+              Setup checklist
+            </Link>
           </div>
         </div>
       )}

@@ -74,6 +74,7 @@ export const SetupProjectSchema = z
     report_count: z.number().int().nonnegative(),
     fix_count: z.number().int().nonnegative(),
     merged_fix_count: z.number().int().nonnegative(),
+    indexed_file_count: z.number().int().nonnegative(),
   })
   .passthrough()
 export const SetupResponseSchema = z
@@ -144,6 +145,10 @@ export const ReportListItemSchema = z
     description: z.string().nullable().optional(),
     created_at: z.string(),
     judge_score: z.number().nullable().optional(),
+    dedup_count: z.number().int().nonnegative().optional(),
+    unique_users: z.number().int().nonnegative().optional(),
+    unique_sessions: z.number().int().nonnegative().optional(),
+    report_group_id: z.string().uuid().nullable().optional(),
   })
   .passthrough()
 export const ReportListSchema = z
