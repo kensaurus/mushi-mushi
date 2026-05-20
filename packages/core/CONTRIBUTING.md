@@ -101,6 +101,17 @@ Releases are fully automated. Maintainers don't run `npm publish` by hand.
 
 If GitHub's anti-loop protection suppresses the auto re-fire (the squash merge can be attributed to `github-actions[bot]`), trigger the workflow manually: **Actions → release → Run workflow → master**.
 
+### Known CI/CD quirks and their automatic safeguards
+
+A handful of GitHub-Actions × Changesets edge cases have caused release-pipeline stalls in the past. Each is now caught automatically — keep these in mind when you see the symptom:
+
+| Symptom | Root cause | Automatic safeguard |
+| --- | --- | --- |
+| The `Build & Test` required check never registers on the `chore: version packages` PR — the PR stays "Required check missing" forever | `changeset-release/master` is pushed by `github-actions[bot]`. GitHub silently drops the downstream `pull_request` event to prevent bot loops (observed on PR #45, #102, #124). | `ci.yml` now also triggers on `push` to `changeset-release/master`, so `Build & Test` reports against the head commit directly. No empty-commit nudge needed. |
+| Release workflow fails with `No commits between master and changeset-release/master` after merging a PR with a new changeset. | A `.changeset/*.md` file whose YAML frontmatter only targets packages listed in `.changeset/config.json#ignore` (e.g. `@mushi-mushi/server`, `@mushi-mushi/admin`). `changeset version` produces no bumps, the version PR is empty, the next push errors (PR #102 / #121, 2026-05-19). | `pnpm check:changeset-orphans` runs in both `ci.yml` and `release.yml`. PR CI fails with an actionable message naming the orphan file *before* it can reach master. If you legitimately need to record an internal-only change, omit the changeset entirely — the diff lives in git history. |
+| Release workflow's `Audit signatures of installed dependencies` step fails with `npm ETARGET / No matching version found for @mushi-mushi/<pkg>@<ver>` seconds after the publish step succeeded. | npm's registry CDN can take up to ~30s to propagate a freshly-published manifest. The audit step shells out to `npm install` against the just-published version and races the CDN (observed 2026-05-20, run 26149167393). | The audit step retries with exponential backoff (1, 2, 4, 8, 16, 32s — 63s total) before failing. Sigstore signatures are written at publish time, so a one-off audit failure never indicates a corrupted package — `pnpm view <pkg> version` is the ground truth. |
+| Push to `master` after merging a PR doesn't fire the `Release` workflow. | Same anti-loop protection: when a squash merge is attributed to `github-actions[bot]`, GitHub may suppress the downstream `push` trigger. Sporadic — observed twice in the last 60 days. | `release.yml` keeps `workflow_dispatch` as the manual fallback. Recovery: **Actions → Release → Run workflow → master**. The `Build & Verify` job re-runs identically to the auto-fired path. |
+
 ### Adding a brand-new publishable package
 
 Trusted Publisher bindings are configured **per package** on `npmjs.com` and require the package to already exist on the registry. New packages therefore need a one-time bootstrap before OIDC can take over.
