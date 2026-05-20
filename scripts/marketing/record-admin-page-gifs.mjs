@@ -27,6 +27,13 @@ const SKILL_DIR = resolve(
   process.env.USERPROFILE || process.env.HOME || '',
   '.cursor/skills/enhance-readme',
 )
+if (!existsSync(join(SKILL_DIR, 'node_modules'))) {
+  err(
+    `Playwright not found under ${SKILL_DIR}/node_modules — install the enhance-readme Cursor skill first.\n` +
+      `  npx skills add enhance-readme`,
+  )
+  process.exit(1)
+}
 const skillRequire = createRequire(join(SKILL_DIR, 'package.json'))
 const { chromium } = skillRequire('playwright')
 const ffmpegInstaller = skillRequire('@ffmpeg-installer/ffmpeg')
@@ -280,7 +287,10 @@ async function patchManifest(pages) {
   let text = await readFile(MANIFEST, 'utf8')
   for (const { slug } of pages) {
     const gif = `${slug}-demo.gif`
-    const blockRe = new RegExp(`(\\s+['"]?${slug.replace(/-/g, '\\-')}['"]?:\\s*\\{)([\\s\\S]*?)(\\n\\s+\\},)`, 'm')
+    // Escape all regex special chars, then allow either a literal hyphen or none
+    // (the manifest key is always a plain slug so escaping is belt-and-suspenders).
+    const escapedSlug = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const blockRe = new RegExp(`(\\s+['"]?${escapedSlug}['"]?:\\s*\\{)([\\s\\S]*?)(\\n\\s+\\},)`, 'm')
     const match = text.match(blockRe)
     if (!match) continue
     let body = match[2]

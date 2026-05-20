@@ -18,7 +18,10 @@ function stripTrailingSlash(value: string): string {
 export function getDocsBase(): string {
   const fromEnv = String(import.meta.env.VITE_DOCS_URL ?? '').trim()
   if (fromEnv) return stripTrailingSlash(fromEnv)
-  if (import.meta.env.DEV) return DEV_DOCS_BASE
+  // import.meta.env.DEV is a boolean in production bundles but vi.stubEnv()
+  // patches it as a string ('true'/'false') in Vitest — handle both shapes.
+  const dev = import.meta.env.DEV
+  if (dev === true || dev === 'true') return DEV_DOCS_BASE
   return PROD_DOCS_BASE
 }
 
