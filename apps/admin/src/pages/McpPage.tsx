@@ -17,6 +17,9 @@ import {
   StatCard,
   SegmentedControl,
   CopyButton,
+  FreshnessPill,
+  RecommendedAction,
+  RelativeTime,
 } from '../components/ui'
 import { IconIntegrations, IconCheck, IconArrowRight } from '../components/icons'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -27,11 +30,11 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
-import { PageHero } from '../components/PageHero'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { detectFromPackageJson } from '../lib/frameworkDetect'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
+import { EMPTY_MCP_STATS } from '../components/mcp/types'
 import type { CatalogTabId, McpProjectsResponse, McpStats, McpTabId } from '../components/mcp/types'
 import {
   TOOL_CATALOG,
@@ -43,6 +46,11 @@ import {
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
 const TABS: Array<{ id: McpTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'MCP posture — key scopes, connection status, and recommended next steps for agent access.',
+  },
   {
     id: 'setup',
     label: 'Setup',
@@ -102,8 +110,9 @@ const USE_CASES: UseCase[] = [
   },
 ]
 
-function isTabId(v: string | null): v is McpTabId {
-  return TABS.some((t) => t.id === v)
+function resolveMcpTab(value: string | null): McpTabId {
+  if (value === 'setup' || value === 'catalog' || value === 'examples') return value
+  return 'overview'
 }
 
 function isCatalogTabId(v: string | null): v is CatalogTabId {
@@ -246,7 +255,7 @@ export function McpPage() {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
-  const activeTab: McpTabId = isTabId(param) ? param : 'setup'
+  const activeTab: McpTabId = resolveMcpTab(param)
   const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
   const catalogParam = searchParams.get('catalog')
   const catalogTab: CatalogTabId = isCatalogTabId(catalogParam) ? catalogParam : 'tools'
@@ -270,20 +279,7 @@ export function McpPage() {
     return projectsQuery.data?.projects.find((p) => p.id === activeProjectId) ?? null
   }, [projectsQuery.data, activeProjectId])
 
-  const stats = statsQuery.data ?? {
-    activeKeyCount: 0,
-    mcpReadKeyCount: 0,
-    mcpWriteKeyCount: 0,
-    connectedKeyCount: 0,
-    neverConnectedCount: 0,
-    reportOnlyKeyCount: 0,
-    lastSeenAt: null,
-    lastSeenEndpointHost: null,
-    endpointMismatch: false,
-    toolCount: TOOL_CATALOG.length,
-    resourceCount: RESOURCE_CATALOG.length,
-    promptCount: PROMPT_CATALOG.length,
-  }
+  const stats = { ...EMPTY_MCP_STATS, ...statsQuery.data }
 
   const loading = projectsQuery.loading || statsQuery.loading
   const error = projectsQuery.error ?? statsQuery.error
@@ -300,7 +296,7 @@ export function McpPage() {
   const setTab = useCallback(
     (tab: McpTabId) => {
       const next = new URLSearchParams(searchParams)
-      if (tab === 'setup') next.delete('tab')
+      if (tab === 'overview') next.delete('tab')
       else next.set('tab', tab)
       setSearchParams(next, { replace: true, preventScrollReset: true })
     },
@@ -342,15 +338,6 @@ export function McpPage() {
   const step2Tone: QuickstartStepProps['tone'] = hasReadKey ? (stats.connectedKeyCount > 0 ? 'done' : 'next') : 'idle'
   const step3Tone: QuickstartStepProps['tone'] = stats.connectedKeyCount > 0 ? 'done' : hasReadKey ? 'next' : 'idle'
 
-  const mcpSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
-    stats.endpointMismatch
-      ? 'warn'
-      : stats.connectedKeyCount > 0
-        ? 'ok'
-        : stats.mcpReadKeyCount === 0
-          ? 'neutral'
-          : 'warn'
-
   usePublishPageContext({
     route: '/mcp',
     title: `${activeMeta.label} · MCP`,
@@ -361,6 +348,7 @@ export function McpPage() {
 
   const tabOptions = useMemo(
     () => [
+      { id: 'overview' as const, label: 'Overview' },
       { id: 'setup' as const, label: 'Setup' },
       { id: 'catalog' as const, label: 'Catalog', count: stats.toolCount },
       { id: 'examples' as const, label: 'Examples' },
@@ -403,16 +391,55 @@ export function McpPage() {
     )
   }
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
+      ? 'warn'
+      : stats.topPriority === 'healthy'
+        ? 'ok'
+        : stats.topPriority === 'report_only_keys' || stats.topPriority === 'no_mcp_key'
+          ? 'brand'
+          : 'neutral'
+
+  const headerBadge =
+    stats.topPriority === 'healthy'
+      ? 'CONNECTED'
+      : stats.topPriority === 'endpoint_mismatch'
+        ? 'MISMATCH'
+        : stats.topPriority === 'never_connected'
+          ? 'NO HANDSHAKE'
+          : stats.topPriority === 'report_only_keys'
+            ? 'SDK ONLY'
+            : stats.topPriority === 'no_mcp_key'
+              ? 'NO MCP KEY'
+              : 'SETUP'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-mcp">
       <PageHeader
         title={copy?.title ?? 'MCP'}
         description={
           copy?.description ??
-          'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue.'
+          'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools.'
         }
         projectScope={displayName}
       >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'warn'
+                ? 'bg-warn/10 text-warn'
+                : bannerSeverity === 'brand'
+                  ? 'bg-brand/15 text-brand'
+                  : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {headerBadge}
+        </Badge>
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
+          Refresh
+        </Btn>
         <Link to="/projects">
           <Btn variant="ghost" size="sm" data-testid="mcp-mint-key-link">
             Generate an API key
@@ -420,110 +447,151 @@ export function McpPage() {
         </Link>
       </PageHeader>
 
-      <McpStatusBanner stats={stats} projectName={projectName} />
+      <McpStatusBanner stats={stats} onTab={setTab} onRefresh={reloadAll} refreshing={isValidating} />
 
-      <PageHero
-        scope="mcp"
-        title={copy?.title ?? 'MCP'}
-        kicker="Agent access"
-        decide={{
-          label: hasReadKey ? `${stats.mcpReadKeyCount} MCP key${stats.mcpReadKeyCount === 1 ? '' : 's'} ready` : 'No MCP keys yet',
-          metric: hasWriteKey ? 'read + write' : hasReadKey ? 'read-only' : 'not configured',
-          summary: hasReadKey
-            ? `${stats.connectedKeyCount} connected · ${stats.toolCount} tools available to agents`
-            : 'Mint an mcp:read key on /projects, paste the snippet, then ask your agent to list Mushi tools.',
-          severity: mcpSeverity,
-          anchor: 'mcp:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              {
-                label: 'mcp:read',
-                value: hasReadKey ? `${stats.mcpReadKeyCount} key${stats.mcpReadKeyCount === 1 ? '' : 's'}` : 'missing',
-                tone: hasReadKey ? 'ok' : 'neutral',
-              },
-              {
-                label: 'mcp:write',
-                value: hasWriteKey ? `${stats.mcpWriteKeyCount} key${stats.mcpWriteKeyCount === 1 ? '' : 's'}` : 'optional',
-                tone: hasWriteKey ? 'ok' : 'neutral',
-              },
-              {
-                label: 'connected',
-                value: stats.connectedKeyCount > 0 ? String(stats.connectedKeyCount) : 'never',
-                tone: stats.connectedKeyCount > 0 ? 'ok' : stats.mcpReadKeyCount > 0 ? 'warn' : 'neutral',
-              },
-            ],
-          },
-          missingConfigIds: hasReadKey ? [] : ['mcp.api_key'],
-        }}
-        verify={{
-          label: stats.lastSeenAt ? 'Last MCP heartbeat' : 'Handshake check',
-          detail: stats.lastSeenAt
-            ? new Date(stats.lastSeenAt).toLocaleString()
-            : 'Ask your agent: "list mushi tools" — you should see all tools in the Catalog tab.',
-          to: '/projects',
-          secondaryTo: '/audit?source=mcp',
-          secondaryLabel: 'Audit log',
-          anchor: 'mcp:verify',
-          evidence: stats.lastSeenAt
-            ? {
-                kind: 'last-event',
-                at: stats.lastSeenAt,
-                by: stats.lastSeenEndpointHost ?? 'mcp',
-                payloadSummary: stats.endpointMismatch ? 'endpoint mismatch' : 'heartbeat ok',
-                status: stats.endpointMismatch ? 'warn' : 'ok',
-              }
-            : undefined,
-        }}
+      <SegmentedControl
+        value={activeTab}
+        onChange={setTab}
+        options={tabOptions}
+        ariaLabel="MCP sections"
+        size="sm"
       />
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About MCP'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'MCP is an open protocol that lets a coding agent call your app\'s tools and read its data as if they were local. Mushi ships an MCP server that exposes this project\'s triage queue as tools the agent can call during a chat.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Ask your agent "what should I fix next?" and get a prioritised answer from your live dashboard.',
-            'Say "fix bug rep_abc" and watch the agent pull context, propose a patch, and log the PR.',
-            'Run natural-language queries against production data without leaving the chat.',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet below. 3. Restart your IDE. 4. Ask "list mushi tools".'
-        }
-      />
-
-      <Section title="MCP workspace" freshness={{ at: lastFetchedAt, isValidating }}>
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Active keys" value={stats.activeKeyCount} hint="All scopes on this project" />
+      <Section title="MCP SNAPSHOT" freshness={{ at: lastFetchedAt, isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Active keys" value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} hint="All scopes on this project" />
           <StatCard
-            label="MCP scopes"
-            value={hasReadKey ? `${stats.mcpReadKeyCount} read` : '0'}
-            hint={hasWriteKey ? `${stats.mcpWriteKeyCount} write` : 'Mint mcp:read on /projects'}
+            label="mcp:read"
+            value={stats.mcpReadKeyCount}
+            accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
+            hint={stats.mcpWriteKeyCount > 0 ? `${stats.mcpWriteKeyCount} write` : 'Mint on /projects'}
           />
           <StatCard
             label="Connected"
             value={stats.connectedKeyCount}
-            hint={
-              stats.neverConnectedCount > 0
-                ? `${stats.neverConnectedCount} never used`
-                : 'Keys with heartbeat'
+            accent={stats.connectedKeyCount > 0 ? 'text-ok' : stats.mcpReadKeyCount > 0 ? 'text-warn' : undefined}
+            hint={stats.neverConnectedCount > 0 ? `${stats.neverConnectedCount} never used` : 'Keys with heartbeat'}
+          />
+          <StatCard
+            label="SDK-only keys"
+            value={stats.reportOnlyKeyCount}
+            accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
+            hint="report:write without MCP scope"
+          />
+          <StatCard label="Tools" value={stats.toolCount} accent="text-info" hint={`${stats.resourceCount} resources · ${stats.promptCount} prompts`} />
+          <StatCard
+            label="Endpoint"
+            value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
+            accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
+            hint={stats.expectedEndpointHost ?? 'Cloud API host'}
+          />
+        </div>
+      </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
+              ? 'border-warn/30 bg-warn/5'
+              : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          <PageHelp
+            title={copy?.help?.title ?? 'About MCP'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
+                'Have the agent draft a fix for a specific report in one command',
+                'Query your bug data in plain English from inside your editor',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
             }
           />
-          <StatCard label="Tools" value={stats.toolCount} hint={`${stats.resourceCount} resources · ${stats.promptCount} prompts`} />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Agent access live"
+              description={stats.topPriorityLabel ?? `${stats.connectedKeyCount} MCP key(s) connected with heartbeat.`}
+              cta={{ label: 'Browse catalog', to: '/mcp?tab=catalog' }}
+            />
+          )}
+          {stats.topPriority === 'report_only_keys' && (
+            <RecommendedAction
+              tone="info"
+              title="SDK keys exist — add MCP scope"
+              description={stats.topPriorityLabel ?? 'report:write keys capture bugs but cannot expose tools to agents.'}
+              cta={{ label: 'Mint MCP key', to: '/projects' }}
+            />
+          )}
+          {stats.topPriority === 'no_mcp_key' && (
+            <RecommendedAction
+              tone="info"
+              title="Generate your first MCP key"
+              description={stats.topPriorityLabel ?? 'Pick mcp:read to browse or mcp:write to dispatch fixes from agents.'}
+              cta={{ label: 'Go to /projects', to: '/projects' }}
+            />
+          )}
+          {stats.topPriority === 'never_connected' && (
+            <RecommendedAction
+              tone="info"
+              title="Complete the IDE handshake"
+              description={stats.topPriorityLabel ?? 'Paste .cursor/mcp.json, restart, then run "list mushi tools".'}
+              cta={{ label: 'Open Setup', to: '/mcp?tab=setup' }}
+            />
+          )}
+          {stats.topPriority === 'endpoint_mismatch' && (
+            <RecommendedAction
+              tone="urgent"
+              title="Fix MUSHI_API_ENDPOINT in snippet"
+              description={stats.topPriorityLabel ?? 'Agent is hitting a different backend than this console expects.'}
+              cta={{ label: 'Copy correct snippet', to: '/mcp?tab=setup' }}
+            />
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Read scope</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-fg-primary">{stats.mcpReadKeyCount}</p>
+              <p className="text-2xs text-fg-muted">Required to list tools + read triage</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Write scope</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-warn">{stats.mcpWriteKeyCount}</p>
+              <p className="text-2xs text-fg-muted">Optional — dispatch fixes from agents</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last heartbeat</p>
+              <p className="mt-1 text-sm font-semibold text-fg-primary">
+                {stats.lastSeenAt ? <RelativeTime value={stats.lastSeenAt} /> : 'Never'}
+              </p>
+              <p className="text-2xs text-fg-muted font-mono truncate" title={stats.lastSeenEndpointHost ?? undefined}>
+                {stats.lastSeenEndpointHost ?? 'No MCP traffic yet'}
+              </p>
+            </Card>
+          </div>
         </div>
+      )}
 
-        <SegmentedControl
-          value={activeTab}
-          onChange={setTab}
-          options={tabOptions}
-          ariaLabel="MCP sections"
-          className="mb-4"
-        />
-
+      {activeTab !== 'overview' && (
+      <Section title={activeTab === 'setup' ? 'Agent setup' : activeTab === 'catalog' ? 'Tool catalog' : 'Agent examples'}>
         <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
 
         {activeTab === 'setup' && (
@@ -861,6 +929,7 @@ export function McpPage() {
           </div>
         )}
       </Section>
+      )}
     </div>
   )
 }

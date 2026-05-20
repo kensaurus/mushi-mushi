@@ -378,7 +378,7 @@ export const COPY: CopyRegistry = {
     },
     '/mcp': {
       title: 'MCP — agent connection',
-      description: 'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue with scoped API keys.',
+      description: 'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools and resources.',
       help: {
         title: 'About MCP (AI agent connection)',
         whatIsIt: 'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
@@ -420,7 +420,7 @@ export const COPY: CopyRegistry = {
     },
     '/rewards': {
       title: 'Rewards program',
-      description: 'Points, tiers, and payouts for SDK activity — debug rejections, simulate rules, and wire host webhooks.',
+      description: 'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks and disputes.',
       help: {
         title: 'About rewards',
         whatIsIt: 'Org-scoped loyalty loop: SDK activity → points → tiers → perks (Pro access, payouts, host webhooks).',
@@ -842,7 +842,7 @@ export const COPY: CopyRegistry = {
     },
     '/mcp': {
       title: 'MCP',
-      description: 'Model Context Protocol endpoints for external agent consumers.',
+      description: 'Banner + MCP SNAPSHOT — Overview for key posture, Setup for IDE snippet, Catalog for tools.',
     },
     '/qa-coverage': {
       title: 'QA coverage',
@@ -854,7 +854,7 @@ export const COPY: CopyRegistry = {
     },
     '/rewards': {
       title: 'Rewards',
-      description: 'Contributor incentives tied to merged fix throughput.',
+      description: 'Banner + REWARDS SNAPSHOT — Overview for 24h SDK feed, Rules/Tiers to configure, Settings for webhooks.',
     },
     '/lessons': {
       title: 'Lessons',

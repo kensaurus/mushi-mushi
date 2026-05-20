@@ -489,13 +489,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'mcp',
     decide: {
-      label: 'Agent access',
-      summary: 'Mint MCP-scoped API keys and paste the snippet so Cursor or Claude Desktop can read your triage queue.',
+      label: 'MCP SNAPSHOT',
+      summary: 'Key scopes, connection heartbeats, and endpoint match — banner shows SDK-only vs agent-ready.',
       severity: 'info',
     },
     verify: {
       label: 'Handshake check',
-      detail: 'Ask your agent to list Mushi tools — connected keys show a heartbeat on this page.',
+      detail: 'Ask your agent to list Mushi tools — connected keys show a heartbeat on Overview.',
     },
   },
   '/marketplace': {
@@ -584,11 +584,11 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
   },
   '/rewards': {
     title: 'Rewards',
-    kicker: 'Workspace',
+    kicker: 'Act',
     scope: 'rewards',
     decide: {
-      label: 'Program health',
-      summary: 'See contributor activity, rule/tier config, and rejection rate before changing caps.',
+      label: 'REWARDS SNAPSHOT',
+      summary: 'Contributors, rejection rate, webhooks, and payouts — banner shows what blocks the loop.',
       severity: 'info',
     },
     verify: {

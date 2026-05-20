@@ -615,6 +615,20 @@ export function registerRewardsRoutes(app: Hono): void {
       webhooksConfigured: 0,
       webhooksFailing: 0,
       identityProvidersConfigured: 0,
+      enabledQuestsCount: 0,
+      openDisputesCount: 0,
+      lastActivityAt: null as string | null,
+      topPriority: 'no_org' as
+        | 'no_org'
+        | 'project_disabled'
+        | 'webhooks_failing'
+        | 'open_disputes'
+        | 'no_rules'
+        | 'high_rejection'
+        | 'no_contributors'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     }
 
     if (!orgId) return c.json({ ok: true, data: empty })
@@ -632,6 +646,9 @@ export function registerRewardsRoutes(app: Hono): void {
       { data: webhooks },
       { data: projects },
       payoutLiabilityRes,
+      { count: questsCount },
+      { count: openDisputesCount },
+      { data: lastActivityRow },
     ] = await Promise.all([
       db.from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
       db
@@ -666,6 +683,23 @@ export function registerRewardsRoutes(app: Hono): void {
         .eq('organization_id', orgId)
         .in('status', ['pending', 'processing'])
         .single(),
+      db
+        .from('reward_quests')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('enabled', true),
+      db
+        .from('reward_disputes')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('status', 'open'),
+      db
+        .from('end_user_activity')
+        .select('created_at')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ])
 
     const distinctUsers = new Set<string>()
@@ -714,18 +748,62 @@ export function registerRewardsRoutes(app: Hono): void {
       projectRewardsEnabled = Boolean((ps as { rewards_enabled?: boolean } | null)?.rewards_enabled)
     }
 
+    const enabledRulesCount = rulesCount ?? 0
+    const enabledTiersCount = tiersCount ?? 0
+    const activeContributors30d = distinctUsers.size
+    const pointsAwarded30d = totalPts
+    const enabledQuestsCount = questsCount ?? 0
+    const openDisputes = openDisputesCount ?? 0
+    const lastActivityAt =
+      (lastActivityRow as { created_at?: string } | null)?.created_at ?? null
+    const projectName = activeProject?.name ?? null
+
+    let topPriority = empty.topPriority
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!projectRewardsEnabled) {
+      topPriority = 'project_disabled'
+      topPriorityLabel = `rewards_enabled is off for ${projectName ?? 'active project'} — SDK activity ingest returns early without awarding points.`
+      topPriorityTo = '/settings?tab=dev'
+    } else if (webhooksFailing > 0) {
+      topPriority = 'webhooks_failing'
+      topPriorityLabel = `${webhooksFailing} webhook${webhooksFailing === 1 ? '' : 's'} returned HTTP ≥400 on last delivery — tier-change events may not reach your host app.`
+      topPriorityTo = '/rewards?tab=settings'
+    } else if (openDisputes > 0) {
+      topPriority = 'open_disputes'
+      topPriorityLabel = `${openDisputes} open dispute${openDisputes === 1 ? '' : 's'} — review flagged rewards before the next payout run.`
+      topPriorityTo = '/rewards?tab=settings'
+    } else if (enabledRulesCount === 0) {
+      topPriority = 'no_rules'
+      topPriorityLabel = 'No activity rules enabled — SDK events will not award points until at least one rule is on.'
+      topPriorityTo = '/rewards?tab=rules'
+    } else if (rejectionRatePct24h >= 40 && activity24hTotal >= 5) {
+      topPriority = 'high_rejection'
+      topPriorityLabel = `${rejectionRatePct24h}% of ${activity24hTotal} SDK events rejected in 24h — check caps, fraud flags, or unknown actions on Overview.`
+      topPriorityTo = '/rewards?tab=overview'
+    } else if (activeContributors30d === 0) {
+      topPriority = 'no_contributors'
+      topPriorityLabel = `${enabledRulesCount} rules · ${enabledTiersCount} tiers configured — wire SDK identify() + activity() in ${projectName ?? 'your app'}.`
+      topPriorityTo = '/rewards?tab=sandbox'
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${activeContributors30d} contributors (30d) · ${pointsAwarded30d.toLocaleString()} pts · ${enabledQuestsCount} active quest${enabledQuestsCount === 1 ? '' : 's'}.`
+      topPriorityTo = '/rewards?tab=contributors'
+    }
+
     return c.json({
       ok: true,
       data: {
         organizationId: orgId,
         organizationName: (orgRow as { name?: string } | null)?.name ?? null,
         projectId: activeProject?.id ?? null,
-        projectName: activeProject?.name ?? null,
+        projectName,
         projectRewardsEnabled,
-        enabledRulesCount: rulesCount ?? 0,
-        enabledTiersCount: tiersCount ?? 0,
-        activeContributors30d: distinctUsers.size,
-        pointsAwarded30d: totalPts,
+        enabledRulesCount,
+        enabledTiersCount,
+        activeContributors30d,
+        pointsAwarded30d,
         pendingPayoutLiabilityUsd:
           (payoutLiabilityRes.data as Record<string, number> | null)?.sum ?? 0,
         activity24hTotal,
@@ -734,6 +812,12 @@ export function registerRewardsRoutes(app: Hono): void {
         webhooksConfigured,
         webhooksFailing,
         identityProvidersConfigured,
+        enabledQuestsCount,
+        openDisputesCount: openDisputes,
+        lastActivityAt,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     })
   })
