@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMarketing } from '../context'
 import type { MushiStage } from './data'
-import { stageMedia, type StageMediaEntry } from './stageMedia'
+import { stageMedia, loopOverviewMedia } from './stageMedia'
 
 interface StageLivePreviewProps {
   stage: MushiStage
@@ -61,9 +61,9 @@ export function StageLivePreview({
           <span className="mushi-stage-preview__stage-badge">
             {String(stage.index + 1).padStart(2, '0')}
           </span>
-          {stage.kicker}
+          {media.previewEyebrow}
         </p>
-        <h3 className="mushi-stage-preview__title">{stage.title}</h3>
+        <h3 className="mushi-stage-preview__title">{media.previewTitle}</h3>
       </div>
 
       <div className="mushi-stage-preview__frame">
@@ -71,13 +71,7 @@ export function StageLivePreview({
           <span className="mushi-stage-preview__dot" />
           <span className="mushi-stage-preview__dot" />
           <span className="mushi-stage-preview__dot" />
-          <span className="mushi-stage-preview__chrome-label">
-            {media.surface === 'sdk'
-              ? 'SDK widget · animated'
-              : media.animated
-                ? 'Admin console · animated'
-                : 'Admin console preview'}
-          </span>
+          <span className="mushi-stage-preview__chrome-label">{media.chromeLabel}</span>
         </div>
 
         <div className="mushi-stage-preview__viewport">
@@ -85,8 +79,8 @@ export function StageLivePreview({
             type="button"
             className="mushi-stage-preview__expand-trigger"
             onClick={() => setExpanded(true)}
-            aria-label={`Expand ${media.alt}`}
-            title="Click to expand"
+            aria-label={`Expand demo: ${media.lightboxTitle}`}
+            title="Expand demo"
           >
             <AnimatePresence mode="wait">
               <motion.div
@@ -111,7 +105,7 @@ export function StageLivePreview({
               </motion.div>
             </AnimatePresence>
             <span className="mushi-stage-preview__expand-hint" aria-hidden="true">
-              Click to expand
+              Expand demo
             </span>
           </button>
         </div>
@@ -126,7 +120,7 @@ export function StageLivePreview({
           rel={demoHref.startsWith('http') ? 'noreferrer' : undefined}
           className="mushi-stage-preview__link"
         >
-          Open this step live
+          {media.linkLabel}
           <span aria-hidden="true">→</span>
         </a>
       ) : null}
@@ -137,14 +131,17 @@ export function StageLivePreview({
               className="mushi-stage-lightbox"
               role="dialog"
               aria-modal="true"
-              aria-label={media.alt}
+              aria-label={media.lightboxTitle}
               onClick={closeLightbox}
             >
               <div className="mushi-stage-lightbox__panel" onClick={(e) => e.stopPropagation()}>
                 <div className="mushi-stage-lightbox__toolbar">
-                  <p>{media.alt}</p>
+                  <div>
+                    <p className="mushi-stage-lightbox__eyebrow">{media.previewEyebrow}</p>
+                    <p className="mushi-stage-lightbox__title">{media.lightboxTitle}</p>
+                  </div>
                   <button type="button" className="mushi-stage-lightbox__close" onClick={closeLightbox}>
-                    Close ✕
+                    Close
                   </button>
                 </div>
                 <img src={src} alt={media.alt} className="mushi-stage-lightbox__img" />
@@ -155,7 +152,7 @@ export function StageLivePreview({
                       target={demoHref.startsWith('http') ? '_blank' : undefined}
                       rel={demoHref.startsWith('http') ? 'noreferrer' : undefined}
                     >
-                      Open in live console ↗
+                      {media.linkLabel} ↗
                     </a>
                   </div>
                 ) : null}
@@ -188,14 +185,7 @@ function resolveDemoHref(href: string | undefined, consoleHref: string): string 
 
 export function LoopOverviewPreview({ className = '' }: { className?: string }) {
   const { urls } = useMarketing()
-  const media: StageMediaEntry = {
-    file: 'tour-pdca-loop.gif',
-    animated: true,
-    surface: 'admin',
-    alt: 'Animated admin console tour through dashboard, reports, fixes, judge, and graph',
-    caption: 'Full PDCA loop in one pass',
-    demoHref: '/dashboard',
-  }
+  const media = loopOverviewMedia
   const src = urls.screenshots(media.file)
 
   return (

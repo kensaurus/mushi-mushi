@@ -412,6 +412,7 @@ export function PublicIntegrationsPage() {
         subject
           ? `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}`
           : `mailto:${CONTACT_EMAIL}`,
+      screenshots: (filename) => `/screenshots/${filename}`,
     },
   }
 

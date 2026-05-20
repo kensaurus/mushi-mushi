@@ -1,22 +1,19 @@
 // scripts/marketing/record-glotit-sdk-tour.mjs
 //
-// Records a short GIF of the Mushi SDK widget on glot.it (dogfood project):
-// land on the live app → open the feedback widget → type a note → submit.
+// Records glotit-report-flow.gif — Mushi SDK edge-tab launcher on a glot.it-style
+// checkout fixture (examples/react-demo). Shows Report bug → widget open → submit.
 //
-// Output: docs/screenshots/glotit-report-flow.gif
-//
-// Requires Playwright (via examples/e2e-dogfood) + ffmpeg on PATH.
+// Prerequisite: pnpm --filter mushi-mushi-react-demo dev  (default http://localhost:5173)
 //
 // Usage:
 //   node scripts/marketing/record-glotit-sdk-tour.mjs
-//   node scripts/marketing/record-glotit-sdk-tour.mjs --url=https://kensaur.us/glot-it
+//   node scripts/marketing/record-glotit-sdk-tour.mjs --url=http://localhost:5173
 //   node scripts/marketing/record-glotit-sdk-tour.mjs --headed
 
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, renameSync, rmSync, readdirSync, statSync } from 'node:fs'
-import { resolve, join, dirname } from 'node:path'
+import { resolve, join } from 'node:path'
 import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
 import { loadEnv, parseArgs, REPO_ROOT, step, ok, warn, err } from './lib.mjs'
 
 loadEnv()
@@ -35,7 +32,8 @@ const { chromium } = skillRequire('playwright')
 const ffmpegInstaller = skillRequire('@ffmpeg-installer/ffmpeg')
 const FFMPEG = ffmpegInstaller.path
 
-const URL = args.url || 'https://kensaur.us/glot-it'
+const VIEWPORT = { width: 1280, height: 960 }
+const URL = args.url || 'http://localhost:5173'
 const OUT_DIR = resolve(REPO_ROOT, 'docs/screenshots')
 const RAW_DIR = resolve(REPO_ROOT, '.cache', 'glotit-gif-record')
 const GIF_DST = resolve(OUT_DIR, 'glotit-report-flow.gif')
@@ -47,62 +45,53 @@ async function pause(page, ms) {
   await page.waitForTimeout(ms)
 }
 
-step(`Recording glot.it SDK flow at ${URL}`)
+/** Edge-tab trigger sits flush on the right; click center of the tab. */
+async function clickSdkTrigger(page) {
+  const { width, height } = VIEWPORT
+  const x = width - 16
+  const y = Math.round(height * 0.62)
+  await page.mouse.click(x, y)
+}
+
+step(`Recording SDK capture flow at ${URL} (${VIEWPORT.width}×${VIEWPORT.height})`)
 const browser = await chromium.launch({ headless: !args.headed })
 const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
-  recordVideo: { dir: RAW_DIR, size: { width: 1280, height: 800 } },
+  viewport: VIEWPORT,
+  recordVideo: { dir: RAW_DIR, size: VIEWPORT },
   reducedMotion: 'no-preference',
 })
 const page = await context.newPage()
 
-// --- walk-through ----------------------------------------------------------
-
-step('1/4  Land on glot.it home...')
-await page.goto(URL, { waitUntil: 'networkidle', timeout: 60000 })
-await page.waitForSelector('#mushi-mushi-widget', { timeout: 20000 }).catch(() => {
-  warn('  #mushi-mushi-widget not found — Mushi may be disabled on this deploy')
+step('1/5  Land on checkout fixture — dwell on edge-tab launcher...')
+await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
+await page.waitForSelector('#mushi-mushi-widget', { timeout: 25000 }).catch(() => {
+  warn('  #mushi-mushi-widget not found — is react-demo running with MushiProvider?')
 })
-await pause(page, 2500)
+await pause(page, 4200)
 
-step('2/4  Open Mushi feedback widget...')
-const openedViaSdk = await page.evaluate(() => {
-  const mushi = globalThis.__mushi__
-  if (mushi?.openWith) {
-    mushi.openWith('bug')
-    return true
-  }
-  if (mushi?.open) {
-    mushi.open()
-    return true
-  }
-  return false
-})
-if (!openedViaSdk) {
-  warn('  window.__mushi__ unavailable — clicking widget host')
-  try {
-    await page.locator('#mushi-mushi-widget').click({ timeout: 3000, position: { x: 28, y: 28 } })
-  } catch {
-    await page.mouse.click(1240, 760)
-  }
-}
-await pause(page, 2000)
+step('2/5  Click Report bug edge tab...')
+await clickSdkTrigger(page)
+await pause(page, 2200)
 
-step('3/4  Fill report description...')
+step('3/5  Pick bug category...')
+await clickSdkTrigger(page).catch(() => {})
+await pause(page, 800)
+await page.mouse.click(VIEWPORT.width / 2, Math.round(VIEWPORT.height * 0.38))
+await pause(page, 1800)
+
+step('4/5  Fill description...')
 await page.keyboard.type(
-  'Dogfood demo — lesson card feels slow on mobile (Mushi docs GIF)',
-  { delay: 35 },
+  'Pay button slips under bottom bar after spring coupon — checkout /glot-it',
+  { delay: 28 },
 )
-await pause(page, 2500)
+await pause(page, 2200)
 
-step('4/4  Submit (Ctrl+Enter shortcut)...')
+step('5/5  Submit (Ctrl+Enter)...')
 await page.keyboard.press('Control+Enter')
-await pause(page, 3500)
+await pause(page, 3200)
 
 await context.close()
 await browser.close()
-
-// --- find recorded webm ---------------------------------------------------
 
 const webmFiles = readdirSync(RAW_DIR)
   .filter((f) => f.endsWith('.webm'))
@@ -133,11 +122,13 @@ if (ffmpegProbe.status !== 0 && !existsSync(FFMPEG)) {
   process.exit(0)
 }
 
-step('Converting to palette-optimised GIF...')
+step('Converting to palette-optimised GIF (960px tall)...')
 const palette = resolve(RAW_DIR, 'glotit-palette.png')
+const scaleFilter = 'fps=12,scale=960:-1:flags=lanczos'
+
 const r1 = spawnSync(
   ffmpegBin,
-  ['-y', '-i', webmDst, '-vf', 'fps=12,scale=800:-1:flags=lanczos,palettegen=stats_mode=diff', palette],
+  ['-y', '-i', webmDst, '-vf', `${scaleFilter},palettegen=stats_mode=diff`, palette],
   { stdio: 'inherit' },
 )
 if (r1.status !== 0) {
@@ -154,7 +145,7 @@ const r2 = spawnSync(
     '-i',
     palette,
     '-lavfi',
-    'fps=12,scale=800:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5',
+    `${scaleFilter}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`,
     GIF_DST,
   ],
   { stdio: 'inherit' },
@@ -166,9 +157,6 @@ if (r2.status !== 0) {
 
 const sizeMb = statSync(GIF_DST).size / 1024 / 1024
 ok(`Gif: ${GIF_DST} (${sizeMb.toFixed(2)} MB)`)
-if (sizeMb > 10) {
-  warn('GIF > 10 MB — consider re-running with shorter dwell times.')
-}
 
 try {
   rmSync(palette, { force: true })

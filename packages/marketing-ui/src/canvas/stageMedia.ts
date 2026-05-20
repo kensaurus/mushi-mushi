@@ -12,8 +12,14 @@ export interface StageMediaEntry {
   animated: boolean
   /** Dogfood SDK surface vs operator admin console — drives preview chrome copy. */
   surface: 'sdk' | 'admin'
+  /** Human-readable preview rail copy (not the canvas node kicker). */
+  previewEyebrow: string
+  previewTitle: string
+  chromeLabel: string
   alt: string
   caption: string
+  lightboxTitle: string
+  linkLabel: string
   /** Optional live demo URL — admin route or dogfood app. */
   demoHref?: string
 }
@@ -23,40 +29,65 @@ export const stageMedia: Record<MushiStageId, StageMediaEntry> = {
     file: 'glotit-report-flow.gif',
     animated: true,
     surface: 'sdk',
-    alt: 'glot.it with the Mushi SDK bug-report button — open widget, describe the issue, submit',
-    caption: 'SDK widget on glot.it — Report bug opens screenshot + context capture',
+    previewEyebrow: 'Step 1 · In your app',
+    previewTitle: 'Report bug from the page edge',
+    chromeLabel: 'SDK widget',
+    alt: 'Report bug edge tab on a checkout page — widget opens, user describes the issue, and submits',
+    caption: 'The floating edge tab opens the reporter. Screenshot, console, and network context attach on send.',
+    lightboxTitle: 'Capture — SDK Report bug widget',
+    linkLabel: 'Try on glot.it',
     demoHref: 'https://kensaur.us/glot-it',
   },
   classify: {
     file: 'reports-demo.gif',
     animated: true,
     surface: 'admin',
-    alt: 'Mushi admin Reports queue — AI triage with severity stripes and dispatch actions',
-    caption: 'Admin console /reports — severity, taxonomy, repro steps, and root-cause hint',
+    previewEyebrow: 'Step 2 · Admin console',
+    previewTitle: 'Every report arrives triaged',
+    chromeLabel: 'Reports queue',
+    alt: 'Mushi admin Reports page — severity badges, taxonomy labels, and dispatch actions on each row',
+    caption: 'Severity, taxonomy, repro steps, and a plain-English summary land in your queue.',
+    lightboxTitle: 'Classify — Reports queue',
+    linkLabel: 'Open Reports',
     demoHref: '/reports',
   },
   dispatch: {
     file: 'fixes-demo.gif',
     animated: true,
     surface: 'admin',
-    alt: 'Fix orchestrator — agent runs stream live with draft PR links and diffs',
-    caption: 'Admin console /fixes — agent opens a branch; you review the diff and merge',
+    previewEyebrow: 'Step 3 · Admin console',
+    previewTitle: 'Agent opens a draft PR',
+    chromeLabel: 'Fix orchestrator',
+    alt: 'Fix orchestrator page — agent run stream, branch link, and diff preview',
+    caption: 'The repair agent tries a fix and leaves you a branch, diff, and merge decision.',
+    lightboxTitle: 'Dispatch — Fix orchestrator',
+    linkLabel: 'Open Fixes',
     demoHref: '/fixes',
   },
   verify: {
     file: 'judge-demo.gif',
     animated: true,
     surface: 'admin',
-    alt: 'Judge dashboard — independent LLM score against the project rubric',
-    caption: 'Admin console /judge — second model scores the patch before it ships',
+    previewEyebrow: 'Step 4 · Admin console',
+    previewTitle: 'Second model scores the patch',
+    chromeLabel: 'Judge dashboard',
+    alt: 'Judge dashboard — rubric score, pass/fail threshold, and reasoning for the proposed fix',
+    caption: 'An independent judge reads the report and patch against your rubric before ship.',
+    lightboxTitle: 'Verify — Judge score',
+    linkLabel: 'Open Judge',
     demoHref: '/judge',
   },
   evolve: {
     file: 'graph-demo.gif',
     animated: true,
     surface: 'admin',
-    alt: 'Knowledge graph — related bugs cluster into patterns the next fix inherits',
-    caption: 'Admin console /graph — patterns roll into the knowledge graph and weekly report',
+    previewEyebrow: 'Step 5 · Admin console',
+    previewTitle: 'Patterns feed the next fix',
+    chromeLabel: 'Knowledge graph',
+    alt: 'Knowledge graph view — related reports cluster into recurring product friction patterns',
+    caption: 'Related bugs connect in the graph and roll into the weekly friction report.',
+    lightboxTitle: 'Evolve — Knowledge graph',
+    linkLabel: 'Open Graph',
     demoHref: '/graph',
   },
 }
@@ -66,7 +97,12 @@ export const loopOverviewMedia: StageMediaEntry = {
   file: 'tour-pdca-loop.gif',
   animated: true,
   surface: 'admin',
-  alt: 'Animated admin console tour — dashboard through reports, fixes, judge, and graph',
-  caption: 'Full PDCA loop in one pass — dashboard → triage → fix → judge → graph',
+  previewEyebrow: 'Full loop',
+  previewTitle: 'Dashboard through graph in one pass',
+  chromeLabel: 'Admin tour',
+  alt: 'Animated admin console tour through dashboard, reports, fixes, judge, and graph',
+  caption: 'Watch the full PDCA loop — triage, fix, judge, and graph in one pass.',
+  lightboxTitle: 'Full loop tour',
+  linkLabel: 'Open Dashboard',
   demoHref: '/dashboard',
 }

@@ -87,9 +87,9 @@ export const stages: MushiStage[] = [
   {
     id: 'capture',
     index: 0,
-    kicker: 'mushi.web · shake',
-    title: 'Your user shakes their phone.',
-    oneLiner: 'A frustrated tap becomes a careful note: screenshot, console, network, and context.',
+    kicker: 'mushi.web · report bug',
+    title: 'Your user taps Report bug.',
+    oneLiner: 'The SDK widget captures screenshot, console, network, and page context in one send.',
     drawerTitle: 'No support ticket needed.',
     drawerBody:
       'Mushi lives inside the app, so the person who felt the bug can send the useful details while the moment is still fresh.',
@@ -97,7 +97,7 @@ export const stages: MushiStage[] = [
     stat: '1 report',
     tone: 'count',
     href: '/quickstart',
-    position: { x: 0, y: 0 },
+    position: { x: 0, y: 80 },
   },
   {
     id: 'classify',
@@ -112,7 +112,7 @@ export const stages: MushiStage[] = [
     stat: 'High',
     tone: 'alert',
     href: '/concepts/classification',
-    position: { x: 290, y: 0 },
+    position: { x: 268, y: 80 },
   },
   {
     id: 'dispatch',
@@ -127,7 +127,7 @@ export const stages: MushiStage[] = [
     stat: 'PR #42',
     tone: 'link',
     href: '/concepts/fix-orchestrator',
-    position: { x: 580, y: 0 },
+    position: { x: 536, y: 80 },
   },
   {
     id: 'verify',
@@ -146,7 +146,7 @@ export const stages: MushiStage[] = [
     // not /concepts/classification (which the classify stage above
     // already owns). Both .mdx files live under apps/docs/content/concepts.
     href: '/concepts/judge-loop',
-    position: { x: 580, y: 320 },
+    position: { x: 536, y: 312 },
   },
   {
     id: 'evolve',
@@ -161,7 +161,7 @@ export const stages: MushiStage[] = [
     stat: '7 days',
     tone: 'memory',
     href: '/concepts/knowledge-graph',
-    position: { x: 290, y: 320 },
+    position: { x: 268, y: 312 },
   },
 ]
 
