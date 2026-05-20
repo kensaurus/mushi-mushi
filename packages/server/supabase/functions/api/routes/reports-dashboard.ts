@@ -102,6 +102,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         .select('id, status, severity, created_at')
         .in('project_id', projectIds)
         .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
         .limit(1000),
       db
         .from('reports')
@@ -1136,12 +1137,14 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         .select('id, status, severity, created_at')
         .in('project_id', projectIds)
         .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
         .limit(500),
       db
         .from('fix_attempts')
         .select('id, status, created_at')
         .in('project_id', projectIds)
         .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
         .limit(200),
       db
         .from('integration_health_history')
@@ -1402,6 +1405,7 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         .select('id, status, created_at, pr_number')
         .in('project_id', projectIds)
         .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
         .limit(200),
       db
         .from('llm_invocations')

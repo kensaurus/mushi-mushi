@@ -160,7 +160,7 @@ export function registerReleasesRoutes(app: Hono) {
     const publishedAt = release.published_at ?? new Date().toISOString()
     const ticketIds = (release.fulfilled_ticket_ids ?? []) as string[]
     if (ticketIds.length > 0) {
-      await db
+      const { error: ticketsError } = await db
         .from('support_tickets')
         .update({
           shipped_in_release_id: release.id,
@@ -169,22 +169,44 @@ export function registerReleasesRoutes(app: Hono) {
         })
         .in('id', ticketIds)
         .is('shipped_in_release_id', null)
+      if (ticketsError) {
+        return c.json(
+          {
+            ok: false,
+            error: `release published, but linking ${ticketIds.length} support ticket(s) failed: ${ticketsError.message}`,
+          },
+          500,
+        )
+      }
     }
 
-    // Get credits to notify
-    const { data: credits } = await db
+    const { data: credits, error: creditsFetchError } = await db
       .from('release_credits')
       .select('id, end_user_id, display_name_at_time')
       .eq('release_id', release.id)
       .is('notified_at', null)
+    if (creditsFetchError) {
+      return c.json(
+        { ok: false, error: `release published, but fetching credits failed: ${creditsFetchError.message}` },
+        500,
+      )
+    }
 
-    // Mark all credits as notified (the SDK will pick up the toast on next widget open)
     if ((credits ?? []).length > 0) {
-      await db
+      const { error: creditsUpdateError } = await db
         .from('release_credits')
         .update({ notified_at: new Date().toISOString() })
         .eq('release_id', release.id)
         .is('notified_at', null)
+      if (creditsUpdateError) {
+        return c.json(
+          {
+            ok: false,
+            error: `release published, but marking ${(credits ?? []).length} credit(s) notified failed: ${creditsUpdateError.message}`,
+          },
+          500,
+        )
+      }
     }
 
     return c.json({
