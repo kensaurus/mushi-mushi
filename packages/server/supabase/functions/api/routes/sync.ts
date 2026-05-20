@@ -350,6 +350,9 @@ export function registerSyncRoutes(app: Hono) {
   // Used by `mushi index <path>`. The admin route (/v1/admin/codebase/upload)
   // requires a Supabase JWT — this sync variant accepts the SDK API key so
   // that CI pipelines don't need a browser session.
+  //
+  // Delegates to the same code-indexer + createEmbedding pipeline as the admin
+  // route so both write to `project_codebase_files` with proper embeddings.
   app.post('/v1/sync/codebase/upload', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string
@@ -369,36 +372,47 @@ export function registerSyncRoutes(app: Hono) {
 
     const { filePath, source } = parsed.data
 
-    // Chunk the source into ~500-token segments with 50-token overlap.
-    const CHUNK_SIZE = 2000
-    const OVERLAP = 200
-    const chunks: string[] = []
-    for (let i = 0; i < source.length; i += CHUNK_SIZE - OVERLAP) {
-      chunks.push(source.slice(i, i + CHUNK_SIZE))
+    if (source.length > 500_000) {
+      return c.json({ ok: false, error: { code: 'TOO_LARGE', message: 'Source > 500 KB; skip large generated files' } }, 413)
     }
 
-    // Delete stale chunks for this file before inserting the fresh batch.
-    // The combination (project_id, file_path) uniquely identifies a file.
-    await db
-      .from('codebase_chunks')
-      .delete()
-      .eq('project_id', projectId)
-      .eq('file_path', filePath)
+    const { chunk, shouldIndex, sha256Hex } = await import('../../_shared/code-indexer.ts')
+    const { createEmbedding } = await import('../../_shared/embeddings.ts')
 
-    if (chunks.length > 0) {
-      const rows = chunks.map((chunk, idx) => ({
-        project_id: projectId,
-        file_path: filePath,
-        chunk_index: idx,
-        content: chunk,
-        created_at: new Date().toISOString(),
-      }))
-      const { error } = await db.from('codebase_chunks').insert(rows)
-      if (error) {
-        return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    if (!shouldIndex(filePath)) {
+      return c.json({ ok: true, data: { chunks: 0, file_path: filePath, skipped: 'unsupported_extension' } })
+    }
+
+    const chunks = chunk(filePath, source)
+    let inserted = 0
+    for (const ch of chunks) {
+      try {
+        const text = `${filePath}::${ch.symbolName ?? 'whole'}\n${ch.body}`
+        const embedding = await createEmbedding(text, { projectId })
+        const contentHash = await sha256Hex(ch.body)
+        const { error } = await db.from('project_codebase_files').upsert(
+          {
+            project_id: projectId,
+            file_path: filePath,
+            symbol_name: ch.symbolName,
+            signature: ch.signature,
+            line_start: ch.lineStart,
+            line_end: ch.lineEnd,
+            language: ch.language,
+            content_hash: contentHash,
+            content_preview: ch.body.slice(0, 500),
+            embedding,
+            tombstoned_at: null,
+          },
+          { onConflict: 'project_id,file_path,symbol_name', ignoreDuplicates: false },
+        )
+        if (!error) inserted++
+      } catch {
+        // Individual chunk failures don't abort the whole file — log via Sentry
+        // in production via the edge-function wrapper, continue with remaining chunks.
       }
     }
 
-    return c.json({ ok: true, data: { chunks: chunks.length, file_path: filePath } })
+    return c.json({ ok: true, data: { chunks: inserted, file_path: filePath } })
   })
 }

@@ -85,14 +85,18 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
     }
   }, [projectId, onHighlight])
 
-  // Consume seed query from parent (e.g. "Find similar" button in symbol panel)
+  // Consume seed query from parent (e.g. "Find similar" button in symbol panel).
+  // Only fires when seedQuery changes — intentionally excludes `query` and
+  // `onSeedConsumed` from deps to avoid re-firing on every keystroke.
+  const seedQueryRef = useRef(seedQuery)
   useEffect(() => {
-    if (seedQuery && seedQuery !== query) {
+    const prev = seedQueryRef.current
+    seedQueryRef.current = seedQuery
+    if (seedQuery && seedQuery !== prev) {
       setQuery(seedQuery)
       onSeedConsumed?.()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seedQuery])
+  }, [seedQuery, onSeedConsumed])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)

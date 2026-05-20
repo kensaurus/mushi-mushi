@@ -16,6 +16,7 @@ import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { usePageData } from '../lib/usePageData'
+import { usePageCopy } from '../lib/copy'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useTheme } from '../lib/useTheme'
@@ -52,7 +53,16 @@ function detectLanguages(nodes: ExploreNode[]): string[] {
     .map(([lang]) => lang)
 }
 
+function exploreErrorMessage(raw: string | null): string | null {
+  if (!raw) return null
+  if (raw.includes('404')) {
+    return 'Codebase explorer API is unavailable. If you just deployed, wait a minute and refresh — otherwise contact support.'
+  }
+  return raw
+}
+
 export function ExplorePage() {
+  const copy = usePageCopy('/explore')
   const [searchParams] = useSearchParams()
   const urlProjectId = searchParams.get('project')
   const activeProjectId = useActiveProjectId()
@@ -263,18 +273,21 @@ export function ExplorePage() {
 
   return (
     <div className="p-6 space-y-4">
-      <PageHeader title="Explore" />
+      <PageHeader
+        title={copy?.title ?? 'Explore'}
+        description={copy?.description ?? 'Visual map of your indexed source files — layers, import edges, and semantic search.'}
+      />
 
       <PageHelp
-        title="Codebase Atlas"
-        whatIsIt="Visual map of indexed source files grouped by architectural layer — UI, Library, Backend, Tests, Config."
-        useCases={[
+        title={copy?.help?.title ?? 'Codebase Atlas'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Visual map of indexed source files grouped by architectural layer — UI, Library, Backend, Tests, Config.'}
+        useCases={copy?.help?.useCases ?? [
           'See which files live in which layer',
           'Trace import dependencies between files',
           'Semantic search: describe what you need in plain English',
           'Click a file to inspect its path, language, line count, and content preview',
         ]}
-        howToUse="Switch between Graph (node graph), Layers (Sankey flow), and Search tabs. Click any node or row for full details. Use the layer filter chips to narrow the view."
+        howToUse={copy?.help?.howToUse ?? 'Switch between Graph (node graph), Layers (Sankey flow), and Search tabs. Click any node or row for full details. Use the layer filter chips to narrow the view.'}
       />
 
       {/* Stats bar */}
@@ -405,7 +418,7 @@ export function ExplorePage() {
         )}
       </div>
 
-      {error && <ErrorAlert message={error} />}
+      {error && <ErrorAlert message={exploreErrorMessage(error) ?? error} />}
 
       {/* Not indexed CTA */}
       {notIndexed && (
