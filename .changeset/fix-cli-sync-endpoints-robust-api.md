@@ -1,6 +1,5 @@
 ---
 "@mushi-mushi/cli": minor
-"@mushi-mushi/server": minor
 ---
 
 **CLI: robust sync endpoints + new commands + safe API client**
