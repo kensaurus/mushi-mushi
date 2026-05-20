@@ -79,35 +79,25 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [experimentsRes, assignmentsRes] = await Promise.all([
-      db()
-        .from('experiments')
-        .select('id, status, bandit_enabled, winner_variant_id, created_at')
-        .eq('project_id', pid)
-        .order('created_at', { ascending: false }),
-      db()
-        .from('experiment_assignments')
-        .select('converted, experiment_id')
-        .in(
-          'experiment_id',
-          (
-            await db().from('experiments').select('id').eq('project_id', pid)
-          ).data?.map((e) => e.id) ?? ['00000000-0000-0000-0000-000000000000'],
-        ),
-    ])
+    const experimentsRes = await db()
+      .from('experiments')
+      .select('id, status, bandit_enabled, winner_variant_id, created_at')
+      .eq('project_id', pid)
+      .order('created_at', { ascending: false })
 
     const experiments = experimentsRes.data ?? []
     const experimentIds = experiments.map((e) => e.id)
 
-    const [variantsRes] = experimentIds.length
-      ? await Promise.all([
-          db().from('experiment_variants').select('id, experiment_id').in('experiment_id', experimentIds),
-        ])
-      : [{ data: [] as Array<{ id: string; experiment_id: string }> }]
+    const [variantsRes, assignmentsRes] =
+      experimentIds.length > 0
+        ? await Promise.all([
+            db().from('experiment_variants').select('id, experiment_id').in('experiment_id', experimentIds),
+            db().from('experiment_assignments').select('converted, experiment_id').in('experiment_id', experimentIds),
+          ])
+        : [{ data: [] as Array<{ id: string; experiment_id: string }> }, { data: [] as Array<{ converted: boolean; experiment_id: string }> }]
 
     const variants = variantsRes.data ?? []
-    const assignments =
-      experimentIds.length > 0 ? (assignmentsRes.data ?? []) : []
+    const assignments = assignmentsRes.data ?? []
 
     const variantCountByExp = variants.reduce<Record<string, number>>((acc, v) => {
       const expId = v.experiment_id as string
