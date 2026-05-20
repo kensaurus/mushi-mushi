@@ -386,6 +386,48 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Activity tab links each LLM call to Langfuse and the source report.',
     },
   },
+  '/qa-coverage': {
+    title: 'QA Coverage',
+    kicker: 'Check',
+    scope: 'qa-coverage',
+    decide: {
+      label: 'Story pass rate',
+      summary: 'Banner + QA SNAPSHOT — scheduled user-story tests with 24h pass rate and run evidence.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Run evidence',
+      detail: 'Open a story drawer for screenshots, assertion diffs, and Browserbase replay links.',
+    },
+  },
+  '/lessons': {
+    title: 'Lessons',
+    kicker: 'Check',
+    scope: 'lessons',
+    decide: {
+      label: 'Mistake memory',
+      summary: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Promotion proof',
+      detail: 'Clusters tab shows coherence scores; Query Sim previews which rules fire on a diff.',
+    },
+  },
+  '/drift': {
+    title: 'Drift',
+    kicker: 'Check',
+    scope: 'drift',
+    decide: {
+      label: 'Contract sync',
+      summary: 'Banner + DRIFT SNAPSHOT — OpenAPI vs inventory vs DB schema gaps before users hit them.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Walker evidence',
+      detail: 'Snapshots tab shows edge counts; Findings drawer shows expected vs actual JSON.',
+    },
+  },
   '/mcp': {
     title: 'MCP',
     kicker: 'Act',

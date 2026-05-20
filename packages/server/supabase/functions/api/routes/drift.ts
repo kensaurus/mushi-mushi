@@ -14,11 +14,165 @@ import { Hono } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
+import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
 export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
+  // GET /v1/admin/drift/stats — posture banner + DRIFT SNAPSHOT (before nested /:id routes).
+  parent.get('/v1/admin/drift/stats', requireAuth, async (c) => {
+    const userId = c.get('userId') as string
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      openFindings: 0,
+      criticalOpen: 0,
+      warnOpen: 0,
+      infoOpen: 0,
+      dismissedFindings: 0,
+      snapshotCount: 0,
+      lastSnapshotAt: null as string | null,
+      lastSnapshotEdges: 0,
+      edgeCountDelta: null as number | null,
+      surfacesWithFindings: 0,
+      lastFindingAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'critical_findings'
+        | 'warn_findings'
+        | 'never_scanned'
+        | 'stale_scan'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db(), userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db(), userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const [openRes, dismissedRes, snapshotsRes, lastFindingRes, surfacesRes] = await Promise.all([
+      db()
+        .from('drift_findings')
+        .select('severity, surface')
+        .eq('project_id', pid)
+        .eq('status', 'open'),
+      db()
+        .from('drift_findings')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .eq('status', 'dismissed'),
+      db()
+        .from('contract_snapshots')
+        .select('id, snapshot_at, edge_count')
+        .eq('project_id', pid)
+        .order('snapshot_at', { ascending: false })
+        .limit(2),
+      db()
+        .from('drift_findings')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db()
+        .from('drift_findings')
+        .select('surface')
+        .eq('project_id', pid)
+        .eq('status', 'open'),
+    ])
+
+    const openRows = openRes.data ?? []
+    const criticalOpen = openRows.filter((r) => r.severity === 'critical').length
+    const warnOpen = openRows.filter((r) => r.severity === 'warn').length
+    const infoOpen = openRows.filter((r) => r.severity === 'info').length
+    const openFindings = openRows.length
+
+    const snapshots = snapshotsRes.data ?? []
+    const snapshotCount = snapshots.length
+    const lastSnapshot = snapshots[0] ?? null
+    const prevSnapshot = snapshots[1] ?? null
+    const lastSnapshotAt = lastSnapshot?.snapshot_at ?? null
+    const lastSnapshotEdges = lastSnapshot?.edge_count ?? 0
+    const edgeCountDelta =
+      lastSnapshot && prevSnapshot
+        ? (lastSnapshot.edge_count ?? 0) - (prevSnapshot.edge_count ?? 0)
+        : null
+
+    const surfaceSet = new Set((surfacesRes.data ?? []).map((r) => r.surface).filter(Boolean))
+    const dismissedFindings = dismissedRes.count ?? 0
+
+    let topPriority = empty.topPriority
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    const STALE_MS = 7 * 24 * 60 * 60 * 1000
+    const isStale =
+      lastSnapshotAt != null && Date.now() - new Date(lastSnapshotAt).getTime() > STALE_MS
+
+    if (criticalOpen > 0) {
+      topPriority = 'critical_findings'
+      topPriorityLabel = `${criticalOpen} critical gap${criticalOpen === 1 ? '' : 's'} between OpenAPI, inventory, and DB schema — triage before users hit them.`
+      topPriorityTo = '/drift?tab=findings'
+    } else if (warnOpen > 0) {
+      topPriority = 'warn_findings'
+      topPriorityLabel = `${warnOpen} warning-level drift finding${warnOpen === 1 ? '' : 's'} — review or dismiss false positives.`
+      topPriorityTo = '/drift?tab=findings'
+    } else if (snapshotCount === 0) {
+      topPriority = 'never_scanned'
+      topPriorityLabel = 'Run a drift scan to build the first contract snapshot and baseline your API edges.'
+      topPriorityTo = '/drift?tab=scanner'
+    } else if (isStale) {
+      topPriority = 'stale_scan'
+      topPriorityLabel = `Last snapshot ${Math.round((Date.now() - new Date(lastSnapshotAt!).getTime()) / (24 * 60 * 60 * 1000))}d ago — re-scan to catch new divergence.`
+      topPriorityTo = '/drift?tab=scanner'
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${snapshotCount} snapshot${snapshotCount === 1 ? '' : 's'} · ${lastSnapshotEdges} contract edges · 0 open findings.`
+      topPriorityTo = '/drift?tab=snapshots'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        openFindings,
+        criticalOpen,
+        warnOpen,
+        infoOpen,
+        dismissedFindings,
+        snapshotCount,
+        lastSnapshotAt,
+        lastSnapshotEdges,
+        edgeCountDelta,
+        surfacesWithFindings: surfaceSet.size,
+        lastFindingAt: lastFindingRes.data?.created_at ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   const r = new Hono<{ Variables: Variables }>()
   r.use('*', requireAuth, requireProjectAccess)
 

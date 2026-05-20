@@ -434,7 +434,7 @@ export const COPY: CopyRegistry = {
     },
     '/lessons': {
       title: 'Learned rules',
-      description: 'Patterns Mushi noticed across many bug reports — turned into rules so the same class of bug never slips through again.',
+      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
       help: {
         title: 'About lessons',
         whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi names it and uses it to catch the next one early.',
@@ -475,17 +475,17 @@ export const COPY: CopyRegistry = {
       },
     },
     '/drift': {
-      title: 'Code health drift',
-      description: 'Track how your codebase\'s quality is changing over time. Catch gradual degradation before it becomes a crisis.',
+      title: 'Contract drift',
+      description: 'Banner + DRIFT SNAPSHOT — compare OpenAPI, inventory, and DB schema to catch gaps before users do.',
       help: {
-        title: 'About code drift',
-        whatIsIt: 'A trend chart showing whether your app\'s bug rate is slowly getting better or worse — catching a drift early costs much less than fixing a crisis.',
+        title: 'About contract drift',
+        whatIsIt: 'The drift-walker builds a contract snapshot then walks every route — finding API endpoints, inventory nodes, or DB columns that diverged from each other.',
         useCases: [
-          'Spot a gradual increase in bug volume before it becomes urgent',
-          'Measure the impact of a refactor on overall quality',
-          'Share a "quality is improving" chart with leadership',
+          'Find API endpoints present in inventory but missing in OpenAPI spec',
+          'Detect DB columns expected by the FE but removed from the schema',
+          'Promote high-severity findings to candidate lessons',
         ],
-        howToUse: 'Look at the trend line. Flat or declining = healthy. Climbing = investigate. Click any spike to see which component drifted.',
+        howToUse: 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.',
       },
     },
     '/experiments': {
@@ -846,7 +846,7 @@ export const COPY: CopyRegistry = {
     },
     '/qa-coverage': {
       title: 'QA coverage',
-      description: 'Scheduled Playwright / Firecrawl / Browserbase story runs + 24h pass rate.',
+      description: 'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.',
     },
     '/anti-gaming': {
       title: 'Anti-gaming',
@@ -858,7 +858,7 @@ export const COPY: CopyRegistry = {
     },
     '/lessons': {
       title: 'Lessons',
-      description: 'Post-incident learnings linked to report fingerprints.',
+      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.',
     },
     '/releases': {
       title: 'Releases',
@@ -870,7 +870,7 @@ export const COPY: CopyRegistry = {
     },
     '/drift': {
       title: 'Drift',
-      description: 'Classifier output drift vs judge baseline — alert on regression.',
+      description: 'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.',
     },
     '/experiments': {
       title: 'Experiments',
