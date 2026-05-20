@@ -1,0 +1,73 @@
+---
+title: Research
+---
+
+import { Callout } from 'nextra/components'
+
+# Research
+
+**Route:** `/research`
+
+The Research page is a Firecrawl-powered web search scoped to your tech stack. Ask
+questions in plain English and get summarised answers with source links, drawn from
+up-to-date documentation and community resources.
+
+---
+
+## What it's for
+
+- **Debug a library error** — "Why does `react-query` v5 throw on an empty select return?"
+- **Find migration paths** — "How do I upgrade from Next.js 14 to 15 App Router?"
+- **Check best practices** — "What are the current Supabase RLS performance recommendations?"
+- **Research a competitor pattern** — "How does Linear handle optimistic updates in their web app?"
+
+Results are saved per-project so teammates can see previous research without re-running it.
+
+---
+
+## Running a search
+
+1. Type your question in the search box.
+2. Optionally select a **context** tag (e.g. your framework, language, or library) to
+   narrow results.
+3. Press **Search** or `Enter`.
+
+Results appear within 5–15 seconds depending on Firecrawl queue depth. Each result card shows:
+- **Title** and source URL
+- **Summary** — AI-extracted key points
+- **Relevance score**
+
+If the search fails, an error banner shows the specific error code:
+- **FIRECRAWL_ERROR** — your Firecrawl BYOK key is invalid or rate-limited. Check
+  [Integration health](/admin/health).
+- **TIMEOUT** — the search took > 30 seconds. Try a more specific query.
+- **NO_RESULTS** — no pages matched. Try broader terms.
+
+<Callout type="info">
+Research results are stored in your Supabase project. They are never shared with other
+tenants. Firecrawl processes queries on their infrastructure using your BYOK key — see
+their [privacy policy](https://firecrawl.dev/privacy) for data handling details.
+</Callout>
+
+---
+
+## Saving results
+
+Click the bookmark icon on any result card to save it to the project's research library.
+Saved results appear in the **Saved** tab and are pinned to the relevant report or fix
+if you initiated the search from those pages.
+
+---
+
+## Prerequisites
+
+A Firecrawl API key must be configured in **Settings → API keys** before Research works.
+Visit [Integration health](/admin/health) to confirm the key is active.
+
+---
+
+## Related pages
+
+- [Integration health](/admin/health) — test your Firecrawl key
+- [Settings](/admin/settings) — add your Firecrawl BYOK key
+- [Fix orchestrator](/admin/fixes) — research is linked to fix context

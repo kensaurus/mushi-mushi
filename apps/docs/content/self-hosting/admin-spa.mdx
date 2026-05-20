@@ -2,20 +2,47 @@
 title: Admin SPA deploy
 ---
 
+import { Callout } from 'nextra/components'
+
 # Admin SPA deploy
 
-Build with the canonical Supabase URL and your gateway URL baked in:
+The admin console is a Vite + React SPA that talks directly to your Supabase project and the `api` edge function. It has no server runtime — any static host works.
+
+## Build
+
+From the repo root:
 
 ```bash
 VITE_SUPABASE_URL=https://YOUR-REF.supabase.co \
 VITE_SUPABASE_ANON_KEY=eyJ… \
 VITE_API_BASE_URL=https://YOUR-REF.functions.supabase.co \
-pnpm --filter @mushi-mushi/admin build
+npm run -w apps/admin build
 ```
 
-Deploy `apps/admin/dist/` to any static host. Cloudflare Pages, Vercel, S3
-+ CloudFront, Netlify all work — no server runtime required.
+The output lands in `apps/admin/dist/`.
 
-The repo ships a reference deploy workflow at
-`.github/workflows/deploy-admin.yml` that pushes the build to S3 +
-CloudFront with the right SPA-routing headers.
+<Callout type="info">
+  `VITE_API_BASE_URL` must point to your Supabase Functions endpoint, **not** your database URL. All console API calls are proxied through the `api` edge function.
+</Callout>
+
+## Deploy options
+
+| Host | Command / workflow |
+| --- | --- |
+| **Cloudflare Pages** | `wrangler pages deploy apps/admin/dist --project-name mushi-admin` |
+| **Vercel** | `vercel apps/admin/dist` |
+| **S3 + CloudFront** | See `.github/workflows/deploy-admin.yml` in the repo |
+| **Netlify** | `netlify deploy --dir apps/admin/dist --prod` |
+
+## SPA routing
+
+All hosts need to serve `index.html` for every path under the console root. The repo's reference S3 workflow sets the `ErrorDocument` to `index.html`. For Cloudflare Pages and Netlify, a `_redirects` file or `netlify.toml` with `/* /index.html 200` is sufficient.
+
+## First-run setup
+
+After deploy, open the console and complete the **Onboarding** wizard (`/onboarding`). It will:
+1. Generate your first API key.
+2. Connect your GitHub OAuth app.
+3. Show the SDK snippet for your first project.
+
+If `/onboarding` returns a blank screen, confirm `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are baked into the build — these cannot be injected after build time.

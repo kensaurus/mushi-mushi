@@ -1,0 +1,90 @@
+---
+title: Users
+---
+
+import { Callout } from 'nextra/components'
+
+# Users
+
+**Route:** `/users`
+
+The Users page is a super-admin directory of every account that has signed up for
+Mushi. It shows MRR, churn, plan distribution, and per-user detail. It is only
+accessible to Mushi operators — non-operator visitors see a 404-style page.
+
+<Callout type="warning">
+This page is visible only to accounts with the `super_admin` role (`operator` badge).
+Regular org admins cannot access `/users` — the API returns an opaque `404 NOT_FOUND`
+(not `403 FORBIDDEN`) to prevent enumeration.
+</Callout>
+
+---
+
+## Metrics row
+
+Six stat cards at the top of the page:
+
+| Metric | Description |
+|--------|-------------|
+| **Total signups** | All-time user count |
+| **Paid users** | Users on a paid plan |
+| **MRR** | Monthly recurring revenue (USD) |
+| **Signups · 7d** | New signups in the last 7 days |
+| **Signups · 30d** | New signups in the last 30 days |
+| **Churn · 30d** | Users who cancelled in the last 30 days |
+
+---
+
+## User directory
+
+A searchable, filterable table of all users:
+
+| Column | Description |
+|--------|-------------|
+| **Email** | User's email address |
+| **Signed up** | Relative timestamp |
+| **Plan** | Current plan badge |
+| **Projects** | Number of projects the user owns |
+| **Reports · 30d** | Reports submitted across all projects in the last 30 days |
+| **Last report** | Relative timestamp of their most recent report |
+| **Last sign-in** | Relative timestamp |
+| **→** | Hover chevron — click to open user detail drawer |
+
+**Filters:**
+- **Search by email** — 250ms debounce
+- **Plan filter** — All / Paid / Hobby / Starter / Pro / Enterprise
+
+---
+
+## User detail drawer
+
+Click any user row to open the drawer:
+
+| Section | Contents |
+|---------|---------|
+| **Header** | Email, user ID, signed-up date, last sign-in |
+| **Plans** | Current plan, signup plan |
+| **Projects** | List of projects: name, slug, tier, created date |
+| **Subscriptions** | Plan name, status, renewal date, cancel-scheduled flag |
+| **Recent reports** | Last 20 reports: category badge, severity badge, status, created date |
+
+---
+
+## API
+
+```bash
+GET /v1/super-admin/metrics
+GET /v1/super-admin/users?limit=100&search=<email>&plan=<plan>
+GET /v1/super-admin/users/:userId
+```
+
+These endpoints are not available to regular project tokens — they require an operator
+session. Attempts from non-operator sessions return `404 NOT_FOUND`.
+
+---
+
+## Related pages
+
+- [Organization members](/admin/teams) — manage roles within your own org
+- [Audit log](/admin/audit) — per-user action history
+- [Billing](/admin/billing) — subscription and plan detail

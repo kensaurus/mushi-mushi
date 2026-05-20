@@ -2,16 +2,105 @@
 title: Fix orchestrator
 ---
 
+import { Callout } from 'nextra/components'
+
 # Fix orchestrator
 
-The Fixes page lists every dispatched fix attempt. Each row shows agent
-type (`McpFixAgent` or `RestFixWorkerAgent`), sandbox provider, branch /
-PR URL, files changed, lines changed, and the AI summary of the diff.
+The Fixes page is the live view of every agent run Mushi has dispatched — from the
+moment the orchestrator picks up the report to the moment a PR is open (or the run
+fails). It also shows coordination rows for [multi-repo fixes](/concepts/multi-repo-fixes).
 
-The **streaming view** (right rail) opens a Hono `streamSSE` connection
-into the orchestrator and renders AG-UI events live: tool calls,
-file writes, test runs, sandbox lifecycle. The transport sanitises CRs
-per [CVE-2026-29085](https://nvd.nist.gov/vuln/detail/CVE-2026-29085).
+---
 
-When a fix completes successfully, a `fix.applied` webhook fires to every
-subscribed plugin. Failures fire `fix.failed` so on-call can intervene.
+## The fixes list
+
+Each row in the list shows:
+
+| Column | What it is |
+| ------ | ---------- |
+| **Status** | `queued` · `running` · `completed` · `failed` · `cancelled` |
+| **Agent type** | `McpFixAgent` (Cursor / Claude Code) or `RestFixWorkerAgent` (edge function) |
+| **Sandbox** | `e2b` (default cloud), `modal`, `local`, or `none` |
+| **Branch / PR** | Link to the GitHub PR, or the branch name if the PR is still opening |
+| **Files / lines** | Scope of the diff — files touched and net line delta |
+| **Spec warnings** | Yellow pill if `validateAgainstSpec()` flagged issues before the PR opened |
+| **AI summary** | One-sentence description of what the agent changed and why |
+
+Coordination rows have a **▶ Expand** toggle that reveals the per-repo child
+attempts grouped underneath.
+
+---
+
+## Streaming view
+
+Click any running fix to open the **streaming drawer**. It opens a Hono
+`streamSSE` connection into the orchestrator and renders AG-UI protocol events live:
+
+- **Tool calls** — file reads, searches, shell commands, test runs.
+- **File writes** — diffs rendered inline as the agent writes them.
+- **Test output** — pass / fail per test as they stream.
+- **Sandbox lifecycle** — boot, snapshot, restore, teardown events.
+
+The transport sanitises carriage returns per
+[CVE-2026-29085](https://nvd.nist.gov/vuln/detail/CVE-2026-29085) so injected
+control sequences can't forge fake tool-call lines.
+
+<Callout type="info">
+  The streaming view works for both `McpFixAgent` and `RestFixWorkerAgent`.
+  For MCP agents, events arrive via the Cursor / Claude Code AG-UI bridge.
+  For REST workers, events stream directly from the `fix-worker` Edge Function.
+</Callout>
+
+---
+
+## Spec-validation warnings
+
+When the fix-worker runs `validateAgainstSpec()` before opening a PR and finds
+soft issues — e.g. the diff doesn't touch any file that references the contract's
+required DB table — the warnings land in `fix_attempts.spec_validation_warnings`
+and surface as a yellow callout in the streaming drawer:
+
+```
+⚠  Sanity-check before merging
+   The diff does not reference table public.users, but the expected_outcome
+   contract requires a row_exists assertion on that table.
+   Review manually before merging.
+```
+
+Hard errors (removing a json_path field the contract asserts on) abort the run
+before the PR opens.
+
+---
+
+## Dispatching a fix
+
+You can dispatch a fix from three places:
+
+1. **Report detail** → "Dispatch fix" button (single-repo or auto multi-repo).
+2. **Fixes list** → "New fix" button with a report picker.
+3. **MCP / A2A** — `dispatch_fix` tool or `POST /v1/a2a/tasks`.
+
+All three paths produce the same `fix_dispatch_jobs` row and emit the same
+`fix.dispatched` webhook to subscribed plugins.
+
+---
+
+## Webhooks
+
+| Event | When |
+| ----- | ---- |
+| `fix.dispatched` | Immediately after the dispatch row is created |
+| `fix.applied` | Fix completed and PR is open |
+| `fix.failed` | Orchestrator exhausted retries |
+| `fix.coordination.succeeded` | All child PRs in a multi-repo fix are open |
+
+Configure webhook endpoints in **Settings → Webhooks**. Each delivery is logged
+with the payload, HTTP status, and any retry attempts.
+
+---
+
+## See also
+
+- [Concepts → Agentic fix orchestrator](/concepts/fix-orchestrator) — how the orchestrator works internally.
+- [Concepts → Multi-repo coordinated fixes](/concepts/multi-repo-fixes) — coordinated multi-repo runs.
+- [Connecting your orchestrator](/concepts/orchestrator-interop) — dispatch via MCP, A2A, or REST.
