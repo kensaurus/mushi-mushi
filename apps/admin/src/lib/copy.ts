@@ -874,7 +874,7 @@ export const COPY: CopyRegistry = {
     },
     '/experiments': {
       title: 'Experiments',
-      description: 'Feature-flagged pipeline variants with cohort metrics.',
+      description: 'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.',
     },
     '/anomalies': {
       title: 'Anomalies',

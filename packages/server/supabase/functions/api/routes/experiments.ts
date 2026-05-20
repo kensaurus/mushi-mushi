@@ -79,25 +79,35 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [experimentsRes, variantsRes, assignmentsRes] = await Promise.all([
+    const [experimentsRes, assignmentsRes] = await Promise.all([
       db()
         .from('experiments')
         .select('id, status, bandit_enabled, winner_variant_id, created_at')
         .eq('project_id', pid)
         .order('created_at', { ascending: false }),
       db()
-        .from('experiment_variants')
-        .select('id, experiment_id, experiments!inner(project_id)')
-        .eq('experiments.project_id', pid),
-      db()
         .from('experiment_assignments')
-        .select('converted, experiments!inner(project_id)')
-        .eq('experiments.project_id', pid),
+        .select('converted, experiment_id')
+        .in(
+          'experiment_id',
+          (
+            await db().from('experiments').select('id').eq('project_id', pid)
+          ).data?.map((e) => e.id) ?? ['00000000-0000-0000-0000-000000000000'],
+        ),
     ])
 
     const experiments = experimentsRes.data ?? []
+    const experimentIds = experiments.map((e) => e.id)
+
+    const [variantsRes] = experimentIds.length
+      ? await Promise.all([
+          db().from('experiment_variants').select('id, experiment_id').in('experiment_id', experimentIds),
+        ])
+      : [{ data: [] as Array<{ id: string; experiment_id: string }> }]
+
     const variants = variantsRes.data ?? []
-    const assignments = assignmentsRes.data ?? []
+    const assignments =
+      experimentIds.length > 0 ? (assignmentsRes.data ?? []) : []
 
     const variantCountByExp = variants.reduce<Record<string, number>>((acc, v) => {
       const expId = v.experiment_id as string
