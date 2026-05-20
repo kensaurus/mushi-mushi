@@ -38,6 +38,7 @@ import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
+import { FeedbackModal } from './FeedbackModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
@@ -503,13 +504,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'marketplace',
     decide: {
-      label: 'Webhook plugins',
-      summary: 'Install signed receivers that react when reports classify, fixes land, or SLAs breach.',
+      label: 'MARKETPLACE SNAPSHOT',
+      summary: 'Catalog, installed count, delivery success rate, and failing plugins — banner shows EMPTY vs DELIVERING.',
       severity: 'info',
     },
     verify: {
       label: 'Delivery log',
-      detail: 'Every POST includes HTTP status, latency, and response excerpt for debugging.',
+      detail: 'Every signed POST includes HTTP status, latency, and response excerpt for webhook debugging.',
     },
   },
   '/notifications': {
@@ -835,6 +836,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
   const [aiOpen, setAiOpen] = useState(false)
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
+  const [feedbackModalType, setFeedbackModalType] = useState<'bug' | 'feature'>('bug')
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
   const { isSuperAdmin, has } = useEntitlements()
@@ -1564,14 +1567,15 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span aria-hidden className="font-mono text-xs leading-none">✨</span>
                 </button>
               </Tooltip>
-              <Tooltip content="My feedback — bugs & feature requests" side="bottom">
-                <Link
-                  to="/feedback"
-                  aria-label="My feedback"
+              <Tooltip content="Report a bug or request a feature — opens inline" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => { setFeedbackModalType('bug'); setFeedbackModalOpen(true) }}
+                  aria-label="Report a bug or request a feature"
                   className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   <IconChat className="h-3.5 w-3.5" />
-                </Link>
+                </button>
               </Tooltip>
             </div>
             <VersionBadge whatsNew={whatsNew} />
@@ -1618,6 +1622,12 @@ export function Layout({ children }: { children: ReactNode }) {
         onClose={() => setAiOpen(false)}
         route={pathname}
       />
+      {feedbackModalOpen && (
+        <FeedbackModal
+          initialType={feedbackModalType}
+          onClose={() => setFeedbackModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

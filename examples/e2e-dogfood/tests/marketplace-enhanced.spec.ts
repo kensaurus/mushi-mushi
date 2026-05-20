@@ -1,5 +1,5 @@
 /**
- * Smoke test for enhanced MCP page.
+ * Smoke test for enhanced Marketplace page.
  */
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
@@ -35,7 +35,7 @@ const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? rootEnv.TEST_USER_P
 const ref = SUPABASE_URL.match(/https:\/\/([^.]+)\./)?.[1] ?? 'dxptnwrhwsqckaftyymj'
 const storageKey = `sb-${ref}-auth-token`
 
-test.describe('MCP enhanced shell', () => {
+test.describe('Marketplace enhanced shell', () => {
   test.skip(
     !SUPABASE_URL || !SUPABASE_ANON_KEY || !TEST_USER_EMAIL || !TEST_USER_PASSWORD,
     'Requires Supabase + test user env',
@@ -78,31 +78,32 @@ test.describe('MCP enhanced shell', () => {
   })
 
   test('overview loads banner, KPI strip, and tabs', async ({ page }) => {
-    await page.goto(`${ADMIN_URL}/mcp`, { waitUntil: 'domcontentloaded' })
+    await page.goto(`${ADMIN_URL}/marketplace`, { waitUntil: 'domcontentloaded' })
     await page.getByRole('button', { name: 'Dismiss' }).click({ timeout: 3000 }).catch(() => {})
-    await expect(page.getByTestId('mushi-page-mcp')).toBeVisible({ timeout: 15000 })
-    await expect(page.getByTestId('mushi-page-mcp').getByText('MCP SNAPSHOT', { exact: true })).toBeVisible({
-      timeout: 15000,
-    })
-    await expect(page.getByLabel('MCP sections')).toBeVisible()
-    await expect(page.getByLabel('MCP sections').getByRole('radio', { name: 'Overview' })).toBeChecked()
+    await expect(page.getByTestId('mushi-page-marketplace')).toBeVisible({ timeout: 15000 })
+    await expect(
+      page.getByTestId('mushi-page-marketplace').getByText('MARKETPLACE SNAPSHOT', { exact: true }),
+    ).toBeVisible({ timeout: 15000 })
+    await expect(page.getByLabel('Marketplace sections')).toBeVisible()
+    await expect(
+      page.getByLabel('Marketplace sections').getByRole('radio', { name: 'Overview' }),
+    ).toBeChecked()
   })
 
-  test('setup tab loads quickstart', async ({ page }) => {
-    await page.goto(`${ADMIN_URL}/mcp?tab=setup`, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByLabel('MCP sections').getByRole('radio', { name: 'Setup' })).toBeChecked({
-      timeout: 15000,
-    })
-    await expect(page.getByRole('heading', { name: 'Get an agent talking in 60 seconds' })).toBeVisible({
-      timeout: 15000,
-    })
+  test('browse tab loads plugin catalog', async ({ page }) => {
+    await page.goto(`${ADMIN_URL}/marketplace?tab=browse`, { waitUntil: 'domcontentloaded' })
+    await expect(
+      page.getByLabel('Marketplace sections').getByRole('radio', { name: 'Browse' }),
+    ).toBeChecked({ timeout: 15000 })
+    await expect(page.getByRole('heading', { name: 'Plugin catalog' })).toBeVisible({ timeout: 15000 })
+    await expect(page.getByPlaceholder('Search by name, publisher, description…')).toBeVisible()
   })
 
-  test('catalog tab loads tool catalog', async ({ page }) => {
-    await page.goto(`${ADMIN_URL}/mcp?tab=catalog`, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByLabel('MCP sections').getByRole('radio', { name: 'Catalog' })).toBeChecked({
-      timeout: 15000,
-    })
-    await expect(page.getByTestId('mcp-tool-catalog-read')).toBeVisible({ timeout: 15000 })
+  test('deliveries tab loads delivery log', async ({ page }) => {
+    await page.goto(`${ADMIN_URL}/marketplace?tab=deliveries`, { waitUntil: 'domcontentloaded' })
+    await expect(
+      page.getByLabel('Marketplace sections').getByRole('radio', { name: 'Deliveries' }),
+    ).toBeChecked({ timeout: 15000 })
+    await expect(page.getByRole('heading', { name: 'Delivery log' })).toBeVisible({ timeout: 15000 })
   })
 })

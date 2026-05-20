@@ -363,8 +363,8 @@ export const COPY: CopyRegistry = {
       },
     },
     '/marketplace': {
-      title: 'Plugin marketplace',
-      description: 'Install HMAC-signed webhook plugins that react when reports classify, fixes land, or SLAs breach.',
+      title: 'Marketplace',
+      description: 'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.',
       help: {
         title: 'About the marketplace',
         whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',

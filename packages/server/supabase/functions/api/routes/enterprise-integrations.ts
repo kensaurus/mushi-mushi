@@ -1981,6 +1981,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
       catalogTotal: 0,
       installedTotal: 0,
       installedActive: 0,
@@ -1988,8 +1991,19 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       deliveries7d: 0,
       deliveriesOk: 0,
       deliveriesFailed: 0,
+      deliverySuccessRatePct: 0,
       lastDeliveryAt: null as string | null,
+      daysSinceLastDelivery: null as number | null,
       failingPlugins: 0,
+      neverDeliveredPlugins: 0,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'delivery_failures'
+        | 'plugins_paused'
+        | 'no_plugins_installed'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -2004,7 +2018,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       db.from('plugin_registry').select('slug', { count: 'exact', head: true }).eq('is_listed', true),
       db
         .from('project_plugins')
-        .select('is_active, last_delivery_status')
+        .select('is_active, last_delivery_status, last_delivery_at')
         .eq('project_id', project.id),
       db
         .from('plugin_dispatch_log')
@@ -2032,10 +2046,43 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       (p) =>
         p.last_delivery_status === 'error' || p.last_delivery_status === 'timeout',
     ).length;
+    const neverDeliveredPlugins = installed.filter(
+      (p) => p.is_active && !p.last_delivery_at,
+    ).length;
+    const deliverySuccessRatePct =
+      dispatch.length > 0 ? Math.round((deliveriesOk / dispatch.length) * 100) : 0;
+    const daysSinceLastDelivery = lastDeliveryAt
+      ? Math.floor((Date.now() - new Date(lastDeliveryAt).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (deliveriesFailed > 0 || failingPlugins > 0) {
+      topPriority = 'delivery_failures';
+      topPriorityLabel = `${deliveriesFailed} failed deliver${deliveriesFailed === 1 ? 'y' : 'ies'} in 7d · ${failingPlugins} plugin${failingPlugins === 1 ? '' : 's'} with last status error/timeout — check Deliveries tab.`;
+      topPriorityTo = '/marketplace?tab=deliveries';
+    } else if (installed.filter((p) => !p.is_active).length > 0) {
+      topPriority = 'plugins_paused';
+      topPriorityLabel = `${installed.filter((p) => !p.is_active).length} plugin${installed.filter((p) => !p.is_active).length === 1 ? '' : 's'} paused — resume on Installed tab to receive events again.`;
+      topPriorityTo = '/marketplace?tab=installed';
+    } else if (installed.length === 0) {
+      topPriority = 'no_plugins_installed';
+      topPriorityLabel = `${catalogRes.count ?? 0} plugin${(catalogRes.count ?? 0) === 1 ? '' : 's'} in catalog — install a webhook receiver to react when reports classify or fixes land.`;
+      topPriorityTo = '/marketplace?tab=browse';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${installed.filter((p) => p.is_active).length} active · ${deliveriesOk} ok / ${dispatch.length} deliveries (7d) · ${deliverySuccessRatePct}% success rate.`;
+      topPriorityTo = '/marketplace?tab=deliveries';
+    }
 
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
+        projectId: project.id as string,
+        projectName: (project.name as string | null) ?? null,
         catalogTotal: catalogRes.count ?? 0,
         installedTotal: installed.length,
         installedActive: installed.filter((p) => p.is_active).length,
@@ -2043,8 +2090,14 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
         deliveries7d: dispatch.length,
         deliveriesOk,
         deliveriesFailed,
+        deliverySuccessRatePct,
         lastDeliveryAt,
+        daysSinceLastDelivery,
         failingPlugins,
+        neverDeliveredPlugins,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });
