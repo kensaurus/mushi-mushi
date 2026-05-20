@@ -29,7 +29,7 @@
  *          dominating it.
  */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CopyButton } from './ui'
 import { ConfigHelp } from './ConfigHelp'
 import { apiFetch, invalidateApiCache } from '../lib/supabase'
@@ -47,6 +47,11 @@ import {
   type WidgetTheme,
   type WidgetTrigger,
 } from '../lib/sdkSnippets'
+import {
+  detectFromPackageJson,
+  monorepoInstallGuidance,
+  type DetectionResult,
+} from '../lib/frameworkDetect'
 
 interface Props {
   /** The project's external `project_id` (the value the SDK sends back to the
@@ -133,6 +138,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
   const [framework, setFramework] = useState<Framework>('react')
   const [snippetCopied, setSnippetCopied] = useState(false)
   const [installCopied, setInstallCopied] = useState(false)
+  const [detection, setDetection] = useState<DetectionResult | null>(null)
   const [config, setConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [savedConfig, setSavedConfig] = useState<SdkPreviewConfig>(DEFAULT_SDK_CONFIG)
   const [enabled, setEnabled] = useState(true)
@@ -275,6 +281,28 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
 
         {/* ─── RIGHT COLUMN: framework picker, install, snippet ─── */}
         <div className="space-y-3 min-w-0">
+
+          {/* Auto-detect panel — paste package.json to skip manual tab picking */}
+          <FrameworkDetector
+            onDetect={(result) => {
+              setDetection(result)
+              if (result.confidence >= 0.5) {
+                setFramework(result.framework)
+                setSnippetCopied(false)
+                setInstallCopied(false)
+              }
+            }}
+          />
+
+          {/* Detection result banner */}
+          {detection && (
+            <DetectionBanner
+              result={detection}
+              installCmd={installCommand(framework)}
+              onDismiss={() => setDetection(null)}
+            />
+          )}
+
           {/* Framework tabs.
               `flex-wrap` is non-negotiable: there are 7 frameworks today
               (React / Vue / Svelte / React Native / Expo / Capacitor /
@@ -295,6 +323,7 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
                 aria-selected={framework === fw}
                 onClick={() => {
                   setFramework(fw)
+                  setDetection(null)
                   setSnippetCopied(false)
                   setInstallCopied(false)
                 }}
@@ -912,5 +941,163 @@ function CaptureToggle({
         {helpId && <ConfigHelp helpId={helpId} />}
       </span>
     </label>
+  )
+}
+
+// ─── Auto-detect components ────────────────────────────────────────────────────
+
+/**
+ * Collapsible "Detect my framework" accordion.
+ * Users paste their package.json and we auto-select the right tab + show
+ * monorepo / version warnings. ELI5, zero-config, never crashes.
+ */
+function FrameworkDetector({ onDetect }: { onDetect: (r: DetectionResult) => void }) {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  function handleDetect() {
+    setError(null)
+    const trimmed = text.trim()
+    if (!trimmed) {
+      setError('Paste your package.json contents above first.')
+      return
+    }
+    const result = detectFromPackageJson(trimmed)
+    onDetect(result)
+    if (result.confidence < 0.5 || result.monorepo) {
+      // keep the panel open so the user can read the guidance
+    } else {
+      setOpen(false)
+      setText('')
+    }
+  }
+
+  return (
+    <div className="rounded-md border border-edge-subtle bg-surface-raised/40">
+      <button
+        type="button"
+        onClick={() => {
+          setOpen((v) => !v)
+          if (!open) setTimeout(() => taRef.current?.focus(), 50)
+        }}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-surface-overlay rounded-md transition-colors"
+        aria-expanded={open}
+      >
+        <span className="font-medium text-fg">
+          🔍 Detect my framework automatically
+        </span>
+        <span className="text-fg-faint text-2xs" aria-hidden>
+          {open ? '▲ hide' : '▼ paste package.json'}
+        </span>
+      </button>
+
+      {open && (
+        <div className="px-3 pb-3 pt-1 space-y-2">
+          <p className="text-2xs text-fg-muted leading-snug">
+            Paste the contents of your <code className="font-mono">package.json</code> and we'll
+            auto-select the right SDK tab, detect monorepos, and flag any known issues.
+          </p>
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={(e) => { setText(e.target.value); setError(null) }}
+            placeholder={'{\n  "dependencies": {\n    "react": "^18.0.0",\n    ...\n  }\n}'}
+            className="w-full h-32 font-mono text-2xs bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand resize-y placeholder:text-fg-faint"
+            aria-label="Paste your package.json here"
+            spellCheck={false}
+          />
+          {error && (
+            <p className="text-2xs text-danger" role="alert">{error}</p>
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDetect}
+              disabled={!text.trim()}
+              className="px-3 py-1 rounded-sm text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Detect
+            </button>
+            <button
+              type="button"
+              onClick={() => { setText(''); setError(null); setOpen(false) }}
+              className="px-2 py-1 rounded-sm text-xs text-fg-muted hover:text-fg hover:bg-surface-overlay transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Result banner shown after auto-detect. Green when confident, amber when uncertain. */
+function DetectionBanner({
+  result,
+  installCmd,
+  onDismiss,
+}: {
+  result: DetectionResult
+  installCmd: string
+  onDismiss: () => void
+}) {
+  const isConfident = result.confidence >= 0.8
+  const monorepoNote = monorepoInstallGuidance(result, installCmd)
+
+  const tone = isConfident
+    ? 'border-ok/30 bg-ok-muted/10 text-ok'
+    : 'border-warn/30 bg-warn-muted/10 text-warn'
+
+  return (
+    <div className={`rounded-md border px-3 py-2.5 space-y-1.5 ${tone}`} role="status">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs font-semibold">
+            {isConfident ? '✓ Detected:' : '~ Best guess:'}
+          </span>
+          <code className="font-mono text-xs text-fg">{result.framework}</code>
+          <span className="text-2xs text-fg-muted">
+            ({Math.round(result.confidence * 100)}% confident)
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-fg-faint hover:text-fg text-2xs shrink-0"
+          aria-label="Dismiss detection result"
+        >
+          ✕
+        </button>
+      </div>
+
+      <p className="text-2xs text-fg-secondary leading-snug">{result.reason}</p>
+
+      {monorepoNote && (
+        <div className="rounded-sm border border-info/30 bg-info-muted/10 px-2 py-1.5 mt-1">
+          <p className="text-2xs text-info font-semibold mb-0.5">Monorepo detected</p>
+          <pre className="text-2xs text-fg-secondary whitespace-pre-wrap font-mono leading-snug">{monorepoNote}</pre>
+        </div>
+      )}
+
+      {result.warnings.length > 0 && (
+        <ul className="space-y-0.5 mt-1">
+          {result.warnings.map((w, i) => (
+            <li key={i} className="text-2xs text-warn leading-snug flex gap-1">
+              <span aria-hidden>⚠</span>
+              <span>{w}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {result.confidence < 0.5 && (
+        <p className="text-2xs text-fg-muted mt-1">
+          Low confidence — please select the correct framework tab above manually.
+        </p>
+      )}
+    </div>
   )
 }

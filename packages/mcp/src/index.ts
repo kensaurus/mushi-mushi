@@ -35,6 +35,23 @@ async function main() {
         'e.g. https://xyz.supabase.co/functions/v1/api',
     )
   }
+  if (!PROJECT_ID) {
+    console.error(
+      '[mushi-mcp] MUSHI_PROJECT_ID is not set.\n' +
+        '\n' +
+        'Tools that scope to a project (get_recent_reports, get_report_detail,\n' +
+        'search_reports, etc.) will require you to pass projectId explicitly on\n' +
+        'every call. To set it once and never pass it again:\n' +
+        '\n' +
+        '  1. Open the Mushi admin console → Projects\n' +
+        '     (https://your-admin-url/projects)\n' +
+        '  2. Find your project — the UUID chip below the name is the value to use.\n' +
+        '  3. Copy it and set:\n' +
+        '       MUSHI_PROJECT_ID=<paste-uuid-here>\n' +
+        '\n' +
+        'You can also visit Admin → MCP for a pre-filled .env.local snippet.',
+    )
+  }
   log.info('Starting Mushi MCP server', { version: VERSION, endpoint: API_ENDPOINT || '(unset)', hasProjectId: !!PROJECT_ID })
 
   const server = createMushiServer({
