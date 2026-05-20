@@ -1,13 +1,13 @@
 // scripts/marketing/record-glotit-sdk-tour.mjs
 //
-// Records glotit-report-flow.gif — Mushi SDK edge-tab launcher on a glot.it-style
-// checkout fixture (examples/react-demo). Shows Report bug → widget open → submit.
+// Records glotit-report-flow.gif — full Mushi SDK reporter pipeline on the
+// glot.it-style checkout fixture (examples/react-demo):
+//   edge tab visible → open widget → pick Bug → pick intent → describe → submit → success
 //
-// Prerequisite: pnpm --filter mushi-mushi-react-demo dev  (default http://localhost:5173)
+// Prerequisite: pnpm --filter mushi-mushi-react-demo dev  (http://localhost:5173)
 //
 // Usage:
 //   node scripts/marketing/record-glotit-sdk-tour.mjs
-//   node scripts/marketing/record-glotit-sdk-tour.mjs --url=http://localhost:5173
 //   node scripts/marketing/record-glotit-sdk-tour.mjs --headed
 
 import { spawnSync } from 'node:child_process'
@@ -38,6 +38,9 @@ const OUT_DIR = resolve(REPO_ROOT, 'docs/screenshots')
 const RAW_DIR = resolve(REPO_ROOT, '.cache', 'glotit-gif-record')
 const GIF_DST = resolve(OUT_DIR, 'glotit-report-flow.gif')
 
+const DESCRIPTION =
+  'Pay button slips under the bottom bar after the spring coupon — checkout /glot-it'
+
 mkdirSync(OUT_DIR, { recursive: true })
 mkdirSync(RAW_DIR, { recursive: true })
 
@@ -45,15 +48,53 @@ async function pause(page, ms) {
   await page.waitForTimeout(ms)
 }
 
-/** Edge-tab trigger sits flush on the right; click center of the tab. */
-async function clickSdkTrigger(page) {
-  const { width, height } = VIEWPORT
-  const x = width - 16
-  const y = Math.round(height * 0.62)
-  await page.mouse.click(x, y)
+async function waitForRecorder(page) {
+  await page
+    .waitForFunction(
+      () => globalThis.__mushiRecorder?.ready?.() && !!document.getElementById('mushi-mushi-widget'),
+      { timeout: 45000 },
+    )
+    .catch(() => {
+      warn('  __mushiRecorder not ready — rebuild @mushi-mushi/web with debug:true and restart react-demo')
+    })
 }
 
-step(`Recording SDK capture flow at ${URL} (${VIEWPORT.width}×${VIEWPORT.height})`)
+async function clickCenter(page, center) {
+  if (!center) return false
+  await page.mouse.click(center.x, center.y)
+  return true
+}
+
+async function getCenter(page, fnName, ...fnArgs) {
+  return page.evaluate(
+    ({ name, args }) => {
+      const rec = globalThis.__mushiRecorder
+      if (!rec?.[name]) return null
+      return rec[name](...args)
+    },
+    { name: fnName, args: fnArgs },
+  )
+}
+
+async function callRecorder(page, fnName, ...fnArgs) {
+  await page.evaluate(
+    ({ name, args }) => {
+      const rec = globalThis.__mushiRecorder
+      rec?.[name]?.(...args)
+    },
+    { name: fnName, args: fnArgs },
+  )
+}
+
+async function waitForStep(page, stepName) {
+  await page.waitForFunction(
+    (expected) => globalThis.__mushiRecorder?.getStep?.() === expected,
+    stepName,
+    { timeout: 8000 },
+  )
+}
+
+step(`Recording full SDK reporter flow at ${URL} (${VIEWPORT.width}×${VIEWPORT.height})`)
 const browser = await chromium.launch({ headless: !args.headed })
 const context = await browser.newContext({
   viewport: VIEWPORT,
@@ -62,33 +103,62 @@ const context = await browser.newContext({
 })
 const page = await context.newPage()
 
-step('1/5  Land on checkout fixture — dwell on edge-tab launcher...')
-await page.goto(URL, { waitUntil: 'domcontentloaded', timeout: 60000 })
-await page.waitForSelector('#mushi-mushi-widget', { timeout: 25000 }).catch(() => {
-  warn('  #mushi-mushi-widget not found — is react-demo running with MushiProvider?')
-})
-await pause(page, 4200)
+step('1/7  Land on checkout — show Report bug edge tab…')
+await page.goto(URL, { waitUntil: 'networkidle', timeout: 60000 })
+await waitForRecorder(page)
+await pause(page, 3800)
 
-step('2/5  Click Report bug edge tab...')
-await clickSdkTrigger(page)
-await pause(page, 2200)
+step('2/7  Click Report bug edge tab…')
+const trigger = await getCenter(page, 'getTriggerCenter')
+if (await clickCenter(page, trigger)) {
+  await waitForStep(page, 'category')
+} else {
+  warn('  Could not locate edge tab — falling back to recorder API')
+  await callRecorder(page, 'clickTrigger')
+  await waitForStep(page, 'category')
+}
+await pause(page, 2400)
 
-step('3/5  Pick bug category...')
-await clickSdkTrigger(page).catch(() => {})
-await pause(page, 800)
-await page.mouse.click(VIEWPORT.width / 2, Math.round(VIEWPORT.height * 0.38))
+step('3/7  Choose Bug category…')
+const bugBtn = await getCenter(page, 'getCategoryCenter', 'bug')
+if (await clickCenter(page, bugBtn)) {
+  await waitForStep(page, 'intent')
+} else {
+  await callRecorder(page, 'selectCategory', 'bug')
+  await waitForStep(page, 'intent')
+}
+await pause(page, 2000)
+
+step('4/7  Choose intent…')
+const intentBtn = await getCenter(page, 'getIntentCenter', 'Unresponsive')
+if (await clickCenter(page, intentBtn)) {
+  await waitForStep(page, 'details')
+} else {
+  await callRecorder(page, 'selectIntent', 'Unresponsive')
+  await waitForStep(page, 'details')
+}
 await pause(page, 1800)
 
-step('4/5  Fill description...')
-await page.keyboard.type(
-  'Pay button slips under bottom bar after spring coupon — checkout /glot-it',
-  { delay: 28 },
-)
+step('5/7  Type report description…')
+await callRecorder(page, 'focusDescription')
+await pause(page, 400)
+await page.keyboard.type(DESCRIPTION, { delay: 32 })
 await pause(page, 2200)
 
-step('5/5  Submit (Ctrl+Enter)...')
-await page.keyboard.press('Control+Enter')
-await pause(page, 3200)
+step('6/7  Submit report…')
+const submitBtn = await getCenter(page, 'getSubmitCenter')
+if (await clickCenter(page, submitBtn)) {
+  /* clicked */
+} else {
+  await page.keyboard.press('Control+Enter')
+}
+await pause(page, 800)
+await page.waitForFunction(() => globalThis.__mushiRecorder?.getStep?.() === 'success', null, {
+  timeout: 10000,
+}).catch(() => warn('  Success step not detected — API may have blocked, but GIF continues'))
+
+step('7/7  Hold on success stamp…')
+await pause(page, 3600)
 
 await context.close()
 await browser.close()
@@ -122,9 +192,9 @@ if (ffmpegProbe.status !== 0 && !existsSync(FFMPEG)) {
   process.exit(0)
 }
 
-step('Converting to palette-optimised GIF (960px tall)...')
+step('Converting to palette-optimised GIF…')
 const palette = resolve(RAW_DIR, 'glotit-palette.png')
-const scaleFilter = 'fps=12,scale=960:-1:flags=lanczos'
+const scaleFilter = 'fps=10,scale=960:-1:flags=lanczos'
 
 const r1 = spawnSync(
   ffmpegBin,

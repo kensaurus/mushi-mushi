@@ -1049,4 +1049,65 @@ export class MushiWidget {
       this.render();
     }
   }
+
+  /* ── Marketing / Playwright recorder (debug GIF capture) ─────────── */
+
+  getRecorderStep(): WidgetStep {
+    return this.step;
+  }
+
+  getRecorderTrigger(): Element | null {
+    return this.shadow.querySelector('.mushi-trigger');
+  }
+
+  getRecorderCategoryButton(category: MushiReportCategory): Element | null {
+    return this.shadow.querySelector(`[data-category="${category}"]`);
+  }
+
+  getRecorderIntentButton(label: string): Element | null {
+    return (
+      Array.from(this.shadow.querySelectorAll('[data-intent]')).find(
+        (el) => (el as HTMLElement).dataset.intent === label,
+      ) ?? null
+    );
+  }
+
+  getRecorderSubmitButton(): Element | null {
+    return this.shadow.querySelector('[data-action="submit"]');
+  }
+
+  recorderClickTrigger(): void {
+    if (this.isOpen) this.close();
+    this.open();
+  }
+
+  recorderSelectCategory(category: MushiReportCategory): void {
+    if (!this.isOpen) this.open();
+    if (this.step !== 'category') {
+      this.selectedCategory = null;
+      this.selectedIntent = null;
+      this.step = 'category';
+      this.render();
+    }
+    this.selectedCategory = category;
+    this.step = 'intent';
+    this.render();
+  }
+
+  recorderSelectIntent(label: string): void {
+    if (!this.isOpen || this.step !== 'intent') return;
+    this.selectedIntent = label;
+    this.step = 'details';
+    this.render();
+  }
+
+  recorderFocusDescription(): void {
+    const textarea = this.shadow.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
+    textarea?.focus();
+  }
+
+  recorderSubmit(): void {
+    const submit = this.shadow.querySelector('[data-action="submit"]') as HTMLButtonElement | null;
+    submit?.click();
+  }
 }
