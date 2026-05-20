@@ -1,22 +1,41 @@
-import { MushiProvider, MushiErrorBoundary } from '@mushi-mushi/react'
+import { MushiProvider, MushiErrorBoundary, useMushi } from '@mushi-mushi/react'
+import { useEffect } from 'react'
 
 const MUSHI_CONFIG = {
   projectId: import.meta.env.VITE_MUSHI_PROJECT_ID ?? 'demo_project',
   apiKey: import.meta.env.VITE_MUSHI_API_KEY ?? 'mushi_demo_key',
   apiEndpoint: import.meta.env.VITE_MUSHI_API_ENDPOINT ?? 'http://localhost:54321/functions/v1/api',
   runtimeConfig: false,
+  debug: import.meta.env.DEV,
   widget: {
     trigger: 'edge-tab' as const,
     triggerText: 'Report bug',
     position: 'bottom-right' as const,
     theme: 'light' as const,
+    environments: {
+      development: 'always' as const,
+      staging: 'always' as const,
+      production: 'always' as const,
+    },
   },
+}
+
+/** Exposes SDK + recorder for marketing GIF capture (Playwright). */
+function SdkRecorderBridge() {
+  const sdk = useMushi()
+  useEffect(() => {
+    if (!sdk || !import.meta.env.DEV) return
+    const win = window as Window & { __mushiDemo?: typeof sdk }
+    win.__mushiDemo = sdk
+  }, [sdk])
+  return null
 }
 
 export function App() {
   return (
     <MushiProvider config={MUSHI_CONFIG}>
       <MushiErrorBoundary>
+        <SdkRecorderBridge />
         <CheckoutDogfoodPage />
       </MushiErrorBoundary>
     </MushiProvider>
