@@ -5,7 +5,7 @@
       "id": "2026-05-20-cli-codebase-atlas",
       "date": "2026-05-20",
       "title": "Robust CLI + Codebase Atlas explorer + Bug fixes",
-      "summary": "mushi-mushi CLI v0.7.0 with 8 new commands (whoami, ping, reports resolve/reopen/dismiss/search, lessons list/show), all routed through new /v1/sync/* API-key endpoints — no JWT needed. Codebase Atlas (/explore) visualises your indexed source as a force-directed graph with layer filtering and semantic search. Three bug fixes: correct @mushi-mushi/mcp package name in setup wizard, accurate project stats counts (no 1000-row cap), and banner install-command respects user-selected framework tab.",
+      "summary": "mushi-mushi CLI v0.7.0 with 8 new commands (whoami, ping, reports resolve/reopen/dismiss/search, lessons list/show), all routed through new /v1/sync/* API-key endpoints — no JWT needed. Codebase Atlas (/explore) visualises your indexed source as a swimlane column graph with layer filtering and semantic search. Three bug fixes: correct @mushi-mushi/mcp package name in setup wizard, accurate project stats counts (no 1000-row cap), and banner install-command respects user-selected framework tab.",
       "highlights": [
         {
           "tone": "feature",
@@ -17,7 +17,7 @@
         },
         {
           "tone": "feature",
-          "text": "Codebase Atlas (/explore) — force-directed ReactFlow graph of indexed source files coloured by architectural layer (UI, Lib, Backend, Test, Config). Layer-filter pills narrow the view. Semantic search via match_codebase_files embedding RPC. Three view modes: Graph, Layer Sankey, Search."
+          "text": "Codebase Atlas (/explore) — ReactFlow swimlane graph of indexed source files coloured by architectural layer (UI, Lib, Backend, Test, Config). Layer-filter pills narrow the view. Semantic search via match_codebase_files embedding RPC. Three view modes: Graph, Layer Sankey, Search."
         },
         {
           "tone": "fix",
