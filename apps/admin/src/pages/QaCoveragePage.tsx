@@ -29,12 +29,14 @@ import { useToast } from '../lib/toast'
 import { apiFetch } from '../lib/supabase'
 import {
   PageHeader,
+  PageHelp,
   Card,
   Btn,
   ErrorAlert,
   EmptyState,
   RelativeTime,
 } from '../components/ui'
+import { usePageCopy } from '../lib/copy'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -745,6 +747,7 @@ function CreateStoryModal({
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export function QaCoveragePage() {
+  const copy = usePageCopy('/qa-coverage')
   const projectId = useActiveProjectId()
   const { success: toastSuccess, error: toastError } = useToast()
   const [searchParams] = useSearchParams()
@@ -802,6 +805,17 @@ export function QaCoveragePage() {
           + New story
         </Btn>
       </PageHeader>
+
+      <PageHelp
+        title={copy?.help?.title ?? 'About QA coverage'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Automated tests written in plain English that run on your live app on a schedule — like a robot QA tester that never sleeps.'}
+        useCases={copy?.help?.useCases ?? [
+          'Write a test like "A user can log in and see their dashboard" and run it hourly',
+          'Catch a broken flow before your users report it',
+          'See a screenshot of exactly what the test saw when it failed',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Click "+ New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.'}
+      />
 
       {error && <ErrorAlert message={error} onRetry={reload} />}
 

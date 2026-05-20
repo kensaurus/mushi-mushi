@@ -23,6 +23,7 @@ import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import {
   PageHeader,
+  PageHelp,
   Section,
   Card,
   Badge,
@@ -36,6 +37,7 @@ import {
   RelativeTime,
   IdField,
 } from '../components/ui'
+import { usePageCopy } from '../lib/copy'
 import { EditorialErrorState } from '../components/EditorialErrorState'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 
@@ -118,6 +120,7 @@ function planBadgeTone(plan: string | null): {
 }
 
 export function UsersPage() {
+  const copy = usePageCopy('/users')
   const { isSuperAdmin, loading: entitlementsLoading } = useEntitlements()
 
   const [search, setSearch] = useState('')
@@ -183,6 +186,17 @@ export function UsersPage() {
       <PageHeader
         title="Users"
         description="Operator-only — every signup, current plan, and recent activity. Service-role view, never reachable by non-operators."
+      />
+
+      <PageHelp
+        title={copy?.help?.title ?? 'About the user directory'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.'}
+        useCases={copy?.help?.useCases ?? [
+          'Look up a specific user to check their plan or recent activity',
+          'See how many new users signed up this week',
+          'Find accounts that signed up but never submitted a report',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Search by email or filter by plan. Click any row for the full user detail. This page is only visible to super-admins.'}
       />
 
       {/* Top metrics row */}

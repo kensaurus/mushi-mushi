@@ -44,12 +44,12 @@ async function main() {
         'every call. To set it once and never pass it again:\n' +
         '\n' +
         '  1. Open the Mushi admin console → Projects\n' +
-        '     (https://your-admin-url/projects)\n' +
-        '  2. Find your project — the UUID chip below the name is the value to use.\n' +
-        '  3. Copy it and set:\n' +
-        '       MUSHI_PROJECT_ID=<paste-uuid-here>\n' +
+        '     https://kensaur.us/mushi-mushi/projects\n' +
+        '  2. Click your project — copy the UUID below the project name.\n' +
+        '  3. Add it to your MCP env config:\n' +
+        '       MUSHI_PROJECT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n' +
         '\n' +
-        'You can also visit Admin → MCP for a pre-filled .env.local snippet.',
+        'Or visit Admin → MCP for a pre-filled config snippet with your actual UUID.',
     )
   }
   log.info('Starting Mushi MCP server', { version: VERSION, endpoint: API_ENDPOINT || '(unset)', hasProjectId: !!PROJECT_ID })

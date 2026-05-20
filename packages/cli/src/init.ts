@@ -166,7 +166,7 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
     (await promptText({
       message: 'Project ID',
       placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-      hint: 'Copy from the Projects page → project card chip at https://kensaur.us/mushi-mushi/projects',
+      hint: 'Where to find it: https://kensaur.us/mushi-mushi/projects → click your project → copy the UUID below the project name.',
       validate: (v) =>
         PROJECT_ID_PATTERN.test(v)
           ? undefined
@@ -179,7 +179,7 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
     (await promptText({
       message: 'API key',
       placeholder: 'mushi_xxxxxxxxxxxx',
-      hint: 'Treat this like a password — it goes in your env file, not in source.',
+      hint: 'Where to find it: https://kensaur.us/mushi-mushi/settings → API Keys tab. Treat it like a password — env file only, never commit it.',
       validate: (v) =>
         API_KEY_PATTERN.test(v)
           ? undefined
@@ -225,9 +225,12 @@ function redact(value: string): string {
 async function promptText(opts: {
   message: string
   placeholder?: string
+  /** Shown BEFORE the prompt so the user knows where to look. */
   hint?: string
   validate?: (value: string) => string | undefined
 }): Promise<string> {
+  // Show the hint before the prompt — it tells users where to find the value.
+  if (opts.hint) p.log.info(opts.hint)
   const value = await p.text({
     message: opts.message,
     placeholder: opts.placeholder,
@@ -244,7 +247,6 @@ async function promptText(opts: {
     p.cancel('Aborted.')
     process.exit(0)
   }
-  if (opts.hint) p.log.info(opts.hint)
   return value
 }
 

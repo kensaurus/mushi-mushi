@@ -272,7 +272,7 @@ Mushi is a **companion** to Sentry/Datadog, not a replacement. It sees the signa
 ```bash
 npm i -g @mushi-mushi/cli
 mushi reports list
-mushi reports triage <id> --status acknowledged --severity high
+mushi reports triage <id> --status triaged --severity high
 mushi deploy check          # post-deploy smoke check
 mushi status                # live pipeline health
 ```

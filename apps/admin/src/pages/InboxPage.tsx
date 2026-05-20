@@ -47,8 +47,10 @@ import {
   ErrorAlert,
   Btn,
   FreshnessPill,
+  PageHelp,
 } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
+import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import type { PageAction } from '../components/PageActionBar'
 import type { DashboardData } from '../components/dashboard/types'
@@ -95,6 +97,7 @@ const TONE_RING: Record<PageAction['tone'], string> = {
 type FilterValue = 'all' | 'open' | 'clear' | Group
 
 export function InboxPage() {
+  const copy = usePageCopy('/inbox')
   const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
   const cards = useMemo(() => buildInboxCards(data ?? undefined), [data])
   const [filter, setFilter] = useState<FilterValue>('all')
@@ -169,6 +172,17 @@ export function InboxPage() {
 
   return (
     <div data-inbox-root>
+      <PageHelp
+        title={copy?.help?.title ?? 'About the inbox'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'A single dashboard that shows every action waiting for you — bugs to triage, fixes to review, and connections to set up.'}
+        useCases={copy?.help?.useCases ?? [
+          'Start every morning here — see what actually needs your attention today',
+          'Jump to the highest-priority open action in one click',
+          'Check at a glance which stages of the loop are clear vs. blocked',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Click any open action card to jump straight to that page. Stages with a green check are all clear — no action needed.'}
+      />
+
       {/* Hero strip — replaces the wordy PageHeader. The first thing the eye
           lands on is the open/clear ratio and a refresh affordance, not a
           paragraph of explanatory copy. */}
