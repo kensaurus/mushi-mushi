@@ -2802,6 +2802,191 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return resolved.join('/')
   }
 
+  // GET /v1/admin/explore/stats — codebase atlas posture (banner + EXPLORE SNAPSHOT).
+  // Must be registered BEFORE /v1/admin/projects/:id/codebase/explore so "stats"
+  // is never swallowed as a project id.
+  app.get('/v1/admin/explore/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const emptyLayers = { ui: 0, lib: 0, backend: 0, test: 0, config: 0, other: 0 }
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      codebaseIndexEnabled: false,
+      indexingEnabled: null as boolean | null,
+      repoUrl: null as string | null,
+      hasWebhookSecret: false,
+      indexedFiles: 0,
+      symbolCount: 0,
+      withEmbeddings: 0,
+      layers: emptyLayers,
+      topLanguages: [] as string[],
+      lastIndexedAt: null as string | null,
+      lastIndexAttemptAt: null as string | null,
+      lastIndexError: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'not_enabled'
+        | 'indexing'
+        | 'error'
+        | 'empty'
+        | 'ready'
+        | 'stale',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const [
+      settingsRes,
+      primaryRepoRes,
+      filesCountRes,
+      symbolsCountRes,
+      embeddingsCountRes,
+      fileSampleRes,
+    ] = await Promise.all([
+      db
+        .from('project_settings')
+        .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
+        .eq('project_id', pid)
+        .maybeSingle(),
+      db
+        .from('project_repos')
+        .select(
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled',
+        )
+        .eq('project_id', pid)
+        .eq('is_primary', true)
+        .maybeSingle(),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .not('symbol_name', 'is', null),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .not('embedding', 'is', null),
+      db
+        .from('project_codebase_files')
+        .select('file_path, language')
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null)
+        .limit(5000),
+    ])
+
+    const settings = settingsRes.data
+    const primaryRepo = primaryRepoRes.data
+    const indexedFiles = filesCountRes.count ?? 0
+    const symbolCount = symbolsCountRes.count ?? 0
+    const withEmbeddings = embeddingsCountRes.count ?? 0
+    const codebaseIndexEnabled = !!settings?.codebase_index_enabled
+    const indexingEnabled = primaryRepo?.indexing_enabled ?? null
+    const repoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null
+    const lastIndexedAt = primaryRepo?.last_indexed_at ?? null
+    const lastIndexAttemptAt = primaryRepo?.last_index_attempt_at ?? null
+    const lastIndexError = primaryRepo?.last_index_error ?? null
+
+    const layers = { ...emptyLayers }
+    const langCounts = new Map<string, number>()
+    for (const row of fileSampleRes.data ?? []) {
+      const layer = detectExploreLayer(String(row.file_path ?? ''))
+      layers[layer] = (layers[layer] ?? 0) + 1
+      const lang = row.language ? String(row.language) : null
+      if (lang) langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1)
+    }
+    const topLanguages = [...langCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([lang]) => lang)
+
+    let topPriority: typeof empty.topPriority = 'ready'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!codebaseIndexEnabled && indexedFiles === 0) {
+      topPriority = 'not_enabled'
+      topPriorityLabel = 'Codebase indexing is off — enable in Settings or run mushi index'
+      topPriorityTo = '/explore?tab=index'
+    } else if (lastIndexError) {
+      topPriority = 'error'
+      topPriorityLabel = `Last index error — ${lastIndexError.slice(0, 120)}${lastIndexError.length > 120 ? '…' : ''}`
+      topPriorityTo = '/explore?tab=index'
+    } else if (indexedFiles === 0 && lastIndexAttemptAt && !lastIndexedAt) {
+      topPriority = 'indexing'
+      topPriorityLabel = 'Indexer is running — files should appear within ~90s'
+      topPriorityTo = '/explore?tab=index'
+    } else if (indexedFiles === 0) {
+      topPriority = 'empty'
+      topPriorityLabel = 'No files indexed yet — connect a repo or run mushi index'
+      topPriorityTo = '/settings'
+    } else if (
+      lastIndexedAt &&
+      Date.now() - new Date(lastIndexedAt).getTime() > 7 * 24 * 60 * 60 * 1000
+    ) {
+      topPriority = 'stale'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files · index may be stale (>7d)`
+      topPriorityTo = '/explore?tab=graph'
+    } else {
+      topPriority = 'ready'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files · ${withEmbeddings} embedded for search`
+      topPriorityTo = '/explore?tab=graph'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name ?? null,
+        projectCount: projectIds.length,
+        codebaseIndexEnabled,
+        indexingEnabled,
+        repoUrl,
+        hasWebhookSecret: !!settings?.github_webhook_secret,
+        indexedFiles,
+        symbolCount,
+        withEmbeddings,
+        layers,
+        topLanguages,
+        lastIndexedAt,
+        lastIndexAttemptAt,
+        lastIndexError,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   app.get('/v1/admin/projects/:id/codebase/explore', jwtAuth, async (c) => {
     const projectId = c.req.param('id')
     const userId = c.get('userId') as string
