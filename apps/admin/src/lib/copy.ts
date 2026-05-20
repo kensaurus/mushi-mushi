@@ -18,6 +18,7 @@
  */
 
 import { useAdminMode, type AdminMode } from './mode'
+import { PAGE_FLOW_LINKS, type PageFlowLink } from './pageLinks'
 
 interface PageCopy {
   /** Page-header title (overrides the in-page title in beginner mode). */
@@ -32,6 +33,40 @@ interface PageCopy {
     whatIsIt: string
     useCases?: string[]
     howToUse?: string
+  }
+  /** Optional override for cross-page chips (defaults from PAGE_FLOW_LINKS). */
+  relatedLinks?: PageFlowLink[]
+}
+
+/** Props for `<PageHelp>` with copy + flow fallbacks merged. */
+export interface PageHelpFromCopyProps {
+  title: string
+  whatIsIt: string
+  useCases?: string[]
+  howToUse?: string
+  defaultOpen?: boolean
+  relatedLinks?: PageFlowLink[]
+}
+
+/**
+ * Merge `usePageCopy()` with page-local fallbacks and default flow links.
+ * Keeps beginner help in advanced mode while letting each page keep one
+ * inline fallback block for titles the registry doesn't override.
+ */
+export function buildPageHelpProps(
+  path: string,
+  copy: PageCopy | null,
+  fallback: PageHelpFromCopyProps,
+) {
+  const flow = copy?.relatedLinks ?? fallback.relatedLinks ?? PAGE_FLOW_LINKS[path] ?? []
+  return {
+    title: copy?.help?.title ?? fallback.title,
+    whatIsIt: copy?.help?.whatIsIt ?? fallback.whatIsIt,
+    useCases: copy?.help?.useCases ?? fallback.useCases,
+    howToUse: copy?.help?.howToUse ?? fallback.howToUse,
+    defaultOpen: fallback.defaultOpen,
+    relatedLinks: flow.length > 0 ? flow : undefined,
+    flowPath: path,
   }
 }
 
@@ -61,6 +96,21 @@ export const COPY: CopyRegistry = {
         ],
         howToUse:
           'Use the big "Resolve next bug" button at the top to jump to the highest-priority report. The auto-fix agent does the heavy lifting.',
+      },
+    },
+    '/inbox': {
+      title: 'Inbox',
+      description: 'Everything waiting for your attention right now. Start here each session.',
+      help: {
+        title: 'About the inbox',
+        whatIsIt:
+          'One place to see every action waiting for you — bugs to triage, fixes to review, and setup steps to complete.',
+        useCases: [
+          'Start every morning here to see what actually needs your attention',
+          'Click any open card to jump straight to that page',
+        ],
+        howToUse:
+          'Work through the Awaiting cards top-to-bottom. Green check marks mean nothing to do there.',
       },
     },
     '/reports': {
@@ -111,16 +161,16 @@ export const COPY: CopyRegistry = {
   beginner: {
     '/inbox': {
       title: 'Your to-do list',
-      description: 'One place to see everything that needs your attention right now — across every stage of the bug-fix loop.',
+      description: 'Start here every session. Open the top Awaiting card and work through the list — green checks mean nothing to do there.',
       help: {
         title: 'About the inbox',
-        whatIsIt: 'A single dashboard that shows every action waiting for you — bugs to triage, fixes to review, and connections to set up.',
+        whatIsIt: 'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up — so you never have to remember what to do next.',
         useCases: [
           'Start every morning here — see what actually needs your attention today',
-          'Jump to the highest-priority bug in one click',
-          'Quickly check if everything is on track or if something is stuck',
+          'Jump to the highest-priority open item in one click',
+          'Confirm at a glance which stages of the loop are clear vs. blocked',
         ],
-        howToUse: 'Click any open action card to jump straight to that page. Stages with a green check are all clear — no action needed.',
+        howToUse: 'Click any open action card to jump straight to that page. Stages with a green check are all clear — no action needed. Use the filter chips to narrow down by PDCA stage.',
       },
     },
     '/projects': {
@@ -561,7 +611,7 @@ export const COPY: CopyRegistry = {
           'Mute noisy reports or tag false positives so the model learns',
         ],
         howToUse:
-          'Click any row for the full report. Click "Send to auto-fix" to draft a pull request. Filter by severity, status, or date.',
+          'Click any row for the full report. Click **Send to auto-fix** to draft a pull request. Use the date chips (Today / 7d / 30d) to narrow the list, then open /fixes to review drafts.',
       },
     },
     '/graph': {
@@ -689,7 +739,7 @@ export const COPY: CopyRegistry = {
   advanced: {
     '/inbox': {
       title: 'Inbox',
-      description: 'Cross-stage action queue — triage backlog, open PRs, integration gaps, PDCA coverage.',
+      description: 'Cross-stage action queue. Triage the open list top-to-bottom; cleared stages stay one click away.',
     },
     '/projects': {
       title: 'Projects',

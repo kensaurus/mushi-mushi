@@ -9,6 +9,10 @@ import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttr
 import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
 import { pctToneClass } from '../lib/tokens'
+import { PAGE_FLOW_LINKS, flowLinkBlurb, resolveFlowPath, type PageFlowLink } from '../lib/pageLinks'
+import { navIconForPath } from '../lib/pageNavIcons'
+import { HelpBulletList, HelpRichText } from './HelpRichText'
+import { HelpSection } from './HelpSection'
 import { ConfigHelp } from './ConfigHelp'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
 
@@ -80,7 +84,7 @@ export function Card({ children, className = '', interactive, elevated, onClick,
     : {}
   const interactiveCls =
     interactive || onClick
-      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-all motion-safe:duration-150 hover:border-edge hover:-translate-y-px hover:shadow-raised'
+      ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface motion-safe:transition-all motion-safe:duration-150 hover:border-edge hover:-translate-y-px hover:shadow-raised motion-safe:active:translate-y-0 motion-safe:active:scale-[0.995] motion-safe:active:shadow-card'
       : ''
   if (elevated) {
     return (
@@ -897,6 +901,132 @@ export function RelativeTime({ value, className = '' }: { value: string | Date; 
   )
 }
 
+/** Compact staleness chip — same relative formatter as RelativeTime, tuned for dense rows/cards. */
+export function AgeChip({
+  at,
+  className = '',
+  title,
+}: {
+  at: string | Date | null | undefined
+  className?: string
+  title?: string
+}) {
+  if (at == null) return null
+  const date = typeof at === 'string' ? new Date(at) : at
+  if (Number.isNaN(date.getTime())) return null
+  return (
+    <Tooltip content={title ?? date.toLocaleString()}>
+      <span className={`text-2xs text-fg-faint tabular-nums ${className}`}>{formatRelative(date)}</span>
+    </Tooltip>
+  )
+}
+
+/** Thin horizontal bar for confidence, spend share, coverage %, etc. */
+export function MiniInlineBar({
+  value,
+  max = 100,
+  className = '',
+  barClassName = 'bg-brand',
+  trackClassName = 'bg-surface-overlay',
+  widthClass = 'w-12',
+  'aria-label': ariaLabel,
+}: {
+  value: number
+  max?: number
+  className?: string
+  barClassName?: string
+  trackClassName?: string
+  widthClass?: string
+  'aria-label'?: string
+}) {
+  const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0
+  return (
+    <div
+      className={`h-1 ${widthClass} rounded-full overflow-hidden ${trackClassName} ${className}`.trim()}
+      role={ariaLabel ? 'meter' : undefined}
+      aria-label={ariaLabel}
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div className={`h-full rounded-full ${barClassName}`} style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
+/** Elapsed wall time between two ISO timestamps (e.g. fix dispatch → complete). */
+export function formatDurationBetween(start: string | Date, end: string | Date): string {
+  const a = typeof start === 'string' ? new Date(start) : start
+  const b = typeof end === 'string' ? new Date(end) : end
+  const ms = Math.max(0, b.getTime() - a.getTime())
+  const sec = Math.round(ms / 1000)
+  if (sec < 60) return `${sec}s`
+  const min = Math.round(sec / 60)
+  if (min < 60) return `${min}m`
+  const hr = Math.round(min / 60)
+  if (hr < 48) return `${hr}h`
+  const days = Math.round(hr / 24)
+  return `${days}d`
+}
+
+export type PipelineStageState = 'pending' | 'active' | 'done' | 'failed'
+
+export interface PipelineStripProps {
+  stages: Array<{ label: string; state: PipelineStageState }>
+  /** Tighter layout for fix cards and table rows. */
+  compact?: boolean
+  className?: string
+}
+
+const PIPELINE_DOT: Record<PipelineStageState, string> = {
+  pending: 'bg-surface-overlay border border-edge-subtle',
+  active: 'bg-info border-info ring-2 ring-info/30 motion-safe:animate-pulse',
+  done: 'bg-ok border-ok',
+  failed: 'bg-danger border-danger',
+}
+
+/**
+ * Lightweight 5-stage pipeline strip (Report → Dispatch → PR → Judge → Ship).
+ * Prefer this over per-card React Flow when rendering long fix lists.
+ */
+export function PipelineStrip({ stages, compact = false, className = '' }: PipelineStripProps) {
+  if (stages.length === 0) return null
+  const dot = compact ? 'h-2 w-2' : 'h-2.5 w-2.5'
+  const gap = compact ? 'gap-0.5' : 'gap-1'
+  return (
+    <div
+      role="list"
+      aria-label="Fix pipeline stages"
+      className={`flex items-center ${gap} ${className}`.trim()}
+    >
+      {stages.map((stage, i) => (
+        <div key={`${stage.label}-${i}`} role="listitem" className="flex items-center gap-0.5 min-w-0">
+          {i > 0 && (
+            <span
+              aria-hidden
+              className={`shrink-0 ${compact ? 'w-2' : 'w-3'} h-px ${
+                stage.state === 'failed' || stages[i - 1]?.state === 'failed'
+                  ? 'bg-danger/40'
+                  : stages[i - 1]?.state === 'done'
+                    ? 'bg-ok/50'
+                    : 'bg-edge-subtle'
+              }`}
+            />
+          )}
+          <Tooltip content={`${stage.label}: ${stage.state}`}>
+            <span className="inline-flex flex-col items-center gap-0.5 min-w-0">
+              <span className={`rounded-full border shrink-0 ${dot} ${PIPELINE_DOT[stage.state]}`} />
+              {!compact && (
+                <span className="text-3xs text-fg-faint truncate max-w-[3.5rem]">{stage.label}</span>
+              )}
+            </span>
+          </Tooltip>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── RecommendedAction (status-aware suggestion card) ──────────────────── */
 
 interface RecommendedActionCta {
@@ -1219,7 +1349,7 @@ export function PageHeader({ title, description, children, contextChip, projectS
   // forcing every page to import PdcaContextHint manually.
   const chip = contextChip === undefined ? <AutoPdcaChip /> : contextChip
   return (
-    <div className="mb-5 space-y-1.5">
+    <div className="mb-5 w-full min-w-0 space-y-1.5">
       {chip && <div>{chip}</div>}
       <div className="flex items-start justify-between gap-3">
         <h2 className="min-w-0 flex-1 text-base font-semibold text-fg leading-snug">
@@ -1239,7 +1369,7 @@ export function PageHeader({ title, description, children, contextChip, projectS
         )}
       </div>
       {description && (
-        <p className="text-xs text-fg-muted max-w-3xl leading-relaxed text-pretty text-balance">
+        <p className="w-full max-w-none text-xs text-fg-muted leading-relaxed text-pretty text-balance">
           {description}
         </p>
       )}
@@ -1290,6 +1420,53 @@ interface PageHelpProps {
   /** Force-override the default-open behaviour. Leave unset for the
    *  default "open until the user dismisses it once" UX. */
   defaultOpen?: boolean
+  /** Cross-page navigation chips (plain-language). */
+  relatedLinks?: PageFlowLink[]
+  /** When set, loads defaults from `PAGE_FLOW_LINKS` unless `relatedLinks` is provided. */
+  flowPath?: string
+}
+
+/* ── PageRelatedLinks — "where to go next" chips ───────────────────────── */
+
+export function PageRelatedLinks({ links, className = '' }: { links: PageFlowLink[]; className?: string }) {
+  if (links.length === 0) return null
+  return (
+    <nav
+      aria-label="Related pages"
+      className={`grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3 ${className}`}
+    >
+      {links.map((link) => {
+        const NavIcon = navIconForPath(link.to)
+        const blurb = flowLinkBlurb(link)
+        return (
+          <Link
+            key={link.to + link.label}
+            to={link.to}
+            title={blurb ? `${link.label} — ${blurb}` : link.label}
+            className="group/link flex min-w-0 w-full items-start gap-2.5 rounded-md border border-edge-subtle bg-surface-overlay/60 px-3 py-2.5 motion-safe:transition-all motion-safe:duration-150 hover:border-brand/45 hover:bg-brand-muted/25 hover:-translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 motion-safe:active:translate-y-0 motion-safe:active:scale-[0.99]"
+          >
+            {NavIcon ? (
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-muted/25 text-brand motion-safe:transition-colors group-hover/link:bg-brand-muted/40" aria-hidden="true">
+                <NavIcon size={15} />
+              </span>
+            ) : (
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-brand-muted/20 text-brand/80" aria-hidden="true">→</span>
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-medium text-fg-secondary motion-safe:transition-colors group-hover/link:text-fg">
+                {link.label}
+              </span>
+              {blurb ? (
+                <span className="mt-0.5 block text-3xs leading-snug text-fg-muted text-pretty line-clamp-3 group-hover/link:text-fg-secondary">
+                  {blurb}
+                </span>
+              ) : null}
+            </span>
+          </Link>
+        )
+      })}
+    </nav>
+  )
 }
 
 const PAGEHELP_DISMISS_PREFIX = 'mushi:pagehelp:dismissed:'
@@ -1339,7 +1516,18 @@ function markVisited() {
   }
 }
 
-export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: PageHelpProps) {
+export function PageHelp({
+  title,
+  whatIsIt,
+  useCases,
+  howToUse,
+  defaultOpen,
+  relatedLinks,
+  flowPath,
+}: PageHelpProps) {
+  const { pathname } = useLocation()
+  const routeKey = flowPath ?? resolveFlowPath(pathname)
+  const resolvedLinks = relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []
   // Default-open only for first-ever visits (a single global flag, not per
   // page) — the audit found existing per-title-only logic hammered returning
   // users with re-opened help on every new page they navigated to.
@@ -1363,11 +1551,11 @@ export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: P
     <details
       open={open}
       onToggle={handleToggle}
-      className="group mb-4 rounded-md border border-edge-subtle bg-surface-raised/30 open:bg-surface-raised/50"
+      className="group mb-4 w-full min-w-0 rounded-lg border border-edge-subtle bg-surface-raised/30 open:border-edge open:bg-surface-raised/50 motion-safe:transition-colors motion-safe:duration-150"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-xs text-fg-muted hover:text-fg-secondary motion-safe:transition-colors">
+      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted hover:bg-surface-overlay/40 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
         <svg
-          className="h-3 w-3 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
+          className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -1376,38 +1564,40 @@ export function PageHelp({ title, whatIsIt, useCases, howToUse, defaultOpen }: P
         >
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        <svg
-          className="h-3.5 w-3.5 text-fg-faint"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-muted/30 text-brand"
           aria-hidden="true"
         >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
-        </svg>
-        <span className="font-medium">{title}</span>
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M3 2.5h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z" />
+            <path d="M10 2.5V5.5h3" />
+            <path d="M5 8h6M5 10.5h4" strokeLinecap="round" />
+          </svg>
+        </span>
+        <span className="font-medium text-fg-secondary group-open:text-fg">{title}</span>
+        <span className="ml-auto hidden text-3xs text-fg-faint sm:inline">{open ? 'Click to collapse' : 'Click to expand'}</span>
       </summary>
-      <div className="max-w-3xl space-y-2.5 border-t border-edge-subtle px-3 py-2.5 text-2xs leading-relaxed text-fg-secondary text-pretty">
-        <div>
-          <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">What it is</p>
-          <p>{whatIsIt}</p>
+      <div className="w-full min-w-0 border-t border-edge-subtle px-3 py-3 sm:px-4">
+        <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2">
+          <HelpSection tone="info" title="What it is" className="md:col-span-2">
+            <HelpRichText text={whatIsIt} />
+          </HelpSection>
+          {useCases && useCases.length > 0 && (
+            <HelpSection tone="tip" title="When to use it">
+              <HelpBulletList items={useCases} />
+            </HelpSection>
+          )}
+          {howToUse && (
+            <HelpSection tone="steps" title="How to use it">
+              <HelpRichText text={howToUse} />
+            </HelpSection>
+          )}
+          {resolvedLinks.length > 0 && (
+            <HelpSection tone="nav" title="Related pages" className="md:col-span-2">
+              <PageRelatedLinks links={resolvedLinks} />
+            </HelpSection>
+          )}
         </div>
-        {useCases && useCases.length > 0 && (
-          <div>
-            <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">When to use it</p>
-            <ul className="list-disc pl-4 space-y-0.5">
-              {useCases.map((u, i) => <li key={i}>{u}</li>)}
-            </ul>
-          </div>
-        )}
-        {howToUse && (
-          <div>
-            <p className="mb-1 font-medium text-fg-muted uppercase tracking-wider text-3xs">How to use it</p>
-            <p>{howToUse}</p>
-          </div>
-        )}
       </div>
     </details>
   )
@@ -1482,10 +1672,10 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(opt.id)}
-            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 ${
+            className={`${SEGMENT_SIZE[size]} rounded-sm motion-safe:transition-all motion-safe:duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 motion-safe:active:scale-[0.97] ${
               active
-                ? 'bg-brand text-brand-fg'
-                : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50'
+                ? 'bg-brand text-brand-fg shadow-card'
+                : 'text-fg-secondary hover:text-fg hover:bg-surface-overlay/50 hover:-translate-y-px'
             }`}
           >
             {opt.label}
@@ -1547,10 +1737,14 @@ const BTN_SIZES = {
 } as const
 
 const BTN_VARIANTS = {
-  primary: 'bg-brand text-brand-fg hover:bg-brand-hover shadow-card hover:shadow-raised',
-  ghost: 'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge',
-  danger: 'bg-danger-muted text-danger hover:bg-danger-muted/80 border border-danger/30 hover:border-danger/40',
-  success: 'bg-ok-muted text-ok hover:bg-ok-muted/80 border border-ok/30 hover:border-ok/40',
+  primary:
+    'bg-brand text-brand-fg shadow-card hover:bg-brand-hover hover:shadow-raised hover:-translate-y-px',
+  ghost:
+    'border border-edge text-fg-secondary hover:bg-surface-overlay hover:text-fg hover:border-edge hover:-translate-y-px',
+  danger:
+    'bg-danger-muted text-danger border border-danger/30 hover:bg-danger-muted/80 hover:border-danger/40 hover:-translate-y-px',
+  success:
+    'bg-ok-muted text-ok border border-ok/30 hover:bg-ok-muted/80 hover:border-ok/40 hover:-translate-y-px',
 } as const
 
 export function Btn({
@@ -1957,7 +2151,7 @@ export function EditorialEmptyState({ title, description, action, hints, icon }:
  */
 function CompactEmptyState({ title, description, action, hints }: EmptyStateProps) {
   return (
-    <Card className="p-6 text-center">
+    <Card className="p-6 text-center border-dashed">
       <p className="text-fg-muted text-sm">{title}</p>
       {description && (
         <p className="text-fg-muted text-xs mt-2 max-w-prose mx-auto leading-relaxed text-pretty wrap-break-word">
@@ -2353,6 +2547,120 @@ export function Tooltip({ content, children, side = 'top', nowrap = true }: Tool
         </span>
       )}
     </span>
+  )
+}
+
+/* ── Data cells (tables: models, tokens, money) ───────────────────────── */
+
+/** Monospace pill for model ids, operation names, paths — keeps technical text grounded. */
+export function CodeChip({
+  children,
+  className = '',
+  title,
+  maxWidthClass = 'max-w-[10rem]',
+}: {
+  children: ReactNode
+  className?: string
+  title?: string
+  maxWidthClass?: string
+}) {
+  return (
+    <code
+      title={title}
+      className={`inline-block truncate rounded-sm border border-edge-subtle bg-surface-overlay/70 px-1.5 py-0.5 font-mono text-2xs leading-snug text-fg-secondary ${maxWidthClass} ${className}`}
+    >
+      {children}
+    </code>
+  )
+}
+
+export function TokenIn({
+  value,
+  className = '',
+}: {
+  value: number | null | undefined
+  className?: string
+}) {
+  const n = value ?? 0
+  return (
+    <span
+      className={`inline-flex min-w-[3rem] justify-end tabular-nums text-2xs font-medium text-ok ${className}`}
+      title="Input tokens"
+    >
+      {n.toLocaleString()}
+    </span>
+  )
+}
+
+export function TokenOut({
+  value,
+  className = '',
+}: {
+  value: number | null | undefined
+  className?: string
+}) {
+  const n = value ?? 0
+  return (
+    <span
+      className={`inline-flex min-w-[3rem] justify-end tabular-nums text-2xs font-medium text-danger ${className}`}
+      title="Output tokens"
+    >
+      {n.toLocaleString()}
+    </span>
+  )
+}
+
+export function UsdAmount({
+  value,
+  digits = 4,
+  className = '',
+}: {
+  value: number
+  digits?: number
+  className?: string
+}) {
+  return (
+    <span className={`tabular-nums text-2xs font-semibold text-fg ${className}`}>
+      ${Number(value).toFixed(digits)}
+    </span>
+  )
+}
+
+export function DataTableHead({
+  children,
+  align = 'left',
+  className = '',
+}: {
+  children: ReactNode
+  align?: 'left' | 'right' | 'center'
+  className?: string
+}) {
+  const alignClass =
+    align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+  return (
+    <th
+      className={`px-3 py-2 text-2xs font-medium uppercase tracking-wide text-fg-muted ${alignClass} ${className}`}
+    >
+      {children}
+    </th>
+  )
+}
+
+export function DataTableCell({
+  children,
+  align = 'left',
+  className = '',
+}: {
+  children: ReactNode
+  align?: 'left' | 'right' | 'center'
+  className?: string
+}) {
+  const alignClass =
+    align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+  return (
+    <td className={`px-3 py-1.5 align-middle ${alignClass} ${className}`}>
+      {children}
+    </td>
   )
 }
 
