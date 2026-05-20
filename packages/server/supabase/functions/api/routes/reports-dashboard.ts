@@ -1975,6 +1975,185 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     });
   });
 
+  // GET /v1/admin/judge/stats — posture banner + JUDGE SNAPSHOT.
+  app.get('/v1/admin/judge/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      totalEvaluations: 0,
+      latestWeekScore: null as number | null,
+      latestWeekEvalCount: 0,
+      weekOverWeekDriftPct: null as number | null,
+      disagreementCount: 0,
+      disagreementRatePct: null as number | null,
+      classifiedReports: 0,
+      promptVersionCount: 0,
+      activePromptCount: 0,
+      lastEvalAt: null as string | null,
+      staleHours: null as number | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'no_evals'
+        | 'low_score'
+        | 'drifting'
+        | 'disagreements'
+        | 'stale'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const [weekRes, evalCountRes, disagreeRes, lastEvalRes, classifiedRes, promptsRes] =
+      await Promise.all([
+        db.rpc('weekly_judge_scores', { p_project_id: pid, p_weeks: 2 }),
+        db
+          .from('classification_evaluations')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid),
+        db
+          .from('classification_evaluations')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid)
+          .eq('classification_agreed', false),
+        db
+          .from('classification_evaluations')
+          .select('created_at')
+          .eq('project_id', pid)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        db
+          .from('reports')
+          .select('id', { count: 'exact', head: true })
+          .eq('project_id', pid)
+          .in('status', ['classified', 'triaged', 'grouped', 'dispatched']),
+        db
+          .from('prompt_versions')
+          .select('id, is_active')
+          .or(`project_id.is.null,project_id.eq.${pid}`)
+          .limit(200),
+      ]);
+
+    const weeks = (weekRes.data ?? []) as Array<{
+      week_start: string;
+      avg_score: number;
+      eval_count: number;
+    }>;
+    weeks.sort((a, b) => (a.week_start < b.week_start ? 1 : -1));
+    const latest = weeks[0];
+    const previous = weeks[1];
+
+    const totalEvaluations = evalCountRes.count ?? 0;
+    const disagreementCount = disagreeRes.count ?? 0;
+    const classifiedReports = classifiedRes.count ?? 0;
+    const prompts = promptsRes.data ?? [];
+    const activePromptCount = prompts.filter((p) => p.is_active).length;
+
+    const latestWeekScore = latest?.avg_score != null ? Number(latest.avg_score) : null;
+    const latestWeekEvalCount = latest?.eval_count ?? 0;
+
+    let weekOverWeekDriftPct: number | null = null;
+    if (latest && previous && previous.avg_score > 0) {
+      weekOverWeekDriftPct = Math.round(
+        ((previous.avg_score - latest.avg_score) / previous.avg_score) * 100,
+      );
+    }
+
+    const disagreementRatePct =
+      totalEvaluations > 0
+        ? Math.round((disagreementCount / totalEvaluations) * 100)
+        : null;
+
+    const lastEvalAt = lastEvalRes.data?.created_at ?? null;
+    let staleHours: number | null = null;
+    if (lastEvalAt) {
+      staleHours = Math.floor(
+        (Date.now() - new Date(lastEvalAt).getTime()) / (1000 * 60 * 60),
+      );
+    }
+
+    let topPriority: typeof empty.topPriority = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (totalEvaluations === 0) {
+      topPriority = 'no_evals';
+      topPriorityLabel =
+        classifiedReports > 0
+          ? `No judge scores yet — ${classifiedReports} classified report${classifiedReports === 1 ? '' : 's'} ready to grade`
+          : 'No judge evaluations yet — classify reports first, then run judge';
+      topPriorityTo = classifiedReports > 0 ? '/judge?action=run' : '/reports';
+    } else if (latestWeekScore != null && latestWeekScore < 0.6) {
+      topPriority = 'low_score';
+      topPriorityLabel = `Mean score ${Math.round(latestWeekScore * 100)}% — classifier may be drifting; review Prompt Lab`;
+      topPriorityTo = '/prompt-lab?tab=prompts';
+    } else if (weekOverWeekDriftPct != null && weekOverWeekDriftPct >= 5) {
+      topPriority = 'drifting';
+      topPriorityLabel = `Score down ${weekOverWeekDriftPct}% week-over-week — inspect recent evaluations`;
+      topPriorityTo = '/judge?tab=evaluations&filter=disagreement';
+    } else if (disagreementRatePct != null && disagreementRatePct >= 20) {
+      topPriority = 'disagreements';
+      topPriorityLabel = `${disagreementRatePct}% disagreement rate — classifier overriding user categories`;
+      topPriorityTo = '/judge?tab=evaluations&filter=disagreement';
+    } else if (staleHours != null && staleHours > 72) {
+      topPriority = 'stale';
+      topPriorityLabel = `Last eval ${staleHours}h ago — run judge to refresh scores`;
+      topPriorityTo = '/judge?action=run';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel =
+        latestWeekScore != null
+          ? `${Math.round(latestWeekScore * 100)}% this week · ${latestWeekEvalCount} evals`
+          : `${totalEvaluations} total evaluations`;
+      topPriorityTo = '/judge?tab=trend';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name ?? null,
+        projectCount: projectIds.length,
+        totalEvaluations,
+        latestWeekScore,
+        latestWeekEvalCount,
+        weekOverWeekDriftPct,
+        disagreementCount,
+        disagreementRatePct,
+        classifiedReports,
+        promptVersionCount: prompts.length,
+        activePromptCount,
+        lastEvalAt,
+        staleHours,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   // Judge scores / drift data
   app.get('/v1/admin/judge-scores', jwtAuth, async (c) => {
     // Aggregates across all owned projects so multi-project accounts see the
