@@ -12,6 +12,9 @@ import { InventoryModelDiagram, GatesStrip } from './components/InventoryDiagram
 import { SpecTracePipeline } from './components/SpecTracePipeline'
 import { JudgeLoops, JudgeScoreBreakdown, FineTunePipeline } from './components/JudgeDiagram'
 import { MultiRepoFlowDiagram } from './components/MultiRepoFlow'
+import { DocScreenshot } from './components/DocScreenshot'
+import { AdminDocHero } from './components/AdminDocHero'
+import { DocsMediaShowcase } from './components/DocsMediaShowcase'
 
 export const useMDXComponents = (components?: Record<string, unknown>) => ({
   ...getDocsComponents(),
@@ -32,5 +35,8 @@ export const useMDXComponents = (components?: Record<string, unknown>) => ({
   JudgeScoreBreakdown,
   FineTunePipeline,
   MultiRepoFlowDiagram,
+  DocScreenshot,
+  AdminDocHero,
+  DocsMediaShowcase,
   ...(components ?? {}),
 })
