@@ -93,12 +93,6 @@ function minorVersion(range: string | null): number {
   return m ? parseInt(m[1], 10) : 0
 }
 
-/** Parse the patch version from a semver range like "^0.8.1" → 1 */
-function patchVersion(range: string | null): number {
-  if (!range) return 0
-  const m = range.replace(/[\^~>=<]/g, '').match(/^\d+\.\d+\.(\d+)/)
-  return m ? parseInt(m[1], 10) : 0
-}
 
 function detectMonorepo(pkg: PackageJson): DetectedMonorepo {
   if (

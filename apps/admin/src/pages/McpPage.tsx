@@ -215,7 +215,6 @@ export function McpPage() {
   const toast = useToast()
   const [snippetMode, setSnippetMode] = useState<'cursor' | 'env'>('cursor')
   const [copied, setCopied] = useState(false)
-  const [idCopied, setIdCopied] = useState(false)
   const [monorepoNote, setMonorepoNote] = useState<string | null>(null)
   const [monoWarnings, setMonoWarnings] = useState<string[]>([])
   const [detectOpen, setDetectOpen] = useState(false)
