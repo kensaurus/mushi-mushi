@@ -1981,6 +1981,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
       catalogTotal: 0,
       installedTotal: 0,
       installedActive: 0,
@@ -1988,8 +1991,19 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       deliveries7d: 0,
       deliveriesOk: 0,
       deliveriesFailed: 0,
+      deliverySuccessRatePct: 0,
       lastDeliveryAt: null as string | null,
+      daysSinceLastDelivery: null as number | null,
       failingPlugins: 0,
+      neverDeliveredPlugins: 0,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'delivery_failures'
+        | 'plugins_paused'
+        | 'no_plugins_installed'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -2004,7 +2018,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       db.from('plugin_registry').select('slug', { count: 'exact', head: true }).eq('is_listed', true),
       db
         .from('project_plugins')
-        .select('is_active, last_delivery_status')
+        .select('is_active, last_delivery_status, last_delivery_at')
         .eq('project_id', project.id),
       db
         .from('plugin_dispatch_log')
@@ -2032,10 +2046,43 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       (p) =>
         p.last_delivery_status === 'error' || p.last_delivery_status === 'timeout',
     ).length;
+    const neverDeliveredPlugins = installed.filter(
+      (p) => p.is_active && !p.last_delivery_at,
+    ).length;
+    const deliverySuccessRatePct =
+      dispatch.length > 0 ? Math.round((deliveriesOk / dispatch.length) * 100) : 0;
+    const daysSinceLastDelivery = lastDeliveryAt
+      ? Math.floor((Date.now() - new Date(lastDeliveryAt).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (deliveriesFailed > 0 || failingPlugins > 0) {
+      topPriority = 'delivery_failures';
+      topPriorityLabel = `${deliveriesFailed} failed deliver${deliveriesFailed === 1 ? 'y' : 'ies'} in 7d · ${failingPlugins} plugin${failingPlugins === 1 ? '' : 's'} with last status error/timeout — check Deliveries tab.`;
+      topPriorityTo = '/marketplace?tab=deliveries';
+    } else if (installed.filter((p) => !p.is_active).length > 0) {
+      topPriority = 'plugins_paused';
+      topPriorityLabel = `${installed.filter((p) => !p.is_active).length} plugin${installed.filter((p) => !p.is_active).length === 1 ? '' : 's'} paused — resume on Installed tab to receive events again.`;
+      topPriorityTo = '/marketplace?tab=installed';
+    } else if (installed.length === 0) {
+      topPriority = 'no_plugins_installed';
+      topPriorityLabel = `${catalogRes.count ?? 0} plugin${(catalogRes.count ?? 0) === 1 ? '' : 's'} in catalog — install a webhook receiver to react when reports classify or fixes land.`;
+      topPriorityTo = '/marketplace?tab=browse';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${installed.filter((p) => p.is_active).length} active · ${deliveriesOk} ok / ${dispatch.length} deliveries (7d) · ${deliverySuccessRatePct}% success rate.`;
+      topPriorityTo = '/marketplace?tab=deliveries';
+    }
 
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
+        projectId: project.id as string,
+        projectName: (project.name as string | null) ?? null,
         catalogTotal: catalogRes.count ?? 0,
         installedTotal: installed.length,
         installedActive: installed.filter((p) => p.is_active).length,
@@ -2043,8 +2090,14 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
         deliveries7d: dispatch.length,
         deliveriesOk,
         deliveriesFailed,
+        deliverySuccessRatePct,
         lastDeliveryAt,
+        daysSinceLastDelivery,
         failingPlugins,
+        neverDeliveredPlugins,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });
@@ -2105,6 +2158,184 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       .order('generated_at', { ascending: false })
       .limit(50);
     return c.json({ ok: true, data: { reports: data ?? [] } });
+  });
+
+  // GET /v1/admin/intelligence/stats — posture banner + INTELLIGENCE SNAPSHOT.
+  app.get('/v1/admin/intelligence/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      featureUnlocked: false,
+      planName: null as string | null,
+      reportCount: 0,
+      latestReportAt: null as string | null,
+      latestWeekStart: null as string | null,
+      daysSinceLastDigest: null as number | null,
+      totalReportsInLatest: 0,
+      totalFixAttempts: 0,
+      fixCompletionRatePct: 0,
+      activeJobCount: 0,
+      failedJobCount: 0,
+      completedJobCount: 0,
+      lastJobStatus: null as string | null,
+      lastJobError: null as string | null,
+      lastJobAt: null as string | null,
+      pendingFindings: 0,
+      securityFindings: 0,
+      benchmarkOptIn: false,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'feature_locked'
+        | 'job_running'
+        | 'job_failed'
+        | 'stale_digest'
+        | 'no_reports'
+        | 'pending_findings'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const featureUnlocked = entitlement?.hasFeature('intelligence_reports') ?? false;
+    const planName = entitlement?.plan?.name ?? null;
+
+    const [reportsRes, jobsRes, findingsRes, settingsRes] = await Promise.all([
+      db
+        .from('intelligence_reports')
+        .select('id, week_start, stats, created_at')
+        .eq('project_id', pid)
+        .order('week_start', { ascending: false })
+        .limit(52),
+      db
+        .from('intelligence_generation_jobs')
+        .select('id, status, error, created_at, started_at, finished_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      db
+        .from('modernization_findings')
+        .select('id, severity, status')
+        .eq('project_id', pid)
+        .eq('status', 'pending'),
+      db
+        .from('project_settings')
+        .select('benchmarking_optin')
+        .eq('project_id', pid)
+        .maybeSingle(),
+    ]);
+
+    const reports = reportsRes.data ?? [];
+    const jobs = jobsRes.data ?? [];
+    const findings = findingsRes.data ?? [];
+    const latestReport = reports[0] ?? null;
+    const latestJob = jobs[0] ?? null;
+    const activeJobs = jobs.filter((j) => j.status === 'queued' || j.status === 'running');
+    const failedJobs = jobs.filter((j) => j.status === 'failed');
+    const completedJobs = jobs.filter((j) => j.status === 'completed');
+
+    const daysSinceLastDigest = latestReport?.created_at
+      ? Math.floor((Date.now() - new Date(latestReport.created_at).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    const latestStats = (latestReport?.stats as { reports?: { total?: number }; fixes?: { total?: number; completionRate?: number } } | null) ?? null;
+    const totalReportsInLatest = latestStats?.reports?.total ?? 0;
+    const totalFixAttempts = reports.reduce(
+      (sum, r) => sum + (((r.stats as { fixes?: { total?: number } } | null)?.fixes?.total) ?? 0),
+      0,
+    );
+    const rawRate = latestStats?.fixes?.completionRate ?? 0;
+    const fixCompletionRatePct =
+      rawRate <= 1 ? Math.round(rawRate * 1000) / 10 : Math.round(rawRate * 10) / 10;
+    const pendingFindings = findings.length;
+    const securityFindings = findings.filter((f) => f.severity === 'security').length;
+    const benchmarkOptIn = settingsRes.data?.benchmarking_optin === true;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!featureUnlocked) {
+      topPriority = 'feature_locked';
+      topPriorityLabel = `Intelligence reports require a plan upgrade${planName ? ` (current: ${planName})` : ''}.`;
+      topPriorityTo = '/billing';
+    } else if (activeJobs.length > 0) {
+      topPriority = 'job_running';
+      topPriorityLabel = `Job ${activeJobs[0]!.id.slice(0, 8)}… is ${activeJobs[0]!.status} — digest lands in Reports when complete (typical 20–60s).`;
+      topPriorityTo = '/intelligence?tab=pipeline';
+    } else if (latestJob?.status === 'failed') {
+      topPriority = 'job_failed';
+      topPriorityLabel = latestJob.error ?? 'Last generation failed — check Settings → LLM Keys and retry.';
+      topPriorityTo = '/intelligence?tab=pipeline';
+    } else if (reports.length === 0) {
+      topPriority = 'no_reports';
+      topPriorityLabel = 'No weekly digests archived yet — Monday cron writes automatically, or generate one now.';
+      topPriorityTo = '/intelligence?tab=overview';
+    } else if (daysSinceLastDigest != null && daysSinceLastDigest > 7) {
+      topPriority = 'stale_digest';
+      topPriorityLabel = `Last digest was ${daysSinceLastDigest} days ago — generate a fresh weekly narrative.`;
+      topPriorityTo = '/intelligence?tab=overview';
+    } else if (pendingFindings > 0) {
+      topPriority = 'pending_findings';
+      topPriorityLabel = `${pendingFindings} library modernization finding${pendingFindings === 1 ? '' : 's'} pending triage${securityFindings > 0 ? ` · ${securityFindings} security` : ''}.`;
+      topPriorityTo = '/intelligence?tab=pipeline';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${reports.length} digest${reports.length === 1 ? '' : 's'} on file · last ${daysSinceLastDigest ?? 0}d ago${benchmarkOptIn ? ' · benchmarking on' : ''}.`;
+      topPriorityTo = '/intelligence?tab=reports';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        featureUnlocked,
+        planName,
+        reportCount: reports.length,
+        latestReportAt: latestReport?.created_at ?? null,
+        latestWeekStart: latestReport?.week_start ?? null,
+        daysSinceLastDigest,
+        totalReportsInLatest,
+        totalFixAttempts,
+        fixCompletionRatePct,
+        activeJobCount: activeJobs.length,
+        failedJobCount: failedJobs.length,
+        completedJobCount: completedJobs.length,
+        lastJobStatus: latestJob?.status ?? null,
+        lastJobError: latestJob?.error ?? null,
+        lastJobAt: latestJob?.created_at ?? null,
+        pendingFindings,
+        securityFindings,
+        benchmarkOptIn,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
   });
 
   // Async generation: enqueue a job, kick the worker fire-and-forget, return

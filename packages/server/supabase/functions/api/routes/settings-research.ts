@@ -5,7 +5,7 @@ import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
 import { requireFeature } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
-import { dbError, resolveOwnedProject } from '../shared.ts';
+import { dbError, resolveOwnedProject, ownedProjectIds } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -924,56 +924,156 @@ export function registerSettingsResearchRoutes(app: Hono): void {
   app.get('/v1/admin/research/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      sessions: 0,
+      snippets: 0,
+      attached: 0,
+      unattachedSnippets: 0,
+      lastSessionAt: null as string | null,
+      daysSinceLastSearch: null as number | null,
+      firecrawlConfigured: false,
+      firecrawlReady: false,
+      firecrawlTestStatus: null as string | null,
+      firecrawlKeyHint: null as string | null,
+      allowedDomainsCount: 0,
+      maxPagesPerCall: 5,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'firecrawl_not_configured'
+        | 'firecrawl_auth_failed'
+        | 'firecrawl_error'
+        | 'firecrawl_untested'
+        | 'ready_no_sessions'
+        | 'unattached_snippets'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
       noProjectResponse: () =>
         c.json({
           ok: true,
-          data: {
-            sessions: 0,
-            snippets: 0,
-            attached: 0,
-            lastSessionAt: null,
-          },
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
         }),
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
+    const pid = project.id;
 
     const [
       { count: sessionCount },
       { count: snippetCount },
       { count: attachedCount },
       { data: lastSessionRow },
+      { data: settingsRow },
     ] = await Promise.all([
-      db
-        .from('research_sessions')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', project.id),
+      db.from('research_sessions').select('id', { count: 'exact', head: true }).eq('project_id', pid),
+      db.from('research_snippets').select('id', { count: 'exact', head: true }).eq('project_id', pid),
       db
         .from('research_snippets')
         .select('id', { count: 'exact', head: true })
-        .eq('project_id', project.id),
-      db
-        .from('research_snippets')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', project.id)
+        .eq('project_id', pid)
         .not('attached_to_report_id', 'is', null),
       db
         .from('research_sessions')
         .select('created_at')
-        .eq('project_id', project.id)
+        .eq('project_id', pid)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
+      db
+        .from('project_settings')
+        .select(
+          'byok_firecrawl_key_ref, byok_firecrawl_key_hint, byok_firecrawl_test_status, firecrawl_allowed_domains, firecrawl_max_pages_per_call',
+        )
+        .eq('project_id', pid)
+        .maybeSingle(),
     ]);
+
+    const sessions = sessionCount ?? 0;
+    const snippets = snippetCount ?? 0;
+    const attached = attachedCount ?? 0;
+    const unattachedSnippets = Math.max(0, snippets - attached);
+    const lastSessionAt = (lastSessionRow?.created_at as string | null) ?? null;
+    const daysSinceLastSearch = lastSessionAt
+      ? Math.floor((Date.now() - new Date(lastSessionAt).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+
+    const firecrawlConfigured = Boolean(settingsRow?.byok_firecrawl_key_ref);
+    const firecrawlTestStatus = (settingsRow?.byok_firecrawl_test_status as string | null) ?? null;
+    const firecrawlReady =
+      firecrawlConfigured && (!firecrawlTestStatus || firecrawlTestStatus === 'ok');
+    const allowedDomains = (settingsRow?.firecrawl_allowed_domains as string[] | null) ?? [];
+    const maxPagesPerCall = (settingsRow?.firecrawl_max_pages_per_call as number | null) ?? 5;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!firecrawlConfigured) {
+      topPriority = 'firecrawl_not_configured';
+      topPriorityLabel =
+        'Add a BYOK Firecrawl API key in Settings → Firecrawl before running web research.';
+      topPriorityTo = '/settings?tab=firecrawl';
+    } else if (firecrawlTestStatus === 'error_auth') {
+      topPriority = 'firecrawl_auth_failed';
+      topPriorityLabel = `Firecrawl rejected key ${settingsRow?.byok_firecrawl_key_hint ?? ''} — re-test in Settings.`;
+      topPriorityTo = '/settings?tab=firecrawl';
+    } else if (firecrawlTestStatus && firecrawlTestStatus !== 'ok') {
+      topPriority = 'firecrawl_error';
+      topPriorityLabel = `Firecrawl test status: ${firecrawlTestStatus} — fix connectivity or quota in Settings.`;
+      topPriorityTo = '/settings?tab=firecrawl';
+    } else if (firecrawlConfigured && !firecrawlTestStatus) {
+      topPriority = 'firecrawl_untested';
+      topPriorityLabel = 'Key saved but not tested — run Test connection in Settings → Firecrawl.';
+      topPriorityTo = '/settings?tab=firecrawl';
+    } else if (sessions === 0) {
+      topPriority = 'ready_no_sessions';
+      topPriorityLabel = `Firecrawl ready · ${allowedDomains.length} allowed domain${allowedDomains.length === 1 ? '' : 's'} · run your first search.`;
+      topPriorityTo = '/research?tab=search';
+    } else if (unattachedSnippets > 0) {
+      topPriority = 'unattached_snippets';
+      topPriorityLabel = `${unattachedSnippets} snippet${unattachedSnippets === 1 ? '' : 's'} not attached to reports — paste report UUIDs on Search tab.`;
+      topPriorityTo = '/research?tab=search';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${sessions} session${sessions === 1 ? '' : 's'} · ${attached} attached · last search ${daysSinceLastSearch ?? 0}d ago.`;
+      topPriorityTo = '/research?tab=history';
+    }
 
     return c.json({
       ok: true,
       data: {
-        sessions: sessionCount ?? 0,
-        snippets: snippetCount ?? 0,
-        attached: attachedCount ?? 0,
-        lastSessionAt: (lastSessionRow?.created_at as string | null) ?? null,
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: project.project_name ?? null,
+        projectCount: projectIds.length,
+        sessions,
+        snippets,
+        attached,
+        unattachedSnippets,
+        lastSessionAt,
+        daysSinceLastSearch,
+        firecrawlConfigured,
+        firecrawlReady,
+        firecrawlTestStatus,
+        firecrawlKeyHint: (settingsRow?.byok_firecrawl_key_hint as string | null) ?? null,
+        allowedDomainsCount: allowedDomains.length,
+        maxPagesPerCall,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });

@@ -7,7 +7,7 @@
  */
 
 import { useState, useCallback, useMemo, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePageData } from '../lib/usePageData'
@@ -30,6 +30,8 @@ import {
   RelativeTime,
   SegmentedControl,
   DetailRows,
+  FreshnessPill,
+  RecommendedAction,
   type DetailRowItem,
 } from '../components/ui'
 import {
@@ -2107,7 +2109,7 @@ export function RewardsPage() {
     lastFetchedAt,
     isValidating,
   } = usePageData<RewardsStats>(statsPath)
-  const stats = statsData ?? EMPTY_REWARDS_STATS
+  const stats = { ...EMPTY_REWARDS_STATS, ...statsData }
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -2194,27 +2196,76 @@ export function RewardsPage() {
     return <ErrorAlert message={`Failed to load rewards stats: ${statsError}`} onRetry={reloadAll} />
   }
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.organizationId
+      ? 'neutral'
+      : !rewardsEnabled
+        ? 'warn'
+        : stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
+          ? 'danger'
+          : stats.topPriority === 'project_disabled' ||
+              stats.topPriority === 'no_rules' ||
+              stats.topPriority === 'high_rejection'
+            ? 'warn'
+            : stats.topPriority === 'no_contributors'
+              ? 'brand'
+              : 'ok'
+
+  const headerBadge = !stats.organizationId
+    ? 'NO ORG'
+    : !rewardsEnabled
+      ? 'HOBBY'
+      : !stats.projectRewardsEnabled
+        ? 'DISABLED'
+        : stats.webhooksFailing > 0
+          ? `${stats.webhooksFailing} WEBHOOK FAIL`
+          : stats.openDisputesCount > 0
+            ? `${stats.openDisputesCount} DISPUTE`
+            : stats.enabledRulesCount === 0
+              ? 'NO RULES'
+              : stats.rejectionRatePct24h >= 40 && stats.activity24hTotal >= 5
+                ? `${stats.rejectionRatePct24h}% REJECT`
+                : stats.activeContributors30d === 0
+                  ? 'NO ACTIVITY'
+                  : 'ACTIVE'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-rewards">
       <PageHeader
         title={copy?.title ?? 'Rewards'}
         description={
           copy?.description ??
-          'Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks.'
+          'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks.'
         }
         projectScope={stats.projectName ?? stats.organizationName ?? undefined}
       >
-        {rewardsEnabled ? (
-          <Badge className="bg-ok-muted text-ok">Program active</Badge>
-        ) : (
-          <Badge className="bg-warn/10 text-warn">Hobby — read-only</Badge>
-        )}
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {headerBadge}
+        </Badge>
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
+          Refresh
+        </Btn>
       </PageHeader>
 
       <RewardsStatusBanner
         stats={stats}
         rewardsEntitlement={rewardsEnabled}
         onTab={setActive}
+        onRefresh={reloadAll}
+        refreshing={isValidating}
       />
 
       <SegmentedControl
@@ -2225,9 +2276,9 @@ export function RewardsPage() {
         size="sm"
       />
 
-      <Section title="Program snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
+      <Section title="REWARDS SNAPSHOT" freshness={{ at: lastFetchedAt, isValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label="Contributors · 30d"
             value={stats.activeContributors30d}
@@ -2237,14 +2288,38 @@ export function RewardsPage() {
           <StatCard
             label="Points · 30d"
             value={stats.pointsAwarded30d.toLocaleString()}
-            accent="text-brand"
+            accent={stats.pointsAwarded30d > 0 ? 'text-brand' : undefined}
             hint={`${stats.activity24hTotal} SDK events in 24h`}
           />
           <StatCard
             label="Rules · tiers"
             value={`${stats.enabledRulesCount} · ${stats.enabledTiersCount}`}
             accent={stats.enabledRulesCount > 0 ? 'text-ok' : 'text-warn'}
-            hint="Enabled activity rules and tier ladder steps"
+            hint="Enabled activity rules and ladder steps"
+          />
+          <StatCard
+            label="Quests"
+            value={stats.enabledQuestsCount}
+            accent={stats.enabledQuestsCount > 0 ? 'text-info' : undefined}
+            hint="Active multi-step goals"
+          />
+          <StatCard
+            label="Webhooks"
+            value={
+              stats.webhooksConfigured === 0
+                ? 'None'
+                : stats.webhooksFailing > 0
+                  ? `${stats.webhooksFailing} fail`
+                  : `${stats.webhooksConfigured} ok`
+            }
+            accent={
+              stats.webhooksFailing > 0
+                ? 'text-danger'
+                : stats.webhooksConfigured > 0
+                  ? 'text-ok'
+                  : undefined
+            }
+            hint="Tier-change delivery to host app"
           />
           <StatCard
             label="Pending payout"
@@ -2253,37 +2328,117 @@ export function RewardsPage() {
             hint={
               stats.rejectionRatePct24h > 0
                 ? `${stats.rejectionRatePct24h}% rejected in 24h`
-                : 'USD awaiting monthly Stripe run'
+                : 'USD awaiting monthly run'
             }
           />
         </div>
       </Section>
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About Rewards'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events, and promotes users through tiers.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
-            'Reward power users with monetary payments at the Champion tier',
-            'Use quests to guide new users through key flows while earning bonus points',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'Configure activity rules, define the tier ladder, then wire SDK identify() + activity. Use Overview to debug rejections; Simulator to preview rule changes.'
-        }
-      />
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && active === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'high_rejection' || stats.topPriority === 'no_rules'
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       <div
         role="tabpanel"
         id={`rewards-panel-${active}`}
         aria-labelledby={`rewards-tab-${active}`}
       >
-        {active === 'overview' && <OverviewTab />}
+        {active === 'overview' && (
+          <div className="space-y-4">
+            <PageHelp
+              title={copy?.help?.title ?? 'About Rewards'}
+              whatIsIt={
+                copy?.help?.whatIsIt ??
+                'The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events, and promotes users through tiers.'
+              }
+              useCases={
+                copy?.help?.useCases ?? [
+                  'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
+                  'Reward power users with monetary payments at the Champion tier',
+                  'Use quests to guide new users through key flows while earning bonus points',
+                ]
+              }
+              howToUse={
+                copy?.help?.howToUse ??
+                'Configure activity rules, define the tier ladder, then wire SDK identify() + activity. Use Overview to debug rejections; Simulator to preview rule changes.'
+              }
+            />
+            {stats.topPriority === 'healthy' && (
+              <RecommendedAction
+                tone="success"
+                title="Rewards loop active"
+                description={stats.topPriorityLabel ?? `${stats.activeContributors30d} contributors in the last 30 days.`}
+                cta={{ label: 'View leaderboard', to: '/rewards?tab=contributors' }}
+              />
+            )}
+            {stats.topPriority === 'project_disabled' && (
+              <RecommendedAction
+                tone="info"
+                title="Enable rewards on this project"
+                description={stats.topPriorityLabel ?? 'SDK activity will not award points until rewards_enabled is on.'}
+                cta={{ label: 'Open Settings', to: '/settings?tab=dev' }}
+              />
+            )}
+            {stats.topPriority === 'no_rules' && (
+              <RecommendedAction
+                tone="info"
+                title="Enable at least one activity rule"
+                description={stats.topPriorityLabel ?? 'Without rules, SDK events are logged but earn zero points.'}
+                cta={{ label: 'Configure rules', to: '/rewards?tab=rules' }}
+              />
+            )}
+            {stats.topPriority === 'no_contributors' && (
+              <RecommendedAction
+                tone="info"
+                title="Wire the SDK in your app"
+                description={stats.topPriorityLabel ?? 'Call identify() then activity() after user actions.'}
+                cta={{ label: 'Run simulator', to: '/rewards?tab=sandbox' }}
+              />
+            )}
+            {stats.topPriority === 'high_rejection' && (
+              <RecommendedAction
+                tone="urgent"
+                title="Debug rejected SDK events"
+                description={stats.topPriorityLabel ?? 'Check daily caps, fraud flags, and unknown action names.'}
+                cta={{ label: 'View 24h feed', to: '/rewards?tab=overview' }}
+              />
+            )}
+            {(stats.topPriority === 'webhooks_failing' || stats.topPriority === 'open_disputes') && (
+              <RecommendedAction
+                tone="urgent"
+                title={stats.topPriority === 'open_disputes' ? 'Resolve open disputes' : 'Fix failing webhooks'}
+                description={stats.topPriorityLabel ?? 'Settings tab has delivery logs and dispute review.'}
+                cta={{ label: 'Open Settings tab', to: '/rewards?tab=settings' }}
+              />
+            )}
+            {stats.lastActivityAt && (
+              <p className="text-2xs text-fg-muted">
+                Last SDK activity <RelativeTime value={stats.lastActivityAt} />
+                {stats.identityProvidersConfigured === 0 ? (
+                  <> · <span className="text-warn">No identity providers configured</span></>
+                ) : (
+                  <> · {stats.identityProvidersConfigured} identity provider{stats.identityProvidersConfigured === 1 ? '' : 's'}</>
+                )}
+              </p>
+            )}
+            <OverviewTab />
+          </div>
+        )}
         {active === 'rules' && <ActivityRulesTab canEdit={canEdit} />}
         {active === 'tiers' && <TierLadderTab canEdit={canEdit} />}
         {active === 'contributors' && <ContributorsTab />}

@@ -18,8 +18,165 @@ import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, getOrgIdFromContext, apiKeyAuth } from '../../_shared/auth.ts'
 import { resolveEndUser } from '../../_shared/end-user-resolver.ts'
+import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
 export function registerReleasesRoutes(app: Hono) {
+  // GET /v1/admin/releases/stats — posture banner + RELEASES SNAPSHOT.
+  app.get('/v1/admin/releases/stats', jwtAuth, async (c) => {
+    const db = getServiceClient()
+    const userId = c.get('userId') as string
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      draftCount: 0,
+      publishedCount: 0,
+      totalReleases: 0,
+      totalFixesLinked: 0,
+      totalContributors: 0,
+      totalCredits: 0,
+      creditsNotified: 0,
+      creditsPending: 0,
+      fulfilledTicketsShipped: 0,
+      fixedReportsCount: 0,
+      openFeedbackTickets: 0,
+      lastPublishedAt: null as string | null,
+      lastDraftAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'drafts_pending'
+        | 'ready_to_draft'
+        | 'no_fixes'
+        | 'no_releases'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const [releasesRes, fixedReportsRes, shippedTicketsRes, openTicketsRes] = await Promise.all([
+      db
+        .from('releases')
+        .select('id, status, fixed_report_ids, credited_reporter_ids, published_at, created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false }),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .eq('status', 'fixed'),
+      db
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .not('shipped_in_release_id', 'is', null),
+      db
+        .from('support_tickets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .in('status', ['open', 'in_progress']),
+    ])
+
+    const releases = releasesRes.data ?? []
+    const releaseIds = releases.map((r) => r.id as string)
+
+    const creditsRes =
+      releaseIds.length > 0
+        ? await db
+            .from('release_credits')
+            .select('id, notified_at')
+            .in('release_id', releaseIds)
+        : { data: [] as Array<{ id: string; notified_at: string | null }> }
+
+    const credits = creditsRes.data ?? []
+    const draftCount = releases.filter((r) => r.status === 'draft').length
+    const publishedCount = releases.filter((r) => r.status === 'published').length
+    const totalFixesLinked = releases.reduce(
+      (sum, r) => sum + ((r.fixed_report_ids as string[] | null)?.length ?? 0),
+      0,
+    )
+    const totalContributors = releases.reduce(
+      (sum, r) => sum + ((r.credited_reporter_ids as string[] | null)?.length ?? 0),
+      0,
+    )
+    const creditsNotified = credits.filter((c) => c.notified_at != null).length
+    const creditsPending = credits.filter((c) => c.notified_at == null).length
+    const fixedReportsCount = fixedReportsRes.count ?? 0
+    const fulfilledTicketsShipped = shippedTicketsRes.count ?? 0
+    const openFeedbackTickets = openTicketsRes.count ?? 0
+    const lastPublished = releases.find((r) => r.status === 'published')
+    const lastDraft = releases.find((r) => r.status === 'draft')
+
+    let topPriority = empty.topPriority
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (draftCount > 0) {
+      topPriority = 'drafts_pending'
+      topPriorityLabel = `${totalContributors} contributor${totalContributors === 1 ? '' : 's'} credited · ${totalFixesLinked} fix${totalFixesLinked === 1 ? '' : 'es'} linked — review Markdown and publish to notify reporters.`
+      topPriorityTo = '/releases?tab=drafts'
+    } else if (releases.length === 0 && fixedReportsCount > 0) {
+      topPriority = 'no_releases'
+      topPriorityLabel = `${fixedReportsCount} fixed report${fixedReportsCount === 1 ? '' : 's'} available — generate an AI changelog draft from the Draft tab.`
+      topPriorityTo = '/releases?tab=draft'
+    } else if (releases.length === 0 && fixedReportsCount === 0) {
+      topPriority = 'no_fixes'
+      topPriorityLabel = 'Mark reports as fixed in Reports before generating a release draft.'
+      topPriorityTo = '/reports?status=fixed'
+    } else if (fixedReportsCount > 0 && draftCount === 0) {
+      topPriority = 'ready_to_draft'
+      topPriorityLabel = `${fixedReportsCount} fixed report${fixedReportsCount === 1 ? '' : 's'} since last publish — generate a new AI changelog draft.`
+      topPriorityTo = '/releases?tab=draft'
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${publishedCount} published · ${credits.length} credit${credits.length === 1 ? '' : 's'} · ${openFeedbackTickets} open feedback ticket${openFeedbackTickets === 1 ? '' : 's'}.`
+      topPriorityTo = '/releases?tab=published'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        draftCount,
+        publishedCount,
+        totalReleases: releases.length,
+        totalFixesLinked,
+        totalContributors,
+        totalCredits: credits.length,
+        creditsNotified,
+        creditsPending,
+        fulfilledTicketsShipped,
+        fixedReportsCount,
+        openFeedbackTickets,
+        lastPublishedAt: lastPublished?.published_at ?? null,
+        lastDraftAt: lastDraft?.created_at ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   // ─── List releases ────────────────────────────────────────────────────────
   app.get('/v1/admin/releases', jwtAuth, async (c) => {
     const db = getServiceClient()

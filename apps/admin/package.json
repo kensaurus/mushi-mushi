@@ -19,6 +19,7 @@
   "dependencies": {
     "@mushi-mushi/brand": "workspace:*",
     "@mushi-mushi/marketing-ui": "workspace:*",
+    "@mushi-mushi/web": "workspace:*",
     "@sentry/react": "^10.51.0",
     "@supabase/supabase-js": "^2.105.1",
     "@tanstack/react-table": "^8.21.3",

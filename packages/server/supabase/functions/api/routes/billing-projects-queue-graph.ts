@@ -1622,8 +1622,18 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       reportsLast24h: 0,
       reportsLast30d: 0,
       activeProjectId: activeProjectHint,
+      activeProjectName: null as string | null,
       activeProjectHasReports: false,
       activeProjectSdkConnected: false,
+      staleKeyCount: 0,
+      topPriority: 'no_projects' as
+        | 'no_projects'
+        | 'never_ingested'
+        | 'no_sdk_heartbeat'
+        | 'partial_ingest'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     if (accessibleIds.length === 0) {
@@ -1638,6 +1648,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       { data: reportProjectRows, error: reportProjErr },
       { count: reports24h, error: r24Err },
       { count: reports30d, error: r30Err },
+      { data: activeProjectRow },
     ] = await Promise.all([
       db
         .from('project_api_keys')
@@ -1654,6 +1665,9 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .select('id', { count: 'exact', head: true })
         .in('project_id', accessibleIds)
         .gte('created_at', since30d),
+      activeProjectHint && accessibleIds.includes(activeProjectHint)
+        ? db.from('projects').select('name').eq('id', activeProjectHint).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     if (keyErr) return dbError(c, keyErr);
@@ -1663,9 +1677,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
 
     const activeKeyCount = (keyRows ?? []).filter((k) => k.is_active !== false).length;
     const sdkConnectedProjects = new Set<string>();
+    let staleKeyCount = 0;
     for (const k of keyRows ?? []) {
-      if ((k as { last_seen_at?: string | null }).last_seen_at) {
+      const lastSeen = (k as { last_seen_at?: string | null }).last_seen_at;
+      if (lastSeen) {
         sdkConnectedProjects.add(k.project_id as string);
+      } else if (k.is_active !== false) {
+        staleKeyCount += 1;
       }
     }
     const projectsWithReportsSet = new Set<string>();
@@ -1680,6 +1698,39 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
 
     const activeProjectId =
       activeProjectHint && accessibleIds.includes(activeProjectHint) ? activeProjectHint : null;
+    const activeProjectName = (activeProjectRow as { name?: string } | null)?.name ?? null;
+    const activeProjectHasReports = activeProjectId
+      ? projectsWithReportsSet.has(activeProjectId)
+      : false;
+    const activeProjectSdkConnected = activeProjectId
+      ? sdkConnectedProjects.has(activeProjectId)
+      : false;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (projectCount === 0) {
+      topPriority = 'no_projects';
+      topPriorityLabel = 'Create a project, mint an API key, and send a test report to prove ingest.';
+      topPriorityTo = '/projects?tab=create';
+    } else if (projectsWithReports === 0) {
+      topPriority = 'never_ingested';
+      topPriorityLabel = `${projectCount} project${projectCount === 1 ? '' : 's'} exist but none have ingested a report — mint a key and use Test report on a project card.`;
+      topPriorityTo = '/projects?tab=list';
+    } else if (sdkConnectedCount === 0) {
+      topPriority = 'no_sdk_heartbeat';
+      topPriorityLabel = 'Reports are landing but no API key shows a SDK heartbeat — expand a project card and compare endpoint host vs this admin.';
+      topPriorityTo = '/projects?tab=list';
+    } else if (neverIngestedCount > 0) {
+      topPriority = 'partial_ingest';
+      topPriorityLabel = `${neverIngestedCount} project${neverIngestedCount === 1 ? '' : 's'} never ingested · ${projectsWithReports}/${projectCount} receiving reports · ${sdkConnectedCount} with SDK heartbeat.`;
+      topPriorityTo = '/projects?tab=list';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${projectCount} project${projectCount === 1 ? '' : 's'} ingesting · ${activeKeyCount} active key${activeKeyCount === 1 ? '' : 's'} · ${reports24h ?? 0} report${(reports24h ?? 0) === 1 ? '' : 's'} in 24h.`;
+      topPriorityTo = '/reports';
+    }
 
     return c.json({
       ok: true,
@@ -1692,12 +1743,13 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         reportsLast24h: reports24h ?? 0,
         reportsLast30d: reports30d ?? 0,
         activeProjectId,
-        activeProjectHasReports: activeProjectId
-          ? projectsWithReportsSet.has(activeProjectId)
-          : false,
-        activeProjectSdkConnected: activeProjectId
-          ? sdkConnectedProjects.has(activeProjectId)
-          : false,
+        activeProjectName,
+        activeProjectHasReports,
+        activeProjectSdkConnected,
+        staleKeyCount,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });

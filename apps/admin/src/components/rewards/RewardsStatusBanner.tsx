@@ -10,9 +10,29 @@ interface Props {
   stats: RewardsStats
   rewardsEntitlement: boolean
   onTab?: (tab: RewardsTabId) => void
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
-export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab }: Props) {
+function tabFromPath(path: string | null): RewardsTabId | null {
+  if (!path) return null
+  const tab = new URL(path, 'http://local').searchParams.get('tab')
+  if (
+    tab === 'overview' ||
+    tab === 'rules' ||
+    tab === 'tiers' ||
+    tab === 'contributors' ||
+    tab === 'quests' ||
+    tab === 'analytics' ||
+    tab === 'sandbox' ||
+    tab === 'settings'
+  ) {
+    return tab
+  }
+  return null
+}
+
+export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab, onRefresh, refreshing }: Props) {
   const orgLabel = stats.organizationName ?? 'this organization'
   const projectLabel = stats.projectName ?? 'active project'
 
@@ -51,26 +71,28 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab }: Props)
     )
   }
 
-  if (!stats.projectRewardsEnabled) {
+  const priority = stats.topPriority
+  const label = stats.topPriorityLabel
+  const actionTab = tabFromPath(stats.topPriorityTo)
+
+  if (priority === 'project_disabled') {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">Rewards disabled for {projectLabel}</p>
-            <p className="text-2xs text-fg-muted">
-              SDK activity ingest returns early when rewards_enabled is off — turn it on in project settings.
-            </p>
+            <p className="text-2xs text-fg-muted">{label ?? 'Turn on rewards_enabled in project settings.'}</p>
           </div>
         </div>
         <Link to="/settings?tab=dev">
-          <Btn size="sm" variant="ghost">Open Settings</Btn>
+          <Btn size="sm" variant="primary">Open Settings</Btn>
         </Link>
       </div>
     )
   }
 
-  if (stats.webhooksFailing > 0) {
+  if (priority === 'webhooks_failing') {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
@@ -79,42 +101,61 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab }: Props)
             <p className="text-xs font-medium text-danger">
               {stats.webhooksFailing} reward webhook{stats.webhooksFailing === 1 ? '' : 's'} failing
             </p>
-            <p className="text-2xs text-fg-muted">
-              Tier-change events may not reach your host app — open Settings and re-test delivery.
-            </p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
-        {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('settings')}>
-            Fix webhooks
-          </Btn>
-        ) : null}
+        {onTab && actionTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Fix webhooks</Btn>
+        ) : (
+          <Link to="/rewards?tab=settings">
+            <Btn size="sm" variant="ghost">Fix webhooks</Btn>
+          </Link>
+        )}
       </div>
     )
   }
 
-  if (stats.enabledRulesCount === 0) {
+  if (priority === 'open_disputes') {
+    return (
+      <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 min-w-0">
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
+          <div>
+            <p className="text-xs font-medium text-danger">
+              {stats.openDisputesCount} open dispute{stats.openDisputesCount === 1 ? '' : 's'}
+            </p>
+            <p className="text-2xs text-fg-muted">{label}</p>
+          </div>
+        </div>
+        {onTab && actionTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>Review disputes</Btn>
+        ) : (
+          <Link to="/rewards?tab=settings">
+            <Btn size="sm" variant="ghost">Review disputes</Btn>
+          </Link>
+        )}
+      </div>
+    )
+  }
+
+  if (priority === 'no_rules') {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">No activity rules enabled</p>
-            <p className="text-2xs text-fg-muted">
-              SDK events won&apos;t award points until at least one rule is on — configure Activity rules for {orgLabel}.
-            </p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('rules')}>
-            Add rules
-          </Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab('rules')}>Add rules</Btn>
         ) : null}
       </div>
     )
   }
 
-  if (stats.rejectionRatePct24h >= 40 && stats.activity24hTotal >= 5) {
+  if (priority === 'high_rejection') {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
@@ -123,36 +164,28 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab }: Props)
             <p className="text-xs font-medium text-warn">
               High rejection rate — {stats.rejectionRatePct24h}% in 24h
             </p>
-            <p className="text-2xs text-fg-muted">
-              {stats.activity24hRejected} of {stats.activity24hTotal} events rejected — check caps, fraud flags, or unknown actions on Overview.
-            </p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('overview')}>
-            Debug feed
-          </Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('overview')}>Debug feed</Btn>
         ) : null}
       </div>
     )
   }
 
-  if (stats.activeContributors30d === 0) {
+  if (priority === 'no_contributors') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">Program configured — no contributor activity yet</p>
-            <p className="text-2xs text-fg-muted">
-              {stats.enabledRulesCount} rules · {stats.enabledTiersCount} tiers · wire SDK identify() + activity calls in {projectLabel}.
-            </p>
+            <p className="text-xs font-medium text-brand">Program configured — no contributor activity yet</p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('sandbox')}>
-            Run simulator
-          </Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab('sandbox')}>Run simulator</Btn>
         ) : null}
       </div>
     )
@@ -164,18 +197,15 @@ export function RewardsStatusBanner({ stats, rewardsEntitlement, onTab }: Props)
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
           <p className="text-xs font-medium text-ok">Rewards loop active for {orgLabel}</p>
-          <p className="text-2xs text-fg-muted">
-            {stats.activeContributors30d} contributors (30d) · {stats.pointsAwarded30d.toLocaleString()} pts
-            {stats.pendingPayoutLiabilityUsd > 0
-              ? ` · $${stats.pendingPayoutLiabilityUsd.toFixed(2)} pending payouts`
-              : ''}
-          </p>
+          <p className="text-2xs text-fg-muted">{label}</p>
         </div>
       </div>
-      {onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('contributors')}>
-          View leaderboard
+      {onRefresh ? (
+        <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
+          Refresh
         </Btn>
+      ) : onTab ? (
+        <Btn size="sm" variant="ghost" onClick={() => onTab('contributors')}>View leaderboard</Btn>
       ) : null}
     </div>
   )

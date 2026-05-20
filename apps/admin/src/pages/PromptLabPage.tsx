@@ -39,6 +39,7 @@ export function PromptLabPage() {
   const [busy, setBusy] = useState<string | null>(null)
   const [trafficTarget, setTrafficTarget] = useState<PromptVersion | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<PromptVersion | null>(null)
+  const [activateTarget, setActivateTarget] = useState<PromptVersion | null>(null)
   const toast = useToast()
 
   const grouped = useMemo(() => {
@@ -114,7 +115,14 @@ export function PromptLabPage() {
     }
   }
 
-  async function activatePrompt(p: PromptVersion) {
+  function activatePrompt(p: PromptVersion) {
+    setActivateTarget(p)
+  }
+
+  async function commitActivatePrompt() {
+    if (!activateTarget) return
+    const p = activateTarget
+    setActivateTarget(null)
     setBusy(p.id)
     const res = await apiFetch(`/v1/admin/prompt-lab/prompts/${p.id}`, {
       method: 'PATCH',
@@ -384,6 +392,16 @@ export function PromptLabPage() {
           }}
           onConfirm={commitTraffic}
           onCancel={() => setTrafficTarget(null)}
+        />
+      )}
+
+      {activateTarget && (
+        <ConfirmDialog
+          title={`Activate ${activateTarget.version} at 100%?`}
+          body={`This sets "${activateTarget.version}" to serve 100% of ${activateTarget.stage} traffic immediately, replacing the current active prompt. All A/B splits will be removed. This is irreversible without a manual rollback.`}
+          confirmLabel="Activate at 100%"
+          onConfirm={commitActivatePrompt}
+          onCancel={() => setActivateTarget(null)}
         />
       )}
 

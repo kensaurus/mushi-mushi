@@ -1,20 +1,17 @@
 /**
  * FILE: apps/admin/src/pages/ExperimentsPage.tsx
- * PURPOSE: A/B experiment console — create, launch, analyze, and ship winners.
- *   Phase 5 of the closed-loop evolution plan.
- *
- *   Tabs:
- *     Experiments  — list with status, variants, live stats
- *     New          — create + add variants
- *     [Drawer]     — analysis results: CUPED, mSPRT, SRM, bandit config
+ * PURPOSE: A/B experiment console — banner + EXPERIMENTS SNAPSHOT + tabs:
+ *          Overview | Experiments | New.
  */
 
-import { useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useCallback, useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { useActiveProjectSignal } from '../lib/activeProject'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -29,11 +26,17 @@ import {
   RelativeTime,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
 } from '../components/ui'
+import { ExperimentsStatusBanner } from '../components/experiments/ExperimentsStatusBanner'
+import {
+  EMPTY_EXPERIMENTS_STATS,
+  type ExperimentsStats,
+  type ExperimentsTabId,
+} from '../components/experiments/ExperimentsStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
-
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface ExperimentVariant {
   id: string
@@ -73,13 +76,11 @@ interface AnalysisResult {
   variant_stats: Array<{ id: string; name: string; total: number; converted: number; rate: number }>
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 const STATUS_CLS: Record<Experiment['status'], string> = {
-  draft:     'bg-muted text-muted-foreground',
-  running:   'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-  stopped:   'bg-muted text-muted-foreground',
-  completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  draft: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  running: 'bg-warn/10 text-warn border border-warn/20',
+  stopped: 'bg-surface-overlay text-fg-muted border border-edge-subtle',
+  completed: 'bg-ok/10 text-ok border border-ok/20',
 }
 
 const STATUS_LABEL: Record<Experiment['status'], string> = {
@@ -95,51 +96,109 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   return Array.isArray(payload) ? payload : (payload.data ?? [])
 }
 
-// ─── Main page ───────────────────────────────────────────────────────────────
+const TABS: Array<{ id: ExperimentsTabId; label: string; description: string }> = [
+  { id: 'overview', label: 'Overview', description: 'Posture banner and how A/B assignment + mSPRT analysis works.' },
+  { id: 'experiments', label: 'Experiments', description: 'Launch, monitor, analyze, and stop live variant tests.' },
+  { id: 'new', label: 'New', description: 'Create an experiment with control + treatment variants.' },
+]
+
+function resolveExperimentsTab(value: string | null): ExperimentsTabId {
+  if (value === 'experiments' || value === 'new') return value
+  return 'overview'
+}
 
 export function ExperimentsPage() {
-  const [searchParams] = useSearchParams()
+  const copy = usePageCopy('/experiments')
   const toast = useToast()
-  const [tab, setTab] = useState<'experiments' | 'new'>('experiments')
+  const projectId = useActiveProjectId()
+  const setup = useSetupStatus(projectId)
+  const projectName = setup.activeProject?.project_name ?? null
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = resolveExperimentsTab(searchParams.get('tab'))
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+
   const [selected, setSelected] = useState<Experiment | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const activeProjectSignal = useActiveProjectSignal()
-  const projectId = searchParams.get('project_id') || activeProjectSignal
-
-  usePublishPageContext({
-    route: '/experiments',
-    title: 'Experiments',
-    summary: 'A/B and multi-arm RCT experiments — run controlled tests against real users with statistical significance tracking.',
-    filters: { tab, project_id: projectId ?? undefined },
-  })
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<ExperimentsStats>('/v1/admin/experiments/stats')
+  const stats = { ...EMPTY_EXPERIMENTS_STATS, ...statsData }
 
   const {
     data: expData,
     loading,
     error,
-    reload,
+    reload: reloadExperiments,
+    isValidating: experimentsValidating,
   } = usePageData<{ data: Experiment[]; total: number }>(
-    projectId ? `/v1/admin/experiments?project_id=${projectId}` : null,
-    { deps: [projectId] },
+    projectId && activeTab === 'experiments' ? `/v1/admin/experiments?project_id=${projectId}` : null,
+    { deps: [projectId, activeTab] },
   )
 
   const experiments = listRows(expData)
-  const running = experiments.filter(e => e.status === 'running').length
+
+  const setActiveTab = useCallback(
+    (tab: ExperimentsTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reloadExperiments()
+  }, [reloadStats, reloadExperiments])
+
+  const tabOptions = useMemo(
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'experiments' && stats.runningCount > 0
+            ? stats.runningCount
+            : t.id === 'experiments' && stats.draftsReadyToLaunch > 0
+              ? stats.draftsReadyToLaunch
+              : undefined,
+      })),
+    [stats.runningCount, stats.draftsReadyToLaunch],
+  )
+
+  usePublishPageContext({
+    route: '/experiments',
+    title: projectName ? `Experiments · ${projectName}` : 'Experiments',
+    summary: statsLoading
+      ? 'Loading experiments…'
+      : stats.totalExperiments === 0
+        ? 'No experiments yet'
+        : `${stats.runningCount} running · ${stats.totalExperiments} total`,
+    criticalCount: stats.runningCount,
+  })
 
   const launch = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/experiments/${id}/launch`, { method: 'POST' })
     if (!res.ok) { toast.error(res.error?.message ?? 'Launch failed'); return }
     toast.success('Experiment launched')
-    reload()
-  }, [reload, toast])
+    reloadAll()
+  }, [reloadAll, toast])
 
   const stop = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/experiments/${id}/stop`, { method: 'POST' })
     if (!res.ok) { toast.error(res.error?.message ?? 'Stop failed'); return }
     toast.success('Experiment stopped')
-    reload()
-  }, [reload, toast])
+    reloadAll()
+  }, [reloadAll, toast])
 
   const openDetail = useCallback(async (exp: Experiment) => {
     const res = await apiFetch<{ data: Experiment }>(`/v1/admin/experiments/${exp.id}`)
@@ -147,55 +206,173 @@ export function ExperimentsPage() {
     setDrawerOpen(true)
   }, [])
 
-  const tabs = [
-    { id: 'experiments', label: `Experiments (${experiments.length})` },
-    { id: 'new',         label: 'New' },
-  ] as const
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading experiments">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load experiment stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'running' || stats.topPriority === 'draft_incomplete'
+        ? 'warn'
+        : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
+          ? 'brand'
+          : stats.topPriority === 'winners_found' || stats.topPriority === 'healthy'
+            ? 'ok'
+            : 'info'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-experiments">
       <PageHeader
-        title="Experiments"
-        description="A/B test UI variants, messaging, and feature flags with CUPED variance reduction, mSPRT always-valid p-values, and SRM checks."
+        title={copy?.title ?? 'Experiments'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.'
+        }
       >
-        <Btn variant="primary" size="sm" onClick={() => setTab('new')}>+ New</Btn>
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'warn'
+                ? 'bg-warn/10 text-warn'
+                : bannerSeverity === 'brand'
+                  ? 'bg-brand/15 text-brand'
+                  : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.runningCount > 0
+              ? `${stats.runningCount} LIVE`
+              : stats.draftsReadyToLaunch > 0
+                ? `${stats.draftsReadyToLaunch} READY`
+                : stats.totalExperiments === 0
+                  ? 'EMPTY'
+                  : `${stats.totalExperiments} TOTAL`}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || experimentsValidating}>
+          Refresh
+        </Btn>
+        <Btn size="sm" variant="primary" onClick={() => setActiveTab('new')}>+ New</Btn>
       </PageHeader>
 
-      <PageHelp
-        title="A/B experiments"
-        whatIsIt="Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty."
-        useCases={[
-          'Test button copy, colour, or layout variants',
-          'Measure impact of a new feature on report rate',
-          'Use bandit mode for fast exploration with small samples',
-        ]}
-        howToUse="Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives."
+      <ExperimentsStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating}
       />
 
-      <Section title="Experiment overview">
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          <StatCard label="Total" value={experiments.length} />
-          <StatCard label="Running" value={running} />
-          <StatCard label="Winners found" value={experiments.filter(e => e.winner_variant_id).length} />
+      <SegmentedControl<ExperimentsTabId>
+        size="sm"
+        ariaLabel="Experiments sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="EXPERIMENTS SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Total" value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} hint={`${stats.draftCount} draft`} />
+          <StatCard label="Running" value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} hint="Live assignment" />
+          <StatCard label="Ready to launch" value={stats.draftsReadyToLaunch} accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined} hint="≥2 variants" />
+          <StatCard label="Winners" value={stats.winnersFound} accent={stats.winnersFound > 0 ? 'text-ok' : undefined} hint="Declared" />
+          <StatCard label="Assignments" value={stats.totalAssignments} accent={stats.totalAssignments > 0 ? 'text-brand' : undefined} hint={`${stats.totalConversions} converted`} />
+          <StatCard label="Conversion" value={`${stats.conversionRatePct}%`} accent={stats.conversionRatePct > 0 ? 'text-ok' : undefined} hint={`${stats.banditEnabledCount} bandit`} />
         </div>
-
-        <SegmentedControl value={tab} onChange={v => setTab(v as typeof tab)} options={tabs} className="mb-6" />
-
-        {tab === 'experiments' && (
-          <ExperimentsTab
-            experiments={experiments}
-            loading={loading}
-            error={error}
-            onOpen={openDetail}
-            onLaunch={launch}
-            onStop={stop}
-            projectId={projectId}
-          />
-        )}
-        {tab === 'new' && (
-          <NewExperimentForm projectId={projectId} onCreated={() => { setTab('experiments'); reload() }} />
-        )}
       </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'running'
+              ? 'border-warn/30 bg-warn/5'
+              : stats.topPriority === 'no_experiments' || stats.topPriority === 'draft_ready'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-ok/30 bg-ok/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'A/B experiments'}
+            whatIsIt={copy?.help?.whatIsIt ?? 'Each experiment auto-assigns reporters to variants via deterministic hash or Thompson sampling (bandit mode). Run Analyze at any time for an always-valid p-value — no peeking penalty.'}
+            useCases={copy?.help?.useCases ?? [
+              'Test button copy, colour, or layout variants',
+              'Measure impact of a new feature on report rate',
+              'Use bandit mode for fast exploration with small samples',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.'}
+          />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Experiment library is idle"
+              description={`${stats.totalExperiments} experiment${stats.totalExperiments === 1 ? '' : 's'} · none running · launch a draft or create a new test.`}
+            />
+          )}
+          {stats.topPriority === 'no_experiments' && (
+            <RecommendedAction
+              tone="info"
+              title="Start your first A/B test"
+              description="Compare two UI variants with SDK assignment and mSPRT significance — no peeking penalty."
+              cta={{ label: 'Create experiment', to: '/experiments?tab=new' }}
+            />
+          )}
+          {stats.topPriority === 'draft_ready' && (
+            <RecommendedAction
+              tone="info"
+              title="Launch a ready draft"
+              description={stats.topPriorityLabel ?? 'Drafts with ≥2 variants can go live immediately.'}
+              cta={{ label: 'Open Experiments', to: '/experiments?tab=experiments' }}
+            />
+          )}
+        </>
+      )}
+
+      {activeTab === 'experiments' && (
+        <ExperimentsTab
+          experiments={experiments}
+          loading={loading}
+          error={error}
+          onOpen={openDetail}
+          onLaunch={launch}
+          onStop={stop}
+          projectId={projectId ?? ''}
+          onCreate={() => setActiveTab('new')}
+        />
+      )}
+
+      {activeTab === 'new' && (
+        <NewExperimentForm projectId={projectId ?? ''} onCreated={() => { setActiveTab('experiments'); reloadAll() }} />
+      )}
 
       {drawerOpen && selected && (
         <ExperimentDrawer
@@ -206,7 +383,7 @@ export function ExperimentsPage() {
           onStop={stop}
           onRefresh={async () => {
             const res = await apiFetch<{ data: Experiment }>(`/v1/admin/experiments/${selected.id}`)
-            if (res.ok && res.data) setSelected(res.data as unknown as Experiment)
+            if (res.ok && res.data) setSelected((res.data as { data: Experiment }).data ?? selected)
           }}
         />
       )}
@@ -214,9 +391,7 @@ export function ExperimentsPage() {
   )
 }
 
-// ─── Experiments tab ──────────────────────────────────────────────────────────
-
-function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop, projectId }: {
+function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop, projectId, onCreate }: {
   experiments: Experiment[]
   loading: boolean
   error: string | null
@@ -224,43 +399,54 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
   onLaunch: (id: string) => void
   onStop: (id: string) => void
   projectId: string
+  onCreate: () => void
 }) {
-  if (!projectId) return <EmptyState title="Select a project" />
+  if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to manage experiments." />
   if (loading) return <TableSkeleton rows={5} />
   if (error) return <ErrorAlert message={error} />
-  if (!experiments.length) return <EmptyState title="No experiments" description="Create your first A/B experiment to start testing variants." />
+  if (!experiments.length) {
+    return (
+      <EmptyState
+        title="No experiments"
+        description="Create your first A/B experiment to start testing variants with SDK assignment."
+        action={<Btn size="sm" variant="primary" onClick={onCreate}>Create experiment</Btn>}
+      />
+    )
+  }
 
   return (
     <Card className="overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+          <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
             <th className="px-3 py-2 text-left">Name</th>
             <th className="px-3 py-2 text-left">Status</th>
             <th className="px-3 py-2 text-left">Variants</th>
-            <th className="px-3 py-2 text-left">Bandit</th>
+            <th className="px-3 py-2 text-left">Mode</th>
             <th className="px-3 py-2 text-left">Created</th>
             <th className="px-3 py-2" />
           </tr>
         </thead>
         <tbody>
-          {experiments.map(e => (
-            <tr key={e.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+          {experiments.map((e) => (
+            <tr key={e.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
               <td className="px-3 py-2">
-                <div className="font-medium">{e.name}</div>
-                {e.hypothesis && <div className="text-xs text-muted-foreground truncate max-w-[200px]">{e.hypothesis}</div>}
+                <div className="font-medium text-fg-primary">{e.name}</div>
+                {e.hypothesis && <div className="text-xs text-fg-muted truncate max-w-[200px]">{e.hypothesis}</div>}
               </td>
               <td className="px-3 py-2">{statusBadge(e.status)}</td>
-              <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? '—'}</td>
+              <td className="px-3 py-2 tabular-nums text-xs">{e.experiment_variants?.length ?? 0}</td>
               <td className="px-3 py-2">
                 {e.bandit_enabled
-                  ? <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">Bandit</Badge>
-                  : <span className="text-xs text-muted-foreground">Static</span>}
+                  ? <Badge className="bg-brand/10 text-brand border border-brand/20">Bandit</Badge>
+                  : <span className="text-xs text-fg-muted">Static</span>}
               </td>
-              <td className="px-3 py-2 text-xs text-muted-foreground"><RelativeTime value={e.created_at} /></td>
+              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={e.created_at} /></td>
               <td className="px-3 py-2">
                 <div className="flex gap-1 justify-end">
-                  {e.status === 'draft' && <Btn size="sm" variant="primary" onClick={() => onLaunch(e.id)}>Launch</Btn>}
+                  {e.status === 'draft' && (e.experiment_variants?.length ?? 0) >= 2 && (
+                    <Btn size="sm" variant="primary" onClick={() => onLaunch(e.id)}>Launch</Btn>
+                  )}
                   {e.status === 'running' && <Btn size="sm" variant="ghost" onClick={() => onStop(e.id)}>Stop</Btn>}
                   <Btn size="sm" variant="ghost" onClick={() => onOpen(e)}>View</Btn>
                 </div>
@@ -273,8 +459,6 @@ function ExperimentsTab({ experiments, loading, error, onOpen, onLaunch, onStop,
   )
 }
 
-// ─── New experiment form ──────────────────────────────────────────────────────
-
 function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCreated: () => void }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
@@ -284,7 +468,7 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
     { name: 'Treatment A', description: '', traffic_weight: 0.5 },
   ])
 
-  const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
 
   const submit = async () => {
     if (!form.name.trim()) { toast.error('Name required'); return }
@@ -312,51 +496,52 @@ function NewExperimentForm({ projectId, onCreated }: { projectId: string; onCrea
 
   return (
     <Card className="max-w-2xl p-6 space-y-5">
-      <h2 className="text-base font-semibold">New experiment</h2>
+      <h2 className="text-base font-semibold text-fg-primary">New experiment</h2>
+      {!projectId && (
+        <p className="text-xs text-warn">Select a project from the switcher before creating an experiment.</p>
+      )}
       <div className="grid gap-4">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Name *</span>
-          <Input value={form.name} onChange={e => set('name', e.target.value)} placeholder="Button colour CTA test" />
+          <span className="text-sm font-medium text-fg-primary">Name *</span>
+          <Input value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="Button colour CTA test" />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Hypothesis</span>
-          <Input value={form.hypothesis} onChange={e => set('hypothesis', e.target.value)} placeholder="Changing CTA to orange will increase clicks by 5%" />
+          <span className="text-sm font-medium text-fg-primary">Hypothesis</span>
+          <Input value={form.hypothesis} onChange={(e) => set('hypothesis', e.target.value)} placeholder="Changing CTA to orange will increase clicks by 5%" />
         </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={form.bandit_enabled} onChange={e => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
+        <label className="flex items-center gap-2 text-sm text-fg-primary">
+          <input type="checkbox" checked={form.bandit_enabled} onChange={(e) => set('bandit_enabled', e.target.checked)} className="h-4 w-4" />
           Enable Thompson Sampling bandit (auto-shifts traffic to winning variant)
         </label>
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-sm font-medium">Variants</h3>
+        <h3 className="text-sm font-medium text-fg-primary">Variants</h3>
         {variants.map((v, i) => (
           <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end">
             <label className="block space-y-1">
-              {i === 0 && <span className="text-xs text-muted-foreground">Name</span>}
-              <Input value={v.name} onChange={e => setVariants(vs => vs.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
+              {i === 0 && <span className="text-xs text-fg-muted">Name</span>}
+              <Input value={v.name} onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
             </label>
             <label className="block space-y-1">
-              {i === 0 && <span className="text-xs text-muted-foreground">Weight (0–1)</span>}
+              {i === 0 && <span className="text-xs text-fg-muted">Weight (0–1)</span>}
               <Input type="number" step={0.1} min={0} max={1} value={v.traffic_weight}
-                onChange={e => setVariants(vs => vs.map((x, j) => j === i ? { ...x, traffic_weight: parseFloat(e.target.value) } : x))} />
+                onChange={(e) => setVariants((vs) => vs.map((x, j) => j === i ? { ...x, traffic_weight: parseFloat(e.target.value) } : x))} />
             </label>
             {i >= 2 && (
-              <Btn size="sm" variant="ghost" onClick={() => setVariants(vs => vs.filter((_, j) => j !== i))}>✕</Btn>
+              <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))}>✕</Btn>
             )}
           </div>
         ))}
-        <Btn size="sm" variant="ghost" onClick={() => setVariants(vs => [...vs, { name: `Treatment ${String.fromCharCode(64 + vs.length)}`, description: '', traffic_weight: 0.33 }])}>
+        <Btn size="sm" variant="ghost" onClick={() => setVariants((vs) => [...vs, { name: `Treatment ${String.fromCharCode(64 + vs.length)}`, description: '', traffic_weight: 0.33 }])}>
           + Add variant
         </Btn>
       </div>
 
-      <Btn variant="primary" onClick={submit} loading={loading}>Create experiment</Btn>
+      <Btn variant="primary" onClick={submit} loading={loading} disabled={!projectId}>Create experiment</Btn>
     </Card>
   )
 }
-
-// ─── Experiment drawer ────────────────────────────────────────────────────────
 
 function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefresh }: {
   experiment: Experiment
@@ -390,13 +575,13 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         <div className="flex flex-wrap gap-2 items-center">
           {statusBadge(experiment.status)}
           {experiment.bandit_enabled && (
-            <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">Bandit</Badge>
+            <Badge className="bg-brand/10 text-brand border border-brand/20">Bandit</Badge>
           )}
           {experiment.winner_variant_id && (
-            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Winner found</Badge>
+            <Badge className="bg-ok/10 text-ok border border-ok/20">Winner found</Badge>
           )}
           <div className="ml-auto flex gap-2">
-            {experiment.status === 'draft' && (
+            {experiment.status === 'draft' && variants.length >= 2 && (
               <Btn size="sm" variant="primary" onClick={() => { onLaunch(experiment.id); onRefresh() }}>Launch</Btn>
             )}
             {experiment.status === 'running' && (
@@ -407,23 +592,23 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
         </div>
 
         {experiment.hypothesis && (
-          <div className="rounded-md bg-muted/40 px-4 py-3 text-sm italic">{experiment.hypothesis}</div>
+          <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm italic text-fg-primary">{experiment.hypothesis}</div>
         )}
 
         <div>
-          <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">Variants</p>
+          <p className="mb-2 text-xs font-medium text-fg-muted uppercase tracking-wide">Variants</p>
           <div className="space-y-2">
-            {variants.map(v => (
-              <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30' : ''}`}>
+            {variants.map((v) => (
+              <div key={v.id} className={`flex items-center gap-3 rounded-md border p-3 ${experiment.winner_variant_id === v.id ? 'border-ok/40 bg-ok/5' : 'border-edge-subtle'}`}>
                 <div className="flex-1">
-                  <div className="font-medium text-sm">{v.name}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="font-medium text-sm text-fg-primary">{v.name}</div>
+                  <div className="text-xs text-fg-muted">
                     Weight: {(v.traffic_weight * 100).toFixed(0)}%
                     {experiment.bandit_enabled && ` · α=${v.bandit_alpha.toFixed(1)} β=${v.bandit_beta.toFixed(1)}`}
                   </div>
                 </div>
                 {experiment.winner_variant_id === v.id && (
-                  <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">Winner</Badge>
+                  <Badge className="bg-ok/10 text-ok border border-ok/20">Winner</Badge>
                 )}
               </div>
             ))}
@@ -432,25 +617,25 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
 
         {analysis && (
           <div className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Analysis</p>
+            <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Analysis</p>
 
-            <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30' : 'border-rose-300 bg-rose-50 dark:bg-rose-950/30'}`}>
-              <div className="font-medium">{analysis.srm_ok ? '✅ SRM check passed' : '⚠️ SRM detected'}</div>
-              <div className="text-xs mt-0.5 text-muted-foreground">chi-square p = {analysis.srm_p.toFixed(4)}</div>
+            <div className={`rounded-md border px-4 py-3 text-sm ${analysis.srm_ok ? 'border-ok/30 bg-ok/5' : 'border-danger/30 bg-danger/5'}`}>
+              <div className="font-medium text-fg-primary">{analysis.srm_ok ? 'SRM check passed' : 'SRM detected'}</div>
+              <div className="text-xs mt-0.5 text-fg-muted">chi-square p = {analysis.srm_p.toFixed(4)}</div>
             </div>
 
             <Card className="p-4 space-y-2">
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground text-xs">p-value</span><div className="font-mono font-medium">{analysis.p_value.toFixed(4)}</div></div>
-                <div><span className="text-muted-foreground text-xs">mSPRT log-LR</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
-                <div><span className="text-muted-foreground text-xs">Relative lift</span><div className="font-mono font-medium">{(analysis.relative_lift * 100).toFixed(1)}%</div></div>
+                <div><span className="text-fg-muted text-xs">p-value</span><div className="font-mono font-medium">{analysis.p_value.toFixed(4)}</div></div>
+                <div><span className="text-fg-muted text-xs">mSPRT log-LR</span><div className="font-mono font-medium">{analysis.log_lr.toFixed(3)}</div></div>
+                <div><span className="text-fg-muted text-xs">Relative lift</span><div className="font-mono font-medium">{(analysis.relative_lift * 100).toFixed(1)}%</div></div>
               </div>
-              <p className="text-sm mt-2 border-t pt-2">{analysis.recommendation}</p>
+              <p className="text-sm mt-2 border-t border-edge-subtle pt-2 text-fg-primary">{analysis.recommendation}</p>
             </Card>
 
             <table className="w-full text-xs">
               <thead>
-                <tr className="border-b text-muted-foreground">
+                <tr className="border-b border-edge-subtle text-fg-muted">
                   <th className="py-1 text-left">Variant</th>
                   <th className="py-1 text-right">N</th>
                   <th className="py-1 text-right">Converted</th>
@@ -458,8 +643,8 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
                 </tr>
               </thead>
               <tbody>
-                {analysis.variant_stats.map(v => (
-                  <tr key={v.id} className="border-b last:border-0">
+                {analysis.variant_stats.map((v) => (
+                  <tr key={v.id} className="border-b border-edge-subtle last:border-0">
                     <td className="py-1">{v.name}</td>
                     <td className="py-1 text-right tabular-nums">{v.total}</td>
                     <td className="py-1 text-right tabular-nums">{v.converted}</td>
@@ -471,7 +656,7 @@ function ExperimentDrawer({ experiment, open, onClose, onLaunch, onStop, onRefre
           </div>
         )}
 
-        <div className="rounded-md border bg-muted/20 px-4 py-3 space-y-1 text-xs text-muted-foreground">
+        <div className="rounded-md border border-edge-subtle bg-surface-overlay/50 px-4 py-3 space-y-1 text-xs text-fg-muted">
           {experiment.start_at && <div className="flex gap-2"><span className="w-20">Started</span><RelativeTime value={experiment.start_at} /></div>}
           {experiment.end_at && <div className="flex gap-2"><span className="w-20">Stopped</span><RelativeTime value={experiment.end_at} /></div>}
         </div>

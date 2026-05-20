@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FeedbackModal } from './FeedbackModal'
+import { getMushiSelf, reportMushiBug } from '../lib/mushi-self'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const DISMISS_KEY = 'mushi-mushi:beta-banner-dismissed-at'
@@ -48,6 +49,15 @@ export function BetaBanner() {
   }
 
   function openFeedback(type: 'bug' | 'feature') {
+    // Prefer the Mushi SDK widget when it's loaded — reports then flow through
+    // the same pipeline as customer reports, giving us first-hand QA of the
+    // full submission experience. Fall back to the FeedbackModal (which posts
+    // to /v1/support/contact) when Mushi isn't loaded yet or VITE_MUSHI_SELF_*
+    // env vars are absent.
+    if (type === 'bug' && getMushiSelf()) {
+      reportMushiBug({ category: 'bug' })
+      return
+    }
     setFeedbackType(type)
     setFeedbackOpen(true)
   }

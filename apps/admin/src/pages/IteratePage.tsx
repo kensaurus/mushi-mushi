@@ -1,60 +1,74 @@
 /**
  * FILE: apps/admin/src/pages/IteratePage.tsx
- * PURPOSE: PDCA iteration console — queue runs, watch producer/critic progress,
- *          inspect critiques, export results.
+ * PURPOSE: Banner + PDCA SNAPSHOT + tabs: Overview | Runs | New Run.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { usePageCopy } from '../lib/copy'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
   PageHelp,
+  Card,
   Section,
   Btn,
+  Badge,
   ErrorAlert,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
+  RelativeTime,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
-import { PdcaStatusBanner } from '../components/iterate/PdcaStatusBanner'
+import { IterateStatusBanner } from '../components/iterate/IterateStatusBanner'
 import { PdcaRunTable } from '../components/iterate/PdcaRunTable'
 import { NewRunForm } from '../components/iterate/NewRunForm'
 import { PdcaRunDrawer } from '../components/iterate/PdcaRunDrawer'
-import type { PdcaRun, PdcaStats } from '../components/iterate/types'
+import type { PdcaRun } from '../components/iterate/types'
+import {
+  EMPTY_ITERATE_STATS,
+  type IterateStats,
+  type IterateTabId,
+} from '../components/iterate/IterateStatsTypes'
 
-type TabId = 'runs' | 'new'
-
-const TABS: Array<{ id: TabId; label: string; description: string }> = [
+const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'PDCA pipeline posture — what is running, queued, failed, or idle on this project.',
+  },
   {
     id: 'runs',
     label: 'Runs',
-    description: 'All producer/critic loops for the active project — trigger, abort, or open detail.',
+    description: 'All producer/critic loops — Trigger queued runs, abort active ones, open detail drawer.',
   },
   {
     id: 'new',
     label: 'New Run',
-    description: 'Queue a target URL with a critic persona and score target.',
+    description: 'Queue a target URL with critic persona, score target, and iteration cap.',
   },
 ]
 
-function isTabId(v: string | null): v is TabId {
-  return TABS.some((t) => t.id === v)
+function resolveIterateTab(value: string | null): IterateTabId {
+  if (value === 'runs' || value === 'new') return value
+  return 'overview'
 }
 
 export function IteratePage() {
+  const copy = usePageCopy('/iterate')
   const [searchParams, setSearchParams] = useSearchParams()
-  const param = searchParams.get('tab')
-  const activeTab: TabId = isTabId(param) ? param : 'runs'
-  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+  const activeTab = resolveIterateTab(searchParams.get('tab'))
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -64,48 +78,44 @@ export function IteratePage() {
   const [selectedRun, setSelectedRun] = useState<PdcaRun | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const listPath = activeProjectId ? `/v1/admin/pdca?project_id=${activeProjectId}&limit=50` : null
-  const statsPath = activeProjectId ? `/v1/admin/pdca/stats?project_id=${activeProjectId}` : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<IterateStats>('/v1/admin/pdca/stats')
+  const stats = { ...EMPTY_ITERATE_STATS, ...statsData }
+
+  const listPath =
+    activeProjectId && activeTab === 'runs' ? `/v1/admin/pdca?project_id=${activeProjectId}&limit=50` : null
 
   const {
     data: runs,
     loading: runsLoading,
     error: runsError,
     reload: reloadRuns,
-    lastFetchedAt,
-    isValidating,
-  } = usePageData<PdcaRun[]>(listPath, { deps: [activeProjectId] })
-
-  const { data: statsData, reload: reloadStats } = usePageData<PdcaStats>(statsPath, {
-    deps: [activeProjectId],
-  })
-
-  const stats = statsData ?? {
-    total: 0,
-    queued: 0,
-    running: 0,
-    succeeded: 0,
-    failed: 0,
-    aborted: 0,
-    avgFinalScore: null,
-    lastRunAt: null,
-  }
+    lastFetchedAt: runsFetchedAt,
+    isValidating: runsValidating,
+  } = usePageData<PdcaRun[]>(listPath, { deps: [activeProjectId, activeTab] })
 
   const runList = runs ?? []
   const activeRuns = runList.filter((r) => r.status === 'running' || r.status === 'queued')
 
   const reloadAll = useCallback(() => {
-    reloadRuns()
     reloadStats()
-  }, [reloadRuns, reloadStats])
+    reloadRuns()
+  }, [reloadStats, reloadRuns])
 
   useRealtimeReload(['pdca_runs', 'pdca_iterations'], reloadAll)
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   useEffect(() => {
-    if (activeRuns.length > 0 && !pollRef.current) {
+    const hasActive = stats.running + stats.queued > 0 || activeRuns.length > 0
+    if (hasActive && !pollRef.current) {
       pollRef.current = setInterval(reloadAll, 4000)
-    } else if (activeRuns.length === 0 && pollRef.current) {
+    } else if (!hasActive && pollRef.current) {
       clearInterval(pollRef.current)
       pollRef.current = null
     }
@@ -115,43 +125,60 @@ export function IteratePage() {
         pollRef.current = null
       }
     }
-  }, [activeRuns.length, reloadAll])
+  }, [stats.running, stats.queued, activeRuns.length, reloadAll])
 
-  const setTab = useCallback(
-    (tab: TabId) => {
-      const next = new URLSearchParams(searchParams)
-      if (tab === 'runs') next.delete('tab')
-      else next.set('tab', tab)
-      setSearchParams(next, { replace: true, preventScrollReset: true })
+  const setActiveTab = useCallback(
+    (tab: IterateTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
     },
-    [searchParams, setSearchParams],
+    [setSearchParams],
   )
 
   usePublishPageContext({
     route: '/iterate',
-    title: `${activeMeta.label} · Iterate`,
-    summary: activeMeta.description,
-    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    title: projectName ? `Iterate · ${projectName}` : 'Iterate',
+    summary: statsLoading
+      ? 'Loading PDCA…'
+      : stats.running + stats.queued > 0
+        ? `${stats.running + stats.queued} active run${stats.running + stats.queued === 1 ? '' : 's'}`
+        : stats.total === 0
+          ? 'No runs yet'
+          : `${stats.succeeded} succeeded · avg ${stats.avgFinalScorePct ?? 0}%`,
     criticalCount: stats.running + stats.queued,
   })
 
   const tabOptions = useMemo(
-    () => [
-      { id: 'runs' as const, label: 'Runs', count: runList.length },
-      { id: 'new' as const, label: 'New Run' },
-    ],
-    [runList.length],
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'runs' && stats.total > 0
+            ? stats.total
+            : t.id === 'runs' && stats.queued + stats.running > 0
+              ? stats.queued + stats.running
+              : undefined,
+      })),
+    [stats.total, stats.queued, stats.running],
   )
 
-  const openDetail = useCallback(async (run: PdcaRun) => {
-    const res = await apiFetch<PdcaRun>(`/v1/admin/pdca/${run.id}`)
-    if (res.ok && res.data) {
-      setSelectedRun(res.data)
-      setDrawerOpen(true)
-    } else {
-      toast.error('Failed to load run', res.error?.message)
-    }
-  }, [toast])
+  const openDetail = useCallback(
+    async (run: PdcaRun) => {
+      const res = await apiFetch<PdcaRun>(`/v1/admin/pdca/${run.id}`)
+      if (res.ok && res.data) {
+        setSelectedRun(res.data)
+        setDrawerOpen(true)
+      } else {
+        toast.error('Failed to load run', res.error?.message)
+      }
+    },
+    [toast],
+  )
 
   const abortRun = useCallback(
     async (runId: string) => {
@@ -185,28 +212,149 @@ export function IteratePage() {
     if (res.ok && res.data) setSelectedRun(res.data)
   }, [selectedRun])
 
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading iterate">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load PDCA stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'last_failed'
+        ? 'danger'
+        : stats.topPriority === 'active_runs'
+          ? 'warn'
+          : stats.topPriority === 'queued_waiting' || stats.topPriority === 'no_runs'
+            ? 'brand'
+            : 'ok'
+
+  const headerBadge =
+    !stats.hasAnyProject
+      ? 'NO PROJECT'
+      : stats.running > 0
+        ? `${stats.running} RUNNING`
+        : stats.queued > 0
+          ? `${stats.queued} QUEUED`
+          : stats.total === 0
+            ? 'EMPTY'
+            : stats.failed > 0 && stats.succeeded === 0
+              ? 'FAILED'
+              : 'IDLE'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-iterate">
       <PageHeader
-        title="Iterate"
-        description="Autonomous PDCA loops — queue a run, watch producer → critic iterations, export critique when the score target is met."
+        title={copy?.title ?? 'Iterate'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger/abort, New Run to queue loops.'
+        }
         contextChip={<PdcaContextHint stage="act" />}
       >
-        <Btn variant="primary" size="sm" onClick={() => setTab('new')} disabled={!activeProjectId}>
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {headerBadge}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || runsValidating}>
+          Refresh
+        </Btn>
+        <Btn
+          size="sm"
+          variant="primary"
+          onClick={() => setActiveTab('new')}
+          disabled={!activeProjectId}
+          title={!activeProjectId ? 'Select a project first' : undefined}
+        >
           + New Run
         </Btn>
       </PageHeader>
 
-      <PageHelp
-        title="PDCA autonomous iteration"
-        whatIsIt="Each run fetches a target URL, generates improved markup (producer), then critiques it (critic) using a configurable LLM persona. The loop continues until the target score is reached or max iterations."
-        useCases={[
-          "Improve a dashboard page's visual hierarchy automatically",
-          'Run a WCAG accessibility critique cycle',
-          'Use a conversion-rate-optimizer persona to suggest CTA copy changes',
-        ]}
-        howToUse="Queue a run with a target URL, goal, and persona. Click Trigger on queued runs (or wait for cron). Open a run to inspect the score timeline and copy critiques to a PR."
+      <IterateStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating}
       />
+
+      <SegmentedControl<IterateTabId>
+        size="sm"
+        ariaLabel="Iterate sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="PDCA SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Total runs" value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} hint="All PDCA runs" />
+          <StatCard
+            label="Active"
+            value={stats.running + stats.queued}
+            accent={stats.running + stats.queued > 0 ? 'text-warn' : undefined}
+            hint={`${stats.running} running · ${stats.queued} queued`}
+          />
+          <StatCard label="Succeeded" value={stats.succeeded} accent={stats.succeeded > 0 ? 'text-ok' : undefined} hint="Met exit criteria" />
+          <StatCard label="Failed" value={stats.failed} accent={stats.failed > 0 ? 'text-danger' : undefined} hint="Need inspection" />
+          <StatCard
+            label="Avg score"
+            value={stats.avgFinalScorePct != null ? `${stats.avgFinalScorePct}%` : '—'}
+            accent={stats.avgFinalScorePct != null && stats.avgFinalScorePct >= 70 ? 'text-ok' : stats.avgFinalScorePct != null ? 'text-warn' : undefined}
+            hint={`${stats.runsMeetingTarget} met target`}
+          />
+          <StatCard
+            label="Iterations"
+            value={stats.totalIterations}
+            accent={stats.totalIterations > 0 ? 'text-info' : undefined}
+            hint="Producer → critic steps"
+          />
+        </div>
+      </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'last_failed'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'active_runs'
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       {!activeProjectId ? (
         <SetupNudge
@@ -215,70 +363,145 @@ export function IteratePage() {
           emptyDescription="PDCA runs are scoped to the active project in the header."
         />
       ) : (
-        <PdcaStatusBanner runs={runList} projectName={projectName} />
-      )}
-
-      <Section title="PDCA workspace" freshness={{ at: lastFetchedAt, isValidating }}>
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Total runs" value={stats.total} hint="All runs for this project" />
-          <StatCard
-            label="Active"
-            value={stats.running + stats.queued}
-            hint={`${stats.running} running · ${stats.queued} queued`}
-          />
-          <StatCard label="Succeeded" value={stats.succeeded} hint="Runs that met exit criteria" />
-          <StatCard
-            label="Avg score"
-            value={stats.avgFinalScore != null ? `${Math.round(stats.avgFinalScore * 100)}%` : '—'}
-            hint="Mean final score across completed runs"
-          />
-        </div>
-
-        <SegmentedControl
-          value={activeTab}
-          onChange={setTab}
-          options={tabOptions}
-          ariaLabel="Iterate sections"
-          className="mb-4"
-        />
-
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
-
-        {!activeProjectId ? (
-          <SetupNudge
-            requires={['project']}
-            emptyTitle="Select a project"
-            emptyDescription="Pick a project in the header to view runs or queue a new PDCA loop."
-          />
-        ) : activeTab === 'runs' ? (
-          <>
-            {runsLoading && (
-              <TableSkeleton rows={5} showFilters={false} label="Loading PDCA runs" />
-            )}
-            {runsError && (
-              <ErrorAlert message={`Failed to load runs: ${runsError}`} onRetry={reloadRuns} />
-            )}
-            {!runsLoading && !runsError && (
-              <PdcaRunTable
-                runs={runList}
-                projectName={projectName}
-                onOpen={(r) => void openDetail(r)}
-                onAbort={(id) => void abortRun(id)}
-                onTrigger={(id) => void triggerRun(id)}
+        <>
+          {activeTab === 'overview' && (
+            <div className="space-y-4">
+              <PageHelp
+                title={copy?.help?.title ?? 'About PDCA iteration'}
+                whatIsIt={
+                  copy?.help?.whatIsIt ??
+                  'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona until target score or max iterations.'
+                }
+                useCases={
+                  copy?.help?.useCases ?? [
+                    "Improve a dashboard page's visual hierarchy automatically",
+                    'Run a WCAG accessibility critique cycle on a live URL',
+                    'Use a conversion persona to suggest CTA and copy improvements',
+                  ]
+                }
+                howToUse={
+                  copy?.help?.howToUse ??
+                  'Queue a run on New Run. Click Trigger on queued rows (Runs tab). Open a run for score timeline and critique export.'
+                }
               />
-            )}
-          </>
-        ) : (
-          <NewRunForm
-            projectId={activeProjectId}
-            projectName={projectName}
-            onCreated={() => {
-              setTab('runs')
-              reloadAll()
-            }}
-          />
-        )}
-      </Section>
+
+              {stats.topPriority === 'healthy' && (
+                <RecommendedAction
+                  tone="success"
+                  title="PDCA pipeline idle"
+                  description={stats.topPriorityLabel ?? `${stats.succeeded} succeeded runs on ${stats.projectName ?? 'project'}.`}
+                  cta={{ label: 'View runs', to: '/iterate?tab=runs' }}
+                />
+              )}
+              {stats.topPriority === 'no_runs' && (
+                <RecommendedAction
+                  tone="info"
+                  title="Queue your first PDCA run"
+                  description={stats.topPriorityLabel ?? 'Pick a target URL and critic persona to start the producer/critic loop.'}
+                  cta={{ label: 'New Run', to: '/iterate?tab=new' }}
+                />
+              )}
+              {stats.topPriority === 'queued_waiting' && (
+                <RecommendedAction
+                  tone="info"
+                  title="Queued runs need Trigger"
+                  description={stats.topPriorityLabel ?? `${stats.queued} run(s) waiting — pdca-runner does not auto-start unless cron picks them up.`}
+                  cta={{ label: 'Open Runs', to: '/iterate?tab=runs' }}
+                />
+              )}
+              {stats.topPriority === 'active_runs' && (
+                <RecommendedAction
+                  tone="info"
+                  title="Runs in progress"
+                  description={stats.topPriorityLabel ?? 'This page auto-refreshes every 4s while runs are active.'}
+                  cta={{ label: 'View progress', to: '/iterate?tab=runs' }}
+                />
+              )}
+              {stats.topPriority === 'last_failed' && (
+                <RecommendedAction
+                  tone="urgent"
+                  title="Inspect the failed run"
+                  description={stats.topPriorityLabel ?? 'Open the run drawer for iteration-level critique, then queue a new run.'}
+                  cta={{ label: 'View runs', to: '/iterate?tab=runs' }}
+                />
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Card className="p-3 border-edge">
+                  <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Queued</p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-fg-primary">{stats.queued}</p>
+                  <p className="text-2xs text-fg-muted">Needs manual Trigger on Runs tab</p>
+                </Card>
+                <Card className="p-3 border-edge">
+                  <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Running</p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-warn">{stats.running}</p>
+                  <p className="text-2xs text-fg-muted">Producer → critic loop active</p>
+                </Card>
+                <Card className="p-3 border-edge">
+                  <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Aborted</p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums text-fg-muted">{stats.aborted}</p>
+                  <p className="text-2xs text-fg-muted">Stopped before completion</p>
+                </Card>
+              </div>
+
+              {stats.lastRunAt && (
+                <p className="text-2xs text-fg-muted">
+                  Last run queued <RelativeTime value={stats.lastRunAt} />
+                  {stats.daysSinceLastRun != null && stats.daysSinceLastRun > 0
+                    ? ` (${stats.daysSinceLastRun}d ago)`
+                    : null}
+                </p>
+              )}
+              {stats.lastFailedUrl && (
+                <p className="text-2xs text-danger truncate" title={stats.lastFailedUrl}>
+                  Latest failure: {stats.lastFailedUrl}
+                  {stats.lastFailedAt ? (
+                    <>
+                      {' '}
+                      · <RelativeTime value={stats.lastFailedAt} />
+                    </>
+                  ) : null}
+                </p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'runs' && (
+            <>
+              {runsLoading && (
+                <TableSkeleton rows={5} showFilters={false} label="Loading PDCA runs" />
+              )}
+              {runsError && (
+                <ErrorAlert message={`Failed to load runs: ${runsError}`} onRetry={reloadRuns} />
+              )}
+              {!runsLoading && !runsError && (
+                <Section title="Run history" freshness={{ at: runsFetchedAt, isValidating: runsValidating }}>
+                  <PdcaRunTable
+                    runs={runList}
+                    projectName={stats.projectName ?? projectName}
+                    onOpen={(r) => void openDetail(r)}
+                    onAbort={(id) => void abortRun(id)}
+                    onTrigger={(id) => void triggerRun(id)}
+                  />
+                </Section>
+              )}
+            </>
+          )}
+
+          {activeTab === 'new' && (
+            <Section title="Queue new run">
+              <NewRunForm
+                projectId={activeProjectId}
+                projectName={stats.projectName ?? projectName}
+                onCreated={() => {
+                  setActiveTab('runs')
+                  reloadAll()
+                }}
+              />
+            </Section>
+          )}
+        </>
+      )}
 
       {drawerOpen && selectedRun && (
         <PdcaRunDrawer

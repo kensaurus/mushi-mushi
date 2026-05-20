@@ -111,6 +111,13 @@ export function createElementSelector(): ElementSelector {
     e.stopPropagation();
     const target = e.target as Element;
     if (target === overlay) return;
+    // Guard: ignore clicks that originated inside the Mushi widget host so
+    // the user can't accidentally capture the widget panel itself.
+    const path = e.composedPath ? e.composedPath() : [];
+    const hitsMushiHost = path.some(
+      (node) => node instanceof Element && (node as Element).id === 'mushi-mushi-widget',
+    );
+    if (hitsMushiHost) return;
     const captured = captureElement(target);
     finish(captured);
   }

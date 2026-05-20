@@ -193,8 +193,8 @@ export const COPY: CopyRegistry = {
       },
     },
     '/projects': {
-      title: 'Your projects',
-      description: 'Create and manage projects — one per app or environment. Each project gets its own bug inbox, API keys, SDK heartbeat, and console scope.',
+      title: 'Projects',
+      description: 'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.',
       help: {
         title: 'About projects',
         whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.',
@@ -252,7 +252,7 @@ export const COPY: CopyRegistry = {
     },
     '/research': {
       title: 'Web research',
-      description: 'Firecrawl web search during triage — find docs and threads, then attach snippets to reports as evidence.',
+      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
       help: {
         title: 'About web research',
         whatIsIt: 'BYOK Firecrawl-powered search you run while triaging a report. Look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.',
@@ -261,7 +261,7 @@ export const COPY: CopyRegistry = {
           'Find a Stack Overflow thread to attach as triage evidence',
           'Check if a third-party library shipped a fix in the last 24 hours',
         ],
-        howToUse: 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence. Sessions persist per project — reopen them from History. Configure Firecrawl under Settings.',
+        howToUse: 'Configure Firecrawl in Settings, then search on the Search tab. Paste a report UUID on any snippet and click Attach evidence. Sessions persist per project — reopen them from History.',
       },
     },
     '/repo': {
@@ -321,17 +321,17 @@ export const COPY: CopyRegistry = {
       },
     },
     '/intelligence': {
-      title: 'Weekly digest',
-      description: 'An AI-written summary of what happened this week — patterns, improvements, and things that need your attention.',
+      title: 'Bug Intelligence',
+      description: 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.',
       help: {
-        title: 'About the intelligence report',
-        whatIsIt: 'A weekly AI-written narrative that turns your raw bug numbers into an easy-to-read story — like a Monday morning briefing.',
+        title: 'About Bug Intelligence',
+        whatIsIt: 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations. Each report is persisted, versioned, and exportable as HTML/PDF.',
         useCases: [
-          'Share a one-paragraph status with your team without writing it yourself',
-          'Spot a trend that\'s not obvious from the dashboard numbers',
-          'Get a "state of the app" summary before a planning meeting',
+          'Share a one-page status with stakeholders every Monday',
+          'Spot regressions early — week-over-week category and severity drift',
+          'Compare fix velocity against anonymised industry benchmarks (opt-in)',
         ],
-        howToUse: 'Reports generate automatically each week. Click "Generate now" to get a fresh one. Copy the text to paste into Slack or a status doc.',
+        howToUse: 'Reports generate automatically every Monday by cron. Click Generate to run for the current project — Pipeline shows live job status and errors for debugging.',
       },
     },
     '/compliance': {
@@ -363,8 +363,8 @@ export const COPY: CopyRegistry = {
       },
     },
     '/marketplace': {
-      title: 'Plugin marketplace',
-      description: 'Install HMAC-signed webhook plugins that react when reports classify, fixes land, or SLAs breach.',
+      title: 'Marketplace',
+      description: 'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.',
       help: {
         title: 'About the marketplace',
         whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
@@ -378,7 +378,7 @@ export const COPY: CopyRegistry = {
     },
     '/mcp': {
       title: 'MCP — agent connection',
-      description: 'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue with scoped API keys.',
+      description: 'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools and resources.',
       help: {
         title: 'About MCP (AI agent connection)',
         whatIsIt: 'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
@@ -420,7 +420,7 @@ export const COPY: CopyRegistry = {
     },
     '/rewards': {
       title: 'Rewards program',
-      description: 'Points, tiers, and payouts for SDK activity — debug rejections, simulate rules, and wire host webhooks.',
+      description: 'Banner + REWARDS SNAPSHOT — Overview for 24h feed, Rules/Tiers to configure, Settings for webhooks and disputes.',
       help: {
         title: 'About rewards',
         whatIsIt: 'Org-scoped loyalty loop: SDK activity → points → tiers → perks (Pro access, payouts, host webhooks).',
@@ -434,7 +434,7 @@ export const COPY: CopyRegistry = {
     },
     '/lessons': {
       title: 'Learned rules',
-      description: 'Patterns Mushi noticed across many bug reports — turned into rules so the same class of bug never slips through again.',
+      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
       help: {
         title: 'About lessons',
         whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi names it and uses it to catch the next one early.',
@@ -448,7 +448,7 @@ export const COPY: CopyRegistry = {
     },
     '/releases': {
       title: 'Releases',
-      description: 'Draft changelogs with AI, credit reporters, and close the feedback loop when you publish.',
+      description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
       help: {
         title: 'About Releases',
         whatIsIt: 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.',
@@ -462,7 +462,7 @@ export const COPY: CopyRegistry = {
     },
     '/iterate': {
       title: 'PDCA iteration',
-      description: 'Autonomous producer/critic loops on a target URL — queue runs, watch scores climb, export critiques.',
+      description: 'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger loops, New Run to queue.',
       help: {
         title: 'About PDCA iteration',
         whatIsIt: 'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona. The loop repeats until the target score or max iterations.',
@@ -471,49 +471,49 @@ export const COPY: CopyRegistry = {
           'Run a WCAG accessibility critique cycle on a live URL',
           'Use a conversion persona to suggest CTA and copy improvements',
         ],
-        howToUse: 'Queue a run with target URL + persona. Click Trigger on queued runs. Open a run to inspect the score timeline and copy critiques to a PR.',
+        howToUse: 'Overview shows pipeline posture. Queue on New Run, Trigger queued rows on Runs, open a run for score timeline and critique export.',
       },
     },
     '/drift': {
-      title: 'Code health drift',
-      description: 'Track how your codebase\'s quality is changing over time. Catch gradual degradation before it becomes a crisis.',
+      title: 'Contract drift',
+      description: 'Banner + DRIFT SNAPSHOT — compare OpenAPI, inventory, and DB schema to catch gaps before users do.',
       help: {
-        title: 'About code drift',
-        whatIsIt: 'A trend chart showing whether your app\'s bug rate is slowly getting better or worse — catching a drift early costs much less than fixing a crisis.',
+        title: 'About contract drift',
+        whatIsIt: 'The drift-walker builds a contract snapshot then walks every route — finding API endpoints, inventory nodes, or DB columns that diverged from each other.',
         useCases: [
-          'Spot a gradual increase in bug volume before it becomes urgent',
-          'Measure the impact of a refactor on overall quality',
-          'Share a "quality is improving" chart with leadership',
+          'Find API endpoints present in inventory but missing in OpenAPI spec',
+          'Detect DB columns expected by the FE but removed from the schema',
+          'Promote high-severity findings to candidate lessons',
         ],
-        howToUse: 'Look at the trend line. Flat or declining = healthy. Climbing = investigate. Click any spike to see which component drifted.',
+        howToUse: 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.',
       },
     },
     '/experiments': {
       title: 'A/B experiments',
-      description: 'Test whether a change actually reduced bugs — compare two groups of users to see which version performed better.',
+      description: 'Banner + EXPERIMENTS SNAPSHOT — create variants, launch tests, analyze with mSPRT significance.',
       help: {
         title: 'About experiments',
-        whatIsIt: 'A/B testing for bug rates — compare two versions of your app to see which one your users hit fewer problems with.',
+        whatIsIt: 'A/B testing with SDK assignment — compare UI variants with CUPED variance reduction, mSPRT always-valid p-values, and SRM checks.',
         useCases: [
-          'Verify that a UI redesign actually reduced confusion-related reports',
-          'Test two error-handling approaches and measure which produces fewer reports',
-          'Run a canary deployment and watch bug rates on the new version in real time',
+          'Test button copy, colour, or layout variants',
+          'Measure impact of a new feature on conversion rate',
+          'Use bandit mode for fast exploration with small samples',
         ],
-        howToUse: 'Create an experiment, pick the two variants, set a duration. Mushi automatically splits incoming reports and shows you the difference.',
+        howToUse: 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.',
       },
     },
     '/anomalies': {
-      title: 'Unusual patterns',
-      description: 'Alerts when bug volume, severity, or types change in a way that looks unusual — catch surprises before they escalate.',
+      title: 'Metric anomalies',
+      description: 'Banner + ANOMALIES SNAPSHOT — ingest metrics, run detection, triage Page-Hinkley and release regressions.',
       help: {
         title: 'About anomaly detection',
-        whatIsIt: 'An automatic alarm system that spots unusual spikes or drops in your bug data and alerts you before users start complaining.',
+        whatIsIt: 'Ingest any numeric metric (error rate, latency, conversion) and run Page-Hinkley, Z-score, or release-regression detectors. Confirmed regressions can auto-open bug reports.',
         useCases: [
-          'Get notified if a deploy suddenly tripled the error rate',
-          'Catch a silent regression that\'s slowly getting worse',
-          'See a list of all anomalies sorted by how unusual they are',
+          'Detect crash-rate spikes after a release',
+          'Flag latency regressions against rolling baseline',
+          'Auto-open a bug report when a regression is confirmed',
         ],
-        howToUse: 'Active anomalies appear at the top. Click any to see the full detail and which reports triggered the alert. Dismiss when investigated.',
+        howToUse: 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron. Confirm or dismiss each finding.',
       },
     },
     '/cost': {
@@ -531,8 +531,8 @@ export const COPY: CopyRegistry = {
       },
     },
     '/notifications': {
-      title: 'Reporter notifications',
-      description: 'Outbound messages the SDK widget polls — classify, fix, and reward updates for bug reporters.',
+      title: 'Notifications',
+      description: 'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.',
       help: {
         title: 'About reporter notifications',
         whatIsIt: 'Messages queued for end users who submitted bugs. The SDK polls this inbox so reporters see when their report was classified, fixed, or rewarded.',
@@ -806,7 +806,7 @@ export const COPY: CopyRegistry = {
     },
     '/research': {
       title: 'Research',
-      description: 'Firecrawl web search + snippet attach during triage (BYOK).',
+      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
     },
     '/repo': {
       title: 'Repo',
@@ -826,7 +826,7 @@ export const COPY: CopyRegistry = {
     },
     '/intelligence': {
       title: 'Intelligence',
-      description: 'Weekly LLM digest — KPI trends, hotspots, modernization findings, and exportable narratives.',
+      description: 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.',
     },
     '/compliance': {
       title: 'Compliance',
@@ -842,11 +842,11 @@ export const COPY: CopyRegistry = {
     },
     '/mcp': {
       title: 'MCP',
-      description: 'Model Context Protocol endpoints for external agent consumers.',
+      description: 'Banner + MCP SNAPSHOT — Overview for key posture, Setup for IDE snippet, Catalog for tools.',
     },
     '/qa-coverage': {
       title: 'QA coverage',
-      description: 'Scheduled Playwright / Firecrawl / Browserbase story runs + 24h pass rate.',
+      description: 'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.',
     },
     '/anti-gaming': {
       title: 'Anti-gaming',
@@ -854,15 +854,15 @@ export const COPY: CopyRegistry = {
     },
     '/rewards': {
       title: 'Rewards',
-      description: 'Contributor incentives tied to merged fix throughput.',
+      description: 'Banner + REWARDS SNAPSHOT — Overview for 24h SDK feed, Rules/Tiers to configure, Settings for webhooks.',
     },
     '/lessons': {
       title: 'Lessons',
-      description: 'Post-incident learnings linked to report fingerprints.',
+      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.',
     },
     '/releases': {
       title: 'Releases',
-      description: 'Draft changelogs with AI, credit reporters, and publish in-app attribution toasts.',
+      description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
     },
     '/iterate': {
       title: 'Iterate',
@@ -870,15 +870,15 @@ export const COPY: CopyRegistry = {
     },
     '/drift': {
       title: 'Drift',
-      description: 'Classifier output drift vs judge baseline — alert on regression.',
+      description: 'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.',
     },
     '/experiments': {
       title: 'Experiments',
-      description: 'Feature-flagged pipeline variants with cohort metrics.',
+      description: 'Banner + EXPERIMENTS SNAPSHOT — Overview for posture, Experiments to launch/monitor, New to create variants.',
     },
     '/anomalies': {
       title: 'Anomalies',
-      description: 'Statistical spikes in intake, latency, or failure rate.',
+      description: 'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.',
     },
     '/cost': {
       title: 'LLM Cost',

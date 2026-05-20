@@ -9,12 +9,15 @@
  *     Query Sim    — paste a diff, see what rules would be injected (lessons.query)
  */
 
-import { useState, useCallback, useLayoutEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useCallback, useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { usePublishPageContext } from '../lib/pageContext'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
 import {
   PageHeader,
   PageHelp,
@@ -24,7 +27,18 @@ import {
   ErrorAlert,
   RelativeTime,
   SegmentedControl,
+  Section,
+  StatCard,
+  FreshnessPill,
+  RecommendedAction,
+  Card,
 } from '../components/ui'
+import { LessonsStatusBanner } from '../components/lessons/LessonsStatusBanner'
+import {
+  EMPTY_LESSONS_STATS,
+  type LessonsStats,
+  type LessonsTabId,
+} from '../components/lessons/LessonsStatsTypes'
 import { IconIntelligence, IconShield, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -79,13 +93,14 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
 // ─── Severity pill ─────────────────────────────────────────────
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const variants = {
-    critical: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-    warn: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-    info: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  } as Record<string, string>
+  const className =
+    severity === 'critical'
+      ? 'bg-danger/10 text-danger border border-danger/20'
+      : severity === 'warn'
+        ? 'bg-warn/10 text-warn border border-warn/20'
+        : 'bg-info/10 text-info border border-info/20'
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${variants[severity] ?? variants.info}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${className}`}>
       {severity}
     </span>
   )
@@ -93,15 +108,16 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 // ─── Tab bar (URL-driven) ─────────────────────────────────────
 
-const TABS: Array<{ id: string; label: string; description: string }> = [
+const TABS: Array<{ id: LessonsTabId; label: string; description: string }> = [
+  { id: 'overview', label: 'Overview', description: 'Posture banner and how mistake memory feeds PR review.' },
   { id: 'lessons',  label: 'Lessons',   description: 'Promoted learning rules — encoded mistake memory for your codebase.' },
   { id: 'clusters', label: 'Clusters',  description: 'Vector-clustered groups of similar bug reports awaiting promotion.' },
   { id: 'query',    label: 'Query Sim', description: 'Paste a diff and preview which rules would be injected by lessons.query.' },
 ]
-type TabId = 'lessons' | 'clusters' | 'query'
 
-function isTabId(v: string | null): v is TabId {
-  return TABS.some((t) => t.id === v)
+function resolveLessonsTab(value: string | null): LessonsTabId {
+  if (value === 'lessons' || value === 'clusters' || value === 'query') return value
+  return 'overview'
 }
 
 // ─── Lessons tab ─────────────────────────────────────────────
@@ -504,112 +520,225 @@ function QuerySimTab() {
 // ─── Page ─────────────────────────────────────────────────────
 
 export function LessonsPage() {
+  const copy = usePageCopy('/lessons')
+  const projectId = useActiveProjectId()
+  const setup = useSetupStatus(projectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const [searchParams, setSearchParams] = useSearchParams()
-  const param = searchParams.get('tab')
-  const activeTab: TabId = isTabId(param) ? param : 'lessons'
-  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveLessonsTab(tabParam)
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
-  const setTab = useCallback((tab: TabId) => {
-    const next = new URLSearchParams(searchParams)
-    if (tab === 'lessons') next.delete('tab')
-    else next.set('tab', tab)
-    setSearchParams(next, { replace: true, preventScrollReset: true })
-  }, [searchParams, setSearchParams])
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<LessonsStats>('/v1/admin/lessons/stats')
+  const stats = { ...EMPTY_LESSONS_STATS, ...statsData }
+
+  const setActiveTab = useCallback(
+    (tab: LessonsTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
+  const tabOptions = useMemo(
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'clusters' && stats.readyToPromote > 0
+            ? stats.readyToPromote
+            : t.id === 'lessons' && stats.criticalLessons > 0
+              ? stats.criticalLessons
+              : undefined,
+      })),
+    [stats.readyToPromote, stats.criticalLessons],
+  )
 
   usePublishPageContext({
     route: '/lessons',
-    title: `${activeMeta.label} · Lessons`,
-    summary: activeMeta.description,
-    filters: { tab: activeTab },
+    title: projectName ? `Lessons · ${projectName}` : 'Lessons',
+    summary: statsLoading
+      ? 'Loading lesson memory…'
+      : stats.activeLessons === 0 && stats.candidateClusters === 0
+        ? 'No clusters or lessons yet'
+        : `${stats.activeLessons} active · ${stats.candidateClusters} candidate clusters`,
+    criticalCount: stats.criticalLessons,
+    questions: stats.activeLessons > 0
+      ? [
+          'Which lessons would fire on my latest PR diff?',
+          'What mistake patterns are we missing from the library?',
+        ]
+      : ['How do mistake clusters become promoted lessons?'],
   })
 
-  // Animated tab indicator
-  const tablistRef = useRef<HTMLDivElement | null>(null)
-  const tabRefs = useRef<Map<string, HTMLButtonElement>>(new Map())
-  const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading lessons">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
-  useLayoutEffect(() => {
-    const measure = () => {
-      const tab = tabRefs.current.get(activeTab)
-      if (!tab) return
-      setIndicator({ left: tab.offsetLeft, width: tab.offsetWidth })
-    }
-    measure()
-    const list = tablistRef.current
-    if (!list || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(measure)
-    ro.observe(list)
-    return () => ro.disconnect()
-  }, [activeTab])
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load lessons stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'critical_lessons'
+        ? 'danger'
+        : stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons'
+          ? 'warn'
+          : stats.topPriority === 'no_data'
+            ? 'brand'
+            : stats.topPriority === 'healthy'
+              ? 'ok'
+              : 'info'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-lessons">
       <PageHeader
-        title="Lessons"
-        description="Mistake clusters and encoded learning rules — the closed-loop memory layer."
-      />
-
-      <PageHelp
-        title="About Lessons"
-        whatIsIt="Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules."
-        useCases={[
-          'Inject relevant lessons into PR review context via the lessons.query MCP tool',
-          'Test what rules a diff would trigger using the Query Sim tab',
-          'Export active lessons to .mushi/lessons.json for offline CI use',
-        ]}
-        howToUse="Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3."
-      />
-
-      {/* Animated tab nav */}
-      <div
-        ref={tablistRef}
-        role="tablist"
-        aria-label="Lessons sections"
-        className="relative flex flex-wrap gap-1 border-b border-edge-subtle"
+        title={copy?.title ?? 'Lessons'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.'
+        }
       >
-        {TABS.map((t) => {
-          const selected = t.id === activeTab
-          return (
-            <button
-              key={t.id}
-              ref={(el) => {
-                if (el) tabRefs.current.set(t.id, el)
-                else tabRefs.current.delete(t.id)
-              }}
-              role="tab"
-              aria-selected={selected}
-              aria-controls={`lessons-panel-${t.id}`}
-              id={`lessons-tab-${t.id}`}
-              onClick={() => setTab(t.id as TabId)}
-              className={
-                'px-3 py-1.5 text-xs font-medium rounded-t-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
-                (selected ? 'text-fg' : 'text-fg-muted hover:text-fg')
-              }
-            >
-              {t.label}
-            </button>
-          )
-        })}
-        {indicator.width > 0 && (
-          <span
-            aria-hidden="true"
-            className="absolute -bottom-px h-0.5 bg-brand rounded-full motion-safe:transition-[transform,width] motion-safe:duration-200 motion-safe:ease-out"
-            style={{ width: `${indicator.width}px`, transform: `translateX(${indicator.left}px)`, left: 0 }}
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.topPriority === 'critical_lessons'
+              ? `${stats.criticalLessons} CRIT`
+              : stats.readyToPromote > 0
+                ? `${stats.readyToPromote} READY`
+                : stats.activeLessons === 0 && stats.candidateClusters === 0
+                  ? 'EMPTY'
+                  : `${stats.activeLessons} ACTIVE`}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadStats} loading={statsValidating}>
+          Refresh
+        </Btn>
+      </PageHeader>
+
+      <LessonsStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadStats}
+        refreshing={statsValidating}
+      />
+
+      <SegmentedControl<LessonsTabId>
+        size="sm"
+        ariaLabel="Lessons sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="LESSONS SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Active lessons" value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} hint={`${stats.retiredLessons} retired`} />
+          <StatCard label="Critical" value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} hint="PR review rules" />
+          <StatCard label="Candidates" value={stats.candidateClusters} accent={stats.candidateClusters > 0 ? 'text-warn' : undefined} hint={`${stats.readyToPromote} ready`} />
+          <StatCard label="Promoted clusters" value={stats.promotedClusters} accent={stats.promotedClusters > 0 ? 'text-brand' : undefined} hint="Already in library" />
+          <StatCard label="Reports clustered" value={stats.totalClusterReports} accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined} hint="Across all clusters" />
+          <StatCard label="High coherence" value={stats.highCoherenceCandidates} accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined} hint="≥75% · ≥3 reports" />
+        </div>
+      </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'critical_lessons'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'no_data'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'About Lessons'}
+            whatIsIt={copy?.help?.whatIsIt ?? 'Lessons are the institutional memory of your project — named classes of bugs that have recurred ≥ 3 times, been judged coherent by the LLM judge, and promoted to permanent rules.'}
+            useCases={copy?.help?.useCases ?? [
+              'Inject relevant lessons into PR review context via the lessons.query MCP tool',
+              'Test what rules a diff would trigger using the Query Sim tab',
+              'Export active lessons to .mushi/lessons.json for offline CI use',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Browse promoted lessons, retire obsolete ones, or run mushi sync-lessons to sync to your repo. Clusters auto-promote when coherence ≥ 0.75 and size ≥ 3.'}
           />
-        )}
-      </div>
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Lesson library is active"
+              description={`${stats.activeLessons} promoted rules feeding PR context · ${stats.candidateClusters} clusters still forming.`}
+            />
+          )}
+          {stats.topPriority === 'no_data' && (
+            <RecommendedAction
+              tone="info"
+              title="Seed mistake memory with reports"
+              description="Clusters form automatically as similar bug reports accumulate. Triage and classify reports first — the clusterer runs every 6 hours."
+              cta={{ label: 'Open Reports', to: '/reports' }}
+            />
+          )}
+          {(stats.topPriority === 'candidates_ready' || stats.topPriority === 'no_lessons') && (
+            <RecommendedAction
+              tone="info"
+              title="Promote a cluster to a lesson"
+              description={stats.topPriorityLabel ?? 'Review candidate clusters and promote when coherence ≥ 75%.'}
+            />
+          )}
+        </>
+      )}
 
-      <p className="text-2xs text-fg-muted">{activeMeta.description}</p>
-
-      <div
-        role="tabpanel"
-        id={`lessons-panel-${activeTab}`}
-        aria-labelledby={`lessons-tab-${activeTab}`}
-      >
-        {activeTab === 'lessons'  && <LessonsTab />}
-        {activeTab === 'clusters' && <ClustersTab />}
-        {activeTab === 'query'    && <QuerySimTab />}
-      </div>
+      {activeTab === 'lessons' && <LessonsTab />}
+      {activeTab === 'clusters' && <ClustersTab />}
+      {activeTab === 'query' && <QuerySimTab />}
     </div>
   )
 }

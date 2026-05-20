@@ -4,6 +4,15 @@
  *          subcomponents. Keeps the page itself focused on data + actions.
  */
 
+export type MarketplaceTabId = 'overview' | 'browse' | 'installed' | 'deliveries'
+
+export type MarketplaceTopPriority =
+  | 'no_project'
+  | 'delivery_failures'
+  | 'plugins_paused'
+  | 'no_plugins_installed'
+  | 'healthy'
+
 export interface MarketplacePlugin {
   slug: string
   name: string
@@ -49,6 +58,9 @@ export interface ReliabilityStats {
 }
 
 export interface MarketplaceStats {
+  hasAnyProject: boolean
+  projectId: string | null
+  projectName: string | null
   catalogTotal: number
   installedTotal: number
   installedActive: number
@@ -56,11 +68,36 @@ export interface MarketplaceStats {
   deliveries7d: number
   deliveriesOk: number
   deliveriesFailed: number
+  deliverySuccessRatePct: number
   lastDeliveryAt: string | null
+  daysSinceLastDelivery: number | null
   failingPlugins: number
+  neverDeliveredPlugins: number
+  topPriority: MarketplaceTopPriority
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
-export type MarketplaceTabId = 'browse' | 'installed' | 'deliveries'
+export const EMPTY_MARKETPLACE_STATS: MarketplaceStats = {
+  hasAnyProject: false,
+  projectId: null,
+  projectName: null,
+  catalogTotal: 0,
+  installedTotal: 0,
+  installedActive: 0,
+  installedPaused: 0,
+  deliveries7d: 0,
+  deliveriesOk: 0,
+  deliveriesFailed: 0,
+  deliverySuccessRatePct: 0,
+  lastDeliveryAt: null,
+  daysSinceLastDelivery: null,
+  failingPlugins: 0,
+  neverDeliveredPlugins: 0,
+  topPriority: 'no_project',
+  topPriorityLabel: null,
+  topPriorityTo: null,
+}
 
 export const STATUS_CHIP: Record<string, string> = {
   ok: 'bg-ok/15 text-ok border border-ok/30',

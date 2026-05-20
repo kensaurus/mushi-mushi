@@ -27,6 +27,9 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
     const db = getServiceClient()
 
     const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
       activeKeyCount: 0,
       mcpReadKeyCount: 0,
       mcpWriteKeyCount: 0,
@@ -34,11 +37,22 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       neverConnectedCount: 0,
       reportOnlyKeyCount: 0,
       lastSeenAt: null as string | null,
+      daysSinceLastSeen: null as number | null,
       lastSeenEndpointHost: null as string | null,
+      expectedEndpointHost: null as string | null,
       endpointMismatch: false,
       toolCount: TOOL_COUNT,
       resourceCount: RESOURCE_COUNT,
       promptCount: PROMPT_COUNT,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'endpoint_mismatch'
+        | 'report_only_keys'
+        | 'no_mcp_key'
+        | 'never_connected'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     }
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -95,7 +109,7 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
       }
     }
 
-    const adminHost = (() => {
+    const expectedEndpointHost = (() => {
       try {
         return new URL(c.req.url).host || null
       } catch {
@@ -104,12 +118,45 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
     })()
     const endpointMismatch =
       !!lastSeenEndpointHost &&
-      !!adminHost &&
-      lastSeenEndpointHost !== adminHost
+      !!expectedEndpointHost &&
+      lastSeenEndpointHost !== expectedEndpointHost
+
+    const daysSinceLastSeen = lastSeenAt
+      ? Math.floor((Date.now() - new Date(lastSeenAt).getTime()) / (24 * 60 * 60 * 1000))
+      : null
+
+    let topPriority = empty.topPriority
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (endpointMismatch) {
+      topPriority = 'endpoint_mismatch'
+      topPriorityLabel = `Last heartbeat hit ${lastSeenEndpointHost} — snippet should use ${expectedEndpointHost}.`
+      topPriorityTo = '/mcp?tab=setup'
+    } else if (mcpReadKeyCount === 0 && reportOnlyKeyCount > 0) {
+      topPriority = 'report_only_keys'
+      topPriorityLabel = `${reportOnlyKeyCount} active key${reportOnlyKeyCount === 1 ? '' : 's'} with report:write only — mint mcp:read or mcp:write on /projects.`
+      topPriorityTo = '/projects'
+    } else if (mcpReadKeyCount === 0) {
+      topPriority = 'no_mcp_key'
+      topPriorityLabel = 'Generate an mcp:read key on /projects, paste the snippet, then ask your agent to list Mushi tools.'
+      topPriorityTo = '/projects'
+    } else if (neverConnectedCount > 0 && connectedKeyCount === 0) {
+      topPriority = 'never_connected'
+      topPriorityLabel = `${neverConnectedCount} MCP key${neverConnectedCount === 1 ? '' : 's'} minted — paste .cursor/mcp.json, restart IDE, run "list mushi tools".`
+      topPriorityTo = '/mcp?tab=setup'
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${mcpReadKeyCount} read · ${mcpWriteKeyCount} write · ${connectedKeyCount} connected · ${TOOL_COUNT} tools advertised.`
+      topPriorityTo = '/mcp?tab=catalog'
+    }
 
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
+        projectId: project.id as string,
+        projectName: (project.name as string | null) ?? null,
         activeKeyCount: liveKeys.length,
         mcpReadKeyCount,
         mcpWriteKeyCount,
@@ -117,11 +164,16 @@ export function registerMcpAdminRoutes(parent: Hono<{ Variables: Variables }>) {
         neverConnectedCount,
         reportOnlyKeyCount,
         lastSeenAt,
+        daysSinceLastSeen,
         lastSeenEndpointHost,
+        expectedEndpointHost,
         endpointMismatch,
         toolCount: TOOL_COUNT,
         resourceCount: RESOURCE_COUNT,
         promptCount: PROMPT_COUNT,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     })
   })
