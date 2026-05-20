@@ -6,6 +6,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "prebuild": "node ../../scripts/sync-docs-screenshots.mjs",
     "dev": "next --turbopack",
     "build": "next build && pagefind --site out --output-subdir _pagefind",
     "start": "next start -p 3001",
