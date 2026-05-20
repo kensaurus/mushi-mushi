@@ -23,6 +23,14 @@ Mushi is the **antifragile closed-loop layer**: every bug report makes the next 
 
 <br><br>
 
+<a href="https://kensaur.us/glot-it" title="Open glot.it — Mushi SDK dogfood demo">
+  <img src="./docs/screenshots/glotit-report-flow.gif" alt="glot.it with the Mushi web SDK — user opens the feedback widget and submits a felt bug" width="100%" />
+</a>
+
+<sub>↑ SDK dogfood on <a href="https://kensaur.us/glot-it">glot.it</a> · the same one-line install in your app</sub>
+
+<br><br>
+
 <a href="https://kensaur.us/mushi-mushi/admin/dashboard" title="Open the live admin dashboard">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/dashboard-dark.png">

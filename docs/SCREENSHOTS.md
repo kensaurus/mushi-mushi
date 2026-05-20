@@ -15,6 +15,12 @@ Click any image to open the same page in the live admin demo.
 
 <sub>↑ animated 4-stop walk through the Plan → Do → Check → Act loop</sub>
 
+<a href="https://kensaur.us/glot-it" title="glot.it dogfood — Mushi SDK in production">
+  <img src="./screenshots/glotit-report-flow.gif" alt="glot.it live app — Mushi web SDK feedback flow (dogfood project)" width="100%" />
+</a>
+
+<sub>↑ SDK on <a href="https://kensaur.us/glot-it">glot.it</a> · reports land in the admin console above</sub>
+
 <a href="https://kensaur.us/mushi-mushi/admin/" title="Open the live admin demo">
   <img src="./screenshots/report-detail-dark.png" alt="A real classified user-felt bug inside Mushi Mushi — 4-stamp PDCA receipt strip, live Branch & PR timeline, Langfuse trace deeplink." width="100%" />
 </a>
