@@ -103,6 +103,16 @@ jobs:
           echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
           echo "::notice::Version ${APP_VERSION} (${SHORT_SHA}) built ${BUILD_DATE}"
 
+      # Admin now consumes `@mushi-mushi/web` (workspace) for the
+      # self-feedback widget (`apps/admin/src/lib/mushi-self.ts`).
+      # Build the dependency graph in topological order so admin's
+      # `tsc --noEmit` finds the published `dist/index.d.ts` types.
+      # Without this, admin sees `error TS2307: Cannot find module
+      # '@mushi-mushi/web'` because pnpm doesn't auto-build workspace
+      # deps on a `--filter <leaf> build` invocation.
+      - name: Build workspace dependencies
+        run: pnpm --filter @mushi-mushi/admin... --filter '!@mushi-mushi/admin' build
+
       - name: Build admin console
         run: pnpm --filter @mushi-mushi/admin build
         env:
