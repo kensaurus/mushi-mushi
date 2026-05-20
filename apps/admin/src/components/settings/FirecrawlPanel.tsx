@@ -8,13 +8,19 @@
 import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
-import { Section, Input, Btn, ErrorAlert, ResultChip } from '../ui'
+import { Section, Btn, ErrorAlert, ResultChip } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
 import { ConfirmDialog } from '../ConfirmDialog'
+import { SettingsChangeHint } from './SettingsChangeHint'
+import { SettingsFormFooter } from './SettingsFormFooter'
+import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
+import { countChangedFields, valuesEqual } from './settingsDiff'
+import { ConfiguredSecretField } from './ConfiguredSecretField'
 
 interface FirecrawlConfig {
   configured: boolean
+  keyHint: string | null
   addedAt: string | null
   lastUsedAt: string | null
   testStatus: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null
@@ -42,12 +48,29 @@ export function FirecrawlPanel() {
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null)
   const [confirmingClear, setConfirmingClear] = useState(false)
 
-  // Lazy-init local drafts from server data the first time it loads.
   if (cfg && domainsDraft === null) setDomainsDraft(cfg.allowedDomains.join('\n'))
   if (cfg && pagesDraft === null) setPagesDraft(cfg.maxPagesPerCall)
 
-  const domains = domainsDraft ?? ''
-  const pages = pagesDraft ?? 5
+  const savedDomains = cfg?.allowedDomains.join('\n') ?? ''
+  const savedPages = cfg?.maxPagesPerCall ?? 5
+  const domains = domainsDraft ?? savedDomains
+  const pages = pagesDraft ?? savedPages
+
+  const domainsDirty = !valuesEqual(domains, savedDomains)
+  const pagesDirty = !valuesEqual(pages, savedPages)
+  const keyDirty = keyDraft.trim().length >= 8
+  const dirty = domainsDirty || pagesDirty || keyDirty
+  const changeCount = countChangedFields([
+    { current: domains, saved: savedDomains },
+    { current: pages, saved: savedPages },
+    ...(keyDirty ? [{ current: keyDraft, saved: '' }] : []),
+  ])
+
+  function resetDraft() {
+    setDomainsDraft(savedDomains)
+    setPagesDraft(savedPages)
+    setKeyDraft('')
+  }
 
   async function save() {
     setPending(true)
@@ -80,6 +103,8 @@ export function FirecrawlPanel() {
     setConfirmingClear(false)
     if (res.ok) {
       setKeyDraft('')
+      setDomainsDraft(null)
+      setPagesDraft(null)
       setFeedback({ ok: true, message: 'Key cleared.' })
       reload()
     } else {
@@ -112,129 +137,148 @@ export function FirecrawlPanel() {
   const statusMeta = cfg?.testStatus ? TEST_STATUS_LABEL[cfg.testStatus] : null
 
   return (
-    <Section title="Firecrawl (BYOK — Web Research)" className="space-y-3">
-      <div className="text-2xs text-fg-muted space-y-1">
-        <p>
-          <strong className="text-fg-secondary">Optional integration.</strong> Brings <span className="font-mono">firecrawl.dev</span> under your own key for three flows:
-        </p>
-        <ul className="ml-4 list-disc space-y-0.5">
-          <li><strong>Research page</strong> — manually search the web from the admin during triage.</li>
-          <li><strong>Auto-augment fix-worker</strong> — when local RAG is sparse or the judge flags a "stubborn" report, the fix agent pulls top-3 web snippets into the Sonnet prompt.</li>
-          <li><strong>Library modernizer</strong> — weekly cron scrapes release-notes for outdated dependencies and files them as enhancement reports.</li>
-        </ul>
-        <p className="text-fg-faint">
-          Get a key at <a href="https://www.firecrawl.dev/" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">firecrawl.dev</a>. Stored in Supabase Vault. Calls are cached 24h, audit-logged, and bounded by the per-call page cap below.
-        </p>
-      </div>
-
-      {cfg && (
-        <div className="border border-edge rounded-md p-3 space-y-2.5 bg-surface-raised/40">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-fg-primary">Firecrawl</span>
-            <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${cfg.configured ? 'bg-ok/10 text-ok' : 'bg-surface-raised text-fg-muted'}`}>
-              {cfg.configured ? 'BYOK' : 'not configured'}
-            </span>
-            {statusMeta && (
-              <span
-                className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${
-                  statusMeta.tone === 'ok' ? 'bg-ok/10 text-ok' :
-                  statusMeta.tone === 'warn' ? 'bg-warn/10 text-warn' :
-                  'bg-danger/10 text-danger'
-                }`}
-              >
-                {statusMeta.label}
-              </span>
-            )}
-          </div>
-
-          {cfg.configured && (
-            <div className="text-2xs text-fg-muted">
-              Added {cfg.addedAt ? new Date(cfg.addedAt).toLocaleString() : 'unknown'}
-              {cfg.lastUsedAt && <> · last used {new Date(cfg.lastUsedAt).toLocaleString()}</>}
-              {cfg.testedAt && <> · tested {new Date(cfg.testedAt).toLocaleString()}</>}
-            </div>
-          )}
-
-          <Input
-            label="Firecrawl API key"
-            helpId="settings.firecrawl.api_key"
-            type="password"
-            value={keyDraft}
-            onChange={(e) => setKeyDraft(e.target.value)}
-            placeholder="fc-…"
-            autoComplete="new-password"
-          />
-
-          {/* On lg+ viewports the allowed-domains textarea and the per-call
-              page cap sit side-by-side so the card uses its width instead
-              of stacking small controls on top of each other. Below lg
-              they fall back to a single column. `items-start` keeps the
-              textarea anchored to the same baseline as the slider label. */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-            <label className="block">
-              <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
-                <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
-                <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
-              </span>
-              <textarea
-                className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
-                value={domains}
-                onChange={(e) => setDomainsDraft(e.target.value)}
-                placeholder={'github.com\nstackoverflow.com\nreact.dev'}
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
-                <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
-                <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
-              </span>
-              <input
-                type="range" min="1" max="20" step="1"
-                className="w-full accent-brand"
-                value={pages}
-                onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
-              />
-            </label>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <Btn size="sm" onClick={save} loading={pending}>
-              {cfg.configured ? 'Update' : 'Save'}
-            </Btn>
-            {cfg.configured && (
-              <>
-                <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
-                  Test connection
-                </Btn>
-                <Btn size="sm" variant="ghost" onClick={() => setConfirmingClear(true)} disabled={pending}>
-                  Clear
-                </Btn>
-              </>
-            )}
-            {testing && !feedback ? (
-              <ResultChip tone="running">Testing…</ResultChip>
-            ) : feedback ? (
-              <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {confirmingClear && (
-        <ConfirmDialog
-          title="Clear the Firecrawl API key?"
-          body="Research, fix-augmentation, and the library modernizer will all stop functioning until a new key is added. Existing cached results stay; pending crawls will fail."
-          confirmLabel="Clear key"
-          cancelLabel="Keep key"
-          tone="danger"
-          loading={pending}
-          onConfirm={() => void confirmClearKey()}
-          onCancel={() => {
-            if (!pending) setConfirmingClear(false)
-          }}
+    <SettingsPanelLayout
+      footer={
+        <SettingsFormFooter
+          dirty={dirty}
+          saving={pending}
+          changeCount={changeCount}
+          onSave={() => void save()}
+          onDiscard={resetDraft}
+          saveLabel="Save changes"
         />
-      )}
-    </Section>
+      }
+    >
+      <Section title="Firecrawl (BYOK — Web Research)" className="lg:col-span-2 space-y-3">
+        <div className="text-2xs text-fg-muted space-y-1">
+          <p>
+            <strong className="text-fg-secondary">Optional integration.</strong> Brings <span className="font-mono">firecrawl.dev</span> under your own key for three flows:
+          </p>
+          <ul className="ml-4 list-disc space-y-0.5">
+            <li><strong>Research page</strong> — manually search the web from the admin during triage.</li>
+            <li><strong>Auto-augment fix-worker</strong> — when local RAG is sparse or the judge flags a &quot;stubborn&quot; report, the fix agent pulls top-3 web snippets into the Sonnet prompt.</li>
+            <li><strong>Library modernizer</strong> — weekly cron scrapes release-notes for outdated dependencies and files them as enhancement reports.</li>
+          </ul>
+          <p className="text-fg-faint">
+            Get a key at <a href="https://www.firecrawl.dev/" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">firecrawl.dev</a>. Stored in Supabase Vault. Calls are cached 24h, audit-logged, and bounded by the per-call page cap below.
+          </p>
+        </div>
+
+        {cfg && (
+          <SettingsCard>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium text-fg-primary">Firecrawl</span>
+              <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${cfg.configured ? 'bg-ok/10 text-ok' : 'bg-surface-raised text-fg-muted'}`}>
+                {cfg.configured ? 'BYOK' : 'not configured'}
+              </span>
+              {statusMeta && (
+                <span
+                  className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${
+                    statusMeta.tone === 'ok' ? 'bg-ok/10 text-ok' :
+                    statusMeta.tone === 'warn' ? 'bg-warn/10 text-warn' :
+                    'bg-danger/10 text-danger'
+                  }`}
+                >
+                  {statusMeta.label}
+                </span>
+              )}
+            </div>
+
+            {cfg.configured && (
+              <div className="text-2xs text-fg-muted">
+                Added {cfg.addedAt ? new Date(cfg.addedAt).toLocaleString() : 'unknown'}
+                {cfg.lastUsedAt && <> · last used {new Date(cfg.lastUsedAt).toLocaleString()}</>}
+                {cfg.testedAt && <> · tested {new Date(cfg.testedAt).toLocaleString()}</>}
+              </div>
+            )}
+
+            <ConfiguredSecretField
+              label="Firecrawl API key"
+              helpId="settings.firecrawl.api_key"
+              configured={cfg.configured}
+              keyHint={cfg.keyHint}
+              fallbackPrefix="fc-"
+              value={keyDraft}
+              onChange={setKeyDraft}
+              placeholder="fc-…"
+            />
+            {keyDirty && cfg.configured && (
+              <SettingsChangeHint
+                current={keyDraft}
+                saved={cfg.keyHint ?? '(configured)'}
+                kind="text"
+                prefix="Replacing"
+              />
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+              <label className="block">
+                <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
+                  <span>Allowed domains <span className="text-fg-faint">(one per line — empty = unrestricted)</span></span>
+                  <ConfigHelp helpId="settings.firecrawl.allowed_domains" />
+                </span>
+                <textarea
+                  className="w-full text-2xs font-mono px-2 py-1.5 rounded-sm bg-surface-raised border border-edge focus:border-accent outline-none min-h-[64px]"
+                  value={domains}
+                  onChange={(e) => setDomainsDraft(e.target.value)}
+                  placeholder={'github.com\nstackoverflow.com\nreact.dev'}
+                />
+                <SettingsChangeHint current={domains} saved={savedDomains} />
+              </label>
+
+              <label className="block">
+                <span className="text-2xs text-fg-muted mb-1 flex items-center gap-1">
+                  <span>Max pages per call: <span className="font-mono text-fg-secondary">{pages}</span></span>
+                  <ConfigHelp helpId="settings.firecrawl.max_pages_per_call" />
+                </span>
+                <input
+                  type="range"
+                  min="1"
+                  max="20"
+                  step="1"
+                  className="w-full accent-brand"
+                  value={pages}
+                  onChange={(e) => setPagesDraft(parseInt(e.target.value, 10))}
+                />
+                <SettingsChangeHint current={pages} saved={savedPages} kind="number" />
+              </label>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {cfg.configured && (
+                <>
+                  <Btn size="sm" variant="ghost" onClick={testKey} loading={testing}>
+                    Test connection
+                  </Btn>
+                  <Btn size="sm" variant="ghost" onClick={() => setConfirmingClear(true)} disabled={pending}>
+                    Clear
+                  </Btn>
+                </>
+              )}
+              {testing && !feedback ? (
+                <ResultChip tone="running">Testing…</ResultChip>
+              ) : feedback ? (
+                <ResultChip tone={feedback.ok ? 'success' : 'error'}>{feedback.message}</ResultChip>
+              ) : null}
+            </div>
+          </SettingsCard>
+        )}
+
+        {confirmingClear && (
+          <ConfirmDialog
+            title="Clear the Firecrawl API key?"
+            body="Research, fix-augmentation, and the library modernizer will all stop functioning until a new key is added. Existing cached results stay; pending crawls will fail."
+            confirmLabel="Clear key"
+            cancelLabel="Keep key"
+            tone="danger"
+            loading={pending}
+            onConfirm={() => void confirmClearKey()}
+            onCancel={() => {
+              if (!pending) setConfirmingClear(false)
+            }}
+          />
+        )}
+      </Section>
+    </SettingsPanelLayout>
   )
 }
