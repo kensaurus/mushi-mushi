@@ -42,7 +42,13 @@ export interface InitOptions {
 
 const ENV_FILES = ['.env.local', '.env'] as const
 
-const PROJECT_ID_PATTERN = /^proj_[A-Za-z0-9_-]{10,}$/
+// Accept both formats:
+//   - UUID v4  (current backend default): xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+//   - proj_xxx (future short-form): proj_ + 10+ alphanumeric chars
+// The backend schema column is `uuid primary key default gen_random_uuid()`, so
+// every project created so far is a UUID. The proj_ prefix may be adopted in a
+// future API revision. Never break existing UUID users.
+const PROJECT_ID_PATTERN = /^(?:proj_[A-Za-z0-9_-]{10,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i
 const API_KEY_PATTERN = /^mushi_[A-Za-z0-9_-]{10,}$/
 
 export async function runInit(options: InitOptions = {}): Promise<void> {
@@ -114,7 +120,8 @@ function ensureInteractiveOrBailOut(options: InitOptions): void {
   process.stderr.write(
     'mushi-mushi: non-interactive terminal detected.\n' +
       'Pass all of --yes (or --framework), --project-id, and --api-key to run unattended.\n' +
-      'Example: npx mushi-mushi --yes --project-id proj_xxx --api-key mushi_xxx\n',
+      'Example: npx mushi-mushi --yes --project-id xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx --api-key mushi_xxx\n' +
+      'Your project ID is the UUID shown in the Projects page of the Mushi admin console.\n',
   )
   process.exit(1)
 }
@@ -158,12 +165,12 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
     existing.projectId ??
     (await promptText({
       message: 'Project ID',
-      placeholder: 'proj_xxxxxxxxxxxx',
-      hint: 'Find this at https://kensaur.us/mushi-mushi/projects',
+      placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+      hint: 'Copy from the Projects page → project card chip at https://kensaur.us/mushi-mushi/projects',
       validate: (v) =>
         PROJECT_ID_PATTERN.test(v)
           ? undefined
-          : 'Expected format: proj_ followed by 10+ alphanumeric characters',
+          : 'Expected a UUID (xxxxxxxx-xxxx-...) — copy it from the Mushi admin console Projects page.',
     }))
 
   const rawApiKey =
@@ -184,7 +191,9 @@ async function collectCredentials(options: InitOptions): Promise<{ apiKey: strin
 
   if (!PROJECT_ID_PATTERN.test(projectId)) {
     throw new Error(
-      `Invalid project ID. Expected format: proj_[A-Za-z0-9_-]{10,}. Got: ${redact(projectId)}`,
+      `Invalid project ID. Got: ${redact(projectId)}\n` +
+      `Expected a UUID (e.g. 542b34e0-019e-41fe-b900-7b637717bb86) — copy it from the ` +
+      `Projects page in the Mushi console at https://kensaur.us/mushi-mushi/projects`,
     )
   }
   if (!API_KEY_PATTERN.test(apiKey)) {

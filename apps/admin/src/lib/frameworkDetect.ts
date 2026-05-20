@@ -28,7 +28,8 @@ export type DetectedMonorepo =
   | null
 
 export interface DetectionResult {
-  /** Best-guess framework tab to select. Never null — defaults to 'react'. */
+  /** Best-guess framework tab to select. Never null — defaults to 'vanilla' for
+   *  unknown / Angular; 'react' is only returned on JSON parse errors. */
   framework: Framework
   /** 0–1 confidence. ≥0.8 = auto-select without asking; <0.5 = ask user. */
   confidence: number
@@ -135,15 +136,29 @@ function detectMonorepo(pkg: PackageJson): DetectedMonorepo {
   return null
 }
 
+/**
+ * Resolve a raw workspace entry to a concrete path hint.
+ * Glob patterns like "apps/*" are stripped to their base ("apps") and a
+ * placeholder suffix is appended so the hint is usable in commands while
+ * still signalling that the user should replace it with their actual path.
+ */
+function resolveWorkspaceEntry(entry: string): string {
+  // Strip glob suffixes: apps/* → apps, packages/**/src → packages
+  const stripped = entry.replace(/\/\*.*$/, '')
+  // If the entry was a glob, append a <name> placeholder so the user knows
+  // they need to substitute a real workspace directory.
+  return entry.includes('*') ? `${stripped}/<your-app>` : stripped
+}
+
 function detectWorkspacePath(pkg: PackageJson, monorepo: DetectedMonorepo): string | null {
   if (!monorepo) return null
   const ws = pkg.workspaces
   if (Array.isArray(ws) && ws.length > 0) {
-    // "apps/*" → "apps/web" is a common guess; we show the pattern.
-    return ws[0]
+    return resolveWorkspaceEntry(ws[0])
   }
   if (ws && typeof ws === 'object' && 'packages' in ws && Array.isArray(ws.packages)) {
-    return ws.packages[0] ?? null
+    const first = ws.packages[0]
+    return first ? resolveWorkspaceEntry(first) : null
   }
   return null
 }
@@ -389,23 +404,34 @@ export function monorepoInstallGuidance(
   const tool = toolLabel[result.monorepo]
   const appPath = result.workspaceHint ?? 'your app workspace'
 
-  // Extract just the package name(s) from installCmd so we can rewrite it
-  // for the workspace manager. installCmd examples:
+  // Extract package name(s) from installCmd, stripping the manager prefix and
+  // any flags (e.g. -g, --save-dev). Known patterns:
   //   "npm install @mushi-mushi/react"
+  //   "npm install -g mushi-mcp"          ← -g stripped; caller should not
+  //                                          use monorepo scoping for globals
   //   "npx expo install @mushi-mushi/react-native expo-sensors"
   //   "npm install @mushi-mushi/capacitor && npx cap sync"
-  const pkgArgs = installCmd
-    .split(/&&/)[0]              // take only the install part before any &&
+  const installPart = installCmd.split(/&&/)[0].trim()
+  const pkgArgs = installPart
     .replace(/^(npx expo install|npm install|pnpm add|yarn add)\s+/, '')
+    .replace(/^-\w+\s+/, '')     // strip leading flags like -g, -D, -E
     .trim()
 
-  const runIn = result.monorepo === 'npm-workspaces'
-    ? `npm install --workspace=${appPath} ${pkgArgs}`
-    : result.monorepo === 'pnpm-workspaces'
-      ? `pnpm add --filter ${appPath} ${pkgArgs}`
-      : result.monorepo === 'yarn-workspaces'
-        ? `yarn workspace ${appPath} add ${pkgArgs}`
-        : installCmd
+  // For non-workspace monorepo tools (Turborepo, Nx, Lerna, Rush), the user
+  // typically just runs the package manager install from the app dir. Workspace
+  // protocol flags (--workspace=, --filter) don't apply.
+  const isWorkspaceManager =
+    result.monorepo === 'npm-workspaces' ||
+    result.monorepo === 'pnpm-workspaces' ||
+    result.monorepo === 'yarn-workspaces'
+
+  const runIn = !isWorkspaceManager
+    ? `cd ${appPath} && ${installPart}`
+    : result.monorepo === 'npm-workspaces'
+      ? `npm install --workspace=${appPath} ${pkgArgs}`
+      : result.monorepo === 'pnpm-workspaces'
+        ? `pnpm add --filter ${appPath} ${pkgArgs}`
+        : `yarn workspace ${appPath} add ${pkgArgs}`  // yarn-workspaces
 
   return (
     `Detected ${tool} monorepo. Run the install inside your app's workspace — not the root:\n\n` +

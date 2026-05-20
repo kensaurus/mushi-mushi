@@ -29,7 +29,7 @@ Usage:
   npx mushi-mushi init          same, with optional flags
 
 Flags (forwarded to \`mushi init\`):
-  --project-id <id>             skip the project ID prompt
+  --project-id <uuid>           skip the project ID prompt (UUID from the Projects page)
   --api-key <key>               skip the API key prompt (CI only — leaks into \`ps\`)
   --framework <id>              force a framework (${FRAMEWORK_IDS.join(', ')})
   --skip-install                print the install command instead of running it

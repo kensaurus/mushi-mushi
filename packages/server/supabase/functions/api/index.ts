@@ -29,6 +29,7 @@ import { registerRewardsRoutes } from './routes/rewards.ts';
 // Closed-loop evolution + experiment routes.
 // middleware/ and _shared/auth.getOrgIdFromContext now exist — safe to import.
 import { registerLessonsRoutes } from './routes/lessons.ts';
+import { registerSyncRoutes } from './routes/sync.ts';
 import { registerReleasesRoutes } from './routes/releases.ts';
 import { registerPdcaRoutes } from './routes/pdca.ts';
 import { registerDriftRoutes } from './routes/drift.ts';
@@ -407,6 +408,7 @@ registerRewardsRoutes(app);
 
 // Closed-loop evolution + experiment routes.
 registerLessonsRoutes(app);
+registerSyncRoutes(app);
 registerReleasesRoutes(app);
 registerPdcaRoutes(app);
 registerDriftRoutes(app);
