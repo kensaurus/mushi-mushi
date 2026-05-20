@@ -8,6 +8,12 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## pending (pending release) *(pending release)*
 
+### Highlights
+
+- **Graph** — — interactive ReactFlow canvas with layer-filter pills
+- **Layer Sankey** — — horizontal lane diagram showing files per architectural tier
+- **Search** — — semantic search via the `match_codebase_files` embedding RPC
+
 ## v1.1.x
 
 Latest tag: `v1.1.0`

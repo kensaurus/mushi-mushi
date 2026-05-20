@@ -19,7 +19,10 @@ import { MushiProvider } from '@mushi-mushi/react';
 
 function App() {
   return (
-    <MushiProvider config={{ projectId: 'proj_xxx', apiKey: 'mushi_xxx' }}>
+    <MushiProvider config={{
+      projectId: process.env.REACT_APP_MUSHI_PROJECT_ID!,  // UUID from Admin → Projects
+      apiKey: process.env.REACT_APP_MUSHI_API_KEY!,        // from Admin → Settings → API Keys
+    }}>
       <YourApp />
     </MushiProvider>
   );

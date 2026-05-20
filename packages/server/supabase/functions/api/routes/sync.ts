@@ -82,35 +82,54 @@ export function registerSyncRoutes(app: Hono) {
     const projectId = c.get('projectId') as string
     const projectName = c.get('projectName') as string
 
-    // Run all four counts in parallel to keep latency low.
-    const [reportRows, fixCountRes, lessonCountRes] = await Promise.all([
+    // Use DB-level HEAD count queries (no row data returned) so the counts are
+    // always accurate even when a project has > max_rows (Supabase default 1000)
+    // reports. Running them all in parallel keeps the latency equivalent to a
+    // single round-trip.
+    const STATUS_BUCKETS = ['new', 'triaged', 'in_progress', 'resolved', 'dismissed'] as const
+    const SEVERITY_BUCKETS = ['critical', 'high', 'medium', 'low'] as const
+
+    const [statusResults, severityResults, fixCountRes, mergedFixRes, lessonCountRes] = await Promise.all([
+      Promise.all(
+        STATUS_BUCKETS.map((s) =>
+          db
+            .from('reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectId)
+            .eq('status', s)
+            .then((r) => ({ key: s, count: r.count ?? 0 })),
+        ),
+      ),
+      Promise.all(
+        SEVERITY_BUCKETS.map((sev) =>
+          db
+            .from('reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('project_id', projectId)
+            .eq('severity', sev)
+            .then((r) => ({ key: sev, count: r.count ?? 0 })),
+        ),
+      ),
       db
-        .from('reports')
-        .select('status, severity')
+        .from('fixes')
+        .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId),
       db
         .from('fixes')
-        .select('id, status', { count: 'exact' })
-        .eq('project_id', projectId),
+        .select('*', { count: 'exact', head: true })
+        .eq('project_id', projectId)
+        .eq('status', 'merged'),
       db
         .from('lessons')
-        .select('id', { count: 'exact', head: true })
+        .select('*', { count: 'exact', head: true })
         .eq('project_id', projectId)
         .is('retired_at', null),
     ])
 
-    // Aggregate by_status and by_severity from the lightweight rows query
-    const byStatus: Record<string, number> = {}
-    const bySeverity: Record<string, number> = {}
-    for (const row of (reportRows.data ?? []) as Array<{ status?: string; severity?: string }>) {
-      const s = row.status ?? 'new'
-      byStatus[s] = (byStatus[s] ?? 0) + 1
-      const sev = row.severity ?? 'unset'
-      bySeverity[sev] = (bySeverity[sev] ?? 0) + 1
-    }
-
-    const fixes = (fixCountRes.data ?? []) as Array<{ status?: string }>
-    const fixesMerged = fixes.filter((f) => f.status === 'merged').length
+    const byStatus = Object.fromEntries(statusResults.map((r) => [r.key, r.count]))
+    const bySeverity = Object.fromEntries(severityResults.map((r) => [r.key, r.count]))
+    // Use DB counts — fixCountRes.count is always exact regardless of row limits
+    const fixesMerged = mergedFixRes.count ?? 0
 
     return c.json({
       ok: true,
@@ -119,7 +138,7 @@ export function registerSyncRoutes(app: Hono) {
         project_name: projectName,
         by_status: byStatus,
         by_severity: bySeverity,
-        fixes_count: fixes.length,
+        fixes_count: fixCountRes.count ?? 0,
         fixes_merged: fixesMerged,
         lessons_count: lessonCountRes.count ?? 0,
       },

@@ -188,4 +188,14 @@ A walk through the rooms inside. Click any panel to land on it in the live demo.
     <p align="center"><b>Report detail</b> · <sub>4-stamp PDCA receipt + live Branch & PR timeline — every step of the dispatch lifecycle in a single round-trip so it never N+1s.</sub></p>
   </td>
 </tr>
+<tr>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/explore"><img src="./screenshots/dashboard-dark.png" alt="Codebase Atlas (/explore) — Graph view with nodes coloured by architectural layer (UI blue, Library green, Backend red, Tests purple), directed import arrows, layer legend bottom-left, floating file detail panel top-right." /></a>
+    <p align="center"><b>Codebase Atlas — Graph</b> · <sub>every indexed source file as a node, coloured by layer (UI / Library / Backend / Tests / Config). Directed import arrows show how modules depend on each other. Click any node for path, language, line count, and a content preview with line numbers.</sub></p>
+  </td>
+  <td width="50%" valign="top">
+    <a href="https://kensaur.us/mushi-mushi/admin/explore"><img src="./screenshots/dashboard-dark.png" alt="Codebase Atlas (/explore) — Layers view with horizontal Sankey columns (UI → Library → Backend → Tests → Config), proportional fill bars per column, bezier import curves with arrows." /></a>
+    <p align="center"><b>Codebase Atlas — Layers + Search</b> · <sub>Layers tab: horizontal Sankey with proportional fill bars and bezier import curves. Search tab: semantic search over vector embeddings — describe what you need in plain English and ranked results appear with colour-coded similarity bars and layer filter chips.</sub></p>
+  </td>
+</tr>
 </table>

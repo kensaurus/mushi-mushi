@@ -2,6 +2,42 @@
   "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
+      "id": "2026-05-20-cli-codebase-atlas",
+      "date": "2026-05-20",
+      "title": "Robust CLI + Codebase Atlas explorer + Bug fixes",
+      "summary": "mushi-mushi CLI v0.7.0 with 8 new commands (whoami, ping, reports resolve/reopen/dismiss/search, lessons list/show), all routed through new /v1/sync/* API-key endpoints — no JWT needed. Codebase Atlas (/explore) visualises your indexed source as a force-directed graph with layer filtering and semantic search. Three bug fixes: correct @mushi-mushi/mcp package name in setup wizard, accurate project stats counts (no 1000-row cap), and banner install-command respects user-selected framework tab.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "CLI v0.7.0 — 8 new commands: `mushi whoami` (verify key + project), `mushi ping` (connectivity check), `mushi reports resolve/reopen/dismiss/search`, `mushi lessons list/show`. Exit codes 0/1/2/3. All commands use /v1/sync/* endpoints — no Supabase JWT required, just your project API key."
+        },
+        {
+          "tone": "feature",
+          "text": "New /v1/sync/* server endpoints (apiKeyAuth) — /whoami, /stats, /reports, /reports/:id (GET+PATCH), /lessons/:id, /codebase/upload. Fixes INSUFFICIENT_SCOPE errors that affected status, reports list, and reports show with SDK API keys."
+        },
+        {
+          "tone": "feature",
+          "text": "Codebase Atlas (/explore) — force-directed ReactFlow graph of indexed source files coloured by architectural layer (UI, Lib, Backend, Test, Config). Layer-filter pills narrow the view. Semantic search via match_codebase_files embedding RPC. Three view modes: Graph, Layer Sankey, Search."
+        },
+        {
+          "tone": "fix",
+          "text": "Setup wizard MCP panel — package name corrected to @mushi-mushi/mcp (was mushi-mcp which doesn't exist on npm). Global install guidance: `npm install -g @mushi-mushi/mcp` or `npx -y @mushi-mushi/mcp@latest`."
+        },
+        {
+          "tone": "fix",
+          "text": "Project stats endpoint (/v1/sync/stats) — status and severity counts now use DB-level HEAD count queries instead of client-side row counting, eliminating silent 1 000-row cap on Supabase max_rows. Fix totals also corrected (was reading fixes.length instead of DB count)."
+        },
+        {
+          "tone": "fix",
+          "text": "Setup wizard SDK banner — install command now matches the user's selected framework tab when auto-detection confidence is < 50%, preventing the banner from showing a React command while the user is on the Vue or Svelte tab."
+        },
+        {
+          "tone": "fix",
+          "text": "frameworkDetect shell-safe placeholders — workspace path hints now use your-app (no angle brackets) so copy-pasted install commands don't fail due to shell redirection. Fallback also changed from 'your app workspace' (spaces) to 'your-app'."
+        }
+      ]
+    },
+    {
       "id": "2026-05-20-closed-loop-evolution",
       "date": "2026-05-20",
       "title": "Closed-loop evolution — Lessons, Releases, Iterate, Drift, Experiments, Anomalies, Rewards",
