@@ -18,6 +18,7 @@ import { PaperEdge } from './edges/PaperEdge'
 import { LogTicker } from './LogTicker'
 import { StageNode } from './nodes/StageNode'
 import { StageDrawer } from './StageDrawer'
+import { StageLivePreview } from './StageLivePreview'
 import {
   reportSample,
   stageEdges,
@@ -52,6 +53,7 @@ function CanvasInner() {
   const selectedStage = selectedStageId
     ? stages.find((stage) => stage.id === selectedStageId) ?? null
     : null
+  const previewStage = selectedStage ?? focusStage
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -128,8 +130,9 @@ function CanvasInner() {
   )
 
   return (
-    <div
-      className="mushi-canvas-light mushi-canvas-frame relative h-[min(620px,calc(100vh-9rem))] min-h-[480px] w-full overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] shadow-[0_30px_100px_-64px_rgba(14,13,11,0.55)]"
+    <div className="mushi-canvas-light mushi-canvas-shell grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_min(400px,38%)] lg:items-stretch">
+      <div
+      className="mushi-canvas-frame relative h-[min(620px,calc(100vh-9rem))] min-h-[480px] w-full overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] shadow-[0_30px_100px_-64px_rgba(14,13,11,0.55)]"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
@@ -232,6 +235,14 @@ function CanvasInner() {
         sample={reportSample}
         onClose={() => setSelectedStageId(null)}
       />
+      </div>
+
+      <aside
+        className="mushi-canvas-preview-rail flex min-h-[420px]"
+        aria-label="Live demo for the selected loop stage"
+      >
+        <StageLivePreview stage={previewStage} layout="panel" remountKey={focusIndex} />
+      </aside>
     </div>
   )
 }

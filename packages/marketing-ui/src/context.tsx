@@ -64,6 +64,8 @@ export interface MarketingUrls {
   repo: (path?: string) => string
   /** mailto: link with optional subject */
   contact: (subject?: string) => string
+  /** Public /screenshots/ asset resolver for landing-page GIF previews. */
+  screenshots: (filename: string) => string
 }
 
 export interface MarketingTheme {
