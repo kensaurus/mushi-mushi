@@ -13,7 +13,6 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
-import { PageHero } from '../components/PageHero'
 import {
   PageHeader,
   PageHelp,
@@ -28,6 +27,9 @@ import {
   LogBlock,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
+  RelativeTime,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
@@ -35,6 +37,7 @@ import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { NotificationsStatusBanner } from '../components/notifications/NotificationsStatusBanner'
 import {
+  EMPTY_NOTIFICATIONS_STATS,
   TYPE_BADGE,
   TYPE_OPTIONS,
   type NotificationStats,
@@ -43,6 +46,11 @@ import {
 } from '../components/notifications/types'
 
 const TABS: Array<{ id: NotificationTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Reporter loop posture — enabled state, unread backlog, volume, and recommended next steps.',
+  },
   {
     id: 'inbox',
     label: 'Inbox',
@@ -55,8 +63,9 @@ const TABS: Array<{ id: NotificationTabId; label: string; description: string }>
   },
 ]
 
-function isTabId(v: string | null): v is NotificationTabId {
-  return TABS.some((t) => t.id === v)
+function resolveNotificationTab(value: string | null): NotificationTabId {
+  if (value === 'inbox' || value === 'setup') return value
+  return 'overview'
 }
 
 export function NotificationsPage() {
@@ -69,7 +78,7 @@ export function NotificationsPage() {
 
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
-  const activeTab: NotificationTabId = isTabId(tabParam) ? tabParam : 'inbox'
+  const activeTab: NotificationTabId = resolveNotificationTab(tabParam)
   const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const filter = (searchParams.get('show') ?? 'all') as 'all' | 'unread'
@@ -97,18 +106,18 @@ export function NotificationsPage() {
   } = usePageData<{ notifications: ReporterNotification[] }>(listPath, {
     deps: [queryString, activeProjectId],
   })
-  const { data: statsData, reload: reloadStats } = usePageData<NotificationStats>(statsPath, {
+  const {
+    data: statsData,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<NotificationStats>(statsPath, {
     deps: [activeProjectId],
   })
 
-  const stats = statsData ?? {
-    total: 0,
-    unread: 0,
-    last24h: 0,
-    lastNotificationAt: null,
-    byType: {},
-    notificationsEnabled: false,
-  }
+  const stats = { ...EMPTY_NOTIFICATIONS_STATS, ...statsData }
+  const fetchedAt = statsFetchedAt ?? lastFetchedAt
+  const validating = isValidating || statsValidating
 
   const reloadAll = useCallback(() => {
     reload()
@@ -123,7 +132,7 @@ export function NotificationsPage() {
   const setTab = useCallback(
     (tab: NotificationTabId) => {
       const next = new URLSearchParams(searchParams)
-      if (tab === 'inbox') next.delete('tab')
+      if (tab === 'overview') next.delete('tab')
       else next.set('tab', tab)
       setSearchParams(next, { replace: true, preventScrollReset: true })
     },
@@ -140,14 +149,6 @@ export function NotificationsPage() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [bulking, setBulking] = useState(false)
 
-  const notifSeverity: 'ok' | 'warn' | 'crit' | 'neutral' = !stats.notificationsEnabled
-    ? 'warn'
-    : stats.unread > 0
-      ? 'warn'
-      : stats.total > 0
-        ? 'ok'
-        : 'neutral'
-
   usePublishPageContext({
     route: '/notifications',
     title: `${activeMeta.label} · Notifications`,
@@ -158,6 +159,7 @@ export function NotificationsPage() {
 
   const tabOptions = useMemo(
     () => [
+      { id: 'overview' as const, label: 'Overview' },
       { id: 'inbox' as const, label: 'Inbox', count: stats.unread > 0 ? stats.unread : undefined },
       { id: 'setup' as const, label: 'Setup' },
     ],
@@ -217,16 +219,55 @@ export function NotificationsPage() {
     return <ErrorAlert message={`Failed to load notifications: ${error}`} onRetry={reloadAll} />
   }
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    stats.topPriority === 'disabled'
+      ? 'warn'
+      : stats.topPriority === 'unread_backlog'
+        ? 'warn'
+        : stats.topPriority === 'healthy'
+          ? 'ok'
+          : stats.topPriority === 'no_messages'
+            ? 'brand'
+            : 'neutral'
+
+  const headerBadge =
+    stats.topPriority === 'healthy'
+      ? 'ACTIVE'
+      : stats.topPriority === 'disabled'
+        ? 'DISABLED'
+        : stats.topPriority === 'unread_backlog'
+          ? `${stats.unread} UNREAD`
+          : stats.total === 0
+            ? 'EMPTY'
+            : 'SETUP'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-notifications">
       <PageHeader
-        title={copy?.title ?? 'Reporter notifications'}
+        title={copy?.title ?? 'Notifications'}
         description={
           copy?.description ??
-          'Outbound messages for bug reporters — the SDK widget polls this queue so users see classify/fix updates.'
+          'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.'
         }
-        projectScope={projectName}
+        projectScope={stats.projectName ?? projectName ?? undefined}
       >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'warn'
+                ? 'bg-warn/10 text-warn'
+                : bannerSeverity === 'brand'
+                  ? 'bg-brand/15 text-brand'
+                  : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {headerBadge}
+        </Badge>
+        <FreshnessPill at={fetchedAt} isValidating={validating} />
+        <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
+          Refresh
+        </Btn>
         {activeTab === 'inbox' && (
           <>
             <SelectField
@@ -259,92 +300,164 @@ export function NotificationsPage() {
         )}
       </PageHeader>
 
-      <NotificationsStatusBanner stats={stats} projectName={projectName} />
-
-      <PageHero
-        scope="notifications"
-        title={copy?.title ?? 'Notifications'}
-        kicker="Reporter loop"
-        decide={{
-          label: stats.notificationsEnabled ? 'Notifications enabled' : 'Notifications off',
-          metric: `${stats.unread} unread`,
-          summary: stats.notificationsEnabled
-            ? `${stats.total} messages queued for the SDK widget · ${stats.last24h} in the last 24 hours.`
-            : 'Enable reporter notifications in Settings or reporters never see classify/fix updates in the widget.',
-          severity: notifSeverity,
-          anchor: 'notifications:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: Object.entries(stats.byType).map(([label, value]) => ({
-              label,
-              value: String(value),
-              tone: label === 'fix_failed' ? 'crit' : 'neutral',
-            })),
-          },
-        }}
-        verify={{
-          label: stats.lastNotificationAt ? 'Last message' : 'No messages yet',
-          detail: stats.lastNotificationAt
-            ? new Date(stats.lastNotificationAt).toLocaleString()
-            : 'Classify or fix a report — a message should land here when reporter_notifications_enabled is on.',
-          to: '/settings',
-          secondaryTo: '/reports',
-          secondaryLabel: 'Triage queue',
-          anchor: 'notifications:verify',
-          evidence: stats.lastNotificationAt
-            ? {
-                kind: 'last-event',
-                at: stats.lastNotificationAt,
-                by: 'reporter_notifications',
-                payloadSummary: `${stats.unread} unread`,
-                status: stats.unread > 0 ? 'warn' : 'ok',
-              }
-            : undefined,
-        }}
+      <NotificationsStatusBanner
+        stats={stats}
+        onTab={setTab}
+        onRefresh={reloadAll}
+        refreshing={validating}
       />
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About reporter notifications'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
-            'Audit which reporter tokens received messages for a given report',
-            'Spot stale unread rows that suggest client polling stopped working',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'Filter by type or unread, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
-        }
+      <SegmentedControl
+        value={activeTab}
+        onChange={setTab}
+        options={tabOptions}
+        ariaLabel="Notification sections"
+        size="sm"
       />
 
-      <Section title="Notification workspace" freshness={{ at: lastFetchedAt, isValidating }}>
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Total" value={stats.total} hint="Messages for this project" />
-          <StatCard label="Unread" value={stats.unread} hint="Not yet marked read in admin" />
-          <StatCard label="Last 24h" value={stats.last24h} hint="Recent outbound volume" />
+      <Section title="NOTIFICATIONS SNAPSHOT" freshness={{ at: fetchedAt, isValidating: validating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            label="Total"
+            value={stats.total}
+            accent={stats.total > 0 ? 'text-brand' : undefined}
+            hint="Messages for this project"
+          />
+          <StatCard
+            label="Unread"
+            value={stats.unread}
+            accent={stats.unread > 0 ? 'text-warn' : undefined}
+            hint="Not yet marked read in admin"
+          />
+          <StatCard
+            label="Last 24h"
+            value={stats.last24h}
+            accent={stats.last24h > 0 ? 'text-info' : undefined}
+            hint="Recent outbound volume"
+          />
           <StatCard
             label="Enabled"
             value={stats.notificationsEnabled ? 'Yes' : 'No'}
+            accent={stats.notificationsEnabled ? 'text-ok' : 'text-warn'}
             hint={stats.notificationsEnabled ? 'SDK polling allowed' : 'Turn on in Settings'}
           />
+          <StatCard
+            label="Fix failed"
+            value={stats.fixFailedCount}
+            accent={stats.fixFailedCount > 0 ? 'text-danger' : undefined}
+            hint="fix_failed type messages"
+          />
+          <StatCard
+            label="Last message"
+            value={stats.lastNotificationAt ? 'Recent' : 'Never'}
+            accent={stats.lastNotificationAt ? 'text-ok' : undefined}
+            hint={
+              stats.daysSinceLastNotification != null && stats.daysSinceLastNotification > 0
+                ? `${stats.daysSinceLastNotification}d ago`
+                : stats.lastNotificationAt
+                  ? 'Today'
+                  : 'Classify a report to test'
+            }
+          />
         </div>
+      </Section>
 
-        <SegmentedControl
-          value={activeTab}
-          onChange={setTab}
-          options={tabOptions}
-          ariaLabel="Notification sections"
-          className="mb-4"
-        />
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'disabled' || stats.topPriority === 'unread_backlog'
+              ? 'border-warn/30 bg-warn/5'
+              : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          <PageHelp
+            title={copy?.help?.title ?? 'About reporter notifications'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'Outbound messages for end users who submitted bug reports. The SDK polls this list and shows classification, fix-shipped, or reward updates in the reporter widget.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Verify the SDK side of the loop — reporters see when their bug was classified or fixed',
+                'Audit which reporter tokens received messages for a given report',
+                'Spot stale unread rows that suggest client polling stopped working',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Filter by type or unread on Inbox, expand a row for the JSON payload, and mark read once verified. Requires reporter_notifications_enabled in Settings.'
+            }
+          />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Reporter loop active"
+              description={stats.topPriorityLabel ?? `${stats.total} messages · all read.`}
+              cta={{ label: 'View inbox', to: '/notifications?tab=inbox' }}
+            />
+          )}
+          {stats.topPriority === 'disabled' && (
+            <RecommendedAction
+              tone="info"
+              title="Enable reporter notifications"
+              description={stats.topPriorityLabel ?? 'Turn on reporter_notifications_enabled in Settings.'}
+              cta={{ label: 'Open Settings', to: '/settings' }}
+            />
+          )}
+          {stats.topPriority === 'unread_backlog' && (
+            <RecommendedAction
+              tone="urgent"
+              title="Review unread messages"
+              description={stats.topPriorityLabel ?? 'Unread rows may mean the reporter SDK stopped polling.'}
+              cta={{ label: 'Filter unread', to: '/notifications?tab=inbox&show=unread' }}
+            />
+          )}
+          {stats.topPriority === 'no_messages' && (
+            <RecommendedAction
+              tone="info"
+              title="Send your first reporter message"
+              description={stats.topPriorityLabel ?? 'Classify or fix a report to populate the inbox.'}
+              cta={{ label: 'Open Setup', to: '/notifications?tab=setup' }}
+            />
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Classified</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.byType.classified ?? 0}</p>
+              <p className="text-2xs text-fg-muted">Triage updates to reporters</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Fixed</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-ok">{stats.byType.fixed ?? 0}</p>
+              <p className="text-2xs text-fg-muted">Shipped fix notifications</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last activity</p>
+              <p className="mt-1 text-sm font-semibold text-fg-primary">
+                {stats.lastNotificationAt ? <RelativeTime value={stats.lastNotificationAt} /> : 'Never'}
+              </p>
+              <p className="text-2xs text-fg-muted">
+                {stats.notificationsEnabled ? 'SDK polling enabled' : 'Notifications disabled'}
+              </p>
+            </Card>
+          </div>
+        </div>
+      )}
 
-        {activeTab === 'inbox' && (
+      {activeTab === 'inbox' && (
+        <Section title="Reporter inbox">
           <div data-dav-anchor="notifications:decide">
             {notifications.length === 0 ? (
               filter === 'unread' || type ? (
@@ -449,12 +562,14 @@ export function NotificationsPage() {
               </div>
             )}
           </div>
-        )}
+        </Section>
+      )}
 
-        {activeTab === 'setup' && (
+      {activeTab === 'setup' && (
+        <Section title="Pipeline checklist">
           <div className="space-y-3" data-dav-anchor="notifications:verify">
             <Card className="p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-fg">Pipeline checklist</h3>
+              <h3 className="text-sm font-semibold text-fg">Reporter loop prerequisites</h3>
               <ul className="space-y-2 text-xs text-fg-muted">
                 <li className="flex items-start gap-2">
                   <span
@@ -507,8 +622,8 @@ export function NotificationsPage() {
               </Card>
             )}
           </div>
-        )}
-      </Section>
+        </Section>
+      )}
     </div>
   )
 }

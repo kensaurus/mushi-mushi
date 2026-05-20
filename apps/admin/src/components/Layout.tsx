@@ -518,13 +518,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'notifications',
     decide: {
-      label: 'Reporter inbox',
-      summary: 'Outbound messages the SDK widget polls so bug reporters see classify and fix updates.',
+      label: 'NOTIFICATIONS SNAPSHOT',
+      summary: 'Total, unread, 24h volume, and enabled state — banner shows DISABLED vs ACTIVE vs UNREAD backlog.',
       severity: 'info',
     },
     verify: {
       label: 'Payload audit',
-      detail: 'Expand any row to inspect the JSON the widget received — unread rows may mean polling stopped.',
+      detail: 'Inbox tab expands JSON payloads — unread rows may mean the reporter SDK stopped polling.',
     },
   },
   '/billing': {
@@ -546,13 +546,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Workspace',
     scope: 'projects',
     decide: {
-      label: 'Project list',
-      summary: 'Pick the active project, mint keys, or send a test report from the project cards.',
+      label: 'PROJECTS SNAPSHOT',
+      summary: 'Project count, ingest coverage, SDK heartbeats, and active keys — banner shows EMPTY vs INGESTING.',
       severity: 'info',
     },
     verify: {
       label: 'Active context',
-      detail: 'The selected project drives filters and setup state across the console.',
+      detail: 'The selected project drives filters and setup state across the console — switch on Your projects tab.',
     },
   },
   '/organization/members': {

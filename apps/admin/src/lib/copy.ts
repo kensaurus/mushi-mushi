@@ -193,8 +193,8 @@ export const COPY: CopyRegistry = {
       },
     },
     '/projects': {
-      title: 'Your projects',
-      description: 'Create and manage projects — one per app or environment. Each project gets its own bug inbox, API keys, SDK heartbeat, and console scope.',
+      title: 'Projects',
+      description: 'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.',
       help: {
         title: 'About projects',
         whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.',
@@ -531,8 +531,8 @@ export const COPY: CopyRegistry = {
       },
     },
     '/notifications': {
-      title: 'Reporter notifications',
-      description: 'Outbound messages the SDK widget polls — classify, fix, and reward updates for bug reporters.',
+      title: 'Notifications',
+      description: 'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.',
       help: {
         title: 'About reporter notifications',
         whatIsIt: 'Messages queued for end users who submitted bugs. The SDK polls this inbox so reporters see when their report was classified, fixed, or rewarded.',

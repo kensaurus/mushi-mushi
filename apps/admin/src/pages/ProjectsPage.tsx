@@ -27,6 +27,8 @@ import { PageHeader,
   Tooltip,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
@@ -77,6 +79,29 @@ import {
 // that the user doesn't think the action silently failed. Mirrors the
 // member-remove window in OrganizationSettingsPage.
 const UNDO_WINDOW_MS = 8000
+
+const TABS: Array<{ id: ProjectsTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Workspace posture — project count, ingest coverage, SDK heartbeats, and recommended next steps.',
+  },
+  {
+    id: 'list',
+    label: 'Your projects',
+    description: 'Switch context, mint keys, send test reports, and inspect per-project SDK health.',
+  },
+  {
+    id: 'create',
+    label: 'New project',
+    description: 'Create a project for one app or environment — API keys and scoped inbox follow on the list tab.',
+  },
+]
+
+function resolveProjectsTab(value: string | null): ProjectsTabId {
+  if (value === 'list' || value === 'create') return value
+  return 'overview'
+}
 
 interface ApiKey {
   id: string
@@ -331,12 +356,13 @@ export function ProjectsPage() {
   const activeProjectId = useActiveProjectId()
 
   const tabParam = searchParams.get('tab')
-  const activeTab: ProjectsTabId = tabParam === 'create' ? 'create' : 'list'
+  const activeTab: ProjectsTabId = resolveProjectsTab(tabParam)
+  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const setTab = useCallback(
     (tab: ProjectsTabId) => {
       const next = new URLSearchParams(searchParams)
-      if (tab === 'list') next.delete('tab')
+      if (tab === 'overview') next.delete('tab')
       else next.set('tab', tab)
       setSearchParams(next, { replace: true, preventScrollReset: true })
     },
@@ -405,10 +431,12 @@ export function ProjectsPage() {
   const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<{ projects: Project[]; admin_host: string | null }>(
     '/v1/admin/projects',
   )
-  const { data: statsData, reload: reloadStats } = usePageData<ProjectsStats>(
+  const { data: statsData, reload: reloadStats, lastFetchedAt: statsFetchedAt, isValidating: statsValidating } = usePageData<ProjectsStats>(
     '/v1/admin/projects/stats',
   )
-  const stats = statsData ?? EMPTY_PROJECTS_STATS
+  const stats = { ...EMPTY_PROJECTS_STATS, ...statsData }
+  const fetchedAt = statsFetchedAt ?? lastFetchedAt
+  const validating = isValidating || statsValidating
 
   const reloadAll = useCallback(() => {
     reload()
@@ -424,10 +452,6 @@ export function ProjectsPage() {
     () => (data?.projects ?? []).filter((p) => !pendingDeleteIds.has(p.id)),
     [data, pendingDeleteIds],
   )
-  const activeProjectName = useMemo(
-    () => projects.find((p) => p.id === activeProjectId)?.name ?? null,
-    [projects, activeProjectId],
-  )
   // Captured once per response and threaded into every SdkHealthSummary so
   // each card can compare the SDK's last-seen endpoint against the host
   // THIS admin reads from. Mismatch = silent backend split = the bug class
@@ -436,19 +460,20 @@ export function ProjectsPage() {
 
   usePublishPageContext({
     route: '/projects',
-    title: `${activeTab === 'create' ? 'New project' : 'Your projects'} · Projects`,
-    summary: copy?.description ?? 'Workspace project registry',
+    title: `${activeMeta.label} · Projects`,
+    summary: activeMeta.description,
     filters: { tab: activeTab, active_project_id: activeProjectId ?? undefined },
     criticalCount:
-      stats.projectCount === 0
-        ? 1
-        : stats.projectsWithReports === 0
-          ? 1
-          : stats.neverIngestedCount,
+      stats.topPriority === 'healthy'
+        ? 0
+        : stats.topPriority === 'partial_ingest'
+          ? stats.neverIngestedCount
+          : 1,
   })
 
   const tabOptions = useMemo(
     () => [
+      { id: 'overview' as const, label: 'Overview' },
       { id: 'list' as const, label: 'Your projects', count: stats.projectCount || undefined },
       { id: 'create' as const, label: 'New project' },
     ],
@@ -806,20 +831,65 @@ export function ProjectsPage() {
     </div>
   )
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
+      ? 'warn'
+      : stats.topPriority === 'healthy'
+        ? 'ok'
+        : stats.topPriority === 'no_projects'
+          ? 'brand'
+          : stats.topPriority === 'partial_ingest'
+            ? 'info'
+            : 'neutral'
+
+  const headerBadge =
+    stats.topPriority === 'healthy'
+      ? 'INGESTING'
+      : stats.topPriority === 'never_ingested'
+        ? 'NO INGEST'
+        : stats.topPriority === 'no_sdk_heartbeat'
+          ? 'NO HEARTBEAT'
+        : stats.topPriority === 'partial_ingest'
+          ? `${stats.neverIngestedCount} STALE`
+          : stats.projectCount === 0
+            ? 'EMPTY'
+            : 'SETUP'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-projects">
       <PageHeader
-        title={copy?.title ?? 'Your projects'}
+        title={copy?.title ?? 'Projects'}
         description={
           copy?.description ??
-          `${pluralizeWithCount(projects.length, 'project')} in this workspace — switch context, mint keys, and verify ingest.`
+          'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'
         }
-      />
+      >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'warn'
+                ? 'bg-warn/10 text-warn'
+                : bannerSeverity === 'brand'
+                  ? 'bg-brand/15 text-brand'
+                  : bannerSeverity === 'info'
+                    ? 'bg-info/10 text-info'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {headerBadge}
+        </Badge>
+        <FreshnessPill at={fetchedAt} isValidating={validating} />
+        <Btn variant="ghost" size="sm" onClick={reloadAll} loading={validating}>
+          Refresh
+        </Btn>
+      </PageHeader>
 
       <ProjectsStatusBanner
         stats={stats}
-        activeProjectName={activeProjectName}
-        onCreateTab={() => setTab('create')}
+        onTab={setTab}
+        onRefresh={reloadAll}
+        refreshing={validating}
       />
 
       <SegmentedControl
@@ -827,21 +897,17 @@ export function ProjectsPage() {
         onChange={setTab}
         options={tabOptions}
         ariaLabel="Projects sections"
+        size="sm"
       />
 
-      <Section
-        title="Workspace snapshot"
-        freshness={{ at: lastFetchedAt, isValidating }}
-      >
-        <p className="mb-3 text-2xs text-fg-muted">
-          {pluralizeWithCount(projects.length, 'project')} in this workspace — KPIs refresh when keys connect or reports land.
-        </p>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+      <Section title="PROJECTS SNAPSHOT" freshness={{ at: fetchedAt, isValidating: validating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label="Projects"
             value={stats.projectCount}
-            accent="text-brand"
-            hint="Every app or environment you track separately"
+            accent={stats.projectCount > 0 ? 'text-brand' : undefined}
+            hint="Apps or environments tracked"
           />
           <StatCard
             label="Ingesting"
@@ -859,16 +925,147 @@ export function ProjectsPage() {
                   ? 'text-warn'
                   : undefined
             }
-            hint="Projects with at least one key heartbeat"
+            hint="Projects with key heartbeat"
+          />
+          <StatCard
+            label="Active keys"
+            value={stats.activeKeyCount}
+            accent={stats.activeKeyCount > 0 ? 'text-info' : undefined}
+            hint={`${stats.staleKeyCount} never seen`}
           />
           <StatCard
             label="Reports · 24h"
             value={stats.reportsLast24h}
             accent={stats.reportsLast24h > 0 ? 'text-ok' : undefined}
-            hint={`${stats.reportsLast30d} in the last 30 days`}
+            hint={`${stats.reportsLast30d} in 30 days`}
+          />
+          <StatCard
+            label="Viewing"
+            value={stats.activeProjectName ? 'Set' : 'None'}
+            accent={stats.activeProjectId ? 'text-brand' : undefined}
+            hint={
+              stats.activeProjectHasReports
+                ? stats.activeProjectSdkConnected
+                  ? 'Active project ingesting'
+                  : 'Active project — no heartbeat'
+                : 'Pick a project on list tab'
+            }
           />
         </div>
       </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
+              ? 'border-warn/30 bg-warn/5'
+              : stats.topPriority === 'no_projects'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-info/30 bg-info/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          <PageHelp
+            title={copy?.help?.title ?? 'About projects'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Create a project for your main app (takes 30 seconds)',
+                "Add a separate project for staging so test bugs don't mix with real ones",
+                'Generate an API key, send a test report, and confirm SDK heartbeat before production',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Use Your projects to switch context, mint keys, and read per-project health. The banner and KPI strip tell you which projects ingest and which keys have connected.'
+            }
+          />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="All projects ingesting"
+              description={stats.topPriorityLabel ?? `${stats.projectCount} projects with recent reports.`}
+              cta={{ label: 'Open Reports', to: '/reports' }}
+            />
+          )}
+          {stats.topPriority === 'no_projects' && (
+            <RecommendedAction
+              tone="info"
+              title="Create your first project"
+              description={stats.topPriorityLabel ?? 'One project per app or environment.'}
+              cta={{ label: 'New project', to: '/projects?tab=create' }}
+            />
+          )}
+          {stats.topPriority === 'never_ingested' && (
+            <RecommendedAction
+              tone="urgent"
+              title="Send a test report"
+              description={stats.topPriorityLabel ?? 'Mint a key and use Test report on a project card.'}
+              cta={{ label: 'Open project list', to: '/projects?tab=list' }}
+            />
+          )}
+          {stats.topPriority === 'no_sdk_heartbeat' && (
+            <RecommendedAction
+              tone="urgent"
+              title="Debug SDK heartbeat"
+              description={stats.topPriorityLabel ?? 'Expand a project card and compare endpoint host vs this admin.'}
+              cta={{ label: 'View projects', to: '/projects?tab=list' }}
+            />
+          )}
+          {stats.topPriority === 'partial_ingest' && (
+            <RecommendedAction
+              tone="info"
+              title="Some projects never ingested"
+              description={stats.topPriorityLabel ?? `${stats.neverIngestedCount} projects waiting for first report.`}
+              cta={{ label: 'View projects', to: '/projects?tab=list' }}
+            />
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Ingest coverage</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-ok">
+                {stats.projectCount > 0
+                  ? `${Math.round((stats.projectsWithReports / stats.projectCount) * 100)}%`
+                  : '—'}
+              </p>
+              <p className="text-2xs text-fg-muted">
+                {stats.projectsWithReports}/{stats.projectCount} projects with reports
+              </p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">SDK heartbeats</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.sdkConnectedCount}</p>
+              <p className="text-2xs text-fg-muted">{stats.staleKeyCount} active keys never seen</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Active context</p>
+              <p className="mt-1 text-sm font-semibold text-fg-primary truncate">
+                {stats.activeProjectName ?? 'None selected'}
+              </p>
+              <p className="text-2xs text-fg-muted">
+                {stats.activeProjectId
+                  ? stats.activeProjectHasReports
+                    ? 'Receiving reports'
+                    : 'No reports yet'
+                  : 'Switch on list tab'}
+              </p>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'create' ? (
         <Section title="Create a project">
@@ -883,8 +1080,8 @@ export function ProjectsPage() {
             howToUse={copy?.help?.howToUse ?? ''}
           />
         </Section>
-      ) : (
-        <>
+      ) : activeTab === 'list' ? (
+        <Section title="Your projects">
           {activeProjectId && (
             <MigrationsInProgressCard
               projectId={activeProjectId}
@@ -1333,8 +1530,8 @@ export function ProjectsPage() {
           })}
         </div>
           )}
-        </>
-      )}
+        </Section>
+      ) : null}
 
       {/* Type-the-slug-to-confirm modal for project deletion. Cascades
           take care of every dependent table (54 rows in the FK graph as

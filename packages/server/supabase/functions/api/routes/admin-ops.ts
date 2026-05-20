@@ -169,12 +169,25 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
       total: 0,
       unread: 0,
       last24h: 0,
       lastNotificationAt: null as string | null,
+      daysSinceLastNotification: null as number | null,
       byType: {} as Record<string, number>,
       notificationsEnabled: false,
+      fixFailedCount: 0,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'disabled'
+        | 'unread_backlog'
+        | 'no_messages'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -205,23 +218,63 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const byType: Record<string, number> = {};
     let unread = 0;
     let last24h = 0;
+    let fixFailedCount = 0;
     for (const row of list) {
       const t = row.notification_type as string;
       byType[t] = (byType[t] ?? 0) + 1;
+      if (t === 'fix_failed') fixFailedCount += 1;
       if (!row.read_at) unread += 1;
       if ((row.created_at as string) >= since24h) last24h += 1;
+    }
+
+    const lastNotificationAt = (list[0]?.created_at as string | undefined) ?? null;
+    const daysSinceLastNotification = lastNotificationAt
+      ? Math.floor((Date.now() - new Date(lastNotificationAt).getTime()) / (24 * 60 * 60 * 1000))
+      : null;
+    const notificationsEnabled = !!(settings as { reporter_notifications_enabled?: boolean } | null)
+      ?.reporter_notifications_enabled;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!notificationsEnabled) {
+      topPriority = 'disabled';
+      topPriorityLabel =
+        'reporter_notifications_enabled is off — the SDK widget will not poll outbound messages until you turn it on in Settings.';
+      topPriorityTo = '/settings';
+    } else if (unread > 0) {
+      topPriority = 'unread_backlog';
+      topPriorityLabel = `${unread} unread message${unread === 1 ? '' : 's'} — expand payloads in Inbox to debug whether the reporter SDK stopped polling.`;
+      topPriorityTo = '/notifications?tab=inbox&show=unread';
+    } else if (list.length === 0) {
+      topPriority = 'no_messages';
+      topPriorityLabel =
+        'No outbound messages yet — classify or fix a report; a message should land here when reporter_notifications_enabled is on.';
+      topPriorityTo = '/notifications?tab=setup';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${list.length} total · ${last24h} in 24h · all read · last message ${daysSinceLastNotification === 0 ? 'today' : daysSinceLastNotification != null ? `${daysSinceLastNotification}d ago` : '—'}.`;
+      topPriorityTo = '/notifications?tab=inbox';
     }
 
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
+        projectId: project.id as string,
+        projectName: (project.name as string | null) ?? null,
         total: list.length,
         unread,
         last24h,
-        lastNotificationAt: (list[0]?.created_at as string | undefined) ?? null,
+        lastNotificationAt,
+        daysSinceLastNotification,
         byType,
-        notificationsEnabled: !!(settings as { reporter_notifications_enabled?: boolean } | null)
-          ?.reporter_notifications_enabled,
+        notificationsEnabled,
+        fixFailedCount,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });
