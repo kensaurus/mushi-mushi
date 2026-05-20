@@ -35,6 +35,127 @@ interface ContactBody {
 const RATE_LIMIT_PER_HOUR = 5;
 
 export function registerAdminOpsRoutes(app: Hono): void {
+  // GET /v1/admin/anti-gaming/stats — AntiGamingStatusBanner posture data.
+  app.get('/v1/admin/anti-gaming/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasIngest: false,
+      trackedDevices: 0,
+      flaggedDevices: 0,
+      crossAccountDevices: 0,
+      totalReports: 0,
+      eventsLast24h: 0,
+      velocityEvents24h: 0,
+      multiAccountEvents24h: 0,
+      manualFlags24h: 0,
+      lastEventAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project' | 'cross_account' | 'flagged' | 'velocity' | 'waiting' | 'clean',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) return c.json({ ok: true, data: empty })
+
+    // Use the first owned project as the active context.
+    const projectRes = await db
+      .from('projects')
+      .select('id, project_name')
+      .in('id', projectIds)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const pid = projectRes.data?.id ?? projectIds[0]
+    const projectName = projectRes.data?.project_name ?? null
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    const [devicesRes, events24hRes, lastEventRes, reportsRes] = await Promise.all([
+      db.from('reporter_devices')
+        .select('id, flagged_as_suspicious, cross_account_flagged, report_count')
+        .eq('project_id', pid)
+        .limit(1000),
+      db.from('anti_gaming_events')
+        .select('id, event_type')
+        .eq('project_id', pid)
+        .gte('created_at', since24h),
+      db.from('anti_gaming_events')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db.from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid),
+    ])
+
+    const devices = devicesRes.data ?? []
+    const events24h = events24hRes.data ?? []
+    const flaggedDevices = devices.filter((d) => d.flagged_as_suspicious).length
+    const crossAccountDevices = devices.filter((d) => d.cross_account_flagged).length
+    const totalReports = reportsRes.count ?? 0
+    const velocityEvents24h = events24h.filter((e) => e.event_type === 'velocity_anomaly').length
+    const multiAccountEvents24h = events24h.filter((e) => e.event_type === 'multi_account').length
+    const manualFlags24h = events24h.filter((e) => e.event_type === 'manual_flag').length
+    const lastEventAt = lastEventRes.data?.created_at ?? null
+
+    let topPriority: typeof empty.topPriority = 'clean'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (crossAccountDevices > 0) {
+      topPriority = 'cross_account'
+      topPriorityLabel = `${crossAccountDevices} device${crossAccountDevices === 1 ? '' : 's'} flagged for cross-account abuse — review now.`
+      topPriorityTo = '/anti-gaming?filter=flagged'
+    } else if (flaggedDevices > 0) {
+      topPriority = 'flagged'
+      topPriorityLabel = `${flaggedDevices} suspicious device${flaggedDevices === 1 ? '' : 's'} flagged — review before unflagging.`
+      topPriorityTo = '/anti-gaming?filter=flagged'
+    } else if (velocityEvents24h > 0) {
+      topPriority = 'velocity'
+      topPriorityLabel = `${velocityEvents24h} velocity anomaly${velocityEvents24h === 1 ? '' : 'ies'} in the last 24h.`
+      topPriorityTo = '/anti-gaming?tab=events'
+    } else if (devices.length === 0) {
+      topPriority = 'waiting'
+      topPriorityLabel = 'No devices tracked yet — install the SDK to begin anti-gaming monitoring.'
+      topPriorityTo = '/onboarding'
+    } else {
+      topPriorityLabel = `${devices.length} device${devices.length === 1 ? '' : 's'} tracked — no abuse patterns detected.`
+      topPriorityTo = '/anti-gaming'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName,
+        projectCount: projectIds.length,
+        hasIngest: totalReports > 0,
+        trackedDevices: devices.length,
+        flaggedDevices,
+        crossAccountDevices,
+        totalReports,
+        eventsLast24h: events24h.length,
+        velocityEvents24h,
+        multiAccountEvents24h,
+        manualFlags24h,
+        lastEventAt,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   app.get('/v1/admin/anti-gaming/devices', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

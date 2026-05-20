@@ -124,7 +124,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
     setError(null)
     setSubmitting(true)
 
-    const pageCtx = `Page: ${window.location.pathname}`
+    const pageCtx = `Page: ${window.location.href}`
     const bodyWithContext = cleanBody
       ? `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n${cleanBody}\n\n---\n${pageCtx}`
       : `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n(no description provided)\n\n---\n${pageCtx}`
@@ -275,7 +275,7 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                     <span className="ml-1 text-2xs font-normal text-fg-faint">(optional)</span>
                   </label>
                   <span className="text-2xs text-fg-faint tabular-nums shrink-0">
-                    Page: {typeof window !== 'undefined' ? window.location.pathname : '—'} ↗ captured
+                    Page: {typeof window !== 'undefined' ? `${window.location.pathname}${window.location.search}` : '—'} ↗ captured
                   </span>
                 </div>
                 <textarea

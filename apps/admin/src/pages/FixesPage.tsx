@@ -29,7 +29,10 @@ import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixCard } from '../components/fixes/FixCard'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
+import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
+import { EMPTY_FIXES_STATS, type FixesStats } from '../components/fixes/FixesStatsTypes'
 import { usePageCopy } from '../lib/copy'
+import { usePageData } from '../lib/usePageData'
 import { useStaggeredAppear } from '../lib/useStaggeredAppear'
 
 interface InventoryActionNode {
@@ -76,6 +79,11 @@ export function FixesPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/fixes')
+
+  const { data: statsData } = usePageData<FixesStats>(
+    activeProjectId ? '/v1/admin/fixes/stats' : null,
+  )
+  const fixesStats = statsData ?? EMPTY_FIXES_STATS
   const [fixes, setFixes] = useState<FixAttempt[]>([])
   const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
@@ -440,6 +448,8 @@ export function FixesPage() {
         )}
       </PageHeader>
 
+      <FixesStatusBanner stats={fixesStats} />
+
       <PageHelp
         title={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
         whatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
@@ -567,7 +577,7 @@ export function FixesPage() {
 
       {retryAllConfirm && failedFixes.length > 0 ? (
         <ConfirmDialog
-          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix')}?`}
+          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix', 'fixes')}?`}
           body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
           confirmLabel="Retry all"
           cancelLabel="Cancel"

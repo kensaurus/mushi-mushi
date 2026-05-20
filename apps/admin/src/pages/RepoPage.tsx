@@ -36,6 +36,9 @@ import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
 import { IconGit, IconIntegrations } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
+import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
+import { EMPTY_REPO_STATS, type RepoStats } from '../components/repo/RepoStatsTypes'
+import { usePageData } from '../lib/usePageData'
 
 interface RepoBranch {
   id: string
@@ -212,6 +215,12 @@ export function RepoPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+
+  const { data: statsData } = usePageData<RepoStats>(
+    activeProjectId ? '/v1/admin/repo/stats' : null,
+  )
+  const repoStats = statsData ?? EMPTY_REPO_STATS
+
   const [overview, setOverview] = useState<RepoOverview | null>(null)
   const [activity, setActivity] = useState<RepoActivityEvent[] | null>(null)
   const [activityError, setActivityError] = useState<string | null>(null)
@@ -332,6 +341,8 @@ export function RepoPage() {
           {pluralizeWithCount(counts.total, 'branch', 'branches')}
         </span>
       </PageHeader>
+
+      <RepoStatusBanner stats={repoStats} />
 
       <PageHelp
         title="About the Repo graph"

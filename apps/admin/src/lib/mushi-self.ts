@@ -123,6 +123,7 @@ export async function initMushiSelf(options?: {
       return _sdk;
     } catch (err) {
       win[INIT_KEY] = false;
+      _initPromise = null;
       console.warn('[mushi-self] init failed', err);
       return null;
     }
