@@ -48,7 +48,7 @@ const STAGE_CTA: Record<PdcaStageId, { to: string; label: string }> = {
   plan: { to: '/reports', label: 'See your bugs' },
   do: { to: '/fixes', label: 'See draft fixes' },
   check: { to: '/judge', label: 'See judge scores' },
-  act: { to: '/integrations', label: 'See where fixes ship' },
+  act: { to: '/integrations/config', label: 'See where fixes ship' },
 }
 
 // Per-stage demo dwell time. ~1s per stage feels alive without dragging on;

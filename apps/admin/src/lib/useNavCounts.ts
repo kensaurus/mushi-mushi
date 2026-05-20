@@ -44,6 +44,8 @@ export interface NavCounts {
    *  sidebar dot. Sourced via the cheap `count_only=1` mode of
    *  /v1/admin/anti-gaming/devices?flagged=true. */
   flaggedDevices: number
+  /** Active My feedback tickets with a team reply (sidebar nudge). */
+  feedbackWithReply: number
   /** Whether the hook has loaded once; consumers can skip rendering
    *  dots in the undefined state. */
   ready: boolean
@@ -60,6 +62,7 @@ const INITIAL: NavCounts = {
   queueFailed: 0,
   healthIssues: 0,
   flaggedDevices: 0,
+  feedbackWithReply: 0,
   ready: false,
 }
 
@@ -89,6 +92,10 @@ interface DeviceCountResp {
   count?: number
 }
 
+interface FeedbackSummaryResp {
+  with_reply?: number
+}
+
 function countHealthIssues(dashboard: DashboardData | undefined): number {
   const integrations = dashboard?.integrations
   if (!Array.isArray(integrations)) return 0
@@ -114,6 +121,7 @@ export function useNavCounts(): NavCounts {
       notifRes,
       queueRes,
       flaggedRes,
+      feedbackRes,
     ] = await Promise.all([
       apiFetch<FixSummaryResp>('/v1/admin/fixes/summary'),
       apiFetch<ReportsListResp>('/v1/admin/reports?status=new&limit=1'),
@@ -127,6 +135,7 @@ export function useNavCounts(): NavCounts {
       // the cheap count-only mode so we don't pull 200 device rows on
       // every page navigation just to render a 1-character badge.
       apiFetch<DeviceCountResp>('/v1/admin/anti-gaming/devices?flagged=true&count_only=1'),
+      apiFetch<FeedbackSummaryResp>('/v1/admin/support/tickets/summary'),
     ])
     const summary = summaryRes.ok ? summaryRes.data : null
     const reports = reportsRes.ok ? reportsRes.data : null
@@ -139,6 +148,7 @@ export function useNavCounts(): NavCounts {
     const queueByStatus = queueRes.ok ? (queueRes.data?.byStatus ?? {}) : {}
     const queueFailed = (queueByStatus.dead_letter ?? 0) + (queueByStatus.failed ?? 0)
     const flaggedDevices = flaggedRes.ok ? (flaggedRes.data?.count ?? 0) : 0
+    const feedbackWithReply = feedbackRes.ok ? (feedbackRes.data?.with_reply ?? 0) : 0
     setCounts({
       untriagedBacklog: reports?.total ?? 0,
       fixesInFlight: summary?.inProgress ?? 0,
@@ -150,6 +160,7 @@ export function useNavCounts(): NavCounts {
       queueFailed,
       healthIssues: countHealthIssues(dashboard),
       flaggedDevices,
+      feedbackWithReply,
       ready: true,
     })
   }, [])
@@ -172,6 +183,7 @@ export function useNavCounts(): NavCounts {
       // it live so an operator who flags a device on /anti-gaming sees
       // the rail update without a manual reload.
       'reporter_devices',
+      'support_tickets',
     ],
     () => { void load() },
     { debounceMs: 1500 },

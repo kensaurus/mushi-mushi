@@ -6,7 +6,7 @@
  *   Design: matches the SettingsPage / HealthPage tablist pattern.
  */
 
-import { useState, useCallback, useLayoutEffect, useRef, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
@@ -46,6 +46,11 @@ import {
 } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
+import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
+import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
+import { usePageCopy } from '../lib/copy'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -2066,7 +2071,7 @@ function IconBilling(p: { className?: string }) {
 
 // ─── Tab definitions ─────────────────────────────────────────
 
-type TabId = 'overview' | 'rules' | 'tiers' | 'contributors' | 'quests' | 'analytics' | 'sandbox' | 'settings'
+type TabId = RewardsTabId
 
 const TABS: Array<{ id: TabId; label: string; description: string }> = [
   { id: 'overview',      label: 'Overview',        description: 'KPIs, tier distribution, and pending payouts at a glance.' },
@@ -2087,141 +2092,206 @@ function isTabId(v: string | null): v is TabId {
 
 export function RewardsPage() {
   const orgId = useActiveOrgSignal()
+  const activeProjectId = useActiveProjectId()
+  const copy = usePageCopy('/rewards')
   const { has } = useEntitlements()
   const rewardsEnabled = has('rewards_program')
   const canEdit = rewardsEnabled
+
+  const statsPath = orgId ? '/v1/admin/rewards/stats' : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt,
+    isValidating,
+  } = usePageData<RewardsStats>(statsPath)
+  const stats = statsData ?? EMPTY_REWARDS_STATS
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+  }, [reloadStats])
+
+  useRealtimeReload(['end_user_activity', 'end_user_points', 'reward_rules', 'reward_tiers'], reloadAll)
 
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
   const active: TabId = isTabId(param) ? param : 'overview'
   const activeMeta = TABS.find((t) => t.id === active) ?? TABS[0]
 
-  const setActive = (id: TabId) => {
-    const next = new URLSearchParams(searchParams)
-    if (id === 'overview') next.delete('tab')
-    else next.set('tab', id)
-    setSearchParams(next, { replace: true, preventScrollReset: true })
-  }
+  const setActive = useCallback(
+    (id: TabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const criticalCount =
+    (rewardsEnabled ? 0 : 1) +
+    (stats.projectRewardsEnabled ? 0 : 1) +
+    stats.webhooksFailing +
+    (stats.enabledRulesCount === 0 ? 1 : 0) +
+    (stats.rejectionRatePct24h >= 40 && stats.activity24hTotal >= 5 ? 1 : 0)
 
   usePublishPageContext({
     route: '/rewards',
     title: `${activeMeta.label} · Rewards`,
     summary: activeMeta.description,
-    filters: { tab: active },
+    filters: { tab: active, org_id: orgId ?? undefined, project_id: activeProjectId ?? undefined },
+    criticalCount,
   })
 
-  // Animated tab indicator
-  const tablistRef = useRef<HTMLDivElement | null>(null)
-  const tabRefs = useRef<Map<TabId, HTMLButtonElement>>(new Map())
-  const [indicator, setIndicator] = useState<{ left: number; width: number }>({ left: 0, width: 0 })
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      { id: 'rules' as const, label: 'Rules', count: stats.enabledRulesCount || undefined },
+      { id: 'tiers' as const, label: 'Tiers', count: stats.enabledTiersCount || undefined },
+      {
+        id: 'contributors' as const,
+        label: 'Contributors',
+        count: stats.activeContributors30d > 0 ? stats.activeContributors30d : undefined,
+      },
+      { id: 'quests' as const, label: 'Quests' },
+      { id: 'analytics' as const, label: 'Retention' },
+      { id: 'sandbox' as const, label: 'Simulator' },
+      {
+        id: 'settings' as const,
+        label: 'Settings',
+        count: stats.webhooksFailing > 0 ? stats.webhooksFailing : undefined,
+      },
+    ],
+    [
+      stats.enabledRulesCount,
+      stats.enabledTiersCount,
+      stats.activeContributors30d,
+      stats.webhooksFailing,
+    ],
+  )
 
-  useLayoutEffect(() => {
-    const measure = () => {
-      const tab = tabRefs.current.get(active)
-      if (!tab) return
-      setIndicator({ left: tab.offsetLeft, width: tab.offsetWidth })
-    }
-    measure()
-    const list = tablistRef.current
-    if (!list || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(measure)
-    ro.observe(list)
-    return () => ro.disconnect()
-  }, [active])
+  if (!orgId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title={copy?.title ?? 'Rewards'}
+          description={copy?.description ?? 'Incentivize SDK activity with points, tiers, and payouts.'}
+        />
+        <EmptyState
+          title="Select an organization"
+          description="Rewards is scoped to the team in the header org switcher — pick kenji or your workspace team first."
+        />
+      </div>
+    )
+  }
+
+  if (statsLoading && !statsData) {
+    return <PanelSkeleton rows={6} label="Loading rewards" />
+  }
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load rewards stats: ${statsError}`} onRetry={reloadAll} />
+  }
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Rewards"
-        description="Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks."
+        title={copy?.title ?? 'Rewards'}
+        description={
+          copy?.description ??
+          'Incentivize users to report bugs, explore your app, and give feedback — earn points, tier badges, and perks.'
+        }
+        projectScope={stats.projectName ?? stats.organizationName ?? undefined}
       >
-        {rewardsEnabled
-          ? <Badge className="bg-ok-muted text-ok">Active</Badge>
-          : <Badge className="bg-surface-overlay text-fg-muted">Hobby — read-only</Badge>}
+        {rewardsEnabled ? (
+          <Badge className="bg-ok-muted text-ok">Program active</Badge>
+        ) : (
+          <Badge className="bg-warn/10 text-warn">Hobby — read-only</Badge>
+        )}
       </PageHeader>
 
-      <PageHelp
-        title="About Rewards"
-        whatIsIt="The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events (screen views, session time, bug reports), and promotes users through tiers as they accumulate points. Each tier can carry perks — Pro access, monetary payouts, or host-defined credits applied via webhook."
-        useCases={[
-          'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
-          'Reward power users with monetary payments (via Stripe Connect) at the Champion tier',
-          'Use quests to guide new users through key flows while earning bonus points',
-        ]}
-        howToUse="Configure activity rules to set points per SDK event, then define the tier ladder. Share the SDK snippet with your app and call identify() to link users. Monitor contributors in the leaderboard; use the Simulator tab to preview changes before going live."
+      <RewardsStatusBanner
+        stats={stats}
+        rewardsEntitlement={rewardsEnabled}
+        onTab={setActive}
       />
 
-      {!rewardsEnabled && (
-        <div className="rounded-xl border border-warn/20 bg-warn/5 p-3 text-xs text-warn">
-          <strong>Rewards program requires Starter or higher.</strong>{' '}
-          <a href="/billing" className="underline">Upgrade your plan</a> to configure rules, tiers, and webhooks.
-          You can preview the program below.
-        </div>
-      )}
+      <SegmentedControl
+        value={active}
+        onChange={setActive}
+        options={tabOptions}
+        ariaLabel="Rewards sections"
+        size="sm"
+      />
 
-      {!orgId && (
-        <div className="rounded-xl border border-danger/20 bg-danger/5 p-3 text-xs text-danger">
-          No active organization found. Please select an organization from the switcher.
-        </div>
-      )}
-
-      {/* Tab nav */}
-      <div
-        ref={tablistRef}
-        role="tablist"
-        aria-label="Rewards sections"
-        className="relative flex flex-wrap gap-1 border-b border-edge-subtle"
-      >
-        {TABS.map((t) => {
-          const selected = t.id === active
-          return (
-            <button
-              key={t.id}
-              ref={(el) => {
-                if (el) tabRefs.current.set(t.id, el)
-                else tabRefs.current.delete(t.id)
-              }}
-              role="tab"
-              aria-selected={selected}
-              aria-controls={`rewards-panel-${t.id}`}
-              id={`rewards-tab-${t.id}`}
-              onClick={() => setActive(t.id)}
-              className={
-                'px-3 py-1.5 text-xs font-medium rounded-t-sm motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ' +
-                (selected ? 'text-fg' : 'text-fg-muted hover:text-fg')
-              }
-            >
-              {t.label}
-            </button>
-          )
-        })}
-        {indicator.width > 0 && (
-          <span
-            aria-hidden="true"
-            className="absolute -bottom-px h-0.5 bg-brand rounded-full motion-safe:transition-[transform,width] motion-safe:duration-200 motion-safe:ease-out"
-            style={{ width: `${indicator.width}px`, transform: `translateX(${indicator.left}px)`, left: 0 }}
+      <Section title="Program snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Contributors · 30d"
+            value={stats.activeContributors30d}
+            accent={stats.activeContributors30d > 0 ? 'text-ok' : undefined}
+            hint="Distinct users who earned points"
           />
-        )}
-      </div>
-
-      <p className="text-2xs text-fg-muted">{activeMeta.description}</p>
-
-      {orgId && (
-        <div
-          role="tabpanel"
-          id={`rewards-panel-${active}`}
-          aria-labelledby={`rewards-tab-${active}`}
-        >
-          {active === 'overview'     && <OverviewTab />}
-          {active === 'rules'        && <ActivityRulesTab canEdit={canEdit} />}
-          {active === 'tiers'        && <TierLadderTab canEdit={canEdit} />}
-          {active === 'contributors' && <ContributorsTab />}
-          {active === 'quests'       && <QuestsTab canEdit={canEdit} />}
-          {active === 'analytics'    && <RetentionAnalyticsTab />}
-          {active === 'sandbox'      && <SandboxSimulatorTab />}
-          {active === 'settings'     && <SettingsTab canEdit={canEdit} />}
+          <StatCard
+            label="Points · 30d"
+            value={stats.pointsAwarded30d.toLocaleString()}
+            accent="text-brand"
+            hint={`${stats.activity24hTotal} SDK events in 24h`}
+          />
+          <StatCard
+            label="Rules · tiers"
+            value={`${stats.enabledRulesCount} · ${stats.enabledTiersCount}`}
+            accent={stats.enabledRulesCount > 0 ? 'text-ok' : 'text-warn'}
+            hint="Enabled activity rules and tier ladder steps"
+          />
+          <StatCard
+            label="Pending payout"
+            value={`$${stats.pendingPayoutLiabilityUsd.toFixed(2)}`}
+            accent={stats.pendingPayoutLiabilityUsd > 0 ? 'text-warn' : undefined}
+            hint={
+              stats.rejectionRatePct24h > 0
+                ? `${stats.rejectionRatePct24h}% rejected in 24h`
+                : 'USD awaiting monthly Stripe run'
+            }
+          />
         </div>
-      )}
+      </Section>
+
+      <PageHelp
+        title={copy?.help?.title ?? 'About Rewards'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'The Rewards program tracks user activity via the Mushi SDK, awards points for SDK events, and promotes users through tiers.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Incentivize beta testers to report bugs by giving Pro access at the Contributor tier',
+            'Reward power users with monetary payments at the Champion tier',
+            'Use quests to guide new users through key flows while earning bonus points',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Configure activity rules, define the tier ladder, then wire SDK identify() + activity. Use Overview to debug rejections; Simulator to preview rule changes.'
+        }
+      />
+
+      <div
+        role="tabpanel"
+        id={`rewards-panel-${active}`}
+        aria-labelledby={`rewards-tab-${active}`}
+      >
+        {active === 'overview' && <OverviewTab />}
+        {active === 'rules' && <ActivityRulesTab canEdit={canEdit} />}
+        {active === 'tiers' && <TierLadderTab canEdit={canEdit} />}
+        {active === 'contributors' && <ContributorsTab />}
+        {active === 'quests' && <QuestsTab canEdit={canEdit} />}
+        {active === 'analytics' && <RetentionAnalyticsTab />}
+        {active === 'sandbox' && <SandboxSimulatorTab />}
+        {active === 'settings' && <SettingsTab canEdit={canEdit} />}
+      </div>
     </div>
   )
 }

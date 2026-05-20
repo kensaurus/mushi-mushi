@@ -149,6 +149,11 @@ export const STATUS_LABELS: Record<string, string> = {
   fixing:     'Fixing',
   fixed:      'Fixed',
   dismissed:  'Dismissed',
+  // Legacy rows / SDK ingest — shown until migrated server-side
+  triaged:    'Classified',
+  resolved:   'Fixed',
+  queued:     'Queued',
+  grouped:    'Classified',
 }
 
 export const SEVERITY_LABELS: Record<string, string> = {
@@ -196,7 +201,7 @@ export function pipelineStatusLabel(s: string | null | undefined): string {
 
 export const FILTER_OPTIONS = {
   categories: ['', 'bug', 'slow', 'visual', 'confusing', 'other'],
-  statuses:   ['', 'new', 'classified', 'fixing', 'fixed', 'dismissed'],
+  statuses:   ['', 'new', 'queued', 'classified', 'fixing', 'fixed', 'dismissed'],
   severities: ['', 'critical', 'high', 'medium', 'low'],
 } as const
 

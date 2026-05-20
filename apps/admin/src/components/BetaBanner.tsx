@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { FeedbackModal } from './FeedbackModal'
 
 const DISMISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
@@ -87,6 +88,12 @@ export function BetaBanner() {
               <span aria-hidden>✨</span>
               <span>Request a feature</span>
             </button>
+            <Link
+              to="/feedback"
+              className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle px-2 py-0.5 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            >
+              My submissions
+            </Link>
             <button
               type="button"
               onClick={handleDismiss}

@@ -18,6 +18,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
@@ -25,7 +26,12 @@ import { useAuth } from '../lib/auth'
 import { formatLlmCost } from '../lib/format'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
+import { BillingStatusBanner } from '../components/billing/BillingStatusBanner'
+import { EMPTY_BILLING_STATS, type BillingStats, type BillingTabId } from '../components/billing/types'
 import {
   PageHeader,
   PageHelp,
@@ -40,6 +46,9 @@ import {
   SelectField,
   Sparkline,
   DetailRows,
+  Section,
+  StatCard,
+  SegmentedControl,
 } from '../components/ui'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -176,12 +185,43 @@ const formatMoney = (amountMinor: number, currency: string) => {
   }
 }
 
+const BILLING_TABS: Array<{ id: BillingTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Active project plan, usage bar, invoices, and quota health for this period.',
+  },
+  {
+    id: 'plans',
+    label: 'Plans',
+    description: 'Compare Hobby, Starter, Pro, and Enterprise entitlements side by side.',
+  },
+  {
+    id: 'support',
+    label: 'Support',
+    description: 'Open a billing ticket or email the team — reply SLA depends on plan tier.',
+  },
+]
+
+function isBillingTabId(value: string | null): value is BillingTabId {
+  return BILLING_TABS.some((t) => t.id === value)
+}
+
 export function BillingPage() {
+  const copy = usePageCopy('/billing')
   const toast = useToast()
   const { user } = useAuth()
   const activeProjectId = useActiveProjectId()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const param = searchParams.get('tab')
+  const activeTab: BillingTabId = isBillingTabId(param) ? param : 'overview'
+  const activeTabMeta = BILLING_TABS.find((t) => t.id === activeTab) ?? BILLING_TABS[0]
+
   const billingQuery = usePageData<BillingResponse>('/v1/admin/billing')
+  const statsQuery = usePageData<BillingStats>('/v1/admin/billing/stats')
   const billing = billingQuery.data
+  const stats = statsQuery.data ?? EMPTY_BILLING_STATS
   const projects = billing?.projects ?? []
   const activeProject = useMemo(
     () => projects.find(p => p.project_id === activeProjectId) ?? projects[0] ?? null,
@@ -193,6 +233,52 @@ export function BillingPage() {
   // has zero reports this period — otherwise React skips the render and
   // the hook just sits on its cache.
   const setup = useSetupStatus(activeProjectId)
+
+  const reloadAll = useCallback(() => {
+    billingQuery.reload()
+    statsQuery.reload()
+  }, [billingQuery, statsQuery])
+
+  useRealtimeReload(['usage_events', 'billing_subscriptions'], reloadAll)
+
+  const setActiveTab = useCallback(
+    (id: BillingTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const criticalCount =
+    (stats.projectCount === 0 ? 1 : 0) +
+    stats.pastDueProjects +
+    stats.unpaidProjects +
+    (stats.overQuota ? 1 : 0) +
+    (stats.approachingQuota ? 1 : 0) +
+    (stats.hasStripeCustomer && !stats.paymentOk ? 1 : 0) +
+    (stats.cancelAtPeriodEnd ? 1 : 0)
+
+  usePublishPageContext({
+    route: '/billing',
+    title: `${activeTabMeta.label} · Billing`,
+    summary: activeTabMeta.description,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount,
+  })
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      { id: 'plans' as const, label: 'Plans' },
+      {
+        id: 'support' as const,
+        label: 'Support',
+      },
+    ],
+    [],
+  )
 
   const [actioning, setActioning] = useState<string | null>(null)
   // Project ID whose plan picker is open. null = no picker open.
@@ -237,106 +323,208 @@ export function BillingPage() {
     window.open(res.data.url, '_blank', 'noopener,noreferrer')
   }, [toast])
 
-  if (billingQuery.loading) return <PanelSkeleton rows={5} label="Loading billing" />
+  const triggerUpgrade = useCallback(() => {
+    if (!activeProject) return
+    setPickerFor(activeProject.project_id)
+    setActiveTab('overview')
+  }, [activeProject, setActiveTab])
+
+  const triggerManage = useCallback(() => {
+    if (!activeProject) return
+    void openPortal(activeProject.project_id)
+  }, [activeProject, openPortal])
+
+  if ((billingQuery.loading && !billing) || (statsQuery.loading && !statsQuery.data)) {
+    return <PanelSkeleton rows={5} label="Loading billing" />
+  }
   if (billingQuery.error) {
-    return <ErrorAlert message={`Failed to load billing: ${billingQuery.error}`} onRetry={billingQuery.reload} />
+    return (
+      <ErrorAlert
+        message={`Failed to load billing: ${billingQuery.error}`}
+        onRetry={reloadAll}
+      />
+    )
+  }
+  if (statsQuery.error) {
+    return (
+      <ErrorAlert
+        message={`Failed to load billing stats: ${statsQuery.error}`}
+        onRetry={reloadAll}
+      />
+    )
   }
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Billing"
-        description="Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms."
+        title={copy?.title ?? 'Billing'}
+        description={
+          copy?.description ??
+          'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'
+        }
+        projectScope={stats.projectName ?? activeProject?.project_name}
       >
         <span className="text-2xs text-fg-faint font-mono">
-          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? '—'} reports / mo
+          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} reports / mo
         </span>
       </PageHeader>
 
-      <PageHelp
-        title="About Billing"
-        whatIsIt="Per-project subscription + usage view. The free tier gives every project a monthly quota of report ingests; subscriptions unlock unlimited reports + usage-based pricing on Stripe Meter Events."
-        useCases={[
-          'Upgrade to Cloud Starter when you hit the free quota and reports are being rejected with HTTP 402',
-          'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
-          'Cross-check usage between Mushi (reports/fixes/tokens) and Stripe (line items)',
-        ]}
-        howToUse="Each project bills independently. Click Upgrade to start a Stripe Checkout session, or Manage to jump into the customer portal. Recent invoices appear inline once Stripe sends the first one."
+      <BillingStatusBanner
+        stats={stats}
+        onManage={activeProject?.customer?.stripe_customer_id ? triggerManage : undefined}
+        onUpgrade={activeProject && activeProject.billing_mode !== 'complimentary' ? triggerUpgrade : undefined}
+        onTab={setActiveTab}
       />
 
-      {/* Order: identity first, options second.
-          Project card(s) show "where you are" — current plan, usage, and the
-          30-day sparkline — so the user has context before scanning the plan
-          comparison. Showing "Plans at a glance" first put the user in
-          shopping mode before they knew what they had; landing on their own
-          card answers the implicit "am I OK?" question first, then the table
-          contextualises a switch ("would 0/1k Hobby fit?") with that answer
-          already in hand. */}
-      {projects.length === 0 ? (
-        <EmptyState
-          title="No projects yet"
-          description="Create a project from the Projects page to start tracking usage and billing."
-        />
-      ) : (
-        <div className="space-y-3">
-          {projects.map((p) => (
-            <ProjectBillingCard
-              key={p.project_id}
-              project={p}
-              plans={billing?.plans ?? []}
-              actioning={actioning}
-              pickerOpen={pickerFor === p.project_id}
-              onTogglePicker={() => setPickerFor(pickerFor === p.project_id ? null : p.project_id)}
-              onPickPlan={(planId) => {
-                setPickerFor(null)
-                void startCheckout(p.project_id, planId)
-              }}
-              onManage={() => openPortal(p.project_id)}
-            />
-          ))}
-        </div>
-      )}
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Billing sections"
+        size="sm"
+      />
 
-      {/* Connectivity diagnostic — slotted between the project card and the
-          plan comparison so the user sees "WHY this is zero" before
-          considering "should I switch plans?". Only fires when the active
-          project has zero ingests this period and we have a setup
-          diagnostic to render against — otherwise the existing UsageBar
-          already tells the story. The same component is used as the
-          /reports empty state so the diagnostic copy stays consistent. */}
-      {activeProject &&
-        (activeProject.usage?.reports ?? 0) === 0 &&
-        setup.activeProject?.project_id === activeProject.project_id && (
-          <SdkConnectivityEmptyState
-            projectId={activeProject.project_id}
-            projectName={activeProject.project_name}
-            lastReportAt={null}
-            diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
-            adminHost={setup.data?.admin_endpoint_host ?? null}
-            headline="Why this period reads 0"
-            onTestReportSent={() => {
-              setup.reload()
-              billingQuery.reload()
-            }}
+      <Section title="Billing snapshot" freshness={{ at: statsQuery.lastFetchedAt, isValidating: statsQuery.isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Plan"
+            value={stats.planDisplayName}
+            accent={stats.isComplimentary ? 'text-brand' : stats.planId === 'hobby' ? undefined : 'text-ok'}
+            hint={
+              stats.isComplimentary
+                ? 'Complimentary admin account'
+                : stats.subscriptionStatus ?? 'No subscription'
+            }
+          />
+          <StatCard
+            label="Reports · period"
+            value={
+              stats.reportsLimit != null
+                ? `${stats.reportsUsed.toLocaleString()} / ${stats.reportsLimit.toLocaleString()}`
+                : stats.reportsUsed.toLocaleString()
+            }
+            accent={stats.overQuota ? 'text-danger' : stats.approachingQuota ? 'text-warn' : 'text-ok'}
+            hint={stats.usagePct != null ? `${stats.usagePct}% of monthly quota` : 'Unlimited on this tier'}
+          />
+          <StatCard
+            label="Fixes · period"
+            value={`${stats.fixesSucceeded}/${stats.fixesAttempted}`}
+            accent={stats.fixesAttempted > 0 ? 'text-info' : undefined}
+            hint="Succeeded / attempted autofix runs"
+          />
+          <StatCard
+            label="LLM COGS · month"
+            value={stats.llmCostUsdMonth > 0 ? formatLlmCost(stats.llmCostUsdMonth) : '$0'}
+            accent={stats.llmCostUsdMonth > 0 ? 'text-brand' : undefined}
+            hint={
+              stats.periodEnd
+                ? `Period ends soon — see LLM Cost for detail`
+                : 'Summed from llm_invocations.cost_usd'
+            }
+          />
+        </div>
+      </Section>
+
+      <PageHelp
+        title={copy?.help?.title ?? 'About Billing'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Per-project subscription + usage view. The free tier gives every project a monthly quota of report ingests; subscriptions unlock unlimited reports + usage-based pricing on Stripe Meter Events.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Upgrade to Cloud Starter when you hit the free quota and reports are being rejected with HTTP 402',
+            'Open the Stripe Billing Portal to update your card, download invoices, or cancel',
+            'Cross-check usage between Mushi (reports/fixes/tokens) and Stripe (line items)',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Overview shows your project card with usage + invoices. Plans compares tiers. Support opens a ticket. Upgrade starts Stripe Checkout; Manage opens the customer portal.'
+        }
+      />
+
+      <div
+        role="tabpanel"
+        id={`billing-panel-${activeTab}`}
+        aria-labelledby={`billing-tab-${activeTab}`}
+      >
+        {activeTab === 'overview' && (
+          <>
+            {projects.length === 0 ? (
+              <EmptyState
+                title="No projects yet"
+                description="Create a project from the Projects page to start tracking usage and billing."
+                action={
+                  <Link to="/projects">
+                    <Btn size="sm">Go to Projects</Btn>
+                  </Link>
+                }
+              />
+            ) : (
+              <div className="space-y-3">
+                {projects.map((p) => (
+                  <ProjectBillingCard
+                    key={p.project_id}
+                    project={p}
+                    plans={billing?.plans ?? []}
+                    actioning={actioning}
+                    pickerOpen={pickerFor === p.project_id}
+                    onTogglePicker={() => setPickerFor(pickerFor === p.project_id ? null : p.project_id)}
+                    onPickPlan={(planId) => {
+                      setPickerFor(null)
+                      void startCheckout(p.project_id, planId)
+                    }}
+                    onManage={() => openPortal(p.project_id)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {activeProject &&
+              (activeProject.usage?.reports ?? 0) === 0 &&
+              setup.activeProject?.project_id === activeProject.project_id && (
+                <SdkConnectivityEmptyState
+                  projectId={activeProject.project_id}
+                  projectName={activeProject.project_name}
+                  lastReportAt={null}
+                  diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
+                  adminHost={setup.data?.admin_endpoint_host ?? null}
+                  headline="Why this period reads 0"
+                  onTestReportSent={() => {
+                    setup.reload()
+                    reloadAll()
+                  }}
+                />
+              )}
+          </>
+        )}
+
+        {activeTab === 'plans' && (billing?.plans?.length ?? 0) > 0 && (
+          <PlanComparisonTable
+            plans={billing!.plans!}
+            currentPlanId={activeTierId}
+            currentUsage={
+              activeProject
+                ? {
+                    reports: activeProject.usage?.reports ?? 0,
+                    contextLabel: activeProject.project_name,
+                  }
+                : undefined
+            }
           />
         )}
 
-      {(billing?.plans?.length ?? 0) > 0 && (
-        <PlanComparisonTable
-          plans={billing!.plans!}
-          currentPlanId={activeTierId}
-          currentUsage={
-            activeProject
-              ? {
-                  reports: activeProject.usage?.reports ?? 0,
-                  contextLabel: activeProject.project_name,
-                }
-              : undefined
-          }
-        />
-      )}
+        {activeTab === 'plans' && (billing?.plans?.length ?? 0) === 0 && (
+          <EmptyState
+            title="Plan catalog unavailable"
+            description="The API didn't return plan tiers — check billing_subscriptions migrations or reload."
+          />
+        )}
 
-      <SupportSection projects={projects} />
+        {activeTab === 'support' && <SupportSection projects={projects} />}
+      </div>
     </div>
   )
 }

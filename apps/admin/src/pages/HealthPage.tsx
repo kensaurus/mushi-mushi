@@ -39,6 +39,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
+import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { markJudgeBatchSeen } from '../components/PipelineStatusRibbon'
 
@@ -288,6 +289,14 @@ export function HealthPage() {
     redCount > 0 ? 'crit' : amberCount > 0 ? 'warn' : 'ok'
   const lastLlmCall = llm.recent?.[0]
 
+  const healthDebugLines: OperatorTraceLine[] = [
+    { level: 'debug', source: 'window', message: `telemetry window=${window}` },
+    { level: redCount > 0 ? 'error' : 'info', source: 'probes', message: `red=${redCount} amber=${amberCount}` },
+    ...(lastLlmCall
+      ? [{ level: 'info' as const, source: 'llm.last', message: `${lastLlmCall.function_name} · ${lastLlmCall.used_model}`, ts: lastLlmCall.created_at }]
+      : []),
+  ]
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -342,6 +351,7 @@ export function HealthPage() {
               { label: 'Avg latency', value: `${Math.round(llm.avgLatencyMs)}ms`, tone: 'neutral' },
             ],
           },
+          debugLines: healthDebugLines,
         }}
         act={healthAction}
         actAnchor="health:act"

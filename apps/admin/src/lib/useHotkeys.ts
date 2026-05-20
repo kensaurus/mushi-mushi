@@ -80,6 +80,9 @@ export function useHotkeys(
   useEffect(() => {
     if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
+      // e.key can be undefined on synthetic events (e.g. IME composition,
+      // some accessibility tools). Guard to avoid a TypeError crash.
+      if (!e.key) return
       const typing = isTypingTarget(e.target)
       for (const b of ref.current) {
         if (b.key.toLowerCase() !== e.key.toLowerCase()) continue

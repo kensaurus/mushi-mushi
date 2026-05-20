@@ -20,8 +20,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Btn, Card } from './ui'
 import { apiFetch } from '../lib/supabase'
+import { useActiveProjectId } from './ProjectSwitcher'
 
 type FeedbackType = 'bug' | 'feature'
 
@@ -29,6 +31,8 @@ interface FeedbackModalProps {
   onClose: () => void
   /** Pre-select the tab on open. Defaults to 'bug'. */
   initialType?: FeedbackType
+  /** Called after a successful submit (before auto-close). */
+  onSubmitted?: (ticketId: string) => void
 }
 
 const FALLBACK_EMAIL = 'kensaurus@gmail.com'
@@ -67,12 +71,14 @@ const TYPE_CONFIG: Record<FeedbackType, {
   },
 }
 
-export function FeedbackModal({ onClose, initialType = 'bug' }: FeedbackModalProps) {
+export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: FeedbackModalProps) {
+  const activeProjectId = useActiveProjectId()
   const [type, setType] = useState<FeedbackType>(initialType)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [submittedTicketId, setSubmittedTicketId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const subjectRef = useRef<HTMLInputElement>(null)
 
@@ -118,9 +124,10 @@ export function FeedbackModal({ onClose, initialType = 'bug' }: FeedbackModalPro
     setError(null)
     setSubmitting(true)
 
-    const result = await apiFetch<{ ok: boolean }>('/v1/support/contact', {
+    const result = await apiFetch<{ ticket_id: string; created_at: string }>('/v1/support/contact', {
       method: 'POST',
       body: JSON.stringify({
+        project_id: activeProjectId ?? null,
         subject: cleanSubject,
         body: `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n${cleanBody}\n\n---\nPage: ${window.location.href}`,
         category: type === 'bug' ? 'bug' : 'feature',
@@ -143,6 +150,9 @@ export function FeedbackModal({ onClose, initialType = 'bug' }: FeedbackModalPro
       return
     }
 
+    const ticketId = result.data?.ticket_id ?? null
+    setSubmittedTicketId(ticketId)
+    if (ticketId) onSubmitted?.(ticketId)
     setSubmitted(true)
   }
 
@@ -189,8 +199,24 @@ export function FeedbackModal({ onClose, initialType = 'bug' }: FeedbackModalPro
           /* Success state */
           <div className="px-4 py-6 text-center space-y-2">
             <p className="text-xs text-fg-secondary leading-relaxed max-w-xs mx-auto">{config.successBody}</p>
+            <p className="text-2xs text-fg-muted">
+              Track status anytime on{' '}
+              <Link to="/feedback" className="text-brand hover:text-brand-hover font-medium" onClick={onClose}>
+                My feedback
+              </Link>
+              .
+            </p>
+            {submittedTicketId && (
+              <p className="text-3xs text-fg-faint font-mono">#{submittedTicketId.slice(0, 8)}</p>
+            )}
             <p className="text-2xs text-fg-muted">Closing in a moment…</p>
-            <div className="pt-2">
+            <div className="pt-2 flex justify-center gap-2">
+              <Link
+                to={submittedTicketId ? `/feedback?ticket=${submittedTicketId}` : '/feedback'}
+                onClick={onClose}
+              >
+                <Btn size="sm" variant="ghost">View my submissions</Btn>
+              </Link>
               <Btn size="sm" variant="ghost" onClick={onClose}>Close now</Btn>
             </div>
           </div>

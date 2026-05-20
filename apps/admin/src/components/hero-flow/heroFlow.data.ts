@@ -17,6 +17,7 @@ import type { Edge, Node } from '@xyflow/react'
 
 import type { PageAction } from '../PageActionBar'
 import type { DavEvidence } from '../../lib/davManifest'
+import type { OperatorTraceLine } from './operatorTrace'
 
 export type HeroSeverity = 'ok' | 'info' | 'warn' | 'crit' | 'neutral'
 
@@ -51,6 +52,7 @@ export interface HeroDecideData {
   evidence?: DavEvidence
   /** configDocs IDs that are currently unset/blocking. */
   missingConfigIds?: string[]
+  debugLines?: OperatorTraceLine[]
 }
 
 export interface HeroActData {
@@ -62,6 +64,7 @@ export interface HeroActData {
   evidence?: DavEvidence
   /** configDocs IDs that are currently unset/blocking. */
   missingConfigIds?: string[]
+  debugLines?: OperatorTraceLine[]
 }
 
 export interface HeroVerifyData {
@@ -76,12 +79,15 @@ export interface HeroVerifyData {
   evidence?: DavEvidence
   /** configDocs IDs that are currently unset/blocking. */
   missingConfigIds?: string[]
+  debugLines?: OperatorTraceLine[]
 }
 
 export interface HeroNodeBaseData extends Record<string, unknown> {
   scope: string
   expanded: boolean
   onToggle: () => void
+  /** Collapsed-tile trace preview (built in PageHero). */
+  operatorTrace?: OperatorTraceLine[]
 }
 
 export interface HeroDecideNodeData extends HeroNodeBaseData {
@@ -108,34 +114,113 @@ export interface HeroEdgeData extends Record<string, unknown> {
   targetColor: string
   flowing?: boolean
   failing?: boolean
-  /** Short metadata label rendered at the edge midpoint via
-   *  EdgeLabelRenderer. Derived from real page data — never stubbed. */
+  /** Full metadata label (tooltip when truncated). */
   label?: string
+  /** Single-line display copy for the edge pill. */
+  labelDisplay?: string
+  /** When true, hover reveals `label` in a tooltip. */
+  labelTruncated?: boolean
+  /** Max pill width — long copy uses truncate + tooltip. */
+  labelMaxWidth?: number
+}
+
+/** Compact edge-pill copy — breaks on a word boundary when possible. */
+export function formatHeroEdgeLabel(
+  text: string,
+  maxLen = 28,
+): { display: string; full: string; truncated: boolean } {
+  const full = text.trim()
+  if (full.length <= maxLen) {
+    return { display: full, full, truncated: false }
+  }
+  const slice = full.slice(0, maxLen)
+  const lastSpace = slice.lastIndexOf(' ')
+  const cut = lastSpace >= 10 ? lastSpace : maxLen
+  return {
+    display: `${full.slice(0, cut).trimEnd()}…`,
+    full,
+    truncated: true,
+  }
 }
 
 // ─── Layout ────────────────────────────────────────────────────────────
 //
-// Three stations on a single horizontal lane. Width chosen so the canvas
-// fits a 1024px-wide page chrome at md+ without horizontal scroll, and so
-// the bezier between siblings has enough horizontal slack to bend rather
-// than reading as a straight line.
+// Three stations on a single horizontal lane. Positions are derived from
+// the live container width so the hero stretches with the page instead of
+// sitting in a fixed ~910px band with dead margins on wide screens.
 
-const NODE_WIDTH = 250
-const NODE_HEIGHT = 110
-const NODE_GAP = 80
+const DEFAULT_NODE_WIDTH = 250
+const DEFAULT_NODE_HEIGHT = 110
+const DEFAULT_NODE_GAP = 80
 
-const POSITIONS = {
-  decide: { x: 0, y: 0 },
-  act: { x: NODE_WIDTH + NODE_GAP, y: 0 },
-  verify: { x: 2 * (NODE_WIDTH + NODE_GAP), y: 0 },
-} as const
+export interface HeroLayoutMetrics {
+  nodeWidth: number
+  nodeHeight: number
+  gap: number
+  /** Max width for edge midpoint pills — derived from gap so long copy wraps
+   *  instead of overlapping the next node. */
+  labelMaxWidth: number
+  positions: {
+    decide: { x: number; y: number }
+    act: { x: number; y: number }
+    verify: { x: number; y: number }
+  }
+  totalWidth: number
+}
+
+/** Compute node geometry from the hero container's client width. */
+export function computeHeroLayout(
+  containerWidth: number,
+  opts?: { expanded?: boolean },
+): HeroLayoutMetrics {
+  const padding = 12
+  const usable = Math.max(360, containerWidth - padding * 2)
+  const minNode = 140
+  const maxNode = 400
+  // Gaps are the "label channels" between nodes — keep them wide enough that
+  // edge pills can wrap to 2–3 readable lines instead of one char per line.
+  const minGap = 88
+  const maxGap = 168
+
+  let gap = Math.min(maxGap, Math.max(minGap, Math.floor(usable * 0.11)))
+  let nodeWidth = Math.floor((usable - 2 * gap) / 3)
+  nodeWidth = Math.min(maxNode, Math.max(minNode, nodeWidth))
+
+  // If nodes hit max width, pour leftover space into wider gaps (pill room).
+  const slack = usable - (3 * nodeWidth + 2 * gap)
+  if (slack > 0) {
+    gap = Math.min(maxGap, gap + Math.floor(slack / 2))
+  }
+
+  const totalWidth = 3 * nodeWidth + 2 * gap
+  const offsetX = padding + Math.max(0, (usable - totalWidth) / 2)
+  const nodeHeight = opts?.expanded ? 132 : DEFAULT_NODE_HEIGHT + 10
+  const labelMaxWidth = Math.max(108, Math.min(200, Math.floor(gap * 0.92)))
+
+  return {
+    nodeWidth,
+    nodeHeight,
+    gap,
+    labelMaxWidth,
+    positions: {
+      decide: { x: offsetX, y: 0 },
+      act: { x: offsetX + nodeWidth + gap, y: 0 },
+      verify: { x: offsetX + 2 * (nodeWidth + gap), y: 0 },
+    },
+    totalWidth: offsetX + totalWidth + padding,
+  }
+}
+
+const FALLBACK_LAYOUT = computeHeroLayout(
+  3 * DEFAULT_NODE_WIDTH + 2 * DEFAULT_NODE_GAP + 24,
+)
 
 export const HERO_FLOW_LAYOUT = {
-  nodeWidth: NODE_WIDTH,
-  nodeHeight: NODE_HEIGHT,
-  gap: NODE_GAP,
-  totalWidth: 3 * NODE_WIDTH + 2 * NODE_GAP,
-  totalHeight: NODE_HEIGHT,
+  nodeWidth: DEFAULT_NODE_WIDTH,
+  nodeHeight: DEFAULT_NODE_HEIGHT,
+  gap: DEFAULT_NODE_GAP,
+  totalWidth: FALLBACK_LAYOUT.totalWidth,
+  totalHeight: DEFAULT_NODE_HEIGHT,
 } as const
 
 interface BuildHeroFlowInput {
@@ -143,6 +228,7 @@ interface BuildHeroFlowInput {
   decide: HeroDecideData
   act: HeroActData
   verify: HeroVerifyData
+  layout: HeroLayoutMetrics
   /** Per-tile expand state. Owned by `<HeroFlow />` and threaded into
    *  each node's data so the custom node component can render its
    *  expanded body inside the React Flow node tree (rather than a sibling
@@ -151,22 +237,28 @@ interface BuildHeroFlowInput {
   onToggle: (tile: 'decide' | 'act' | 'verify') => void
   /** Optional decide accessory (sparkline, trend chip). */
   decideAccessory?: unknown
+  operatorTraces?: {
+    decide: OperatorTraceLine[]
+    act: OperatorTraceLine[]
+    verify: OperatorTraceLine[]
+  }
 }
 
 export function buildHeroNodes(input: BuildHeroFlowInput): Node<HeroNodeData>[] {
+  const { layout } = input
   const baseProps = {
     draggable: false,
     connectable: false,
     selectable: false,
-    width: NODE_WIDTH,
-    height: NODE_HEIGHT,
+    width: layout.nodeWidth,
+    height: layout.nodeHeight,
   }
   return [
     {
       ...baseProps,
       id: 'decide',
       type: 'heroDecide',
-      position: POSITIONS.decide,
+      position: layout.positions.decide,
       data: {
         kind: 'decide',
         scope: input.scope,
@@ -174,32 +266,35 @@ export function buildHeroNodes(input: BuildHeroFlowInput): Node<HeroNodeData>[] 
         accessory: input.decideAccessory,
         expanded: input.expanded === 'decide',
         onToggle: () => input.onToggle('decide'),
+        operatorTrace: input.operatorTraces?.decide,
       } satisfies HeroDecideNodeData,
     },
     {
       ...baseProps,
       id: 'act',
       type: 'heroAct',
-      position: POSITIONS.act,
+      position: layout.positions.act,
       data: {
         kind: 'act',
         scope: input.scope,
         act: input.act,
         expanded: input.expanded === 'act',
         onToggle: () => input.onToggle('act'),
+        operatorTrace: input.operatorTraces?.act,
       } satisfies HeroActNodeData,
     },
     {
       ...baseProps,
       id: 'verify',
       type: 'heroVerify',
-      position: POSITIONS.verify,
+      position: layout.positions.verify,
       data: {
         kind: 'verify',
         scope: input.scope,
         verify: input.verify,
         expanded: input.expanded === 'verify',
         onToggle: () => input.onToggle('verify'),
+        operatorTrace: input.operatorTraces?.verify,
       } satisfies HeroVerifyNodeData,
     },
   ]
@@ -212,6 +307,7 @@ export function buildHeroEdges(input: {
   decide: HeroDecideData
   act: HeroActData
   verify: HeroVerifyData
+  layout: HeroLayoutMetrics
 }): Edge<HeroEdgeData>[] {
   const decideHex = HERO_SEVERITY_HEX[input.decide.severity]
   const actHex = input.act.action
@@ -225,17 +321,17 @@ export function buildHeroEdges(input: {
   const flowingFirst = hasAction || failingFirst
   const flowingSecond = hasAction && Boolean(input.verify.to)
 
-  // Derive real metadata labels from the page data — no stubs.
-  const firstLabel = hasAction
-    ? input.act.action!.title.length > 30
-      ? input.act.action!.title.slice(0, 28) + '…'
-      : input.act.action!.title
+  // Derive real metadata labels from page data. Long action titles are
+  // truncated in the pill; full copy appears on hover (HeroGradientEdge).
+  const firstRaw = hasAction
+    ? input.act.action!.title
     : input.decide.severity !== 'neutral' && input.decide.severity !== 'ok'
       ? input.decide.severity
       : undefined
-  const secondLabel = input.verify.to
-    ? 'evidence'
-    : undefined
+  const firstFormatted = firstRaw ? formatHeroEdgeLabel(firstRaw, 30) : null
+  const secondRaw = input.verify.to ? 'evidence' : undefined
+  const secondFormatted = secondRaw ? formatHeroEdgeLabel(secondRaw, 24) : null
+  const labelMaxWidth = Math.min(148, input.layout.labelMaxWidth)
 
   return [
     {
@@ -250,7 +346,10 @@ export function buildHeroEdges(input: {
         targetColor: actHex,
         flowing: flowingFirst,
         failing: failingFirst,
-        label: firstLabel,
+        label: firstFormatted?.full,
+        labelDisplay: firstFormatted?.display,
+        labelTruncated: firstFormatted?.truncated,
+        labelMaxWidth,
       },
     },
     {
@@ -265,7 +364,10 @@ export function buildHeroEdges(input: {
         targetColor: verifyHex,
         flowing: flowingSecond,
         failing: failingSecond,
-        label: secondLabel,
+        label: secondFormatted?.full,
+        labelDisplay: secondFormatted?.display,
+        labelTruncated: secondFormatted?.truncated,
+        labelMaxWidth: Math.min(labelMaxWidth, 88),
       },
     },
   ]

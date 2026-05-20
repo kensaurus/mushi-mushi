@@ -6,7 +6,7 @@
 
 import { Link, useNavigate } from 'react-router-dom'
 import { Card } from '../ui'
-import { SeverityStackedBars, LineSparkline, formatTokens } from '../charts'
+import { SeverityStackedBars, LineSparkline } from '../charts'
 import { ChartAnnotations } from '../charts/ChartAnnotations'
 import type { LlmDay, ReportDay } from './types'
 import type { ChartEvent } from '../../lib/apiSchemas'
@@ -51,12 +51,19 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <div className="text-2xs text-fg-muted">Tokens / day</div>
+            <div className="text-2xs text-fg-muted mb-1">Tokens / day</div>
             <div className="relative">
               <LineSparkline
                 values={llmByDay.map((d) => d.tokens)}
                 timestamps={llmTimestamps}
                 onRangeSelect={onLlmRange}
+                showAxes
+                scaleToData
+                valueFormat="count"
+                yAxisCaption="Tokens"
+                xAxisCaption="UTC day"
+                showPeakLabel
+                height={56}
                 ariaLabel="LLM tokens per day — drag to filter reports by date range"
               />
               {llmTimestamps.length > 1 && chartEvents.length > 0 && (
@@ -69,18 +76,21 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
                 />
               )}
             </div>
-            <div className="text-3xs font-mono text-fg-faint mt-0.5">
-              peak {formatTokens(Math.max(0, ...llmByDay.map((d) => d.tokens)))}
-            </div>
           </div>
           <div>
-            <div className="text-2xs text-fg-muted">Calls / day</div>
+            <div className="text-2xs text-fg-muted mb-1">Calls / day</div>
             <div className="relative">
               <LineSparkline
                 values={llmByDay.map((d) => d.calls)}
                 timestamps={llmTimestamps}
                 onRangeSelect={onLlmRange}
                 accent="text-info"
+                showAxes
+                valueFormat="count"
+                yAxisCaption="Calls"
+                xAxisCaption="UTC day"
+                showPeakLabel
+                height={56}
                 ariaLabel="LLM calls per day — drag to filter reports by date range"
               />
               {llmTimestamps.length > 1 && chartEvents.length > 0 && (
@@ -93,7 +103,7 @@ export function ChartsRow({ reportsByDay, llmByDay, totalLlmCalls, chartEvents =
                 />
               )}
             </div>
-            <div className="text-3xs font-mono text-fg-faint mt-0.5">{totalLlmCalls} total</div>
+            <div className="text-3xs font-mono text-fg-faint mt-1">{totalLlmCalls} total calls</div>
           </div>
         </div>
       </Card>

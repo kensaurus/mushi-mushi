@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import {
@@ -14,6 +16,10 @@ import {
   Card,
   ErrorAlert,
   Loading,
+  Section,
+  StatCard,
+  FreshnessPill,
+  Badge,
 } from '../components/ui'
 import { PageHero } from '../components/PageHero'
 import { PageActionBar } from '../components/PageActionBar'
@@ -30,9 +36,47 @@ import { DiscoveryTab } from '../components/inventory/DiscoveryTab'
 import { SyntheticTimeline } from '../components/inventory/SyntheticTimeline'
 import { DriftDiffPanel } from '../components/inventory/DriftDiffPanel'
 import { INVENTORY_HELP } from '../components/inventory/inventoryCopy'
+import { InventoryStatusBanner } from '../components/inventory/InventoryStatusBanner'
+import {
+  EMPTY_INVENTORY_STATS,
+  type InventoryStats,
+  type InventoryTabId,
+} from '../components/inventory/InventoryStatsTypes'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
-type Tab = 'stories' | 'tree' | 'gates' | 'synthetic' | 'drift' | 'discovery' | 'yaml'
+const INVENTORY_TABS: Array<{ id: InventoryTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture banner, coverage snapshot, and how discovery → ingest → gates fit together.',
+  },
+  {
+    id: 'stories',
+    label: 'User stories',
+    description: 'Card map of stories and actions — status chips from gates, crawler, and synthetic probes.',
+  },
+  { id: 'tree', label: 'Tree', description: 'Page × element grid with backend and test wiring.' },
+  { id: 'gates', label: 'Gates', description: 'Latest gate runs and open findings — dead handlers, mock leaks, contracts.' },
+  { id: 'synthetic', label: 'Synthetic', description: 'Production probes per action — latency and pass/fail history.' },
+  { id: 'drift', label: 'Drift', description: 'Crawler diff — missing in inventory vs missing in app vs mismatches.' },
+  { id: 'discovery', label: 'Discovery', description: 'SDK observe → Claude propose → accept lifecycle.' },
+  { id: 'yaml', label: 'Yaml', description: 'Power-user ingest — paste inventory.yaml or tweak the raw snapshot.' },
+]
+
+function resolveInventoryTab(value: string | null): InventoryTabId {
+  if (
+    value === 'stories' ||
+    value === 'tree' ||
+    value === 'gates' ||
+    value === 'synthetic' ||
+    value === 'drift' ||
+    value === 'discovery' ||
+    value === 'yaml'
+  ) {
+    return value
+  }
+  return 'overview'
+}
 
 interface Summary {
   total?: number
@@ -142,7 +186,31 @@ export function InventoryPage() {
   const projectId = useActiveProjectId()
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
-  const [tab, setTab] = useState<Tab>('stories')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveInventoryTab(tabParam)
+  const activeTabMeta = INVENTORY_TABS.find((t) => t.id === activeTab) ?? INVENTORY_TABS[0]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<InventoryStats>('/v1/admin/inventory/stats')
+  const stats = statsData ?? EMPTY_INVENTORY_STATS
+
+  const setActiveTab = useCallback(
+    (id: InventoryTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
     id: string
@@ -162,14 +230,13 @@ export function InventoryPage() {
   })
   const storiesQuery = usePageData<{ tree: StoryPayload[] }>(
     basePath ? `${basePath}/user-stories` : null,
-    { deps: [projectId ?? '', tab] },
+    { deps: [projectId ?? '', activeTab] },
   )
-  // Findings drive the per-story open-finding badge AND the Gates tab's
-  // detail list. Loading them on `stories` lets the Stories cards advertise
-  // "X open findings" without an extra round-trip when the user clicks over.
   const findingsQuery = usePageData<FindingsPayload>(
-    basePath && (tab === 'gates' || tab === 'stories') ? `${basePath}/findings` : null,
-    { deps: [projectId ?? '', tab] },
+    basePath && (activeTab === 'gates' || activeTab === 'stories' || activeTab === 'overview')
+      ? `${basePath}/findings`
+      : null,
+    { deps: [projectId ?? '', activeTab] },
   )
 
   const payload = mainQuery.data
@@ -178,10 +245,11 @@ export function InventoryPage() {
   const treeRows = useMemo(() => buildTreeRows(snapshot?.parsed as Record<string, unknown>), [snapshot])
 
   const reloadAll = useCallback(() => {
+    reloadStats()
     mainQuery.reload()
     storiesQuery.reload()
     findingsQuery.reload()
-  }, [mainQuery, storiesQuery, findingsQuery])
+  }, [reloadStats, mainQuery, storiesQuery, findingsQuery])
 
   useRealtimeReload(['inventories', 'gate_runs', 'gate_findings', 'status_history', 'synthetic_runs'], reloadAll, {
     debounceMs: 1200,

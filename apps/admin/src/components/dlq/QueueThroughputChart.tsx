@@ -42,27 +42,54 @@ export function QueueThroughputChart({ throughput }: Props) {
           />
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div>
           <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-info/70" aria-hidden="true" />
             Created
           </div>
-          <BarSparkline values={throughput.map((d) => d.created)} accent="bg-info/70" height={28} />
+          <BarSparkline
+            values={throughput.map((d) => d.created)}
+            xLabels={throughput.map((d) => d.day)}
+            accent="bg-info/70"
+            height={64}
+            showAxes
+            valueFormat="count"
+            yAxisCaption="Jobs"
+            showPeakLabel
+          />
         </div>
         <div>
           <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-ok/70" aria-hidden="true" />
             Completed
           </div>
-          <BarSparkline values={throughput.map((d) => d.completed)} accent="bg-ok/70" height={28} />
+          <BarSparkline
+            values={throughput.map((d) => d.completed)}
+            xLabels={throughput.map((d) => d.day)}
+            accent="bg-ok/70"
+            height={64}
+            showAxes
+            valueFormat="count"
+            yAxisCaption="Jobs"
+            showPeakLabel
+          />
         </div>
         <div>
           <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint mb-1 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-danger/70" aria-hidden="true" />
             Failed / DLQ
           </div>
-          <BarSparkline values={throughput.map((d) => d.failed)} accent="bg-danger/70" height={28} />
+          <BarSparkline
+            values={throughput.map((d) => d.failed)}
+            xLabels={throughput.map((d) => d.day)}
+            accent="bg-danger/70"
+            height={64}
+            showAxes
+            valueFormat="count"
+            yAxisCaption="Jobs"
+            showPeakLabel
+          />
         </div>
       </div>
     </Card>

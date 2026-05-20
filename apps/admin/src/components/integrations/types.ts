@@ -94,6 +94,17 @@ export interface RoutingIntegration {
   last_synced_at: string | null
 }
 
+export interface IntegrationStats {
+  platformTotal: number
+  platformConnected: number
+  platformHealthy: number
+  platformDown: number
+  routingActive: number
+  routingPaused: number
+  routingTotal: number
+  lastProbeAt: string | null
+}
+
 export const PLATFORM_STATUS_MAP: Record<HealthRow['status'], string | null | undefined> = {
   ok: 'ok',
   degraded: 'degraded',

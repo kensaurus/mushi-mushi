@@ -7,14 +7,17 @@
  *          copy-pasting an API key.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
+import { usePageCopy } from '../lib/copy'
+import { useRealtimeReload } from '../lib/realtime'
 import { pluralize, pluralizeWithCount } from '../lib/format'
-import {
-  PageHeader,
+import { PageHeader,
   PageHelp,
+  Section,
   Card,
   Btn,
   ErrorAlert,
@@ -22,12 +25,20 @@ import {
   EmptyState,
   Badge,
   Tooltip,
+  StatCard,
+  SegmentedControl,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { useUpdateProject } from '../lib/useUpdateProject'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { ProjectsStatusBanner } from '../components/projects/ProjectsStatusBanner'
+import {
+  EMPTY_PROJECTS_STATS,
+  type ProjectsStats,
+  type ProjectsTabId,
+} from '../components/projects/types'
 import {
   ACTIVE_PROJECT_QUERY_PARAM,
   ACTIVE_PROJECT_STORAGE_KEY,
@@ -234,7 +245,7 @@ const PDCA_BOTTLENECK_DEEP_LINK: Record<PdcaStageId, string> = {
   plan: '/reports?status=new',
   do: '/fixes',
   check: '/judge',
-  act: '/integrations',
+  act: '/integrations/config',
 }
 
 const LINK_CHIP_CLASS =
@@ -315,8 +326,22 @@ const INDEX_HEALTH_TONE: Record<IndexHealth, string> = {
 export function ProjectsPage() {
   const toast = useToast()
   const navigate = useNavigate()
+  const copy = usePageCopy('/projects')
   const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab: ProjectsTabId = tabParam === 'create' ? 'create' : 'list'
+
+  const setTab = useCallback(
+    (tab: ProjectsTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (tab === 'list') next.delete('tab')
+      else next.set('tab', tab)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   const [newName, setNewName] = useState('')
   const [busyProject, setBusyProject] = useState<string | null>(null)
@@ -377,9 +402,20 @@ export function ProjectsPage() {
     | null
   >(null)
 
-  const { data, loading, error, reload } = usePageData<{ projects: Project[]; admin_host: string | null }>(
+  const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<{ projects: Project[]; admin_host: string | null }>(
     '/v1/admin/projects',
   )
+  const { data: statsData, reload: reloadStats } = usePageData<ProjectsStats>(
+    '/v1/admin/projects/stats',
+  )
+  const stats = statsData ?? EMPTY_PROJECTS_STATS
+
+  const reloadAll = useCallback(() => {
+    reload()
+    reloadStats()
+  }, [reload, reloadStats])
+
+  useRealtimeReload(['projects', 'project_api_keys', 'reports'], reloadAll)
   // Hide rows that the user is currently undoing — they're already
   // pretending to be deleted from the user's POV. If the timer fires and
   // the DELETE succeeds, the next reload drops them for real; if the user
@@ -388,11 +424,36 @@ export function ProjectsPage() {
     () => (data?.projects ?? []).filter((p) => !pendingDeleteIds.has(p.id)),
     [data, pendingDeleteIds],
   )
+  const activeProjectName = useMemo(
+    () => projects.find((p) => p.id === activeProjectId)?.name ?? null,
+    [projects, activeProjectId],
+  )
   // Captured once per response and threaded into every SdkHealthSummary so
   // each card can compare the SDK's last-seen endpoint against the host
   // THIS admin reads from. Mismatch = silent backend split = the bug class
   // we're surfacing here.
   const adminHost = data?.admin_host ?? null
+
+  usePublishPageContext({
+    route: '/projects',
+    title: `${activeTab === 'create' ? 'New project' : 'Your projects'} · Projects`,
+    summary: copy?.description ?? 'Workspace project registry',
+    filters: { tab: activeTab, active_project_id: activeProjectId ?? undefined },
+    criticalCount:
+      stats.projectCount === 0
+        ? 1
+        : stats.projectsWithReports === 0
+          ? 1
+          : stats.neverIngestedCount,
+  })
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'list' as const, label: 'Your projects', count: stats.projectCount || undefined },
+      { id: 'create' as const, label: 'New project' },
+    ],
+    [stats.projectCount],
+  )
 
   const {
     create: createProjectRaw,
@@ -402,7 +463,8 @@ export function ProjectsPage() {
   } = useCreateProject({
     onCreated: () => {
       setNewName('')
-      reload()
+      reloadAll()
+      setTab('list')
     },
   })
 
@@ -678,115 +740,171 @@ export function ProjectsPage() {
 
   if (loading)
     return <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading projects" />
-  if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reload} />
+  if (error) return <ErrorAlert message={`Failed to load projects: ${error}`} onRetry={reloadAll} />
+
+  const createForm = (
+    <div className="space-y-2">
+      <div className="flex gap-2 items-end">
+        <div className="flex-1">
+          <Input
+            label="Project name"
+            helpId="projects.create_project"
+            type="text"
+            placeholder="New project name (e.g. Acme iOS app)"
+            value={newName}
+            onChange={(e) => {
+              setNewName(e.target.value)
+              if (createError) clearCreateError()
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && createProject()}
+            aria-invalid={createError ? true : undefined}
+            aria-describedby={createError ? 'projects-create-error' : undefined}
+          />
+        </div>
+        <Btn onClick={createProject} disabled={creating || !newName.trim()}>
+          {creating ? 'Creating...' : 'Create project'}
+        </Btn>
+      </div>
+      {createError && (
+        <div id="projects-create-error">
+          <ErrorAlert
+            title={
+              createError.code === 'NO_ORGANIZATION'
+                ? 'No writable team found'
+                : createError.code === 'FORBIDDEN'
+                ? 'Not allowed in this team'
+                : createError.code === 'NETWORK_ERROR'
+                ? 'Couldn\u2019t reach the server'
+                : 'Couldn\u2019t create project'
+            }
+            message={createError.message}
+            code={createError.code}
+            actions={(() => {
+              if (createError.code === 'NO_ORGANIZATION') {
+                return [
+                  { label: 'Open team settings', onClick: () => navigate('/organization/members') },
+                  { label: 'Dismiss', onClick: clearCreateError },
+                ]
+              }
+              if (createError.code === 'FORBIDDEN') {
+                return [
+                  { label: 'Switch team', onClick: () => navigate('/organization/members') },
+                  { label: 'Dismiss', onClick: clearCreateError },
+                ]
+              }
+              if (createError.code === 'NETWORK_ERROR') {
+                return [
+                  { label: 'Try again', onClick: () => void createProjectRaw(newName) },
+                  { label: 'Dismiss', onClick: clearCreateError },
+                ]
+              }
+              return [{ label: 'Dismiss', onClick: clearCreateError }]
+            })()}
+          />
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Projects"
+        title={copy?.title ?? 'Your projects'}
         description={
-          // Use neutral "in this workspace" wording — invited team members
-          // (org `member`/`admin` role) don't *own* the projects but they
-          // can still access them. Saying "owned by you" misleads them
-          // into thinking the empty state means they're missing access
-          // when in fact they're seeing the org's full project list.
-          `${pluralizeWithCount(projects.length, 'project')} in this workspace`
+          copy?.description ??
+          `${pluralizeWithCount(projects.length, 'project')} in this workspace — switch context, mint keys, and verify ingest.`
         }
       />
 
-      <PageHelp
-        title="About Projects"
-        whatIsIt="A project is a logical grouping of bug reports — usually one per app, game, or service. Each project gets its own API keys, settings, integrations, and reports inbox so multiple sources can submit reports without mixing them."
-        useCases={[
-          'Separate reports from your iOS app, Android app, and backend API',
-          'Rotate credentials by revoking and re-issuing API keys without downtime',
-          'Scope per-project routing rules and SLAs in Settings, then share read access via members',
-          'The "Viewing" badge marks which project the rest of the admin console is focused on — Reports, Fixes, Dashboard, Billing, and Health all filter to that one. Every project keeps ingesting reports in the background regardless; this is just a UI lens.',
-        ]}
-        howToUse="Create a project, generate an API key, then drop it into the SDK or send it as the X-API-Key header. Use Switch to to change which project the admin console is showing, or use the project picker in the top-right header. Use the Test report action to verify ingest before wiring up production traffic."
+      <ProjectsStatusBanner
+        stats={stats}
+        activeProjectName={activeProjectName}
+        onCreateTab={() => setTab('create')}
       />
 
-      {/* Migration Hub progress for the active project. The card returns
-          null when nobody on the project has any in-flight migrations, so
-          quiet teams never see dead chrome here. Scoped to active project
-          so a team viewing Acme iOS sees Acme's progress, not Acme Web's. */}
-      {activeProjectId && (
-        <MigrationsInProgressCard
-          projectId={activeProjectId}
-          title="Migrations in this project"
-        />
-      )}
+      <SegmentedControl
+        value={activeTab}
+        onChange={setTab}
+        options={tabOptions}
+        ariaLabel="Projects sections"
+      />
 
-      <div className="space-y-2">
-        <div className="flex gap-2 items-end">
-          <div className="flex-1">
-            <Input
-              label="Project name"
-              helpId="projects.create_project"
-              type="text"
-              placeholder="New project name (e.g. Acme iOS app)"
-              value={newName}
-              onChange={(e) => {
-                setNewName(e.target.value)
-                if (createError) clearCreateError()
-              }}
-              onKeyDown={(e) => e.key === 'Enter' && createProject()}
-              aria-invalid={createError ? true : undefined}
-              aria-describedby={createError ? 'projects-create-error' : undefined}
-            />
-          </div>
-          <Btn onClick={createProject} disabled={creating || !newName.trim()}>
-            {creating ? 'Creating...' : 'Create project'}
-          </Btn>
+      <Section
+        title="Workspace snapshot"
+        freshness={{ at: lastFetchedAt, isValidating }}
+      >
+        <p className="mb-3 text-2xs text-fg-muted">
+          {pluralizeWithCount(projects.length, 'project')} in this workspace — KPIs refresh when keys connect or reports land.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Projects"
+            value={stats.projectCount}
+            accent="text-brand"
+            hint="Every app or environment you track separately"
+          />
+          <StatCard
+            label="Ingesting"
+            value={stats.projectsWithReports}
+            accent={stats.projectsWithReports > 0 ? 'text-ok' : 'text-warn'}
+            hint={`${stats.neverIngestedCount} never received a report`}
+          />
+          <StatCard
+            label="SDK connected"
+            value={stats.sdkConnectedCount}
+            accent={
+              stats.sdkConnectedCount > 0
+                ? 'text-ok'
+                : stats.projectsWithReports > 0
+                  ? 'text-warn'
+                  : undefined
+            }
+            hint="Projects with at least one key heartbeat"
+          />
+          <StatCard
+            label="Reports · 24h"
+            value={stats.reportsLast24h}
+            accent={stats.reportsLast24h > 0 ? 'text-ok' : undefined}
+            hint={`${stats.reportsLast30d} in the last 30 days`}
+          />
         </div>
-        {createError && (
-          <div id="projects-create-error">
-            <ErrorAlert
-              title={
-                createError.code === 'NO_ORGANIZATION'
-                  ? 'No writable team found'
-                  : createError.code === 'FORBIDDEN'
-                  ? 'Not allowed in this team'
-                  : createError.code === 'NETWORK_ERROR'
-                  ? 'Couldn\u2019t reach the server'
-                  : 'Couldn\u2019t create project'
-              }
-              message={createError.message}
-              code={createError.code}
-              actions={(() => {
-                if (createError.code === 'NO_ORGANIZATION') {
-                  return [
-                    { label: 'Open team settings', onClick: () => navigate('/organization/members') },
-                    { label: 'Dismiss', onClick: clearCreateError },
-                  ]
-                }
-                if (createError.code === 'FORBIDDEN') {
-                  return [
-                    { label: 'Switch team', onClick: () => navigate('/organization/members') },
-                    { label: 'Dismiss', onClick: clearCreateError },
-                  ]
-                }
-                if (createError.code === 'NETWORK_ERROR') {
-                  return [
-                    { label: 'Try again', onClick: () => void createProjectRaw(newName) },
-                    { label: 'Dismiss', onClick: clearCreateError },
-                  ]
-                }
-                return [{ label: 'Dismiss', onClick: clearCreateError }]
-              })()}
-            />
-          </div>
-        )}
-      </div>
+      </Section>
 
-      {projects.length === 0 ? (
-        <EmptyState
-          icon={<HeroPlugIntegration />}
-          title="No projects yet"
-          description="Create your first project above to start receiving bug reports. You'll get an API key to use with the SDK or REST endpoint."
-        />
+      {activeTab === 'create' ? (
+        <Section title="Create a project">
+          <p className="mb-3 text-2xs text-fg-muted">
+            One project per app or environment — you&apos;ll get API keys and a scoped inbox on the next screen.
+          </p>
+          {createForm}
+          <PageHelp
+            title={copy?.help?.title ?? 'About projects'}
+            whatIsIt={copy?.help?.whatIsIt ?? ''}
+            useCases={copy?.help?.useCases ?? []}
+            howToUse={copy?.help?.howToUse ?? ''}
+          />
+        </Section>
       ) : (
-        <div className="space-y-2">
+        <>
+          {activeProjectId && (
+            <MigrationsInProgressCard
+              projectId={activeProjectId}
+              title="Migrations in this project"
+            />
+          )}
+
+          {projects.length === 0 ? (
+            <EmptyState
+              icon={<HeroPlugIntegration />}
+              title="No projects yet"
+              description="Switch to the New project tab to create your first project — you'll get an API key for the SDK or REST endpoint."
+              action={
+                <Btn size="sm" onClick={() => setTab('create')}>
+                  New project
+                </Btn>
+              }
+            />
+          ) : (
+            <div className="space-y-2">
           {projects.map((project) => {
             const isActive = activeProjectId === project.id
             const isBusy = busyProject === project.id
@@ -952,7 +1070,7 @@ export function ProjectsPage() {
                     </Tooltip>
                     <Tooltip content="Integrations">
                       <Link
-                        to={`/integrations?project=${project.id}`}
+                        to={`/integrations/config?project=${project.id}`}
                         className={LINK_CHIP_CLASS}
                         aria-label={`Integrations for ${project.name}`}
                       >
@@ -1214,6 +1332,8 @@ export function ProjectsPage() {
             )
           })}
         </div>
+          )}
+        </>
       )}
 
       {/* Type-the-slug-to-confirm modal for project deletion. Cascades

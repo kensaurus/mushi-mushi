@@ -18,7 +18,7 @@ import {
   // unique glyphs for the closed-loop + workspace sections
   IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
   IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
-  IconInbox, IconGauge, IconUser, IconExplore,
+  IconInbox, IconGauge, IconUser, IconExplore, IconChat,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
@@ -125,12 +125,13 @@ const NAV: NavSection[] = [
       // checklist itself collapses to a "Setup complete" hero, and Dashboard
       // / Inbox become the obvious next stops.
       { label: 'Get started', path: '/onboarding', icon: IconSparkle,   beginner: true, quickstartLabel: 'Setup' },
-      { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true },
+      { label: 'Dashboard',   path: '/dashboard',  icon: IconDashboard, beginner: true, quickstartLabel: 'Home' },
       // Wave T (2026-04-23) — /inbox is the single top-of-loop destination for
       // "what should I do next?" across the whole PDCA surface. Pinned above
       // the PDCA sections so Advanced users land on it the same way beginner
       // users land on the Dashboard.
       { label: 'Inbox',       path: '/inbox',      icon: IconInbox,     beginner: true, quickstartLabel: 'Inbox' },
+      { label: 'My feedback', path: '/feedback',   icon: IconChat,      beginner: true, quickstartLabel: 'Feedback' },
     ],
   },
   {
@@ -190,7 +191,7 @@ const NAV: NavSection[] = [
     hint: 'Standardise verified fixes back into the upstream tools your team already lives in.',
     items: [
       { label: 'Iterate',       path: '/iterate',       icon: IconIterate,      beginner: true },
-      { label: 'Integrations',  path: '/integrations',  icon: IconIntegrations, beginner: true },
+      { label: 'Integrations',  path: '/integrations/config',  icon: IconIntegrations, beginner: true },
       { label: 'MCP',           path: '/mcp',           icon: IconMcp,          beginner: true },
       { label: 'Marketplace',   path: '/marketplace',   icon: IconMarketplace },
       { label: 'Notifications', path: '/notifications', icon: IconBell },
@@ -231,18 +232,32 @@ interface PageHeroFallback {
 }
 
 const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
+  '/feedback': {
+    title: 'My feedback',
+    kicker: 'Start',
+    scope: 'feedback',
+    decide: {
+      label: 'Your submissions',
+      summary: 'Status banner and FEEDBACK SNAPSHOT show replies, active tickets, and shipped releases before you pick a tab.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Closed loop',
+      detail: 'Shipped tab shows release version chips — Active tab pulses when the team replies.',
+    },
+  },
   '/dashboard': {
     title: 'Dashboard',
     kicker: 'Start',
     scope: 'dashboard',
     decide: {
-      label: 'Workspace snapshot',
-      summary: 'Scan the current project for new reports, active fixes, and quality signals before you drill in.',
+      label: 'Loop snapshot',
+      summary: 'Status banner and KPI strip show backlog, in-flight fixes, and integration health before you pick a tab.',
       severity: 'info',
     },
     verify: {
       label: 'Refresh source',
-      detail: 'Live project data and queue status are shown below.',
+      detail: 'Stats reload on report/fix webhooks — use Refresh if you just dispatched a fix manually.',
     },
   },
   '/reports': {
@@ -251,7 +266,7 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     scope: 'reports',
     decide: {
       label: 'Triage queue',
-      summary: 'Prioritize incoming reports by severity, status, and evidence before dispatching a fix.',
+      summary: 'Banner + TRIAGE SNAPSHOT — Overview for posture, Queue to triage, Severity for 14d trends.',
       severity: 'info',
     },
     verify: {
@@ -307,12 +322,12 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     scope: 'mcp',
     decide: {
       label: 'Agent access',
-      summary: 'Connect MCP-aware agents to the current project with the right read or write scope.',
+      summary: 'Mint MCP-scoped API keys and paste the snippet so Cursor or Claude Desktop can read your triage queue.',
       severity: 'info',
     },
     verify: {
-      label: 'Install check',
-      detail: 'After adding the snippet, ask your agent to list the Mushi tools.',
+      label: 'Handshake check',
+      detail: 'Ask your agent to list Mushi tools — connected keys show a heartbeat on this page.',
     },
   },
   '/marketplace': {
@@ -320,13 +335,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'marketplace',
     decide: {
-      label: 'Plugin catalog',
-      summary: 'Choose where classified reports and fix events should be routed next.',
+      label: 'Webhook plugins',
+      summary: 'Install signed receivers that react when reports classify, fixes land, or SLAs breach.',
       severity: 'info',
     },
     verify: {
       label: 'Delivery log',
-      detail: 'Installed plugins expose delivery attempts and webhook responses below.',
+      detail: 'Every POST includes HTTP status, latency, and response excerpt for debugging.',
     },
   },
   '/notifications': {
@@ -334,13 +349,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'notifications',
     decide: {
-      label: 'Reporter updates',
-      summary: 'Review outbound messages so reporters know what happened to the bugs they filed.',
+      label: 'Reporter inbox',
+      summary: 'Outbound messages the SDK widget polls so bug reporters see classify and fix updates.',
       severity: 'info',
     },
     verify: {
       label: 'Payload audit',
-      detail: 'Open a notification payload to confirm exactly what was sent.',
+      detail: 'Expand any row to inspect the JSON the widget received — unread rows may mean polling stopped.',
     },
   },
   '/billing': {
@@ -354,7 +369,7 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     },
     verify: {
       label: 'Stripe source',
-      detail: 'Billing actions hand off to Stripe for payment method and invoice changes.',
+      detail: 'Overview card shows usage + invoices inline. Manage opens Stripe portal; Upgrade starts Checkout.',
     },
   },
   '/projects': {
@@ -371,6 +386,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'The selected project drives filters and setup state across the console.',
     },
   },
+  '/organization/members': {
+    title: 'Members',
+    kicker: 'Workspace',
+    scope: 'members',
+    decide: {
+      label: 'Team roster',
+      summary: 'Audit who has access, which seats are inactive, and whether pending invites need a resend.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Invite deliverability',
+      detail: 'Pending invites show opened / not-opened and expiry — resend or copy the accept link if email failed.',
+    },
+  },
   '/settings': {
     title: 'Settings',
     kicker: 'Workspace',
@@ -382,7 +411,35 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     },
     verify: {
       label: 'Saved state',
-      detail: 'Changed controls only take effect after the settings form is saved.',
+      detail: 'Health tab runs a test report against the active project — BYOK Test buttons confirm keys before save.',
+    },
+  },
+  '/rewards': {
+    title: 'Rewards',
+    kicker: 'Workspace',
+    scope: 'rewards',
+    decide: {
+      label: 'Program health',
+      summary: 'See contributor activity, rule/tier config, and rejection rate before changing caps.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'SDK activity feed',
+      detail: 'Overview shows 24h accept/reject breakdown — Simulator previews rule changes without live data.',
+    },
+  },
+  '/cost': {
+    title: 'LLM Cost',
+    kicker: 'Workspace',
+    scope: 'cost',
+    decide: {
+      label: 'Spend discipline',
+      summary: 'Check 24h spend, top operations, and BYOK vs platform keys before tuning pipelines.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Invocation log',
+      detail: 'Raw log lists every llm_invocations row — search by operation or model to audit individual calls.',
     },
   },
   '/sso': {
@@ -396,21 +453,77 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     },
     verify: {
       label: 'Provider metadata',
-      detail: 'Use the generated ACS and entity values when completing setup in your IdP.',
+      detail: 'Overview shows ACS URL — paste into Okta/Azure AD, then verify login on Providers tab.',
+    },
+  },
+  '/compliance': {
+    title: 'Compliance',
+    kicker: 'Workspace',
+    scope: 'compliance',
+    decide: {
+      label: 'Audit posture',
+      summary: 'Review failing controls, open DSARs, and legal holds before your next SOC 2 review.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Evidence snapshot',
+      detail: 'Overview KPI strip shows control pass/fail counts — Evidence tab expands payload JSON for auditors.',
+    },
+  },
+  '/audit': {
+    title: 'Audit log',
+    kicker: 'Workspace',
+    scope: 'audit',
+    decide: {
+      label: 'Mutation trail',
+      summary: 'Scan 24h failures and actor mix before exporting CSV evidence for compliance.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Latest event',
+      detail: 'Log tab expands metadata JSON — Breakdown tab links to top 7-day actions.',
+    },
+  },
+  '/storage': {
+    title: 'Storage',
+    kicker: 'Workspace',
+    scope: 'storage',
+    decide: {
+      label: 'Bucket health',
+      summary: 'Probe BYO buckets before screenshot uploads fail silently — defaults use cluster Supabase Storage.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Usage + probe',
+      detail: 'Configure tab shows step-by-step health debug — Usage tab lists screenshot object counts.',
+    },
+  },
+  '/query': {
+    title: 'Ask Your Data',
+    kicker: 'Analytics',
+    scope: 'query',
+    decide: {
+      label: 'Query posture',
+      summary: 'Check 24h error rate and saved prompts before running ad-hoc analytics on production bug data.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Latest run',
+      detail: 'History tab reruns saved prompts — Schema tab lists approved tables for raw SQL.',
     },
   },
   '/onboarding': {
-    title: 'Onboarding',
+    title: 'Get started',
     kicker: 'Start',
     scope: 'onboarding',
     decide: {
       label: 'Setup progress',
-      summary: 'Finish the required project, key, SDK, and first-report steps to complete setup.',
+      summary: 'Finish required steps so Dashboard, Reports, and Fixes stop showing empty shells.',
       severity: 'info',
     },
     verify: {
-      label: 'First report',
-      detail: 'Send a test report to confirm the SDK can reach your project.',
+      label: 'Pipeline proof',
+      detail: 'Verify tab sends a test report — SDK tab shows the install snippet for every environment.',
     },
   },
   '/research': {
@@ -418,13 +531,41 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Check',
     scope: 'research',
     decide: {
-      label: 'Saved findings',
-      summary: 'Capture product and QA notes that should inform the next loop iteration.',
+      label: 'Firecrawl search',
+      summary: 'Look up docs, threads, and changelogs during triage — attach snippets to reports as evidence.',
       severity: 'info',
     },
     verify: {
-      label: 'Search history',
-      detail: 'Recent research sessions and pinned notes stay available below.',
+      label: 'Session history',
+      detail: 'Past queries and attached snippets stay scoped to the active project below.',
+    },
+  },
+  '/iterate': {
+    title: 'Iterate',
+    kicker: 'Act',
+    scope: 'iterate',
+    decide: {
+      label: 'PDCA runs',
+      summary: 'Queue producer/critic loops on a target URL — watch scores climb iteration by iteration.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Run detail',
+      detail: 'Open a run for the score timeline, per-iteration critique, and clipboard export.',
+    },
+  },
+  '/integrations/config': {
+    title: 'Integrations',
+    kicker: 'Act',
+    scope: 'integrations',
+    decide: {
+      label: 'Platform wiring',
+      summary: 'Connect Sentry, Langfuse, and GitHub so classification, traces, and auto-fix PRs work end-to-end.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Probe history',
+      detail: 'Test each card to refresh status pills and sparklines scoped to the active project.',
     },
   },
   '/inbox': {
@@ -432,13 +573,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Start',
     scope: 'inbox',
     decide: {
-      label: 'Next actions',
-      summary: 'Review the highest-priority work waiting across Plan, Do, Check, and Act.',
+      label: 'Action queue',
+      summary: 'Status banner and INBOX SNAPSHOT tell you open vs clear before you work the Actions tab top-to-bottom.',
       severity: 'info',
     },
     verify: {
-      label: 'Action source',
-      detail: 'Each card links back to the queue, report, fix, or integration that needs attention.',
+      label: 'Card source',
+      detail: 'Counts match the sidebar badge — derived from the same dashboard aggregate + live stats endpoint.',
     },
   },
 }
@@ -876,7 +1017,7 @@ export function Layout({ children }: { children: ReactNode }) {
                             className="ml-auto"
                           />
                         )}
-                        {path === '/integrations' && <IntegrationHealthDot />}
+                        {path === '/integrations/config' && <IntegrationHealthDot />}
                         {path === '/inventory' && navCounts.ready && (
                           <SidebarHealthDot
                             tone={navCounts.regressedActions > 0 ? 'danger' : 'ok'}
@@ -955,6 +1096,18 @@ export function Layout({ children }: { children: ReactNode }) {
                             tone="ok"
                             count={navCounts.prsOpen}
                             label={`${navCounts.prsOpen} PRs open awaiting review`}
+                          />
+                        )}
+                        {path === '/feedback' && navCounts.ready && (
+                          <SidebarHealthDot
+                            tone={navCounts.feedbackWithReply > 0 ? 'warn' : 'idle'}
+                            count={navCounts.feedbackWithReply}
+                            label={
+                              navCounts.feedbackWithReply > 0
+                                ? `${navCounts.feedbackWithReply} feedback ${navCounts.feedbackWithReply === 1 ? 'reply' : 'replies'} to read`
+                                : 'No new feedback replies'
+                            }
+                            hideWhenZero
                           />
                         )}
                         {path === '/inbox' && navCounts.ready && (
@@ -1243,6 +1396,15 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span aria-hidden className="font-mono text-xs leading-none">✨</span>
                 </button>
               </Tooltip>
+              <Tooltip content="My feedback — bugs & feature requests" side="bottom">
+                <Link
+                  to="/feedback"
+                  aria-label="My feedback"
+                  className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+                >
+                  <IconChat className="h-3.5 w-3.5" />
+                </Link>
+              </Tooltip>
             </div>
             <VersionBadge whatsNew={whatsNew} />
             <OrgSwitcher />
@@ -1251,7 +1413,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </header>}
 
         <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
-          <div className={`${focusMode ? 'max-w-[92rem]' : 'max-w-6xl'} mx-auto px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base`}>
+          <div className="w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base">
             {!focusMode && <QuickstartMegaCta />}
             {!focusMode && <PipelineStatusRibbon />}
             {!focusMode && <NextBestAction />}

@@ -49,7 +49,7 @@
  *            buttons are real `<button>`s with `aria-expanded`.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PageAction } from './PageActionBar'
 import { useAdminMode } from '../lib/mode'
 import { HeroFlow } from './hero-flow/HeroFlow'
@@ -57,6 +57,7 @@ import type { HeroSeverity } from './hero-flow/heroFlow.data'
 import type { DavEvidence } from '../lib/davManifest'
 import { useDavSpotlight } from '../lib/useDavSpotlight'
 import { HeroDetailPanel } from './hero-flow/HeroDetailPanel'
+import { buildOperatorTrace, summarizeOperatorTrace, type OperatorTraceLine } from './hero-flow/operatorTrace'
 
 type Severity = HeroSeverity
 
@@ -82,6 +83,8 @@ export interface PageHeroDecide {
    *  `ConfigDoc` whose label, summary, and lineage are shown in a
    *  callout box so the operator knows exactly what to fill in. */
   missingConfigIds?: string[]
+  /** Extra lines merged into the operator trace (jobs, API receipts, etc.). */
+  debugLines?: OperatorTraceLine[]
 }
 
 export interface PageHeroVerify {
@@ -100,6 +103,7 @@ export interface PageHeroVerify {
   evidence?: DavEvidence
   /** configDocs IDs blocking the verification step. */
   missingConfigIds?: string[]
+  debugLines?: OperatorTraceLine[]
 }
 
 interface PageHeroProps {
@@ -111,9 +115,10 @@ interface PageHeroProps {
   kicker?: string
   decide: PageHeroDecide
   /** Action tile body — reuses PageAction so the rule engine is shared
-   *  with PageActionBar. Pass null to render the calm "nothing to do"
-   *  affordance. */
-  act: PageAction | null
+   *  with PageActionBar. Pass `null` (or omit entirely) to render the
+   *  calm "nothing to do" affordance — many pages have no rule-engine
+   *  next-best-action and want the placid Act tile by default. */
+  act?: PageAction | null
   /** data-dav-anchor value for the Act tile's on-page element. */
   actAnchor?: string
   /** Structured evidence for the Act tile detail panel
@@ -121,6 +126,8 @@ interface PageHeroProps {
   actEvidence?: DavEvidence
   /** configDocs IDs blocking the Act tile. */
   actMissingConfigIds?: string[]
+  /** Extra debug lines for the Act tile operator trace. */
+  actDebugLines?: OperatorTraceLine[]
   verify: PageHeroVerify
   /** Optional chart/KPI sparkline shown to the right of Decide in a
    *  full-width layout (keeps the hero interesting when there IS a
@@ -180,16 +187,23 @@ export function PageHero({
   title,
   kicker,
   decide,
-  act,
+  act: actProp,
   actAnchor,
   actEvidence,
   actMissingConfigIds,
+  actDebugLines,
   verify,
   decideAccessory,
 }: PageHeroProps) {
   const { isAdvanced } = useAdminMode()
   const severity = decide.severity ?? 'neutral'
   const style = SEVERITY_STYLE[severity]
+  // Normalise the optional `act` prop to a strict `PageAction | null`
+  // before threading it into HeroFlow / HeroDetailPanel / operatorTrace,
+  // all of which were authored against the original `PageAction | null`
+  // shape and have no `undefined` branch. Pages may now omit `act`
+  // entirely (treated as "nothing to do") or pass `null` explicitly.
+  const act: PageAction | null = actProp ?? null
 
   // Per-scope collapse, per-tile expand. The tile-level state is in-memory
   // only — operators expand "Act" to grab a secondary CTA, not as a long-
@@ -205,6 +219,43 @@ export function PageHero({
   useEffect(() => {
     writeCollapsedScopes(collapsedScopes)
   }, [collapsedScopes])
+
+  const operatorTraces = useMemo(
+    () => ({
+      decide: buildOperatorTrace({
+        scope,
+        tile: 'decide',
+        decide,
+        evidence: decide.evidence,
+        anchor: decide.anchor,
+      }),
+      act: buildOperatorTrace({
+        scope,
+        tile: 'act',
+        action: act,
+        evidence: actEvidence,
+        anchor: actAnchor,
+        extraDebugLines: actDebugLines,
+      }),
+      verify: buildOperatorTrace({
+        scope,
+        tile: 'verify',
+        verify,
+        evidence: verify.evidence,
+        anchor: verify.anchor,
+      }),
+    }),
+    [scope, decide, act, actEvidence, actAnchor, actDebugLines, verify],
+  )
+
+  const traceAlert = useMemo(() => {
+    const all = [
+      ...operatorTraces.decide,
+      ...operatorTraces.act,
+      ...operatorTraces.verify,
+    ]
+    return summarizeOperatorTrace(all)
+  }, [operatorTraces])
 
   if (!isAdvanced) {
     // Beginner: one-line summary card — no tile grid. The global NBA
@@ -271,7 +322,7 @@ export function PageHero({
           onClick={toggleCollapsed}
           aria-expanded={false}
           aria-controls={`hero-${scope}-tiles`}
-          className={`group flex items-center gap-2.5 w-full rounded-sm border ${style.ring} bg-surface-raised/40 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          className={`group flex items-center gap-2.5 w-full rounded-sm bg-surface-raised/25 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
           title="Decide → Act → Verify · click to expand"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${style.dot}`} />
@@ -309,15 +360,31 @@ export function PageHero({
       data-scope={scope}
       data-hero-variant="decide-act-verify-flow"
       data-collapsed="false"
-      className="mb-5 rounded-lg border border-edge bg-surface-raised/40 overflow-hidden"
+      className={[
+        'mb-5 w-full overflow-visible rounded-md bg-surface-raised/20 border-t-2',
+        severity === 'crit' ? 'border-t-err/60' : severity === 'warn' ? 'border-t-warn/50' : 'border-t-transparent',
+      ].join(' ')}
     >
       {/* Header strip — title + collapse toggle. Stays tight (~28px) so the
           hero's vertical footprint barely grows from the previous version. */}
-      <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle/50">
-        <div className="flex items-center gap-2 min-w-0">
+      <header className="flex items-center justify-between gap-2 px-3 py-1.5 border-b border-edge-subtle/25">
+        <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <span aria-hidden className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
           <span className="text-3xs font-medium uppercase tracking-wider text-fg-faint">
             Decide → Act → Verify
+          </span>
+          {traceAlert.errorCount > 0 && (
+            <span className="rounded bg-err/15 px-1.5 py-px text-3xs font-semibold text-err">
+              {traceAlert.errorCount} in trace
+            </span>
+          )}
+          {traceAlert.errorCount === 0 && traceAlert.warnCount > 0 && (
+            <span className="rounded bg-warn/15 px-1.5 py-px text-3xs font-semibold text-warn">
+              {traceAlert.warnCount} warn
+            </span>
+          )}
+          <span className="hidden sm:inline text-3xs text-fg-faint/80" title="Expand a tile for live metrics, lineage, and operator trace">
+            · click tile for trace
           </span>
           {kicker && (
             <>
@@ -340,7 +407,7 @@ export function PageHero({
 
       {/* ReactFlow lane: 3 custom nodes (Decide / Act / Verify) connected
           by 2 gradient bezier edges. */}
-      <div id={`hero-${scope}-flow`}>
+      <div id={`hero-${scope}-flow`} className="w-full px-1 pb-1">
         <HeroFlow
           scope={scope}
           decide={{
@@ -351,12 +418,14 @@ export function PageHero({
             anchor: decide.anchor,
             evidence: decide.evidence,
             missingConfigIds: decide.missingConfigIds,
+            debugLines: decide.debugLines,
           }}
           act={{
             action: act,
             anchor: actAnchor,
             evidence: actEvidence,
             missingConfigIds: actMissingConfigIds,
+            debugLines: actDebugLines,
           }}
           verify={{
             label: verify.label,
@@ -367,10 +436,12 @@ export function PageHero({
             anchor: verify.anchor,
             evidence: verify.evidence,
             missingConfigIds: verify.missingConfigIds,
+            debugLines: verify.debugLines,
           }}
           expandedTile={expandedTile}
           onToggleTile={toggleTile}
           decideAccessory={decideAccessory}
+          operatorTraces={operatorTraces}
         />
       </div>
 
@@ -386,6 +457,7 @@ export function PageHero({
           actEvidence={actEvidence}
           actAnchor={actAnchor}
           actMissingConfigIds={actMissingConfigIds}
+          actDebugLines={actDebugLines}
           verify={verify}
           onSpotlight={spotlight}
           onClose={() => toggleTile(expandedTile)}

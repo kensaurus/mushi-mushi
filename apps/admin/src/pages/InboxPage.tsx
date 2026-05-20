@@ -1,64 +1,60 @@
 /**
  * FILE: apps/admin/src/pages/InboxPage.tsx
- * PURPOSE: Wave T (2026-04-23) — global Action Inbox. One card per
- *          actionable stage, grouped by PDCA phase, deriving each card
- *          from `computeNextBestAction` with live counts sourced from
- *          the existing `/v1/admin/dashboard` aggregate. Reusing the
- *          dashboard endpoint avoids a new round-trip + keeps the
- *          inbox's headline numbers consistent with the cards on the
- *          dashboard itself.
- *
- *          Wave U (2026-05-07) — operator feedback rebuild:
- *            - **Hero KPI strip at the top** — open count, clear count,
- *              and a freshness pill replace the old all-text page header.
- *              The first thing the eye lands on is "do I have anything
- *              to act on?" rather than five sub-headers titled "All
- *              clear".
- *            - **Filter chips** — quick toggles for All / Open / each
- *              PDCA stage so the page works as a focused worklist when
- *              the inbox grows beyond a single screen.
- *            - **Open actions list** — every card with an action gets
- *              promoted out of its PDCA section into a single priority
- *              list, severity-tinted, with a "stage" eyebrow so the
- *              operator never loses the PDCA mapping. This is the
- *              single biggest win — open work is now front and centre
- *              regardless of which stage it belongs to.
- *            - **Cleared stages strip** — pages with `null` action
- *              collapse from full-width "All clear" cards into a chip
- *              row with a check + page link. Saves ~60% vertical space
- *              on a fully-clean inbox while still keeping every page
- *              one click away.
- *
- *          Design principles:
- *            - No dead buttons — every card has a primary CTA that links
- *              to the page where the action actually happens.
- *            - `computeNextBestAction` returns `null` for "nothing to do"
- *              which we render as a calm "All clear" affordance so the
- *              inbox visually distinguishes "3 criticals waiting" from
- *              "nothing is broken right now".
- *            - `data-inbox-card` hooks on every card so the Wave T
- *              dead-button Playwright sweep can assert every CTA is
- *              reachable without relying on fragile text selectors.
+ * PURPOSE: Global Action Inbox — tab shell (Overview | Actions | Stages | Activity)
+ *          with stats banner, KPI strip, and PDCA action cards from dashboard data.
  */
 
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   ErrorAlert,
   Btn,
   FreshnessPill,
   PageHelp,
+  PageHeader,
   AgeChip,
-  Tooltip,
+  Section,
+  StatCard,
+  SegmentedControl,
+  Badge,
+  Card,
 } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { PageHero } from '../components/PageHero'
+import { InboxStatusBanner } from '../components/inbox/InboxStatusBanner'
+import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../components/inbox/types'
 import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 
 type Group = InboxCardGroup
+
+const INBOX_TABS: Array<{ id: InboxTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture banner, top priority, and how to read open vs clear stages.',
+  },
+  {
+    id: 'actions',
+    label: 'Actions',
+    description: 'Priority worklist — every open card with a primary CTA, top to bottom.',
+  },
+  {
+    id: 'stages',
+    label: 'Stages',
+    description: 'Filter by PDCA stage — open cards and cleared stage chips in one view.',
+  },
+  {
+    id: 'activity',
+    label: 'Activity',
+    description: 'Recent reports and fixes that fed the inbox counts.',
+  },
+]
 
 const GROUP_LABEL: Record<Group, string> = {
   plan: 'Plan',
@@ -76,16 +72,12 @@ const GROUP_LONG_LABEL: Record<Group, string> = {
   ops: 'Ops — health + compliance',
 }
 
-// Tone tokens per PDCA group — used for the eyebrow chip on open cards
-// so operators can tell at a glance which stage of the loop a card
-// belongs to even after the cards have been promoted out of their
-// per-stage sections.
 const GROUP_TONE: Record<Group, { chip: string; chipText: string; ring: string }> = {
-  plan: { chip: 'bg-info-muted',      chipText: 'text-info',  ring: 'border-info/30' },
-  do:   { chip: 'bg-brand/15',        chipText: 'text-brand', ring: 'border-brand/30' },
-  check:{ chip: 'bg-warn-muted',      chipText: 'text-warn',  ring: 'border-warn/30' },
-  act:  { chip: 'bg-ok-muted',        chipText: 'text-ok',    ring: 'border-ok/30' },
-  ops:  { chip: 'bg-surface-overlay', chipText: 'text-fg-muted', ring: 'border-edge' },
+  plan: { chip: 'bg-info-muted', chipText: 'text-info', ring: 'border-info/30' },
+  do: { chip: 'bg-brand/15', chipText: 'text-brand', ring: 'border-brand/30' },
+  check: { chip: 'bg-warn-muted', chipText: 'text-warn', ring: 'border-warn/30' },
+  act: { chip: 'bg-ok-muted', chipText: 'text-ok', ring: 'border-ok/30' },
+  ops: { chip: 'bg-surface-overlay', chipText: 'text-fg-muted', ring: 'border-edge' },
 }
 
 const TONE_RING: Record<PageAction['tone'], string> = {
@@ -98,29 +90,68 @@ const TONE_RING: Record<PageAction['tone'], string> = {
 
 type FilterValue = 'all' | 'open' | 'clear' | Group
 
+function isInboxTab(value: string | null): value is InboxTabId {
+  return INBOX_TABS.some((t) => t.id === value)
+}
+
 export function InboxPage() {
   const copy = usePageCopy('/inbox')
-  const { data, loading, error, isValidating, lastFetchedAt, reload } = usePageData<DashboardData>('/v1/admin/dashboard')
+  const activeProjectId = useActiveProjectId()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab: InboxTabId = isInboxTab(tabParam) ? tabParam : 'overview'
+  const activeTabMeta = INBOX_TABS.find((t) => t.id === activeTab) ?? INBOX_TABS[0]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<InboxStats>('/v1/admin/inbox/stats')
+  const stats = statsData ?? EMPTY_INBOX_STATS
+
+  const { data, loading, error, isValidating, lastFetchedAt, reload } =
+    usePageData<DashboardData>('/v1/admin/dashboard')
   const cards = useMemo(() => buildInboxCards(data ?? undefined), [data])
   const [filter, setFilter] = useState<FilterValue>('all')
 
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reload()
+  }, [reloadStats, reload])
+
+  useRealtimeReload(['reports', 'fix_attempts', 'fix_events', 'integration_health_history'], reloadAll, {
+    debounceMs: 1000,
+    enabled: stats.hasAnyProject,
+  })
+
+  const setActiveTab = useCallback(
+    (id: InboxTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
   const openCards = cards.filter((c) => c.action !== null)
   const clearCards = cards.filter((c) => c.action === null)
-  const unreadCritical = openCards.length
 
-  // Filter the rendered card list. `clear` is its own bucket so a user can
-  // confirm "yes, every stage is genuinely settled" without scanning a
-  // mostly-empty inbox.
-  const visibleOpen = filter === 'clear'
-    ? []
-    : filter === 'open' || filter === 'all'
-      ? openCards
-      : openCards.filter((c) => c.group === filter)
-  const visibleClear = filter === 'open'
-    ? []
-    : filter === 'clear' || filter === 'all'
-      ? clearCards
-      : clearCards.filter((c) => c.group === filter)
+  const visibleOpen =
+    filter === 'clear'
+      ? []
+      : filter === 'open' || filter === 'all'
+        ? openCards
+        : openCards.filter((c) => c.group === filter)
+  const visibleClear =
+    filter === 'open'
+      ? []
+      : filter === 'clear' || filter === 'all'
+        ? clearCards
+        : clearCards.filter((c) => c.group === filter)
 
   const activity = data?.activity ?? []
   const activityAtByGroup = useMemo(() => {
@@ -134,278 +165,402 @@ export function InboxPage() {
 
   const pdcaGroups: Group[] = ['plan', 'do', 'check', 'act', 'ops']
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : !stats.setupDone
+        ? 'warn'
+        : stats.openActions > 0
+          ? 'danger'
+          : 'ok'
+
   usePublishPageContext({
     route: '/inbox',
     title: 'Action inbox',
-    summary: unreadCritical > 0 ? `${unreadCritical} open action${unreadCritical === 1 ? '' : 's'}` : 'All clear',
-    criticalCount: unreadCritical,
-    questions: unreadCritical > 0
-      ? [
-          'Which action should I tackle first?',
-          'Why is the highest-severity card blocking?',
-          'Group these by PDCA stage and tell me where the loop is stuck.',
-        ]
-      : [
-          'Is there anything that should be on this inbox but isn\u2019t?',
-          'What changed in the last 24h to clear the inbox?',
-        ],
-    actions: [
-      { id: 'inbox-refresh', label: 'Refresh', hint: 'Re-run the dashboard aggregate', run: reload },
-    ],
+    summary: `${activeTabMeta.label} · ${stats.openActions > 0 ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'}` : 'All clear'}`,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount: stats.openActions,
+    questions:
+      stats.openActions > 0
+        ? [
+            'Which action should I tackle first?',
+            'Why is the highest-severity card blocking?',
+            'Group these by PDCA stage and tell me where the loop is stuck.',
+          ]
+        : [
+            'Is there anything that should be on this inbox but isn\u2019t?',
+            'What changed in the last 24h to clear the inbox?',
+          ],
+    actions: [{ id: 'inbox-refresh', label: 'Refresh', hint: 'Re-fetch stats + dashboard', run: reloadAll }],
   })
 
-  if (loading) return (
-    <div className="space-y-4 animate-pulse" aria-hidden="true" role="status" aria-label="Loading inbox">
-      {/* Hero strip skeleton */}
-      <div className="flex items-end justify-between gap-3 mb-4">
-        <div className="space-y-2">
-          <div className="h-5 w-32 rounded bg-surface-raised" />
-          <div className="h-3 w-64 rounded bg-surface-raised" />
-        </div>
-        <div className="h-6 w-20 rounded bg-surface-raised" />
-      </div>
-      {/* KPI tile skeleton */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-lg border border-edge-subtle bg-surface-raised/40 px-4 py-3 space-y-2">
-            <div className="h-3 w-10 rounded bg-surface-overlay" />
-            <div className="h-7 w-8 rounded bg-surface-overlay" />
-          </div>
-        ))}
-      </div>
-      {/* Card skeletons */}
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="rounded-lg border border-edge-subtle bg-surface-raised/20 p-4 space-y-2">
-          <div className="h-4 w-48 rounded bg-surface-raised" />
-          <div className="h-3 w-72 rounded bg-surface-raised/60" />
-        </div>
-      ))}
-    </div>
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'actions' as const,
+        label: 'Actions',
+        count: stats.openActions > 0 ? stats.openActions : undefined,
+      },
+      {
+        id: 'stages' as const,
+        label: 'Stages',
+        count: stats.clearStages > 0 ? stats.clearStages : undefined,
+      },
+      { id: 'activity' as const, label: 'Activity' },
+    ],
+    [stats],
   )
-  if (error) return <ErrorAlert message={error} />
+
+  if ((loading && !data) || (statsLoading && !statsData)) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden="true" role="status" aria-label="Loading inbox">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
+  if (statsError) return <ErrorAlert message={`Failed to load inbox stats: ${statsError}`} onRetry={reloadAll} />
 
   return (
-    <div data-inbox-root>
-      <PageHelp
-        title={copy?.help?.title ?? 'About the inbox'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'A single dashboard that shows every action waiting for you — bugs to triage, fixes to review, and connections to set up.'}
-        useCases={copy?.help?.useCases ?? [
-          'Start every morning here — see what actually needs your attention today',
-          'Jump to the highest-priority open action in one click',
-          'Check at a glance which stages of the loop are clear vs. blocked',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Click any open action card to jump straight to that page. Stages with a green check are all clear — no action needed.'}
+    <div data-inbox-root className="space-y-4">
+      <PageHeader
+        title={copy?.title ?? 'Action inbox'}
+        projectScope={stats.projectName ?? undefined}
+        description={
+          copy?.description ??
+          (stats.openActions > 0
+            ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — work top to bottom on Actions tab`
+            : 'No open actions — cleared stages stay one click away on Stages tab')
+        }
+      >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : 'bg-info/10 text-info'
+          }
+        >
+          {bannerSeverity === 'ok'
+            ? 'CLEAR'
+            : bannerSeverity === 'danger'
+              ? `${stats.openActions} OPEN`
+              : bannerSeverity === 'warn'
+                ? 'SETUP'
+                : 'START'}
+        </Badge>
+        <FreshnessPill
+          at={statsFetchedAt ?? lastFetchedAt}
+          isValidating={statsValidating || isValidating}
+        />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
+          Refresh
+        </Btn>
+      </PageHeader>
+
+      <InboxStatusBanner stats={stats} onTab={setActiveTab} onRefresh={reloadAll} refreshing={statsValidating || isValidating} />
+
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Inbox sections"
+        size="sm"
       />
 
-      {/* Hero strip — replaces the wordy PageHeader. The first thing the eye
-          lands on is the open/clear ratio and a refresh affordance, not a
-          paragraph of explanatory copy. */}
-      <header className="mb-4 flex items-end justify-between gap-3 flex-wrap">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-fg leading-tight">Action inbox</h1>
-          <p className="text-xs text-fg-muted mt-0.5">
-            {unreadCritical > 0
-              ? `${unreadCritical} open action${unreadCritical === 1 ? '' : 's'} across the PDCA loop · ${clearCards.length} stage${clearCards.length === 1 ? '' : 's'} clear`
-              : 'No open actions — the loop is clear. New reports will surface here automatically.'}
-          </p>
+      <Section title="INBOX SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Open"
+            value={stats.openActions}
+            accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
+            hint={stats.openActions > 0 ? 'Needs your decision' : 'Inbox zero'}
+          />
+          <StatCard
+            label="Clear"
+            value={stats.clearStages}
+            accent="text-ok"
+            hint={`of ${stats.totalSurfaces} PDCA surfaces`}
+          />
+          <StatCard
+            label="Backlog"
+            value={stats.openBacklog}
+            accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
+            hint={stats.openBacklog > 0 ? 'Reports > 1h untriaged' : 'Queue current'}
+          />
+          <StatCard
+            label="Critical 14d"
+            value={stats.criticalReports14d}
+            accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
+            hint={stats.failedFixes14d > 0 ? `${stats.failedFixes14d} failed fixes` : 'Severity rollup'}
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-          <Btn size="sm" variant="ghost" onClick={reload}>
-            Refresh
-          </Btn>
-        </div>
-      </header>
+      </Section>
 
-      {/* KPI tile strip — three glanceable numbers. Severity-coloured ring
-          on the OPEN tile so a non-zero count visually shouts. */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
-        <KpiTile
-          label="Open"
-          value={unreadCritical}
-          tone={unreadCritical > 0 ? 'do' : 'act'}
-          hint={unreadCritical > 0 ? 'Awaiting action' : 'Inbox zero'}
-        />
-        <KpiTile
-          label="Clear"
-          value={clearCards.length}
-          tone="act"
-          hint={`Stage${clearCards.length === 1 ? '' : 's'} settled`}
-        />
-        <CoverageKpiTile cards={cards} groups={pdcaGroups} />
-      </div>
+      {activeTab === 'overview' && (
+        <>
+          <PageHero
+            scope="inbox"
+            title="Action inbox"
+            kicker="Start here"
+            decide={{
+              label:
+                stats.openActions > 0
+                  ? (stats.topPriorityTitle ?? 'Open actions waiting')
+                  : 'All clear',
+              metric: stats.openActions > 0 ? `${stats.openActions} open` : `${stats.clearStages}/${stats.totalSurfaces} clear`,
+              summary:
+                stats.openActions > 0
+                  ? 'Work the Actions tab top-to-bottom — each card links to the page where you can resolve it.'
+                  : 'New reports and integration drift surface here automatically — green banner means nothing is blocking.',
+              severity: bannerSeverity === 'ok' ? 'ok' : bannerSeverity === 'danger' ? 'crit' : 'info',
+            }}
+            verify={{
+              label: 'Live counts',
+              detail: 'Cards derive from the same dashboard aggregate as the sidebar badge.',
+            }}
+          />
 
-      {/* Filter pills — 'All' / 'Open' / 'Clear' / per-stage. Echoes the
-          filter strip on /reports and /fixes so the muscle memory carries. */}
-      <div
-        role="toolbar"
-        aria-label="Filter inbox"
-        className="mb-4 flex flex-wrap items-center gap-1.5"
-      >
-        <FilterChip
-          active={filter === 'all'}
-          onClick={() => setFilter('all')}
-          count={cards.length}
-        >
-          All
-        </FilterChip>
-        <FilterChip
-          active={filter === 'open'}
-          onClick={() => setFilter('open')}
-          count={openCards.length}
-          tone={openCards.length > 0 ? 'do' : 'idle'}
-        >
-          Open
-        </FilterChip>
-        <FilterChip
-          active={filter === 'clear'}
-          onClick={() => setFilter('clear')}
-          count={clearCards.length}
-          tone="act"
-        >
-          Clear
-        </FilterChip>
-        <span aria-hidden className="mx-1 text-fg-faint">·</span>
-        {(['plan', 'do', 'check', 'act', 'ops'] as Group[]).map((g) => {
-          const groupOpen = openCards.filter((c) => c.group === g).length
-          const groupTotal = cards.filter((c) => c.group === g).length
-          if (groupTotal === 0) return null
-          return (
-            <FilterChip
-              key={g}
-              active={filter === g}
-              onClick={() => setFilter(g)}
-              count={groupTotal}
-              tone={groupOpen > 0 ? 'do' : 'idle'}
-            >
-              {GROUP_LABEL[g]}
-            </FilterChip>
-          )
-        })}
-      </div>
+          {stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
+            <Card className="border-danger/30 bg-danger/5 p-4">
+              <p className="text-3xs font-semibold uppercase tracking-wider text-danger">Top priority</p>
+              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityTitle}</p>
+              <p className="mt-1 text-2xs text-fg-muted">
+                {stats.topPriorityStage ? `${GROUP_LABEL[stats.topPriorityStage as Group] ?? stats.topPriorityStage} stage` : 'Highest-severity open action'}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link to={stats.topPriorityTo}>
+                  <Btn size="sm" variant="primary">
+                    Take action →
+                  </Btn>
+                </Link>
+                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('actions')}>
+                  View full queue
+                </Btn>
+              </div>
+            </Card>
+          ) : null}
 
-      {/* Open actions — promoted into one priority list (regardless of PDCA
-          group) so the operator sees the full work surface in one scan. The
-          stage eyebrow on each card preserves the PDCA mapping. */}
-      {visibleOpen.length > 0 ? (
-        <section aria-labelledby="inbox-open" className="mb-6">
-          <header className="mb-2 flex items-center gap-2">
-            <h2 id="inbox-open" className="text-sm font-semibold text-fg">
-              Awaiting action
-            </h2>
-            <span className="text-2xs text-fg-faint">·</span>
-            <span className="text-2xs text-fg-muted">{visibleOpen.length} card{visibleOpen.length === 1 ? '' : 's'}</span>
-            {visibleOpen.length > 1 && (
-              <span className="ml-auto text-2xs text-fg-faint">Work top-to-bottom</span>
-            )}
-          </header>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {visibleOpen.map((card, index) => (
-              <OpenInboxCard
-                key={card.id}
-                card={card}
-                priority={index + 1}
-                isFirst={index === 0}
-                activityAt={activityAtByGroup[card.group]}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
+          <PageHelp
+            title={copy?.help?.title ?? 'About the inbox'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Start every morning on Overview — read the banner, then switch to Actions',
+                'Use Stages tab to filter by Plan / Do / Check / Act / Ops',
+                'Activity tab shows the events that triggered open cards',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Red banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
+            }
+          />
 
-      {/* Cleared stages — chip strip. Each chip is a real link so the
-          operator can still jump to a settled page (e.g. to confirm or to
-          go look at the metrics underlying the "all clear" status). */}
-      {visibleClear.length > 0 ? (
-        <section aria-labelledby="inbox-clear" className="mb-6">
-          <header className="mb-2 flex items-center gap-2">
-            <h2 id="inbox-clear" className="text-sm font-semibold text-fg-secondary">
-              Clear stages
-            </h2>
-            <span className="text-2xs text-fg-faint">·</span>
-            <span className="text-2xs text-fg-muted">
-              {visibleClear.length} stage{visibleClear.length === 1 ? '' : 's'} settled
-            </span>
-          </header>
-          <ul className="flex flex-wrap gap-1.5">
-            {visibleClear.map((card) => (
-              <li key={card.id}>
-                <ClearChip card={card} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
+          {openCards.length === 0 && clearCards.length > 0 ? (
+            <section aria-label="Cleared stages preview">
+              <header className="mb-2">
+                <h2 className="text-sm font-semibold text-fg-secondary">All stages clear</h2>
+              </header>
+              <ul className="flex flex-wrap gap-1.5">
+                {clearCards.map((card) => (
+                  <li key={card.id}>
+                    <ClearChip card={card} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
+      )}
 
-      {/* Empty-state when the active filter has nothing to show. Different
-          copy for "no open work" vs "filtered down to zero" so the user
-          knows whether to relax (inbox zero) or relax their filter. */}
-      {visibleOpen.length === 0 && visibleClear.length === 0 ? (
-        <section
-          aria-label="Empty inbox"
-          className="rounded-lg border border-dashed border-edge bg-surface-raised/30 p-6 text-center"
-        >
-          <p className="text-sm font-medium text-fg">
-            {filter === 'all' ? 'All clear' : 'Nothing here'}
-          </p>
-          <p className="text-xs text-fg-muted mt-1 leading-snug">
-            {filter === 'all'
-              ? 'The loop is clear — new reports will appear here automatically.'
-              : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now. Switch back to All to see everything.`}
-          </p>
-          {filter !== 'all' && (
-            <button
-              type="button"
-              onClick={() => setFilter('all')}
-              className="mt-3 inline-flex items-center gap-1 text-xs text-brand hover:text-brand-hover motion-safe:transition-colors"
-            >
-              Show all <span aria-hidden>→</span>
-            </button>
+      {activeTab === 'actions' && (
+        <>
+          {visibleOpen.length > 0 ? (
+            <section aria-labelledby="inbox-open">
+              <header className="mb-2 flex items-center gap-2">
+                <h2 id="inbox-open" className="text-sm font-semibold text-fg">
+                  Awaiting action
+                </h2>
+                <span className="text-2xs text-fg-faint">·</span>
+                <span className="text-2xs text-fg-muted">
+                  {visibleOpen.length} card{visibleOpen.length === 1 ? '' : 's'}
+                </span>
+                {visibleOpen.length > 1 ? (
+                  <span className="ml-auto text-2xs text-fg-faint">Work top-to-bottom</span>
+                ) : null}
+              </header>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {visibleOpen.map((card, index) => (
+                  <OpenInboxCard
+                    key={card.id}
+                    card={card}
+                    priority={index + 1}
+                    isFirst={index === 0}
+                    activityAt={activityAtByGroup[card.group]}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : (
+            <Card className="border-dashed p-6 text-center">
+              <p className="text-sm font-medium text-ok">Inbox zero</p>
+              <p className="mt-1 text-xs text-fg-muted">
+                No open actions — switch to Stages to confirm cleared surfaces or Activity for recent events.
+              </p>
+              <Btn size="sm" variant="ghost" className="mt-3" onClick={() => setActiveTab('stages')}>
+                View stages
+              </Btn>
+            </Card>
           )}
-        </section>
-      ) : null}
+        </>
+      )}
 
-      {activity.length > 0 ? (
-        <section aria-labelledby="inbox-activity" className="mb-6">
-          <header className="mb-2 flex items-center gap-2">
-            <h2 id="inbox-activity" className="text-sm font-semibold text-fg-secondary">
-              Recent activity
-            </h2>
-            <span className="text-2xs text-fg-faint">·</span>
-            <span className="text-2xs text-fg-muted">Last {activity.length} events</span>
-          </header>
-          <ul className="rounded-md border border-edge-subtle bg-surface-raised/30 divide-y divide-edge-subtle/60">
-            {activity.map((item) => (
-              <ActivityFeedRow key={`${item.kind}-${item.id}`} item={item} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      {activeTab === 'stages' && (
+        <>
+          <div role="toolbar" aria-label="Filter inbox" className="flex flex-wrap items-center gap-1.5">
+            <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} count={cards.length}>
+              All
+            </FilterChip>
+            <FilterChip
+              active={filter === 'open'}
+              onClick={() => setFilter('open')}
+              count={openCards.length}
+              tone={openCards.length > 0 ? 'do' : 'idle'}
+            >
+              Open
+            </FilterChip>
+            <FilterChip active={filter === 'clear'} onClick={() => setFilter('clear')} count={clearCards.length} tone="act">
+              Clear
+            </FilterChip>
+            <span aria-hidden className="mx-1 text-fg-faint">
+              ·
+            </span>
+            {pdcaGroups.map((g) => {
+              const groupOpen = openCards.filter((c) => c.group === g).length
+              const groupTotal = cards.filter((c) => c.group === g).length
+              if (groupTotal === 0) return null
+              return (
+                <FilterChip
+                  key={g}
+                  active={filter === g}
+                  onClick={() => setFilter(g)}
+                  count={groupTotal}
+                  tone={groupOpen > 0 ? 'do' : 'idle'}
+                >
+                  {GROUP_LABEL[g]}
+                </FilterChip>
+              )
+            })}
+          </div>
 
-    </div>
-  )
-}
+          {visibleOpen.length > 0 ? (
+            <section aria-labelledby="inbox-stages-open" className="mb-6">
+              <header className="mb-2">
+                <h2 id="inbox-stages-open" className="text-sm font-semibold text-fg">
+                  Open in filter
+                </h2>
+              </header>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {visibleOpen.map((card, index) => (
+                  <OpenInboxCard
+                    key={card.id}
+                    card={card}
+                    priority={index + 1}
+                    activityAt={activityAtByGroup[card.group]}
+                  />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
-// ─── Small subcomponents ──────────────────────────────────────────────────
+          {visibleClear.length > 0 ? (
+            <section aria-labelledby="inbox-clear">
+              <header className="mb-2 flex items-center gap-2">
+                <h2 id="inbox-clear" className="text-sm font-semibold text-fg-secondary">
+                  Clear stages
+                </h2>
+                <span className="text-2xs text-fg-muted">
+                  {visibleClear.length} settled
+                </span>
+              </header>
+              <ul className="flex flex-wrap gap-1.5">
+                {visibleClear.map((card) => (
+                  <li key={card.id}>
+                    <ClearChip card={card} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
-function KpiTile({
-  label,
-  value,
-  tone,
-  hint,
-}: {
-  label: string
-  value: number | string
-  tone: PageAction['tone']
-  hint: string
-}) {
-  return (
-    <div
-      className={`rounded-md border ${TONE_RING[tone]} px-3 py-2`}
-    >
-      <p className="text-3xs uppercase tracking-wider text-fg-faint font-semibold">{label}</p>
-      <p className="mt-0.5 text-xl font-semibold tabular-nums text-fg leading-none">{value}</p>
-      <p className="mt-1 text-2xs text-fg-muted leading-snug truncate">{hint}</p>
+          {visibleOpen.length === 0 && visibleClear.length === 0 ? (
+            <Card className="border-dashed p-6 text-center">
+              <p className="text-sm font-medium text-fg">{filter === 'all' ? 'All clear' : 'Nothing here'}</p>
+              <p className="mt-1 text-xs text-fg-muted">
+                {filter === 'all'
+                  ? 'The loop is clear — new reports will appear here automatically.'
+                  : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now.`}
+              </p>
+              {filter !== 'all' ? (
+                <button
+                  type="button"
+                  onClick={() => setFilter('all')}
+                  className="mt-3 text-xs text-brand hover:text-brand-hover"
+                >
+                  Show all →
+                </button>
+              ) : null}
+            </Card>
+          ) : null}
+        </>
+      )}
+
+      {activeTab === 'activity' && (
+        <>
+          {activity.length > 0 ? (
+            <section aria-labelledby="inbox-activity">
+              <header className="mb-2 flex items-center gap-2">
+                <h2 id="inbox-activity" className="text-sm font-semibold text-fg-secondary">
+                  Recent activity
+                </h2>
+                <span className="text-2xs text-fg-muted">Last {activity.length} events</span>
+              </header>
+              <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle bg-surface-raised/30">
+                {activity.map((item) => (
+                  <ActivityFeedRow key={`${item.kind}-${item.id}`} item={item} />
+                ))}
+              </ul>
+            </section>
+          ) : (
+            <Card className="p-6 text-center">
+              <p className="text-sm font-medium text-info">No recent activity</p>
+              <p className="mt-1 text-xs text-fg-muted">
+                Reports and fix dispatches appear here once ingest is live on {stats.projectName ?? 'your project'}.
+              </p>
+              <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
+                <Btn size="sm" variant="ghost">
+                  Send test report
+                </Btn>
+              </Link>
+            </Card>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -423,9 +578,6 @@ function FilterChip({
   count?: number
   tone?: PageAction['tone']
 }) {
-  // Two visual states: active (filled brand) and inactive (ghost). The
-  // count is the same colour as the chip text so it doesn't fight for
-  // attention with the label.
   const groupTone = tone === 'do' ? 'text-brand' : tone === 'act' ? 'text-ok' : 'text-fg-muted'
   return (
     <button
@@ -435,13 +587,13 @@ function FilterChip({
       className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-2xs font-medium motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50 ${
         active
           ? 'border-brand/40 bg-brand/15 text-brand'
-          : 'border-edge-subtle bg-surface-raised/40 text-fg-muted hover:text-fg hover:bg-surface-overlay'
+          : 'border-edge-subtle bg-surface-raised/40 text-fg-muted hover:bg-surface-overlay hover:text-fg'
       }`}
     >
       <span>{children}</span>
-      {typeof count === 'number' && (
+      {typeof count === 'number' ? (
         <span className={`tabular-nums ${active ? 'text-brand' : groupTone}`}>{count}</span>
-      )}
+      ) : null}
     </button>
   )
 }
@@ -452,38 +604,17 @@ function ClearChip({ card }: { card: InboxCard }) {
       data-inbox-card={card.id}
       data-inbox-state="clear"
       to={card.pageTo}
-      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs font-medium text-fg-muted hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       title={`${card.pageLabel} — all clear. Click to open.`}
     >
-      <span aria-hidden className="text-ok">✓</span>
+      <span aria-hidden className="text-ok">
+        ✓
+      </span>
       <span className={`text-3xs uppercase tracking-wider ${GROUP_TONE[card.group].chipText}`}>
         {GROUP_LABEL[card.group]}
       </span>
       <span className="text-fg-secondary group-hover:text-fg">{card.pageLabel}</span>
     </Link>
-  )
-}
-
-function CoverageKpiTile({ cards, groups }: { cards: InboxCard[]; groups: Group[] }) {
-  return (
-    <div className={`rounded-md border ${TONE_RING.idle} px-3 py-2`}>
-      <p className="text-3xs uppercase tracking-wider text-fg-faint font-semibold">Coverage</p>
-      <p className="mt-0.5 text-xl font-semibold tabular-nums text-fg leading-none">{cards.length}</p>
-      <p className="mt-1 text-2xs text-fg-muted leading-snug">PDCA surfaces watched</p>
-      <div className="mt-2 flex items-center gap-1.5" aria-label="PDCA stage coverage">
-        {groups.map((g) => {
-          const hasSurface = cards.some((c) => c.group === g)
-          return (
-            <Tooltip key={g} content={`${GROUP_LONG_LABEL[g]}${hasSurface ? ' — watched' : ' — not mapped'}`}>
-              <span
-                className={`inline-flex h-2 w-2 rounded-full ${hasSurface ? 'bg-ok' : 'bg-surface-overlay border border-edge-subtle'}`}
-                aria-hidden
-              />
-            </Tooltip>
-          )
-        })}
-      </div>
-    </div>
   )
 }
 
@@ -496,14 +627,16 @@ function ActivityFeedRow({ item }: { item: ActivityItem }) {
         className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-colors"
       >
         <span
-          className={`shrink-0 text-3xs font-semibold uppercase tracking-wider px-1 py-0.5 rounded-sm ${
+          className={`shrink-0 rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${
             item.kind === 'report' ? 'bg-info-muted text-info' : 'bg-brand/15 text-brand'
           }`}
         >
           {item.kind}
         </span>
         <span className="min-w-0 flex-1 truncate text-fg-secondary">{item.label}</span>
-        {item.meta ? <span className="shrink-0 text-2xs text-fg-faint truncate max-w-[8rem]">{item.meta}</span> : null}
+        {item.meta ? (
+          <span className="max-w-[8rem] shrink-0 truncate text-2xs text-fg-faint">{item.meta}</span>
+        ) : null}
         <AgeChip at={item.at} />
       </Link>
     </li>
@@ -530,27 +663,23 @@ function OpenInboxCard({
       data-inbox-state="open"
       className={`rounded-lg border p-4 ${TONE_RING[action.tone]}${isFirst ? ' md:col-span-2' : ''}`}
     >
-      <header className="flex items-center gap-2 mb-1.5">
-        <span className="text-2xs font-mono text-fg-faint tabular-nums shrink-0">#{priority}</span>
-        {/* Stage eyebrow chip — preserves the PDCA mapping even though
-            the cards are no longer rendered inside per-stage sections. */}
+      <header className="mb-1.5 flex items-center gap-2">
+        <span className="shrink-0 font-mono text-2xs tabular-nums text-fg-faint">#{priority}</span>
         <span
           className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
         >
           {GROUP_LABEL[card.group]}
         </span>
-        <span className="text-2xs text-fg-faint truncate flex-1">{card.pageLabel}</span>
-        {isFirst && !activityAt && (
-          <span className="shrink-0 text-2xs text-brand font-medium">Start here ↑</span>
-        )}
+        <span className="flex-1 truncate text-2xs text-fg-faint">{card.pageLabel}</span>
+        {isFirst && !activityAt ? (
+          <span className="shrink-0 text-2xs font-medium text-brand">Start here ↑</span>
+        ) : null}
         {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
       </header>
-      <p className="text-sm font-medium text-fg leading-snug">{action.title}</p>
-      {action.reason && (
-        <p className="mt-1 text-xs text-fg-muted leading-snug">{action.reason}</p>
-      )}
-      <div className="mt-3 flex items-center gap-2 flex-wrap">
-        {action.primary && action.primary.kind === 'link' && (
+      <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>
+      {action.reason ? <p className="mt-1 text-xs leading-snug text-fg-muted">{action.reason}</p> : null}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {action.primary && action.primary.kind === 'link' ? (
           <Link
             data-inbox-primary
             to={action.primary.to}
@@ -558,19 +687,19 @@ function OpenInboxCard({
           >
             {action.primary.label} <span aria-hidden="true">→</span>
           </Link>
-        )}
-        {action.primary && action.primary.kind === 'button' && (
+        ) : null}
+        {action.primary && action.primary.kind === 'button' ? (
           <Btn size="sm" variant="primary" onClick={action.primary.onClick} data-inbox-primary>
             {action.primary.label}
           </Btn>
-        )}
+        ) : null}
         {action.secondary?.slice(0, 1).map((s, i) =>
           s.kind === 'link' ? (
             <Link
               key={i}
               data-inbox-secondary
               to={s.to}
-              className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors"
+              className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
             >
               {s.label}
             </Link>
