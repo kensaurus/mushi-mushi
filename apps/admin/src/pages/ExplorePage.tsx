@@ -1,13 +1,8 @@
 /**
  * Codebase Atlas — /explore
  *
- * Three views:
- *   Graph  — ReactFlow canvas, nodes coloured by architectural layer
- *   Layers — horizontal Sankey lane (UI → Library → Backend → …)
- *   Search — semantic search via /codebase/search embedding RPC
- *
- * A fourth "layer filter" lets the user narrow any view to a single
- * architectural layer (clicking the pill again deselects).
+ * Tabs: Overview | Graph | Layers | Search | Index
+ * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
 import { useCallback, useMemo, useRef, useState } from 'react'
@@ -17,40 +12,59 @@ import '@xyflow/react/dist/style.css'
 
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
-import { useSetupStatus } from '../lib/useSetupStatus'
 import { useTheme } from '../lib/useTheme'
 import {
   PageHeader,
   PageHelp,
   SegmentedControl,
   ErrorAlert,
+  Section,
+  StatCard,
+  FreshnessPill,
+  Badge,
+  Btn,
+  Card,
+  DetailRows,
+  type DetailRowItem,
 } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { exploreGridLayout, EXPLORE_HEADER_H } from '../components/explore/exploreLayout'
-
+import { PageHero } from '../components/PageHero'
 import { ExploreCanvas } from '../components/explore/ExploreCanvas'
 import { ExploreLayerLane } from '../components/explore/ExploreLayerLane'
 import { ExploreSymbolPanel } from '../components/explore/ExploreSymbolPanel'
 import { ExploreSearchBar } from '../components/explore/ExploreSearchBar'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from '../components/explore/exploreLayers'
+import { ExploreStatusBanner } from '../components/explore/ExploreStatusBanner'
+import {
+  EMPTY_EXPLORE_STATS,
+  type ExploreStats,
+  type ExploreTabId,
+} from '../components/explore/ExploreStatsTypes'
 import type { ExploreEdge, ExploreLayer, ExploreNode, ExplorePayload, ExploreSearchHit } from '../components/explore/exploreTypes'
 
-type ViewMode = 'graph' | 'layers' | 'search'
 type DensityMode = 'files' | 'symbols'
 
-/** Top-level language stats derived from file extensions */
-function detectLanguages(nodes: ExploreNode[]): string[] {
-  const counts = new Map<string, number>()
-  for (const n of nodes) {
-    if (n.metadata.language) {
-      counts.set(n.metadata.language, (counts.get(n.metadata.language) ?? 0) + 1)
-    }
+const EXPLORE_TABS: Array<{ id: ExploreTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture banner, layer breakdown, and how indexing → graph → search fit together.',
+  },
+  { id: 'graph', label: 'Graph', description: 'ReactFlow canvas — nodes coloured by architectural layer.' },
+  { id: 'layers', label: 'Layers', description: 'Horizontal Sankey lane (UI → Library → Backend → …).' },
+  { id: 'search', label: 'Search', description: 'Semantic search via embeddings — plain English queries.' },
+  { id: 'index', label: 'Index', description: 'Indexer debug — repo, webhook, last error, embedding coverage.' },
+]
+
+function resolveExploreTab(value: string | null): ExploreTabId {
+  if (value === 'overview' || value === 'layers' || value === 'search' || value === 'index') {
+    return value
   }
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([lang]) => lang)
+  return 'graph'
 }
 
 function exploreErrorMessage(raw: string | null): string | null {
@@ -61,54 +75,143 @@ function exploreErrorMessage(raw: string | null): string | null {
   return raw
 }
 
+function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
+  return [
+    {
+      label: 'Repo',
+      value: stats.repoUrl ?? '—',
+      mono: true,
+      tone: stats.repoUrl ? 'info' : 'warn',
+      copyable: !!stats.repoUrl,
+    },
+    {
+      label: 'Index enabled',
+      value: stats.codebaseIndexEnabled ? 'Yes' : 'No',
+      tone: stats.codebaseIndexEnabled ? 'ok' : 'warn',
+    },
+    {
+      label: 'Webhook secret',
+      value: stats.hasWebhookSecret ? 'Configured' : 'Missing',
+      tone: stats.hasWebhookSecret ? 'ok' : 'warn',
+    },
+    {
+      label: 'Indexed files',
+      value: stats.indexedFiles.toLocaleString(),
+      mono: true,
+      tone: stats.indexedFiles > 0 ? 'ok' : 'warn',
+    },
+    {
+      label: 'Symbols',
+      value: stats.symbolCount.toLocaleString(),
+      mono: true,
+      hint: 'Symbol rows when density = Symbols on Graph tab.',
+    },
+    {
+      label: 'Embeddings',
+      value: stats.withEmbeddings.toLocaleString(),
+      mono: true,
+      tone: stats.withEmbeddings > 0 ? 'ok' : 'warn',
+      hint: 'Files with vectors for semantic search.',
+    },
+    {
+      label: 'Last indexed',
+      value: stats.lastIndexedAt ?? '—',
+      mono: true,
+    },
+    {
+      label: 'Last attempt',
+      value: stats.lastIndexAttemptAt ?? '—',
+      mono: true,
+    },
+    ...(stats.lastIndexError
+      ? [
+          {
+            label: 'Last error',
+            value: stats.lastIndexError,
+            tone: 'danger' as const,
+            wrap: true,
+          },
+        ]
+      : []),
+  ]
+}
+
 export function ExplorePage() {
   const copy = usePageCopy('/explore')
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const urlProjectId = searchParams.get('project')
   const activeProjectId = useActiveProjectId()
-  // Prefer the URL param so a direct link to a non-active project works.
-  // Fall back to the active project for the common case.
   const projectId = urlProjectId ?? activeProjectId ?? ''
-  // Derive indexedFileCount from the resolved projectId's setup state, not
-  // unconditionally from activeProjectId, so the "not indexed" empty state
-  // is accurate when viewing a non-active project via URL param.
-  const setup = useSetupStatus(projectId || activeProjectId)
-  const indexedFileCount = setup.activeProject?.indexed_file_count
+
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveExploreTab(tabParam)
+  const activeTabMeta = EXPLORE_TABS.find((t) => t.id === activeTab) ?? EXPLORE_TABS[1]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<ExploreStats>('/v1/admin/explore/stats')
+  const stats = statsData ?? EMPTY_EXPLORE_STATS
 
   const { resolved: theme } = useTheme()
 
-  const [view, setView] = useState<ViewMode>('graph')
   const [density, setDensity] = useState<DensityMode>('files')
   const [selectedNode, setSelectedNode] = useState<ExploreNode | null>(null)
   const [highlightIds, setHighlightIds] = useState<Set<string>>(new Set())
   const [activeLayerFilter, setActiveLayerFilter] = useState<ExploreLayer | null>(null)
   const [filenameFilter, setFilenameFilter] = useState('')
+  const [searchSeedQuery, setSearchSeedQuery] = useState('')
   const densityRef = useRef(density)
   densityRef.current = density
 
-  const exploreUrl = projectId
-    ? `/v1/admin/projects/${projectId}/codebase/explore${density === 'symbols' ? '?symbols=1' : ''}`
-    : null
+  const exploreUrl =
+    projectId && stats.hasAnyProject
+      ? `/v1/admin/projects/${projectId}/codebase/explore${density === 'symbols' ? '?symbols=1' : ''}`
+      : null
 
-  // usePageData already refetches when exploreUrl changes (density and projectId
-  // are both encoded in the URL). No extra effect is needed — a second reload()
-  // call here would cause a duplicate in-flight request on every change.
   const exploreQuery = usePageData<ExplorePayload>(exploreUrl)
   const payload = exploreQuery.data
   const loading = exploreQuery.loading
   const error = exploreQuery.error
 
+  const reloadAll = useCallback(() => {
+    void reloadStats()
+    void exploreQuery.reload()
+  }, [reloadStats, exploreQuery])
+
+  useRealtimeReload(
+    ['project_codebase_files', 'project_repos', 'project_settings'],
+    reloadAll,
+    { enabled: !!projectId },
+  )
+
+  const setActiveTab = useCallback(
+    (tab: ExploreTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'graph') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []
 
-  // Apply layer filter + optional filename quick-filter
   const nodes = useMemo(() => {
     let result = allNodes
     if (activeLayerFilter) result = result.filter((n) => n.metadata.layer === activeLayerFilter)
     if (filenameFilter.trim()) {
       const q = filenameFilter.trim().toLowerCase()
-      result = result.filter((n) =>
-        n.label.toLowerCase().includes(q) || n.metadata.file_path.toLowerCase().includes(q),
+      result = result.filter(
+        (n) =>
+          n.label.toLowerCase().includes(q) || n.metadata.file_path.toLowerCase().includes(q),
       )
     }
     return result
@@ -118,7 +221,9 @@ export function ExplorePage() {
 
   const edges = useMemo(() => {
     if (!activeLayerFilter && !filenameFilter.trim()) return allEdges
-    return allEdges.filter((e) => filteredNodeIds.has(e.source_node_id) && filteredNodeIds.has(e.target_node_id))
+    return allEdges.filter(
+      (e) => filteredNodeIds.has(e.source_node_id) && filteredNodeIds.has(e.target_node_id),
+    )
   }, [allEdges, activeLayerFilter, filenameFilter, filteredNodeIds])
 
   const positions = useMemo(() => exploreGridLayout(nodes), [nodes])
@@ -139,7 +244,6 @@ export function ExplorePage() {
     })
   }, [nodes, positions, selectedNode, highlightIds, theme])
 
-  /** Floating layer-column header nodes rendered above each swimlane */
   const layerHeaderNodes: Node[] = useMemo(() => {
     const headers: Node[] = []
     for (const layer of LAYER_ORDER) {
@@ -181,9 +285,9 @@ export function ExplorePage() {
     return edges.map((e) => {
       const srcLayer = nodeLayerMap.get(e.source_node_id) ?? 'other'
       const color = LAYER_COLORS[srcLayer] ?? LAYER_COLORS.other
-      const isHighlighted = highlightIds.size > 0 && (
-        highlightIds.has(e.source_node_id) || highlightIds.has(e.target_node_id)
-      )
+      const isHighlighted =
+        highlightIds.size > 0 &&
+        (highlightIds.has(e.source_node_id) || highlightIds.has(e.target_node_id))
       const opacity = highlightIds.size > 0 ? (isHighlighted ? 0.85 : 0.05) : 0.35
       return {
         id: e.id,
@@ -199,12 +303,15 @@ export function ExplorePage() {
     })
   }, [edges, highlightIds, nodeLayerMap])
 
-  const handleNodeClick = useCallback((_: unknown, node: Node) => {
-    if (node.id.startsWith('__hdr_')) return // layer header — not selectable
-    const match = allNodes.find((n) => n.id === node.id) ?? null
-    setSelectedNode(match)
-    setHighlightIds(new Set())
-  }, [allNodes])
+  const handleNodeClick = useCallback(
+    (_: unknown, node: Node) => {
+      if (node.id.startsWith('__hdr_')) return
+      const match = allNodes.find((n) => n.id === node.id) ?? null
+      setSelectedNode(match)
+      setHighlightIds(new Set())
+    },
+    [allNodes],
+  )
 
   const handlePaneClick = useCallback(() => {
     setSelectedNode(null)
@@ -215,24 +322,27 @@ export function ExplorePage() {
     setSelectedNode(null)
   }, [])
 
-  const handleSelectHit = useCallback((hit: ExploreSearchHit) => {
-    // Show the symbol panel within Search tab; user can click "View in graph" to navigate
-    const match = allNodes.find((n) => n.id === hit.id) ?? null
-    setSelectedNode(match)
-    setHighlightIds(new Set())
-  }, [allNodes])
+  const handleSelectHit = useCallback(
+    (hit: ExploreSearchHit) => {
+      const match = allNodes.find((n) => n.id === hit.id) ?? null
+      setSelectedNode(match)
+      setHighlightIds(new Set())
+    },
+    [allNodes],
+  )
 
   const handleViewInGraph = useCallback(() => {
-    setView('graph')
-  }, [])
+    setActiveTab('graph')
+  }, [setActiveTab])
 
-  const [searchSeedQuery, setSearchSeedQuery] = useState('')
-
-  const handleFindSimilar = useCallback((query: string) => {
-    setSearchSeedQuery(query)
-    setView('search')
-    setSelectedNode(null)
-  }, [])
+  const handleFindSimilar = useCallback(
+    (query: string) => {
+      setSearchSeedQuery(query)
+      setActiveTab('search')
+      setSelectedNode(null)
+    },
+    [setActiveTab],
+  )
 
   const toggleLayerFilter = useCallback((layer: ExploreLayer) => {
     setActiveLayerFilter((prev) => (prev === layer ? null : layer))
@@ -240,21 +350,67 @@ export function ExplorePage() {
     setHighlightIds(new Set())
   }, [])
 
-  // Hooks must be called unconditionally (before any early return).
-  const languages = useMemo(() => detectLanguages(allNodes), [allNodes])
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'error'
+        ? 'danger'
+        : stats.topPriority === 'empty' || stats.topPriority === 'stale'
+          ? 'warn'
+          : stats.topPriority === 'not_enabled' || stats.topPriority === 'indexing'
+            ? 'brand'
+            : stats.topPriority === 'ready'
+              ? 'ok'
+              : 'info'
 
-  // ── Empty state: no project ────────────────────────────────────────────────
+  const tabOptions = useMemo(
+    () =>
+      EXPLORE_TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'graph' && stats.indexedFiles > 0
+            ? stats.indexedFiles
+            : t.id === 'search' && stats.withEmbeddings > 0
+              ? stats.withEmbeddings
+              : undefined,
+      })),
+    [stats.indexedFiles, stats.withEmbeddings],
+  )
+
+  usePublishPageContext({
+    route: '/explore',
+    title: 'Codebase atlas',
+    summary: `${activeTabMeta.label} · ${stats.indexedFiles} files · ${stats.withEmbeddings} embedded`,
+    filters: { tab: activeTab, density },
+    criticalCount: stats.topPriority === 'error' ? 1 : 0,
+    actions: [{ id: 'explore-refresh', label: 'Refresh', hint: 'Re-fetch stats + graph', run: reloadAll }],
+  })
+
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading explore">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load explore stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
   if (!projectId) {
     return (
-      <div className="p-6 space-y-4">
-        <PageHeader title="Explore" />
+      <div className="space-y-4">
+        <PageHeader title={copy?.title ?? 'Explore'} />
+        <ExploreStatusBanner stats={stats} onTab={setActiveTab} />
         <div className="rounded-md border border-edge bg-surface-raised p-8 text-center space-y-2">
-          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto text-fg-faint mb-2" aria-hidden="true">
-            <circle cx="8" cy="16" r="3" />
-            <circle cx="24" cy="8" r="3" />
-            <circle cx="24" cy="24" r="3" />
-            <path d="M11 15l10-5M11 17l10 5" />
-          </svg>
           <div className="text-sm font-medium text-fg">No project selected</div>
           <div className="text-2xs text-fg-muted">Select a project from the top bar to explore its codebase.</div>
         </div>
@@ -262,84 +418,41 @@ export function ExplorePage() {
     )
   }
 
-  const notIndexed = !loading && !error && allNodes.length === 0 && indexedFileCount === 0
+  const notIndexed =
+    stats.topPriority === 'empty' ||
+    stats.topPriority === 'not_enabled' ||
+    (!loading && !error && allNodes.length === 0 && stats.indexedFiles === 0)
+
   const layerEntries = payload
-    ? LAYER_ORDER.filter((l) => (payload.layers[l] ?? 0) > 0).map((l) => [l, payload.layers[l]] as [ExploreLayer, number])
-    : []
+    ? LAYER_ORDER.filter((l) => (payload.layers[l] ?? 0) > 0).map(
+        (l) => [l, payload.layers[l]] as [ExploreLayer, number],
+      )
+    : LAYER_ORDER.filter((l) => stats.layers[l] > 0).map(
+        (l) => [l, stats.layers[l]] as [ExploreLayer, number],
+      )
 
-  return (
-    <div className="p-6 space-y-4">
-      <PageHeader
-        title={copy?.title ?? 'Explore'}
-        description={copy?.description ?? 'Visual map of your indexed source files — layers, import edges, and semantic search.'}
-      />
-
-      <PageHelp
-        title={copy?.help?.title ?? 'Codebase Atlas'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Visual map of indexed source files grouped by architectural layer — UI, Library, Backend, Tests, Config.'}
-        useCases={copy?.help?.useCases ?? [
-          'See which files live in which layer',
-          'Trace import dependencies between files',
-          'Semantic search: describe what you need in plain English',
-          'Click a file to inspect its path, language, line count, and content preview',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Switch between Graph (node graph), Layers (Sankey flow), and Search tabs. Click any node or row for full details. Use the layer filter chips to narrow the view.'}
-      />
-
-      {/* Stats bar */}
-      {payload && !loading && (
-        <div className="flex items-center gap-3 flex-wrap px-3 py-2 rounded-md border border-edge-subtle bg-surface-raised text-2xs text-fg-secondary">
-          <span className="tabular-nums font-medium text-fg">
-            {payload.total_files.toLocaleString()} files
-          </span>
-          {allEdges.length > 0 && (
-            <>
-              <span className="text-fg-faint/50">·</span>
-              <span className="tabular-nums">{allEdges.length.toLocaleString()} import edges</span>
-            </>
-          )}
-          {languages.length > 0 && (
-            <>
-              <span className="text-fg-faint/50">·</span>
-              <span>{languages.join(', ')}</span>
-            </>
-          )}
-          <span className="ml-auto text-fg-faint text-3xs">
-            Indexed via Mushi SDK
-          </span>
-        </div>
-      )}
-
-      {/* View + density + layer filter controls */}
+  const mapControls =
+    activeTab === 'graph' || activeTab === 'layers' ? (
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <SegmentedControl
-            value={view}
-            onChange={(v) => setView(v as ViewMode)}
-            options={[
-              { id: 'graph', label: 'Graph' },
-              { id: 'layers', label: 'Layers' },
-              { id: 'search', label: 'Search' },
-            ]}
-          />
           <div className="flex items-center gap-2">
-            {view !== 'search' && (
-              <SegmentedControl
-                value={density}
-                onChange={(v) => setDensity(v as DensityMode)}
-                options={[
-                  { id: 'files', label: 'Files' },
-                  { id: 'symbols', label: 'Symbols' },
-                ]}
-              />
-            )}
+            <SegmentedControl
+              value={density}
+              onChange={(v) => setDensity(v as DensityMode)}
+              options={[
+                { id: 'files', label: 'Files' },
+                { id: 'symbols', label: 'Symbols' },
+              ]}
+            />
             {(loading || exploreQuery.isValidating) && (
               <span className="text-2xs text-fg-faint animate-pulse">Loading…</span>
             )}
           </div>
+          <span className="text-2xs text-fg-faint font-mono">
+            {nodes.length}/{allNodes.length} nodes · {edges.length}/{allEdges.length} edges
+          </span>
         </div>
 
-        {/* Layer filter chips + filename quick-filter */}
         {layerEntries.length > 0 && !loading && (
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-3xs text-fg-faint uppercase tracking-wider shrink-0">Filter:</span>
@@ -375,152 +488,328 @@ export function ExplorePage() {
                 Clear
               </button>
             )}
-
-            {/* Filename quick-filter — only shown on graph/layers views */}
-            {view !== 'search' && (
-              <div className="relative ml-auto">
-                <svg
-                  width="11" height="11" viewBox="0 0 16 16" fill="none"
-                  stroke="currentColor" strokeWidth="1.5"
-                  className="absolute left-2 top-1/2 -translate-y-1/2 text-fg-faint pointer-events-none"
-                  aria-hidden="true"
+            <div className="relative ml-auto">
+              <input
+                type="text"
+                value={filenameFilter}
+                onChange={(e) => setFilenameFilter(e.target.value)}
+                placeholder="Filter by filename…"
+                className="text-3xs pl-3 pr-6 py-1 rounded-full border border-edge-subtle bg-surface-raised text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40 w-44"
+                aria-label="Filter files by name"
+              />
+              {filenameFilter && (
+                <button
+                  type="button"
+                  onClick={() => setFilenameFilter('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg"
+                  aria-label="Clear filename filter"
                 >
-                  <circle cx="6.5" cy="6.5" r="4" />
-                  <path d="M10.5 10.5L14 14" strokeLinecap="round" />
-                </svg>
-                <input
-                  type="text"
-                  value={filenameFilter}
-                  onChange={(e) => setFilenameFilter(e.target.value)}
-                  placeholder="Filter by filename…"
-                  className="text-3xs pl-6 pr-6 py-1 rounded-full border border-edge-subtle bg-surface-raised text-fg placeholder:text-fg-faint focus:outline-none focus:ring-1 focus:ring-brand/40 focus:border-brand/40 w-44"
-                  aria-label="Filter files by name"
-                />
-                {filenameFilter && (
-                  <button
-                    type="button"
-                    onClick={() => setFilenameFilter('')}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-faint hover:text-fg"
-                    aria-label="Clear filename filter"
-                  >
-                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
-                      <path d="M2 2l6 6M8 2l-6 6" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            )}
+                  ×
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
+    ) : null
 
-      {error && <ErrorAlert message={exploreErrorMessage(error) ?? error} />}
+  const mapContent = loading ? (
+    <GraphSkeleton />
+  ) : error ? (
+    <ErrorAlert message={exploreErrorMessage(error) ?? error} onRetry={reloadAll} />
+  ) : notIndexed ? (
+    <div className="rounded-md border border-edge bg-surface-raised p-8 text-center space-y-3">
+      <div className="text-sm font-medium text-fg">Codebase not indexed yet</div>
+      <div className="text-2xs text-fg-muted max-w-md mx-auto">
+        Enable codebase indexing in{' '}
+        <Link to="/settings" className="text-brand hover:underline">Settings → Codebase Indexing</Link>
+        {' '}or run{' '}
+        <code className="text-2xs font-mono bg-surface-overlay px-1 rounded">mushi index</code>
+        {' '}in your project directory.
+      </div>
+      <div className="flex items-center justify-center gap-2 pt-1">
+        <Btn size="sm" onClick={() => setActiveTab('index')}>Open Index tab</Btn>
+        <Link to="/settings">
+          <Btn size="sm" variant="ghost">Settings</Btn>
+        </Link>
+      </div>
+    </div>
+  ) : activeTab === 'graph' ? (
+    <div className="space-y-3">
+      <ExploreCanvas
+        flowNodes={[...layerHeaderNodes, ...flowNodes]}
+        flowEdges={flowEdges}
+        nodeCount={nodes.length}
+        edgeCount={edges.length}
+        onNodeClick={handleNodeClick}
+        onPaneClick={handlePaneClick}
+        layerCounts={payload?.layers}
+      />
+      {selectedNode && (
+        <ExploreSymbolPanel
+          node={selectedNode}
+          onClear={() => setSelectedNode(null)}
+          onViewInGraph={handleViewInGraph}
+          onFindSimilar={handleFindSimilar}
+        />
+      )}
+    </div>
+  ) : activeTab === 'layers' ? (
+    <div className="space-y-3">
+      <ExploreLayerLane
+        nodes={nodes}
+        edges={edges}
+        selectedId={selectedNode?.id ?? null}
+        highlightIds={highlightIds}
+        onSelect={(n) => {
+          setSelectedNode(n)
+          setHighlightIds(new Set())
+        }}
+        onClear={() => setSelectedNode(null)}
+      />
+      {selectedNode && (
+        <ExploreSymbolPanel
+          node={selectedNode}
+          onClear={() => setSelectedNode(null)}
+          onViewInGraph={handleViewInGraph}
+          onFindSimilar={handleFindSimilar}
+        />
+      )}
+    </div>
+  ) : null
 
-      {/* Not indexed CTA */}
-      {notIndexed && (
-        <div className="rounded-md border border-edge bg-surface-raised p-8 text-center space-y-3">
-          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="1.4" className="mx-auto text-fg-faint" aria-hidden="true">
-            <rect x="6" y="8" width="28" height="24" rx="2" />
-            <path d="M14 16h12M14 20h8M14 24h6" strokeLinecap="round" />
-            <path d="M28 26l5 5" strokeLinecap="round" />
-            <circle cx="28" cy="24" r="4" />
-          </svg>
-          <div className="text-sm font-medium text-fg">Codebase not indexed yet</div>
-          <div className="text-2xs text-fg-muted max-w-md mx-auto">
-            Enable codebase indexing in{' '}
-            <Link to="/settings" className="text-brand hover:underline">Settings → Codebase Indexing</Link>
-            {' '}or run{' '}
-            <code className="text-2xs font-mono bg-surface-overlay px-1 rounded">mushi index</code>
-            {' '}in your project directory.
-          </div>
-          <div className="flex items-center justify-center gap-2 pt-1">
-            <Link
-              to="/settings"
-              className="inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-sm bg-brand text-brand-fg hover:bg-brand-hover"
-            >
-              Open indexing settings →
-            </Link>
-            <Link
-              to="/onboarding"
-              className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-sm border border-edge text-fg-secondary hover:bg-surface-overlay"
-            >
-              Setup checklist
-            </Link>
-          </div>
+  return (
+    <div className="space-y-4" data-testid="mushi-page-explore">
+      <PageHeader
+        title={copy?.title ?? 'Explore'}
+        projectScope={stats.projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'
+        }
+      >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.topPriority === 'error'
+              ? 'ERROR'
+              : stats.topPriority === 'indexing'
+                ? 'INDEXING'
+                : stats.topPriority === 'empty' || stats.topPriority === 'not_enabled'
+                  ? 'EMPTY'
+                  : stats.topPriority === 'stale'
+                    ? 'STALE'
+                    : 'READY'}
+        </Badge>
+        <FreshnessPill
+          at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
+          isValidating={statsValidating || exploreQuery.isValidating}
+        />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || loading}>
+          Refresh
+        </Btn>
+      </PageHeader>
+
+      <ExploreStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating || loading}
+      />
+
+      <SegmentedControl<ExploreTabId>
+        size="sm"
+        ariaLabel="Explore sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section
+        title="EXPLORE SNAPSHOT"
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Files"
+            value={stats.indexedFiles}
+            accent={stats.indexedFiles > 0 ? 'text-fg' : undefined}
+            hint={stats.repoUrl ? 'Indexed file rows' : 'Connect a repo'}
+          />
+          <StatCard
+            label="UI layer"
+            value={stats.layers.ui}
+            accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
+            hint="Components, pages, screens"
+          />
+          <StatCard
+            label="Backend"
+            value={stats.layers.backend}
+            accent={stats.layers.backend > 0 ? 'text-info' : undefined}
+            hint="API routes, edge functions"
+          />
+          <StatCard
+            label="Embedded"
+            value={stats.withEmbeddings}
+            accent={stats.withEmbeddings > 0 ? 'text-ok' : 'text-warn'}
+            hint="Vectors for semantic search"
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHero
+            scope="explore"
+            title="Codebase Atlas"
+            kicker="Plan"
+            decide={{
+              label: stats.topPriorityLabel ?? 'Indexed codebase map',
+              metric:
+                stats.indexedFiles > 0
+                  ? `${stats.layers.ui} UI · ${stats.layers.backend} backend`
+                  : undefined,
+              summary:
+                stats.topPriority === 'not_enabled'
+                  ? 'Brand banner — turn on indexing before the graph can populate.'
+                  : stats.topPriority === 'error'
+                    ? 'Red banner — last indexer run failed; check Index tab for the error.'
+                    : stats.topPriority === 'ready'
+                      ? 'Green banner — open Graph to trace imports or Search for plain-English lookup.'
+                      : 'Amber banner — indexing may still be running or the repo is empty.',
+              severity:
+                stats.topPriority === 'error'
+                  ? 'crit'
+                  : stats.topPriority === 'empty' || stats.topPriority === 'stale'
+                    ? 'warn'
+                    : stats.topPriority === 'ready'
+                      ? 'ok'
+                      : 'info',
+            }}
+            verify={{
+              label: 'Embeddings',
+              detail: `${stats.withEmbeddings}/${stats.indexedFiles} files embedded for search`,
+            }}
+          />
+
+          <PageHelp
+            title={copy?.help?.title ?? 'Codebase Atlas'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'Visual map of indexed source files grouped by architectural layer.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'See which layer a bug report file lives in',
+                'Trace import dependencies between files',
+                'Search "where is login?" and jump to the right symbol',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Overview for posture. Graph/Layers for the map. Search for semantic lookup. Index for debug.'
+            }
+          />
+
+          <PageActionBar
+            primary={
+              stats.topPriorityTo
+                ? { label: stats.topPriority === 'ready' ? 'Open Graph' : 'Next step', to: stats.topPriorityTo }
+                : { label: 'Open Graph', onClick: () => setActiveTab('graph') }
+            }
+            secondary={[
+              { label: 'Semantic search', onClick: () => setActiveTab('search') },
+              { label: 'Index debug', onClick: () => setActiveTab('index') },
+            ]}
+          />
+
+          {stats.topLanguages.length > 0 && (
+            <Card className="p-4">
+              <p className="text-2xs font-medium text-fg-muted uppercase tracking-wider mb-2">Top languages</p>
+              <div className="flex flex-wrap gap-2">
+                {stats.topLanguages.map((lang) => (
+                  <Badge key={lang} className="bg-surface-overlay text-fg-secondary">
+                    {lang}
+                  </Badge>
+                ))}
+              </div>
+            </Card>
+          )}
+        </>
+      )}
+
+      {(activeTab === 'graph' || activeTab === 'layers') && (
+        <>
+          {mapControls}
+          {mapContent}
+        </>
+      )}
+
+      {activeTab === 'search' && (
+        <div className={selectedNode ? 'grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-4 items-start' : ''}>
+          {stats.withEmbeddings === 0 && !loading && (
+            <div className="rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-2xs text-warn mb-2">
+              No embeddings yet — semantic search needs indexed files with vectors. Check Index tab.
+            </div>
+          )}
+          <ExploreSearchBar
+            projectId={projectId}
+            onHighlight={handleSearchHighlight}
+            onSelectHit={handleSelectHit}
+            seedQuery={searchSeedQuery}
+            onSeedConsumed={() => setSearchSeedQuery('')}
+          />
+          {selectedNode && (
+            <div className="sticky top-4">
+              <ExploreSymbolPanel
+                node={selectedNode}
+                onClear={() => setSelectedNode(null)}
+                onViewInGraph={handleViewInGraph}
+                onFindSimilar={handleFindSimilar}
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Skeleton while initial load */}
-      {loading && <GraphSkeleton />}
-
-      {/* Main views */}
-      {!loading && !notIndexed && (
-        <>
-          {view === 'graph' && (
-            <div className="space-y-3">
-              <ExploreCanvas
-                flowNodes={[...layerHeaderNodes, ...flowNodes]}
-                flowEdges={flowEdges}
-                nodeCount={nodes.length}
-                edgeCount={edges.length}
-                onNodeClick={handleNodeClick}
-                onPaneClick={handlePaneClick}
-                layerCounts={payload?.layers}
-              />
-              {selectedNode && (
-                <ExploreSymbolPanel
-                  node={selectedNode}
-                  onClear={() => setSelectedNode(null)}
-                  onViewInGraph={handleViewInGraph}
-                  onFindSimilar={handleFindSimilar}
-                />
-              )}
-            </div>
-          )}
-
-          {view === 'layers' && (
-            <div className="space-y-3">
-              <ExploreLayerLane
-                nodes={nodes}
-                edges={edges}
-                selectedId={selectedNode?.id ?? null}
-                highlightIds={highlightIds}
-                onSelect={(n) => { setSelectedNode(n); setHighlightIds(new Set()) }}
-                onClear={() => setSelectedNode(null)}
-              />
-              {selectedNode && (
-                <ExploreSymbolPanel
-                  node={selectedNode}
-                  onClear={() => setSelectedNode(null)}
-                  onViewInGraph={handleViewInGraph}
-                  onFindSimilar={handleFindSimilar}
-                />
-              )}
-            </div>
-          )}
-
-          {view === 'search' && (
-            <div className={selectedNode ? 'grid grid-cols-1 lg:grid-cols-[1fr_22rem] gap-4 items-start' : ''}>
-              <ExploreSearchBar
-                projectId={projectId}
-                onHighlight={handleSearchHighlight}
-                onSelectHit={handleSelectHit}
-                seedQuery={searchSeedQuery}
-                onSeedConsumed={() => setSearchSeedQuery('')}
-              />
-              {selectedNode && (
-                <div className="sticky top-4">
-                  <ExploreSymbolPanel
-                    node={selectedNode}
-                    onClear={() => setSelectedNode(null)}
-                    onViewInGraph={handleViewInGraph}
-                    onFindSimilar={handleFindSimilar}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </>
+      {activeTab === 'index' && (
+        <div className="space-y-4">
+          <Card className="p-4 space-y-3">
+            <p className="text-sm font-medium text-fg">Indexer debug</p>
+            <p className="text-2xs text-fg-muted">
+              Live state from <code className="font-mono">project_repos</code> and{' '}
+              <code className="font-mono">project_codebase_files</code>. Use this when the banner
+              shows ERROR or INDEXING.
+            </p>
+            <DetailRows rows={buildIndexRows(stats)} />
+          </Card>
+          <div className="flex flex-wrap gap-2">
+            <Link to="/settings">
+              <Btn size="sm">Open indexing settings</Btn>
+            </Link>
+            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating}>
+              Re-fetch stats
+            </Btn>
+            {stats.indexedFiles > 0 && (
+              <Btn size="sm" variant="ghost" onClick={() => setActiveTab('graph')}>
+                Open Graph
+              </Btn>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )
