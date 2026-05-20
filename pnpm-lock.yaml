@@ -41,6 +41,9 @@ importers:
       '@mushi-mushi/marketing-ui':
         specifier: workspace:*
         version: link:../../packages/marketing-ui
+      '@mushi-mushi/web':
+        specifier: workspace:*
+        version: link:../../packages/web
       '@sentry/react':
         specifier: ^10.51.0
         version: 10.52.0(react@19.2.5)
@@ -15250,7 +15253,7 @@ snapshots:
       '@babel/code-frame': 7.29.0
       '@babel/core': 7.29.0
       '@babel/generator': 7.29.1
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.3
       '@babel/template': 7.28.6
       '@babel/traverse': 7.29.0
       '@babel/types': 7.29.0

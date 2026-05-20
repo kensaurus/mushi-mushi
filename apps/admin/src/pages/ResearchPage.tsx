@@ -1,7 +1,6 @@
 /**
  * FILE: apps/admin/src/pages/ResearchPage.tsx
- * PURPOSE: Manual web research powered by BYOK Firecrawl during triage.
- *          Search the web, persist sessions + snippets, attach evidence to reports.
+ * PURPOSE: Banner + RESEARCH SNAPSHOT + tabs: Overview | Search | History.
  */
 
 import { useCallback, useMemo, useState } from 'react'
@@ -12,42 +11,45 @@ import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { usePageCopy } from '../lib/copy'
 import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
   PageHelp,
+  Card,
   Section,
   Btn,
+  Badge,
   Input,
   SegmentedControl,
   ErrorAlert,
   EmptyState,
   StatCard,
   RelativeTime,
+  FreshnessPill,
+  RecommendedAction,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
-import { FirecrawlStatusBanner } from '../components/research/FirecrawlStatusBanner'
+import { ResearchStatusBanner } from '../components/research/ResearchStatusBanner'
+import {
+  EMPTY_RESEARCH_STATS,
+  type ResearchStats,
+  type ResearchTabId,
+} from '../components/research/ResearchStatsTypes'
 import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
 import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
-import type {
-  FirecrawlConfig,
-  SearchResponse,
-  SessionRow,
-} from '../components/research/types'
+import type { SearchResponse, SessionRow } from '../components/research/types'
 
-type TabId = 'search' | 'history'
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
 
-interface ResearchStats {
-  sessions: number
-  snippets: number
-  attached: number
-  lastSessionAt: string | null
-}
-
-const TABS: Array<{ id: TabId; label: string; description: string }> = [
+const TABS: Array<{ id: ResearchTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Firecrawl posture, how web research fits triage, and recommended next steps.',
+  },
   {
     id: 'search',
     label: 'Search',
@@ -68,15 +70,16 @@ const SUGGESTIONS = [
   'cloudflare workers fetch ECONNRESET intermittent',
 ]
 
-function isTabId(v: string | null): v is TabId {
-  return TABS.some((t) => t.id === v)
+function resolveResearchTab(value: string | null): ResearchTabId {
+  if (value === 'search' || value === 'history') return value
+  return 'overview'
 }
 
 export function ResearchPage() {
+  const copy = usePageCopy('/research')
   const [searchParams, setSearchParams] = useSearchParams()
-  const param = searchParams.get('tab')
-  const activeTab: TabId = isTabId(param) ? param : 'search'
-  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+  const activeTab = resolveResearchTab(searchParams.get('tab'))
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -90,65 +93,74 @@ export function ResearchPage() {
   const [modeFilter, setModeFilter] = useState<SessionMode>('all')
   const [ageFilter, setAgeFilter] = useState<SessionAge>('all')
 
-  const sessionsPath = activeProjectId ? '/v1/admin/research/sessions?limit=50' : null
-  const statsPath = activeProjectId ? '/v1/admin/research/stats' : null
-  const firecrawlPath = activeProjectId ? '/v1/admin/byok/firecrawl' : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<ResearchStats>('/v1/admin/research/stats')
+  const stats = { ...EMPTY_RESEARCH_STATS, ...statsData }
+
+  const sessionsPath = activeProjectId && activeTab === 'history' ? '/v1/admin/research/sessions?limit=50' : null
 
   const {
     data: historyData,
     loading: historyLoading,
     error: historyError,
     reload: loadHistory,
-    lastFetchedAt,
-    isValidating,
-  } = usePageData<{ sessions: SessionRow[] }>(sessionsPath, { deps: [activeProjectId] })
-
-  const {
-    data: statsData,
-    reload: reloadStats,
-  } = usePageData<ResearchStats>(statsPath, { deps: [activeProjectId] })
-
-  const {
-    data: firecrawlData,
-    loading: firecrawlLoading,
-    reload: reloadFirecrawl,
-  } = usePageData<FirecrawlConfig | null>(firecrawlPath, { deps: [activeProjectId] })
+    isValidating: historyValidating,
+  } = usePageData<{ sessions: SessionRow[] }>(sessionsPath, { deps: [activeProjectId, activeTab] })
 
   const sessions = historyData?.sessions ?? []
-  const stats = statsData ?? { sessions: 0, snippets: 0, attached: 0, lastSessionAt: null }
-  const firecrawlReady =
-    Boolean(firecrawlData?.configured) &&
-    (!firecrawlData?.testStatus || firecrawlData.testStatus === 'ok')
 
   const reloadAll = useCallback(() => {
-    loadHistory()
     reloadStats()
-    reloadFirecrawl()
-  }, [loadHistory, reloadStats, reloadFirecrawl])
+    loadHistory()
+  }, [reloadStats, loadHistory])
 
   useRealtimeReload(['research_sessions', 'research_snippets'], reloadAll)
 
-  const setTab = useCallback((tab: TabId) => {
-    const next = new URLSearchParams(searchParams)
-    if (tab === 'search') next.delete('tab')
-    else next.set('tab', tab)
-    setSearchParams(next, { replace: true, preventScrollReset: true })
-  }, [searchParams, setSearchParams])
+  const setActiveTab = useCallback(
+    (tab: ResearchTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
 
   usePublishPageContext({
     route: '/research',
-    title: `${activeMeta.label} · Research`,
-    summary: activeMeta.description,
-    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
-    criticalCount: stats.attached,
+    title: projectName ? `Research · ${projectName}` : 'Research',
+    summary: statsLoading
+      ? 'Loading research…'
+      : !stats.firecrawlReady
+        ? 'Firecrawl setup required'
+        : `${stats.sessions} session${stats.sessions === 1 ? '' : 's'} · ${stats.attached} attached`,
+    criticalCount: stats.unattachedSnippets,
   })
 
-  const tabOptions = useMemo(() => [
-    { id: 'search' as const, label: 'Search' },
-    { id: 'history' as const, label: 'History', count: sessions.length },
-  ], [sessions.length])
+  const tabOptions = useMemo(
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'history' && stats.sessions > 0
+            ? stats.sessions
+            : t.id === 'search' && stats.unattachedSnippets > 0
+              ? stats.unattachedSnippets
+              : undefined,
+      })),
+    [stats.sessions, stats.unattachedSnippets],
+  )
 
-  async function runSearch(q: string) {
+  const runSearch = useCallback(async (q: string) => {
     if (!activeProjectId) {
       toast.error('Select a project first')
       return
@@ -166,7 +178,7 @@ export function ResearchPage() {
     setSearching(false)
     if (res.ok && res.data) {
       setActive(res.data)
-      setTab('search')
+      setActiveTab('search')
       reloadAll()
       toast.success(`Found ${res.data.results.length} result${res.data.results.length === 1 ? '' : 's'}`)
     } else {
@@ -181,9 +193,9 @@ export function ResearchPage() {
         toast.error('Search failed', res.error?.message)
       }
     }
-  }
+  }, [activeProjectId, reloadAll, setActiveTab, toast])
 
-  async function loadSession(id: string) {
+  const loadSession = useCallback(async (id: string) => {
     const res = await apiFetch<{ session: SessionRow; snippets: SearchResponse['results'] }>(
       `/v1/admin/research/sessions/${id}`,
     )
@@ -194,13 +206,13 @@ export function ResearchPage() {
         query: res.data.session.query,
         results: res.data.snippets,
       })
-      setTab('search')
+      setActiveTab('search')
     } else {
       toast.error('Failed to load session', res.error?.message)
     }
-  }
+  }, [setActiveTab, toast])
 
-  async function attach(snippetId: string) {
+  const attach = useCallback(async (snippetId: string) => {
     const reportId = (attachInput[snippetId] ?? '').trim()
     if (!reportId) {
       toast.error('Paste the report UUID from the Reports page.')
@@ -227,24 +239,87 @@ export function ResearchPage() {
     } else {
       toast.error('Attach failed', res.error?.message)
     }
+  }, [active, attachInput, reloadStats, toast])
+
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading research">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
   }
 
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load research stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
+        ? 'danger'
+        : stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'unattached_snippets'
+          ? 'warn'
+          : stats.topPriority === 'ready_no_sessions' || stats.topPriority === 'firecrawl_untested'
+            ? 'brand'
+            : stats.firecrawlReady
+              ? 'ok'
+              : 'info'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-research">
       <PageHeader
-        title="Research"
-        description="Firecrawl web search during triage — find docs, threads, and changelogs, then attach snippets as report evidence."
+        title={copy?.title ?? 'Research'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.'
+        }
       >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : !stats.firecrawlConfigured
+              ? 'NO KEY'
+              : !stats.firecrawlReady
+                ? 'NOT READY'
+                : stats.sessions === 0
+                  ? 'READY'
+                  : `${stats.attached} ATTACHED`}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || historyValidating}>
+          Refresh
+        </Btn>
         {activeTab === 'search' && (
           <Btn
+            size="sm"
             variant="primary"
-            disabled={!activeProjectId || searching || !firecrawlReady}
+            disabled={!activeProjectId || searching || !stats.firecrawlReady}
             loading={searching}
             onClick={() => void runSearch(query)}
             title={
               !activeProjectId
                 ? 'Select a project first'
-                : !firecrawlReady
+                : !stats.firecrawlReady
                   ? 'Configure and test Firecrawl first'
                   : undefined
             }
@@ -254,16 +329,61 @@ export function ResearchPage() {
         )}
       </PageHeader>
 
-      <PageHelp
-        title="About Research"
-        whatIsIt="BYOK Firecrawl-powered web search you run during triage. Look up release notes for a stubborn report, find Stack Overflow threads matching an error signature, or pull a vendor changelog into the report's evidence trail."
-        useCases={[
-          'Cross-reference an error signature against current upstream docs.',
-          'Find a Stack Overflow thread to attach as triage evidence.',
-          'Check if a third-party library shipped a fix in the last 24 hours.',
-        ]}
-        howToUse="Press Enter to search. Click Attach evidence on any snippet and paste a report UUID from Reports. Sessions persist per project — reopen them from History. Configure Firecrawl under Settings → Firecrawl (allow-list domains and page cap)."
+      <ResearchStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating}
       />
+
+      <SegmentedControl<ResearchTabId>
+        size="sm"
+        ariaLabel="Research sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="RESEARCH SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Sessions" value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} hint="Saved queries" />
+          <StatCard label="Snippets" value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} hint="Web results" />
+          <StatCard label="Attached" value={stats.attached} accent={stats.attached > 0 ? 'text-ok' : undefined} hint="Report evidence" />
+          <StatCard label="Unattached" value={stats.unattachedSnippets} accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined} hint="Need report UUID" />
+          <StatCard
+            label="Firecrawl"
+            value={stats.firecrawlReady ? 'Ready' : stats.firecrawlConfigured ? 'Test' : 'Setup'}
+            accent={stats.firecrawlReady ? 'text-ok' : stats.firecrawlConfigured ? 'text-warn' : undefined}
+            hint={stats.firecrawlKeyHint ?? 'BYOK in Settings'}
+          />
+          <StatCard
+            label="Domains"
+            value={stats.allowedDomainsCount}
+            accent={stats.allowedDomainsCount > 0 ? 'text-info' : undefined}
+            hint={`${stats.maxPagesPerCall} pages/call`}
+          />
+        </div>
+      </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'unattached_snippets'
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       {!activeProjectId ? (
         <SetupNudge
@@ -272,202 +392,204 @@ export function ResearchPage() {
           emptyDescription="Research sessions and Firecrawl settings are scoped to the active project in the header."
         />
       ) : (
-        <FirecrawlStatusBanner
-          config={firecrawlData ?? null}
-          loading={firecrawlLoading}
-          projectName={projectName}
-        />
-      )}
-
-      <Section
-        title="Research workspace"
-        freshness={{ at: lastFetchedAt, isValidating }}
-      >
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Sessions" value={stats.sessions} hint="Saved Firecrawl queries" />
-          <StatCard label="Snippets" value={stats.snippets} hint="Web results returned" />
-          <StatCard
-            label="Attached"
-            value={stats.attached}
-            hint="Linked to reports as evidence"
-          />
-          <StatCard
-            label="Firecrawl"
-            value={firecrawlLoading ? '…' : firecrawlReady ? 'Ready' : 'Setup'}
-            hint={
-              firecrawlReady
-                ? (firecrawlData?.keyHint ?? 'Key configured')
-                : 'Configure BYOK in Settings'
-            }
-          />
-        </div>
-
-        <SegmentedControl
-          value={activeTab}
-          onChange={setTab}
-          options={tabOptions}
-          ariaLabel="Research sections"
-          className="mb-4"
-        />
-
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
-
-        {!activeProjectId ? (
-          <SetupNudge
-            requires={['project']}
-            emptyTitle="Select a project"
-            emptyDescription="Pick a project in the header to search the web and view session history."
-          />
-        ) : activeTab === 'search' ? (
-          <div className="space-y-4">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                void runSearch(query)
-              }}
-              className="flex flex-col gap-2 sm:flex-row sm:items-end"
-            >
-              <Input
-                label="Web query"
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="error signature, library name, doc topic…"
-                className="flex-1"
-                disabled={searching || !firecrawlReady}
-              />
-              <Btn
-                type="submit"
-                variant="primary"
-                disabled={searching || !firecrawlReady}
-                loading={searching}
-                className="shrink-0 sm:self-end"
-              >
-                Search
-              </Btn>
-            </form>
-
-            <div className="flex flex-wrap gap-1.5">
-              <span className="self-center text-3xs text-fg-faint">Try:</span>
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => {
-                    setQuery(s)
-                    void runSearch(s)
-                  }}
-                  disabled={searching || !firecrawlReady}
-                  className="rounded-sm border border-edge bg-surface-raised px-1.5 py-0.5 font-mono text-2xs text-fg-muted hover:text-fg-secondary disabled:opacity-50"
-                  title="Run this example query"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-
-            {!firecrawlReady && !firecrawlLoading && (
-              <EmptyState
-                title="Firecrawl not ready"
-                description="Add and test your Firecrawl API key before searching. The fix-worker also uses this key when local RAG is sparse."
-                action={
-                  <Link to="/settings?tab=firecrawl">
-                    <Btn size="sm" variant="primary">Open Firecrawl settings</Btn>
-                  </Link>
-                }
-                hints={[
-                  'Set an allow-list of domains to keep results on-topic',
-                  'Duplicate queries within 24h hit the Firecrawl cache',
+        <>
+          {activeTab === 'overview' && (
+            <div className="space-y-4">
+              <PageHelp
+                title={copy?.help?.title ?? 'About web research'}
+                whatIsIt={copy?.help?.whatIsIt ?? 'BYOK Firecrawl-powered web search you run while triaging a report.'}
+                useCases={copy?.help?.useCases ?? [
+                  'Cross-reference an error signature against current upstream docs',
+                  'Find a Stack Overflow thread to attach as triage evidence',
+                  'Check if a third-party library shipped a fix in the last 24 hours',
                 ]}
+                howToUse={copy?.help?.howToUse ?? 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence.'}
               />
-            )}
+              {stats.topPriority === 'healthy' && (
+                <RecommendedAction
+                  tone="success"
+                  title="Research pipeline healthy"
+                  description={stats.topPriorityLabel ?? `${stats.sessions} sessions with Firecrawl ready.`}
+                />
+              )}
+              {(stats.topPriority === 'firecrawl_not_configured' || stats.topPriority === 'firecrawl_untested') && (
+                <RecommendedAction
+                  tone="info"
+                  title="Configure Firecrawl first"
+                  description={stats.topPriorityLabel ?? 'Web search requires a BYOK Firecrawl key.'}
+                  cta={{ label: 'Open Firecrawl settings', to: '/settings?tab=firecrawl' }}
+                />
+              )}
+              {(stats.topPriority === 'firecrawl_auth_failed' || stats.topPriority === 'firecrawl_error') && (
+                <RecommendedAction
+                  tone="urgent"
+                  title="Fix Firecrawl before searching"
+                  description={stats.topPriorityLabel ?? 'Re-test the API key in Settings.'}
+                  cta={{ label: 'Fix in Settings', to: '/settings?tab=firecrawl' }}
+                />
+              )}
+              {stats.topPriority === 'ready_no_sessions' && (
+                <RecommendedAction
+                  tone="info"
+                  title="Run your first search"
+                  description={stats.topPriorityLabel ?? 'Firecrawl is ready — try an example query on the Search tab.'}
+                  cta={{ label: 'Open Search', to: '/research?tab=search' }}
+                />
+              )}
+              {stats.topPriority === 'unattached_snippets' && (
+                <RecommendedAction
+                  tone="info"
+                  title="Attach snippets to reports"
+                  description={stats.topPriorityLabel ?? 'Paste report UUIDs from the Reports page.'}
+                  cta={{ label: 'Open Search', to: '/research?tab=search' }}
+                />
+              )}
+              {stats.lastSessionAt && (
+                <p className="text-2xs text-fg-muted">
+                  Last search <RelativeTime value={stats.lastSessionAt} />
+                  {' · '}
+                  <button type="button" className="text-brand hover:underline" onClick={() => setActiveTab('history')}>
+                    View history
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
 
-            {active && (
-              <div className="space-y-3 border-t border-edge-subtle pt-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-medium text-fg">
-                      Results — &ldquo;{active.query}&rdquo;
-                    </h3>
-                    <p className="text-2xs text-fg-muted">
-                      Session {active.sessionId.slice(0, 8)}… ·{' '}
-                      <RelativeTime value={active.createdAt} />
-                    </p>
-                  </div>
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setActive(null)}
-                  >
-                    Clear results
-                  </Btn>
-                </div>
-
-                {active.results.length === 0 ? (
-                  <EmptyState
-                    title="No results returned"
-                    description="Try a broader query or relax the domain allow-list in Settings → Firecrawl."
-                    hints={[
-                      'Check allowed domains include the site you expect',
-                      `Page cap is ${firecrawlData?.maxPagesPerCall ?? 5} results per call`,
-                    ]}
-                  />
-                ) : (
-                  <div className="space-y-3">
-                    {active.results.map((r) => (
-                      <ResearchSnippetCard
-                        key={r.id}
-                        snippet={r}
-                        attachValue={attachInput[r.id] ?? ''}
-                        onAttachValueChange={(v) =>
-                          setAttachInput((s) => ({ ...s, [r.id]: v }))
-                        }
-                        onAttach={() => void attach(r.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!active && firecrawlReady && stats.lastSessionAt && (
-              <p className="text-2xs text-fg-muted">
-                Last search{' '}
-                <RelativeTime value={stats.lastSessionAt} />
-                {' · '}
-                <button
-                  type="button"
-                  className="text-brand hover:underline"
-                  onClick={() => setTab('history')}
+          {activeTab === 'search' && (
+            <div className="space-y-4">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  void runSearch(query)
+                }}
+                className="flex flex-col gap-2 sm:flex-row sm:items-end"
+              >
+                <Input
+                  label="Web query"
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="error signature, library name, doc topic…"
+                  className="flex-1"
+                  disabled={searching || !stats.firecrawlReady}
+                />
+                <Btn
+                  type="submit"
+                  variant="primary"
+                  disabled={searching || !stats.firecrawlReady}
+                  loading={searching}
+                  className="shrink-0 sm:self-end"
                 >
-                  View history
-                </button>
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {historyLoading && (
-              <TableSkeleton rows={4} columns={5} showFilters={false} label="Loading research history" />
-            )}
-            {historyError && (
-              <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />
-            )}
-            {!historyLoading && !historyError && (
-              <ResearchSessionTable
-                sessions={sessions}
-                projectName={projectName}
-                modeFilter={modeFilter}
-                ageFilter={ageFilter}
-                onModeFilterChange={setModeFilter}
-                onAgeFilterChange={setAgeFilter}
-                onOpenSession={(id) => void loadSession(id)}
-                activeSessionId={active?.sessionId ?? null}
-              />
-            )}
-          </div>
-        )}
-      </Section>
+                  Search
+                </Btn>
+              </form>
+
+              <div className="flex flex-wrap gap-1.5">
+                <span className="self-center text-3xs text-fg-faint">Try:</span>
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      setQuery(s)
+                      void runSearch(s)
+                    }}
+                    disabled={searching || !stats.firecrawlReady}
+                    className="rounded-sm border border-edge bg-surface-raised px-1.5 py-0.5 font-mono text-2xs text-fg-muted hover:text-fg-secondary disabled:opacity-50"
+                    title="Run this example query"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+
+              {!stats.firecrawlReady && (
+                <EmptyState
+                  title="Firecrawl not ready"
+                  description="Add and test your Firecrawl API key before searching. The fix-worker also uses this key when local RAG is sparse."
+                  action={
+                    <Link to="/settings?tab=firecrawl">
+                      <Btn size="sm" variant="primary">Open Firecrawl settings</Btn>
+                    </Link>
+                  }
+                  hints={[
+                    'Set an allow-list of domains to keep results on-topic',
+                    'Duplicate queries within 24h hit the Firecrawl cache',
+                  ]}
+                />
+              )}
+
+              {active && (
+                <div className="space-y-3 border-t border-edge-subtle pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <h3 className="text-sm font-medium text-fg">
+                        Results — &ldquo;{active.query}&rdquo;
+                      </h3>
+                      <p className="text-2xs text-fg-muted">
+                        Session {active.sessionId.slice(0, 8)}… ·{' '}
+                        <RelativeTime value={active.createdAt} />
+                      </p>
+                    </div>
+                    <Btn size="sm" variant="ghost" onClick={() => setActive(null)}>
+                      Clear results
+                    </Btn>
+                  </div>
+
+                  {active.results.length === 0 ? (
+                    <EmptyState
+                      title="No results returned"
+                      description="Try a broader query or relax the domain allow-list in Settings → Firecrawl."
+                      hints={[
+                        'Check allowed domains include the site you expect',
+                        `Page cap is ${stats.maxPagesPerCall} results per call`,
+                      ]}
+                    />
+                  ) : (
+                    <div className="space-y-3">
+                      {active.results.map((r) => (
+                        <ResearchSnippetCard
+                          key={r.id}
+                          snippet={r}
+                          attachValue={attachInput[r.id] ?? ''}
+                          onAttachValueChange={(v) =>
+                            setAttachInput((s) => ({ ...s, [r.id]: v }))
+                          }
+                          onAttach={() => void attach(r.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'history' && (
+            <div className="space-y-3">
+              {historyLoading && (
+                <TableSkeleton rows={4} columns={5} showFilters={false} label="Loading research history" />
+              )}
+              {historyError && (
+                <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />
+              )}
+              {!historyLoading && !historyError && (
+                <ResearchSessionTable
+                  sessions={sessions}
+                  projectName={projectName}
+                  modeFilter={modeFilter}
+                  ageFilter={ageFilter}
+                  onModeFilterChange={setModeFilter}
+                  onAgeFilterChange={setAgeFilter}
+                  onOpenSession={(id) => void loadSession(id)}
+                  activeSessionId={active?.sessionId ?? null}
+                />
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

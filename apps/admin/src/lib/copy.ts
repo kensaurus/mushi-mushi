@@ -252,7 +252,7 @@ export const COPY: CopyRegistry = {
     },
     '/research': {
       title: 'Web research',
-      description: 'Firecrawl web search during triage — find docs and threads, then attach snippets to reports as evidence.',
+      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
       help: {
         title: 'About web research',
         whatIsIt: 'BYOK Firecrawl-powered search you run while triaging a report. Look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.',
@@ -261,7 +261,7 @@ export const COPY: CopyRegistry = {
           'Find a Stack Overflow thread to attach as triage evidence',
           'Check if a third-party library shipped a fix in the last 24 hours',
         ],
-        howToUse: 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence. Sessions persist per project — reopen them from History. Configure Firecrawl under Settings.',
+        howToUse: 'Configure Firecrawl in Settings, then search on the Search tab. Paste a report UUID on any snippet and click Attach evidence. Sessions persist per project — reopen them from History.',
       },
     },
     '/repo': {
@@ -321,17 +321,17 @@ export const COPY: CopyRegistry = {
       },
     },
     '/intelligence': {
-      title: 'Weekly digest',
-      description: 'An AI-written summary of what happened this week — patterns, improvements, and things that need your attention.',
+      title: 'Bug Intelligence',
+      description: 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.',
       help: {
-        title: 'About the intelligence report',
-        whatIsIt: 'A weekly AI-written narrative that turns your raw bug numbers into an easy-to-read story — like a Monday morning briefing.',
+        title: 'About Bug Intelligence',
+        whatIsIt: 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations. Each report is persisted, versioned, and exportable as HTML/PDF.',
         useCases: [
-          'Share a one-paragraph status with your team without writing it yourself',
-          'Spot a trend that\'s not obvious from the dashboard numbers',
-          'Get a "state of the app" summary before a planning meeting',
+          'Share a one-page status with stakeholders every Monday',
+          'Spot regressions early — week-over-week category and severity drift',
+          'Compare fix velocity against anonymised industry benchmarks (opt-in)',
         ],
-        howToUse: 'Reports generate automatically each week. Click "Generate now" to get a fresh one. Copy the text to paste into Slack or a status doc.',
+        howToUse: 'Reports generate automatically every Monday by cron. Click Generate to run for the current project — Pipeline shows live job status and errors for debugging.',
       },
     },
     '/compliance': {
@@ -448,7 +448,7 @@ export const COPY: CopyRegistry = {
     },
     '/releases': {
       title: 'Releases',
-      description: 'Draft changelogs with AI, credit reporters, and close the feedback loop when you publish.',
+      description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
       help: {
         title: 'About Releases',
         whatIsIt: 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.',
@@ -503,17 +503,17 @@ export const COPY: CopyRegistry = {
       },
     },
     '/anomalies': {
-      title: 'Unusual patterns',
-      description: 'Alerts when bug volume, severity, or types change in a way that looks unusual — catch surprises before they escalate.',
+      title: 'Metric anomalies',
+      description: 'Banner + ANOMALIES SNAPSHOT — ingest metrics, run detection, triage Page-Hinkley and release regressions.',
       help: {
         title: 'About anomaly detection',
-        whatIsIt: 'An automatic alarm system that spots unusual spikes or drops in your bug data and alerts you before users start complaining.',
+        whatIsIt: 'Ingest any numeric metric (error rate, latency, conversion) and run Page-Hinkley, Z-score, or release-regression detectors. Confirmed regressions can auto-open bug reports.',
         useCases: [
-          'Get notified if a deploy suddenly tripled the error rate',
-          'Catch a silent regression that\'s slowly getting worse',
-          'See a list of all anomalies sorted by how unusual they are',
+          'Detect crash-rate spikes after a release',
+          'Flag latency regressions against rolling baseline',
+          'Auto-open a bug report when a regression is confirmed',
         ],
-        howToUse: 'Active anomalies appear at the top. Click any to see the full detail and which reports triggered the alert. Dismiss when investigated.',
+        howToUse: 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron. Confirm or dismiss each finding.',
       },
     },
     '/cost': {
@@ -806,7 +806,7 @@ export const COPY: CopyRegistry = {
     },
     '/research': {
       title: 'Research',
-      description: 'Firecrawl web search + snippet attach during triage (BYOK).',
+      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
     },
     '/repo': {
       title: 'Repo',
@@ -826,7 +826,7 @@ export const COPY: CopyRegistry = {
     },
     '/intelligence': {
       title: 'Intelligence',
-      description: 'Weekly LLM digest — KPI trends, hotspots, modernization findings, and exportable narratives.',
+      description: 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.',
     },
     '/compliance': {
       title: 'Compliance',
@@ -862,7 +862,7 @@ export const COPY: CopyRegistry = {
     },
     '/releases': {
       title: 'Releases',
-      description: 'Draft changelogs with AI, credit reporters, and publish in-app attribution toasts.',
+      description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
     },
     '/iterate': {
       title: 'Iterate',
@@ -878,7 +878,7 @@ export const COPY: CopyRegistry = {
     },
     '/anomalies': {
       title: 'Anomalies',
-      description: 'Statistical spikes in intake, latency, or failure rate.',
+      description: 'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.',
     },
     '/cost': {
       title: 'LLM Cost',

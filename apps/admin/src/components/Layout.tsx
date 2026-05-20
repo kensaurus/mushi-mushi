@@ -442,6 +442,48 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Experiment drawer shows SRM check, p-value, and per-variant conversion rates.',
     },
   },
+  '/anomalies': {
+    title: 'Anomalies',
+    kicker: 'Check',
+    scope: 'anomalies',
+    decide: {
+      label: 'Metric regressions',
+      summary: 'Banner + ANOMALIES SNAPSHOT — ingest timeseries, run detectors, triage release regressions.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Detection evidence',
+      detail: 'Anomalies tab shows method, score vs baseline, and auto-report links.',
+    },
+  },
+  '/releases': {
+    title: 'Releases',
+    kicker: 'Check',
+    scope: 'releases',
+    decide: {
+      label: 'Changelog pipeline',
+      summary: 'Banner + RELEASES SNAPSHOT — AI draft from fixed reports, credit reporters, publish attribution toasts.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Credit audit',
+      detail: 'Release drawer shows fix count, contributor credits, and notified-at stamps per reporter.',
+    },
+  },
+  '/intelligence': {
+    title: 'Intelligence',
+    kicker: 'Check',
+    scope: 'intelligence',
+    decide: {
+      label: 'Weekly digest',
+      summary: 'Banner + INTELLIGENCE SNAPSHOT — LLM narrative, job pipeline, modernization findings, benchmarking.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Digest proof',
+      detail: 'Reports tab shows week_start, stats JSON, and exportable HTML — Pipeline shows job errors for debugging.',
+    },
+  },
   '/mcp': {
     title: 'MCP',
     kicker: 'Act',
@@ -658,12 +700,12 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     scope: 'research',
     decide: {
       label: 'Firecrawl search',
-      summary: 'Look up docs, threads, and changelogs during triage — attach snippets to reports as evidence.',
+      summary: 'Banner + RESEARCH SNAPSHOT — BYOK web search during triage, attach snippets as report evidence.',
       severity: 'info',
     },
     verify: {
       label: 'Session history',
-      detail: 'Past queries and attached snippets stay scoped to the active project below.',
+      detail: 'History tab lists past queries; attached snippets link back to report UUIDs for audit.',
     },
   },
   '/iterate': {

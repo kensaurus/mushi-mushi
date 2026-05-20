@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import { AuthProvider, useAuth } from './lib/auth'
@@ -18,6 +18,7 @@ import { loginPathForLocation } from './lib/authRedirect'
 import { OfflineBanner } from './components/OfflineBanner'
 import { BetaBanner } from './components/BetaBanner'
 import { useSessionWatcher } from './lib/sessionWatcher'
+import { initMushiSelf } from './lib/mushi-self'
 
 // Wrap Routes ONCE, at the level where the real (parametrized) route
 // definitions live — i.e. the inner Routes mounted under the auth gate.
@@ -164,6 +165,18 @@ function ResilienceLayer() {
   return <OfflineBanner />
 }
 
+/** Lazy-initialises the Mushi self-dogfood SDK after the user logs in.
+ *  Deliberately placed outside ProtectedRoute so the init happens as soon as
+ *  session becomes available rather than waiting for protected-route render. */
+function MushiSelfMount() {
+  const { session } = useAuth()
+  useEffect(() => {
+    if (!session) return
+    void initMushiSelf({ userId: session.user.id })
+  }, [session?.user?.id])
+  return null
+}
+
 export function App() {
   if (envStatus.mode === 'self-hosted' && !envStatus.ready) {
     return <SetupGatePage env={envStatus} />
@@ -180,6 +193,7 @@ export function App() {
           (see BetaBanner.tsx for the rationale). */}
       <BetaBanner />
       <ResilienceLayer />
+      <MushiSelfMount />
       <UpgradePromptHost />
       <PasswordRecoveryGate>
       {/* Outer ErrorBoundary — catches render errors on PUBLIC pages too

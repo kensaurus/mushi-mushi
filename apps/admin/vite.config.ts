@@ -138,6 +138,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Workspace link occasionally missing in admin node_modules on Windows;
+      // point Vite at the built SDK so mushi-self dynamic import resolves.
+      '@mushi-mushi/web': path.resolve(__dirname, '../../packages/web/dist/index.js'),
     },
   },
   build: {
