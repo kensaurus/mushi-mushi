@@ -221,8 +221,15 @@ jobs:
         #   registry mirror takes time to propagate the new manifest.
         #   The tarball is already signed and verified by the previous
         #   step — this audit just needs the registry to catch up. Retry
-        #   with exponential backoff (1, 2, 4, 8, 16, 32s = 63s max wait)
-        #   before failing the release, since this race never lasts longer.
+        #   with exponential backoff (1, 2, 4, 8, 16, 32s = 63s total wait
+        #   across 7 attempts: try → sleep 1 → try → sleep 2 → … → try
+        #   → sleep 32 → final try) before failing the release, since
+        #   this race never lasts longer.
+        #
+        # NB: only ETARGET / "No matching version" failures are treated
+        # as the CDN race. Auth / network / registry-outage failures
+        # surface with their own error string and the npm output is
+        # echoed verbatim so the release log isn't misleading.
         run: |
           set -euo pipefail
           mkdir -p /tmp/audit-sigs && cd /tmp/audit-sigs
@@ -230,17 +237,30 @@ jobs:
           install_with_retry() {
             local pkg="$1"
             local ver="$2"
-            local max_attempts=6
+            local max_attempts=7
             local delay=1
+            local last_log
+            last_log=$(mktemp)
             for attempt in $(seq 1 "$max_attempts"); do
-              if npm install --no-save --ignore-scripts "${pkg}@${ver}" 2>&1; then
+              if npm install --no-save --ignore-scripts "${pkg}@${ver}" >"$last_log" 2>&1; then
+                cat "$last_log"
+                rm -f "$last_log"
                 return 0
               fi
-              if [ "$attempt" -eq "$max_attempts" ]; then
-                echo "::error::Failed to install ${pkg}@${ver} after ${max_attempts} attempts — npm registry did not propagate the new manifest in time."
+              cat "$last_log"
+              # Only retry the propagation race; bail fast on every
+              # other npm failure so the operator sees the real cause.
+              if ! grep -qE 'ETARGET|No matching version found' "$last_log"; then
+                echo "::error::npm install ${pkg}@${ver} failed for a non-propagation reason (see log above) — not retrying."
+                rm -f "$last_log"
                 return 1
               fi
-              echo "::warning::npm install ${pkg}@${ver} failed (attempt ${attempt}/${max_attempts}); retrying in ${delay}s (CDN propagation race)"
+              if [ "$attempt" -eq "$max_attempts" ]; then
+                echo "::error::Failed to install ${pkg}@${ver} after ${max_attempts} attempts — npm registry did not propagate the new manifest in time (last error: ETARGET / No matching version)."
+                rm -f "$last_log"
+                return 1
+              fi
+              echo "::warning::npm install ${pkg}@${ver} hit ETARGET (attempt ${attempt}/${max_attempts}); retrying in ${delay}s (CDN propagation race)"
               sleep "$delay"
               delay=$((delay * 2))
             done
