@@ -28,8 +28,10 @@ export type DetectedMonorepo =
   | null
 
 export interface DetectionResult {
-  /** Best-guess framework tab to select. Never null — defaults to 'vanilla' for
-   *  unknown / Angular; 'react' is only returned on JSON parse errors. */
+  /** Best-guess framework tab to select. Never null. Defaults to 'vanilla' for
+   *  unknown deps / Angular. Returns 'react' on JSON parse errors (invalid input)
+   *  and for monorepo roots (no framework deps detected at root level, low
+   *  confidence). Callers should check `confidence` before acting on this value. */
   framework: Framework
   /** 0–1 confidence. ≥0.8 = auto-select without asking; <0.5 = ask user. */
   confidence: number
@@ -147,7 +149,9 @@ function resolveWorkspaceEntry(entry: string): string {
   const stripped = entry.replace(/\/\*.*$/, '')
   // If the entry was a glob, append a <name> placeholder so the user knows
   // they need to substitute a real workspace directory.
-  return entry.includes('*') ? `${stripped}/<your-app>` : stripped
+  // Use a shell-safe placeholder (no angle brackets, no spaces) so copy-pasted
+  // commands don't fail due to shell redirection operators.
+  return entry.includes('*') ? `${stripped}/your-app` : stripped
 }
 
 function detectWorkspacePath(pkg: PackageJson, monorepo: DetectedMonorepo): string | null {
@@ -402,19 +406,20 @@ export function monorepoInstallGuidance(
   }
 
   const tool = toolLabel[result.monorepo]
-  const appPath = result.workspaceHint ?? 'your app workspace'
+  // Shell-safe fallback (no spaces) so `cd ${appPath}` is a valid command.
+  const appPath = result.workspaceHint ?? 'your-app'
 
   // Extract package name(s) from installCmd, stripping the manager prefix and
   // any flags (e.g. -g, --save-dev). Known patterns:
   //   "npm install @mushi-mushi/react"
-  //   "npm install -g mushi-mcp"          ← -g stripped; caller should not
+  //   "npm install -g @mushi-mushi/mcp"    ← -g stripped; caller should not
   //                                          use monorepo scoping for globals
   //   "npx expo install @mushi-mushi/react-native expo-sensors"
   //   "npm install @mushi-mushi/capacitor && npx cap sync"
   const installPart = installCmd.split(/&&/)[0].trim()
   const pkgArgs = installPart
     .replace(/^(npx expo install|npm install|pnpm add|yarn add)\s+/, '')
-    .replace(/^-\w+\s+/, '')     // strip leading flags like -g, -D, -E
+    .replace(/^(-\w+|--\w[\w-]*)\s+/, '')  // strip leading short (-g, -D) or long (--save-dev) flags
     .trim()
 
   // For non-workspace monorepo tools (Turborepo, Nx, Lerna, Rush), the user

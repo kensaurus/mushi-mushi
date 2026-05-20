@@ -3,7 +3,8 @@ import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
-import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, RelativeTime, SelectField, Tooltip } from '../components/ui'
+import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, PageHelp, RelativeTime, SelectField, Tooltip } from '../components/ui'
+import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -139,6 +140,7 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
 const NOTE_MAX_LEN = 280
 
 export function OrganizationSettingsPage() {
+  const copy = usePageCopy('/organization/members')
   const activeOrgId = useActiveOrgId()
   const toast = useToast()
   const entitlements = useEntitlements()
@@ -547,6 +549,17 @@ export function OrganizationSettingsPage() {
           {data?.organization?.plan_id ?? 'hobby'} plan
         </Badge>
       </PageHeader>
+
+      <PageHelp
+        title={copy?.help?.title ?? 'About team management'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
+        useCases={copy?.help?.useCases ?? [
+          'Invite a colleague with their email address — they get a sign-up link',
+          'Give a designer read-only access so they can see bugs without changing anything',
+          'Remove a former teammate\'s access in one click',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Click "Invite member" and enter their email. Pick a role: Viewer, Member, Admin, or Owner. They\'ll receive an email with a link.'}
+      />
 
       {/* Team identity — rename the organization. Owner and admin only;
           everyone else sees a read-only chip so the UI doesn't lie about

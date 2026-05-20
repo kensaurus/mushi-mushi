@@ -57,6 +57,7 @@ import {
   IconSend,
   IconKey,
   IconCopy,
+  IconExplore,
 } from '../components/icons'
 
 // Undo window for soft-delete operations on this page (project delete,
@@ -1386,6 +1387,17 @@ function ProjectContextStrip({ project }: { project: Project }) {
           <span className="font-mono text-fg">{indexedFiles.toLocaleString()}</span>{' '}
           {pluralize(indexedFiles, 'file')}
         </span>
+      )}
+      {indexedFiles > 0 && (
+        <Link
+          to={`/explore?project=${project.id}`}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm border border-edge-subtle bg-surface-overlay hover:bg-surface-raised hover:border-edge text-fg-secondary hover:text-fg transition-colors text-2xs"
+          title="Open codebase atlas — visual map of indexed source files"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <IconExplore className="w-3 h-3" />
+          Explore
+        </Link>
       )}
 
       {showTrend && trend && (

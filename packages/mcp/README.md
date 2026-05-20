@@ -10,12 +10,6 @@
 > - **`@mushi-mushi/agents`** ships the MCP **client adapter** — used by the autofix orchestrator when your project's `autofix_agent = 'mcp'`. See `packages/agents/src/adapters/mcp.ts`.
 > - The `generic_mcp` adapter shipped before V5.3 was a misnomer (it spoke plain REST). It is now `RestFixWorkerAgent`; the old export is kept as a deprecated alias for one more minor.
 
-> **What this is, and what it isn't**
->
-> - **This package** is the MCP **server** — runs locally next to your editor, talks to the Mushi Mushi API, and presents bug reports as MCP tools/resources to your coding agent.
-> - **`@mushi-mushi/agents`** ships the MCP **client adapter** — used by the autofix orchestrator when your project's `autofix_agent = 'mcp'`. See `packages/agents/src/adapters/mcp.ts`.
-> - The `generic_mcp` adapter shipped before V5.3 was a misnomer (it spoke plain REST). It is now `RestFixWorkerAgent`; the old export is kept as a deprecated alias for one more minor.
-
 ## Quick start
 
 ### 1. With Claude Desktop
@@ -29,9 +23,9 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
       "command": "npx",
       "args": ["-y", "@mushi-mushi/mcp@latest"],
       "env": {
-        "MUSHI_API_KEY": "key_xxx",
-        "MUSHI_PROJECT_ID": "proj_xxx",
-        "MUSHI_API_ENDPOINT": "https://api.mushimushi.dev"
+        "MUSHI_API_KEY": "mushi_xxxxxxxxxxxxxxxxxxxx",
+        "MUSHI_PROJECT_ID": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "MUSHI_API_ENDPOINT": "https://<your-ref>.supabase.co/functions/v1/api"
       }
     }
   }
@@ -39,6 +33,13 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 ```
 
 Restart Claude Desktop. You should see a hammer icon in the chat input — click it to see the Mushi Mushi tools.
+
+> **Where do I find these values?**
+> - **`MUSHI_API_KEY`**: [Admin console](https://kensaur.us/mushi-mushi/settings) → **Settings → API Keys**
+> - **`MUSHI_PROJECT_ID`**: [Admin console](https://kensaur.us/mushi-mushi/projects) → click your project → copy the UUID below the project name (e.g. `542b34e0-019e-41fe-b900-7b637717bb86`)
+> - **`MUSHI_API_ENDPOINT`**: [Admin console](https://kensaur.us/mushi-mushi/settings) → **Settings → API Keys** — shown alongside your key
+>
+> Or visit **Admin → MCP** in the console for a one-click pre-filled config snippet.
 
 ### 2. With Cursor
 
@@ -48,15 +49,22 @@ In Cursor settings, open **MCP** → **Add new MCP server** and paste:
 npx -y @mushi-mushi/mcp@latest
 ```
 
-Set the same three env vars (`MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, optional `MUSHI_API_ENDPOINT`).
+Then set the same three environment variables:
 
-> **Where do I find `MUSHI_PROJECT_ID`?**
-> Log into your [Mushi admin console](https://kensaur.us/mushi-mushi/admin/) → **Projects** → click your project → the Project ID chip next to the project name is copyable with one click. It looks like `542b34e0-019e-41fe-b900-7b637717bb86`. Without it the MCP server starts but all tool calls return an empty result with a clear message pointing you here.
+| Variable | Where to find it |
+|---|---|
+| `MUSHI_API_KEY` | Admin console → Settings → API Keys |
+| `MUSHI_PROJECT_ID` | Admin console → Projects → click project → UUID below the name |
+| `MUSHI_API_ENDPOINT` | Admin console → Settings → API Keys (shown alongside your key) |
+
+Without `MUSHI_PROJECT_ID` the server starts but scoped tools return an empty result with a message pointing you here.
 
 ### 3. From the command line
 
 ```bash
-MUSHI_API_KEY=key_xxx MUSHI_PROJECT_ID=proj_xxx npx -y @mushi-mushi/mcp@latest
+MUSHI_API_KEY=mushi_xxxxxxxxxxxxxxxxxxxx \
+MUSHI_PROJECT_ID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx \
+npx -y @mushi-mushi/mcp@latest
 ```
 
 The server speaks stdio MCP transport by default — your client launches it as a subprocess.
@@ -70,10 +78,10 @@ The Mushi backend now exposes the same tool catalog over the **Streamable HTTP**
 {
   "mcpServers": {
     "mushi-mushi-hosted": {
-      "url": "https://api.mushimushi.dev/functions/v1/mcp",
+      "url": "https://<your-ref>.supabase.co/functions/v1/mcp",
       "headers": {
-        "X-Mushi-Api-Key": "mushi_live_…",
-        "X-Mushi-Project-Id": "proj_…"
+        "X-Mushi-Api-Key": "mushi_xxxxxxxxxxxxxxxxxxxx",
+        "X-Mushi-Project": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
       }
     }
   }

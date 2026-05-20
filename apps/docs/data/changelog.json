@@ -4,7 +4,28 @@
     "headline": "pending (pending release)",
     "pending": true,
     "versions": [],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "Graph",
+        "description": "— interactive ReactFlow canvas with layer-filter pills"
+      },
+      {
+        "title": "Layer Sankey",
+        "description": "— horizontal lane diagram showing files per architectural tier"
+      },
+      {
+        "title": "Search",
+        "description": "— semantic search via the `match_codebase_files` embedding RPC"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      }
+    ],
     "packages": []
   },
   {

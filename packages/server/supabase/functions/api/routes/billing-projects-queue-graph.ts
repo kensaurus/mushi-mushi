@@ -2259,6 +2259,226 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     });
   });
 
+  // ── Codebase Explorer ────────────────────────────────────────────────────
+  //
+  // GET  /v1/admin/projects/:id/codebase/explore
+  //   Returns { nodes, edges, layers, total_files } — the full graph payload
+  //   the ExplorePage visualises. Nodes are project_codebase_files rows
+  //   (files or symbols); edges are derived by regex-scanning content_preview
+  //   for relative import paths.
+  //
+  // POST /v1/admin/projects/:id/codebase/search
+  //   Accepts { query, k? } and returns top-k semantically similar files via
+  //   the match_codebase_files Postgres RPC.
+
+  type ExploreLayer = 'ui' | 'lib' | 'backend' | 'test' | 'config' | 'other'
+
+  function detectExploreLayer(filePath: string): ExploreLayer {
+    const p = filePath.toLowerCase().replace(/\\/g, '/')
+    // Anchored to handle both root-relative paths (no leading /) and nested paths
+    if (/(^|\/)(tests?|__tests?__|spec|e2e|cypress|playwright)\//.test(p) || /\.(test|spec)\.[jt]sx?$/.test(p)) return 'test'
+    if (/(^|\/)(server|api|edge-function|supabase\/functions|backend|routes?)\//.test(p)) return 'backend'
+    if (/(^|\/)(app|pages?|screens?|views?|components?|layouts?|ui)\//u.test(p) || /\.(tsx|jsx)$/u.test(p)) return 'ui'
+    if (/(^|\/)(lib|libs?|utils?|helpers?|hooks?|contexts?|shared|common|core)\//u.test(p)) return 'lib'
+    if (/(^|\/)(config|configs?|tooling|scripts?|deploy|\.github|build)\//u.test(p) || /\.(json|yaml|yml|toml|mjs|cjs)$/u.test(p) || /^(vite|next|tailwind|tsconfig|package|turbo)/.test(p.split('/').pop() ?? '')) return 'config'
+    return 'other'
+  }
+
+  const IMPORT_RE = /(?:import\s+(?:[^'"]+\s+from\s+)?['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\))/g
+
+  function extractRelativeImports(content: string): string[] {
+    const imports: string[] = []
+    let m: RegExpExecArray | null
+    IMPORT_RE.lastIndex = 0
+    while ((m = IMPORT_RE.exec(content)) !== null) {
+      const p = m[1] ?? m[2]
+      if (p && p.startsWith('.')) imports.push(p)
+    }
+    return imports
+  }
+
+  /** Resolve a relative import path against its source file's directory. */
+  function resolveRelative(fromPath: string, importPath: string): string {
+    const dir = fromPath.split('/').slice(0, -1).join('/')
+    const segments = [...(dir ? dir.split('/') : []), ...importPath.split('/')]
+    const resolved: string[] = []
+    for (const seg of segments) {
+      if (seg === '..') resolved.pop()
+      else if (seg !== '.') resolved.push(seg)
+    }
+    return resolved.join('/')
+  }
+
+  app.get('/v1/admin/projects/:id/codebase/explore', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const access = await userCanAccessProject(db, userId, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+    }
+
+    const includeSymbols = c.req.query('symbols') === '1'
+
+    let query = db
+      .from('project_codebase_files')
+      // Include last_modified so the frontend can show file freshness.
+      .select('id, file_path, symbol_name, signature, line_start, line_end, language, content_preview, last_modified')
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .order('file_path')
+      .limit(5000)
+
+    if (!includeSymbols) {
+      query = query.is('symbol_name', null)
+    }
+
+    const { data: rows, error: dbErr } = await query
+    if (dbErr) return dbError(c, dbErr)
+
+    const fileRows = rows ?? []
+
+    // Build nodes — set node_type based on whether the row represents a symbol
+    // or a file so the frontend can apply different styling per type.
+    const nodes = fileRows.map((r) => {
+      const layer = detectExploreLayer(r.file_path)
+      const label = r.symbol_name
+        ? `${r.file_path.split('/').pop()} · ${r.symbol_name}`
+        : (r.file_path.split('/').pop() ?? r.file_path)
+      return {
+        id: r.id,
+        node_type: (r.symbol_name ? 'code_symbol' : 'code_file') as 'code_symbol' | 'code_file',
+        label,
+        metadata: {
+          file_path: r.file_path,
+          symbol_name: r.symbol_name ?? null,
+          signature: r.signature ?? null,
+          line_start: r.line_start ?? null,
+          line_end: r.line_end ?? null,
+          language: r.language ?? null,
+          layer,
+          content_preview: r.content_preview ?? null,
+          last_modified: r.last_modified ?? null,
+        },
+      }
+    })
+
+    // Derive import edges from content_preview.
+    // In symbols mode, key nodeByPath by (file_path + symbol_name) so that
+    // multiple symbols in the same file don't collide and overwrite each other.
+    const edges: { id: string; source_node_id: string; target_node_id: string; edge_type: string; weight: number }[] = []
+    const seenEdges = new Set<string>()
+    // For edge resolution we only want file-level nodes (not symbols), so build
+    // the path → id map from file rows only.
+    const nodeByPath = new Map(
+      fileRows
+        .filter((r) => !r.symbol_name)
+        .map((r) => [r.file_path, r.id]),
+    )
+
+    for (const row of fileRows) {
+      if (!row.content_preview) continue
+      for (const imp of extractRelativeImports(row.content_preview)) {
+        const resolved = resolveRelative(row.file_path, imp)
+        // Try exact match first, then common extensions
+        const targetId =
+          nodeByPath.get(resolved) ??
+          nodeByPath.get(resolved + '.ts') ??
+          nodeByPath.get(resolved + '.tsx') ??
+          nodeByPath.get(resolved + '.js') ??
+          nodeByPath.get(resolved + '/index.ts') ??
+          nodeByPath.get(resolved + '/index.tsx')
+        if (!targetId || targetId === row.id) continue
+        const edgeKey = `${row.id}→${targetId}`
+        if (seenEdges.has(edgeKey) || edges.length >= 2000) continue
+        seenEdges.add(edgeKey)
+        edges.push({
+          id: edgeKey,
+          source_node_id: row.id,
+          target_node_id: targetId,
+          edge_type: 'imports',
+          weight: 1,
+        })
+      }
+    }
+
+    // Layer summary counts
+    const layerCounts: Record<string, number> = {}
+    for (const n of nodes) {
+      const l = n.metadata.layer
+      layerCounts[l] = (layerCounts[l] ?? 0) + 1
+    }
+
+    // Total distinct files (not symbols)
+    const { count: totalFiles } = await db
+      .from('project_codebase_files')
+      .select('*', { count: 'exact', head: true })
+      .eq('project_id', projectId)
+      .is('tombstoned_at', null)
+      .is('symbol_name', null)
+
+    return c.json({
+      ok: true,
+      data: {
+        nodes,
+        edges,
+        layers: layerCounts,
+        total_files: totalFiles ?? fileRows.filter((r) => !r.symbol_name).length,
+      },
+    })
+  })
+
+  app.post('/v1/admin/projects/:id/codebase/search', jwtAuth, async (c) => {
+    const projectId = c.req.param('id')
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const access = await userCanAccessProject(db, userId, projectId)
+    if (!access.allowed) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } }, 403)
+    }
+
+    let body: { query?: string; k?: number }
+    try {
+      body = await c.req.json()
+    } catch {
+      return c.json({ ok: false, error: { code: 'INVALID_JSON', message: 'Body must be JSON' } }, 400)
+    }
+    if (!body.query || typeof body.query !== 'string' || !body.query.trim()) {
+      return c.json({ ok: false, error: { code: 'MISSING_QUERY', message: 'query is required' } }, 400)
+    }
+
+    const k = Math.min(20, Math.max(1, Number(body.k ?? 8)))
+    const { createEmbedding } = await import('../../_shared/embeddings.ts')
+    const embedding = await createEmbedding(body.query.trim(), { projectId })
+
+    const { data: hits, error: rpcErr } = await db.rpc('match_codebase_files', {
+      query_embedding: embedding,
+      match_project: projectId,
+      match_count: k,
+    })
+    if (rpcErr) return dbError(c, rpcErr)
+
+    // Return all fields the frontend ExploreSearchHit type expects:
+    // id, file_path, symbol_name, signature, line_start, line_end, language,
+    // content_preview, similarity, layer.
+    const results = (hits ?? []).map((h: Record<string, unknown>) => ({
+      id: String(h.id ?? ''),
+      file_path: String(h.file_path ?? ''),
+      symbol_name: h.symbol_name ? String(h.symbol_name) : null,
+      signature: h.signature ? String(h.signature) : null,
+      line_start: h.line_start != null ? Number(h.line_start) : null,
+      line_end: h.line_end != null ? Number(h.line_end) : null,
+      language: h.language ? String(h.language) : null,
+      similarity: Number(h.similarity ?? 0),
+      content_preview: h.content_preview != null ? String(h.content_preview) : null,
+      layer: detectExploreLayer(String(h.file_path ?? '')),
+    }))
+
+    return c.json({ ok: true, data: { results, query: body.query.trim() } })
+  })
+
   // DLQ admin endpoints
   app.get('/v1/admin/queue', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;

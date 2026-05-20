@@ -417,9 +417,12 @@ export function McpPage() {
                     // --filter) doesn't apply. Use a note about global vs. local installs.
                     const globalNote = result.monorepo
                       ? `Detected ${result.monorepo} monorepo.\n\n` +
-                        `mushi-mcp is a CLI tool — install it globally on your dev machine:\n\n` +
-                        `  npm install -g mushi-mcp\n\n` +
-                        `Then run \`npx mushi-mcp\` from any workspace directory.`
+                        `@mushi-mushi/mcp is a global CLI tool — workspace scoping does not apply.\n\n` +
+                        `Install once on your machine:\n\n` +
+                        `  npm install -g @mushi-mushi/mcp\n\n` +
+                        `Then run \`mushi-mcp\` from any workspace directory.\n\n` +
+                        `Or skip the global install and run on demand:\n\n` +
+                        `  npx -y @mushi-mushi/mcp@latest`
                       : null
                     setMonorepoNote(globalNote)
                     setMonoWarnings(result.warnings)

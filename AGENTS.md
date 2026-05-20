@@ -26,6 +26,30 @@ can execute without additional context.
 
 ---
 
+## Codebase Explorer API
+
+The admin console's `/explore` page is backed by two project-scoped REST endpoints in `billing-projects-queue-graph.ts`:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/v1/admin/projects/:id/codebase/explore` | `GET` | Returns the full codebase graph: `nodes` (files/symbols with layer, language, line range, content preview), `edges` (import relationships), `layers` (count per layer), `total_files`. Add `?symbols=1` for symbol-level granularity. |
+| `/v1/admin/projects/:id/codebase/search` | `POST` | Semantic search. Body: `{ query: string, k?: number }`. Generates an embedding for the query and calls the `match_codebase_files` RPC for vector similarity ranking. Returns ranked `results[]` with `similarity` scores. |
+
+**Data source:** `project_codebase_files` table. Populated by `mushi index` (CLI) or Settings → Codebase Indexing.
+
+**Architectural layers** (detected by `detectExploreLayer` on the backend, mirrored by `detectLayer` on the frontend):
+
+| Layer | Key | Heuristic |
+|-------|-----|-----------|
+| UI | `ui` | `app/`, `pages/`, `screens/`, `components/` directories; `.tsx/.jsx` extension |
+| Library | `lib` | `lib/`, `utils/`, `hooks/`, `shared/`, `common/` directories |
+| Backend | `backend` | `server/`, `api/`, `supabase/functions/`, `routes/` directories |
+| Tests | `test` | `tests/`, `__tests__/`, `spec/`, `.test.ts` / `.spec.ts` files |
+| Config | `config` | `config/`, `.github/`, `tooling/`; `.json`, `.yaml`, `.toml` files |
+| Other | `other` | Anything else |
+
+---
+
 ## QA Coverage Suite
 
 The QA Coverage Suite (`qa-story-runner`) is the primary agent orchestration

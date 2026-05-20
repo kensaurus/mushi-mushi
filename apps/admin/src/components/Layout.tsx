@@ -18,7 +18,7 @@ import {
   // unique glyphs for the closed-loop + workspace sections
   IconLessons, IconDrift, IconAnomalies, IconReleases, IconExperiments,
   IconIterate, IconRewards, IconMcp, IconMembers, IconQaCoverage,
-  IconInbox, IconGauge, IconUser,
+  IconInbox, IconGauge, IconUser, IconExplore,
 } from './icons'
 import { IntegrationHealthDot } from './IntegrationHealthDot'
 import { SidebarHealthDot } from './SidebarHealthDot'
@@ -149,6 +149,7 @@ const NAV: NavSection[] = [
         requiresFeature: 'inventory_v2',
       },
       { label: 'Graph',       path: '/graph',       icon: IconGraph,   beginner: true },
+      { label: 'Explore',     path: '/explore',     icon: IconExplore, beginner: true },
       { label: 'Queue',       path: '/queue',       icon: IconQueue },
       { label: 'Anti-Gaming', path: '/anti-gaming', icon: IconShield },
     ],

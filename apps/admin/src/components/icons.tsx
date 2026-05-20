@@ -73,6 +73,16 @@ export function IconGraph(p: IconProps) {
   </>)
 }
 
+/** Codebase atlas / explore — layered files icon */
+export function IconExplore(p: IconProps) {
+  return wrap(p, <>
+    <path d="M2 5h5M2 8h4M2 11h3" />
+    <path d="M9 3h5a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+    <line x1="11" y1="6" x2="13" y2="6" />
+    <line x1="11" y1="9" x2="13" y2="9" />
+  </>)
+}
+
 export function IconJudge(p: IconProps) {
   return wrap(p, <>
     <path d="M8 2l1.8 3.6 4 .6-2.9 2.8.7 4L8 11.2 4.4 13l.7-4-2.9-2.8 4-.6z" />
