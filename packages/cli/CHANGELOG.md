@@ -1,5 +1,173 @@
 # @mushi-mushi/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- 506df78: fix(cli): robust sync endpoints, new commands, shell-safe setup wizard
+
+  **CLI v0.7.0 additions:**
+  - New commands: `whoami`, `ping`, `reports resolve/reopen/dismiss/search`, `lessons list/show`
+  - All commands use `/v1/sync/*` API-key-authenticated endpoints — no Supabase JWT required
+  - Robust `apiCall()`: safe JSON parsing, 15 s timeout, typed `ApiResult<T>`, clear exit codes (0/1/2/3)
+  - Config loading now respects `MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, `MUSHI_API_ENDPOINT` env vars over `~/.mushirc`
+
+  **Server `/v1/sync/*` endpoints (apiKeyAuth):**
+  - `GET /v1/sync/whoami` — verify key + return project name and report summary
+  - `GET /v1/sync/stats` — accurate DB-level counts (no 1 000-row cap) for status/severity/fixes/lessons
+  - `GET /v1/sync/reports` + `GET /v1/sync/reports/:id` + `PATCH /v1/sync/reports/:id` — list, show, triage/resolve/reopen/dismiss
+  - `GET /v1/sync/lessons/:id` — fetch a lesson by ID
+  - `POST /v1/sync/codebase/upload` — ingest source file into the vector index
+
+  **Bug fixes:**
+  - `@mushi-mushi/mcp` setup guidance now uses the correct package name (`@mushi-mushi/mcp`, not `mushi-mcp`)
+  - `/v1/sync/stats` uses DB-level HEAD count queries instead of client-side row counting, eliminating silent 1 000-row cap
+  - Setup wizard SDK banner respects the user's selected framework tab when detection confidence < 50%
+  - frameworkDetect uses shell-safe `your-app` placeholder (no angle brackets) and `your-app` fallback (no spaces)
+
+- acdf1fe: **CLI: robust sync endpoints + new commands + safe API client**
+
+  All CLI commands now route through `/v1/sync/*` endpoints that accept the SDK
+  API key (no JWT, no scope check required). This fixes the `INSUFFICIENT_SCOPE`
+  errors that `status`, `reports list`, and `reports show` produced when called
+  with a project API key.
+
+  ### New commands
+  - `mushi whoami` — verify the API key and print project info + report counts
+  - `mushi ping` — check backend connectivity with latency measurement
+  - `mushi reports resolve <id>` — mark a report resolved (shorthand for triage)
+  - `mushi reports reopen <id>` — reopen a resolved or dismissed report
+  - `mushi reports dismiss <id>` — dismiss a report as out of scope
+  - `mushi reports search <query>` — full-text search across summary and description
+  - `mushi lessons list` — list active mistake rules with severity and frequency
+  - `mushi lessons show <id>` — print full detail for a single lesson
+
+  ### Fixed commands
+  - `mushi status` — now uses `/v1/sync/stats` (apiKeyAuth), was hitting `/v1/admin/stats` which required JWT
+  - `mushi reports list` — now uses `/v1/sync/reports`, was hitting `/v1/admin/reports`
+  - `mushi reports show <id>` — now uses `/v1/sync/reports/:id`
+  - `mushi reports triage <id>` — now uses `PATCH /v1/sync/reports/:id`
+  - `mushi index <path>` — now uses `/v1/sync/codebase/upload` (apiKeyAuth) instead of the JWT-only admin route
+
+  ### Safe API client (fixes crash on non-JSON errors)
+
+  The `apiCall()` helper no longer crashes when the server returns a plain-text or
+  HTML response (gateway 404, Deno cold-start error, Supabase maintenance page).
+  Non-JSON responses are wrapped into a structured `{ ok: false, error }` object
+  with the HTTP status code attached. A 15-second timeout using `AbortController`
+  prevents CI hangs on unreachable endpoints.
+
+  ### New exit codes
+
+  | Code | Meaning                                               |
+  | ---- | ----------------------------------------------------- |
+  | `0`  | Success                                               |
+  | `1`  | API or runtime error                                  |
+  | `2`  | Configuration error (missing credentials or endpoint) |
+  | `3`  | Not found (resource does not exist)                   |
+
+  ### New server endpoints (deployed to Supabase)
+
+  All behind `apiKeyAuth` — no JWT or scope required:
+  - `GET /v1/sync/whoami`
+  - `GET /v1/sync/stats`
+  - `GET /v1/sync/reports`
+  - `GET /v1/sync/reports/:id`
+  - `PATCH /v1/sync/reports/:id`
+  - `GET /v1/sync/lessons/:id`
+  - `POST /v1/sync/codebase/upload`
+
+  ### Documentation
+
+  `packages/cli/README.md` rewritten with:
+  - Quick start in 5 steps
+  - Full command reference with `--json` output and exit code docs
+  - Environment variable table
+  - Step-by-step guide for finding Project ID and API key
+  - CI usage examples (GitHub Actions, env-var-only config)
+  - Biological evolution analogy connecting the CLI to the closed-loop pipeline
+
+- 506df78: Release the full SDK + closed-loop evolution backlog since v0.5.0
+  (`cf27d81`, 2026-05-10). Covers headless SDK, QA Coverage Suite,
+  rewards program, native 0.4.0 parity, closed-loop Phases 0–6, and
+  operator UX hardening for beta users.
+
+  ### Headless SDK (minor — core / web / react / react-native)
+
+  `MushiTrigger` (React + React Native) and `MushiAttach` (React) — wrap
+  any element or DOM selector to trigger the Mushi widget without the
+  floating button. The matching `SdkInstallCard` in the console now
+  generates copy/paste snippets for both patterns.
+
+  ### QA Coverage Suite (minor — core / web)
+
+  Automated user-story tests run on cron through Playwright, Browserbase,
+  or Firecrawl. Ships with `qa_stories` / `qa_story_runs` /
+  `qa_story_evidence` schema, the `qa-story-runner` edge function, a
+  pluggable browser-provider abstraction, and the full admin UI
+  (`QaCoveragePage` + `QaCoverageTile`).
+
+  ### Rewards program (minor — core / web / react / react-native)
+
+  End-user rewards across all layers: configurable point rules,
+  GDPR export, Stripe Connect payouts (Enterprise-gated), multi-step
+  quests, SDK activity batching + tier badges, MCP catalog tools
+  (`list_top_contributors`, `award_bonus_points`, `set_tier`).
+
+  ### Closed-loop evolution — CLI + MCP (minor)
+  - **`mushi sync-lessons`** — pulls promoted lessons from
+    `/v1/admin/lessons` and writes `.mushi/lessons.json` into the
+    connected repo (supports `--dry-run` and `--json`). Designed for
+    CI and scheduled refresh PRs.
+  - **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+    token-budget-ranked lesson injection into agent / PR-review flows;
+    expanded catalog surface for Migration Hub and closed-loop resources.
+
+  ### Native parity (Capacitor minor; iOS/Android via Cocoapods/Maven)
+
+  Capacitor re-exports `addBreadcrumb` / `getBreadcrumbs` and the 0.4.0
+  native parity modules (BreadcrumbCollector, ProactiveDetector,
+  PIIScrubber, ExceptionNormaliser). iOS/Android SDKs ship at 0.4.0 via
+  native package managers — not npm.
+
+  ### Plugin packaging (patch)
+
+  PR #98 fixed six plugin packages that shipped with `workspace:*`
+  instead of `workspace:^`, which broke `npm install` for end users.
+
+  ### Patch surfaces
+  - `@mushi-mushi/{vue,svelte,angular}` — re-export headless trigger helpers.
+  - `@mushi-mushi/plugin-sentry` — expanded inbound adapter surface.
+  - `@mushi-mushi/plugin-sdk` — event schema extensions for rewards +
+    experiment hooks.
+
+  ### Server + admin (not in this npm release)
+
+  The following ship via Supabase Edge Functions + admin deploy, not npm:
+  - Closed-loop Phases 1–6: mistake clustering, releases + credits, PDCA
+    iterate loop, contract drift walker, A/B experiments, anomaly detection,
+    `/cost` panel.
+  - Beta banner + structured project-create error UX + personal-org
+    bootstrap on signup.
+  - Seven new admin tabs: `/lessons`, `/releases`, `/iterate`, `/drift`,
+    `/experiments`, `/anomalies`, `/cost`.
+  - Docs: `closed-loop.mdx`, `EvolutionDiagram`, `LoopComparison`.
+  - `SELF_HOSTED.md` updated with `mushi.edge_function_post()` cron
+    patterns (replaces broken `current_setting('app.settings.*')` GUCs).
+
+### Patch Changes
+
+- acdf1fe: fix(cli): accept UUID project IDs and read config from env vars
+  - `PROJECT_ID_PATTERN` now accepts both UUID format (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
+    and the `proj_xxx` prefix format. All existing projects use UUID format from
+    `gen_random_uuid()`. The `proj_xxx` format was never actually used by the backend.
+  - `loadConfig()` now overlays `MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, and
+    `MUSHI_API_ENDPOINT` env vars over the `~/.mushirc` file so CI pipelines and
+    `npx @mushi-mushi/cli sync-lessons` work without an interactive `mushi init` first.
+  - Error messages, placeholders and the non-interactive example now show the UUID format.
+  - `sync-lessons` command now calls `/v1/sync/lessons` (API-key-authenticated) instead of
+    `/v1/admin/lessons` (JWT-authenticated) so it works with the project API key.
+
 ## 0.7.0
 
 ### Minor Changes
