@@ -724,17 +724,28 @@ export function ExplorePage() {
             }
           />
 
-          <PageActionBar
-            primary={
-              stats.topPriorityTo
-                ? { label: stats.topPriority === 'ready' ? 'Open Graph' : 'Next step', to: stats.topPriorityTo }
-                : { label: 'Open Graph', onClick: () => setActiveTab('graph') }
-            }
-            secondary={[
-              { label: 'Semantic search', onClick: () => setActiveTab('search') },
-              { label: 'Index debug', onClick: () => setActiveTab('index') },
-            ]}
-          />
+          {stats.topPriorityTo && stats.topPriority !== 'ready' ? (
+            <Card
+              className={`p-4 ${
+                stats.topPriority === 'error'
+                  ? 'border-danger/30 bg-danger/5'
+                  : stats.topPriority === 'empty' || stats.topPriority === 'stale'
+                    ? 'border-warn/30 bg-warn/5'
+                    : 'border-brand/30 bg-brand/5'
+              }`}
+            >
+              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
+              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link to={stats.topPriorityTo}>
+                  <Btn size="sm" variant="primary">Take action →</Btn>
+                </Link>
+                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('index')}>
+                  Index debug
+                </Btn>
+              </div>
+            </Card>
+          ) : null}
 
           {stats.topLanguages.length > 0 && (
             <Card className="p-4">
