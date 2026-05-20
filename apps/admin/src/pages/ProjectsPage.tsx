@@ -56,6 +56,7 @@ import {
   IconSettings,
   IconSend,
   IconKey,
+  IconCopy,
 } from '../components/icons'
 
 // Undo window for soft-delete operations on this page (project delete,
@@ -868,6 +869,9 @@ export function ProjectsPage() {
                       Created {new Date(project.created_at).toLocaleDateString()} · last report{' '}
                       {relativeTime(project.last_report_at)}
                     </p>
+                    {/* Project ID chip — MUSHI_PROJECT_ID value, copyable in one click.
+                        Answers the #1 support question: "where do I find my project ID?" */}
+                    <ProjectIdChip projectId={project.id} />
                     <div className="flex items-center gap-3 mt-2 text-2xs text-fg-secondary flex-wrap">
                       <span>
                         <span className="font-mono text-fg">{project.report_count}</span>{' '}
@@ -1474,6 +1478,53 @@ function ProjectContextStrip({ project }: { project: Project }) {
           Sentry
         </Badge>
       )}
+    </div>
+  )
+}
+
+// ─── Project ID chip ──────────────────────────────────────────────────────────
+// Surfaced inline under the project header so users know exactly what value
+// goes in MUSHI_PROJECT_ID without having to generate a key or open Settings.
+
+function ProjectIdChip({ projectId }: { projectId: string }) {
+  const toast = useToast()
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(projectId)
+      setCopied(true)
+      toast.success('Project ID copied — paste it as MUSHI_PROJECT_ID.')
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Clipboard blocked — select the ID and copy manually.')
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5">
+      <span className="text-3xs text-fg-faint uppercase tracking-wider font-medium select-none">
+        Project ID
+      </span>
+      <button
+        type="button"
+        onClick={copy}
+        className="inline-flex items-center gap-1 rounded-sm border border-edge-subtle bg-surface-raised px-1.5 py-0.5 font-mono text-3xs text-fg-secondary hover:bg-surface-overlay hover:border-edge hover:text-fg transition-colors group"
+        title="Copy project ID — paste as MUSHI_PROJECT_ID in .env.local or .cursor/mcp.json"
+        data-testid={`project-id-chip-${projectId}`}
+        aria-label={`Copy project ID: ${projectId}`}
+      >
+        <span className="tabular-nums">{projectId}</span>
+        <span className="ml-0.5 opacity-50 group-hover:opacity-100 transition-opacity" aria-hidden="true">
+          {copied
+            ? <IconCheck className="h-2.5 w-2.5 text-ok" />
+            : <IconCopy className="h-2.5 w-2.5" />
+          }
+        </span>
+      </button>
+      <span className="text-3xs text-fg-faint hidden sm:inline">
+        = <code className="font-mono">MUSHI_PROJECT_ID</code>
+      </span>
     </div>
   )
 }

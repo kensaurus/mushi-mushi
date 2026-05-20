@@ -20,7 +20,7 @@
  */
 
 import { Link } from 'react-router-dom'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   PageHeader,
   PageHelp,
@@ -36,6 +36,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
+import { detectFromPackageJson, monorepoInstallGuidance } from '../lib/frameworkDetect'
 import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
@@ -214,6 +215,11 @@ export function McpPage() {
   const toast = useToast()
   const [snippetMode, setSnippetMode] = useState<'cursor' | 'env'>('cursor')
   const [copied, setCopied] = useState(false)
+  const [monorepoNote, setMonorepoNote] = useState<string | null>(null)
+  const [monoWarnings, setMonoWarnings] = useState<string[]>([])
+  const [detectOpen, setDetectOpen] = useState(false)
+  const [detectText, setDetectText] = useState('')
+  const detectTaRef = useRef<HTMLTextAreaElement>(null)
 
   const { data, loading, error } = usePageData<ProjectsResponse>('/v1/admin/projects', { deps: [activeId] })
   const status = useMemo(() => deriveStatus(data, activeId), [data, activeId])
@@ -368,12 +374,70 @@ export function McpPage() {
           beginner surfaces feel like a single IA. */}
       <Card className="p-5 space-y-4" data-testid="mcp-install">
         <div>
-          <h3 className="text-sm font-semibold text-fg">Install snippet</h3>
+          <h3 className="text-sm font-semibold text-fg">Configuration values</h3>
           <p className="text-xs text-fg-muted mt-1">
-            The id of the project you're currently viewing is pre-filled. Replace{' '}
-            <code className="mx-0.5 px-1 py-0.5 rounded bg-surface-raised text-fg-secondary font-mono text-2xs">paste-your-key-here</code>{' '}
-            with a key generated on <Link to="/projects" className="text-accent hover:underline">/projects</Link>.
+            Three env vars wire the MCP binary to this project. All three are pre-filled below once you select a project and generate a key.
           </p>
+        </div>
+
+        {/* ── Monorepo / project detector ─────────────────────────── */}
+        <div className="rounded-md border border-edge-subtle bg-surface-raised/40">
+          <button
+            type="button"
+            onClick={() => {
+              setDetectOpen((v) => !v)
+              if (!detectOpen) setTimeout(() => detectTaRef.current?.focus(), 50)
+            }}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs hover:bg-surface-overlay rounded-md transition-colors"
+            aria-expanded={detectOpen}
+          >
+            <span className="font-medium text-fg">🔍 Detect monorepo / workspace (optional)</span>
+            <span className="text-fg-faint text-2xs" aria-hidden>{detectOpen ? '▲ hide' : '▼ paste package.json'}</span>
+          </button>
+          {detectOpen && (
+            <div className="px-3 pb-3 pt-1 space-y-2">
+              <p className="text-2xs text-fg-muted leading-snug">
+                Paste your <code className="font-mono">package.json</code> to detect monorepo workspaces and get workspace-scoped install guidance.
+              </p>
+              <textarea
+                ref={detectTaRef}
+                value={detectText}
+                onChange={(e) => setDetectText(e.target.value)}
+                placeholder={'{\n  "workspaces": ["apps/*", "packages/*"],\n  ...\n}'}
+                className="w-full h-28 font-mono text-2xs bg-surface-raised border border-edge-subtle rounded-sm px-2 py-1.5 text-fg-secondary focus:outline-none focus:ring-1 focus:ring-brand resize-y placeholder:text-fg-faint"
+                spellCheck={false}
+              />
+              <div className="flex gap-2">
+                <button type="button" disabled={!detectText.trim()}
+                  onClick={() => {
+                    const result = detectFromPackageJson(detectText)
+                    setMonorepoNote(monorepoInstallGuidance(result, 'npm install -g mushi-mcp'))
+                    setMonoWarnings(result.warnings)
+                    setDetectOpen(false)
+                  }}
+                  className="px-3 py-1 rounded-sm text-xs font-medium bg-brand text-brand-fg hover:bg-brand-hover disabled:opacity-40 transition-colors">
+                  Detect
+                </button>
+                <button type="button"
+                  onClick={() => { setDetectText(''); setDetectOpen(false); setMonorepoNote(null); setMonoWarnings([]) }}
+                  className="px-2 py-1 rounded-sm text-xs text-fg-muted hover:text-fg transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {!detectOpen && (monorepoNote || monoWarnings.length > 0) && (
+            <div className="px-3 pb-3 space-y-1.5">
+              {monorepoNote && (
+                <div className="rounded-sm border border-info/30 bg-info-muted/10 px-2 py-1.5">
+                  <p className="text-2xs text-info font-semibold mb-0.5">Monorepo install guidance</p>
+                  <pre className="text-2xs text-fg-secondary whitespace-pre-wrap font-mono leading-snug">{monorepoNote}</pre>
+                </div>
+              )}
+              {monoWarnings.map((w, i) => <p key={i} className="text-2xs text-warn flex gap-1"><span aria-hidden>⚠</span><span>{w}</span></p>)}
+              <button type="button" onClick={() => { setMonorepoNote(null); setMonoWarnings([]) }} className="text-3xs text-fg-faint hover:text-fg-muted">Dismiss</button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-1 border-b border-edge-subtle pb-2">

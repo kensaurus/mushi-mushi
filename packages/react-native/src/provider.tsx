@@ -158,20 +158,30 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
   }, [])
 
   // Added: network-aware delivery (Phase 2.4)
+  // Uses require() instead of new Function('s','return import(s)') — Hermes
+  // (RN 0.76+, AOT-only) rejects dynamic import() inside Function constructor
+  // bodies with "SyntaxError: Invalid expression encountered" at evaluation
+  // time, even if the constructed function is never called. require() is the
+  // correct sync-optional-dep pattern for Metro + Hermes environments.
   useEffect(() => {
     let unsubscribe: (() => void) | undefined
-    ;(async () => {
-      try {
-        const NetInfo = await (new Function('s', 'return import(s)') as (s: string) => Promise<{ default: { addEventListener: (cb: (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => void) => () => void } }>)('@react-native-community/netinfo')
-        unsubscribe = NetInfo.default.addEventListener((state) => {
-          if (state.isConnected && state.isInternetReachable) {
-            queueRef.current?.flush().catch(() => {})
-          }
-        })
-      } catch {
-        // @react-native-community/netinfo is an optional peer dependency
-      }
-    })()
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const NetInfo = (require('@react-native-community/netinfo') as {
+        default: {
+          addEventListener: (
+            cb: (state: { isConnected: boolean | null; isInternetReachable: boolean | null }) => void,
+          ) => () => void
+        }
+      }).default
+      unsubscribe = NetInfo.addEventListener((state) => {
+        if (state.isConnected && state.isInternetReachable) {
+          queueRef.current?.flush().catch(() => {})
+        }
+      })
+    } catch {
+      // @react-native-community/netinfo is an optional peer dep — web / test envs won't have it
+    }
     return () => unsubscribe?.()
   }, [])
 
@@ -188,9 +198,13 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
     let lastShake = 0
     const threshold = config.widget?.shakeThreshold ?? 2.7
 
-    ;(new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<ExpoSensorsModule>)('expo-sensors')
-      .then((mod) => {
-        if (disposed) return
+    // require() instead of new Function dynamic import — same Hermes rationale
+    // as the NetInfo effect above. expo-sensors is an optional peer dep;
+    // bare React Native apps that don't install it stay dependency-light.
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mod = require('expo-sensors') as ExpoSensorsModule
+      if (!disposed) {
         mod.Accelerometer.setUpdateInterval(120)
         const sub = mod.Accelerometer.addListener((evt) => {
           const g = Math.sqrt(evt.x * evt.x + evt.y * evt.y + evt.z * evt.z)
@@ -201,10 +215,10 @@ export function MushiProvider({ children, ...config }: MushiRNConfig & { childre
           open()
         })
         cleanup = () => sub.remove()
-      })
-      .catch(() => {
-        // expo-sensors is optional so bare React Native apps can stay dependency-light.
-      })
+      }
+    } catch {
+      // expo-sensors is optional — bare RN apps without it fall back to button-only
+    }
 
     return () => {
       disposed = true
