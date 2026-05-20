@@ -2531,6 +2531,204 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     return c.json({ ok: true, data: { channels, staleSince, summary } });
   });
 
+  // GET /v1/admin/health/stats — posture banner + HEALTH SNAPSHOT.
+  app.get('/v1/admin/health/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const windowParam = c.req.query('window') ?? '24h';
+    const windowMs: Record<string, number> = {
+      '1h': 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+    };
+    const ms = windowMs[windowParam] ?? windowMs['24h'];
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      window: windowParam,
+      totalCalls: 0,
+      errorRatePct: 0,
+      fallbackRatePct: 0,
+      avgLatencyMs: 0,
+      p95LatencyMs: 0,
+      cronJobCount: 3,
+      cronHealthyCount: 0,
+      cronErrorCount: 0,
+      cronStaleCount: 0,
+      cronWarnCount: 0,
+      redCount: 0,
+      amberCount: 0,
+      lastLlmCallAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'llm_errors'
+        | 'cron_error'
+        | 'llm_fallbacks'
+        | 'cron_stale'
+        | 'idle'
+        | 'cron_warn'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const since = new Date(Date.now() - ms).toISOString();
+    const KNOWN_JOBS = ['judge-batch', 'intelligence-report', 'data-retention'] as const;
+    const EXPECTED_CADENCE_MIN: Record<string, number> = {
+      'judge-batch': 60,
+      'intelligence-report': 60 * 24 * 7,
+      'data-retention': 60 * 24,
+    };
+
+    const [invRes, cronRes, lastCallRes] = await Promise.all([
+      db
+        .from('llm_invocations')
+        .select('fallback_used, status, latency_ms, created_at')
+        .eq('project_id', pid)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(500),
+      db
+        .from('cron_runs')
+        .select('job_name, status, started_at')
+        .order('started_at', { ascending: false })
+        .limit(100),
+      db
+        .from('llm_invocations')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const rows = invRes.data ?? [];
+    const totalCalls = rows.length;
+    const fallbacks = rows.filter((r) => r.fallback_used).length;
+    const errors = rows.filter((r) => r.status !== 'success').length;
+    const errorRatePct = totalCalls > 0 ? Math.round((errors / totalCalls) * 1000) / 10 : 0;
+    const fallbackRatePct = totalCalls > 0 ? Math.round((fallbacks / totalCalls) * 1000) / 10 : 0;
+    const latencies = rows.map((r) => r.latency_ms ?? 0).sort((a, b) => a - b);
+    const avgLatencyMs =
+      latencies.length > 0
+        ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length)
+        : 0;
+    const p95LatencyMs =
+      latencies.length > 0
+        ? (latencies[Math.min(latencies.length - 1, Math.floor(latencies.length * 0.95))] ?? 0)
+        : 0;
+
+    const cronRows = cronRes.data ?? [];
+    const now = Date.now();
+    let cronErrorCount = 0;
+    let cronStaleCount = 0;
+    let cronWarnCount = 0;
+    let cronHealthyCount = 0;
+
+    for (const job of KNOWN_JOBS) {
+      const jobRuns = cronRows.filter((r) => r.job_name === job);
+      const lastRun = jobRuns[0];
+      const lastStatus = lastRun?.status ?? null;
+      if (lastStatus === 'error') {
+        cronErrorCount += 1;
+        continue;
+      }
+      const lastRunIso = lastRun?.started_at ?? null;
+      if (!lastRunIso) {
+        cronStaleCount += 1;
+        continue;
+      }
+      const ageMin = Math.max(0, Math.round((now - new Date(lastRunIso).getTime()) / 60_000));
+      const expected = EXPECTED_CADENCE_MIN[job] ?? 60 * 24;
+      if (ageMin > expected * 3) cronStaleCount += 1;
+      else if (ageMin > expected) cronWarnCount += 1;
+      else cronHealthyCount += 1;
+    }
+
+    const redCount = (errorRatePct > 5 ? 1 : 0) + cronErrorCount;
+    const amberCount = (fallbackRatePct > 10 ? 1 : 0) + cronWarnCount + cronStaleCount;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (errorRatePct > 5) {
+      topPriority = 'llm_errors';
+      topPriorityLabel = `LLM error rate ${errorRatePct}% over ${windowParam} — check provider status or rotate API keys.`;
+      topPriorityTo = '/health?tab=llm';
+    } else if (cronErrorCount > 0) {
+      topPriority = 'cron_error';
+      topPriorityLabel = `${cronErrorCount} cron job${cronErrorCount === 1 ? '' : 's'} failing — trigger manually to confirm, then inspect logs.`;
+      topPriorityTo = '/health?tab=cron';
+    } else if (fallbackRatePct > 10) {
+      topPriority = 'llm_fallbacks';
+      topPriorityLabel = `Fallback rate ${fallbackRatePct}% — primary provider may be rate-limiting.`;
+      topPriorityTo = '/health?tab=llm';
+    } else if (cronStaleCount > 0) {
+      topPriority = 'cron_stale';
+      topPriorityLabel = `${cronStaleCount} cron job${cronStaleCount === 1 ? '' : 's'} stale — last run exceeded 3× expected cadence.`;
+      topPriorityTo = '/health?tab=cron';
+    } else if (totalCalls === 0) {
+      topPriority = 'idle';
+      topPriorityLabel = `No LLM activity in the last ${windowParam} — send a test report to verify routing.`;
+      topPriorityTo = '/onboarding';
+    } else if (cronWarnCount > 0) {
+      topPriority = 'cron_warn';
+      topPriorityLabel = `${cronWarnCount} cron job${cronWarnCount === 1 ? '' : 's'} running late — not yet blocking.`;
+      topPriorityTo = '/health?tab=cron';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${totalCalls} LLM calls · ${errorRatePct}% errors · ${fallbackRatePct}% fallbacks — all systems nominal.`;
+      topPriorityTo = '/health?tab=activity';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        window: windowParam,
+        totalCalls,
+        errorRatePct,
+        fallbackRatePct,
+        avgLatencyMs,
+        p95LatencyMs,
+        cronJobCount: KNOWN_JOBS.length,
+        cronHealthyCount,
+        cronErrorCount,
+        cronStaleCount,
+        cronWarnCount,
+        redCount,
+        amberCount,
+        lastLlmCallAt: lastCallRes.data?.created_at ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   app.get('/v1/admin/health/llm', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

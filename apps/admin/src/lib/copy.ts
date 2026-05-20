@@ -922,7 +922,7 @@ export const COPY: CopyRegistry = {
     },
     '/judge': {
       title: 'Judge scores',
-      description: 'Independent LLM grading with per-prompt regression deltas.',
+      description: 'Banner + JUDGE SNAPSHOT — Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
     },
     '/health': {
       title: 'LLM health',
