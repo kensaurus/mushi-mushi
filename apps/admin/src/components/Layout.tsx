@@ -713,8 +713,8 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'iterate',
     decide: {
-      label: 'PDCA runs',
-      summary: 'Queue producer/critic loops on a target URL — watch scores climb iteration by iteration.',
+      label: 'PDCA SNAPSHOT',
+      summary: 'Overview shows queued/running/failed posture — Runs tab needs Trigger on each queued row.',
       severity: 'info',
     },
     verify: {

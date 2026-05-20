@@ -462,7 +462,7 @@ export const COPY: CopyRegistry = {
     },
     '/iterate': {
       title: 'PDCA iteration',
-      description: 'Autonomous producer/critic loops on a target URL — queue runs, watch scores climb, export critiques.',
+      description: 'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger loops, New Run to queue.',
       help: {
         title: 'About PDCA iteration',
         whatIsIt: 'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona. The loop repeats until the target score or max iterations.',
@@ -471,7 +471,7 @@ export const COPY: CopyRegistry = {
           'Run a WCAG accessibility critique cycle on a live URL',
           'Use a conversion persona to suggest CTA and copy improvements',
         ],
-        howToUse: 'Queue a run with target URL + persona. Click Trigger on queued runs. Open a run to inspect the score timeline and copy critiques to a PR.',
+        howToUse: 'Overview shows pipeline posture. Queue on New Run, Trigger queued rows on Runs, open a run for score timeline and critique export.',
       },
     },
     '/drift': {
