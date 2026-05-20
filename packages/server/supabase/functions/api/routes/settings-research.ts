@@ -143,6 +143,14 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     return `mushi/byok/${projectId}/${provider}`;
   }
 
+  /** Display-only masked hint — never log or persist the full key. */
+  function byokKeyHint(key: string): string {
+    const k = key.trim();
+    if (k.length <= 8) return '••••••••';
+    const head = k.slice(0, Math.min(12, k.length - 4));
+    return `${head}…${k.slice(-4)}`;
+  }
+
   app.get('/v1/admin/byok', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -156,8 +164,8 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const { data } = await db
       .from('project_settings')
       .select(
-        'byok_anthropic_key_ref, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, byok_anthropic_test_status, byok_anthropic_tested_at, ' +
-          'byok_openai_key_ref, byok_openai_key_added_at, byok_openai_key_last_used_at, byok_openai_base_url, byok_openai_test_status, byok_openai_tested_at',
+        'byok_anthropic_key_ref, byok_anthropic_key_hint, byok_anthropic_key_added_at, byok_anthropic_key_last_used_at, byok_anthropic_test_status, byok_anthropic_tested_at, ' +
+          'byok_openai_key_ref, byok_openai_key_hint, byok_openai_key_added_at, byok_openai_key_last_used_at, byok_openai_base_url, byok_openai_test_status, byok_openai_tested_at',
       )
       .eq('project_id', project.id)
       .single();
@@ -170,6 +178,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       lastUsedAt: (row[`byok_${provider}_key_last_used_at`] as string | null) ?? null,
       testStatus: (row[`byok_${provider}_test_status`] as string | null) ?? null,
       testedAt: (row[`byok_${provider}_tested_at`] as string | null) ?? null,
+      keyHint: (row[`byok_${provider}_key_hint`] as string | null) ?? null,
       baseUrl: provider === 'openai' ? ((row.byok_openai_base_url as string | null) ?? null) : null,
     }));
 
@@ -242,8 +251,10 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     }
 
     const now = new Date().toISOString();
+    const hint = byokKeyHint(key);
     const update: Record<string, string | null> = {
       [`byok_${provider}_key_ref`]: `vault://${secretName}`,
+      [`byok_${provider}_key_hint`]: hint,
       [`byok_${provider}_key_added_at`]: now,
       [`byok_${provider}_key_last_used_at`]: null,
       // Reset the connectivity test cache on every key change — stale "ok"
@@ -286,7 +297,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
 
     return c.json({
       ok: true,
-      data: { provider, configured: true, addedAt: now, hint: `…${key.slice(-4)}` },
+      data: { provider, configured: true, addedAt: now, hint, keyHint: hint },
     });
   });
 
@@ -312,6 +323,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       {
         project_id: project.id,
         [`byok_${provider}_key_ref`]: null,
+        [`byok_${provider}_key_hint`]: null,
         [`byok_${provider}_key_added_at`]: null,
         [`byok_${provider}_key_last_used_at`]: null,
       },
@@ -487,7 +499,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const { data } = await db
       .from('project_settings')
       .select(
-        'byok_firecrawl_key_ref, byok_firecrawl_key_added_at, byok_firecrawl_key_last_used_at, byok_firecrawl_test_status, byok_firecrawl_tested_at, firecrawl_allowed_domains, firecrawl_max_pages_per_call',
+        'byok_firecrawl_key_ref, byok_firecrawl_key_hint, byok_firecrawl_key_added_at, byok_firecrawl_key_last_used_at, byok_firecrawl_test_status, byok_firecrawl_tested_at, firecrawl_allowed_domains, firecrawl_max_pages_per_call',
       )
       .eq('project_id', project.id)
       .maybeSingle();
@@ -496,6 +508,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       ok: true,
       data: {
         configured: Boolean(data?.byok_firecrawl_key_ref),
+        keyHint: (data?.byok_firecrawl_key_hint as string | null) ?? null,
         addedAt: (data?.byok_firecrawl_key_added_at as string | null) ?? null,
         lastUsedAt: (data?.byok_firecrawl_key_last_used_at as string | null) ?? null,
         testStatus: (data?.byok_firecrawl_test_status as string | null) ?? null,
@@ -545,6 +558,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         );
       }
       update.byok_firecrawl_key_ref = `vault://${secretName}`;
+      update.byok_firecrawl_key_hint = byokKeyHint(key);
       update.byok_firecrawl_key_added_at = new Date().toISOString();
       update.byok_firecrawl_key_last_used_at = null;
       update.byok_firecrawl_test_status = null;
@@ -608,6 +622,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       {
         project_id: project.id,
         byok_firecrawl_key_ref: null,
+        byok_firecrawl_key_hint: null,
         byok_firecrawl_key_added_at: null,
         byok_firecrawl_key_last_used_at: null,
         byok_firecrawl_test_status: null,

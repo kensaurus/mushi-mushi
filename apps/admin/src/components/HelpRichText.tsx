@@ -68,7 +68,7 @@ export function HelpRichText({ text }: { text: string }): React.ReactElement {
   )
 }
 
-export function HelpBulletList({ items }: { items: string[] }): React.ReactElement {
+export function HelpBulletList({ items }: { items: readonly string[] }): React.ReactElement {
   return React.createElement(
     'ul',
     { className: 'space-y-1' },

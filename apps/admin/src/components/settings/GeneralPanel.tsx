@@ -9,10 +9,14 @@ import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { usePageData } from '../../lib/usePageData'
 import { useToast } from '../../lib/toast'
-import { Section, Input, SelectField, Btn, ErrorAlert, Checkbox } from '../ui'
+import { Section, Input, SelectField, ErrorAlert, Checkbox } from '../ui'
 import { PanelSkeleton } from '../skeletons/PanelSkeleton'
 import { ConfigHelp } from '../ConfigHelp'
 import { slackWebhookUrl, sentryDsn, token } from '../../lib/validators'
+import { SettingsChangeHint } from './SettingsChangeHint'
+import { SettingsFormFooter } from './SettingsFormFooter'
+import { SettingsPanelLayout } from './SettingsPanelLayout'
+import { countChangedFields } from './settingsDiff'
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -31,10 +35,24 @@ export function GeneralPanel() {
   const [draft, setDraft] = useState<ProjectSettings | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const settings: ProjectSettings = draft ?? data ?? {}
+  const saved: ProjectSettings = data ?? {}
+  const settings: ProjectSettings = draft ?? saved
 
   const update = (patch: Partial<ProjectSettings>) =>
     setDraft({ ...settings, ...patch })
+
+  const dirty = draft != null
+  const changeCount = dirty
+    ? countChangedFields([
+        { current: settings.slack_webhook_url ?? '', saved: saved.slack_webhook_url ?? '' },
+        { current: settings.sentry_dsn ?? '', saved: saved.sentry_dsn ?? '' },
+        { current: settings.sentry_webhook_secret ?? '', saved: saved.sentry_webhook_secret ?? '' },
+        { current: settings.sentry_consume_user_feedback ?? true, saved: saved.sentry_consume_user_feedback ?? true },
+        { current: settings.stage2_model ?? 'claude-sonnet-4-6', saved: saved.stage2_model ?? 'claude-sonnet-4-6' },
+        { current: settings.stage1_confidence_threshold ?? 0.85, saved: saved.stage1_confidence_threshold ?? 0.85 },
+        { current: settings.dedup_threshold ?? 0.82, saved: saved.dedup_threshold ?? 0.82 },
+      ])
+    : 0
 
   async function save() {
     setSaving(true)
@@ -56,15 +74,20 @@ export function GeneralPanel() {
   if (error) return <ErrorAlert message={`Failed to load settings: ${error}`} onRetry={reload} />
 
   return (
-    // Width policy: panel fills the page container (max-w-6xl in Layout) so it
-    // matches the LLM keys / Firecrawl tabs. Sections themselves are paired
-    // 2-up on lg+ viewports — keeps each form readable (~500 px) instead of
-    // stretching a single Slack URL across the whole viewport. Below lg the
-    // grid collapses to a single column.
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
-        <div id="slack" className="scroll-mt-6">
-          <Section title="Notifications" className="space-y-3">
+    <SettingsPanelLayout
+      footer={
+        <SettingsFormFooter
+          dirty={dirty}
+          saving={saving}
+          changeCount={changeCount}
+          onSave={() => void save()}
+          onDiscard={() => setDraft(null)}
+        />
+      }
+    >
+      <div id="slack" className="scroll-mt-6">
+        <Section title="Notifications" className="space-y-3">
+          <div>
             <Input
               label="Slack Webhook URL"
               helpId="settings.general.slack_webhook_url"
@@ -74,10 +97,17 @@ export function GeneralPanel() {
               placeholder="https://hooks.slack.com/services/..."
               validate={slackWebhookUrl()}
             />
-          </Section>
-        </div>
+            <SettingsChangeHint
+              current={settings.slack_webhook_url ?? ''}
+              saved={saved.slack_webhook_url ?? ''}
+              kind="url"
+            />
+          </div>
+        </Section>
+      </div>
 
-        <Section title="Sentry Integration" className="space-y-3">
+      <Section title="Sentry Integration" className="space-y-3">
+        <div>
           <Input
             label="Sentry DSN"
             helpId="settings.general.sentry_dsn"
@@ -87,6 +117,13 @@ export function GeneralPanel() {
             placeholder="https://abc@o0.ingest.sentry.io/4511023875"
             validate={sentryDsn()}
           />
+          <SettingsChangeHint
+            current={settings.sentry_dsn ?? ''}
+            saved={saved.sentry_dsn ?? ''}
+            kind="url"
+          />
+        </div>
+        <div>
           <Input
             label="Webhook Secret"
             helpId="settings.general.sentry_webhook_secret"
@@ -95,15 +132,29 @@ export function GeneralPanel() {
             onChange={(e) => update({ sentry_webhook_secret: e.target.value })}
             validate={token({ minLength: 16 })}
           />
+          <SettingsChangeHint
+            current={settings.sentry_webhook_secret ?? ''}
+            saved={saved.sentry_webhook_secret ?? ''}
+            kind="secret"
+          />
+        </div>
+        <div>
           <Checkbox
             label="Consume Sentry User Feedback as Mushi reports"
             helpId="settings.general.sentry_consume_user_feedback"
             checked={settings.sentry_consume_user_feedback ?? true}
             onChange={(v) => update({ sentry_consume_user_feedback: v })}
           />
-        </Section>
+          <SettingsChangeHint
+            current={settings.sentry_consume_user_feedback ?? true}
+            saved={saved.sentry_consume_user_feedback ?? true}
+            kind="bool"
+          />
+        </div>
+      </Section>
 
-        <Section title="LLM Pipeline" className="space-y-3">
+      <Section title="LLM Pipeline" className="space-y-3">
+        <div>
           <SelectField
             label="Stage 2 Model"
             helpId="settings.general.stage2_model"
@@ -117,40 +168,49 @@ export function GeneralPanel() {
             </optgroup>
             <optgroup label="OpenAI fallback">
               <option value="gpt-5.4">GPT-5.4</option>
-              <option value="gpt-5.4-mini">GPT-5.4 mini</option>
+              <option value="gpt-5.4-mini">GPT-5.4-mini</option>
             </optgroup>
             <optgroup label="Legacy (cost review only)">
               <option value="claude-opus-4-6">Claude Opus 4.6</option>
               <option value="gpt-4.1">GPT-4.1</option>
             </optgroup>
           </SelectField>
+          <SettingsChangeHint
+            current={settings.stage2_model ?? 'claude-sonnet-4-6'}
+            saved={saved.stage2_model ?? 'claude-sonnet-4-6'}
+          />
+        </div>
+        <div>
           <Slider
             label="Stage 1 Confidence Threshold"
             helpId="settings.general.stage1_confidence_threshold"
             value={settings.stage1_confidence_threshold ?? 0.85}
             onChange={(v) => update({ stage1_confidence_threshold: v })}
           />
-        </Section>
+          <SettingsChangeHint
+            current={settings.stage1_confidence_threshold ?? 0.85}
+            saved={saved.stage1_confidence_threshold ?? 0.85}
+            kind="number"
+          />
+        </div>
+      </Section>
 
-        <Section title="Deduplication" className="space-y-3">
+      <Section title="Deduplication" className="space-y-3">
+        <div>
           <Slider
             label="Similarity Threshold"
             helpId="settings.general.dedup_threshold"
             value={settings.dedup_threshold ?? 0.82}
             onChange={(v) => update({ dedup_threshold: v })}
           />
-        </Section>
-      </div>
-
-      <div className="flex items-center gap-3">
-        <Btn onClick={save} disabled={saving || !draft} loading={saving}>
-          {draft ? 'Save changes' : 'No changes'}
-        </Btn>
-        {draft && (
-          <Btn variant="ghost" onClick={() => setDraft(null)}>Discard</Btn>
-        )}
-      </div>
-    </div>
+          <SettingsChangeHint
+            current={settings.dedup_threshold ?? 0.82}
+            saved={saved.dedup_threshold ?? 0.82}
+            kind="number"
+          />
+        </div>
+      </Section>
+    </SettingsPanelLayout>
   )
 }
 

@@ -7,10 +7,11 @@
 
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Section, Btn, Card, ResultChip, type ResultChipTone } from '../ui'
+import { Section, Btn, ResultChip, type ResultChipTone } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { RESOLVED_API_URL } from '../../lib/env'
 import { SdkInstallCard } from '../SdkInstallCard'
+import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
 
 interface TestProject {
   id: string
@@ -18,11 +19,6 @@ interface TestProject {
 }
 
 export function HealthPanel() {
-  // Fetch the first project once at the panel level so both the SDK install
-  // snippet and the smoke-test button share a single round trip and stay in
-  // sync (you'd be surprised how often two near-identical components on the
-  // same page would otherwise show different "active project" values for a
-  // few hundred ms after a switch).
   const [project, setProject] = useState<TestProject | null>(null)
   const [projectLoading, setProjectLoading] = useState(true)
 
@@ -35,50 +31,41 @@ export function HealthPanel() {
   }, [])
 
   return (
-    // Same width policy as the General tab: panel fills the page container,
-    // sections paired 2-up on lg+ viewports. ConnectionStatus is the only
-    // section that benefits from full width on every viewport (its internal
-    // grid renders 3 service rows side-by-side at md+), so it spans both
-    // columns via `lg:col-span-2`. The remaining 3 cards pair off below.
-    <div className="space-y-4">
-      <Card className="p-4">
-        <ConnectionStatus />
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <Section title="SDK Configuration Reference">
-          <p className="text-2xs text-fg-muted mb-2">Use these values when configuring the Mushi SDK in your app:</p>
-          <div className="space-y-1.5">
-            <div>
-              <span className="text-xs text-fg-muted font-medium">API Endpoint</span>
-              <code className="block text-xs font-mono text-fg-secondary bg-surface-raised px-2 py-1 rounded-sm mt-0.5 select-all break-all">
-                {RESOLVED_API_URL}
-              </code>
-            </div>
+    <SettingsPanelLayout
+      fullWidth={
+        <SettingsCard className="p-4">
+          <ConnectionStatus />
+        </SettingsCard>
+      }
+    >
+      <Section title="SDK Configuration Reference">
+        <p className="text-2xs text-fg-muted mb-2">Use these values when configuring the Mushi SDK in your app:</p>
+        <div className="space-y-1.5">
+          <div>
+            <span className="text-xs text-fg-muted font-medium">API Endpoint</span>
+            <code className="block text-xs font-mono text-fg-secondary bg-surface-raised px-2 py-1 rounded-sm mt-0.5 select-all break-all">
+              {RESOLVED_API_URL}
+            </code>
           </div>
-        </Section>
-
-        <QuickTestSection project={project} projectLoading={projectLoading} />
-
-        {/* SDK Install card hosts a tabbed code block — gets the wider lane
-            (full row) so the npm + init snippets don't wrap. */}
-        <div className="lg:col-span-2">
-          <Section title="Install the SDK">
-            <p className="text-2xs text-fg-muted mb-2">
-              Per-framework <code className="font-mono">npm install</code> command and init snippet,
-              pre-filled with this project's id.
-            </p>
-            {project ? (
-              <SdkInstallCard projectId={project.id} />
-            ) : projectLoading ? (
-              <p className="text-2xs text-fg-faint">Loading project…</p>
-            ) : (
-              <p className="text-2xs text-fg-faint">Create a project first to see install snippets.</p>
-            )}
-          </Section>
         </div>
-      </div>
-    </div>
+      </Section>
+
+      <QuickTestSection project={project} projectLoading={projectLoading} />
+
+      <Section title="Install the SDK" className="lg:col-span-2">
+        <p className="text-2xs text-fg-muted mb-2">
+          Per-framework <code className="font-mono">npm install</code> command and init snippet,
+          pre-filled with this project&apos;s id.
+        </p>
+        {project ? (
+          <SdkInstallCard projectId={project.id} />
+        ) : projectLoading ? (
+          <p className="text-2xs text-fg-faint">Loading project…</p>
+        ) : (
+          <p className="text-2xs text-fg-faint">Create a project first to see install snippets.</p>
+        )}
+      </Section>
+    </SettingsPanelLayout>
   )
 }
 
@@ -96,9 +83,6 @@ function QuickTestSection({ project, projectLoading }: QuickTestSectionProps) {
     if (!project) return
     setStatus('running')
     setDetail('')
-    // Uses the JWT-authenticated admin endpoint instead of /v1/reports — that
-    // one requires X-Mushi-Api-Key, which the admin has no plaintext access to
-    // (keys are SHA-256 hashed at rest).
     const res = await apiFetch<{ reportId: string; projectName: string }>(
       `/v1/admin/projects/${project.id}/test-report`,
       { method: 'POST' },

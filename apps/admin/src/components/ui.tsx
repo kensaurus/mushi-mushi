@@ -2497,7 +2497,7 @@ export function Abbr({ children, title, className = '' }: AbbrProps) {
 /* ── Tooltip ───────────────────────────────────────────────────────────── */
 
 interface TooltipProps {
-  content: string
+  content: ReactNode
   children: ReactNode
   side?: 'top' | 'bottom' | 'left' | 'right'
   /** When false, wraps are allowed — use under narrow headers where long tips would clip. */

@@ -160,6 +160,7 @@ export function SettingsPage() {
         role="tabpanel"
         id={`settings-panel-${active}`}
         aria-labelledby={`settings-tab-${active}`}
+        className="min-w-0"
       >
         {active === 'general' && <GeneralPanel />}
         {active === 'byok' && <ByokPanel />}
