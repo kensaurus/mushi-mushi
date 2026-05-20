@@ -27,6 +27,7 @@ import {
 } from '@mushi-mushi/core';
 
 import { MushiWidget } from './widget';
+import { exposeMarketingRecorder } from './marketing-recorder';
 import {
   initRewards,
   updateRewardsUser,
@@ -979,6 +980,10 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       enqueueActivity({ action, metadata });
     },
   };
+
+  if (typeof globalThis !== 'undefined' && (bootstrapConfig.debug ?? false)) {
+    exposeMarketingRecorder(widget);
+  }
 
   return sdk;
 }

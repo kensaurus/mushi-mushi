@@ -100,6 +100,7 @@ export function StageLivePreview({
                   className={[
                     'mushi-stage-preview__img',
                     media.animated ? 'mushi-stage-preview__img--animated' : 'mushi-stage-preview__img--still',
+                    media.surface === 'sdk' ? 'mushi-stage-preview__img--sdk' : '',
                   ].join(' ')}
                 />
               </motion.div>
@@ -144,7 +145,14 @@ export function StageLivePreview({
                     Close
                   </button>
                 </div>
-                <img src={src} alt={media.alt} className="mushi-stage-lightbox__img" />
+                <img
+                  src={src}
+                  alt={media.alt}
+                  className={[
+                    'mushi-stage-lightbox__img',
+                    media.surface === 'sdk' ? 'mushi-stage-preview__img--sdk' : '',
+                  ].join(' ')}
+                />
                 {demoHref ? (
                   <div className="mushi-stage-lightbox__footer">
                     <a
