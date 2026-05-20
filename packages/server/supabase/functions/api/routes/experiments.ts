@@ -88,16 +88,29 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     const experiments = experimentsRes.data ?? []
     const experimentIds = experiments.map((e) => e.id)
 
-    const [variantsRes, assignmentsRes] =
+    const [variantsRes, totalAssignmentsRes, totalConversionsRes] =
       experimentIds.length > 0
         ? await Promise.all([
             db().from('experiment_variants').select('id, experiment_id').in('experiment_id', experimentIds),
-            db().from('experiment_assignments').select('converted, experiment_id').in('experiment_id', experimentIds),
+            // Server-side count avoids loading every assignment row into memory —
+            // this table grows with end-user SDK traffic (one row per user per experiment).
+            db()
+              .from('experiment_assignments')
+              .select('id', { count: 'exact', head: true })
+              .in('experiment_id', experimentIds),
+            db()
+              .from('experiment_assignments')
+              .select('id', { count: 'exact', head: true })
+              .in('experiment_id', experimentIds)
+              .eq('converted', true),
           ])
-        : [{ data: [] as Array<{ id: string; experiment_id: string }> }, { data: [] as Array<{ converted: boolean; experiment_id: string }> }]
+        : [
+            { data: [] as Array<{ id: string; experiment_id: string }> },
+            { count: 0 },
+            { count: 0 },
+          ]
 
     const variants = variantsRes.data ?? []
-    const assignments = assignmentsRes.data ?? []
 
     const variantCountByExp = variants.reduce<Record<string, number>>((acc, v) => {
       const expId = v.experiment_id as string
@@ -118,8 +131,8 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
       (e) => e.status === 'draft' && (variantCountByExp[e.id] ?? 0) < 2,
     ).length
 
-    const totalAssignments = assignments.length
-    const totalConversions = assignments.filter((a) => a.converted).length
+    const totalAssignments = totalAssignmentsRes.count ?? 0
+    const totalConversions = totalConversionsRes.count ?? 0
     const conversionRatePct =
       totalAssignments > 0 ? Math.round((totalConversions / totalAssignments) * 1000) / 10 : 0
 

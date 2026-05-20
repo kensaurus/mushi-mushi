@@ -67,7 +67,7 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     const activeProject = resolvedProject.project
     const pid = activeProject.id
 
-    const [openRes, dismissedRes, snapshotsRes, lastFindingRes, surfacesRes] = await Promise.all([
+    const [openRes, dismissedRes, snapshotsRes, snapshotCountRes, lastFindingRes, surfacesRes] = await Promise.all([
       db()
         .from('drift_findings')
         .select('severity, surface')
@@ -78,12 +78,19 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
         .select('id', { count: 'exact', head: true })
         .eq('project_id', pid)
         .eq('status', 'dismissed'),
+      // Fetch only the 2 most-recent snapshots for delta calculation.
       db()
         .from('contract_snapshots')
         .select('id, snapshot_at, edge_count')
         .eq('project_id', pid)
         .order('snapshot_at', { ascending: false })
         .limit(2),
+      // Separate server-side count so `snapshotCount` reflects the true total,
+      // not the limit-2 slice above.
+      db()
+        .from('contract_snapshots')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid),
       db()
         .from('drift_findings')
         .select('created_at')
@@ -105,7 +112,7 @@ export function registerDriftRoutes(parent: Hono<{ Variables: Variables }>) {
     const openFindings = openRows.length
 
     const snapshots = snapshotsRes.data ?? []
-    const snapshotCount = snapshots.length
+    const snapshotCount = snapshotCountRes.count ?? snapshots.length
     const lastSnapshot = snapshots[0] ?? null
     const prevSnapshot = snapshots[1] ?? null
     const lastSnapshotAt = lastSnapshot?.snapshot_at ?? null

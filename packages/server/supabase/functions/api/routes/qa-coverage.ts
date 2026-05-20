@@ -145,13 +145,15 @@ export function registerQaCoverageRoutes(app: Hono): void {
       topPriority = 'pending';
       topPriorityLabel = `${pendingRuns} run${pendingRuns === 1 ? '' : 's'} queued or in progress — results appear in run history.`;
       topPriorityTo = '/qa-coverage?tab=stories';
+    } else if (enabledStories === 0) {
+      // Check disabled_all BEFORE no_runs: if all stories are disabled, "Run now"
+      // is impossible — surfacing no_runs would give an unactionable instruction.
+      topPriority = 'disabled_all';
+      topPriorityLabel = 'All stories are disabled — enable at least one to resume scheduled checks.';
+      topPriorityTo = '/qa-coverage?tab=stories';
     } else if (totalRuns24h === 0) {
       topPriority = 'no_runs';
       topPriorityLabel = `${stories.length} ${stories.length === 1 ? 'story' : 'stories'} configured but no runs in 24h — click Run now on a story.`;
-      topPriorityTo = '/qa-coverage?tab=stories';
-    } else if (enabledStories === 0) {
-      topPriority = 'disabled_all';
-      topPriorityLabel = 'All stories are disabled — enable at least one to resume scheduled checks.';
       topPriorityTo = '/qa-coverage?tab=stories';
     } else {
       topPriority = 'healthy';
