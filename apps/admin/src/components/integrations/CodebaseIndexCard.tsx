@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
-import { Card, Btn, Badge, Input, RelativeTime, ResultChip, CopyButton, DetailRows, type DetailRowItem } from '../ui'
+import { Card, Btn, Badge, Input, RelativeTime, ResultChip, CopyButton, DetailRows, ErrorAlert, type DetailRowItem } from '../ui'
 import { useToast } from '../../lib/toast'
 
 interface CodebaseStats {
@@ -110,14 +110,18 @@ export function CodebaseIndexCard({ projectId }: Props) {
   const [branch, setBranch] = useState('main')
   const [installationId, setInstallationId] = useState('')
   const [issuedSecret, setIssuedSecret] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const loadStats = useCallback(async () => {
     const res = await apiFetch<CodebaseStats>(`/v1/admin/projects/${projectId}/codebase/stats`)
     if (res.ok && res.data) {
+      setLoadError(null)
       setStats(res.data)
       if (res.data.repo_url) setRepoUrl(res.data.repo_url)
       if (res.data.default_branch) setBranch(res.data.default_branch)
       if (res.data.installation_id != null) setInstallationId(String(res.data.installation_id))
+    } else {
+      setLoadError(res.error?.message ?? res.error?.code ?? 'Could not load codebase stats')
     }
     setLoading(false)
   }, [projectId])
@@ -197,6 +201,17 @@ export function CodebaseIndexCard({ projectId }: Props) {
         Pulls your repo's source tree into Mushi's RAG so the auto-fix agent can read real files
         instead of guessing. Without this the worker emits <code className="font-mono bg-surface-overlay px-0.5 rounded-sm text-fg-secondary">INVESTIGATION_NEEDED.md</code> stubs.
       </p>
+
+      {loadError ? (
+        <ErrorAlert
+          title="Could not load indexing status"
+          message={loadError}
+          onRetry={() => {
+            setLoading(true)
+            void loadStats()
+          }}
+        />
+      ) : null}
 
       {stats?.repo_url && (
         <DetailRows items={buildStatsRows(stats, hasFiles)} />

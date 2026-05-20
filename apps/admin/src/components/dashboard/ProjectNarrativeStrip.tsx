@@ -176,7 +176,7 @@ function buildNarrative({ sdkInstalled, hasReports, hasFix, hasMerged }: BuildAr
         ? 'Your fix is merged upstream. New reports for the same component now resolve automatically. Connect Slack to get a heads-up on every loop.'
         : 'After a verified fix is merged, Mushi closes the loop \u2014 the same class of bug stops surfacing. Connect Slack/GitHub to push wins back into your team.',
       state: hasMerged ? 'done' : hasFix ? 'active' : 'next',
-      cta: hasMerged ? { to: '/integrations', label: 'Add notifications' } : undefined,
+      cta: hasMerged ? { to: '/integrations/config', label: 'Add notifications' } : undefined,
     }
   })
 }

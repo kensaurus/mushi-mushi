@@ -156,11 +156,18 @@ export function sentryHonoErrorHandler(err: Error, c: Context): Response {
 /**
  * Wrap a plain `Deno.serve` handler so unhandled exceptions get reported
  * to Sentry before being re-thrown (Deno surfaces them as 500s).
+ *
+ * Accepts both signatures for backwards-compatibility with edge functions
+ * that were written before the `functionName` parameter was added:
+ *   withSentry('my-fn', handler)   ← preferred, named
+ *   withSentry(handler)            ← legacy, uses 'unknown' as function name
  */
 export function withSentry(
-  functionName: string,
-  handler: (req: Request) => Response | Promise<Response>,
+  functionNameOrHandler: string | ((req: Request) => Response | Promise<Response>),
+  handlerArg?: (req: Request) => Response | Promise<Response>,
 ): (req: Request) => Promise<Response> {
+  const functionName = typeof functionNameOrHandler === 'string' ? functionNameOrHandler : 'unknown'
+  const handler = typeof functionNameOrHandler === 'function' ? functionNameOrHandler : handlerArg!
   ensureSentry(functionName)
   return async (req: Request): Promise<Response> => {
     try {

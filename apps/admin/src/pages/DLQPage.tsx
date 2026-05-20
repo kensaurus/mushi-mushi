@@ -25,6 +25,7 @@ import { QueueStageBreakdown } from '../components/dlq/QueueStageBreakdown'
 import { QueueItemCard } from '../components/dlq/QueueItemCard'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
+import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import {
   STATUS_OPTIONS,
@@ -210,6 +211,21 @@ export function DLQPage() {
   })
   const latestThroughput = throughput.at(-1)
 
+  const dlqDebugLines: OperatorTraceLine[] = [
+    {
+      level: deadLetter > 0 ? 'error' : failedCount > 0 ? 'warn' : 'info',
+      source: 'queue',
+      message: `dead=${deadLetter} failed=${failedCount} pending=${pendingCount} running=${runningCount}`,
+    },
+    ...(latestThroughput
+      ? [{
+          level: 'debug' as const,
+          source: 'throughput',
+          message: `${latestThroughput.day}: ${latestThroughput.completed} ok / ${latestThroughput.failed} fail`,
+        }]
+      : []),
+  ]
+
   return (
     <div className="space-y-5">
       <PageHeader
@@ -293,6 +309,7 @@ export function DLQPage() {
               { label: 'Running', value: runningCount, tone: runningCount > 0 ? 'info' : 'neutral' },
             ],
           },
+          debugLines: dlqDebugLines,
         }}
         act={dlqAction}
         actAnchor="dlq:act"

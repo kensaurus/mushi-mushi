@@ -91,10 +91,10 @@ export function InstalledPluginRow({
             {plugin.webhook_url ?? '(built-in)'}
           </p>
           <div className="flex flex-wrap gap-1 mt-1">
-            {plugin.subscribed_events.length === 0 ? (
+            {plugin.subscribed_events?.length === 0 ? (
               <code className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">all events</code>
             ) : (
-              plugin.subscribed_events.map((e) => (
+              plugin.subscribed_events?.map((e) => (
                 <code key={e} className="text-3xs bg-surface-raised px-1.5 py-0.5 rounded">
                   {e}
                 </code>

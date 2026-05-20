@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
+import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
 import {
   PageHeader,
   PageHelp,
@@ -13,6 +16,10 @@ import {
   Input,
   SelectField,
   FilterChip,
+  Badge,
+  Section,
+  StatCard,
+  SegmentedControl,
   type FilterChipTone,
 } from '../components/ui'
 import { ConfigHelp } from '../components/ConfigHelp'
@@ -24,9 +31,16 @@ import { IconEye } from '../components/icons'
 import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { SetupNudge } from '../components/SetupNudge'
 import { PageActionBar } from '../components/PageActionBar'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { PageHero } from '../components/PageHero'
+import { ComplianceStatusBanner } from '../components/compliance/ComplianceStatusBanner'
+import {
+  EMPTY_COMPLIANCE_STATS,
+  type ComplianceStats,
+  type ComplianceTabId,
+} from '../components/compliance/types'
 
 interface RetentionPolicy {
   project_id: string
@@ -121,6 +135,38 @@ const FILTER_HINTS: Record<ComplianceFilter, string> = {
   legal_hold: 'Projects placed on legal hold — retention sweeps are paused.',
 }
 
+const COMPLIANCE_TABS: Array<{ id: ComplianceTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture summary, severity filters, and cross-section audit trail.',
+  },
+  {
+    id: 'evidence',
+    label: 'Evidence',
+    description: 'Latest SOC 2 control snapshots — expand payload JSON for auditors.',
+  },
+  {
+    id: 'retention',
+    label: 'Retention',
+    description: 'Per-project retention windows and legal-hold toggles.',
+  },
+  {
+    id: 'dsars',
+    label: 'DSARs',
+    description: 'GDPR / CCPA subject requests — file, fulfil, or reject within 30 days.',
+  },
+  {
+    id: 'residency',
+    label: 'Residency',
+    description: 'Pin projects to US / EU / JP clusters before data lands.',
+  },
+]
+
+function isComplianceTab(value: string | null): value is ComplianceTabId {
+  return COMPLIANCE_TABS.some((t) => t.id === value)
+}
+
 const GDPR_SLA_DAYS = 30
 
 function dsarIsOpen(d: Dsar): boolean {
@@ -133,10 +179,23 @@ function daysSince(iso: string): number {
 }
 
 export function CompliancePage() {
+  const copy = usePageCopy('/compliance')
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+
+  const statsPath = activeProjectId ? '/v1/admin/compliance/stats' : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt,
+    isValidating,
+  } = usePageData<ComplianceStats>(statsPath)
+  const stats = statsData ?? EMPTY_COMPLIANCE_STATS
+
   const policiesQuery = usePageData<{ policies: RetentionPolicy[] }>('/v1/admin/compliance/retention')
   const dsarsQuery = usePageData<{ requests: Dsar[] }>('/v1/admin/compliance/dsars')
   const evidenceQuery = usePageData<{ evidence: Evidence[] }>('/v1/admin/compliance/evidence')
@@ -159,23 +218,35 @@ export function CompliancePage() {
   const loading = merged.loading
   const error = merged.error
   const reloadAll = useCallback(() => {
+    reloadStats()
     policiesQuery.reload()
     dsarsQuery.reload()
     evidenceQuery.reload()
     residencyQuery.reload()
-  }, [policiesQuery, dsarsQuery, evidenceQuery, residencyQuery])
+  }, [reloadStats, policiesQuery, dsarsQuery, evidenceQuery, residencyQuery])
 
-  // Project name resolution. We piggy-back on the residency endpoint which
-  // returns id + name for every owned project — saves a second round-trip
-  // just to label DSAR/evidence rows.
-  const projectNameById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const p of residency) map.set(p.id, p.name)
-    return map
-  }, [residency])
+  useRealtimeReload(
+    ['soc2_evidence', 'data_subject_requests', 'project_retention_policies'],
+    reloadAll,
+  )
 
   const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab: ComplianceTabId = isComplianceTab(tabParam) ? tabParam : 'overview'
+  const activeTabMeta = COMPLIANCE_TABS.find((t) => t.id === activeTab) ?? COMPLIANCE_TABS[0]
+
+  const setActiveTab = useCallback(
+    (id: ComplianceTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
   const filter = parseFilter(searchParams.get('status'))
+  const effectiveFilter: ComplianceFilter = activeTab === 'overview' ? filter : 'all'
   const setFilter = useCallback(
     (next: ComplianceFilter) => {
       const params = new URLSearchParams(searchParams)
@@ -185,6 +256,22 @@ export function CompliancePage() {
     },
     [searchParams, setSearchParams],
   )
+
+  const setFilterFromBanner = useCallback(
+    (status: 'fail' | 'open' | 'legal_hold') => {
+      const params = new URLSearchParams(searchParams)
+      params.set('status', status)
+      if (activeTab !== 'overview') params.delete('tab')
+      setSearchParams(params, { replace: true })
+    },
+    [searchParams, setSearchParams, activeTab],
+  )
+
+  const projectNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const p of residency) map.set(p.id, p.name)
+    return map
+  }, [residency])
 
   const [refreshing, setRefreshing] = useState(false)
   const [filing, setFiling] = useState(false)
@@ -354,32 +441,91 @@ export function CompliancePage() {
   // chip can reshape the page without each table reaching for its own copy
   // of the rules.
   const visibleEvidence = useMemo(() => {
-    if (filter === 'fail') return latestEvidenceByControl.filter((e) => e.status === 'fail')
-    if (filter === 'warn') return latestEvidenceByControl.filter((e) => e.status === 'warn')
-    if (filter === 'open') return latestEvidenceByControl.filter((e) => e.status !== 'pass')
-    if (filter === 'legal_hold') return [] // not relevant for legal-hold view
+    if (effectiveFilter === 'fail') return latestEvidenceByControl.filter((e) => e.status === 'fail')
+    if (effectiveFilter === 'warn') return latestEvidenceByControl.filter((e) => e.status === 'warn')
+    if (effectiveFilter === 'open') return latestEvidenceByControl.filter((e) => e.status !== 'pass')
+    if (effectiveFilter === 'legal_hold') return []
     return latestEvidenceByControl
-  }, [filter, latestEvidenceByControl])
+  }, [effectiveFilter, latestEvidenceByControl])
 
   const visibleDsars = useMemo(() => {
-    if (filter === 'fail') return overdueDsars
-    if (filter === 'warn')
+    if (effectiveFilter === 'fail') return overdueDsars
+    if (effectiveFilter === 'warn')
       return openDsars.filter((d) => {
         const age = daysSince(d.created_at)
         return age >= 14 && age < GDPR_SLA_DAYS - 9
       })
-    if (filter === 'open') return openDsars
-    if (filter === 'legal_hold') return []
+    if (effectiveFilter === 'open') return openDsars
+    if (effectiveFilter === 'legal_hold') return []
     return dsars
-  }, [filter, dsars, openDsars, overdueDsars])
+  }, [effectiveFilter, dsars, openDsars, overdueDsars])
 
   const visiblePolicies = useMemo(() => {
-    if (filter === 'legal_hold') return legalHoldPolicies
-    if (filter === 'fail' || filter === 'warn' || filter === 'open') return []
+    if (effectiveFilter === 'legal_hold') return legalHoldPolicies
+    if (effectiveFilter === 'fail' || effectiveFilter === 'warn' || effectiveFilter === 'open') return []
     return policies
-  }, [filter, policies, legalHoldPolicies])
+  }, [effectiveFilter, policies, legalHoldPolicies])
 
-  const showResidencyCard = filter === 'all'
+  const showEvidenceSection =
+    activeTab === 'overview' || activeTab === 'evidence'
+      ? effectiveFilter === 'all' ||
+        effectiveFilter === 'open' ||
+        effectiveFilter === 'fail' ||
+        effectiveFilter === 'warn'
+      : false
+  const showResidencyCard =
+    (activeTab === 'overview' || activeTab === 'residency') && effectiveFilter === 'all'
+  const showRetentionSection =
+    (activeTab === 'overview' || activeTab === 'retention') &&
+    (effectiveFilter === 'all' || effectiveFilter === 'legal_hold')
+  const showDsarsSection =
+    activeTab === 'overview' || activeTab === 'dsars'
+      ? effectiveFilter === 'all' ||
+        effectiveFilter === 'open' ||
+        effectiveFilter === 'fail' ||
+        effectiveFilter === 'warn'
+      : false
+
+  const criticalCount =
+    (stats.soc2Entitlement ? 0 : 1) +
+    stats.controlsFail +
+    stats.overdueDsars +
+    (stats.evidenceNeverGenerated && stats.soc2Entitlement ? 1 : 0)
+
+  usePublishPageContext({
+    route: '/compliance',
+    title: `${activeTabMeta.label} · Compliance`,
+    summary: activeTabMeta.description,
+    filters: {
+      tab: activeTab,
+      status: filter !== 'all' ? filter : undefined,
+      project_id: activeProjectId ?? undefined,
+    },
+    criticalCount,
+  })
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'evidence' as const,
+        label: 'Evidence',
+        count: stats.controlsFail > 0 ? stats.controlsFail : stats.controlsTotal > 0 ? stats.controlsTotal : undefined,
+      },
+      {
+        id: 'retention' as const,
+        label: 'Retention',
+        count: stats.legalHoldCount > 0 ? stats.legalHoldCount : undefined,
+      },
+      {
+        id: 'dsars' as const,
+        label: 'DSARs',
+        count: stats.openDsars > 0 ? stats.openDsars : undefined,
+      },
+      { id: 'residency' as const, label: 'Residency' },
+    ],
+    [stats.controlsFail, stats.controlsTotal, stats.legalHoldCount, stats.openDsars],
+  )
 
   const complianceAction = useNextBestAction({
     scope: 'compliance',
@@ -393,13 +539,47 @@ export function CompliancePage() {
         ? 'warn'
         : 'ok'
 
+  if (!activeProjectId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title={copy?.title ?? 'Compliance'}
+          description={
+            copy?.description ??
+            'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'
+          }
+        />
+        <SetupNudge
+          requires={['project']}
+          emptyTitle="Select a project"
+          emptyDescription="Compliance evidence and DSAR queues are scoped to the active project — pick mushi-mushi (or your app) first."
+        />
+      </div>
+    )
+  }
+
+  if (statsLoading && !statsData) {
+    return <PanelSkeleton rows={6} label="Loading compliance" />
+  }
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load compliance stats: ${statsError}`} onRetry={reloadAll} />
+  }
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <PageHeader
-        title="Compliance"
-        projectScope={projectName}
-        description="Track GDPR, SOC2, and audit obligations against the data Mushi holds for this project."
+        title={copy?.title ?? 'Compliance'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'
+        }
       >
+        {stats.soc2Entitlement ? (
+          <Badge className="bg-ok-muted text-ok">SOC 2 enabled</Badge>
+        ) : (
+          <Badge className="bg-warn/10 text-warn">{stats.planDisplayName} — upgrade for compliance</Badge>
+        )}
         <Btn onClick={refreshEvidence} disabled={refreshing} loading={refreshing} data-dav-anchor="compliance:act">
           Refresh evidence
         </Btn>
@@ -409,6 +589,54 @@ export function CompliancePage() {
         <TableDensityToggle />
       </PageHeader>
 
+      <ComplianceStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onFilter={setFilterFromBanner}
+        onRefreshEvidence={refreshEvidence}
+        refreshing={refreshing}
+      />
+
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Compliance sections"
+        size="sm"
+      />
+
+      <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Controls"
+            value={`${stats.controlsPass}/${stats.controlsTotal}`}
+            accent={stats.controlsFail > 0 ? 'text-danger' : stats.controlsWarn > 0 ? 'text-warn' : stats.controlsTotal > 0 ? 'text-ok' : undefined}
+            hint={`${stats.controlsFail} fail · ${stats.controlsWarn} warn`}
+          />
+          <StatCard
+            label="Open DSARs"
+            value={stats.openDsars}
+            accent={stats.overdueDsars > 0 ? 'text-danger' : stats.atRiskDsars > 0 ? 'text-warn' : undefined}
+            hint={`${stats.overdueDsars} overdue · ${stats.atRiskDsars} at risk`}
+          />
+          <StatCard
+            label="Legal holds"
+            value={stats.legalHoldCount}
+            accent={stats.legalHoldCount > 0 ? 'text-info' : undefined}
+            hint={`${stats.policiesCount} retention polic${stats.policiesCount === 1 ? 'y' : 'ies'}`}
+          />
+          <StatCard
+            label="Cluster"
+            value={(stats.activeProjectRegion ?? stats.currentRegion).toUpperCase()}
+            accent="text-brand"
+            hint={stats.activeProjectRegion ? 'Project pinned region' : 'Default deployment region'}
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+      <>
       <PageHero
         scope="compliance"
         title="Compliance"
@@ -480,14 +708,22 @@ export function CompliancePage() {
       <PageActionBar scope="compliance" action={complianceAction} />
 
       <PageHelp
-        title="About Compliance"
-        whatIsIt="SOC 2 Type 1 readiness — control evidence, retention windows, and Data Subject Access Request (DSAR) audit trail."
-        useCases={[
-          'Demonstrate per-control evidence to your auditor at a single glance',
-          'Tune per-project data retention windows and place projects on legal hold',
-          'Track and fulfil GDPR/CCPA data subject requests within 30 days',
-        ]}
-        howToUse="Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot."
+        title={copy?.help?.title ?? 'About Compliance'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'SOC 2 Type 1 readiness — control evidence, retention windows, and Data Subject Access Request (DSAR) audit trail.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Demonstrate per-control evidence to your auditor at a single glance',
+            'Tune per-project data retention windows and place projects on legal hold',
+            'Track and fulfil GDPR/CCPA data subject requests within 30 days',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Evidence is auto-generated nightly at 04:30 UTC. Retention sweeps run nightly at 03:30 UTC. Click Refresh evidence to take an on-demand snapshot.'
+        }
       />
 
       {/* URL-driven status filter. Deep links from the Next-Best-Action
@@ -506,6 +742,17 @@ export function CompliancePage() {
           />
         ))}
       </div>
+      </>
+      )}
+
+      {activeTab !== 'overview' ? (
+        <PageHelp
+          title={copy?.help?.title ?? 'About Compliance'}
+          whatIsIt={activeTabMeta.description}
+          useCases={copy?.help?.useCases ?? []}
+          howToUse={copy?.help?.howToUse ?? 'Use Refresh evidence for on-demand SOC 2 snapshots.'}
+        />
+      ) : null}
 
       {loading ? <PanelSkeleton rows={5} label="Loading compliance data" /> : error ? (
         <ErrorAlert message={`Failed to load ${merged.failedLabel ?? 'compliance data'}: ${error}`} onRetry={merged.retry} />
@@ -538,7 +785,7 @@ export function CompliancePage() {
               </Card>
             )}
 
-          {(filter === 'all' || filter === 'open' || filter === 'fail' || filter === 'warn') && (
+          {showEvidenceSection && (
             <Card className="p-5">
               <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
                 <div className="text-xs font-medium uppercase tracking-wider">
@@ -691,7 +938,7 @@ export function CompliancePage() {
             </Card>
           )}
 
-          {(filter === 'all' || filter === 'legal_hold') && (
+          {showRetentionSection && (
             <Card className="p-5">
               <div className="text-xs font-medium uppercase tracking-wider mb-2">
                 Retention policies
@@ -774,7 +1021,7 @@ export function CompliancePage() {
             </Card>
           )}
 
-          {(filter === 'all' || filter === 'open' || filter === 'fail' || filter === 'warn') && (
+          {showDsarsSection && (
             <Card className="p-5">
               <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
                 <div className="text-xs font-medium uppercase tracking-wider">
@@ -794,7 +1041,7 @@ export function CompliancePage() {
               {/* Filing form is hidden on focused views — the user clicked
                   "Open" because they want to clear work, not file new
                   requests. Available again on the All view. */}
-              {filter === 'all' && (
+              {effectiveFilter === 'all' && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3 border border-edge-subtle rounded-sm p-2 bg-surface-overlay">
                   <SelectField
                     label="Request type"

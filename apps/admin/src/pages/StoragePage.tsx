@@ -10,9 +10,16 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
-import { PageHeader, PageHelp, Card, Btn, ErrorAlert, Input, SelectField } from '../components/ui'
+import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { StorageStatusBanner } from '../components/storage/StorageStatusBanner'
+import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
+import { PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
@@ -124,20 +131,80 @@ function validateProvider(m: StorageSetting): ValidationHint[] {
   return hints
 }
 
+const STORAGE_TABS: Array<{ id: StorageTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Bucket health summary, PageHero decide/act/verify, and active-project posture.',
+  },
+  {
+    id: 'configure',
+    label: 'Configure',
+    description: 'Per-project provider, bucket, Vault refs, and health-probe debug log.',
+  },
+  {
+    id: 'usage',
+    label: 'Usage',
+    description: 'Screenshot object counts and last-write timestamps per owned project.',
+  },
+]
+
+function isStorageTab(value: string | null): value is StorageTabId {
+  return STORAGE_TABS.some((t) => t.id === value)
+}
+
 export function StoragePage() {
-  const settingsQuery = usePageData<{ settings: StorageSetting[] }>('/v1/admin/storage')
-  const projectsQuery = usePageData<{ projects: OwnedProject[] }>('/v1/admin/projects')
-  const usageQuery = usePageData<{ usage: StorageUsageRow[] }>('/v1/admin/storage/usage')
+  const copy = usePageCopy('/storage')
+  const activeProjectId = useActiveProjectId()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab: StorageTabId = isStorageTab(tabParam) ? tabParam : 'overview'
+  const activeTabMeta = STORAGE_TABS.find((t) => t.id === activeTab) ?? STORAGE_TABS[0]
+
+  const statsPath = activeProjectId ? '/v1/admin/storage/stats' : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<StorageStats>(statsPath)
+  const stats = statsData ?? EMPTY_STORAGE_STATS
+
+  const settingsQuery = usePageData<{ settings: StorageSetting[] }>(
+    activeProjectId ? '/v1/admin/storage' : null,
+  )
+  const projectsQuery = usePageData<{ projects: OwnedProject[] }>(
+    activeProjectId ? '/v1/admin/projects' : null,
+  )
+  const usageQuery = usePageData<{ usage: StorageUsageRow[] }>(
+    activeProjectId ? '/v1/admin/storage/usage' : null,
+  )
   const settings = settingsQuery.data?.settings ?? []
   const projects = projectsQuery.data?.projects ?? []
   const usageRows = usageQuery.data?.usage ?? []
   const loading = settingsQuery.loading || projectsQuery.loading
   const error = settingsQuery.error ?? projectsQuery.error
   const reloadAll = useCallback(() => {
+    reloadStats()
     settingsQuery.reload()
     projectsQuery.reload()
     usageQuery.reload()
-  }, [settingsQuery, projectsQuery, usageQuery])
+  }, [reloadStats, settingsQuery, projectsQuery, usageQuery])
+
+  useRealtimeReload(['project_storage_settings'], reloadAll)
+
+  const setActiveTab = useCallback(
+    (id: StorageTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   const usageByProject = useMemo(
     () => new Map(usageRows.map((u) => [u.project_id, u])),
@@ -219,16 +286,15 @@ export function StoragePage() {
     reloadAll()
   }
 
-  const failingBuckets = settings.filter((s) => s.health_status === 'failing').length
-  const degradedBuckets = settings.filter((s) => s.health_status === 'degraded').length
-  const healthyBuckets = settings.filter((s) => s.health_status === 'healthy').length
+  const failingBuckets = stats.failingCount
+  const degradedBuckets = stats.degradedCount
   const storageAction = useNextBestAction({
     scope: 'storage',
     approachingQuotaPct: null,
     failedUploadsLastHour: failingBuckets,
   })
   const storageSeverity: 'crit' | 'warn' | 'ok' | 'neutral' =
-    settings.length === 0
+    stats.configuredCount === 0 && stats.projectCount > 0
       ? 'neutral'
       : failingBuckets > 0
         ? 'crit'
@@ -236,136 +302,84 @@ export function StoragePage() {
           ? 'warn'
           : 'ok'
 
-  if (loading) return <TableSkeleton rows={5} columns={4} showFilters label="Loading storage" />
-  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
+  const criticalCount = stats.failingCount + (stats.neverProbedCount > 0 && stats.activeProjectConfigured ? 1 : 0)
 
-  return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Storage"
-        description="Per-project bucket usage and retention policy for screenshots, logs, and uploaded artefacts."
-      />
+  usePublishPageContext({
+    route: '/storage',
+    title: `${activeTabMeta.label} · Storage`,
+    summary: activeTabMeta.description,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount,
+  })
 
-      <PageHero
-        scope="storage"
-        title="Storage"
-        kicker="Bucket health"
-        decide={{
-          label:
-            storageSeverity === 'crit'
-              ? 'Buckets are failing uploads'
-              : storageSeverity === 'warn'
-                ? 'Bucket health is degraded'
-                : storageSeverity === 'ok'
-                  ? 'Buckets are healthy'
-                  : 'No buckets configured',
-          metric:
-            settings.length === 0
-              ? '—'
-              : `${healthyBuckets}/${settings.length} healthy`,
-          summary:
-            storageSeverity === 'crit'
-              ? 'Failing buckets drop screenshot + log uploads silently — rotate credentials or retry.'
-              : storageSeverity === 'warn'
-                ? 'Degraded buckets still accept uploads but have recent errors — probe before users hit them.'
-                : storageSeverity === 'ok'
-                  ? `${settings.length} bucket${settings.length === 1 ? '' : 's'} configured and passing probes.`
-                  : 'Connect a bucket to retain screenshots + logs beyond the default rolling window.',
-          severity: storageSeverity,
-          anchor: 'storage:decide',
-          evidence: settings.length > 0 ? {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Buckets', value: settings.length, tone: 'neutral' },
-              { label: 'Healthy', value: healthyBuckets, tone: healthyBuckets > 0 ? 'ok' : 'neutral' },
-              { label: 'Degraded', value: degradedBuckets, tone: degradedBuckets > 0 ? 'warn' : 'ok' },
-              { label: 'Failing', value: failingBuckets, tone: failingBuckets > 0 ? 'crit' : 'ok' },
-            ],
-          } : undefined,
-          missingConfigIds: settings.length === 0 ? ['storage.provider', 'storage.bucket'] : [],
-        }}
-        act={storageAction}
-        actAnchor="storage:act"
-        actEvidence={storageAction ? { kind: 'rule-trace', why: storageAction.reason ?? storageAction.title, threshold: failingBuckets > 0 ? `${failingBuckets} bucket${failingBuckets === 1 ? '' : 's'} failing` : undefined } : undefined}
-        verify={{
-          label: 'Latest probe snapshot',
-          detail:
-            settings.length === 0
-              ? 'No probes run yet'
-              : `${healthyBuckets} healthy · ${degradedBuckets} degraded · ${failingBuckets} failing`,
-          to: '/health?fn=storage-probe',
-          secondaryTo: '/audit?source=storage',
-          secondaryLabel: 'Audit log',
-          anchor: 'storage:verify',
-          evidence: settings.length > 0 ? {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Healthy', value: healthyBuckets, tone: healthyBuckets > 0 ? 'ok' : 'neutral' },
-              { label: 'Degraded', value: degradedBuckets, tone: degradedBuckets > 0 ? 'warn' : 'ok' },
-              { label: 'Failing', value: failingBuckets, tone: failingBuckets > 0 ? 'crit' : 'ok' },
-            ],
-          } : undefined,
-        }}
-      />
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'configure' as const,
+        label: 'Configure',
+        count: stats.failingCount > 0 ? stats.failingCount : stats.configuredCount > 0 ? stats.configuredCount : undefined,
+      },
+      {
+        id: 'usage' as const,
+        label: 'Usage',
+        count: stats.totalObjects > 0 ? stats.totalObjects : undefined,
+      },
+    ],
+    [stats.failingCount, stats.configuredCount, stats.totalObjects],
+  )
 
-      <PageActionBar scope="storage" action={storageAction} />
-
-      <PageHelp
-        title="About BYO Storage"
-        whatIsIt="Per-project storage backend for screenshots, intelligence-report PDFs, and fix attachments. Defaults to the cluster's Supabase Storage; switch to AWS S3, Cloudflare R2, Google Cloud Storage, or MinIO to keep customer data inside your existing infrastructure."
-        useCases={[
-          'Pin screenshots to your existing AWS account for invoice consolidation',
-          'Use Cloudflare R2 to dodge S3 egress fees on heavy report volumes',
-          'Self-host with MinIO inside an air-gapped enterprise network',
-        ]}
-        howToUse="Pick a provider, enter your bucket and region, then store credentials in Supabase Vault and reference them by name. Click Health check to verify the backend before flipping new uploads to it."
-      />
-
-      {cards.length === 0 ? (
-        <SetupNudge
-          requires={['project_created']}
-          emptyTitle="No projects yet"
-          emptyDescription="Create a project first — every project gets its own storage backend, defaulting to the cluster's Supabase Storage."
-        />
-      ) : null}
-
-      {cards.length > 0 && usageRows.length > 0 && (
-        <Card className="p-3">
-          <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">Per-project usage</div>
-          <p className="text-2xs text-fg-muted mb-2">
-            Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project
-            burning through storage or to confirm a quiet project before changing its provider.
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="text-fg-muted uppercase tracking-wider text-3xs">
-                <tr className="border-b border-edge-subtle">
-                  <th className="py-1.5 text-left">Project</th>
-                  <th className="text-right">Objects</th>
-                  <th className="text-left pl-3">Last write</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projects.map((p) => {
-                  const u = usageByProject.get(p.id)
-                  return (
-                    <tr key={p.id} className="border-b border-edge-subtle/40">
-                      <td className="py-1.5">{p.name}</td>
-                      <td className="text-right font-mono">{(u?.object_count ?? 0).toLocaleString()}</td>
-                      <td className="pl-3 text-fg-muted">
-                        {u?.last_write_at ? new Date(u.last_write_at).toLocaleString() : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+  const usageTable = (
+    <Card className="p-3">
+      <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">
+        Per-project usage
+      </div>
+      <p className="text-2xs text-fg-muted mb-2">
+        Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project burning through
+        storage or to confirm a quiet project before changing its provider.
+      </p>
+      {usageRows.length === 0 ? (
+        <p className="text-2xs text-fg-muted">No screenshot uploads recorded yet.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead className="text-fg-muted uppercase tracking-wider text-3xs">
+              <tr className="border-b border-edge-subtle">
+                <th className="py-1.5 text-left">Project</th>
+                <th className="text-right">Objects</th>
+                <th className="text-left pl-3">Last write</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.map((p) => {
+                const u = usageByProject.get(p.id)
+                const isActive = p.id === activeProjectId
+                return (
+                  <tr
+                    key={p.id}
+                    className={`border-b border-edge-subtle/40 ${isActive ? 'bg-brand/5' : ''}`}
+                  >
+                    <td className="py-1.5">
+                      {p.name}
+                      {isActive ? (
+                        <span className="ml-1.5 text-3xs text-brand uppercase">Active</span>
+                      ) : null}
+                    </td>
+                    <td className="text-right font-mono">{(u?.object_count ?? 0).toLocaleString()}</td>
+                    <td className="pl-3 text-fg-muted">
+                      {u?.last_write_at ? new Date(u.last_write_at).toLocaleString() : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
+    </Card>
+  )
 
-      <div data-dav-anchor="storage:decide" className="space-y-3">
-      {cards.map(({ setting: s, existing }) => {
+  const renderProjectCard = ({ setting: s, existing }: { setting: StorageSetting; existing: boolean }) => {
         const m = merged(s)
         const dirty = Object.keys(draftFor(s.project_id)).length > 0
         const projectName = projects.find((p) => p.id === s.project_id)?.name ?? s.project_id
@@ -375,12 +389,16 @@ export function StoragePage() {
         const saveBlocked = existing ? (!dirty || blockingHints.length > 0) : blockingHints.length > 0
         const debugSteps = liveDebug[s.project_id] ?? s.last_health_debug ?? null
         const isDebugOpen = debugOpen[s.project_id] ?? false
+        const isActive = s.project_id === activeProjectId
 
         return (
-          <Card key={s.project_id} className="p-3">
+          <Card key={s.project_id} className={`p-3 ${isActive ? 'ring-1 ring-brand/40' : ''}`}>
             <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
               <div className="min-w-0">
-                <div className="text-xs font-semibold text-fg truncate">{projectName}</div>
+                <div className="text-xs font-semibold text-fg truncate">
+                  {projectName}
+                  {isActive ? <span className="ml-1.5 text-3xs text-brand uppercase">Active</span> : null}
+                </div>
                 <code className="text-3xs opacity-70 font-mono wrap-anywhere">{s.project_id}</code>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -478,7 +496,6 @@ export function StoragePage() {
                 value={m.kms_key_id ?? ''}
                 onChange={(e) => updateDraft(s.project_id, { kms_key_id: e.target.value || null as unknown as string })}
               />
-              {/* Toggles for columns that were in DB but missing from the form */}
               <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -505,7 +522,6 @@ export function StoragePage() {
               </label>
             </div>
 
-            {/* Provider-specific validation hints */}
             {(blockingHints.length > 0 || warnHints.length > 0) && (
               <div className="mt-3 space-y-1">
                 {blockingHints.map((h) => (
@@ -527,7 +543,6 @@ export function StoragePage() {
               <p className="mt-2 text-2xs text-danger">Last error: {s.last_health_error}</p>
             ) : null}
 
-            {/* Health probe debug log — shown after a check or if the row has persisted debug */}
             {existing && debugSteps && debugSteps.length > 0 && (
               <div className="mt-3">
                 <button
@@ -591,8 +606,227 @@ export function StoragePage() {
             </div>
           </Card>
         )
-      })}
+  }
+
+  const activeCard = cards.find((c) => c.setting.project_id === activeProjectId)
+
+  if (!activeProjectId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title={copy?.title ?? 'Storage'}
+          description={copy?.description ?? 'Per-project BYO bucket configuration for screenshots and attachments.'}
+        />
+        <SetupNudge
+          requires={['project']}
+          emptyTitle="Select a project"
+          emptyDescription="Storage backends are scoped per project — pick mushi-mushi (or your app) first."
+        />
       </div>
+    )
+  }
+
+  if ((statsLoading && !statsData) || loading) {
+    return <TableSkeleton rows={5} columns={4} showFilters label="Loading storage" />
+  }
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load storage stats: ${statsError}`} onRetry={reloadAll} />
+  }
+  if (error) {
+    return <ErrorAlert message={error} onRetry={reloadAll} />
+  }
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title={copy?.title ?? 'Storage'}
+        projectScope={stats.projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Per-project BYO bucket configuration for screenshots, intelligence PDFs, and fix attachments.'
+        }
+      >
+        <Badge className={stats.activeProjectHealthStatus === 'healthy' ? 'bg-ok-muted text-ok' : stats.activeProjectHealthStatus === 'failing' ? 'bg-danger-subtle text-danger' : 'bg-warn/10 text-warn'}>
+          {stats.activeProjectHealthStatus.toUpperCase()}
+        </Badge>
+      </PageHeader>
+
+      <StorageStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onHealthCheck={activeProjectId ? () => checkHealth(activeProjectId) : undefined}
+        checking={checkingId === activeProjectId}
+      />
+
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Storage sections"
+        size="sm"
+      />
+
+      <Section title="Storage snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Healthy"
+            value={`${stats.healthyCount}/${stats.configuredCount}`}
+            accent={stats.failingCount > 0 ? 'text-danger' : stats.healthyCount > 0 ? 'text-ok' : undefined}
+            hint={`${stats.failingCount} failing · ${stats.degradedCount} degraded`}
+          />
+          <StatCard
+            label="Screenshots"
+            value={stats.activeProjectObjects.toLocaleString()}
+            accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
+            hint={`${stats.totalObjects.toLocaleString()} total across projects`}
+          />
+          <StatCard
+            label="Provider"
+            value={stats.activeProjectProvider}
+            accent="text-info"
+            hint={stats.activeProjectConfigured ? 'Custom override saved' : 'Cluster Supabase default'}
+          />
+          <StatCard
+            label="Unconfigured"
+            value={stats.unconfiguredCount}
+            accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
+            hint={`${stats.neverProbedCount} never probed`}
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHero
+            scope="storage"
+            title="Storage"
+            kicker="Bucket health"
+            decide={{
+              label:
+                storageSeverity === 'crit'
+                  ? 'Buckets are failing uploads'
+                  : storageSeverity === 'warn'
+                    ? 'Bucket health is degraded'
+                    : storageSeverity === 'ok'
+                      ? 'Buckets are healthy'
+                      : 'Using cluster defaults',
+              metric: stats.configuredCount === 0 ? '—' : `${stats.healthyCount}/${stats.configuredCount} healthy`,
+              summary:
+                storageSeverity === 'crit'
+                  ? 'Failing buckets drop screenshot uploads silently — rotate credentials or re-run the probe.'
+                  : storageSeverity === 'warn'
+                    ? 'Degraded buckets still accept uploads but have recent errors — probe before users hit them.'
+                    : storageSeverity === 'ok'
+                      ? `${stats.configuredCount} bucket${stats.configuredCount === 1 ? '' : 's'} configured and passing probes.`
+                      : 'Save a BYO override on Configure to pin screenshots to S3, R2, GCS, or MinIO.',
+              severity: storageSeverity,
+              anchor: 'storage:decide',
+              evidence:
+                stats.configuredCount > 0
+                  ? {
+                      kind: 'metric-breakdown',
+                      items: [
+                        { label: 'Buckets', value: stats.configuredCount, tone: 'neutral' },
+                        { label: 'Healthy', value: stats.healthyCount, tone: stats.healthyCount > 0 ? 'ok' : 'neutral' },
+                        { label: 'Degraded', value: stats.degradedCount, tone: stats.degradedCount > 0 ? 'warn' : 'ok' },
+                        { label: 'Failing', value: stats.failingCount, tone: stats.failingCount > 0 ? 'crit' : 'ok' },
+                      ],
+                    }
+                  : undefined,
+              missingConfigIds: !stats.activeProjectConfigured ? ['storage.provider', 'storage.bucket'] : [],
+            }}
+            act={storageAction}
+            actAnchor="storage:act"
+            actEvidence={
+              storageAction
+                ? {
+                    kind: 'rule-trace',
+                    why: storageAction.reason ?? storageAction.title,
+                    threshold: failingBuckets > 0 ? `${failingBuckets} bucket${failingBuckets === 1 ? '' : 's'} failing` : undefined,
+                  }
+                : undefined
+            }
+            verify={{
+              label: stats.lastHealthCheckAt ? 'Latest probe' : 'Awaiting probe',
+              detail: stats.lastHealthCheckAt
+                ? `${stats.healthyCount} healthy · ${stats.degradedCount} degraded · ${stats.failingCount} failing`
+                : 'Run health check on Configure',
+              to: '/health?fn=storage-probe',
+              secondaryTo: '/audit?source=storage',
+              secondaryLabel: 'Audit log',
+              anchor: 'storage:verify',
+              evidence:
+                stats.configuredCount > 0
+                  ? {
+                      kind: 'metric-breakdown',
+                      items: [
+                        { label: 'Healthy', value: stats.healthyCount, tone: stats.healthyCount > 0 ? 'ok' : 'neutral' },
+                        { label: 'Degraded', value: stats.degradedCount, tone: stats.degradedCount > 0 ? 'warn' : 'ok' },
+                        { label: 'Failing', value: stats.failingCount, tone: stats.failingCount > 0 ? 'crit' : 'ok' },
+                      ],
+                    }
+                  : undefined,
+            }}
+          />
+
+          <PageActionBar scope="storage" action={storageAction} />
+
+          <PageHelp
+            title={copy?.help?.title ?? 'About BYO Storage'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              "Per-project storage backend for screenshots and attachments. Defaults to the cluster's Supabase Storage."
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Pin screenshots to your existing AWS account for invoice consolidation',
+                'Use Cloudflare R2 to dodge S3 egress fees on heavy report volumes',
+                'Self-host with MinIO inside an air-gapped enterprise network',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Configure tab saves provider + bucket. Health check runs a write probe and shows step-by-step debug output.'
+            }
+          />
+
+          {usageTable}
+          {activeCard ? (
+            <div data-dav-anchor="storage:decide">{renderProjectCard(activeCard)}</div>
+          ) : cards.length === 0 ? (
+            <SetupNudge
+              requires={['project_created']}
+              emptyTitle="No projects yet"
+              emptyDescription="Create a project first — every project gets its own storage backend."
+            />
+          ) : null}
+        </>
+      )}
+
+      {activeTab === 'configure' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'About BYO Storage'}
+            whatIsIt={activeTabMeta.description}
+            useCases={copy?.help?.useCases ?? []}
+            howToUse={copy?.help?.howToUse ?? 'Save before running health check on a new override.'}
+          />
+          {cards.length === 0 ? (
+            <SetupNudge
+              requires={['project_created']}
+              emptyTitle="No projects yet"
+              emptyDescription="Create a project first — every project gets its own storage backend."
+            />
+          ) : (
+            <div data-dav-anchor="storage:decide" className="space-y-3">
+              {cards.map((card) => renderProjectCard(card))}
+            </div>
+          )}
+        </>
+      )}
+
+      {activeTab === 'usage' && usageTable}
     </div>
   )
 }

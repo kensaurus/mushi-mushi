@@ -254,4 +254,23 @@ export async function resolveOwnedProject(
   return { project, explicit: Boolean(requested) };
 }
 
+/**
+ * List endpoints honour `X-Mushi-Project-Id` when the admin console sends it
+ * (ProjectSwitcher). Without a header, returns all owned projects — legacy
+ * behaviour for callers that don't scope. If the header names a project the
+ * caller doesn't own, returns [] so the UI renders an empty state instead of
+ * leaking cross-project rows.
+ */
+export async function scopedOwnedProjectIds(
+  c: Context,
+  db: ReturnType<typeof getServiceClient>,
+  userId: string,
+): Promise<string[]> {
+  const all = await ownedProjectIds(db, userId);
+  const requested = requestedProjectId(c);
+  if (!requested) return all;
+  if (!UUID_RE.test(requested)) return [];
+  return all.includes(requested) ? [requested] : [];
+}
+
 export const resolveAccessibleProject = resolveOwnedProject;

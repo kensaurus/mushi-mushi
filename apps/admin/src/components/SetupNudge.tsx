@@ -14,9 +14,20 @@ import { EmptyState, Btn } from './ui'
 import { useSetupStatus, type SetupStepId } from '../lib/useSetupStatus'
 import { useActiveProjectId } from './ProjectSwitcher'
 
+/**
+ * Virtual blocker ids accepted by `<SetupNudge requires={…}>` in addition
+ * to the canonical `SetupStepId`s emitted by the backend. These don't
+ * map to a setup-status row — they describe a runtime gating condition
+ * that the calling page has already evaluated (e.g. "no active project
+ * selected in the header"). The component falls through to the generic
+ * empty state for any blocker it doesn't recognise, which is what the
+ * calling page wants once it has rendered its own contextual copy.
+ */
+export type SetupBlocker = SetupStepId | 'project'
+
 interface SetupNudgeProps {
   /** What blocks this page when missing. Order matters — first incomplete wins. */
-  requires: SetupStepId[]
+  requires: SetupBlocker[]
   /** Title shown in the "everything is set up but no data yet" path. */
   emptyTitle: string
   /** Description shown in the "no data yet" path. */
@@ -63,6 +74,12 @@ export function SetupNudge({
   }
 
   for (const id of requires) {
+    // Virtual blockers like `'project'` describe runtime gating evaluated
+    // by the caller (e.g. "no active project selected in the header") and
+    // never carry a backend setup-status row. Skip them here — the parent
+    // has already rendered the appropriate contextual copy via the
+    // `emptyTitle` / `emptyDescription` props.
+    if (id === 'project') continue
     const step = setup.getStep(id)
     if (!step || step.complete) continue
     return (

@@ -9,6 +9,17 @@ import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Card, Badge, Tooltip } from './ui'
 import { useBrushSelection } from '../lib/useBrushSelection'
+import { ChartFrame } from './charts/ChartFrame'
+import {
+  buildYTickValues,
+  formatChartCount,
+  formatChartUsd,
+  resolveChartMax,
+  shortDay,
+} from './charts/chartAxis'
+
+export { shortDay, formatChartCount, formatChartUsd } from './charts/chartAxis'
+export { ChartFrame } from './charts/ChartFrame'
 
 /* ── KpiTile ────────────────────────────────────────────────────────────── */
 
@@ -156,6 +167,15 @@ export function LegendDot({ color, label }: { color: string; label: string }) {
 
 /* ── LineSparkline ──────────────────────────────────────────────────────── */
 
+export type ChartValueFormat = 'count' | 'usd' | 'percent' | 'raw'
+
+function formatChartValue(n: number, format: ChartValueFormat): string {
+  if (format === 'usd') return formatChartUsd(n)
+  if (format === 'percent') return `${(n * 100).toFixed(0)}%`
+  if (format === 'count') return formatChartCount(n)
+  return Number.isFinite(n) ? (Number.isInteger(n) ? String(n) : n.toFixed(2)) : '—'
+}
+
 /**
  * Wave T.4.7 range-select bridge. When the caller provides `timestamps`
  * alongside `values`, `LineSparkline` registers a headless brush via
@@ -169,6 +189,13 @@ export function LineSparkline({
   ariaLabel = 'Trend',
   height = 28,
   timestamps,
+  xLabels,
+  showAxes = false,
+  valueFormat = 'count',
+  scaleToData = false,
+  yAxisCaption,
+  xAxisCaption,
+  showPeakLabel = false,
   onRangeSelect,
 }: {
   values: number[]
@@ -177,7 +204,14 @@ export function LineSparkline({
   height?: number
   /** ISO strings aligned 1:1 with `values`. Required to enable brushing. */
   timestamps?: string[]
-  /** Fired with `{ fromIso, toIso }` when the user brushes a range. */
+  /** X-axis day/bucket labels; defaults to short-form `timestamps`. */
+  xLabels?: string[]
+  showAxes?: boolean
+  valueFormat?: ChartValueFormat
+  scaleToData?: boolean
+  yAxisCaption?: string
+  xAxisCaption?: string
+  showPeakLabel?: boolean
   onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
 }) {
   const brush = useBrushSelection({
@@ -193,21 +227,29 @@ export function LineSparkline({
   })
 
   if (values.length === 0) return null
-  const max = Math.max(1, ...values)
+
   const min = Math.min(0, ...values)
-  const range = max - min || 1
+  const chartMax = resolveChartMax(values, scaleToData)
+  const range = chartMax - min || 1
+  const plotHeight = showAxes ? Math.max(height, 56) : height
   const w = 100
-  const h = height
+  const h = plotHeight
   const step = w / Math.max(1, values.length - 1)
   const points = values
     .map(
       (v, i) =>
-        `${(i * step).toFixed(2)},${(h - ((v - min) / range) * h).toFixed(2)}`,
+        `${(i * step).toFixed(2)},${(h - ((v - min) / range) * (h - 2) - 1).toFixed(2)}`,
     )
     .join(' ')
 
-  // Preview rect is drawn in chart-coord space (0..w). Convert indexes to
-  // x-offsets so the overlay tracks the cursor smoothly during drag.
+  const peakIdx = values.reduce((best, v, i) => (v > values[best] ? i : best), 0)
+  const peakVal = values[peakIdx] ?? 0
+  const rawPeak = Math.max(...values, 0)
+  const yTicks = buildYTickValues(rawPeak, min, 4).map((v) => formatChartValue(v, valueFormat))
+  const axisX =
+    xLabels ??
+    (timestamps?.map((t) => shortDay(t.slice(0, 10))) ?? [])
+
   const preview = brush.isDragging && brush.previewStart != null && brush.previewEnd != null
     ? {
         x: Math.min(brush.previewStart, brush.previewEnd) * step,
@@ -215,12 +257,11 @@ export function LineSparkline({
       }
     : null
 
-  return (
+  const svg = (
     <svg
       viewBox={`0 0 ${w} ${h}`}
       preserveAspectRatio="none"
-      className={`w-full ${accent} ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
-      style={{ height: `${height}px` }}
+      className={`w-full h-full ${accent} ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
       role="img"
       aria-label={ariaLabel}
       onPointerDown={brush.onPointerDown}
@@ -228,14 +269,37 @@ export function LineSparkline({
       onPointerUp={brush.onPointerUp}
       onPointerCancel={() => brush.cancel()}
     >
+      {showAxes && (
+        <polyline
+          points={points}
+          fill="currentColor"
+          fillOpacity={0.08}
+          stroke="none"
+        />
+      )}
       <polyline
         points={points}
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.2"
+        strokeWidth={showAxes ? 1.5 : 1.2}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
+      {values.map((v, i) => {
+        if (v <= 0) return null
+        const x = values.length > 1 ? i * step : w / 2
+        const y = h - ((v - min) / range) * (h - 2) - 1
+        return (
+          <circle
+            key={i}
+            cx={x}
+            cy={y}
+            r={showAxes ? 1.8 : 0}
+            fill="currentColor"
+            className={showAxes ? 'opacity-90' : 'opacity-0'}
+          />
+        )
+      })}
       {preview && (
         <rect
           x={preview.x}
@@ -249,6 +313,38 @@ export function LineSparkline({
       )}
     </svg>
   )
+
+  const peakCaption =
+    showPeakLabel && peakVal > 0 ? (
+      <p className="mt-1 text-3xs font-mono text-fg-faint tabular-nums">
+        peak {formatChartValue(peakVal, valueFormat)}
+        {axisX[peakIdx] ? ` · ${axisX[peakIdx]}` : ''}
+      </p>
+    ) : null
+
+  if (!showAxes) {
+    return (
+      <div>
+        <div style={{ height: `${height}px` }}>{svg}</div>
+        {peakCaption}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <ChartFrame
+        height={plotHeight}
+        yTickLabels={yTicks}
+        xLabels={axisX.length > 0 ? axisX : undefined}
+        yAxisCaption={yAxisCaption}
+        xAxisCaption={xAxisCaption}
+      >
+        {svg}
+      </ChartFrame>
+      {peakCaption}
+    </div>
+  )
 }
 
 /* ── BarSparkline (single colour) ───────────────────────────────────────── */
@@ -259,6 +355,15 @@ export function BarSparkline({
   height = 28,
   ariaLabel = 'Bar trend',
   timestamps,
+  xLabels,
+  barTitles,
+  scaleToData = false,
+  showAxes = false,
+  valueFormat = 'count',
+  yAxisCaption,
+  xAxisCaption,
+  showBarLabels = false,
+  showPeakLabel = false,
   onRangeSelect,
 }: {
   values: number[]
@@ -266,6 +371,16 @@ export function BarSparkline({
   height?: number
   ariaLabel?: string
   timestamps?: string[]
+  xLabels?: string[]
+  barTitles?: string[]
+  scaleToData?: boolean
+  showAxes?: boolean
+  valueFormat?: ChartValueFormat
+  yAxisCaption?: string
+  xAxisCaption?: string
+  /** Print formatted values above non-zero bars (use on wide charts only). */
+  showBarLabels?: boolean
+  showPeakLabel?: boolean
   onRangeSelect?: (range: { fromIso: string; toIso: string }) => void
 }) {
   const brush = useBrushSelection({
@@ -281,11 +396,23 @@ export function BarSparkline({
   })
 
   if (values.length === 0) return null
-  const max = Math.max(1, ...values)
-  return (
+
+  const peak = Math.max(...values)
+  const peakIdx = values.indexOf(peak)
+  const chartMax = resolveChartMax(values, scaleToData)
+  const plotHeight = showAxes ? Math.max(height, 80) : height
+  const yTicks = buildYTickValues(chartMax / 1.12, 0, 4).map((v) =>
+    formatChartValue(v, valueFormat),
+  )
+  const activeCount = values.filter((v) => v > 0).length
+  const showIdleBaseline = showAxes && activeCount < values.length
+  const axisX =
+    xLabels ??
+    (timestamps?.map((t) => shortDay(t.slice(0, 10))) ?? [])
+
+  const bars = (
     <div
-      className={`relative flex items-end gap-px w-full ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
-      style={{ height: `${height}px` }}
+      className={`relative flex h-full items-end gap-[3px] w-full ${onRangeSelect ? 'cursor-crosshair touch-none select-none' : ''}`}
       role="img"
       aria-label={ariaLabel}
       onPointerDown={brush.onPointerDown}
@@ -293,14 +420,51 @@ export function BarSparkline({
       onPointerUp={brush.onPointerUp}
       onPointerCancel={() => brush.cancel()}
     >
-      {values.map((v, i) => (
-        <div
-          key={i}
-          className={`flex-1 ${accent} opacity-80 rounded-t-[1px]`}
-          style={{ height: `${(v / max) * 100}%`, minHeight: v > 0 ? '1px' : 0 }}
-          title={`${v}`}
-        />
-      ))}
+      {values.map((v, i) => {
+        const isPeak = i === peakIdx && v > 0
+        const isToday = i === values.length - 1
+        const label =
+          showBarLabels && v > 0 && (activeCount > 2 || isPeak)
+            ? formatChartValue(v, valueFormat)
+            : null
+        const isIdle = v <= 0
+        return (
+          <div
+            key={i}
+            className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+          >
+            {label && (
+              <span
+                className={`pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-sm bg-surface-overlay/90 px-1 py-px text-3xs font-mono tabular-nums shadow-sm ${
+                  isPeak ? 'text-brand font-semibold' : 'text-fg-muted'
+                }`}
+                aria-hidden="true"
+              >
+                {label}
+              </span>
+            )}
+            {isIdle && showIdleBaseline ? (
+              <div
+                className={`h-1 w-1 rounded-full bg-fg-faint/30 motion-safe:transition-colors group-hover:bg-fg-faint/50 ${
+                  isToday ? 'ring-1 ring-edge-subtle ring-offset-1 ring-offset-transparent' : ''
+                }`}
+                title={barTitles?.[i] ?? `${axisX[i] ?? i}: no spend`}
+              />
+            ) : (
+              <div
+                className={`mx-auto w-[72%] max-w-[11px] min-w-[4px] ${accent} rounded-t-sm motion-safe:transition-all ${
+                  isPeak ? 'opacity-100 shadow-sm shadow-brand/40' : 'opacity-80 group-hover:opacity-100'
+                } ${isToday && v > 0 ? 'ring-1 ring-brand/40 ring-offset-1 ring-offset-transparent' : ''}`}
+                style={{
+                  height: `${(v / chartMax) * 100}%`,
+                  minHeight: v > 0 ? '4px' : 0,
+                }}
+                title={barTitles?.[i] ?? `${axisX[i] ?? i}: ${formatChartValue(v, valueFormat)}`}
+              />
+            )}
+          </div>
+        )
+      })}
       {brush.isDragging && brush.previewStart != null && brush.previewEnd != null && (
         <div
           aria-hidden="true"
@@ -311,6 +475,38 @@ export function BarSparkline({
           }}
         />
       )}
+    </div>
+  )
+
+  const peakCaption =
+    showPeakLabel && peak > 0 ? (
+      <p className="mt-1 text-3xs font-mono text-fg-faint tabular-nums">
+        peak {formatChartValue(peak, valueFormat)}
+        {axisX[peakIdx] ? ` · ${axisX[peakIdx]}` : ''}
+      </p>
+    ) : null
+
+  if (!showAxes) {
+    return (
+      <div>
+        <div style={{ height: `${height}px` }}>{bars}</div>
+        {peakCaption}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <ChartFrame
+        height={plotHeight}
+        yTickLabels={yTicks}
+        xLabels={axisX.length > 0 ? axisX : undefined}
+        yAxisCaption={yAxisCaption}
+        xAxisCaption={xAxisCaption}
+      >
+        {bars}
+      </ChartFrame>
+      {peakCaption}
     </div>
   )
 }
@@ -325,12 +521,6 @@ export interface SeverityDay {
   medium: number
   low: number
   unscored?: number
-}
-
-function shortDay(iso: string): string {
-  if (!iso) return ''
-  const d = new Date(iso + 'T00:00:00Z')
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export function SeverityStackedBars({ data }: { data: SeverityDay[] }) {
@@ -403,8 +593,16 @@ function SeverityBarColumn({
       aria-label={ariaSummary}
     >
       {day.total > 0 && (
+        <span
+          className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-0.5 -translate-x-1/2 text-3xs font-mono font-medium tabular-nums text-fg-muted"
+          aria-hidden="true"
+        >
+          {day.total}
+        </span>
+      )}
+      {day.total > 0 && (
         <div
-          className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-1 min-w-[10rem] rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1.5 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+          className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-4 min-w-[10rem] rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1.5 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
           aria-hidden="true"
         >
           <div className="flex items-baseline justify-between gap-2 mb-1">
@@ -509,56 +707,91 @@ export function Histogram({
   labels,
   accent = 'bg-brand',
   height = 80,
+  showAxes = true,
+  valueFormat = 'count',
+  yAxisCaption,
+  xAxisCaption = 'Score bucket',
 }: {
   buckets: number[]
   labels?: string[]
   accent?: string
   height?: number
+  showAxes?: boolean
+  valueFormat?: ChartValueFormat
+  yAxisCaption?: string
+  xAxisCaption?: string
 }) {
   if (buckets.length === 0) return null
-  const max = Math.max(1, ...buckets)
-  return (
-    <div>
-      <div
-        className="flex items-end gap-1 w-full"
-        style={{ height: `${height}px` }}
-      >
-        {buckets.map((v, i) => {
-          const label = labels?.[i] ?? String(i)
-          const summary = `${label}: ${v}`
-          return (
-            <div key={i} className="group relative flex-1 h-full">
-              {v > 0 && (
-                <div
-                  className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-1 whitespace-nowrap rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
-                  aria-hidden="true"
-                >
-                  <span className="font-medium">{label}</span>
-                  <span className="ml-2 font-mono text-fg-muted">{v}</span>
-                </div>
-              )}
-              <button
-                type="button"
-                tabIndex={v > 0 ? 0 : -1}
-                aria-label={summary}
-                className={`absolute inset-x-0 bottom-0 ${accent} rounded-t-sm motion-safe:transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 cursor-default`}
-                style={{
-                  height: `${(v / max) * 100}%`,
-                  minHeight: v > 0 ? '2px' : '0',
-                }}
-              />
-            </div>
-          )
-        })}
-      </div>
-      {labels && (
-        <div className="flex justify-between text-3xs text-fg-faint font-mono mt-1">
-          {labels.map((l, i) => (
-            <span key={i}>{l}</span>
-          ))}
-        </div>
-      )}
+  const peak = Math.max(1, ...buckets)
+  const chartMax = peak * 1.12
+  const yTicks = buildYTickValues(peak, 0, 4).map((v) => formatChartValue(v, valueFormat))
+  const xLabs = labels ?? buckets.map((_, i) => String(i))
+
+  const bars = (
+    <div className="flex h-full items-end gap-1 w-full">
+      {buckets.map((v, i) => {
+        const label = labels?.[i] ?? String(i)
+        const summary = `${label}: ${formatChartValue(v, valueFormat)}`
+        return (
+          <div key={i} className="group relative flex h-full flex-1 flex-col justify-end">
+            {v > 0 && showAxes && (
+              <span
+                className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-0.5 -translate-x-1/2 text-3xs font-mono text-fg-faint tabular-nums"
+                aria-hidden="true"
+              >
+                {formatChartValue(v, valueFormat)}
+              </span>
+            )}
+            {v > 0 && !showAxes && (
+              <div
+                className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 -translate-y-1 z-20 mb-1 whitespace-nowrap rounded-md bg-surface-overlay border border-edge-subtle px-2 py-1 text-3xs text-fg shadow-card opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                aria-hidden="true"
+              >
+                <span className="font-medium">{label}</span>
+                <span className="ml-2 font-mono text-fg-muted">{v}</span>
+              </div>
+            )}
+            <button
+              type="button"
+              tabIndex={v > 0 ? 0 : -1}
+              aria-label={summary}
+              className={`w-full ${accent} rounded-t-sm motion-safe:transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60 cursor-default`}
+              style={{
+                height: `${(v / chartMax) * 100}%`,
+                minHeight: v > 0 ? '2px' : '0',
+              }}
+            />
+          </div>
+        )
+      })}
     </div>
+  )
+
+  if (!showAxes) {
+    return (
+      <div>
+        <div style={{ height: `${height}px` }}>{bars}</div>
+        {labels && (
+          <div className="mt-1 flex justify-between text-3xs font-mono text-fg-faint">
+            {labels.map((l, i) => (
+              <span key={i}>{l}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <ChartFrame
+      height={height}
+      yTickLabels={yTicks}
+      xLabels={xLabs}
+      yAxisCaption={yAxisCaption ?? 'Count'}
+      xAxisCaption={xAxisCaption}
+    >
+      {bars}
+    </ChartFrame>
   )
 }
 

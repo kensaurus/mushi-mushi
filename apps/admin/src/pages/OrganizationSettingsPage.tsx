@@ -1,9 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useActiveOrgId } from '../components/OrgSwitcher'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
 import { useToast } from '../lib/toast'
-import { Badge, Btn, Card, EmptyState, ErrorAlert, Input, PageHeader, PageHelp, RelativeTime, SelectField, Tooltip } from '../components/ui'
+import {
+  Badge,
+  Btn,
+  Card,
+  EmptyState,
+  ErrorAlert,
+  Input,
+  PageHeader,
+  PageHelp,
+  RelativeTime,
+  Section,
+  SegmentedControl,
+  SelectField,
+  StatCard,
+  Tooltip,
+} from '../components/ui'
 import { usePageCopy } from '../lib/copy'
 import { IconCheck, IconClock, IconCopy, IconNote, IconResend, IconTrash, IconUndo } from '../components/icons'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -11,6 +29,12 @@ import { ConfirmDialog } from '../components/ConfirmDialog'
 import { UpgradeBanner, UpgradeLockOverlay } from '../components/billing/UpgradeNudge'
 import { useEntitlements } from '../lib/useEntitlements'
 import { useUpdateOrganization } from '../lib/useUpdateOrganization'
+import { MembersStatusBanner } from '../components/members/MembersStatusBanner'
+import {
+  EMPTY_MEMBERS_STATS,
+  type MembersStats,
+  type MembersTabId,
+} from '../components/members/types'
 
 // Undo window for soft-delete operations on this page. Long enough for the
 // "wait, that wasn't who I meant" reaction (Nielsen reports ~5-10 s for
@@ -139,11 +163,48 @@ const JOINED_VIA_META: Record<JoinedVia, { label: string; tooltip: string; tone:
 // the limit, instead of bouncing off a 400 from the API.
 const NOTE_MAX_LEN = 280
 
+const MEMBER_TABS: Array<{ id: MembersTabId; label: string; description: string }> = [
+  {
+    id: 'roster',
+    label: 'Roster',
+    description: 'Every teammate in this org — activity, roles, and seat hygiene.',
+  },
+  {
+    id: 'invites',
+    label: 'Invites',
+    description: 'Send invitations, resend email, or copy accept links for deliverability fallbacks.',
+  },
+  {
+    id: 'setup',
+    label: 'Setup',
+    description: 'Team name, plan tier, and upgrade path for multi-seat collaboration.',
+  },
+]
+
+function isMembersTabId(v: string | null): v is MembersTabId {
+  return MEMBER_TABS.some((t) => t.id === v)
+}
+
 export function OrganizationSettingsPage() {
   const copy = usePageCopy('/organization/members')
   const activeOrgId = useActiveOrgId()
   const toast = useToast()
   const entitlements = useEntitlements()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab: MembersTabId = isMembersTabId(tabParam) ? tabParam : 'roster'
+  const activeMeta = MEMBER_TABS.find((t) => t.id === activeTab) ?? MEMBER_TABS[0]
+
+  const setTab = useCallback(
+    (tab: MembersTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (tab === 'roster') next.delete('tab')
+      else next.set('tab', tab)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<Invitation['role']>('member')
   const [submitting, setSubmitting] = useState(false)
@@ -171,6 +232,13 @@ export function OrganizationSettingsPage() {
   // the previous one-click DELETE which fired without any confirmation —
   // a single misclick could evict a teammate from every project in the org.
   const [pendingRemove, setPendingRemove] = useState<Member | null>(null)
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{
+    userId: string
+    email: string
+    fromRole: OrgRole
+    toRole: OrgRole
+  } | null>(null)
+  const [roleChangeLoading, setRoleChangeLoading] = useState(false)
   // Soft-delete state. The DELETE call is deferred for `UNDO_WINDOW_MS` so
   // the user has a chance to back out from the toast. We optimistically
   // hide the row in the meantime so the page reads as if the action
@@ -187,7 +255,17 @@ export function OrganizationSettingsPage() {
   const [pendingCancelIds, setPendingCancelIds] = useState<Set<string>>(new Set())
   const cancelTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const path = activeOrgId ? `/v1/org/${activeOrgId}/members` : null
-  const { data, loading, error, reload } = usePageData<MembersResponse>(path)
+  const statsPath = activeOrgId ? `/v1/org/${activeOrgId}/members/stats` : null
+  const { data, loading, error, reload, lastFetchedAt, isValidating } = usePageData<MembersResponse>(path)
+  const { data: statsData, reload: reloadStats } = usePageData<MembersStats>(statsPath)
+  const stats = statsData ?? EMPTY_MEMBERS_STATS
+
+  const reloadAll = useCallback(() => {
+    reload()
+    reloadStats()
+  }, [reload, reloadStats])
+
+  useRealtimeReload(['organization_members', 'invitations', 'organizations'], reloadAll)
 
   const canManage = data?.currentUserRole === 'owner' || data?.currentUserRole === 'admin'
   // Renames are owner/admin-only on the backend; mirror it on the client so
@@ -212,7 +290,7 @@ export function OrganizationSettingsPage() {
       // the new value immediately. The header pill (OrgSwitcher) refetches
       // on next mount/navigation; rename is rare enough that we don't need
       // a global cache-busting event for it.
-      reload()
+      reloadAll()
     },
   })
   // Source of truth: server-resolved entitlements (reflects all gating
@@ -222,6 +300,31 @@ export function OrganizationSettingsPage() {
   const teamsEnabled = entitlements.loading
     ? data?.organization?.plan_id === 'pro' || data?.organization?.plan_id === 'enterprise'
     : entitlements.has('teams')
+
+  usePublishPageContext({
+    route: '/organization/members',
+    title: `${activeMeta.label} · Members`,
+    summary: activeMeta.description,
+    filters: { tab: activeTab, org_id: activeOrgId ?? undefined },
+    criticalCount:
+      (teamsEnabled ? 0 : 1) +
+      (stats.atSeatCap ? 1 : 0) +
+      stats.expiringSoonInvites +
+      (stats.inactiveCount >= 3 ? 1 : 0),
+  })
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'roster' as const, label: 'Roster', count: stats.memberCount || undefined },
+      {
+        id: 'invites' as const,
+        label: 'Invites',
+        count: stats.pendingInvites > 0 ? stats.pendingInvites : undefined,
+      },
+      { id: 'setup' as const, label: 'Setup' },
+    ],
+    [stats.memberCount, stats.pendingInvites],
+  )
 
   // "Show only inactive members" filter for paid-seat hygiene work.
   // 30-day threshold is the Vercel/Linear seat-audit default — long
@@ -313,7 +416,7 @@ export function OrganizationSettingsPage() {
     setEmail('')
     setNote('')
     setNoteOpen(false)
-    reload()
+    reloadAll()
   }
 
   async function resendInvite(inviteRow: Invitation) {
@@ -345,7 +448,7 @@ export function OrganizationSettingsPage() {
       return
     }
     toast.success('Invite resent', `${inviteRow.email} will receive a fresh email.`)
-    reload()
+    reloadAll()
   }
 
   async function copyInviteLink(inviteRow: Invitation) {
@@ -378,10 +481,19 @@ export function OrganizationSettingsPage() {
     })
     if (!res.ok) {
       toast.error('Could not update role', res.error?.message)
-      return
+      return false
     }
     toast.success('Role updated')
-    reload()
+    reloadAll()
+    return true
+  }
+
+  async function confirmRoleChange() {
+    if (!roleChangeTarget) return
+    setRoleChangeLoading(true)
+    const ok = await changeRole(roleChangeTarget.userId, roleChangeTarget.toRole)
+    setRoleChangeLoading(false)
+    if (ok) setRoleChangeTarget(null)
   }
 
   // Cancel any in-flight remove timers when the page unmounts so the DELETE
@@ -453,7 +565,7 @@ export function OrganizationSettingsPage() {
         next.delete(id)
         return next
       })
-      reload()
+      reloadAll()
     }, UNDO_WINDOW_MS)
 
     removeTimers.current.set(id, timer)
@@ -518,7 +630,7 @@ export function OrganizationSettingsPage() {
         next.delete(id)
         return next
       })
-      reload()
+      reloadAll()
     }, UNDO_WINDOW_MS)
 
     cancelTimers.current.set(id, timer)
@@ -535,32 +647,104 @@ export function OrganizationSettingsPage() {
     })
   }
 
-  if (!activeOrgId) return <EmptyState title="No team selected" description="Create a project first, then invite teammates from here." />
+  if (!activeOrgId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title={copy?.title ?? 'Team members'}
+          description={copy?.description ?? 'Invite colleagues, assign roles, and manage workspace access.'}
+        />
+        <EmptyState
+          title="No team selected"
+          description="Pick a team from the header org switcher, or create a project first — every project belongs to a team."
+          action={
+            <Link to="/projects" className="inline-block">
+              <Btn size="sm">Open Projects</Btn>
+            </Link>
+          }
+        />
+      </div>
+    )
+  }
   if (loading) return <PanelSkeleton rows={5} label="Loading members" />
-  if (error) return <ErrorAlert message={error} onRetry={reload} />
+  if (error) return <ErrorAlert message={error} onRetry={reloadAll} />
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Members"
-        description="Invite teammates, set their role, and share every project inside this organization."
+        title={copy?.title ?? 'Team members'}
+        description={
+          copy?.description ??
+          'Invite teammates, set their role, and share every project inside this organization.'
+        }
+        projectScope={data?.organization?.name ?? stats.organizationName ?? undefined}
       >
         <Badge className={teamsEnabled ? 'bg-ok-muted text-ok' : 'bg-warn/10 text-warn'}>
-          {data?.organization?.plan_id ?? 'hobby'} plan
+          {stats.planDisplayName ?? data?.organization?.plan_id ?? 'hobby'}
         </Badge>
       </PageHeader>
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About team management'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
-        useCases={copy?.help?.useCases ?? [
-          'Invite a colleague with their email address — they get a sign-up link',
-          'Give a designer read-only access so they can see bugs without changing anything',
-          'Remove a former teammate\'s access in one click',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Click "Invite member" and enter their email. Pick a role: Viewer, Member, Admin, or Owner. They\'ll receive an email with a link.'}
+      <MembersStatusBanner
+        stats={stats}
+        teamsEnabled={teamsEnabled}
+        onInvitesTab={() => setTab('invites')}
       />
 
+      <SegmentedControl
+        value={activeTab}
+        onChange={setTab}
+        options={tabOptions}
+        ariaLabel="Members sections"
+      />
+
+      <Section title="Team snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            label="Members"
+            value={stats.memberCount}
+            accent="text-brand"
+            hint={`${stats.activeLast7d} active in the last 7 days`}
+          />
+          <StatCard
+            label="Pending invites"
+            value={stats.pendingInvites}
+            accent={stats.pendingInvites > 0 ? 'text-warn' : undefined}
+            hint={
+              stats.expiringSoonInvites > 0
+                ? `${stats.expiringSoonInvites} expiring within 24h`
+                : 'Open invites not yet accepted'
+            }
+          />
+          <StatCard
+            label="Inactive seats"
+            value={stats.inactiveCount}
+            accent={stats.inactiveCount > 0 && stats.memberCount >= 3 ? 'text-warn' : undefined}
+            hint="No activity in 30d or never seen"
+          />
+          <StatCard
+            label={stats.seatLimit !== null ? 'Seats used' : 'Plan seats'}
+            value={stats.seatLimit !== null ? `${stats.seatsUsed}/${stats.seatLimit}` : 'Unlimited'}
+            accent={stats.atSeatCap ? 'text-danger' : stats.seatLimit !== null ? 'text-ok' : undefined}
+            hint={
+              stats.seatLimit !== null
+                ? `${stats.seatsRemaining ?? 0} remaining on ${stats.planDisplayName ?? stats.planId ?? 'plan'}`
+                : `${stats.planDisplayName ?? stats.planId ?? 'Pro'} — no seat cap`
+            }
+          />
+        </div>
+      </Section>
+
+      {(activeTab === 'setup' || !teamsEnabled) && (
+        <UpgradeBanner
+          flag="teams"
+          density="comfy"
+          taglineOverride="Teams ship with Pro and Enterprise. Upgrade to invite teammates, assign roles, and share every project."
+        />
+      )}
+
+      {activeTab === 'setup' && (
+        <>
       {/* Team identity — rename the organization. Owner and admin only;
           everyone else sees a read-only chip so the UI doesn't lie about
           who can edit. Slug is shown for context but is intentionally not
@@ -633,16 +817,21 @@ export function OrganizationSettingsPage() {
         )}
       </Card>
 
-      {/* Plan-aware nudge: when the user lacks the `teams` entitlement
-          (Hobby/Free org), surface a single editorial banner with a
-          targeted "Upgrade to Pro" CTA. The banner self-removes once
-          the user upgrades — see UpgradeBanner's internal gating. */}
-      <UpgradeBanner
-        flag="teams"
-        density="comfy"
-        taglineOverride="Teams ship with Pro and Enterprise. Upgrade to invite teammates, assign roles, and share every project."
+      <PageHelp
+        title={copy?.help?.title ?? 'About team management'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.'}
+        useCases={copy?.help?.useCases ?? [
+          'Invite a colleague with their email address — they get a sign-up link',
+          'Give a designer read-only access so they can see bugs without changing anything',
+          'Remove a former teammate\'s access in one click',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Use Invites to send email invitations. Use Roster to audit activity and change roles.'}
       />
+        </>
+      )}
 
+      {activeTab === 'invites' && (
+        <>
       {/* Invite teammate. The form stays mounted (so users see the
           shape they'd interact with after upgrading) but is wrapped in
           UpgradeLockOverlay when teams is locked. The overlay dims the
@@ -754,145 +943,16 @@ export function OrganizationSettingsPage() {
         </UpgradeLockOverlay>
       </Card>
 
-      <Card className="overflow-hidden">
-        {/* Header strip: count summary + "show inactive only" toggle.
-            Mounted *outside* the <table> so the table can stay focused
-            on roster data and the toggle stays accessible to keyboard
-            users in tab order before any row interactions. */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
-          <span>
-            {showInactiveOnly
-              ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
-              : `${totalVisibleMembers} member${totalVisibleMembers === 1 ? '' : 's'}`}
-          </span>
-          {/* Hide the toggle entirely on tiny rosters — for a 1- or 2-
-              person org there's nothing to filter, and the affordance
-              just steals visual weight from the actual table. The
-              breakpoint of 3 mirrors the smallest team where seat-
-              audit becomes a real concern. */}
-          {totalVisibleMembers >= 3 && (
-            <label className="inline-flex cursor-pointer items-center gap-1.5 normal-case tracking-normal">
-              <input
-                type="checkbox"
-                checked={showInactiveOnly}
-                onChange={(e) => setShowInactiveOnly(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-edge-subtle bg-surface-raised text-brand focus:ring-1 focus:ring-brand/40"
-              />
-              <span className="text-2xs text-fg-muted">Show inactive only</span>
-              <Tooltip content="Hides anyone seen in the last 30 days. Pairs with sort-by-activity so coasting paid seats surface fast.">
-                <span className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-edge-subtle text-[9px] font-medium text-fg-faint">
-                  ?
-                </span>
-              </Tooltip>
-            </label>
-          )}
-        </div>
-        <table className="w-full text-sm">
-          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
-            <tr>
-              <th className="px-3 py-2">Member</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="hidden px-3 py-2 sm:table-cell">Active</th>
-              <th className="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-edge-subtle">
-            {sortedMembers.length === 0 && showInactiveOnly && (
-              <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-xs text-fg-muted">
-                  No inactive members in the last 30 days. Healthy roster.
-                </td>
-              </tr>
-            )}
-            {sortedMembers.map((member) => {
-              // Activity & provenance derivations live next to the row
-              // so the JSX stays declarative. `joinedMeta` may be null
-              // for `personal_backfill` (intentionally hidden) — see
-              // JOINED_VIA_META above.
-              const joinedMeta = member.joined_via ? JOINED_VIA_META[member.joined_via] : null
-              const lastActiveMs = member.last_active_at
-                ? Date.now() - new Date(member.last_active_at).getTime()
-                : null
-              const isInactive = lastActiveMs !== null && lastActiveMs > INACTIVE_THRESHOLD_MS
-              const isNeverActive = member.last_active_at === null
-              return (
-                <tr key={member.user_id}>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium text-fg">{member.email ?? member.user_id}</span>
-                      {joinedMeta && (
-                        <Tooltip content={joinedMeta.tooltip}>
-                          <Badge className={`${joinedMeta.tone} text-2xs`}>{joinedMeta.label}</Badge>
-                        </Tooltip>
-                      )}
-                    </div>
-                    <div className="font-mono text-3xs text-fg-faint">{member.user_id}</div>
-                  </td>
-                  <td className="px-3 py-2">
-                    {canManage ? (
-                      <select
-                        value={member.role}
-                        onChange={(e) => void changeRole(member.user_id, e.target.value as OrgRole)}
-                        className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
-                      >
-                        <option value="owner">Owner</option>
-                        <option value="admin">Admin</option>
-                        <option value="member">Member</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                    ) : (
-                      <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
-                    )}
-                  </td>
-                  {/* Activity column. Three states with deliberately
-                      different visual weight:
-                        - Never active   → "Never seen" (warn tone) so
-                          it reads as a thing-to-look-at, not a neutral
-                          fact.
-                        - Inactive >30d  → muted timestamp, signalling
-                          "this is the cohort the toggle filters to".
-                        - Recently active → normal text, RelativeTime
-                          handles "Just now / 3m ago / 2d ago".
-                      Hidden on `<sm` to keep the row scannable on
-                      mobile-width admin sessions; the 30-day cohort is
-                      a power-user task that mostly happens at desktop.
-                  */}
-                  <td className="hidden px-3 py-2 text-xs sm:table-cell">
-                    {isNeverActive ? (
-                      <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
-                        <span className="text-warn">Never seen</span>
-                      </Tooltip>
-                    ) : (
-                      <span className={isInactive ? 'text-fg-faint' : 'text-fg-muted'}>
-                        <RelativeTime value={member.last_active_at!} />
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    <Btn
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setPendingRemove(member)}
-                      disabled={!canManage || member.role === 'owner'}
-                      aria-label={`Remove ${member.email ?? member.user_id}`}
-                      title={
-                        member.role === 'owner'
-                          ? 'Owners cannot be removed from the org'
-                          : `Remove ${member.email ?? member.user_id}`
-                      }
-                      className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
-                    >
-                      <IconTrash />
-                    </Btn>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </Card>
-
-      {visibleInvitations.length > 0 && (
+      {visibleInvitations.length === 0 ? (
+        <EmptyState
+          title="No pending invitations"
+          description={
+            teamsEnabled && canManage
+              ? 'Send an invite above — pending rows appear here with resend and copy-link actions.'
+              : 'Pending invitations show here once teams is enabled and you have admin access.'
+          }
+        />
+      ) : (
         <Card className="p-4">
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <h2 className="text-sm font-semibold text-fg">Pending invitations</h2>
@@ -900,10 +960,6 @@ export function OrganizationSettingsPage() {
           </div>
           <ul className="space-y-2">
             {visibleInvitations.map((invite) => {
-              // Pre-compute expiry signal so a near-expiry invite reads as
-              // "decaying soon" rather than just another row. We treat
-              // anything in the next 24h as a warn tone — past that, the
-              // server already hides expired invites from the response.
               const expiresMs = new Date(invite.expires_at).getTime() - Date.now()
               const expiresSoon = expiresMs > 0 && expiresMs < 24 * 60 * 60 * 1000
               const expired = expiresMs <= 0
@@ -930,16 +986,6 @@ export function OrganizationSettingsPage() {
                           </Tooltip>
                         )}
                       </div>
-                      {/* Metadata strip — when invited, by whom, when it
-                          expires, deliverability signals (last_seen_at,
-                          resend_count). Inviter falls back to "an admin"
-                          if the user_id couldn't be resolved (deleted
-                          account, legacy row pre-migration). The
-                          last_seen_at signal is the highest-leverage
-                          new datum: it lets the operator distinguish
-                          "ignored / spam-filtered" (never opened) from
-                          "opened but did not accept" (engagement issue,
-                          not deliverability). */}
                       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-faint">
                         <span className="inline-flex items-center gap-1">
                           Invited <RelativeTime value={invite.created_at} className="text-fg-muted" />
@@ -954,7 +1000,11 @@ export function OrganizationSettingsPage() {
                           title={`Expires ${new Date(invite.expires_at).toLocaleString()}`}
                         >
                           <IconClock className="size-3" />
-                          {expired ? 'expired' : 'expires'} <RelativeTime value={invite.expires_at} className={expired ? 'text-danger' : expiresSoon ? 'text-warn' : 'text-fg-muted'} />
+                          {expired ? 'expired' : 'expires'}{' '}
+                          <RelativeTime
+                            value={invite.expires_at}
+                            className={expired ? 'text-danger' : expiresSoon ? 'text-warn' : 'text-fg-muted'}
+                          />
                         </span>
                         {invite.last_seen_at ? (
                           <span className="text-fg-faint" title={`Opened ${new Date(invite.last_seen_at).toLocaleString()}`}>
@@ -967,7 +1017,8 @@ export function OrganizationSettingsPage() {
                         )}
                         {resendCount > 0 && invite.last_resent_at && (
                           <span className="text-fg-faint" title={`Last resent ${new Date(invite.last_resent_at).toLocaleString()}`}>
-                            · resent {resendCount}× (last <RelativeTime value={invite.last_resent_at} className="text-fg-muted" />)
+                            · resent {resendCount}× (last{' '}
+                            <RelativeTime value={invite.last_resent_at} className="text-fg-muted" />)
                           </span>
                         )}
                       </div>
@@ -1036,6 +1087,138 @@ export function OrganizationSettingsPage() {
           </ul>
         </Card>
       )}
+        </>
+      )}
+
+      {activeTab === 'roster' && (
+      <Card className="overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-edge-subtle bg-surface-overlay/30 px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint">
+          <span>
+            {showInactiveOnly
+              ? `${sortedMembers.length} of ${totalVisibleMembers} inactive (>30d)`
+              : `${totalVisibleMembers} member${totalVisibleMembers === 1 ? '' : 's'}`}
+          </span>
+          {totalVisibleMembers >= 3 && (
+            <label className="inline-flex cursor-pointer items-center gap-1.5 normal-case tracking-normal">
+              <input
+                type="checkbox"
+                checked={showInactiveOnly}
+                onChange={(e) => setShowInactiveOnly(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-edge-subtle bg-surface-raised text-brand focus:ring-1 focus:ring-brand/40"
+              />
+              <span className="text-2xs text-fg-muted">Show inactive only</span>
+              <Tooltip content="Hides anyone seen in the last 30 days. Pairs with sort-by-activity so coasting paid seats surface fast.">
+                <span className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-edge-subtle text-[9px] font-medium text-fg-faint">
+                  ?
+                </span>
+              </Tooltip>
+            </label>
+          )}
+        </div>
+        <table className="w-full text-sm">
+          <thead className="border-b border-edge-subtle bg-surface-overlay/20 text-left text-2xs uppercase tracking-wider text-fg-faint">
+            <tr>
+              <th className="px-3 py-2">Member</th>
+              <th className="px-3 py-2">Role</th>
+              <th className="hidden px-3 py-2 sm:table-cell">Active</th>
+              <th className="px-3 py-2 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-edge-subtle">
+            {sortedMembers.length === 0 && showInactiveOnly && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-xs text-fg-muted">
+                  No inactive members in the last 30 days. Healthy roster.
+                </td>
+              </tr>
+            )}
+            {sortedMembers.length === 0 && !showInactiveOnly && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-xs text-fg-muted">
+                  No members yet — switch to Invites to add teammates.
+                </td>
+              </tr>
+            )}
+            {sortedMembers.map((member) => {
+              const joinedMeta = member.joined_via ? JOINED_VIA_META[member.joined_via] : null
+              const lastActiveMs = member.last_active_at
+                ? Date.now() - new Date(member.last_active_at).getTime()
+                : null
+              const isInactive = lastActiveMs !== null && lastActiveMs > INACTIVE_THRESHOLD_MS
+              const isNeverActive = member.last_active_at === null
+              return (
+                <tr key={member.user_id}>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium text-fg">{member.email ?? member.user_id}</span>
+                      {joinedMeta && (
+                        <Tooltip content={joinedMeta.tooltip}>
+                          <Badge className={`${joinedMeta.tone} text-2xs`}>{joinedMeta.label}</Badge>
+                        </Tooltip>
+                      )}
+                    </div>
+                    <div className="font-mono text-3xs text-fg-faint">{member.user_id}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    {canManage ? (
+                      <select
+                        value={member.role}
+                        onChange={(e) => {
+                          const next = e.target.value as OrgRole
+                          if (next === member.role) return
+                          setRoleChangeTarget({
+                            userId: member.user_id,
+                            email: member.email ?? member.user_id,
+                            fromRole: member.role,
+                            toRole: next,
+                          })
+                        }}
+                        className="rounded border border-edge-subtle bg-surface-raised px-2 py-1 text-xs text-fg"
+                      >
+                        <option value="owner">Owner</option>
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                    ) : (
+                      <Badge className={ROLE_TONE[member.role]}>{member.role}</Badge>
+                    )}
+                  </td>
+                  <td className="hidden px-3 py-2 text-xs sm:table-cell">
+                    {isNeverActive ? (
+                      <Tooltip content="This member has not made an authenticated request in this organization since activity tracking shipped.">
+                        <span className="text-warn">Never seen</span>
+                      </Tooltip>
+                    ) : (
+                      <span className={isInactive ? 'text-fg-faint' : 'text-fg-muted'}>
+                        <RelativeTime value={member.last_active_at!} />
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <Btn
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPendingRemove(member)}
+                      disabled={!canManage || member.role === 'owner'}
+                      aria-label={`Remove ${member.email ?? member.user_id}`}
+                      title={
+                        member.role === 'owner'
+                          ? 'Owners cannot be removed from the org'
+                          : `Remove ${member.email ?? member.user_id}`
+                      }
+                      className="px-2 text-fg-secondary hover:text-danger hover:bg-danger-muted/15"
+                    >
+                      <IconTrash />
+                    </Btn>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </Card>
+      )}
 
       {pendingRemove && (
         <ConfirmDialog
@@ -1046,6 +1229,21 @@ export function OrganizationSettingsPage() {
           tone="danger"
           onConfirm={() => scheduleRemoveMember(pendingRemove)}
           onCancel={() => setPendingRemove(null)}
+        />
+      )}
+
+      {roleChangeTarget && (
+        <ConfirmDialog
+          title={`Change role for ${roleChangeTarget.email}?`}
+          body={`${roleChangeTarget.fromRole} → ${roleChangeTarget.toRole}. Owners can manage billing and delete the org; admins can invite and configure integrations.`}
+          confirmLabel="Change role"
+          cancelLabel="Cancel"
+          tone="danger"
+          loading={roleChangeLoading}
+          onConfirm={() => void confirmRoleChange()}
+          onCancel={() => {
+            if (!roleChangeLoading) setRoleChangeTarget(null)
+          }}
         />
       )}
     </div>

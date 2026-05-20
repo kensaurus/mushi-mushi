@@ -145,46 +145,65 @@ export const COPY: CopyRegistry = {
     },
     '/onboarding': {
       title: 'Setup',
-      description: 'Three short steps: create a project, install the widget, send a test bug.',
+      description: 'Four guided tabs — create a project, verify the pipeline, install the SDK, and track live checklist progress.',
       help: {
         title: 'About setup',
-        whatIsIt: 'Get Mushi connected to your app in about 10 minutes — copy a snippet, paste your URL, send a test bug.',
+        whatIsIt: 'DB-backed onboarding wizard — every step reads live project state so progress survives across devices.',
         useCases: [
-          'First-time setup of a new project',
-          'Add a second project (e.g. staging)',
-          'Re-install the widget on a new app',
+          'First-time wiring for a new app or environment',
+          'Re-mint keys and re-verify ingest after a backend migration',
+          'Bookmark the SDK tab when onboarding teammates',
         ],
-        howToUse: 'Follow the steps in order. The checklist tracks your progress automatically.',
+        howToUse: 'Overview shows posture. Steps runs the checklist. Verify mints keys + sends a test report. SDK holds the install snippet.',
       },
     },
   },
   beginner: {
     '/inbox': {
       title: 'Your to-do list',
-      description: 'Start here every session. Open the top Awaiting card and work through the list — green checks mean nothing to do there.',
+      description: 'Start here every session — banner and INBOX SNAPSHOT show open vs clear before you pick Overview, Actions, Stages, or Activity.',
       help: {
         title: 'About the inbox',
-        whatIsIt: 'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up — so you never have to remember what to do next.',
+        whatIsIt:
+          'A tabbed action queue across Plan, Do, Check, Act, and Ops — every card links to the page where you resolve it.',
         useCases: [
-          'Start every morning here — see what actually needs your attention today',
-          'Jump to the highest-priority open item in one click',
-          'Confirm at a glance which stages of the loop are clear vs. blocked',
+          'Read the status banner first — red means open work, green means inbox zero',
+          'Use Actions tab as your daily worklist (top to bottom)',
+          'Use Stages tab to filter by PDCA phase and confirm cleared surfaces',
+          'Activity tab shows the reports and fixes that triggered open cards',
         ],
-        howToUse: 'Click any open action card to jump straight to that page. Stages with a green check are all clear — no action needed. Use the filter chips to narrow down by PDCA stage.',
+        howToUse:
+          'Overview for posture + top priority. Actions for the queue. Stages for filters. Every primary CTA is live — no dead buttons.',
+      },
+    },
+    '/feedback': {
+      title: 'My feedback',
+      description: 'Bugs and features you send to the Mushi team — banner and FEEDBACK SNAPSHOT before Overview, Active, Shipped, or All tabs.',
+      help: {
+        title: 'About My feedback',
+        whatIsIt:
+          'Your personal ticket inbox for console bugs and product ideas — separate from end-user Reports ingested via SDK.',
+        useCases: [
+          'Brand banner = team replied — open the ticket to read the thread',
+          'Active tab shows open / in-progress tickets with status chips',
+          'Shipped tab shows release version when your idea credits in a changelog',
+        ],
+        howToUse:
+          'Report a bug for console issues; Request feature for product ideas. Billing questions go to Billing — not here.',
       },
     },
     '/projects': {
       title: 'Your projects',
-      description: 'Create and manage projects — one per app or environment. Each project gets its own bug inbox, API key, and settings.',
+      description: 'Create and manage projects — one per app or environment. Each project gets its own bug inbox, API keys, SDK heartbeat, and console scope.',
       help: {
         title: 'About projects',
-        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports — belongs to a project.',
+        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports, integrations — belongs to a project.',
         useCases: [
           'Create a project for your main app (takes 30 seconds)',
           'Add a separate project for staging so test bugs don\'t mix with real ones',
-          'Generate an API key here to paste into your app code',
+          'Generate an API key here, send a test report, and confirm SDK heartbeat before production',
         ],
-        howToUse: 'Click "New project" to create one. Click any existing project card to see its API keys, settings, and health.',
+        howToUse: 'Use Your projects to switch context, mint keys, and read per-project health. Use New project to create one — the banner and KPI strip tell you which projects ingest and which keys have connected.',
       },
     },
     '/queue': {
@@ -203,44 +222,46 @@ export const COPY: CopyRegistry = {
     },
     '/inventory': {
       title: 'App inventory',
-      description: 'A map of every screen and user flow in your app, with bug counts attached. Know where the pain lives.',
+      description: 'Banner + INVENTORY SNAPSHOT — Overview for posture, then User stories, Gates, Discovery, or Yaml tabs.',
       help: {
         title: 'About app inventory',
-        whatIsIt: 'An automatically built map of your app\'s pages and features, with live bug counts so you can see which parts are healthiest.',
+        whatIsIt:
+          "Your app's user-story map — pages, actions, and verification status derived from gates, crawler, and synthetic probes.",
         useCases: [
-          'Find which screen has the most unfixed bugs right now',
-          'Check that a new feature was picked up and is being monitored',
-          'See coverage gaps — flows Mushi hasn\'t seen a report from yet',
+          'Brand banner = no inventory yet — start on Discovery or paste YAML',
+          'Red banner = regressed actions — fix on User stories tab',
+          'Amber banner = open gate findings — review on Gates tab',
         ],
-        howToUse: 'Browse by screen or user flow. Click any item to see all bug reports linked to it.',
+        howToUse:
+          'Overview for posture. User stories for the card map. Gates for findings. Discovery for SDK observe → propose → accept.',
       },
     },
     '/query': {
       title: 'Ask your data',
-      description: 'Type a question in plain English and get a live answer from your project\'s bug data. No SQL needed.',
+      description: 'Natural-language or raw SQL analytics against approved tables — read-only, sandboxed, and logged.',
       help: {
-        title: 'About data queries',
-        whatIsIt: 'Ask questions like "How many critical bugs landed this week?" and get instant answers straight from your project\'s database.',
+        title: 'About Ask Your Data',
+        whatIsIt: 'The LLM writes read-only SQL from plain English, or you paste SELECT statements yourself. Every run is persisted for rerun and audit.',
         useCases: [
-          'Answer a manager\'s question without exporting a spreadsheet',
-          'Check trends ("Are bugs up or down this sprint?")',
-          'Find specific reports without clicking through filters',
+          'Answer ad-hoc triage questions without leaving the console',
+          'Write precise SQL against approved tables (Raw SQL mode)',
+          'Reuse questions pinned by you or teammates',
         ],
-        howToUse: 'Type your question in plain English and press Enter. Results appear as a table. Click "Export" to download as CSV.',
+        howToUse: 'Overview shows run health. Ask tab runs NL or raw SQL. History tab lists saved/recent/team prompts. Schema tab lists approved tables and $1 project_id binding.',
       },
     },
     '/research': {
-      title: 'AI research',
-      description: 'Ask the AI a question about your bugs, patterns, or codebase and get a researched answer with sources.',
+      title: 'Web research',
+      description: 'Firecrawl web search during triage — find docs and threads, then attach snippets to reports as evidence.',
       help: {
-        title: 'About AI research',
-        whatIsIt: 'An AI that reads your bug history, code, and fixes to answer specific questions — like having a senior engineer who\'s read everything.',
+        title: 'About web research',
+        whatIsIt: 'BYOK Firecrawl-powered search you run while triaging a report. Look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.',
         useCases: [
-          '"Why does the login screen keep breaking?" — get a pattern analysis',
-          '"What changed before the spike in crashes last Tuesday?"',
-          'Get a plain-language summary of a complex bug cluster',
+          'Cross-reference an error signature against current upstream docs',
+          'Find a Stack Overflow thread to attach as triage evidence',
+          'Check if a third-party library shipped a fix in the last 24 hours',
         ],
-        howToUse: 'Type your question and hit Enter. The AI cites which reports and fixes it used to answer.',
+        howToUse: 'Press Enter to search. Paste a report UUID on any snippet and click Attach evidence. Sessions persist per project — reopen them from History. Configure Firecrawl under Settings.',
       },
     },
     '/repo': {
@@ -259,30 +280,30 @@ export const COPY: CopyRegistry = {
     },
     '/sso': {
       title: 'Single sign-on',
-      description: 'Let your whole team log in with Google, GitHub, or your company\'s identity provider — no separate passwords.',
+      description: 'Register SAML IdPs for team login — ACS URL, domain routing, and GoTrue registration status.',
       help: {
         title: 'About single sign-on',
-        whatIsIt: 'Set up SSO so your team logs into Mushi with the same credentials they use for everything else — no new passwords to manage.',
+        whatIsIt: 'Enterprise SSO via Supabase Auth. SAML 2.0 self-registers through GoTrue; OIDC configs are audit-only until Supabase support provisions the tenant.',
         useCases: [
-          'Enable Google or GitHub login for your whole organization',
-          'Connect your company\'s Okta or Azure AD if you\'re enterprise',
-          'Enforce SSO-only access so passwords can\'t be a weak point',
+          'Let Okta or Azure AD authenticate admins instead of email/password',
+          'Map email domains so the right IdP handles each login',
+          'Audit registration failures before enforcing SSO-only access',
         ],
-        howToUse: 'Pick an identity provider and follow the setup steps. Test the connection before enforcing it so you don\'t lock yourself out.',
+        howToUse: 'Setup tab adds a provider. Overview shows the ACS URL to paste into your IdP. Providers tab lists status and errors. Test with a non-admin user before locking password login.',
       },
     },
     '/audit': {
-      title: 'Activity history',
-      description: 'A full log of every action taken in your account — who did what, and when. Useful for security reviews and debugging.',
+      title: 'Audit log',
+      description: 'Append-only mutation trail — human, agent, and system actors with CSV export for compliance reviews.',
       help: {
         title: 'About the audit log',
-        whatIsIt: 'A tamper-proof record of every significant action in your account — logins, key rotations, settings changes, and fix dispatches.',
+        whatIsIt: 'Tamper-proof record of every consequential action: report triage, key rotation, settings saves, fix dispatch, and compliance events.',
         useCases: [
-          'Find out who changed a setting or rotated an API key',
-          'Investigate a suspicious login or unexpected change',
-          'Export the log for a security or compliance review',
+          'Answer "who changed this setting" or "when was this key revoked"',
+          'Filter failures (fix.failed) before a SOC 2 review',
+          'Export the current filter view as CSV evidence',
         ],
-        howToUse: 'Use the date range and filter to narrow down events. Click any row for the full detail. Export button downloads the filtered view as CSV.',
+        howToUse: 'Overview shows posture + hero. Log tab stacks filters and expands metadata JSON. Breakdown tab surfaces 24h actor mix and top 7-day actions.',
       },
     },
     '/prompt-lab': {
@@ -314,59 +335,59 @@ export const COPY: CopyRegistry = {
       },
     },
     '/compliance': {
-      title: 'Data & privacy',
-      description: 'Control what data Mushi stores, how long it\'s kept, and who can access it. Required reading before going live in regulated industries.',
+      title: 'Compliance',
+      description: 'SOC 2 evidence vault, retention windows, DSAR queue, and data residency — scoped to the active project.',
       help: {
-        title: 'About compliance settings',
-        whatIsIt: 'Settings that control how Mushi handles your users\' data — storage duration, PII masking, data residency, and access controls.',
+        title: 'About compliance',
+        whatIsIt: 'SOC 2 Type 1 readiness — nightly control evidence, per-project retention, legal hold, GDPR/CCPA DSAR audit trail, and regional pinning.',
         useCases: [
-          'Set data retention rules to comply with GDPR or CCPA',
-          'Enable PII masking so user data is never stored in bug reports',
-          'Download a data export if a user requests their data',
+          'Show auditors the latest pass/warn/fail snapshot per control',
+          'Place a project on legal hold before litigation or discovery',
+          'File and fulfil data-subject requests within the 30-day SLA',
         ],
-        howToUse: 'Work through each section top to bottom. Changes take effect immediately. Check the "Verify" button on each section to confirm your settings are applied.',
+        howToUse: 'Start on Overview for posture + severity filters. Evidence tab expands payload JSON. Retention tab tunes day windows. DSARs tab files requests. Residency pins US/EU/JP before data lands.',
       },
     },
     '/storage': {
-      title: 'Screenshots & files',
-      description: 'All the screenshots, screen recordings, and attachments Mushi captured from bug reports — browse, download, or delete.',
+      title: 'BYO storage',
+      description: 'Per-project bucket configuration for screenshots and attachments — Supabase default or your own S3, R2, GCS, or MinIO.',
       help: {
-        title: 'About storage',
-        whatIsIt: 'All the screenshots and files attached to bug reports, stored securely and linked back to the report they came from.',
+        title: 'About BYO storage',
+        whatIsIt: 'Each project can pin uploads to your own object store. Defaults to the cluster Supabase bucket until you save an override.',
         useCases: [
-          'Download a screenshot to include in a Jira ticket or Slack message',
-          'Clear old screenshots to free up storage space',
-          'Check storage usage if you\'re approaching a plan limit',
+          'Route screenshots to AWS for invoice consolidation',
+          'Use Cloudflare R2 to cut egress on heavy report volumes',
+          'Self-host with MinIO inside an air-gapped network',
         ],
-        howToUse: 'Browse by date or project. Click any thumbnail to preview. Click the report link to jump to the bug it belongs to.',
+        howToUse: 'Overview shows bucket health. Configure saves provider + Vault refs. Usage lists screenshot counts. Health check runs a write probe with step-by-step debug output.',
       },
     },
     '/marketplace': {
-      title: 'Plugin library',
-      description: 'Browse and install plugins that connect Mushi to tools like Sentry, Linear, Discord, and more.',
+      title: 'Plugin marketplace',
+      description: 'Install HMAC-signed webhook plugins that react when reports classify, fixes land, or SLAs breach.',
       help: {
-        title: 'About the plugin library',
-        whatIsIt: 'A library of one-click plugins that connect Mushi to your existing tools — install one and bugs automatically flow where your team already works.',
+        title: 'About the marketplace',
+        whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
         useCases: [
-          'Install the Sentry plugin to sync bugs between both tools',
-          'Install Linear or Jira to auto-create tickets from critical reports',
-          'Install Slack to get instant notifications when a critical bug lands',
+          'Page on-call via PagerDuty when a critical bug is reported',
+          'Mirror classified reports to Linear or Jira automatically',
+          'Fan out events to Zapier or Make for no-code workflows',
         ],
-        howToUse: 'Click any plugin to see what it does and how to configure it. Most plugins need a single API key to activate.',
+        howToUse: 'Browse the catalog, deploy a receiver, click Install, paste your HTTPS URL, and copy the signing secret when shown.',
       },
     },
     '/mcp': {
-      title: 'AI agent connection',
-      description: 'Connect Cursor, Claude, or any AI coding assistant to your live bug queue. The agent reads reports and dispatches fixes.',
+      title: 'MCP — agent connection',
+      description: 'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue with scoped API keys.',
       help: {
         title: 'About MCP (AI agent connection)',
-        whatIsIt: 'A one-time setup that lets your AI coding assistant read your bug reports and open fix PRs without copy-pasting anything.',
+        whatIsIt: 'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
         useCases: [
           'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
-          'Have the AI agent draft a fix for a specific report in one command',
+          'Have the agent draft a fix for a specific report in one command',
           'Query your bug data in plain English from inside your editor',
         ],
-        howToUse: 'Click "Generate a key" then copy the config snippet into your AI tool\'s MCP settings. Restart your IDE. Done.',
+        howToUse: 'Generate an mcp:read key on /projects, copy the snippet on this page, restart your IDE, then ask "list mushi tools".',
       },
     },
     '/qa-coverage': {
@@ -398,17 +419,17 @@ export const COPY: CopyRegistry = {
       },
     },
     '/rewards': {
-      title: 'User rewards',
-      description: 'Incentivise your users to submit more bug reports by rewarding them with points for every report they file.',
+      title: 'Rewards program',
+      description: 'Points, tiers, and payouts for SDK activity — debug rejections, simulate rules, and wire host webhooks.',
       help: {
         title: 'About rewards',
-        whatIsIt: 'A points system that rewards your users for submitting bug reports — more reports, better software, happier users.',
+        whatIsIt: 'Org-scoped loyalty loop: SDK activity → points → tiers → perks (Pro access, payouts, host webhooks).',
         useCases: [
-          'Enable rewards to motivate your power users to report more bugs',
-          'Set how many points each report category earns',
-          'See a leaderboard of your most helpful reporters',
+          'Reward beta testers with tier perks when they file quality bug reports',
+          'Use the 24h activity feed on Overview to debug rejected SDK events',
+          'Simulate a user journey on Sandbox before changing rule caps in production',
         ],
-        howToUse: 'Toggle rewards on, set point values, then add the rewards badge to your app using the SDK snippet provided.',
+        howToUse: 'Enable rewards on the project, configure Activity rules + Tier ladder, then call SDK identify() and activity(). Settings tab holds webhooks and identity providers.',
       },
     },
     '/lessons': {
@@ -426,31 +447,31 @@ export const COPY: CopyRegistry = {
       },
     },
     '/releases': {
-      title: 'Release tracking',
-      description: 'See how bug rates change with each release. Spot regressions before they spread.',
+      title: 'Releases',
+      description: 'Draft changelogs with AI, credit reporters, and close the feedback loop when you publish.',
       help: {
-        title: 'About release tracking',
-        whatIsIt: 'A timeline that links your app releases to bug report volumes — so you can instantly see if a deploy made things better or worse.',
+        title: 'About Releases',
+        whatIsIt: 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.',
         useCases: [
-          'Check if yesterday\'s deploy caused a spike in errors',
-          'Compare two releases side-by-side to measure improvement',
-          'Get a bug-rate graph to share in a release retrospective',
+          'Auto-generate changelogs linked to the users who reported each fix',
+          'Notify credited reporters in the feedback stamp when you publish',
+          'Close the feedback loop: users see what their reports fixed',
         ],
-        howToUse: 'Releases appear automatically when you tag them in your SDK config. Click any release bar to see every report that came in during that window.',
+        howToUse: 'Select a date window and click Generate draft — AI writes the changelog. Review credited contributors, edit if needed, then publish to queue in-app toasts for each reporter.',
       },
     },
     '/iterate': {
-      title: 'Sprint planning',
-      description: 'Turn bug reports into sprint tasks with priority scores, estimated effort, and direct links to auto-fix.',
+      title: 'PDCA iteration',
+      description: 'Autonomous producer/critic loops on a target URL — queue runs, watch scores climb, export critiques.',
       help: {
-        title: 'About iteration planning',
-        whatIsIt: 'A board that groups bugs by sprint priority so you can plan your next iteration without switching between Mushi and your project tracker.',
+        title: 'About PDCA iteration',
+        whatIsIt: 'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona. The loop repeats until the target score or max iterations.',
         useCases: [
-          'Plan next sprint\'s bug-fix work with priority scores already calculated',
-          'Estimate effort based on how many users felt each bug',
-          'One-click dispatch the highest-priority bugs to the auto-fix agent',
+          'Improve a dashboard page\'s visual hierarchy automatically',
+          'Run a WCAG accessibility critique cycle on a live URL',
+          'Use a conversion persona to suggest CTA and copy improvements',
         ],
-        howToUse: 'Drag bugs into your next sprint. Click "Dispatch all" to send the selected bugs to auto-fix at once.',
+        howToUse: 'Queue a run with target URL + persona. Click Trigger on queued runs. Open a run to inspect the score timeline and copy critiques to a PR.',
       },
     },
     '/drift': {
@@ -496,73 +517,73 @@ export const COPY: CopyRegistry = {
       },
     },
     '/cost': {
-      title: 'AI spending',
-      description: 'See exactly how much each AI step costs — classification, fix drafts, judge runs — broken down by day and provider.',
+      title: 'LLM Cost',
+      description: 'Audit every AI call — spend by operation, model, and day with a searchable invocation log.',
       help: {
         title: 'About AI cost tracking',
-        whatIsIt: 'A breakdown of every penny spent on AI calls — so you know exactly what Mushi costs and which steps are the most expensive.',
+        whatIsIt: 'Every edge function writes to llm_invocations with token counts and cost_usd. This page rolls spend up by operation, model, and day — legacy llm_cost_usd rows are merged into totals.',
         useCases: [
-          'Check your daily AI spend before approving a budget',
-          'Find which LLM step costs the most and tune it',
-          'Set a budget cap so you\'re never surprised by a big bill',
+          'See which classify/fix/judge step costs the most before tuning prompts',
+          'Spot a runaway cron from the 24h spend banner or daily chart',
+          'Confirm BYOK vs platform key usage before your billing cycle',
         ],
-        howToUse: 'The chart breaks cost by step and day. Click any bar to see individual call breakdowns. Set a monthly cap in Settings → Budget.',
+        howToUse: 'Overview shows health + trend. Breakdown groups by operation/model. Raw log searches individual calls. Add Anthropic BYOK in Settings → LLM keys to bill your own key.',
       },
     },
     '/notifications': {
-      title: 'Alert settings',
-      description: 'Choose when Mushi pings you — new critical bug, fix merged, judge score drops — and where to send the alert.',
+      title: 'Reporter notifications',
+      description: 'Outbound messages the SDK widget polls — classify, fix, and reward updates for bug reporters.',
       help: {
-        title: 'About notification settings',
-        whatIsIt: 'Controls for when Mushi alerts you and where — Slack, email, or webhook. Set it once and only hear about what actually matters.',
+        title: 'About reporter notifications',
+        whatIsIt: 'Messages queued for end users who submitted bugs. The SDK polls this inbox so reporters see when their report was classified, fixed, or rewarded.',
         useCases: [
-          'Get a Slack ping the moment a critical bug lands',
-          'Turn off low-severity notifications so you\'re not spammed',
-          'Set up a webhook to pipe alerts into your on-call system',
+          'Verify the reporter widget is receiving classify/fix updates',
+          'Audit which reporter tokens were notified for a given report',
+          'Debug stale unread rows when client polling stops',
         ],
-        howToUse: 'Toggle each notification type on or off. Click "Configure destination" to add a Slack channel, email, or webhook URL.',
+        howToUse: 'Filter by type or unread, expand payloads to inspect JSON, mark read when verified. Requires reporter_notifications_enabled in Settings.',
       },
     },
     '/billing': {
       title: 'Plan & billing',
-      description: 'See your current plan, usage, and invoices. Upgrade when you\'re ready to unlock more reports, projects, or auto-fixes.',
+      description: 'Current plan, quota usage, Stripe invoices, and upgrade paths — scoped to the active project.',
       help: {
         title: 'About billing',
-        whatIsIt: 'Your subscription, usage limits, and invoice history — all in one place. Upgrade or downgrade without contacting anyone.',
+        whatIsIt: 'Per-project subscription and usage meters. Hobby includes a monthly report quota; paid plans unlock higher limits, BYOK, and Stripe-managed billing.',
         useCases: [
-          'Check how many reports you\'ve used this month vs your plan limit',
-          'Upgrade to unlock more projects or auto-fix runs',
-          'Download an invoice for expenses or accounting',
+          'See reports used vs quota before ingest starts returning HTTP 402',
+          'Upgrade via Stripe Checkout or manage card/invoices in the Billing Portal',
+          'Cross-check Mushi usage (reports, fixes, LLM COGS) against Stripe line items',
         ],
-        howToUse: 'Current usage is at the top. Click "Upgrade" to change plans. Click "Invoices" to download past bills.',
+        howToUse: 'Overview shows your project card with usage bar and invoices. Plans compares tiers. Support opens a ticket. Status banner explains quota and payment health at a glance.',
       },
     },
     '/organization/members': {
       title: 'Team members',
-      description: 'Invite your colleagues, assign roles, and manage who has access to your Mushi workspace.',
+      description: 'Invite colleagues, assign roles, and audit seat activity — scoped to the team in the header org switcher.',
       help: {
         title: 'About team management',
         whatIsIt: 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.',
         useCases: [
           'Invite a colleague with their email address (they get a link)',
           'Give a designer read-only access so they can see bugs without changing anything',
-          'Remove a former teammate\'s access in one click',
+          'Filter inactive seats before renewing a capped plan',
         ],
-        howToUse: 'Click "Invite" and enter their email. Pick a role: Viewer (read-only), Member, Admin, or Owner. They\'ll get an email with a link.',
+        howToUse: 'Roster shows activity and roles. Invites sends email and surfaces pending accept links. Setup renames the team and shows plan limits.',
       },
     },
     '/explore': {
       title: 'Codebase map',
-      description: 'A visual map of your codebase — see every file, how they connect, and search your code with plain English.',
+      description: 'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas, Index for debug.',
       help: {
         title: 'About the codebase explorer',
-        whatIsIt: 'A visual map of your code that shows every file, how files connect to each other, and lets you search with plain English.',
+        whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search with plain English.',
         useCases: [
-          'See which part of the codebase a bug report\'s file lives in',
-          'Search "where is the login logic?" and jump to the right file',
-          'Explore a new codebase visually without reading hundreds of files',
+          'Red banner = index error; brand = indexing off or in progress',
+          'Graph tab: canvas coloured by UI / Backend / Test layer',
+          'Search tab: semantic lookup once embeddings are populated',
         ],
-        howToUse: 'Graph view shows the full map — click any node to open the detail panel. Search tab lets you type a question. Layers view groups files by type.',
+        howToUse: 'Overview for posture. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.',
       },
     },
     '/users': {
@@ -581,23 +602,24 @@ export const COPY: CopyRegistry = {
     },
     '/dashboard': {
       title: 'Your bug-fix loop',
-      description: 'Watch a real user complaint travel from your app to a merged PR.',
+      description: 'Live workspace snapshot — banner and KPI strip tell you what needs action before you drill into loop, metrics, or health.',
       help: {
         title: 'How to read this dashboard',
         whatIsIt:
-          'A live picture of bugs your users hit, fixes Mushi drafted, judge scores, and where fixes shipped — all on one screen.',
+          'A live picture of bugs your users hit, fixes Mushi drafted, judge scores, and where fixes shipped — organized into Overview, Loop, Metrics, and Health tabs.',
         useCases: [
-          'See whether new bug reports are rising or falling this week',
-          'Spot a backlog before users start complaining',
-          'Open the highest-priority report that needs a human review',
+          'Glance at the status banner to see backlog, failures, or integration issues',
+          'Use Loop tab for the interactive PDCA canvas with live counts',
+          'Use Metrics for 14-day charts and the triage queue',
+          'Use Health for platform probes and QA coverage on the active project',
         ],
         howToUse:
-          'Click any tile to drill into that stage. Hover charts to see per-day numbers.',
+          'Start on Overview. Click any KPI tile or tab badge to jump to the stage that needs attention. Green banner = loop healthy.',
       },
     },
     '/reports': {
       title: 'Bugs your users felt',
-      description: 'Real complaints, grouped and scored. Click one to see the screenshot + console + steps to reproduce.',
+      description: 'Banner + TRIAGE SNAPSHOT first — then Overview for posture, Queue to triage, Severity for 14d trends.',
       sections: {
         triage_queue: 'Waiting for review',
       },
@@ -606,28 +628,28 @@ export const COPY: CopyRegistry = {
         whatIsIt:
           'A list of bugs your end-users flagged, automatically grouped, scored, and ranked by how many people are affected.',
         useCases: [
-          'Find the most-felt bug today (sorted by user count)',
-          'Send the top one to the auto-fix agent — it drafts a PR for you to review',
-          'Mute noisy reports or tag false positives so the model learns',
+          'Read the status banner — red = critical untriaged, green = queue current',
+          'Queue tab: j/k navigate, bulk dismiss, dispatch fixes',
+          'Severity tab: 14d sparklines — click a tile to filter the queue',
         ],
         howToUse:
-          'Click any row for the full report. Click **Send to auto-fix** to draft a pull request. Use the date chips (Today / 7d / 30d) to narrow the list, then open /fixes to review drafts.',
+          'Overview for posture + top priority. Queue for the sortable table. Severity for trends. Refresh reloads stats + list.',
       },
     },
     '/graph': {
       title: 'How bugs connect',
-      description: 'A live map of which components, pages, and releases your bugs cluster around. Click any node to see what it can break.',
+      description: 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map, Backend for AGE sync debug.',
       help: {
         title: 'About the bug map',
         whatIsIt:
-          'Every bug points at a component, page, or release. This map joins those dots so you can see where the breakage clusters.',
+          'Every bug points at a component, page, or release. This map joins those dots so you can see where breakage clusters.',
         useCases: [
-          'Find your most fragile component (the one with the most incoming bugs)',
-          'Spot regressions — bugs that came back after a fix',
-          'See the blast radius of a single bug before you ship a fix',
+          'Red banner = fragile components (≥3 incoming affects edges)',
+          'Explore tab: canvas, table, or inventory surface — click nodes for blast radius',
+          'Backend tab: Apache AGE sync status and ontology groups',
         ],
         howToUse:
-          'Click a node to highlight everything it can affect. Drag the canvas to pan. Switch to the table view if you prefer rows.',
+          'Overview for posture. Explore for quick views (Fragile, Regressions, Fixes). Backend when debugging sync drift.',
       },
     },
     '/fixes': {
@@ -681,7 +703,7 @@ export const COPY: CopyRegistry = {
     },
     '/integrations': {
       title: 'Where fixed bugs go',
-      description: 'Connect Sentry, Slack, GitHub, and others so Mushi can route fixes back into the tools your team already uses.',
+      description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi closes the loop in tools your team already uses.',
       sections: {
         platforms: 'Connected services',
         routing: 'Where bugs should land',
@@ -689,30 +711,51 @@ export const COPY: CopyRegistry = {
       help: {
         title: 'About integrations',
         whatIsIt:
-          'Mushi catches bugs and drafts fixes — but you still want them in Sentry, Slack, and your repo. This page wires those routes.',
+          'Mushi catches bugs and drafts fixes — but you still want them in Sentry, your repo, and your tracker. Wire platform credentials here, then add routing destinations.',
         useCases: [
-          'Send merged fixes back to Sentry so they auto-resolve there',
-          'Ping Slack when a critical bug lands',
-          'Open draft PRs on the right GitHub repo for each project',
+          'Give the LLM Sentry context when classifying user reports',
+          'Let auto-fix open draft PRs on your GitHub repo',
+          'Forward critical triage to Jira, Linear, or PagerDuty',
         ],
         howToUse:
-          'Click "Configure" on each platform card to paste keys. Click "Test" to verify the connection. The status pill turns green when it\u2019s healthy.',
+          'Use the Platform tab to paste keys and Test each card. Routing tab connects ticketing tools. Repo & index covers RAG indexing for auto-fix.',
+      },
+    },
+    '/integrations/config': {
+      title: 'Integrations',
+      description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi closes the loop in tools your team already uses.',
+      sections: {
+        platforms: 'Platform wiring',
+        routing: 'Routing destinations',
+        repo: 'Repo & codebase index',
+      },
+      help: {
+        title: 'About integrations',
+        whatIsIt:
+          'Mushi uses your existing observability + code tools. Platform cards feed the LLM pipeline; routing forwards triaged reports; Repo & index grounds auto-fix in your codebase.',
+        useCases: [
+          'Give the LLM Sentry context when classifying user reports',
+          'Let auto-fix open draft PRs on your GitHub repo',
+          'Forward critical triage to Jira, Linear, or PagerDuty',
+        ],
+        howToUse:
+          'Platform tab: Edit credentials → Test. Routing tab: connect ticketing tools. Repo & index: enable codebase indexing before dispatching fixes.',
       },
     },
     '/settings': {
-      title: 'Your settings',
-      description: 'Project keys, your own LLM API keys, and developer tools.',
+      title: 'Project settings',
+      description: 'Per-project pipeline knobs — LLM keys, SDK widget, Slack/Sentry hooks, and dev flags for the active project.',
       help: {
         title: 'About settings',
         whatIsIt:
-          'Project-level configuration: rotate API keys, plug in your own LLM provider keys, and tune developer-only knobs.',
+          'Project-level configuration scoped to the header project: BYOK LLM keys, classifier model, dedup threshold, SDK widget, and developer toggles.',
         useCases: [
           'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
-          'Test that your keys work before going live',
-          'Rotate the project API key if it leaks',
+          'Run Health → Send test report before wiring production SDK traffic',
+          'Tune Stage-2 model and dedup threshold after you see false positives in triage',
         ],
         howToUse:
-          'Use the tabs to navigate. The "Bring your own keys" tab is where you paste LLM provider keys.',
+          'General saves Slack/Sentry + classifier fields. LLM keys tab tests BYOK. Health runs a pipeline smoke test. Changes write to project_settings immediately on Save.',
       },
     },
     '/onboarding': {
@@ -739,7 +782,11 @@ export const COPY: CopyRegistry = {
   advanced: {
     '/inbox': {
       title: 'Inbox',
-      description: 'Cross-stage action queue. Triage the open list top-to-bottom; cleared stages stay one click away.',
+      description: 'Cross-stage action queue — INBOX SNAPSHOT KPIs, then Overview | Actions | Stages | Activity tabs.',
+    },
+    '/feedback': {
+      title: 'My feedback',
+      description: 'Support ticket inbox — FEEDBACK SNAPSHOT KPIs, then Overview | Active | Shipped | All tabs.',
     },
     '/projects': {
       title: 'Projects',
@@ -751,15 +798,15 @@ export const COPY: CopyRegistry = {
     },
     '/inventory': {
       title: 'Inventory',
-      description: 'Crawled user-story map, gate runs, wired/mocked coverage, findings backlog.',
+      description: 'Banner + INVENTORY SNAPSHOT — Overview | User stories | Tree | Gates | Discovery | Yaml tabs.',
     },
     '/query': {
-      title: 'NL query',
-      description: 'Natural-language → SQL against project telemetry. Exportable result sets.',
+      title: 'Ask Your Data',
+      description: 'NL + raw SQL analytics — saved history, team pins, 24h error/latency stats.',
     },
     '/research': {
       title: 'Research',
-      description: 'LLM synthesis over reports, fixes, and indexed codebase context.',
+      description: 'Firecrawl web search + snippet attach during triage (BYOK).',
     },
     '/repo': {
       title: 'Repo',
@@ -767,11 +814,11 @@ export const COPY: CopyRegistry = {
     },
     '/sso': {
       title: 'SSO',
-      description: 'SAML/OIDC + social IdP enforcement for the organization.',
+      description: 'SAML GoTrue registration, domain routing, and provider health per project.',
     },
     '/audit': {
       title: 'Audit log',
-      description: 'Append-only mutation trail — human + agent actors, CSV export.',
+      description: 'Append-only mutation trail — human + agent actors, filter stack, CSV export.',
     },
     '/prompt-lab': {
       title: 'Prompt lab',
@@ -779,19 +826,19 @@ export const COPY: CopyRegistry = {
     },
     '/intelligence': {
       title: 'Intelligence',
-      description: 'Weekly LLM narrative — KPI trends, regressions, recommended actions.',
+      description: 'Weekly LLM digest — KPI trends, hotspots, modernization findings, and exportable narratives.',
     },
     '/compliance': {
       title: 'Compliance',
-      description: 'Retention, PII masking, residency, and evidence export controls.',
+      description: 'Retention, evidence vault, DSAR queue, and residency controls.',
     },
     '/storage': {
       title: 'Storage',
-      description: 'Screenshot / attachment browser with per-report lineage.',
+      description: 'Per-project BYO bucket config — health probes, Vault refs, usage counts.',
     },
     '/marketplace': {
       title: 'Marketplace',
-      description: 'Installable platform plugins — Sentry, Linear, Slack, …',
+      description: 'Webhook plugin catalog, installs, and signed delivery log per project.',
     },
     '/mcp': {
       title: 'MCP',
@@ -815,11 +862,11 @@ export const COPY: CopyRegistry = {
     },
     '/releases': {
       title: 'Releases',
-      description: 'Release ↔ regression correlation and deploy-window overlays.',
+      description: 'Draft changelogs with AI, credit reporters, and publish in-app attribution toasts.',
     },
     '/iterate': {
       title: 'Iterate',
-      description: 'Prompt / policy iteration loop with A/B harness on historical reports.',
+      description: 'PDCA producer/critic loops on target URLs — queue, trigger, inspect critiques.',
     },
     '/drift': {
       title: 'Drift',
@@ -834,16 +881,16 @@ export const COPY: CopyRegistry = {
       description: 'Statistical spikes in intake, latency, or failure rate.',
     },
     '/cost': {
-      title: 'Cost',
-      description: 'LLM spend by function, model, and project — daily rollups.',
+      title: 'LLM Cost',
+      description: 'Per-project llm_invocations telemetry — spend rollups, breakdown, and raw log.',
     },
     '/notifications': {
-      title: 'Notifications',
-      description: 'Routing rules, delivery log, and channel health probes.',
+      title: 'Reporter notifications',
+      description: 'SDK widget inbox — classify, fix, and reward messages scoped per project.',
     },
     '/billing': {
       title: 'Billing',
-      description: 'Plan entitlements, usage meters, Stripe subscription state.',
+      description: 'Plan entitlements, usage meters, Stripe subscription state, and support tickets.',
     },
     '/organization/members': {
       title: 'Members',
@@ -851,7 +898,7 @@ export const COPY: CopyRegistry = {
     },
     '/explore': {
       title: 'Codebase atlas',
-      description: 'Indexed file graph, import edges, semantic search over symbols.',
+      description: 'Banner + EXPLORE SNAPSHOT — Overview | Graph | Layers | Search | Index. Indexed file graph + semantic search.',
     },
     '/users': {
       title: 'Users',
@@ -859,15 +906,15 @@ export const COPY: CopyRegistry = {
     },
     '/dashboard': {
       title: 'PDCA cockpit',
-      description: 'Plan → Do → Check → Act, with 14d intake, LLM cost, judge trend, fix throughput.',
+      description: 'Plan → Do → Check → Act — banner + LOOP SNAPSHOT KPIs, then Overview | Loop | Metrics | Health tabs.',
     },
     '/reports': {
       title: 'Triage queue',
-      description: 'Fingerprinted, severity-classified, blast-radius-ranked. Bulk-dispatch eligible rows.',
+      description: 'Banner + TRIAGE SNAPSHOT — Overview | Queue | Severity tabs. Fingerprinted, severity-classified, blast-radius-ranked.',
     },
     '/graph': {
       title: 'Bug graph',
-      description: 'Component / page / release adjacency with bug-incidence weighting.',
+      description: 'Banner + GRAPH SNAPSHOT — Overview | Explore | Backend. Component/page adjacency with bug-incidence weighting.',
     },
     '/fixes': {
       title: 'Auto-fix pipeline',
@@ -883,7 +930,11 @@ export const COPY: CopyRegistry = {
     },
     '/integrations': {
       title: 'Integrations',
-      description: 'Sentry / Slack / GitHub routing + per-platform probe history.',
+      description: 'Sentry / Langfuse / GitHub platform wiring + Jira/Linear/PagerDuty routing.',
+    },
+    '/integrations/config': {
+      title: 'Integrations',
+      description: 'Platform probes, routing destinations, and codebase index readiness per project.',
     },
     '/settings': {
       title: 'Settings',

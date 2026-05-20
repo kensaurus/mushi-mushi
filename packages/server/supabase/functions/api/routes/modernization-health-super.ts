@@ -37,7 +37,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, scopedOwnedProjectIds, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -66,7 +66,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
 
     // Teams v1: include org-member projects so invited teammates see the
     // workspace's modernization findings (was project_members-only before).
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { findings: [] } });
 
     let q = db
@@ -289,17 +289,16 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
   app.get('/v1/admin/health/history', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    // Teams v1: show health history for every accessible project in one
-    // stream — org members hitting Integrations → Health History should see
-    // the workspace's probe ticks regardless of which org member triggered
-    // them.
-    const accessibleIds = await ownedProjectIds(db, userId);
-    if (accessibleIds.length === 0) return c.json({ ok: true, data: { history: [] } });
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { history: [] } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const projectId = resolvedProject.project.id;
 
     const { data } = await db
       .from('integration_health_history')
       .select('id, kind, status, latency_ms, message, source, checked_at')
-      .in('project_id', accessibleIds)
+      .eq('project_id', projectId)
       .order('checked_at', { ascending: false })
       .limit(200);
 

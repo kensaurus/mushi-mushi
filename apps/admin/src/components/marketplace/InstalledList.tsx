@@ -11,6 +11,7 @@ import type { InstalledPlugin } from './types'
 
 interface Props {
   installed: InstalledPlugin[]
+  projectName: string | null
   busySlug: string | null
   onTest: InstalledPluginRowProps['onTest']
   onTogglePause: InstalledPluginRowProps['onTogglePause']
@@ -21,6 +22,7 @@ interface Props {
 
 export function InstalledList({
   installed,
+  projectName,
   busySlug,
   onTest,
   onTogglePause,
@@ -31,8 +33,12 @@ export function InstalledList({
   if (installed.length === 0) {
     return (
       <EmptyState
-        title="No plugins installed"
-        description="Install one above to start receiving signed webhooks."
+        title={
+          projectName
+            ? `No plugins installed for ${projectName} yet`
+            : 'No plugins installed yet'
+        }
+        description="Browse the catalog tab, deploy a webhook receiver, then click Install and paste your HTTPS URL."
       />
     )
   }

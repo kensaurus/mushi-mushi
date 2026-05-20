@@ -2,6 +2,7 @@
 //
 // Admin:
 //   GET /v1/admin/costs           — paginated llm_invocations (+ legacy llm_cost_usd)
+//   GET /v1/admin/costs/stats     — workspace health summary for banner + KPI strip
 //   GET /v1/admin/costs/summary   — aggregated cost by operation + model + day
 //
 // Primary telemetry: `llm_invocations` (telemetry.ts on every edge function).
@@ -108,6 +109,271 @@ function matchesSearch(row: CostRow, q: string): boolean {
 export function registerCostsRoutes(parent: Hono<{ Variables: Variables }>) {
   const r = new Hono<{ Variables: Variables }>()
   r.use('*', requireAuth, requireProjectAccess)
+
+  r.get('/stats', async (c) => {
+    const projectId = c.req.query('project_id')
+    if (!projectId) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
+
+    const now = Date.now()
+    const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString()
+    const since48h = new Date(now - 48 * 60 * 60 * 1000).toISOString()
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const since30d = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const monthStart = new Date()
+    monthStart.setUTCDate(1)
+    monthStart.setUTCHours(0, 0, 0, 0)
+    const sinceMonth = monthStart.toISOString()
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      totalSpendUsd: 0,
+      spend24hUsd: 0,
+      spend7dUsd: 0,
+      spend30dUsd: 0,
+      spendMonthUsd: 0,
+      prior24hSpendUsd: 0,
+      spendSpike24h: false,
+      calls24h: 0,
+      calls7d: 0,
+      calls30d: 0,
+      totalCalls: 0,
+      invocationCount: 0,
+      ledgerCount: 0,
+      operationsCount: 0,
+      modelsCount: 0,
+      topOperation: null as string | null,
+      topOperationUsd: 0,
+      topModel: null as string | null,
+      topModelUsd: 0,
+      lastCallAt: null as string | null,
+      failedCalls24h: 0,
+      platformKeyCalls24h: 0,
+      byokCalls24h: 0,
+      byokAnthropicConfigured: false,
+      avgCostPerCall24h: 0,
+    }
+
+    const [
+      { data: projectRow },
+      invCountRes,
+      ledgerCountRes,
+      invRes,
+      ledgerRes,
+      { data: settingsRow },
+    ] = await Promise.all([
+      db().from('projects').select('id, name').eq('id', projectId).maybeSingle(),
+      db()
+        .from('llm_invocations')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId),
+      db()
+        .from('llm_cost_usd')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', projectId),
+      db()
+        .from('llm_invocations')
+        .select(
+          'function_name, stage, used_model, input_tokens, output_tokens, cost_usd, created_at, status, key_source',
+        )
+        .eq('project_id', projectId)
+        .gte('created_at', since30d)
+        .order('created_at', { ascending: false })
+        .limit(10000),
+      db()
+        .from('llm_cost_usd')
+        .select('occurred_at, operation, model, cost_usd')
+        .eq('project_id', projectId)
+        .gte('occurred_at', since30d)
+        .order('occurred_at', { ascending: false })
+        .limit(2000),
+      db()
+        .from('project_settings')
+        .select('byok_anthropic_key_ref')
+        .eq('project_id', projectId)
+        .maybeSingle(),
+    ])
+
+    if (!projectRow) return c.json({ ok: true, data: empty })
+
+    type InvRow = {
+      function_name: string
+      stage: string | null
+      used_model: string
+      input_tokens: number | null
+      output_tokens: number | null
+      cost_usd: number | null
+      created_at: string
+      status: string | null
+      key_source: string | null
+    }
+
+    const invRows = (invRes.data ?? []) as InvRow[]
+    const ledgerRows = (ledgerRes.data ?? []) as Array<{
+      occurred_at: string
+      operation: string
+      model: string
+      cost_usd: number
+    }>
+
+    let totalSpendUsd = 0
+    let spend24hUsd = 0
+    let spend7dUsd = 0
+    let spend30dUsd = 0
+    let spendMonthUsd = 0
+    let prior24hSpendUsd = 0
+    let calls24h = 0
+    let calls7d = 0
+    let calls30d = 0
+    let failedCalls24h = 0
+    let platformKeyCalls24h = 0
+    let byokCalls24h = 0
+    let lastCallAt: string | null = null
+
+    const opSpend = new Map<string, number>()
+    const modelSpend = new Map<string, number>()
+    const ops = new Set<string>()
+    const models = new Set<string>()
+
+    const bumpInv = (row: InvRow) => {
+      const cost = resolveCostUsd(row.used_model, row.input_tokens, row.output_tokens, row.cost_usd)
+      const at = row.created_at
+      const operation = row.stage ? `${row.function_name}:${row.stage}` : row.function_name
+
+      totalSpendUsd += cost
+      spend30dUsd += cost
+      calls30d += 1
+      ops.add(operation)
+      models.add(row.used_model)
+      opSpend.set(operation, (opSpend.get(operation) ?? 0) + cost)
+      modelSpend.set(row.used_model, (modelSpend.get(row.used_model) ?? 0) + cost)
+
+      if (!lastCallAt || at > lastCallAt) lastCallAt = at
+
+      if (at >= since7d) {
+        spend7dUsd += cost
+        calls7d += 1
+      }
+      if (at >= since24h) {
+        spend24hUsd += cost
+        calls24h += 1
+        if (row.status && row.status !== 'success') failedCalls24h += 1
+        if (row.key_source === 'byok') byokCalls24h += 1
+        else platformKeyCalls24h += 1
+      } else if (at >= since48h) {
+        prior24hSpendUsd += cost
+      }
+      if (at >= sinceMonth) spendMonthUsd += cost
+    }
+
+    for (const row of invRows) bumpInv(row)
+
+    for (const row of ledgerRows) {
+      const cost = Number(row.cost_usd ?? 0)
+      const at = row.occurred_at
+      totalSpendUsd += cost
+      spend30dUsd += cost
+      calls30d += 1
+      ops.add(row.operation)
+      models.add(row.model)
+      opSpend.set(row.operation, (opSpend.get(row.operation) ?? 0) + cost)
+      modelSpend.set(row.model, (modelSpend.get(row.model) ?? 0) + cost)
+      if (!lastCallAt || at > lastCallAt) lastCallAt = at
+      if (at >= since7d) {
+        spend7dUsd += cost
+        calls7d += 1
+      }
+      if (at >= since24h) spend24hUsd += cost
+      else if (at >= since48h) prior24hSpendUsd += cost
+      if (at >= sinceMonth) spendMonthUsd += cost
+    }
+
+    // All-time totals include rows older than 30d — fetch only sums for those.
+    if ((invCountRes.count ?? 0) > invRows.length || (ledgerCountRes.count ?? 0) > ledgerRows.length) {
+      const [olderInv, olderLedger] = await Promise.all([
+        invRows.length < (invCountRes.count ?? 0)
+          ? db()
+            .from('llm_invocations')
+            .select('used_model, input_tokens, output_tokens, cost_usd')
+            .eq('project_id', projectId)
+            .lt('created_at', since30d)
+            .limit(10000)
+          : Promise.resolve({ data: [] as InvRow[] }),
+        ledgerRows.length < (ledgerCountRes.count ?? 0)
+          ? db()
+            .from('llm_cost_usd')
+            .select('cost_usd')
+            .eq('project_id', projectId)
+            .lt('occurred_at', since30d)
+            .limit(2000)
+          : Promise.resolve({ data: [] as Array<{ cost_usd: number }> }),
+      ])
+      for (const row of (olderInv.data ?? []) as InvRow[]) {
+        totalSpendUsd += resolveCostUsd(row.used_model, row.input_tokens, row.output_tokens, row.cost_usd)
+      }
+      for (const row of (olderLedger.data ?? []) as Array<{ cost_usd: number }>) {
+        totalSpendUsd += Number(row.cost_usd ?? 0)
+      }
+    }
+
+    let topOperation: string | null = null
+    let topOperationUsd = 0
+    for (const [op, usd] of opSpend) {
+      if (usd > topOperationUsd) {
+        topOperation = op
+        topOperationUsd = usd
+      }
+    }
+
+    let topModel: string | null = null
+    let topModelUsd = 0
+    for (const [model, usd] of modelSpend) {
+      if (usd > topModelUsd) {
+        topModel = model
+        topModelUsd = usd
+      }
+    }
+
+    const invocationCount = invCountRes.count ?? invRows.length
+    const ledgerCount = ledgerCountRes.count ?? ledgerRows.length
+    const totalCalls = invocationCount + ledgerCount
+    const avgCostPerCall24h = calls24h > 0 ? spend24hUsd / calls24h : 0
+    const spendSpike24h =
+      prior24hSpendUsd >= 0.01 && spend24hUsd >= prior24hSpendUsd * 3 && spend24hUsd >= 0.05
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: projectRow.id,
+        projectName: projectRow.name,
+        totalSpendUsd: Math.round(totalSpendUsd * 10000) / 10000,
+        spend24hUsd: Math.round(spend24hUsd * 10000) / 10000,
+        spend7dUsd: Math.round(spend7dUsd * 10000) / 10000,
+        spend30dUsd: Math.round(spend30dUsd * 10000) / 10000,
+        spendMonthUsd: Math.round(spendMonthUsd * 10000) / 10000,
+        prior24hSpendUsd: Math.round(prior24hSpendUsd * 10000) / 10000,
+        spendSpike24h,
+        calls24h,
+        calls7d,
+        calls30d,
+        totalCalls,
+        invocationCount,
+        ledgerCount,
+        operationsCount: ops.size,
+        modelsCount: models.size,
+        topOperation,
+        topOperationUsd: Math.round(topOperationUsd * 10000) / 10000,
+        topModel,
+        topModelUsd: Math.round(topModelUsd * 10000) / 10000,
+        lastCallAt,
+        failedCalls24h,
+        platformKeyCalls24h,
+        byokCalls24h,
+        byokAnthropicConfigured: Boolean(settingsRow?.byok_anthropic_key_ref),
+        avgCostPerCall24h: Math.round(avgCostPerCall24h * 10000) / 10000,
+      },
+    })
+  })
 
   r.get('/', async (c) => {
     const projectId = c.req.query('project_id')

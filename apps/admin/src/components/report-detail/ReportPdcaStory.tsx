@@ -307,7 +307,7 @@ function buildStoryNodes(
   const actLink = fix?.pr_url && actState !== 'done'
     ? { href: fix.pr_url, label: 'Review & merge' }
     : status === 'fixed'
-      ? { href: '/integrations', label: 'See routing' }
+      ? { href: '/integrations/config', label: 'See routing' }
       : undefined
   const act: StoryNode = {
     id: 'act',

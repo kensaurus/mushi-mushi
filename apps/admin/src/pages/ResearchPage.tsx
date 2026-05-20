@@ -1,53 +1,64 @@
 /**
  * FILE: apps/admin/src/pages/ResearchPage.tsx
- * PURPOSE: manual web research powered by BYOK Firecrawl. Admin types
- *          a query during triage, snippets land here, and the user can attach
- *          any snippet to a specific report as evidence.
- *
- *          UX intent: spreadsheet-grade speed. Press Enter to search, snippet
- *          rows are keyboard-navigable, "Attach to report" opens an inline
- *          autocomplete by report id.
+ * PURPOSE: Manual web research powered by BYOK Firecrawl during triage.
+ *          Search the web, persist sessions + snippets, attach evidence to reports.
  */
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { useRealtimeReload } from '../lib/realtime'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
   PageHelp,
-  Card,
+  Section,
   Btn,
   Input,
-  Section,
   SegmentedControl,
-  Skeleton,
   ErrorAlert,
+  EmptyState,
+  StatCard,
   RelativeTime,
 } from '../components/ui'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
+import { FirecrawlStatusBanner } from '../components/research/FirecrawlStatusBanner'
+import { ResearchSnippetCard } from '../components/research/ResearchSnippetCard'
+import { ResearchSessionTable } from '../components/research/ResearchSessionTable'
+import type {
+  FirecrawlConfig,
+  SearchResponse,
+  SessionRow,
+} from '../components/research/types'
 
-interface Snippet {
-  id: string
-  url: string
-  title: string | null
-  snippet: string | null
-  attached_to_report_id: string | null
+type TabId = 'search' | 'history'
+type SessionMode = 'all' | 'search' | 'scrape'
+type SessionAge = 'all' | '24h' | '7d'
+
+interface ResearchStats {
+  sessions: number
+  snippets: number
+  attached: number
+  lastSessionAt: string | null
 }
 
-interface SessionRow {
-  id: string
-  query: string
-  mode: 'search' | 'scrape'
-  result_count: number
-  created_at: string
-}
-
-interface SearchResponse {
-  sessionId: string
-  createdAt: string
-  query: string
-  results: Snippet[]
-}
+const TABS: Array<{ id: TabId; label: string; description: string }> = [
+  {
+    id: 'search',
+    label: 'Search',
+    description: 'Run a Firecrawl web query and attach snippets to a report as triage evidence.',
+  },
+  {
+    id: 'history',
+    label: 'History',
+    description: 'Reopen past sessions, filter by mode or age, and continue attaching evidence.',
+  },
+]
 
 const SUGGESTIONS = [
   'react query 5 cache invalidation breaking change',
@@ -57,17 +68,21 @@ const SUGGESTIONS = [
   'cloudflare workers fetch ECONNRESET intermittent',
 ]
 
-type SessionMode = 'all' | 'search' | 'scrape'
-type SessionAge = 'all' | '24h' | '7d'
-
-const AGE_LIMITS: Record<SessionAge, number | null> = {
-  all: null,
-  '24h': 24 * 60 * 60 * 1000,
-  '7d': 7 * 24 * 60 * 60 * 1000,
+function isTabId(v: string | null): v is TabId {
+  return TABS.some((t) => t.id === v)
 }
 
 export function ResearchPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const param = searchParams.get('tab')
+  const activeTab: TabId = isTabId(param) ? param : 'search'
+  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const toast = useToast()
+
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [active, setActive] = useState<SearchResponse | null>(null)
@@ -75,32 +90,72 @@ export function ResearchPage() {
   const [modeFilter, setModeFilter] = useState<SessionMode>('all')
   const [ageFilter, setAgeFilter] = useState<SessionAge>('all')
 
+  const sessionsPath = activeProjectId ? '/v1/admin/research/sessions?limit=50' : null
+  const statsPath = activeProjectId ? '/v1/admin/research/stats' : null
+  const firecrawlPath = activeProjectId ? '/v1/admin/byok/firecrawl' : null
+
   const {
     data: historyData,
     loading: historyLoading,
     error: historyError,
     reload: loadHistory,
-  } = usePageData<{ sessions: SessionRow[] }>('/v1/admin/research/sessions?limit=20')
-  const sessions = historyData?.sessions ?? null
-  // Mode + age filters live in the FE: history is small (<= 20 sessions) and
-  // adding server-side params would require an API change for marginal gain.
-  // Research history needed mode/since filters.
-  const filteredSessions = sessions
-    ? sessions.filter((s) => {
-        if (modeFilter !== 'all' && s.mode !== modeFilter) return false
-        const limit = AGE_LIMITS[ageFilter]
-        if (limit !== null) {
-          const age = Date.now() - new Date(s.created_at).getTime()
-          if (age > limit) return false
-        }
-        return true
-      })
-    : null
+    lastFetchedAt,
+    isValidating,
+  } = usePageData<{ sessions: SessionRow[] }>(sessionsPath, { deps: [activeProjectId] })
+
+  const {
+    data: statsData,
+    reload: reloadStats,
+  } = usePageData<ResearchStats>(statsPath, { deps: [activeProjectId] })
+
+  const {
+    data: firecrawlData,
+    loading: firecrawlLoading,
+    reload: reloadFirecrawl,
+  } = usePageData<FirecrawlConfig | null>(firecrawlPath, { deps: [activeProjectId] })
+
+  const sessions = historyData?.sessions ?? []
+  const stats = statsData ?? { sessions: 0, snippets: 0, attached: 0, lastSessionAt: null }
+  const firecrawlReady =
+    Boolean(firecrawlData?.configured) &&
+    (!firecrawlData?.testStatus || firecrawlData.testStatus === 'ok')
+
+  const reloadAll = useCallback(() => {
+    loadHistory()
+    reloadStats()
+    reloadFirecrawl()
+  }, [loadHistory, reloadStats, reloadFirecrawl])
+
+  useRealtimeReload(['research_sessions', 'research_snippets'], reloadAll)
+
+  const setTab = useCallback((tab: TabId) => {
+    const next = new URLSearchParams(searchParams)
+    if (tab === 'search') next.delete('tab')
+    else next.set('tab', tab)
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
+
+  usePublishPageContext({
+    route: '/research',
+    title: `${activeMeta.label} · Research`,
+    summary: activeMeta.description,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount: stats.attached,
+  })
+
+  const tabOptions = useMemo(() => [
+    { id: 'search' as const, label: 'Search' },
+    { id: 'history' as const, label: 'History', count: sessions.length },
+  ], [sessions.length])
 
   async function runSearch(q: string) {
+    if (!activeProjectId) {
+      toast.error('Select a project first')
+      return
+    }
     const trimmed = q.trim()
     if (trimmed.length < 2) {
-      toast.error('Type a search query first.')
+      toast.error('Type a search query first (at least 2 characters).')
       return
     }
     setSearching(true)
@@ -111,11 +166,13 @@ export function ResearchPage() {
     setSearching(false)
     if (res.ok && res.data) {
       setActive(res.data)
-      loadHistory()
+      setTab('search')
+      reloadAll()
+      toast.success(`Found ${res.data.results.length} result${res.data.results.length === 1 ? '' : 's'}`)
     } else {
       const code = res.error?.code
       if (code === 'FIRECRAWL_NOT_CONFIGURED') {
-        toast.error('Add a Firecrawl API key in Settings → Firecrawl (BYOK) first.')
+        toast.error('Add a Firecrawl API key in Settings → Firecrawl first.')
       } else if (code === 'FIRECRAWL_AUTH_FAILED') {
         toast.error('Firecrawl rejected the key. Re-check Settings → Firecrawl.')
       } else if (code === 'RATE_LIMITED') {
@@ -127,7 +184,9 @@ export function ResearchPage() {
   }
 
   async function loadSession(id: string) {
-    const res = await apiFetch<{ session: SessionRow; snippets: Snippet[] }>(`/v1/admin/research/sessions/${id}`)
+    const res = await apiFetch<{ session: SessionRow; snippets: SearchResponse['results'] }>(
+      `/v1/admin/research/sessions/${id}`,
+    )
     if (res.ok && res.data) {
       setActive({
         sessionId: res.data.session.id,
@@ -135,6 +194,7 @@ export function ResearchPage() {
         query: res.data.session.query,
         results: res.data.snippets,
       })
+      setTab('search')
     } else {
       toast.error('Failed to load session', res.error?.message)
     }
@@ -143,7 +203,7 @@ export function ResearchPage() {
   async function attach(snippetId: string) {
     const reportId = (attachInput[snippetId] ?? '').trim()
     if (!reportId) {
-      toast.error('Paste the report id to attach to.')
+      toast.error('Paste the report UUID from the Reports page.')
       return
     }
     const res = await apiFetch(`/v1/admin/research/snippets/${snippetId}/attach`, {
@@ -151,7 +211,7 @@ export function ResearchPage() {
       body: JSON.stringify({ reportId }),
     })
     if (res.ok) {
-      toast.success(`Snippet attached to ${reportId.slice(0, 8)}…`)
+      toast.success(`Snippet attached to report ${reportId.slice(0, 8)}…`)
       setAttachInput((s) => ({ ...s, [snippetId]: '' }))
       if (active) {
         setActive({
@@ -161,6 +221,7 @@ export function ResearchPage() {
           ),
         })
       }
+      reloadStats()
     } else if (res.error?.code === 'REPORT_NOT_FOUND') {
       toast.error('No report with that id in your project.')
     } else {
@@ -172,190 +233,241 @@ export function ResearchPage() {
     <div className="space-y-4">
       <PageHeader
         title="Research"
-        description="Long-form notes from QA and product research. Pin findings here so the next loop iteration starts smarter."
-      />
+        description="Firecrawl web search during triage — find docs, threads, and changelogs, then attach snippets as report evidence."
+      >
+        {activeTab === 'search' && (
+          <Btn
+            variant="primary"
+            disabled={!activeProjectId || searching || !firecrawlReady}
+            loading={searching}
+            onClick={() => void runSearch(query)}
+            title={
+              !activeProjectId
+                ? 'Select a project first'
+                : !firecrawlReady
+                  ? 'Configure and test Firecrawl first'
+                  : undefined
+            }
+          >
+            Search web
+          </Btn>
+        )}
+      </PageHeader>
 
       <PageHelp
         title="About Research"
-        whatIsIt="BYOK Firecrawl-powered web search you run during triage. Use it to look up release-notes for a stubborn report, find Stack Overflow threads matching the error signature, or pull a vendor changelog into the report's evidence trail."
+        whatIsIt="BYOK Firecrawl-powered web search you run during triage. Look up release notes for a stubborn report, find Stack Overflow threads matching an error signature, or pull a vendor changelog into the report's evidence trail."
         useCases={[
           'Cross-reference an error signature against current upstream docs.',
           'Find a Stack Overflow thread to attach as triage evidence.',
-          'Check if a 3rd-party library shipped a fix in the last 24 hours.',
+          'Check if a third-party library shipped a fix in the last 24 hours.',
         ]}
-        howToUse="Press Enter to search. Click 'Attach' on any snippet to bind it to a specific report. Sessions persist; the same query within 24h hits the cache for free. The fix-worker also auto-uses Firecrawl when local RAG is sparse — see Settings → Firecrawl for the allow-list and per-call page cap."
+        howToUse="Press Enter to search. Click Attach evidence on any snippet and paste a report UUID from Reports. Sessions persist per project — reopen them from History. Configure Firecrawl under Settings → Firecrawl (allow-list domains and page cap)."
       />
 
-      <Section title="Search" className="space-y-2.5">
-        <form
-          onSubmit={(e) => { e.preventDefault(); runSearch(query) }}
-          className="flex gap-2 items-center"
-        >
-          <Input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="error signature, library name, doc topic…"
-            className="flex-1"
-          />
-          <Btn type="submit" disabled={searching} loading={searching}>
-            Search
-          </Btn>
-        </form>
-        <div className="flex flex-wrap gap-1.5">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => { setQuery(s); runSearch(s) }}
-              className="text-2xs font-mono px-1.5 py-0.5 rounded-sm border border-edge bg-surface-raised text-fg-muted hover:text-fg-secondary"
-              title="Run this example query"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </Section>
-
-      {active && (
-        <Section title={`Results — "${active.query}"`} className="space-y-2.5">
-          {active.results.length === 0 ? (
-            <div className="text-2xs text-fg-muted">No results returned. Try a broader query or relax the allow-list in Settings.</div>
-          ) : (
-            active.results.map((r) => (
-              <Card key={r.id} className="p-3 space-y-1.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-accent hover:underline truncate block"
-                    >
-                      {r.title ?? r.url}
-                    </a>
-                    <div className="text-2xs text-fg-faint truncate">{r.url}</div>
-                  </div>
-                  {r.attached_to_report_id && (
-                    <span className="text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-ok/10 text-ok shrink-0">
-                      attached
-                    </span>
-                  )}
-                </div>
-                {r.snippet && (
-                  <p className="text-2xs text-fg-secondary leading-relaxed line-clamp-3">{r.snippet}</p>
-                )}
-                {!r.attached_to_report_id && (
-                  <div className="flex items-center gap-1.5">
-                    <Input
-                      type="text"
-                      value={attachInput[r.id] ?? ''}
-                      onChange={(e) => setAttachInput((s) => ({ ...s, [r.id]: e.target.value }))}
-                      placeholder="report id (uuid)"
-                      className="flex-1 text-2xs font-mono"
-                    />
-                    <Btn size="sm" variant="ghost" onClick={() => attach(r.id)}>Attach</Btn>
-                  </div>
-                )}
-              </Card>
-            ))
-          )}
-        </Section>
+      {!activeProjectId ? (
+        <SetupNudge
+          requires={['project']}
+          emptyTitle="Select a project"
+          emptyDescription="Research sessions and Firecrawl settings are scoped to the active project in the header."
+        />
+      ) : (
+        <FirecrawlStatusBanner
+          config={firecrawlData ?? null}
+          loading={firecrawlLoading}
+          projectName={projectName}
+        />
       )}
 
-      <Section title="Recent sessions" className="space-y-2">
-        {sessions && sessions.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5 text-2xs">
-            <SegmentedControl
-              size="sm"
-              label="Mode"
-              value={modeFilter}
-              options={[
-                { id: 'all', label: 'All' },
-                { id: 'search', label: 'Search' },
-                { id: 'scrape', label: 'Scrape' },
-              ]}
-              onChange={setModeFilter}
-            />
-            <SegmentedControl
-              size="sm"
-              label="Since"
-              value={ageFilter}
-              options={[
-                { id: 'all', label: 'All' },
-                { id: '24h', label: '24h' },
-                { id: '7d', label: '7d' },
-              ]}
-              onChange={setAgeFilter}
-            />
-            <span className="text-3xs text-fg-faint font-mono ml-1">
-              {filteredSessions?.length ?? 0}/{sessions.length}
-            </span>
-          </div>
-        )}
-        {historyLoading && (
-          <div className="space-y-2" aria-busy="true" aria-label="Loading history">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="rounded-md border border-edge-subtle p-3 space-y-1.5">
-                <Skeleton className="h-3 w-2/3" />
-                <Skeleton className="h-2 w-1/3" />
-                <Skeleton className="h-2 w-1/2" />
-              </div>
-            ))}
-          </div>
-        )}
-        {historyError && <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />}
-        {sessions && sessions.length === 0 && (
-          <div className="text-2xs text-fg-muted">No sessions yet — your first search will land here.</div>
-        )}
-        {sessions && sessions.length > 0 && filteredSessions && filteredSessions.length === 0 && (
-          <div className="text-2xs text-fg-muted">
-            No sessions match these filters.{' '}
-            <button
-              type="button"
-              onClick={() => { setModeFilter('all'); setAgeFilter('all') }}
-              className="text-brand hover:underline"
+      <Section
+        title="Research workspace"
+        freshness={{ at: lastFetchedAt, isValidating }}
+      >
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="Sessions" value={stats.sessions} hint="Saved Firecrawl queries" />
+          <StatCard label="Snippets" value={stats.snippets} hint="Web results returned" />
+          <StatCard
+            label="Attached"
+            value={stats.attached}
+            hint="Linked to reports as evidence"
+          />
+          <StatCard
+            label="Firecrawl"
+            value={firecrawlLoading ? '…' : firecrawlReady ? 'Ready' : 'Setup'}
+            hint={
+              firecrawlReady
+                ? (firecrawlData?.keyHint ?? 'Key configured')
+                : 'Configure BYOK in Settings'
+            }
+          />
+        </div>
+
+        <SegmentedControl
+          value={activeTab}
+          onChange={setTab}
+          options={tabOptions}
+          ariaLabel="Research sections"
+          className="mb-4"
+        />
+
+        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+
+        {!activeProjectId ? (
+          <SetupNudge
+            requires={['project']}
+            emptyTitle="Select a project"
+            emptyDescription="Pick a project in the header to search the web and view session history."
+          />
+        ) : activeTab === 'search' ? (
+          <div className="space-y-4">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void runSearch(query)
+              }}
+              className="flex flex-col gap-2 sm:flex-row sm:items-end"
             >
-              Clear filters
-            </button>
+              <Input
+                label="Web query"
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="error signature, library name, doc topic…"
+                className="flex-1"
+                disabled={searching || !firecrawlReady}
+              />
+              <Btn
+                type="submit"
+                variant="primary"
+                disabled={searching || !firecrawlReady}
+                loading={searching}
+                className="shrink-0 sm:self-end"
+              >
+                Search
+              </Btn>
+            </form>
+
+            <div className="flex flex-wrap gap-1.5">
+              <span className="self-center text-3xs text-fg-faint">Try:</span>
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => {
+                    setQuery(s)
+                    void runSearch(s)
+                  }}
+                  disabled={searching || !firecrawlReady}
+                  className="rounded-sm border border-edge bg-surface-raised px-1.5 py-0.5 font-mono text-2xs text-fg-muted hover:text-fg-secondary disabled:opacity-50"
+                  title="Run this example query"
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            {!firecrawlReady && !firecrawlLoading && (
+              <EmptyState
+                title="Firecrawl not ready"
+                description="Add and test your Firecrawl API key before searching. The fix-worker also uses this key when local RAG is sparse."
+                action={
+                  <Link to="/settings?tab=firecrawl">
+                    <Btn size="sm" variant="primary">Open Firecrawl settings</Btn>
+                  </Link>
+                }
+                hints={[
+                  'Set an allow-list of domains to keep results on-topic',
+                  'Duplicate queries within 24h hit the Firecrawl cache',
+                ]}
+              />
+            )}
+
+            {active && (
+              <div className="space-y-3 border-t border-edge-subtle pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-medium text-fg">
+                      Results — &ldquo;{active.query}&rdquo;
+                    </h3>
+                    <p className="text-2xs text-fg-muted">
+                      Session {active.sessionId.slice(0, 8)}… ·{' '}
+                      <RelativeTime value={active.createdAt} />
+                    </p>
+                  </div>
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setActive(null)}
+                  >
+                    Clear results
+                  </Btn>
+                </div>
+
+                {active.results.length === 0 ? (
+                  <EmptyState
+                    title="No results returned"
+                    description="Try a broader query or relax the domain allow-list in Settings → Firecrawl."
+                    hints={[
+                      'Check allowed domains include the site you expect',
+                      `Page cap is ${firecrawlData?.maxPagesPerCall ?? 5} results per call`,
+                    ]}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {active.results.map((r) => (
+                      <ResearchSnippetCard
+                        key={r.id}
+                        snippet={r}
+                        attachValue={attachInput[r.id] ?? ''}
+                        onAttachValueChange={(v) =>
+                          setAttachInput((s) => ({ ...s, [r.id]: v }))
+                        }
+                        onAttach={() => void attach(r.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!active && firecrawlReady && stats.lastSessionAt && (
+              <p className="text-2xs text-fg-muted">
+                Last search{' '}
+                <RelativeTime value={stats.lastSessionAt} />
+                {' · '}
+                <button
+                  type="button"
+                  className="text-brand hover:underline"
+                  onClick={() => setTab('history')}
+                >
+                  View history
+                </button>
+              </p>
+            )}
           </div>
-        )}
-        {filteredSessions && filteredSessions.length > 0 && (
-          <div className="border border-edge rounded-md overflow-hidden">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-fg-muted text-left border-b border-edge bg-surface-raised">
-                  <th className="py-1.5 px-3 font-medium">Query</th>
-                  <th className="py-1.5 px-3 font-medium">Mode</th>
-                  <th className="py-1.5 px-3 font-medium">Results</th>
-                  <th className="py-1.5 px-3 font-medium">When</th>
-                  <th className="py-1.5 px-3 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredSessions.map((s) => (
-                  <tr key={s.id} className="border-b border-edge/60 hover:bg-surface-raised/40">
-                    <td className="py-1.5 px-3 truncate max-w-[28ch]" title={s.query}>{s.query}</td>
-                    <td className="py-1.5 px-3 font-mono text-2xs text-fg-muted">{s.mode}</td>
-                    <td className="py-1.5 px-3 font-mono text-2xs">{s.result_count}</td>
-                    <td className="py-1.5 px-3 text-2xs text-fg-muted"><RelativeTime value={s.created_at} /></td>
-                    <td className="py-1.5 px-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => loadSession(s.id)}
-                        className="text-2xs text-accent hover:underline"
-                      >
-                        Open →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        ) : (
+          <div className="space-y-3">
+            {historyLoading && (
+              <TableSkeleton rows={4} columns={5} showFilters={false} label="Loading research history" />
+            )}
+            {historyError && (
+              <ErrorAlert message={`Failed to load history: ${historyError}`} onRetry={loadHistory} />
+            )}
+            {!historyLoading && !historyError && (
+              <ResearchSessionTable
+                sessions={sessions}
+                projectName={projectName}
+                modeFilter={modeFilter}
+                ageFilter={ageFilter}
+                onModeFilterChange={setModeFilter}
+                onAgeFilterChange={setAgeFilter}
+                onOpenSession={(id) => void loadSession(id)}
+                activeSessionId={active?.sessionId ?? null}
+              />
+            )}
           </div>
         )}
       </Section>
     </div>
   )
 }
-

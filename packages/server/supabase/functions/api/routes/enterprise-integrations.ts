@@ -3,19 +3,122 @@ import type { Hono } from 'npm:hono@4';
 import { getServiceClient } from '../../_shared/db.ts';
 import { log } from '../../_shared/logger.ts';
 import { jwtAuth, adminOrApiKey } from '../../_shared/auth.ts';
-import { requireFeature } from '../../_shared/entitlements.ts';
+import { requireFeature, resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 import { logAudit } from '../../_shared/audit.ts';
 import { createExternalIssue } from '../../_shared/integrations.ts';
 import { getActivePlugins, sendTestDelivery } from '../../_shared/plugins.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
   // PHASE 4: ENTERPRISE — SSO, AUDIT, RETENTION, FINE-TUNING
   // ============================================================
+
+  app.get('/v1/admin/sso/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      ssoEntitlement: false,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      totalConfigs: 0,
+      registeredCount: 0,
+      pendingCount: 0,
+      failedCount: 0,
+      manualRequiredCount: 0,
+      disabledCount: 0,
+      activeCount: 0,
+      domainCount: 0,
+      lastRegisteredAt: null as string | null,
+      defaultAcsUrl: null as string | null,
+      latestFailure: null as string | null,
+      latestProviderName: null as string | null,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const ssoEntitlement = entitlement?.hasFeature('sso') ?? false;
+
+    const { data: configs } = await db
+      .from('enterprise_sso_configs')
+      .select(
+        'provider_name, registration_status, is_active, domains, registered_at, registration_error, acs_url',
+      )
+      .eq('project_id', project.id);
+
+    const rows = configs ?? [];
+    let registeredCount = 0;
+    let pendingCount = 0;
+    let failedCount = 0;
+    let manualRequiredCount = 0;
+    let disabledCount = 0;
+    let activeCount = 0;
+    let domainCount = 0;
+    let lastRegisteredAt: string | null = null;
+    let latestFailure: string | null = null;
+    let latestProviderName: string | null = null;
+    let acsFromConfig: string | null = null;
+
+    for (const row of rows) {
+      const status = row.registration_status as string;
+      if (status === 'registered') registeredCount += 1;
+      else if (status === 'pending') pendingCount += 1;
+      else if (status === 'failed') failedCount += 1;
+      else if (status === 'manual_required') manualRequiredCount += 1;
+      else if (status === 'disabled') disabledCount += 1;
+      if (row.is_active) activeCount += 1;
+      domainCount += Array.isArray(row.domains) ? row.domains.length : 0;
+      if (row.registered_at && (!lastRegisteredAt || row.registered_at > lastRegisteredAt)) {
+        lastRegisteredAt = row.registered_at;
+      }
+      if (status === 'failed' && row.registration_error) {
+        latestFailure = row.registration_error;
+        latestProviderName = row.provider_name;
+      }
+      if (status === 'registered' && row.acs_url && !acsFromConfig) {
+        acsFromConfig = row.acs_url;
+      }
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? null;
+    const defaultAcsUrl =
+      acsFromConfig ?? (supabaseUrl ? `${supabaseUrl}/auth/v1/sso/saml/acs` : null);
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        ssoEntitlement,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        totalConfigs: rows.length,
+        registeredCount,
+        pendingCount,
+        failedCount,
+        manualRequiredCount,
+        disabledCount,
+        activeCount,
+        domainCount,
+        lastRegisteredAt,
+        defaultAcsUrl,
+        latestFailure,
+        latestProviderName,
+      },
+    });
+  });
 
   app.get('/v1/admin/sso', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -305,6 +408,173 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       action: 'sso_disabled',
     });
     return c.json({ ok: true });
+  });
+
+  app.get('/v1/admin/audit/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      auditLogEntitlement: false,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      projectCount: 0,
+      totalEvents: 0,
+      events24h: 0,
+      events7d: 0,
+      failCount24h: 0,
+      warnCount24h: 0,
+      humanCount24h: 0,
+      agentCount24h: 0,
+      systemCount24h: 0,
+      activeProjectEvents24h: 0,
+      latestEventAt: null as string | null,
+      latestAction: null as string | null,
+      latestActorEmail: null as string | null,
+      topAction7d: null as string | null,
+      topAction7dCount: 0,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const auditLogEntitlement = entitlement?.hasFeature('audit_log') ?? false;
+
+    const projectIds = await ownedProjectIds(db, userId);
+    const now = Date.now();
+    const since24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const FAIL_ACTIONS = ['fix.failed', 'integration.disconnected'];
+    const WARN_ACTIONS = ['api_key.revoked', 'plugin.uninstalled'];
+
+    const [
+      { count: totalEvents },
+      { count: events24h },
+      { count: events7d },
+      { count: activeProjectEvents24h },
+      { data: recentRows },
+      { data: failRows },
+      { data: warnRows },
+      { data: topRows },
+    ] = await Promise.all([
+      db.from('audit_logs').select('id', { count: 'exact', head: true }).in('project_id', projectIds),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since24h),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .gte('created_at', since7d),
+      db
+        .from('audit_logs')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .gte('created_at', since24h),
+      db
+        .from('audit_logs')
+        .select('action, actor_email, actor_id, created_at')
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      db
+        .from('audit_logs')
+        .select('id')
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .in('action', FAIL_ACTIONS),
+      db
+        .from('audit_logs')
+        .select('id')
+        .in('project_id', projectIds)
+        .gte('created_at', since24h)
+        .in('action', WARN_ACTIONS),
+      db
+        .from('audit_logs')
+        .select('action')
+        .in('project_id', projectIds)
+        .gte('created_at', since7d)
+        .limit(500),
+    ]);
+
+    let humanCount24h = 0;
+    let agentCount24h = 0;
+    let systemCount24h = 0;
+    for (const row of recentRows ?? []) {
+      const createdAt = row.created_at as string;
+      if (createdAt < since24h) continue;
+      const actorId = row.actor_id as string | null;
+      const actorEmail = row.actor_email as string | null;
+      if (
+        actorId &&
+        (actorId.startsWith('agent_') || (actorEmail?.startsWith('agent-') ?? false))
+      ) {
+        agentCount24h += 1;
+      } else if (
+        !actorId ||
+        actorId.startsWith('cron_') ||
+        actorId.startsWith('system_') ||
+        actorId.startsWith('webhook_')
+      ) {
+        systemCount24h += 1;
+      } else if (actorEmail && actorId) {
+        humanCount24h += 1;
+      } else {
+        systemCount24h += 1;
+      }
+    }
+
+    const actionCounts = new Map<string, number>();
+    for (const row of topRows ?? []) {
+      const action = row.action as string;
+      actionCounts.set(action, (actionCounts.get(action) ?? 0) + 1);
+    }
+    let topAction7d: string | null = null;
+    let topAction7dCount = 0;
+    for (const [action, count] of actionCounts) {
+      if (count > topAction7dCount) {
+        topAction7d = action;
+        topAction7dCount = count;
+      }
+    }
+
+    const latest = recentRows?.[0];
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        auditLogEntitlement,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        projectCount: projectIds.length,
+        totalEvents: totalEvents ?? 0,
+        events24h: events24h ?? 0,
+        events7d: events7d ?? 0,
+        failCount24h: failRows?.length ?? 0,
+        warnCount24h: warnRows?.length ?? 0,
+        humanCount24h,
+        agentCount24h,
+        systemCount24h,
+        activeProjectEvents24h: activeProjectEvents24h ?? 0,
+        latestEventAt: (latest?.created_at as string | undefined) ?? null,
+        latestAction: (latest?.action as string | undefined) ?? null,
+        latestActorEmail: (latest?.actor_email as string | undefined) ?? null,
+        topAction7d,
+        topAction7dCount,
+      },
+    });
   });
 
   app.get('/v1/admin/audit', jwtAuth, async (c) => {
@@ -971,6 +1241,102 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
+  app.get('/v1/admin/integrations/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: {
+            platformTotal: 3,
+            platformConnected: 0,
+            platformHealthy: 0,
+            platformDown: 0,
+            routingActive: 0,
+            routingPaused: 0,
+            routingTotal: 0,
+            lastProbeAt: null,
+          },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const requiredByKind: Record<string, string[]> = {
+      sentry: ['sentry_org_slug', 'sentry_auth_token_ref'],
+      langfuse: ['langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref'],
+      github: ['github_repo_url', 'github_installation_token_ref'],
+    };
+    const platformKinds = Object.keys(requiredByKind);
+    const allFields = [
+      'sentry_org_slug',
+      'sentry_auth_token_ref',
+      'langfuse_host',
+      'langfuse_public_key_ref',
+      'langfuse_secret_key_ref',
+      'github_repo_url',
+      'github_installation_token_ref',
+    ].join(', ');
+
+    const [{ data: settings }, { data: routingRows }, { data: probes }] = await Promise.all([
+      db.from('project_settings').select(allFields).eq('project_id', project.id).maybeSingle(),
+      db
+        .from('project_integrations')
+        .select('integration_type, is_active')
+        .eq('project_id', project.id),
+      db
+        .from('integration_health_history')
+        .select('kind, status, checked_at')
+        .eq('project_id', project.id)
+        .order('checked_at', { ascending: false })
+        .limit(50),
+    ]);
+
+    const row = (settings ?? {}) as Record<string, unknown>;
+    let platformConnected = 0;
+    let platformHealthy = 0;
+    let platformDown = 0;
+
+    const latestProbeByKind = new Map<string, { status: string; checked_at: string }>();
+    for (const p of probes ?? []) {
+      if (!latestProbeByKind.has(p.kind as string)) {
+        latestProbeByKind.set(p.kind as string, {
+          status: p.status as string,
+          checked_at: p.checked_at as string,
+        });
+      }
+    }
+
+    for (const kind of platformKinds) {
+      const required = requiredByKind[kind] ?? [];
+      const connected = required.every((f) => row[f] != null && row[f] !== '');
+      if (!connected) continue;
+      platformConnected += 1;
+      const probe = latestProbeByKind.get(kind);
+      if (probe?.status === 'ok') platformHealthy += 1;
+      else if (probe?.status === 'down' || probe?.status === 'degraded') platformDown += 1;
+    }
+
+    const routing = routingRows ?? [];
+    const routingActive = routing.filter((r) => r.is_active).length;
+    const routingPaused = routing.filter((r) => !r.is_active).length;
+
+    return c.json({
+      ok: true,
+      data: {
+        platformTotal: platformKinds.length,
+        platformConnected,
+        platformHealthy,
+        platformDown,
+        routingActive,
+        routingPaused,
+        routingTotal: routing.length,
+        lastProbeAt: (probes?.[0]?.checked_at as string | null) ?? null,
+      },
+    });
+  });
+
   // ----- Platform integrations (Sentry / Langfuse / GitHub) ---------------
   // These are V5.3 §2.18 first-party integrations. Unlike Jira/Linear (which
   // live in project_integrations as routing destinations), Sentry/Langfuse/GH
@@ -1185,8 +1551,17 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     });
     if ('response' in resolvedProject) return resolvedProject.response;
     const project = resolvedProject.project;
-    const plugins = await getActivePlugins(db, project.id);
-    return c.json({ ok: true, data: { plugins } });
+
+    const { data, error } = await db
+      .from('project_plugins')
+      .select(
+        'id, plugin_name, plugin_slug, webhook_url, subscribed_events, is_active, last_delivery_at, last_delivery_status, plugin_version, execution_order',
+      )
+      .eq('project_id', project.id)
+      .order('plugin_name', { ascending: true });
+
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { plugins: data ?? [] } });
   });
 
   app.post('/v1/admin/plugins', jwtAuth, requireFeature('plugins'), async (c) => {
@@ -1602,6 +1977,78 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     return c.json({ ok: true, data }, 201);
   });
 
+  app.get('/v1/admin/marketplace/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const empty = {
+      catalogTotal: 0,
+      installedTotal: 0,
+      installedActive: 0,
+      installedPaused: 0,
+      deliveries7d: 0,
+      deliveriesOk: 0,
+      deliveriesFailed: 0,
+      lastDeliveryAt: null as string | null,
+      failingPlugins: 0,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [catalogRes, installedRes, dispatchRes] = await Promise.all([
+      db.from('plugin_registry').select('slug', { count: 'exact', head: true }).eq('is_listed', true),
+      db
+        .from('project_plugins')
+        .select('is_active, last_delivery_status')
+        .eq('project_id', project.id),
+      db
+        .from('plugin_dispatch_log')
+        .select('status, created_at')
+        .eq('project_id', project.id)
+        .gte('created_at', sevenDaysAgo)
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ]);
+
+    const installed = installedRes.data ?? [];
+    const dispatch = dispatchRes.data ?? [];
+    let deliveriesOk = 0;
+    let deliveriesFailed = 0;
+    let lastDeliveryAt: string | null = null;
+
+    for (const row of dispatch) {
+      const status = row.status as string;
+      if (status === 'ok') deliveriesOk += 1;
+      if (status === 'error' || status === 'timeout') deliveriesFailed += 1;
+      if (!lastDeliveryAt && row.created_at) lastDeliveryAt = row.created_at as string;
+    }
+
+    const failingPlugins = installed.filter(
+      (p) =>
+        p.last_delivery_status === 'error' || p.last_delivery_status === 'timeout',
+    ).length;
+
+    return c.json({
+      ok: true,
+      data: {
+        catalogTotal: catalogRes.count ?? 0,
+        installedTotal: installed.length,
+        installedActive: installed.filter((p) => p.is_active).length,
+        installedPaused: installed.filter((p) => !p.is_active).length,
+        deliveries7d: dispatch.length,
+        deliveriesOk,
+        deliveriesFailed,
+        lastDeliveryAt,
+        failingPlugins,
+      },
+    });
+  });
+
   app.get('/v1/admin/plugins/dispatch-log', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -1798,7 +2245,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/intelligence/jobs', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { jobs: [] } });
     const { data } = await db
       .from('intelligence_generation_jobs')
@@ -1850,7 +2297,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/intelligence', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
+    const projectIds = await scopedOwnedProjectIds(c, db, userId);
     if (projectIds.length === 0) return c.json({ ok: true, data: { reports: [] } });
 
     const { data, error } = await db

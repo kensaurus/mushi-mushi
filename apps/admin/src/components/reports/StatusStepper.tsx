@@ -35,9 +35,13 @@ const STATUS_TO_INDEX: Record<string, number> = {
   submitted: 0,
   queued: 0,
   classified: 1,
+  triaged: 1,
   grouped: 1,
+  dispatched: 1,
   fixing: 2,
   fixed: 3,
+  resolved: 3,
+  completed: 3,
 }
 
 interface StatusStepperProps {
