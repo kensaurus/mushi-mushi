@@ -8,7 +8,7 @@ import { usePageData } from '../../lib/usePageData'
 import type { DispatchState } from '../../lib/dispatchFix'
 import type { ReportDetail } from './types'
 
-const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'dismissed']
+const STATUS_OPTS = ['new', 'classified', 'fixing', 'fixed', 'resolved', 'dismissed']
 const SEV_OPTS = ['critical', 'high', 'medium', 'low']
 
 interface RoutingIntegration {

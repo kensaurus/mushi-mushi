@@ -79,6 +79,7 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       font-feature-settings: 'ss01', 'cv11'; /* nicer system-ui glyphs where supported */
+      --mushi-ok: ${isDark ? '#4ade80' : '#16a34a'};
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     button { font-family: inherit; }
@@ -531,6 +532,51 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       box-shadow: inset 2px 0 0 ${vermillion};
     }
 
+    /* Example starter chips — reduce first-report activation energy */
+    .mushi-example-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .mushi-example-chip {
+      padding: 4px 10px;
+      border: 1px solid ${rule};
+      border-radius: 12px;
+      background: transparent;
+      color: ${inkMuted};
+      font-family: ${fontBody};
+      font-size: 11px;
+      cursor: pointer;
+      transition: color 150ms ${easeStamp}, border-color 150ms ${easeStamp}, background 150ms ${easeStamp};
+      white-space: nowrap;
+    }
+    .mushi-example-chip:hover {
+      color: ${ink};
+      border-color: ${inkMuted};
+      background: ${isDark ? 'rgba(242,235,221,0.06)' : 'rgba(14,13,11,0.04)'};
+    }
+    .mushi-example-chip:focus-visible {
+      outline: 2px solid ${vermillion};
+      outline-offset: 2px;
+    }
+
+    /* Textarea wrapper to position char counter */
+    .mushi-textarea-wrap {
+      position: relative;
+    }
+    .mushi-char-counter {
+      position: absolute;
+      bottom: 4px;
+      right: 0;
+      font-family: ${fontMono};
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      color: ${inkFaint};
+      pointer-events: none;
+      transition: color 200ms ${easeStamp};
+    }
+
     .mushi-textarea {
       width: 100%;
       min-height: 96px;
@@ -593,9 +639,33 @@ export function getWidgetStyles(theme: 'light' | 'dark'): string {
       border-color: ${vermillion};
       background: ${vermillionWash};
     }
+    .mushi-attach-btn.loading {
+      opacity: 0.7;
+      cursor: wait;
+    }
+    .mushi-attach-btn.error {
+      color: ${vermillion};
+      border-color: ${vermillionWash};
+    }
     .mushi-attach-btn:focus-visible {
       outline: 2px solid ${vermillion};
       outline-offset: 2px;
+    }
+    @keyframes mushi-spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes mushi-fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .mushi-spinner {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 1.5px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: mushi-spin 0.7s linear infinite;
     }
 
     .mushi-footer {

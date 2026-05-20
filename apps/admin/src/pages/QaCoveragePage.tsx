@@ -21,11 +21,13 @@
  * - qa_story_coverage_24h MV for summary stats
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useSetupStatus } from '../lib/useSetupStatus'
 import { apiFetch } from '../lib/supabase'
 import {
   PageHeader,
@@ -35,9 +37,22 @@ import {
   ErrorAlert,
   EmptyState,
   RelativeTime,
+  Section,
+  StatCard,
+  Badge,
+  FreshnessPill,
+  SegmentedControl,
+  RecommendedAction,
 } from '../components/ui'
+import { QaCoverageStatusBanner } from '../components/qa-coverage/QaCoverageStatusBanner'
+import {
+  EMPTY_QA_COVERAGE_STATS,
+  type QaCoverageStats,
+  type QaCoverageTabId,
+} from '../components/qa-coverage/QaCoverageStatsTypes'
 import { usePageCopy } from '../lib/copy'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -131,6 +146,29 @@ const STATUS_BG: Record<string, string> = {
 }
 
 const ACTIVE_STATUSES = new Set(['pending', 'running'])
+
+const QA_COVERAGE_TABS: Array<{ id: QaCoverageTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture banner, workflow, and create-story CTA.',
+  },
+  {
+    id: 'stories',
+    label: 'Stories',
+    description: 'All automated user-story tests with 24h pass-rate bars.',
+  },
+  {
+    id: 'failing',
+    label: 'Failing',
+    description: 'Stories below 80% pass rate — open run history for evidence.',
+  },
+]
+
+function resolveQaCoverageTab(value: string | null): QaCoverageTabId {
+  if (value === 'stories' || value === 'failing') return value
+  return 'overview'
+}
 
 // ── Story card ─────────────────────────────────────────────────────────────
 
@@ -445,12 +483,16 @@ function StoryDrawer({
   onClose,
   onRunNow,
   isQueued,
+  onDelete,
+  onToggleEnabled,
 }: {
   storyId: string
   projectId: string
   onClose: () => void
   onRunNow: (id: string) => void
   isQueued: boolean
+  onDelete?: (id: string) => void
+  onToggleEnabled?: (id: string, enabled: boolean) => void
 }) {
   const { data: story } = usePageData<QaStoryFull>(
     `/v1/admin/projects/${projectId}/qa-stories/${storyId}`,
@@ -535,6 +577,26 @@ function StoryDrawer({
               >
                 {!isQueued && <IconPlay className="h-3 w-3 mr-1" />}
                 {isQueued ? 'Queued…' : 'Run now'}
+              </Btn>
+            )}
+            {story && onToggleEnabled && (
+              <Btn
+                size="sm"
+                variant="ghost"
+                onClick={() => onToggleEnabled(storyId, !story.enabled)}
+                title={story.enabled ? 'Disable story' : 'Enable story'}
+              >
+                {story.enabled ? 'Disable' : 'Enable'}
+              </Btn>
+            )}
+            {story && onDelete && (
+              <Btn
+                size="sm"
+                variant="danger"
+                onClick={() => onDelete(storyId)}
+                title="Delete this story"
+              >
+                Delete
               </Btn>
             )}
             <button
@@ -749,142 +811,431 @@ function CreateStoryModal({
 export function QaCoveragePage() {
   const copy = usePageCopy('/qa-coverage')
   const projectId = useActiveProjectId()
+  const setup = useSetupStatus(projectId)
+  const projectName = setup.activeProject?.project_name ?? null
   const { success: toastSuccess, error: toastError } = useToast()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveQaCoverageTab(tabParam)
+  const activeTabMeta = QA_COVERAGE_TABS.find((t) => t.id === activeTab) ?? QA_COVERAGE_TABS[0]
   const highlightId = searchParams.get('highlight') ?? ''
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  // Tracks stories that have a pending/running manual run (optimistic, cleared
-  // after the run exits active status or after 90 s as a safety timeout).
   const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set())
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const { data, loading, error, reload } = usePageData<{ coverage: QaStoryCoverage[] }>(
-    `/v1/admin/projects/${projectId}/qa-coverage`,
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<QaCoverageStats>(
+    projectId ? `/v1/admin/projects/${projectId}/qa-coverage/stats` : null,
+    { deps: [projectId] },
+  )
+  const stats = { ...EMPTY_QA_COVERAGE_STATS, ...statsData }
+
+  const setActiveTab = useCallback(
+    (tab: QaCoverageTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
+  const { data, loading, error, reload, isValidating, lastFetchedAt } = usePageData<{ coverage: QaStoryCoverage[] }>(
+    projectId ? `/v1/admin/projects/${projectId}/qa-coverage` : null,
     { deps: [projectId] },
   )
 
   const coverage = data?.coverage ?? []
 
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reload()
+  }, [reloadStats, reload])
+
+  const tabOptions = useMemo(
+    () =>
+      QA_COVERAGE_TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'failing' && stats.failingStories > 0
+            ? stats.failingStories
+            : t.id === 'stories' && stats.pendingRuns > 0
+              ? stats.pendingRuns
+              : undefined,
+      })),
+    [stats.failingStories, stats.pendingRuns],
+  )
+
+  usePublishPageContext({
+    route: '/qa-coverage',
+    title: projectName ? `QA Coverage · ${projectName}` : 'QA Coverage',
+    summary: statsLoading
+      ? 'Loading QA coverage…'
+      : stats.failingStories > 0
+        ? `${stats.failingStories} failing · ${stats.totalStories} stories · ${stats.totalRuns24h} runs/24h`
+        : stats.totalStories === 0
+          ? 'No stories yet'
+          : `${stats.passingStories}/${stats.totalStories} passing · ${stats.totalRuns24h} runs/24h`,
+    criticalCount: stats.failingStories,
+    questions: stats.totalStories > 0
+      ? [
+          stats.failingStories > 0
+            ? 'Which failing story should I investigate first and why?'
+            : 'Are any stories at risk of regressing soon?',
+          'Show me the slowest QA runs from the last 24 hours.',
+        ]
+      : ['How do I write my first QA user-story test?'],
+  })
+
   const handleRunNow = useCallback(async (storyId: string) => {
-    if (queuedIds.has(storyId)) return // prevent double-click
+    if (!projectId || queuedIds.has(storyId)) return
     const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${storyId}/run`, {
       method: 'POST',
     })
     if (res.ok) {
       toastSuccess('Run queued — opening run history')
       setQueuedIds((prev) => new Set(prev).add(storyId))
-      setSelectedStoryId(storyId) // auto-open drawer
-      // Safety: always unblock the button after 90 s in case polling misses the completion
+      setSelectedStoryId(storyId)
       setTimeout(() => {
         setQueuedIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
       }, 90_000)
-      setTimeout(() => void reload(), 5000)
+      setTimeout(() => void reloadAll(), 5000)
     } else if (res.error?.message?.includes('disabled') || (res as { error?: { code?: string } }).error?.code === 'Story is disabled') {
       toastError('This story is disabled. Enable it before running.')
     } else {
       toastError(res.error?.message ?? 'Failed to queue run')
     }
-  }, [projectId, queuedIds, reload, toastSuccess, toastError])
+  }, [projectId, queuedIds, reloadAll, toastSuccess, toastError])
 
   const handleClearQueued = useCallback((storyId: string) => {
     setQueuedIds((prev) => { const n = new Set(prev); n.delete(storyId); return n })
   }, [])
 
-  const passing = coverage.filter((c) => (c.pass_rate_pct ?? 0) >= 80).length
-  const failing = coverage.filter((c) => c.pass_rate_pct !== null && c.pass_rate_pct < 80).length
-  const noData = coverage.filter((c) => c.runs_24h === 0).length
+  const handleToggleEnabled = useCallback(async (storyId: string, enabled: boolean) => {
+    if (!projectId) return
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${storyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ enabled }),
+    })
+    if (res.ok) {
+      toastSuccess(enabled ? 'Story enabled' : 'Story disabled')
+      reloadAll()
+    } else {
+      toastError(res.error?.message ?? 'Update failed')
+    }
+  }, [projectId, reloadAll, toastSuccess, toastError])
 
-  return (
-    <div className="space-y-5">
-      <PageHeader
-        title="QA Coverage"
-        projectScope={null}
-        description="Automated user-story tests running on schedule via Playwright, Browserbase, or Firecrawl."
-      >
-        <Btn size="sm" onClick={() => setShowCreate(true)}>
-          + New story
-        </Btn>
-      </PageHeader>
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!projectId || !deleteTarget) return
+    setDeletingId(deleteTarget)
+    const res = await apiFetch(`/v1/admin/projects/${projectId}/qa-stories/${deleteTarget}`, {
+      method: 'DELETE',
+    })
+    setDeletingId(null)
+    setDeleteTarget(null)
+    if (res.ok) {
+      if (selectedStoryId === deleteTarget) setSelectedStoryId(null)
+      toastSuccess('Story deleted')
+      reloadAll()
+    } else {
+      toastError(res.error?.message ?? 'Delete failed')
+    }
+  }, [projectId, deleteTarget, selectedStoryId, reloadAll, toastSuccess, toastError])
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About QA coverage'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'Automated tests written in plain English that run on your live app on a schedule — like a robot QA tester that never sleeps.'}
-        useCases={copy?.help?.useCases ?? [
-          'Write a test like "A user can log in and see their dashboard" and run it hourly',
-          'Catch a broken flow before your users report it',
-          'See a screenshot of exactly what the test saw when it failed',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Click "+ New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.'}
-      />
+  const failingCoverage = useMemo(
+    () => coverage.filter((c) => c.runs_24h > 0 && (c.pass_rate_pct ?? 100) < 80),
+    [coverage],
+  )
 
-      {error && <ErrorAlert message={error} onRetry={reload} />}
-
-      {/* Summary stats */}
-      {!loading && coverage.length > 0 && (
-        <div className="grid grid-cols-4 gap-3">
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-fg">{coverage.length}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">Total</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-ok">{passing}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">Passing</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-danger">{failing}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">Failing</div>
-          </Card>
-          <Card className="p-3 text-center">
-            <div className="text-2xl font-mono font-semibold text-fg-faint">{noData}</div>
-            <div className="text-2xs text-fg-muted mt-0.5">No data</div>
-          </Card>
-        </div>
-      )}
-
-      {/* Story grid */}
-      {loading && (
+  const renderStoryGrid = (rows: QaStoryCoverage[], emptyTitle: string, emptyDescription: string) => {
+    if (loading) {
+      return (
         <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="h-36 rounded-md bg-surface-raised animate-pulse" />
           ))}
         </div>
-      )}
-
-      {!loading && !error && coverage.length === 0 && (
+      )
+    }
+    if (rows.length === 0) {
+      return (
         <EmptyState
           icon={<IconHealth className="h-8 w-8 text-fg-faint" />}
-          title="No QA stories yet"
-          description="Create your first automated user-story test. Start with a Firecrawl story — no setup needed."
+          title={emptyTitle}
+          description={emptyDescription}
           action={
-            <Btn size="sm" onClick={() => setShowCreate(true)}>
-              + New story
-            </Btn>
+            activeTab !== 'failing' ? (
+              <Btn size="sm" onClick={() => setShowCreate(true)}>+ New story</Btn>
+            ) : undefined
           }
         />
-      )}
+      )
+    }
+    return (
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {rows.map((c) => (
+          <StoryCard
+            key={c.story_id}
+            coverage={c}
+            isQueued={queuedIds.has(c.story_id)}
+            onRunNow={handleRunNow}
+            onSelect={setSelectedStoryId}
+            highlighted={c.story_id === highlightId}
+          />
+        ))}
+      </div>
+    )
+  }
 
-      {!loading && coverage.length > 0 && (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {coverage.map((c) => (
-            <StoryCard
-              key={c.story_id}
-              coverage={c}
-              isQueued={queuedIds.has(c.story_id)}
-              onRunNow={handleRunNow}
-              onSelect={setSelectedStoryId}
-              highlighted={c.story_id === highlightId}
-            />
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading QA coverage">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
           ))}
         </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load QA stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'failing'
+        ? 'danger'
+        : stats.topPriority === 'pending'
+          ? 'brand'
+          : stats.topPriority === 'no_runs' || stats.topPriority === 'disabled_all'
+            ? 'warn'
+            : stats.topPriority === 'no_stories'
+              ? 'brand'
+              : stats.topPriority === 'healthy'
+                ? 'ok'
+                : 'info'
+
+  return (
+    <div className="space-y-4" data-testid="mushi-page-qa-coverage">
+      <PageHeader
+        title={copy?.title ?? 'QA Coverage'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.'
+        }
+      >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.failingStories > 0
+              ? `${stats.failingStories} FAIL`
+              : stats.pendingRuns > 0
+                ? `${stats.pendingRuns} QUEUED`
+                : stats.totalStories === 0
+                  ? 'NO STORIES'
+                  : stats.totalRuns24h === 0
+                    ? 'IDLE'
+                    : 'OK'}
+        </Badge>
+        <FreshnessPill
+          at={statsFetchedAt ?? lastFetchedAt}
+          isValidating={statsValidating || isValidating}
+        />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
+          Refresh
+        </Btn>
+        <Btn size="sm" onClick={() => setShowCreate(true)} disabled={!projectId}>
+          + New story
+        </Btn>
+      </PageHeader>
+
+      <QaCoverageStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating || isValidating}
+        onCreateStory={() => setShowCreate(true)}
+      />
+
+      <SegmentedControl<QaCoverageTabId>
+        size="sm"
+        ariaLabel="QA coverage sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="QA SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard
+            label="Stories"
+            value={stats.totalStories}
+            accent={stats.totalStories > 0 ? 'text-brand' : undefined}
+            hint={`${stats.enabledStories} enabled`}
+          />
+          <StatCard
+            label="Passing"
+            value={stats.passingStories}
+            accent="text-ok"
+            hint="≥80% in 24h"
+          />
+          <StatCard
+            label="Failing"
+            value={stats.failingStories}
+            accent={stats.failingStories > 0 ? 'text-danger' : 'text-ok'}
+            hint="<80% in 24h"
+          />
+          <StatCard
+            label="Avg pass rate"
+            value={stats.avgPassRatePct != null ? `${stats.avgPassRatePct}%` : '—'}
+            accent={
+              stats.avgPassRatePct != null && stats.avgPassRatePct >= 80
+                ? 'text-ok'
+                : stats.avgPassRatePct != null
+                  ? 'text-warn'
+                  : undefined
+            }
+            hint="24h window"
+          />
+          <StatCard
+            label="Runs (24h)"
+            value={stats.totalRuns24h}
+            accent={stats.totalRuns24h > 0 ? 'text-brand' : undefined}
+            hint={`${stats.pendingRuns} in flight`}
+          />
+          <StatCard
+            label="No data"
+            value={stats.noDataStories}
+            accent={stats.noDataStories > 0 ? 'text-warn' : undefined}
+            hint="Never run / 24h"
+          />
+        </div>
+      </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'failing'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'no_stories'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {stats.topPriority === 'no_stories' ? (
+              <Btn size="sm" variant="ghost" onClick={() => setShowCreate(true)}>+ New story</Btn>
+            ) : (
+              <Btn size="sm" variant="ghost" onClick={() => setActiveTab(stats.topPriority === 'failing' ? 'failing' : 'stories')}>
+                Take action →
+              </Btn>
+            )}
+          </div>
+        </Card>
+      ) : null}
+
+      {error && <ErrorAlert message={error} onRetry={reloadAll} />}
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'About QA coverage'}
+            whatIsIt={copy?.help?.whatIsIt ?? 'Automated tests written in plain English that run on your live app on a schedule — like a robot QA tester that never sleeps.'}
+            useCases={copy?.help?.useCases ?? [
+              'Write a test like "A user can log in and see their dashboard" and run it hourly',
+              'Catch a broken flow before your users report it',
+              'See a screenshot of exactly what the test saw when it failed',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Click "+ New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.'}
+          />
+
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="All stories passing"
+              description={`${stats.passingStories}/${stats.totalStories} stories at ≥80% pass rate · ${stats.totalRuns24h} runs in 24h.`}
+            />
+          )}
+          {stats.topPriority === 'failing' && (
+            <RecommendedAction
+              tone="urgent"
+              title={`${stats.failingStories} ${stats.failingStories === 1 ? 'story is' : 'stories are'} below 80% pass rate`}
+              description={stats.topFailingStoryName
+                ? `Worst: ${stats.topFailingStoryName} (${stats.topFailingPassRatePct}%). Open run history for screenshots and assertion diffs.`
+                : 'Open the Failing tab to inspect run history and evidence.'}
+            />
+          )}
+          {stats.topPriority === 'no_stories' && (
+            <RecommendedAction
+              tone="info"
+              title="Create your first QA story"
+              description="Start with Firecrawl Actions — cloud runs, no Browserbase key required. Hourly schedule by default."
+              cta={{ label: '+ New story', to: '/qa-coverage' }}
+            />
+          )}
+          {(stats.topPriority === 'no_runs' || stats.topPriority === 'pending') && (
+            <RecommendedAction
+              tone="info"
+              title={stats.topPriority === 'pending' ? 'Runs in progress' : 'No runs in the last 24h'}
+              description={stats.topPriorityLabel ?? 'Trigger a manual run from the Stories tab.'}
+            />
+          )}
+        </>
       )}
 
-      {/* Story drawer */}
+      {activeTab === 'stories' && renderStoryGrid(
+        coverage,
+        'No QA stories yet',
+        'Create your first automated user-story test. Start with a Firecrawl story — no setup needed.',
+      )}
+
+      {activeTab === 'failing' && renderStoryGrid(
+        failingCoverage,
+        'No failing stories in the last 24h',
+        stats.totalStories === 0
+          ? 'Create a story first, then failures will appear here when pass rate drops below 80%.'
+          : 'All stories with runs in the last 24h are at or above 80% pass rate.',
+      )}
+
       {selectedStoryId && projectId && (
         <StoryDrawer
           storyId={selectedStoryId}
           projectId={projectId}
           isQueued={queuedIds.has(selectedStoryId)}
           onRunNow={handleRunNow}
+          onDelete={setDeleteTarget}
+          onToggleEnabled={handleToggleEnabled}
           onClose={() => {
             handleClearQueued(selectedStoryId)
             setSelectedStoryId(null)
@@ -892,12 +1243,23 @@ export function QaCoveragePage() {
         />
       )}
 
-      {/* Create modal */}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete QA story?"
+          body="This permanently removes the story, its schedule, and all run history. This cannot be undone."
+          confirmLabel="Delete story"
+          tone="danger"
+          loading={deletingId === deleteTarget}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
+
       {showCreate && projectId && (
         <CreateStoryModal
           projectId={projectId}
           onClose={() => setShowCreate(false)}
-          onCreated={reload}
+          onCreated={reloadAll}
         />
       )}
     </div>

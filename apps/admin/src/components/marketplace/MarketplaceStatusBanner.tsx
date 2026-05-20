@@ -1,19 +1,44 @@
 /**
  * FILE: apps/admin/src/components/marketplace/MarketplaceStatusBanner.tsx
- * PURPOSE: Top-level plugin marketplace health for the active project.
+ * PURPOSE: Stats-driven plugin marketplace health for the active project.
  */
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
-import type { MarketplaceStats } from './types'
+import type { MarketplaceStats, MarketplaceTabId } from './types'
 
 interface Props {
   stats: MarketplaceStats
-  projectName: string | null
   pluginsUnlocked: boolean
+  onTab?: (tab: MarketplaceTabId) => void
+  onRefresh?: () => void
+  refreshing?: boolean
 }
 
-export function MarketplaceStatusBanner({ stats, projectName, pluginsUnlocked }: Props) {
+function tabFromPath(path: string | null): MarketplaceTabId | null {
+  if (!path) return null
+  const tab = new URL(path, 'http://local').searchParams.get('tab')
+  if (tab === 'browse' || tab === 'installed' || tab === 'deliveries' || tab === 'overview') return tab
+  return null
+}
+
+export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefresh, refreshing }: Props) {
+  const projectLabel = stats.projectName ?? 'active project'
+
+  if (!stats.hasAnyProject) {
+    return (
+      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2 min-w-0">
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
+          <div>
+            <p className="text-xs font-medium text-info">No project selected</p>
+            <p className="text-2xs text-fg-muted">Plugin installs and delivery logs are scoped to the active project.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!pluginsUnlocked) {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -21,9 +46,7 @@ export function MarketplaceStatusBanner({ stats, projectName, pluginsUnlocked }:
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">Plugins require a Pro plan or higher</p>
-            <p className="text-2xs text-fg-muted">
-              You can browse the catalog, but installing webhook plugins needs the plugins entitlement.
-            </p>
+            <p className="text-2xs text-fg-muted">Browse the catalog read-only — installing webhook plugins needs the plugins entitlement.</p>
           </div>
         </div>
         <Link to="/billing">
@@ -33,27 +56,34 @@ export function MarketplaceStatusBanner({ stats, projectName, pluginsUnlocked }:
     )
   }
 
-  if (stats.deliveriesFailed > 0 || stats.failingPlugins > 0) {
+  const priority = stats.topPriority
+  const label = stats.topPriorityLabel
+  const actionTab = tabFromPath(stats.topPriorityTo)
+
+  if (priority === 'delivery_failures') {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-danger/30 bg-danger/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.deliveriesFailed} failed deliver{stats.deliveriesFailed === 1 ? 'y' : 'ies'} in the last 7 days
+              {stats.deliveriesFailed} failed deliver{stats.deliveriesFailed === 1 ? 'y' : 'ies'} (7d)
             </p>
-            <p className="text-2xs text-fg-muted">
-              {stats.failingPlugins > 0
-                ? `${stats.failingPlugins} plugin${stats.failingPlugins === 1 ? '' : 's'} with a failing last delivery — open Deliveries or send a test event.`
-                : 'Check HTTP status and response excerpts in the Deliveries tab.'}
-            </p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
+        {onTab && actionTab ? (
+          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>View deliveries</Btn>
+        ) : (
+          <Link to="/marketplace?tab=deliveries">
+            <Btn size="sm" variant="ghost">View deliveries</Btn>
+          </Link>
+        )}
       </div>
     )
   }
 
-  if (stats.installedPaused > 0) {
+  if (priority === 'plugins_paused') {
     return (
       <div className="flex flex-col gap-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
@@ -62,32 +92,33 @@ export function MarketplaceStatusBanner({ stats, projectName, pluginsUnlocked }:
             <p className="text-xs font-medium text-warn">
               {stats.installedPaused} plugin{stats.installedPaused === 1 ? '' : 's'} paused
             </p>
-            <p className="text-2xs text-fg-muted">
-              Paused plugins stop receiving events until you resume them on the Installed tab.
-            </p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
+        {onTab ? (
+          <Btn size="sm" variant="primary" onClick={() => onTab('installed')}>Resume plugins</Btn>
+        ) : null}
       </div>
     )
   }
 
-  if (stats.installedTotal === 0) {
+  if (priority === 'no_plugins_installed') {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-info/30 bg-info/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-md border border-brand/30 bg-brand/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-2 min-w-0">
-          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
+          <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">
-              {projectName
-                ? `No plugins installed for ${projectName} yet`
-                : 'No plugins installed yet'}
-            </p>
-            <p className="text-2xs text-fg-muted">
-              {stats.catalogTotal} plugin{stats.catalogTotal === 1 ? '' : 's'} in the catalog — install one to receive
-              signed webhooks when reports classify or fixes land.
-            </p>
+            <p className="text-xs font-medium text-brand">No plugins installed on {projectLabel}</p>
+            <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
+        {onTab ? (
+          <Btn size="sm" variant="primary" onClick={() => onTab('browse')}>Browse catalog</Btn>
+        ) : (
+          <Link to="/marketplace?tab=browse">
+            <Btn size="sm" variant="primary">Browse catalog</Btn>
+          </Link>
+        )}
       </div>
     )
   }
@@ -97,18 +128,17 @@ export function MarketplaceStatusBanner({ stats, projectName, pluginsUnlocked }:
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Plugins delivering</p>
-          <p className="text-2xs text-fg-muted">
-            {stats.installedActive}/{stats.installedTotal} active · {stats.deliveriesOk} ok / {stats.deliveries7d} deliveries (7d)
-            {projectName ? ` · ${projectName}` : ''}
-          </p>
+          <p className="text-xs font-medium text-ok">Plugins delivering on {projectLabel}</p>
+          <p className="text-2xs text-fg-muted">{label}</p>
         </div>
       </div>
-      {stats.lastDeliveryAt && (
-        <span className="font-mono text-3xs text-fg-faint shrink-0">
-          Last delivery {new Date(stats.lastDeliveryAt).toLocaleString()}
-        </span>
-      )}
+      {onRefresh ? (
+        <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
+          Refresh
+        </Btn>
+      ) : onTab ? (
+        <Btn size="sm" variant="ghost" onClick={() => onTab('deliveries')}>View log</Btn>
+      ) : null}
     </div>
   )
 }

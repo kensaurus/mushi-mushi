@@ -12,6 +12,16 @@ export type RewardsTabId =
   | 'sandbox'
   | 'settings'
 
+export type RewardsTopPriority =
+  | 'no_org'
+  | 'project_disabled'
+  | 'webhooks_failing'
+  | 'open_disputes'
+  | 'no_rules'
+  | 'high_rejection'
+  | 'no_contributors'
+  | 'healthy'
+
 export interface RewardsStats {
   organizationId: string | null
   organizationName: string | null
@@ -29,6 +39,12 @@ export interface RewardsStats {
   webhooksConfigured: number
   webhooksFailing: number
   identityProvidersConfigured: number
+  enabledQuestsCount: number
+  openDisputesCount: number
+  lastActivityAt: string | null
+  topPriority: RewardsTopPriority
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
 export const EMPTY_REWARDS_STATS: RewardsStats = {
@@ -48,4 +64,10 @@ export const EMPTY_REWARDS_STATS: RewardsStats = {
   webhooksConfigured: 0,
   webhooksFailing: 0,
   identityProvidersConfigured: 0,
+  enabledQuestsCount: 0,
+  openDisputesCount: 0,
+  lastActivityAt: null,
+  topPriority: 'no_org',
+  topPriorityLabel: null,
+  topPriorityTo: null,
 }

@@ -89,12 +89,22 @@ export class MushiWidget {
   private selectedCategory: MushiReportCategory | null = null;
   private selectedIntent: string | null = null;
   private screenshotAttached = false;
+  private screenshotCapturing = false;
+  private screenshotError = false;
   private allowScreenshotRemove = true;
   private elementSelected = false;
+  private elementCapturing = false;
   private submitting = false;
+  /** Hint element injected outside the shadow DOM during element selection. */
+  private selectorHint: HTMLDivElement | null = null;
   private triggerVisible = true;
   private triggerShrunk = false;
   private triggerHiddenByScroll = false;
+  /** Milliseconds since mount — used for the 30s first-time nudge gate. */
+  private mountedAt: number | null = null;
+  private nudgeShown = false;
+  private nudgeEl: HTMLDivElement | null = null;
+  private nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   private sdkFreshness: { latest: string | null; current: string; deprecated: boolean; message?: string | null } | null = null;
   private reporterReports: MushiReporterReport[] = [];
   private reporterComments: MushiReporterComment[] = [];
@@ -145,8 +155,11 @@ export class MushiWidget {
       brandFooter: config.brandFooter ?? true,
       outdatedBanner: config.outdatedBanner ?? 'auto',
       betaMode: config.betaMode ?? {},
+      minDescriptionLength: config.minDescriptionLength ?? 20,
     };
     this.callbacks = callbacks;
+    // Passing undefined when locale is 'auto' lets getLocale() resolve via
+    // navigator.language automatically.
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
 
     this.host = document.createElement('div');
@@ -160,6 +173,7 @@ export class MushiWidget {
     this.syncAttachedLaunchers();
     this.syncSmartHide();
     this.render();
+    this.mountedAt = Date.now();
   }
 
   getIsMounted(): boolean {
@@ -189,6 +203,7 @@ export class MushiWidget {
       ...(config.brandFooter !== undefined ? { brandFooter: config.brandFooter } : {}),
       ...(config.outdatedBanner !== undefined ? { outdatedBanner: config.outdatedBanner } : {}),
       ...(config.betaMode !== undefined ? { betaMode: config.betaMode } : {}),
+      ...(config.minDescriptionLength !== undefined ? { minDescriptionLength: config.minDescriptionLength } : {}),
     };
     this.locale = getLocale(this.config.locale === 'auto' ? undefined : this.config.locale);
     this.syncAttachedLaunchers();
@@ -200,9 +215,13 @@ export class MushiWidget {
     if (this.isOpen) return;
     this.isOpen = true;
     this.screenshotAttached = false;
+    this.screenshotCapturing = false;
+    this.screenshotError = false;
     this.elementSelected = false;
+    this.elementCapturing = false;
     this.submitting = false;
     this.submittedAt = null;
+    this.removeSelectorHint();
 
     if (options?.category) {
       this.selectedCategory = options.category;
@@ -271,7 +290,132 @@ export class MushiWidget {
 
   setElementSelected(selected: boolean): void {
     this.elementSelected = selected;
+    this.elementCapturing = false;
+    this.removeSelectorHint();
     if (this.isOpen) this.render();
+  }
+
+  setScreenshotCapturing(capturing: boolean): void {
+    this.screenshotCapturing = capturing;
+    this.screenshotError = false;
+    if (this.isOpen) this.render();
+  }
+
+  setScreenshotError(failed: boolean): void {
+    this.screenshotError = failed;
+    this.screenshotCapturing = false;
+    if (this.isOpen) this.render();
+  }
+
+  setElementCapturing(capturing: boolean): void {
+    this.elementCapturing = capturing;
+    if (capturing) {
+      this.showSelectorHint();
+    } else {
+      this.removeSelectorHint();
+    }
+    if (this.isOpen) this.render();
+  }
+
+  /** Hide the widget panel (but keep the host element) during element selection
+   *  so the user can click any element on the page without the panel
+   *  intercepting the event. */
+  hidePanel(): void {
+    const panel = this.shadow.querySelector('.mushi-panel') as HTMLElement | null;
+    if (panel) panel.style.display = 'none';
+  }
+
+  showPanel(): void {
+    const panel = this.shadow.querySelector('.mushi-panel') as HTMLElement | null;
+    if (panel) panel.style.display = '';
+  }
+
+  private showSelectorHint(): void {
+    this.removeSelectorHint();
+    const hint = document.createElement('div');
+    hint.id = 'mushi-selector-hint';
+    hint.setAttribute('role', 'status');
+    hint.setAttribute('aria-live', 'polite');
+    hint.style.cssText = `
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2147483646;
+      background: rgba(17,17,17,0.92);
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      padding: 8px 16px;
+      border-radius: 20px;
+      pointer-events: none;
+      white-space: nowrap;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+    `;
+    hint.textContent = this.locale.step3.elementSelectorHint;
+    document.body.appendChild(hint);
+    this.selectorHint = hint;
+  }
+
+  private removeSelectorHint(): void {
+    this.selectorHint?.remove();
+    this.selectorHint = null;
+    // Also remove any orphaned hints from previous sessions.
+    document.getElementById('mushi-selector-hint')?.remove();
+  }
+
+  private showNudge(): void {
+    if (this.nudgeShown || this.nudgeEl) return;
+    this.nudgeShown = true;
+
+    // Find the trigger position to anchor the bubble.
+    const trigger = this.shadow.querySelector('.mushi-trigger') as HTMLElement | null;
+    const rect = trigger?.getBoundingClientRect();
+
+    const nudge = document.createElement('div');
+    nudge.id = 'mushi-nudge-bubble';
+    nudge.setAttribute('role', 'tooltip');
+    const isRight = this.config.position.includes('right');
+    nudge.style.cssText = `
+      position: fixed;
+      z-index: 2147483645;
+      ${rect
+        ? `bottom: ${window.innerHeight - rect.top + 8}px; ${isRight ? `right: ${window.innerWidth - rect.right}px;` : `left: ${rect.left}px;`}`
+        : 'bottom: 80px; right: 24px;'}
+      background: rgba(17,17,17,0.92);
+      color: #fff;
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      font-size: 12px;
+      line-height: 1.4;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 200px;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.35);
+      animation: mushi-fade-in 0.15s ease forwards;
+    `;
+    nudge.textContent = this.locale.step3.tooShort.startsWith('A bit')
+      ? "Found a bug? One sentence is enough \uD83D\uDC1B"
+      : "\u30D0\u30B0\u3092\u898B\u3064\u3051\u305F\uFF1F\u4E00\u884C\u3067\u5927\u4E08\u592B\u3067\u3059 \uD83D\uDC1B";
+    document.body.appendChild(nudge);
+    this.nudgeEl = nudge;
+
+    // Auto-remove after 5s.
+    if (this.nudgeTimer !== null) clearTimeout(this.nudgeTimer);
+    this.nudgeTimer = setTimeout(() => this.removeNudge(), 5000);
+  }
+
+  private removeNudge(): void {
+    if (this.nudgeTimer !== null) {
+      clearTimeout(this.nudgeTimer);
+      this.nudgeTimer = null;
+    }
+    this.nudgeEl?.remove();
+    this.nudgeEl = null;
+    document.getElementById('mushi-nudge-bubble')?.remove();
   }
 
   setSdkFreshness(info: { latest: string | null; current: string; deprecated: boolean; message?: string | null }): void {
@@ -301,6 +445,8 @@ export class MushiWidget {
     this.smartHideCleanup = null;
     this.attachedLaunchers.forEach((cleanup) => cleanup());
     this.attachedLaunchers = [];
+    this.removeSelectorHint();
+    this.removeNudge();
     this.host.remove();
   }
 
@@ -414,8 +560,22 @@ export class MushiWidget {
       trigger.style.zIndex = String(this.config.zIndex);
       this.applyInsetVars(trigger);
       trigger.addEventListener('click', () => {
+        this.removeNudge();
         if (this.isOpen) this.close();
         else this.open();
+      });
+      trigger.addEventListener('mouseenter', () => {
+        const onPageMs = this.mountedAt ? Date.now() - this.mountedAt : 0;
+        if (!this.nudgeShown && !this.isOpen && onPageMs >= 30_000) {
+          this.showNudge();
+        }
+      });
+      trigger.addEventListener('mouseleave', () => {
+        // Keep for 2s after hover ends so the user can read it.
+        if (this.nudgeEl) {
+          if (this.nudgeTimer !== null) clearTimeout(this.nudgeTimer);
+          this.nudgeTimer = setTimeout(() => this.removeNudge(), 2000);
+        }
       });
       this.shadow.appendChild(trigger);
     }
@@ -702,28 +862,88 @@ export class MushiWidget {
     `;
   }
 
+  private effectiveMinLength(): number {
+    const base = this.config.minDescriptionLength ?? 20;
+    // CJK scripts pack more meaning per character. Halve the floor for Japanese,
+    // Chinese, and Korean locales so an 8-character Japanese sentence isn't
+    // blocked by an English-calibrated minimum.
+    const lang = this.config.locale === 'auto'
+      ? (typeof navigator !== 'undefined' ? (navigator.language ?? '') : '')
+      : (this.config.locale ?? '');
+    const isCjk = /^(ja|zh|ko)/i.test(lang);
+    return isCjk ? Math.max(4, Math.floor(base / 2)) : base;
+  }
+
   private renderDetailsStep(): string {
     const t = this.locale;
+    const minLen = this.effectiveMinLength();
+
+    const screenshotLabel = this.screenshotCapturing
+      ? t.step3.screenshotCapturing
+      : this.screenshotError
+        ? t.step3.screenshotFailed
+        : this.screenshotAttached
+          ? t.step3.screenshotAttached
+          : t.step3.screenshotButton;
+
+    const screenshotClass = [
+      'mushi-attach-btn',
+      this.screenshotAttached ? 'active' : '',
+      this.screenshotError ? 'error' : '',
+      this.screenshotCapturing ? 'loading' : '',
+    ].filter(Boolean).join(' ');
+
+    const elementLabel = this.elementCapturing
+      ? t.step3.elementCapturing
+      : this.elementSelected
+        ? t.step3.elementSelected
+        : t.step3.elementButton;
+
+    const elementClass = [
+      'mushi-attach-btn',
+      this.elementSelected ? 'active' : '',
+      this.elementCapturing ? 'loading' : '',
+    ].filter(Boolean).join(' ');
+
+    const exampleChips = t.step3.examplePrompts
+      .map((p) => `<button type="button" class="mushi-example-chip" data-example="${escapeHtml(p)}">${escapeHtml(p)}</button>`)
+      .join('');
 
     return `
       ${this.renderHeader({ title: t.step3.heading, showBack: true, step: STEP_NUMBER.details })}
       <div class="mushi-body">
-        <textarea
-          class="mushi-textarea"
-          placeholder="${t.step3.descriptionPlaceholder}"
-          rows="4"
-          aria-label="${t.step3.heading}"
-          autofocus
-        ></textarea>
+        <div class="mushi-example-chips" aria-label="Example prompts">${exampleChips}</div>
+        <div class="mushi-textarea-wrap">
+          <textarea
+            class="mushi-textarea"
+            placeholder="${t.step3.descriptionPlaceholder}"
+            rows="4"
+            aria-label="${t.step3.heading}"
+            autofocus
+          ></textarea>
+          <div class="mushi-char-counter" data-role="char-counter" aria-hidden="true">
+            <span data-role="char-current">0</span>/<span data-role="char-min">${minLen}</span>
+          </div>
+        </div>
         <div class="mushi-attachments">
-          <button type="button" class="mushi-attach-btn${this.screenshotAttached ? ' active' : ''}" data-action="screenshot">
-            \uD83D\uDCF8 ${this.screenshotAttached ? t.step3.screenshotAttached : t.step3.screenshotButton}
+          <button type="button" class="${screenshotClass}"
+            data-action="screenshot"
+            ${this.screenshotCapturing ? 'disabled' : ''}
+            aria-label="${escapeHtml(screenshotLabel)}"
+          >
+            ${this.screenshotCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83D\uDCF8'}
+            ${escapeHtml(screenshotLabel)}
           </button>
           ${this.screenshotAttached && this.allowScreenshotRemove
-            ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot">\u2715 Remove screenshot</button>'
+            ? '<button type="button" class="mushi-attach-btn danger" data-action="remove-screenshot" aria-label="Remove screenshot">\u2715 Remove</button>'
             : ''}
-          <button type="button" class="mushi-attach-btn${this.elementSelected ? ' active' : ''}" data-action="element">
-            \uD83C\uDFAF ${this.elementSelected ? t.step3.elementSelected : t.step3.elementButton}
+          <button type="button" class="${elementClass}"
+            data-action="element"
+            ${this.elementCapturing ? 'disabled' : ''}
+            aria-label="${escapeHtml(elementLabel)}"
+          >
+            ${this.elementCapturing ? '<span class="mushi-spinner" aria-hidden="true"></span>' : '\uD83C\uDFAF'}
+            ${escapeHtml(elementLabel)}
           </button>
         </div>
         <div class="mushi-error" style="display:none" role="alert"></div>
@@ -908,6 +1128,35 @@ export class MushiWidget {
       });
     });
 
+    // Wire live char counter so users see their progress as they type.
+    const textarea = panel.querySelector('.mushi-textarea') as HTMLTextAreaElement | null;
+    const charCurrentEl = panel.querySelector('[data-role="char-current"]') as HTMLElement | null;
+    if (textarea && charCurrentEl) {
+      const minLen = this.effectiveMinLength();
+      const updateCounter = () => {
+        const len = textarea.value.trim().length;
+        charCurrentEl.textContent = String(len);
+        const counterEl = panel.querySelector('[data-role="char-counter"]') as HTMLElement | null;
+        if (counterEl) {
+          counterEl.style.color = len >= minLen ? 'var(--mushi-ok, #22c55e)' : '';
+        }
+      };
+      textarea.addEventListener('input', updateCounter);
+    }
+
+    // Wire example chips — clicking one pre-fills the textarea.
+    panel.querySelectorAll('[data-example]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const example = (chip as HTMLElement).dataset.example ?? '';
+        if (textarea) {
+          textarea.value = example;
+          textarea.focus();
+          // Trigger counter update.
+          textarea.dispatchEvent(new Event('input'));
+        }
+      });
+    });
+
     panel.querySelector('[data-action="screenshot"]')?.addEventListener('click', () => {
       this.callbacks.onScreenshotRequest();
     });
@@ -924,14 +1173,14 @@ export class MushiWidget {
       const description = textarea?.value?.trim() ?? '';
       const errorEl = panel.querySelector('.mushi-error') as HTMLElement | null;
 
-      // V5.3 §2.1: increased from 5 to 20 to filter low-value "doesn't work"
-      // submissions that the LLM cannot meaningfully classify. Empirically this
-      // removed ~30% of unactionable reports without measurable drop in valid ones.
-      const MIN_DESCRIPTION_LENGTH = 20;
-      if (description.length < MIN_DESCRIPTION_LENGTH) {
+      const minLen = this.effectiveMinLength();
+      if (description.length < minLen) {
         if (errorEl) {
-          errorEl.textContent = `${t.widget.error} (${description.length}/${MIN_DESCRIPTION_LENGTH})`;
+          const msg = `${t.step3.tooShort} (${description.length}/${minLen})`;
+          errorEl.textContent = msg;
           errorEl.style.display = 'block';
+          // Focus the textarea so the user can immediately keep typing.
+          textarea?.focus();
         }
         return;
       }

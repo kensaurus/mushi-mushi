@@ -38,6 +38,7 @@ import { FirstRunTour } from './FirstRunTour'
 import { CommandPalette } from './CommandPalette'
 import { SearchButton } from './SearchButton'
 import { HotkeysModal } from './HotkeysModal'
+import { FeedbackModal } from './FeedbackModal'
 import { ActivityDrawer } from './ActivityDrawer'
 import { DensitySidebarToggle } from './DensitySidebarToggle'
 import { ThemeSidebarToggle } from './ThemeSidebarToggle'
@@ -386,18 +387,116 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Activity tab links each LLM call to Langfuse and the source report.',
     },
   },
+  '/qa-coverage': {
+    title: 'QA Coverage',
+    kicker: 'Check',
+    scope: 'qa-coverage',
+    decide: {
+      label: 'Story pass rate',
+      summary: 'Banner + QA SNAPSHOT — scheduled user-story tests with 24h pass rate and run evidence.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Run evidence',
+      detail: 'Open a story drawer for screenshots, assertion diffs, and Browserbase replay links.',
+    },
+  },
+  '/lessons': {
+    title: 'Lessons',
+    kicker: 'Check',
+    scope: 'lessons',
+    decide: {
+      label: 'Mistake memory',
+      summary: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for rules, Clusters to promote, Query Sim to preview injection.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Promotion proof',
+      detail: 'Clusters tab shows coherence scores; Query Sim previews which rules fire on a diff.',
+    },
+  },
+  '/drift': {
+    title: 'Drift',
+    kicker: 'Check',
+    scope: 'drift',
+    decide: {
+      label: 'Contract sync',
+      summary: 'Banner + DRIFT SNAPSHOT — OpenAPI vs inventory vs DB schema gaps before users hit them.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Walker evidence',
+      detail: 'Snapshots tab shows edge counts; Findings drawer shows expected vs actual JSON.',
+    },
+  },
+  '/experiments': {
+    title: 'Experiments',
+    kicker: 'Check',
+    scope: 'experiments',
+    decide: {
+      label: 'Variant tests',
+      summary: 'Banner + EXPERIMENTS SNAPSHOT — draft, launch, and analyze A/B tests with mSPRT significance.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Analysis proof',
+      detail: 'Experiment drawer shows SRM check, p-value, and per-variant conversion rates.',
+    },
+  },
+  '/anomalies': {
+    title: 'Anomalies',
+    kicker: 'Check',
+    scope: 'anomalies',
+    decide: {
+      label: 'Metric regressions',
+      summary: 'Banner + ANOMALIES SNAPSHOT — ingest timeseries, run detectors, triage release regressions.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Detection evidence',
+      detail: 'Anomalies tab shows method, score vs baseline, and auto-report links.',
+    },
+  },
+  '/releases': {
+    title: 'Releases',
+    kicker: 'Check',
+    scope: 'releases',
+    decide: {
+      label: 'Changelog pipeline',
+      summary: 'Banner + RELEASES SNAPSHOT — AI draft from fixed reports, credit reporters, publish attribution toasts.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Credit audit',
+      detail: 'Release drawer shows fix count, contributor credits, and notified-at stamps per reporter.',
+    },
+  },
+  '/intelligence': {
+    title: 'Intelligence',
+    kicker: 'Check',
+    scope: 'intelligence',
+    decide: {
+      label: 'Weekly digest',
+      summary: 'Banner + INTELLIGENCE SNAPSHOT — LLM narrative, job pipeline, modernization findings, benchmarking.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Digest proof',
+      detail: 'Reports tab shows week_start, stats JSON, and exportable HTML — Pipeline shows job errors for debugging.',
+    },
+  },
   '/mcp': {
     title: 'MCP',
     kicker: 'Act',
     scope: 'mcp',
     decide: {
-      label: 'Agent access',
-      summary: 'Mint MCP-scoped API keys and paste the snippet so Cursor or Claude Desktop can read your triage queue.',
+      label: 'MCP SNAPSHOT',
+      summary: 'Key scopes, connection heartbeats, and endpoint match — banner shows SDK-only vs agent-ready.',
       severity: 'info',
     },
     verify: {
       label: 'Handshake check',
-      detail: 'Ask your agent to list Mushi tools — connected keys show a heartbeat on this page.',
+      detail: 'Ask your agent to list Mushi tools — connected keys show a heartbeat on Overview.',
     },
   },
   '/marketplace': {
@@ -405,13 +504,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'marketplace',
     decide: {
-      label: 'Webhook plugins',
-      summary: 'Install signed receivers that react when reports classify, fixes land, or SLAs breach.',
+      label: 'MARKETPLACE SNAPSHOT',
+      summary: 'Catalog, installed count, delivery success rate, and failing plugins — banner shows EMPTY vs DELIVERING.',
       severity: 'info',
     },
     verify: {
       label: 'Delivery log',
-      detail: 'Every POST includes HTTP status, latency, and response excerpt for debugging.',
+      detail: 'Every signed POST includes HTTP status, latency, and response excerpt for webhook debugging.',
     },
   },
   '/notifications': {
@@ -419,13 +518,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'notifications',
     decide: {
-      label: 'Reporter inbox',
-      summary: 'Outbound messages the SDK widget polls so bug reporters see classify and fix updates.',
+      label: 'NOTIFICATIONS SNAPSHOT',
+      summary: 'Total, unread, 24h volume, and enabled state — banner shows DISABLED vs ACTIVE vs UNREAD backlog.',
       severity: 'info',
     },
     verify: {
       label: 'Payload audit',
-      detail: 'Expand any row to inspect the JSON the widget received — unread rows may mean polling stopped.',
+      detail: 'Inbox tab expands JSON payloads — unread rows may mean the reporter SDK stopped polling.',
     },
   },
   '/billing': {
@@ -447,13 +546,13 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Workspace',
     scope: 'projects',
     decide: {
-      label: 'Project list',
-      summary: 'Pick the active project, mint keys, or send a test report from the project cards.',
+      label: 'PROJECTS SNAPSHOT',
+      summary: 'Project count, ingest coverage, SDK heartbeats, and active keys — banner shows EMPTY vs INGESTING.',
       severity: 'info',
     },
     verify: {
       label: 'Active context',
-      detail: 'The selected project drives filters and setup state across the console.',
+      detail: 'The selected project drives filters and setup state across the console — switch on Your projects tab.',
     },
   },
   '/organization/members': {
@@ -486,11 +585,11 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
   },
   '/rewards': {
     title: 'Rewards',
-    kicker: 'Workspace',
+    kicker: 'Act',
     scope: 'rewards',
     decide: {
-      label: 'Program health',
-      summary: 'See contributor activity, rule/tier config, and rejection rate before changing caps.',
+      label: 'REWARDS SNAPSHOT',
+      summary: 'Contributors, rejection rate, webhooks, and payouts — banner shows what blocks the loop.',
       severity: 'info',
     },
     verify: {
@@ -602,12 +701,12 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     scope: 'research',
     decide: {
       label: 'Firecrawl search',
-      summary: 'Look up docs, threads, and changelogs during triage — attach snippets to reports as evidence.',
+      summary: 'Banner + RESEARCH SNAPSHOT — BYOK web search during triage, attach snippets as report evidence.',
       severity: 'info',
     },
     verify: {
       label: 'Session history',
-      detail: 'Past queries and attached snippets stay scoped to the active project below.',
+      detail: 'History tab lists past queries; attached snippets link back to report UUIDs for audit.',
     },
   },
   '/iterate': {
@@ -615,8 +714,8 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
     kicker: 'Act',
     scope: 'iterate',
     decide: {
-      label: 'PDCA runs',
-      summary: 'Queue producer/critic loops on a target URL — watch scores climb iteration by iteration.',
+      label: 'PDCA SNAPSHOT',
+      summary: 'Overview shows queued/running/failed posture — Runs tab needs Trigger on each queued row.',
       severity: 'info',
     },
     verify: {
@@ -737,6 +836,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
   const [aiOpen, setAiOpen] = useState(false)
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false)
+  const [feedbackModalType, setFeedbackModalType] = useState<'bug' | 'feature'>('bug')
   const whatsNew = useWhatsNew()
   const navCounts = useNavCounts()
   const { isSuperAdmin, has } = useEntitlements()
@@ -1466,14 +1567,15 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span aria-hidden className="font-mono text-xs leading-none">✨</span>
                 </button>
               </Tooltip>
-              <Tooltip content="My feedback — bugs & feature requests" side="bottom">
-                <Link
-                  to="/feedback"
-                  aria-label="My feedback"
+              <Tooltip content="Report a bug or request a feature — opens inline" side="bottom">
+                <button
+                  type="button"
+                  onClick={() => { setFeedbackModalType('bug'); setFeedbackModalOpen(true) }}
+                  aria-label="Report a bug or request a feature"
                   className="inline-flex items-center justify-center h-6 w-6 rounded-sm text-fg-muted hover:text-fg hover:bg-surface-overlay motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                 >
                   <IconChat className="h-3.5 w-3.5" />
-                </Link>
+                </button>
               </Tooltip>
             </div>
             <VersionBadge whatsNew={whatsNew} />
@@ -1520,6 +1622,12 @@ export function Layout({ children }: { children: ReactNode }) {
         onClose={() => setAiOpen(false)}
         route={pathname}
       />
+      {feedbackModalOpen && (
+        <FeedbackModal
+          initialType={feedbackModalType}
+          onClose={() => setFeedbackModalOpen(false)}
+        />
+      )}
     </div>
   )
 }
