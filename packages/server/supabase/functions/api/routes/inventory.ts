@@ -97,6 +97,194 @@ function rateLimitResponse(
 
 export function registerInventoryRoutes(app: Hono): void {
   // ============================================================
+  // GET /v1/admin/inventory/stats — shell banner + INVENTORY SNAPSHOT
+  // Registered before /:projectId so "stats" is never parsed as a UUID.
+  // ============================================================
+  app.get('/v1/admin/inventory/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasGithub: false,
+      hasInventory: false,
+      discoveryEvents: 0,
+      draftProposals: 0,
+      total: 0,
+      verified: 0,
+      wired: 0,
+      mocked: 0,
+      stub: 0,
+      regressed: 0,
+      unknown: 0,
+      userStories: 0,
+      openFindings: 0,
+      lastIngestAt: null as string | null,
+      lastGateRunAt: null as string | null,
+      commitSha: null as string | null,
+      topPriority: 'no_inventory' as
+        | 'no_inventory'
+        | 'discovery_ready'
+        | 'regressed'
+        | 'open_findings'
+        | 'stub_heavy'
+        | 'clear',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+
+    const [
+      snapshotRes,
+      summaryRpc,
+      discoveryRes,
+      proposalsRes,
+      findingsRes,
+      gateRunRes,
+      projectRes,
+    ] = await Promise.all([
+      db
+        .from('inventories')
+        .select('id, commit_sha, ingested_at')
+        .eq('project_id', activeProject.id)
+        .eq('is_current', true)
+        .maybeSingle(),
+      db.rpc('inventory_status_summary', { p_project_id: activeProject.id }),
+      db
+        .from('discovery_events')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id),
+      db
+        .from('inventory_proposals')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id)
+        .eq('status', 'draft'),
+      db
+        .from('gate_findings')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id)
+        .eq('allowlisted', false),
+      db
+        .from('gate_runs')
+        .select('started_at')
+        .eq('project_id', activeProject.id)
+        .order('started_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('projects')
+        .select('github_app_installation_id')
+        .eq('id', activeProject.id)
+        .maybeSingle(),
+    ])
+
+    const summaryRaw = summaryRpc.data
+    const summary =
+      summaryRaw && typeof summaryRaw === 'object'
+        ? ('inventory_status_summary' in (summaryRaw as object)
+            ? (summaryRaw as { inventory_status_summary: Record<string, number> }).inventory_status_summary
+            : (summaryRaw as Record<string, number>))
+        : {}
+
+    const total = Number(summary.total ?? 0)
+    const verified = Number(summary.verified ?? 0)
+    const wired = Number(summary.wired ?? 0)
+    const mocked = Number(summary.mocked ?? 0)
+    const stub = Number(summary.stub ?? 0)
+    const regressed = Number(summary.regressed ?? 0)
+    const unknown = Number(summary.unknown ?? 0)
+    const userStories = Number(summary.user_stories ?? 0)
+    const snapshot = snapshotRes.data
+    const hasInventory = Boolean(snapshot)
+    const discoveryEvents = discoveryRes.count ?? 0
+    const draftProposals = proposalsRes.count ?? 0
+    const openFindings = findingsRes.count ?? 0
+    const hasGithub = Boolean(projectRes.data?.github_app_installation_id)
+
+    let topPriority: typeof empty.topPriority = 'no_inventory'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!hasInventory) {
+      if (draftProposals > 0) {
+        topPriority = 'discovery_ready'
+        topPriorityLabel = `${draftProposals} draft proposal${draftProposals === 1 ? '' : 's'} ready to accept`
+        topPriorityTo = '/inventory?tab=discovery'
+      } else if (discoveryEvents >= 10) {
+        topPriority = 'discovery_ready'
+        topPriorityLabel = `${discoveryEvents} discovery events — generate a proposal on Discovery tab`
+        topPriorityTo = '/inventory?tab=discovery'
+      } else {
+        topPriority = 'no_inventory'
+        topPriorityLabel = 'No inventory ingested — install SDK with discoverInventory or paste YAML'
+        topPriorityTo = '/inventory?tab=discovery'
+      }
+    } else if (regressed > 0) {
+      topPriority = 'regressed'
+      topPriorityLabel = `${regressed} regressed action${regressed === 1 ? '' : 's'} — fix or rollback before release`
+      topPriorityTo = '/inventory?tab=stories'
+    } else if (openFindings > 0) {
+      topPriority = 'open_findings'
+      topPriorityLabel = `${openFindings} open gate finding${openFindings === 1 ? '' : 's'} from latest runs`
+      topPriorityTo = '/inventory?tab=gates'
+    } else if (stub > 0 && stub >= total * 0.25) {
+      topPriority = 'stub_heavy'
+      topPriorityLabel = `${stub} stub actions — wire backend or tests before shipping`
+      topPriorityTo = '/inventory?tab=tree'
+    } else {
+      topPriority = 'clear'
+      topPriorityLabel = `${verified}/${total} actions verified — inventory current`
+      topPriorityTo = '/inventory?tab=stories'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        hasGithub,
+        hasInventory,
+        discoveryEvents,
+        draftProposals,
+        total,
+        verified,
+        wired,
+        mocked,
+        stub,
+        regressed,
+        unknown,
+        userStories,
+        openFindings,
+        lastIngestAt: snapshot?.ingested_at ?? null,
+        lastGateRunAt: gateRunRes.data?.started_at ?? null,
+        commitSha: snapshot?.commit_sha ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
+  // ============================================================
   // POST /v1/admin/inventory/:projectId — ingest yaml (mutation)
   // ============================================================
   app.post(

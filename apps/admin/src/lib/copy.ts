@@ -222,16 +222,18 @@ export const COPY: CopyRegistry = {
     },
     '/inventory': {
       title: 'App inventory',
-      description: 'A map of every screen and user flow in your app, with bug counts attached. Know where the pain lives.',
+      description: 'Banner + INVENTORY SNAPSHOT — Overview for posture, then User stories, Gates, Discovery, or Yaml tabs.',
       help: {
         title: 'About app inventory',
-        whatIsIt: 'An automatically built map of your app\'s pages and features, with live bug counts so you can see which parts are healthiest.',
+        whatIsIt:
+          "Your app's user-story map — pages, actions, and verification status derived from gates, crawler, and synthetic probes.",
         useCases: [
-          'Find which screen has the most unfixed bugs right now',
-          'Check that a new feature was picked up and is being monitored',
-          'See coverage gaps — flows Mushi hasn\'t seen a report from yet',
+          'Brand banner = no inventory yet — start on Discovery or paste YAML',
+          'Red banner = regressed actions — fix on User stories tab',
+          'Amber banner = open gate findings — review on Gates tab',
         ],
-        howToUse: 'Browse by screen or user flow. Click any item to see all bug reports linked to it.',
+        howToUse:
+          'Overview for posture. User stories for the card map. Gates for findings. Discovery for SDK observe → propose → accept.',
       },
     },
     '/query': {
@@ -796,7 +798,7 @@ export const COPY: CopyRegistry = {
     },
     '/inventory': {
       title: 'Inventory',
-      description: 'Crawled user-story map, gate runs, wired/mocked coverage, findings backlog.',
+      description: 'Banner + INVENTORY SNAPSHOT — Overview | User stories | Tree | Gates | Discovery | Yaml tabs.',
     },
     '/query': {
       title: 'Ask Your Data',

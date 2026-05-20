@@ -274,6 +274,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Open a report to review screenshots, console logs, network traces, and user context.',
     },
   },
+  '/inventory': {
+    title: 'User stories',
+    kicker: 'Plan',
+    scope: 'inventory',
+    decide: {
+      label: 'Truth layer',
+      summary: 'Banner + INVENTORY SNAPSHOT — map stories to verified actions before dispatching fixes.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Gate evidence',
+      detail: 'Gates tab lists open findings; Tree tab shows backend and test wiring per action.',
+    },
+  },
   '/fixes': {
     title: 'Fixes',
     kicker: 'Do',
