@@ -106,7 +106,13 @@ export async function assertProjectScope(
   const apiKeyProjectId = c.get('projectId')
   const authMethod = (c.get('authMethod') ?? 'jwt') as 'apiKey' | 'jwt'
 
-  if (apiKeyProjectId) {
+  // Only enforce project-ID pinning when the caller authenticated with an
+  // API key: the key is scoped to a specific project, so any mismatch is a
+  // hard error. JWT callers may access any project they belong to — the
+  // requireFeature middleware also sets projectId (to the user's resolved
+  // default project) as a side-effect, but that must not over-constrain
+  // which project a JWT caller can query via URL parameter.
+  if (apiKeyProjectId && authMethod === 'apiKey') {
     if (apiKeyProjectId !== projectId) {
       return {
         ok: false,

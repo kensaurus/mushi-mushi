@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -51,6 +51,159 @@ export function registerReportsDashboardRoutes(app: Hono): void {
   // /reports so triagers can see "5 critical · 12 high · …" before they scroll.
   // Uses a single small SELECT (severity-only) so it stays cheap even for
   // projects with millions of historical reports.
+  app.get('/v1/admin/reports/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      setupDone: false,
+      hasIngest: false,
+      totalAllTime: 0,
+      total14d: 0,
+      critical14d: 0,
+      high14d: 0,
+      newUntriaged: 0,
+      openBacklog: 0,
+      dismissed14d: 0,
+      lastReportAt: null as string | null,
+      topPriority: 'waiting_ingest' as 'critical' | 'backlog' | 'untriaged' | 'clear' | 'waiting_ingest',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 13);
+    since.setUTCHours(0, 0, 0, 0);
+    const sinceIso = since.toISOString();
+    const now = Date.now();
+
+    const [reportsRes, reportCountRes, keysRes, heartbeatRes] = await Promise.all([
+      db
+        .from('reports')
+        .select('id, status, severity, created_at')
+        .in('project_id', projectIds)
+        .gte('created_at', sinceIso)
+        .limit(1000),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id),
+      db
+        .from('project_api_keys')
+        .select('id')
+        .eq('project_id', activeProject.id)
+        .eq('is_active', true)
+        .limit(1),
+      db
+        .from('project_api_keys')
+        .select('last_seen_at')
+        .eq('project_id', activeProject.id)
+        .eq('is_active', true)
+        .not('last_seen_at', 'is', null)
+        .order('last_seen_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const recentReports = reportsRes.data ?? [];
+    let total14d = 0;
+    let critical14d = 0;
+    let high14d = 0;
+    let newUntriaged = 0;
+    let openBacklog = 0;
+    let dismissed14d = 0;
+
+    for (const r of recentReports) {
+      total14d += 1;
+      const status = String(r.status ?? '');
+      const sev = String(r.severity ?? '').toLowerCase();
+      if (sev === 'critical') critical14d += 1;
+      else if (sev === 'high') high14d += 1;
+      if (status === 'dismissed') dismissed14d += 1;
+      if (status === 'new' || status === 'queued') {
+        newUntriaged += 1;
+        if (now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000) {
+          openBacklog += 1;
+        }
+      }
+    }
+
+    const totalAllTime = reportCountRes.count ?? 0;
+    const hasKey = (keysRes.data ?? []).length > 0;
+    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+    const hasIngest = totalAllTime > 0;
+    const setupDone = hasKey && hasSdk && hasIngest;
+    const lastReportAt = recentReports[0]?.created_at ?? null;
+
+    let topPriority: 'critical' | 'backlog' | 'untriaged' | 'clear' | 'waiting_ingest' = 'waiting_ingest';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!hasIngest) {
+      topPriority = 'waiting_ingest';
+      topPriorityLabel = 'No reports ingested yet — verify SDK + send test report';
+      topPriorityTo = '/onboarding?tab=verify';
+    } else if (critical14d > 0 && newUntriaged > 0) {
+      topPriority = 'critical';
+      topPriorityLabel = `${critical14d} critical in 14d — triage before dispatch`;
+      topPriorityTo = '/reports?tab=queue&status=new&severity=critical';
+    } else if (openBacklog > 0) {
+      topPriority = 'backlog';
+      topPriorityLabel = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting > 1h to triage`;
+      topPriorityTo = '/reports?tab=queue&status=new';
+    } else if (newUntriaged > 0) {
+      topPriority = 'untriaged';
+      topPriorityLabel = `${newUntriaged} new report${newUntriaged === 1 ? '' : 's'} in queue`;
+      topPriorityTo = '/reports?tab=queue&status=new';
+    } else {
+      topPriority = 'clear';
+      topPriorityLabel = `${total14d} reports in 14d — queue current`;
+      topPriorityTo = '/reports?tab=queue';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        setupDone,
+        hasIngest,
+        totalAllTime,
+        total14d,
+        critical14d,
+        high14d,
+        newUntriaged,
+        openBacklog,
+        dismissed14d,
+        lastReportAt,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   app.get('/v1/admin/reports/severity-stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -162,7 +315,16 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       .order(orderColumn, { ascending: sortDir === 'asc', nullsFirst: false })
       .range(offset, offset + limit - 1);
 
-    if (status) query = query.eq('status', status);
+    if (status) {
+      // Canonical UI status "classified" must include legacy `triaged` rows
+      // until the backfill migration has run on every environment.
+      const legacyClassified = new Set(['classified', 'triaged', 'grouped', 'dispatched']);
+      const legacyFixed = new Set(['fixed', 'resolved', 'completed']);
+      if (status === 'classified') query = query.in('status', [...legacyClassified]);
+      else if (status === 'fixed') query = query.in('status', [...legacyFixed]);
+      else if (status === 'new') query = query.in('status', ['new', 'queued', 'pending', 'submitted']);
+      else query = query.eq('status', status);
+    }
     if (category) query = query.eq('category', category);
     if (severity) query = query.eq('severity', severity);
     if (component) query = query.eq('component', component);
@@ -874,13 +1036,516 @@ export function registerReportsDashboardRoutes(app: Hono): void {
     const toMap = (rows: Array<{ val: string; cnt: number }> | null) =>
       Object.fromEntries((rows ?? []).map((r) => [r.val, r.cnt]));
 
+    // Fold legacy SDK statuses (triaged, resolved, queued, …) into the
+    // canonical workflow buckets the admin UI labels use — otherwise quick-
+    // filter chips show "0 Classified" while 15 rows sit under `triaged`.
+    const rawByStatus = toMap(statusRows);
+    const byStatus: Record<string, number> = {};
+    const statusAlias: Record<string, string> = {
+      triaged: 'classified',
+      grouped: 'classified',
+      dispatched: 'classified',
+      resolved: 'fixed',
+      completed: 'fixed',
+      pending: 'new',
+      submitted: 'new',
+    };
+    for (const [val, cnt] of Object.entries(rawByStatus)) {
+      const canon = statusAlias[val] ?? val;
+      byStatus[canon] = (byStatus[canon] ?? 0) + cnt;
+    }
+
     return c.json({
       ok: true,
       data: {
         total: total ?? 0,
-        byStatus: toMap(statusRows),
+        byStatus,
         byCategory: toMap(categoryRows),
         bySeverity: toMap(severityRows),
+      },
+    });
+  });
+
+  // Lightweight posture for the Action Inbox shell — banner, KPI strip, tabs.
+  app.get('/v1/admin/inbox/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      setupDone: false,
+      requiredComplete: 0,
+      requiredTotal: 4,
+      openActions: 0,
+      clearStages: 0,
+      totalSurfaces: 5,
+      criticalReports14d: 0,
+      openBacklog: 0,
+      failedFixes14d: 0,
+      integrationRed: 0,
+      integrationAmber: 0,
+      judgeStale: false,
+      judgeStaleHours: null as number | null,
+      topPriorityTitle: null as string | null,
+      topPriorityStage: null as string | null,
+      topPriorityTo: null as string | null,
+      openPlan: false,
+      openDo: false,
+      openCheck: false,
+      openAct: false,
+      openOps: false,
+      lastActivityAt: null as string | null,
+      lastActivityKind: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 13);
+    since.setUTCHours(0, 0, 0, 0);
+    const sinceIso = since.toISOString();
+    const now = Date.now();
+
+    const [
+      reportsRes,
+      fixesRes,
+      healthRes,
+      evalRes,
+      keysRes,
+      heartbeatRes,
+      reportCountRes,
+    ] = await Promise.all([
+      db
+        .from('reports')
+        .select('id, status, severity, created_at')
+        .in('project_id', projectIds)
+        .gte('created_at', sinceIso)
+        .limit(500),
+      db
+        .from('fix_attempts')
+        .select('id, status, created_at')
+        .in('project_id', projectIds)
+        .gte('created_at', sinceIso)
+        .limit(200),
+      db
+        .from('integration_health_history')
+        .select('kind, status, checked_at')
+        .in('project_id', projectIds)
+        .gte('checked_at', sinceIso)
+        .order('checked_at', { ascending: false })
+        .limit(500),
+      db
+        .from('classification_evaluations')
+        .select('created_at')
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('project_api_keys')
+        .select('id')
+        .eq('project_id', activeProject.id)
+        .eq('is_active', true)
+        .limit(1),
+      db
+        .from('project_api_keys')
+        .select('last_seen_at')
+        .eq('project_id', activeProject.id)
+        .eq('is_active', true)
+        .not('last_seen_at', 'is', null)
+        .order('last_seen_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id),
+    ]);
+
+    const recentReports = reportsRes.data ?? [];
+    const recentFixes = fixesRes.data ?? [];
+
+    let criticalReports14d = 0;
+    for (const r of recentReports) {
+      const sev = String(r.severity ?? '').toLowerCase();
+      if (sev === 'critical') criticalReports14d += 1;
+    }
+
+    const openBacklog = recentReports.filter((r) => {
+      const status = String(r.status ?? '');
+      if (status !== 'new' && status !== 'queued') return false;
+      return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
+    }).length;
+
+    const failedFixes14d = recentFixes.filter((f) => f.status === 'failed').length;
+
+    const healthByKind = new Map<string, string>();
+    for (const row of healthRes.data ?? []) {
+      const kind = String(row.kind);
+      if (!healthByKind.has(kind)) healthByKind.set(kind, String(row.status));
+    }
+    let integrationRed = 0;
+    let integrationAmber = 0;
+    for (const status of healthByKind.values()) {
+      if (status === 'red' || status === 'fail') integrationRed += 1;
+      else if (status === 'amber' || status === 'degraded') integrationAmber += 1;
+    }
+
+    const lastEvalAt = evalRes.data?.created_at ?? null;
+    let judgeStaleHours: number | null = null;
+    if (lastEvalAt) {
+      judgeStaleHours = (now - new Date(String(lastEvalAt)).getTime()) / (60 * 60 * 1000);
+    }
+    const judgeStale = judgeStaleHours == null || judgeStaleHours > 48;
+
+    const openPlan = criticalReports14d > 0;
+    const openDo = failedFixes14d > 0;
+    const openCheck = judgeStale;
+    const openOps = integrationRed > 0 || integrationAmber > 0;
+    const openAct = integrationRed > 0;
+
+    const openFlags = [
+      openPlan
+        ? {
+            stage: 'plan',
+            title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} in 14d`,
+            to: '/reports?severity=critical',
+          }
+        : null,
+      openDo
+        ? {
+            stage: 'do',
+            title: `${failedFixes14d} failed fix${failedFixes14d === 1 ? '' : 'es'} in 14d`,
+            to: '/fixes?status=failed',
+          }
+        : null,
+      openCheck
+        ? {
+            stage: 'check',
+            title: judgeStaleHours == null
+              ? 'No judge evaluations yet'
+              : `Judge scores stale (${Math.round(judgeStaleHours)}h ago)`,
+            to: '/judge?action=run',
+          }
+        : null,
+      openAct
+        ? {
+            stage: 'act',
+            title: `${integrationRed} integration${integrationRed === 1 ? '' : 's'} disconnected`,
+            to: '/integrations?status=disconnected',
+          }
+        : null,
+      openOps
+        ? integrationRed > 0
+          ? {
+              stage: 'ops',
+              title: `${integrationRed} integration probe${integrationRed === 1 ? '' : 's'} failing`,
+              to: '/health?status=red',
+            }
+          : {
+              stage: 'ops',
+              title: `${integrationAmber} probe${integrationAmber === 1 ? '' : 's'} degraded`,
+              to: '/health?status=amber',
+            }
+        : null,
+    ].filter(Boolean) as Array<{ stage: string; title: string; to: string }>;
+
+    const openActions = openFlags.length;
+    const clearStages = 5 - openActions;
+    const top = openFlags[0] ?? null;
+
+    const hasKey = (keysRes.data ?? []).length > 0;
+    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+    const reportCount = reportCountRes.count ?? 0;
+    const requiredComplete =
+      1 + (hasKey ? 1 : 0) + (hasSdk ? 1 : 0) + (reportCount > 0 ? 1 : 0);
+    const setupDone = requiredComplete >= 4;
+
+    const lastReport = recentReports[0]?.created_at ?? null;
+    const lastFix = recentFixes[0]?.created_at ?? null;
+    let lastActivityAt: string | null = null;
+    let lastActivityKind: string | null = null;
+    if (lastReport && lastFix) {
+      if (new Date(String(lastReport)).getTime() >= new Date(String(lastFix)).getTime()) {
+        lastActivityAt = String(lastReport);
+        lastActivityKind = 'report';
+      } else {
+        lastActivityAt = String(lastFix);
+        lastActivityKind = 'fix';
+      }
+    } else if (lastReport) {
+      lastActivityAt = String(lastReport);
+      lastActivityKind = 'report';
+    } else if (lastFix) {
+      lastActivityAt = String(lastFix);
+      lastActivityKind = 'fix';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        setupDone,
+        requiredComplete,
+        requiredTotal: 4,
+        openActions,
+        clearStages,
+        totalSurfaces: 5,
+        criticalReports14d,
+        openBacklog,
+        failedFixes14d,
+        integrationRed,
+        integrationAmber,
+        judgeStale,
+        judgeStaleHours,
+        topPriorityTitle: top?.title ?? null,
+        topPriorityStage: top?.stage ?? null,
+        topPriorityTo: top?.to ?? null,
+        openPlan,
+        openDo,
+        openCheck,
+        openAct,
+        openOps,
+        lastActivityAt,
+        lastActivityKind,
+      },
+    });
+  });
+
+  // Lightweight posture for the dashboard shell — banner, KPI strip, tabs.
+  app.get('/v1/admin/dashboard/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasData: false,
+      setupDone: false,
+      requiredComplete: 0,
+      requiredTotal: 4,
+      openBacklog: 0,
+      reports14d: 0,
+      fixesInProgress: 0,
+      fixesFailed: 0,
+      openPrs: 0,
+      llmFailures14d: 0,
+      llmCalls14d: 0,
+      focusStage: null as string | null,
+      focusLabel: null as string | null,
+      bottleneck: null as string | null,
+      integrationIssues: 0,
+      lastActivityAt: null as string | null,
+      lastActivityKind: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+
+    const since = new Date();
+    since.setUTCDate(since.getUTCDate() - 13);
+    since.setUTCHours(0, 0, 0, 0);
+    const sinceIso = since.toISOString();
+    const now = Date.now();
+
+    const [
+      reportsRes,
+      fixesRes,
+      llmRes,
+      healthRes,
+      keysRes,
+      heartbeatRes,
+      reportCountRes,
+    ] = await Promise.all([
+      db
+        .from('reports')
+        .select('id, status, created_at')
+        .in('project_id', projectIds)
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .limit(500),
+      db
+        .from('fix_attempts')
+        .select('id, status, created_at, pr_number')
+        .in('project_id', projectIds)
+        .gte('created_at', sinceIso)
+        .limit(200),
+      db
+        .from('llm_invocations')
+        .select('id, status, created_at')
+        .in('project_id', projectIds)
+        .gte('created_at', sinceIso)
+        .limit(2000),
+      db
+        .from('integration_health_history')
+        .select('kind, status, checked_at')
+        .in('project_id', projectIds)
+        .gte('checked_at', sinceIso)
+        .order('checked_at', { ascending: false })
+        .limit(500),
+      db
+        .from('project_api_keys')
+        .select('id')
+        .eq('project_id', activeProject.id)
+        .eq('is_active', true)
+        .limit(1),
+      db
+        .from('project_api_keys')
+        .select('last_seen_at')
+        .eq('project_id', activeProject.id)
+        .eq('is_active', true)
+        .not('last_seen_at', 'is', null)
+        .order('last_seen_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', activeProject.id),
+    ]);
+
+    const recentReports = reportsRes.data ?? [];
+    const recentFixes = fixesRes.data ?? [];
+    const recentLlm = llmRes.data ?? [];
+
+    const openBacklog = recentReports.filter((r) => {
+      const status = String(r.status ?? '');
+      if (status !== 'new' && status !== 'queued') return false;
+      return now - new Date(String(r.created_at)).getTime() > 60 * 60 * 1000;
+    }).length;
+
+    const fixesInProgress = recentFixes.filter(
+      (f) => f.status === 'queued' || f.status === 'running',
+    ).length;
+    const fixesFailed = recentFixes.filter((f) => f.status === 'failed').length;
+    const openPrs = recentFixes.filter(
+      (f) => f.pr_number != null && f.status === 'completed',
+    ).length;
+
+    let llmCalls14d = 0;
+    let llmFailures14d = 0;
+    for (const inv of recentLlm) {
+      llmCalls14d += 1;
+      if (inv.status !== 'success') llmFailures14d += 1;
+    }
+
+    const healthByKind = new Map<string, string>();
+    for (const row of healthRes.data ?? []) {
+      const kind = String(row.kind);
+      if (!healthByKind.has(kind)) healthByKind.set(kind, String(row.status));
+    }
+    const integrationIssues = [...healthByKind.values()].filter(
+      (s) => s && s !== 'ok',
+    ).length;
+
+    const hasKey = (keysRes.data ?? []).length > 0;
+    const hasSdk = Boolean(heartbeatRes.data?.last_seen_at);
+    const reportCount = reportCountRes.count ?? 0;
+    const requiredComplete =
+      1 +
+      (hasKey ? 1 : 0) +
+      (hasSdk ? 1 : 0) +
+      (reportCount > 0 ? 1 : 0);
+    const setupDone = requiredComplete >= 4;
+
+    let focusStage: string | null = null;
+    let focusLabel: string | null = null;
+    let bottleneck: string | null = null;
+    if (openBacklog > 0) {
+      focusStage = 'plan';
+      focusLabel = 'Plan';
+      bottleneck = `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting > 1h to triage`;
+    } else if (fixesFailed > 0) {
+      focusStage = 'do';
+      focusLabel = 'Do';
+      bottleneck = `${fixesFailed} failed fix${fixesFailed === 1 ? '' : 'es'} need retry`;
+    } else if (integrationIssues > 0) {
+      focusStage = 'act';
+      focusLabel = 'Act';
+      bottleneck = `${integrationIssues} integration${integrationIssues === 1 ? '' : 's'} failing health checks`;
+    } else if (llmFailures14d > 0) {
+      focusStage = 'check';
+      focusLabel = 'Check';
+      bottleneck = `${llmFailures14d} LLM failure${llmFailures14d === 1 ? '' : 's'} in 14d`;
+    }
+
+    const lastReport = recentReports[0]?.created_at ?? null;
+    const lastFix = recentFixes[0]?.created_at ?? null;
+    let lastActivityAt: string | null = null;
+    let lastActivityKind: string | null = null;
+    if (lastReport && lastFix) {
+      if (new Date(String(lastReport)).getTime() >= new Date(String(lastFix)).getTime()) {
+        lastActivityAt = String(lastReport);
+        lastActivityKind = 'report';
+      } else {
+        lastActivityAt = String(lastFix);
+        lastActivityKind = 'fix';
+      }
+    } else if (lastReport) {
+      lastActivityAt = String(lastReport);
+      lastActivityKind = 'report';
+    } else if (lastFix) {
+      lastActivityAt = String(lastFix);
+      lastActivityKind = 'fix';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        hasData: recentReports.length > 0 || recentFixes.length > 0,
+        setupDone,
+        requiredComplete,
+        requiredTotal: 4,
+        openBacklog,
+        reports14d: recentReports.length,
+        fixesInProgress,
+        fixesFailed,
+        openPrs,
+        llmFailures14d,
+        llmCalls14d,
+        focusStage,
+        focusLabel,
+        bottleneck,
+        integrationIssues,
+        lastActivityAt,
+        lastActivityKind,
       },
     });
   });
@@ -1056,7 +1721,16 @@ export function registerReportsDashboardRoutes(app: Hono): void {
 
     // Triage queue — top 5 most recent reports needing attention
     const triageQueue = (recentReports ?? [])
-      .filter((r) => r.status === 'new' || r.status === 'queued' || r.status === 'classified')
+      .filter((r) => {
+        const s = String(r.status ?? '');
+        return (
+          s === 'new' ||
+          s === 'queued' ||
+          s === 'classified' ||
+          s === 'triaged' ||
+          s === 'grouped'
+        );
+      })
       .slice(0, 5)
       .map((r) => ({
         id: r.id,
@@ -1078,7 +1752,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       })),
       ...(recentFixes ?? []).slice(0, 4).map((f) => ({
         kind: 'fix' as const,
-        id: f.report_id,
+        // Use the fix attempt's own ID, not report_id — multiple attempts can
+        // share the same report_id and would produce duplicate React keys.
+        id: f.id,
         label: `Auto-fix ${f.status}`,
         meta: f.llm_model ?? f.agent ?? null,
         at: f.created_at,

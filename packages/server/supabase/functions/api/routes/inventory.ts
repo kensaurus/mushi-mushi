@@ -4,6 +4,7 @@
  * Mushi Mushi v2 — Bidirectional Inventory routes (whitepaper §4.1, §6).
  *
  * Routes:
+ *   GET    /v1/admin/inventory/stats                        — shell KPIs + posture
  *   POST   /v1/admin/inventory/:projectId                   — ingest yaml
  *   GET    /v1/admin/inventory/:projectId                   — current snapshot
  *   GET    /v1/admin/inventory/:projectId/diff              — between two SHAs
@@ -25,7 +26,7 @@
 
 import type { Hono } from 'npm:hono@4'
 
-import { adminOrApiKey } from '../../_shared/auth.ts'
+import { adminOrApiKey, jwtAuth } from '../../_shared/auth.ts'
 import { requireFeature } from '../../_shared/entitlements.ts'
 import { getServiceClient } from '../../_shared/db.ts'
 import { log } from '../../_shared/logger.ts'
@@ -48,6 +49,7 @@ import {
   type RateLimiter,
   type RateLimitVerdict,
 } from '../../_shared/inventory-guards.ts'
+import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
 interface IngestBody {
   yaml?: string

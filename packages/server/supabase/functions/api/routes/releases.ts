@@ -30,7 +30,7 @@ export function registerReleasesRoutes(app: Hono) {
 
     let query = db
       .from('releases')
-      .select('id, project_id, version, title, status, published_at, credited_reporter_ids, fixed_report_ids, created_at, updated_at', { count: 'exact' })
+      .select('id, project_id, version, title, status, published_at, credited_reporter_ids, fixed_report_ids, fulfilled_ticket_ids, created_at, updated_at', { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -59,19 +59,34 @@ export function registerReleasesRoutes(app: Hono) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    const res = await fetch(`${supabaseUrl}/functions/v1/release-builder`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${serviceKey}`,
-        'x-mushi-admin': '1',
-      },
-      body: JSON.stringify(body.data),
-    })
+    let res: Response
+    try {
+      res = await fetch(`${supabaseUrl}/functions/v1/release-builder`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${serviceKey}`,
+          'x-mushi-admin': '1',
+        },
+        body: JSON.stringify(body.data),
+      })
+    } catch (err) {
+      console.error('[releases/draft] fetch release-builder failed:', err)
+      return c.json({ ok: false, error: 'Could not reach release-builder function' }, 500)
+    }
 
-    const data = await res.json()
-    if (!res.ok) return c.json({ ok: false, error: data.error ?? 'release-builder failed' }, 500)
-    return c.json({ ok: true, data: data.data ?? data })
+    // The edge function may return plain-text "Internal Server Error" on crash —
+    // guard against non-JSON so we surface a useful message instead of 500ing.
+    let data: Record<string, unknown> = {}
+    const rawText = await res.text()
+    try {
+      data = JSON.parse(rawText)
+    } catch {
+      console.error('[releases/draft] release-builder returned non-JSON:', rawText.slice(0, 200))
+      return c.json({ ok: false, error: `release-builder error: ${rawText.slice(0, 100)}` }, 500)
+    }
+    if (!res.ok) return c.json({ ok: false, error: (data.error as string) ?? 'release-builder failed' }, 500)
+    return c.json({ ok: true, data: (data as { data?: unknown }).data ?? data })
   })
 
   // ─── Release detail ────────────────────────────────────────────────────────
@@ -93,6 +108,7 @@ export function registerReleasesRoutes(app: Hono) {
     title: z.string().min(1).optional(),
     body_md: z.string().optional(),
     version: z.string().min(1).optional(),
+    fulfilled_ticket_ids: z.array(z.string().uuid()).optional(),
   })
 
   app.patch('/v1/admin/releases/:id', jwtAuth, async (c) => {
@@ -141,6 +157,20 @@ export function registerReleasesRoutes(app: Hono) {
     if (error) return c.json({ ok: false, error: error.message }, 500)
     if (!release) return c.json({ ok: false, error: 'Release not found or already published' }, 404)
 
+    const publishedAt = release.published_at ?? new Date().toISOString()
+    const ticketIds = (release.fulfilled_ticket_ids ?? []) as string[]
+    if (ticketIds.length > 0) {
+      await db
+        .from('support_tickets')
+        .update({
+          shipped_in_release_id: release.id,
+          shipped_at: publishedAt,
+          status: 'resolved',
+        })
+        .in('id', ticketIds)
+        .is('shipped_in_release_id', null)
+    }
+
     // Get credits to notify
     const { data: credits } = await db
       .from('release_credits')
@@ -161,6 +191,7 @@ export function registerReleasesRoutes(app: Hono) {
       ok: true,
       data: release,
       notified: (credits ?? []).length,
+      tickets_fulfilled: ticketIds.length,
     })
   })
 
