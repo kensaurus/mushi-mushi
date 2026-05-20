@@ -4,7 +4,20 @@
     "headline": "pending (pending release)",
     "pending": true,
     "versions": [],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "Graph",
+        "description": "— interactive ReactFlow canvas with layer-filter pills"
+      },
+      {
+        "title": "Layer Sankey",
+        "description": "— horizontal lane diagram showing files per architectural tier"
+      },
+      {
+        "title": "Search",
+        "description": "— semantic search via the `match_codebase_files` embedding RPC"
+      }
+    ],
     "packages": []
   },
   {

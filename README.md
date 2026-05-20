@@ -77,6 +77,7 @@ Mushi v1 was the negative side: catch what your users _felt_ break and triage it
   - **Anomalies** (`/anomalies`) — STL + Page-Hinkley + isolation-forest detectors on inbound adapter metrics; confirmed regressions auto-open reports.
   - **Cost** (`/cost`) — LLM spend breakdown across clustering, judging, PDCA, drift, and anomaly pipelines.
   - **Docs** — [`closed-loop.mdx`](https://kensaur.us/mushi-mushi/docs/concepts/closed-loop) essay + `EvolutionDiagram` / `LoopComparison` landing components. See [Why a closed loop](#why-a-closed-loop) below.
+- 🗺️ **Codebase Atlas (`/explore`).** Visual exploration of every indexed source file — a ReactFlow node graph coloured by architectural layer (UI, Library, Backend, Tests, Config), a horizontal Sankey flow view for at-a-glance dependency tracing, and a semantic search tab backed by vector embeddings. Click any node for its path, language, line count, and content preview; copy the path in one click; follow "View bug reports" to see Mushi reports filed against that component. Layer filter chips narrow all three views simultaneously. Enable indexing via `mushi index` or Settings → Codebase Indexing.
 - 🧪 **Beta expectations.** The console shows a persistent beta banner with a one-click **Report a bug** mailto (`kensaurus@gmail.com`). Project creation surfaces structured error codes (`NO_ORGANIZATION`, `FORBIDDEN`, …) with recovery actions instead of generic toasts. Personal workspaces auto-provision on signup so first-time users can create a project immediately.
 
 Get started in any project that already has Mushi installed:
@@ -355,6 +356,18 @@ A quick look at where you'll spend your time. Every panel is a click-through to 
 </table>
 
 For the full screenshot tour (28 surfaces, every page in the console) see [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md).
+
+### Codebase Atlas — `/explore`
+
+A lens for understanding how your indexed project is structured, before you file a bug or dispatch a fix.
+
+| View | What you see |
+|------|-------------|
+| **Graph** | ReactFlow canvas — every file as a node, coloured by layer, import edges drawn as directed arrows. Drag to pan, scroll to zoom, click a node for full metadata in a floating panel. |
+| **Layers** | Horizontal Sankey — files grouped left-to-right (UI → Library → Backend → Tests → Config). Import edges drawn as bezier curves with directional arrows. Column headers show a proportional fill bar so the heaviest layer is immediately obvious. |
+| **Search** | Semantic search over vector embeddings — describe what you're looking for in plain English ("authentication logic", "rate limiting middleware") and the most relevant files surface ranked by similarity, with a visual similarity bar. Layer filter tabs narrow results to a single architectural layer. |
+
+The **layer filter chips** at the top of any view narrow all three tabs simultaneously — click `Backend (12)` and the graph, lane, and search results all scope to backend files only.
 
 ---
 

@@ -82,35 +82,63 @@ export function registerSyncRoutes(app: Hono) {
     const projectId = c.get('projectId') as string
     const projectName = c.get('projectName') as string
 
-    // Run all four counts in parallel to keep latency low.
-    const [reportRows, fixCountRes, lessonCountRes] = await Promise.all([
-      db
-        .from('reports')
-        .select('status, severity')
-        .eq('project_id', projectId),
-      db
-        .from('fixes')
-        .select('id, status', { count: 'exact' })
-        .eq('project_id', projectId),
-      db
-        .from('lessons')
-        .select('id', { count: 'exact', head: true })
-        .eq('project_id', projectId)
-        .is('retired_at', null),
-    ])
+    // Use DB-level HEAD count queries (no row data returned) so the counts are
+    // always accurate even when a project has > max_rows (Supabase default 1000)
+    // reports. Running them all in parallel keeps the latency equivalent to a
+    // single round-trip.
+    const STATUS_BUCKETS = ['new', 'triaged', 'in_progress', 'resolved', 'dismissed'] as const
+    const SEVERITY_BUCKETS = ['critical', 'high', 'medium', 'low'] as const
 
-    // Aggregate by_status and by_severity from the lightweight rows query
-    const byStatus: Record<string, number> = {}
-    const bySeverity: Record<string, number> = {}
-    for (const row of (reportRows.data ?? []) as Array<{ status?: string; severity?: string }>) {
-      const s = row.status ?? 'new'
-      byStatus[s] = (byStatus[s] ?? 0) + 1
-      const sev = row.severity ?? 'unset'
-      bySeverity[sev] = (bySeverity[sev] ?? 0) + 1
+    // Each status/severity bucket query throws on DB error so Promise.all rejects
+    // fast. Fix/lesson queries use the non-throwing pattern and are checked below.
+    let statusResults: Array<{ key: string; count: number }>
+    let severityResults: Array<{ key: string; count: number }>
+    let fixCount: number
+    let mergedFixCount: number
+    let lessonCount: number
+    try {
+      const [sRes, sevRes, fixCountRes, mergedFixRes, lessonCountRes] = await Promise.all([
+        Promise.all(
+          STATUS_BUCKETS.map((s) =>
+            db.from('reports').select('*', { count: 'exact', head: true })
+              .eq('project_id', projectId).eq('status', s)
+              .then((r) => {
+                if (r.error) throw new Error(`stats status ${s}: ${r.error.message}`)
+                return { key: s as string, count: r.count ?? 0 }
+              }),
+          ),
+        ),
+        Promise.all(
+          SEVERITY_BUCKETS.map((sev) =>
+            db.from('reports').select('*', { count: 'exact', head: true })
+              .eq('project_id', projectId).eq('severity', sev)
+              .then((r) => {
+                if (r.error) throw new Error(`stats severity ${sev}: ${r.error.message}`)
+                return { key: sev as string, count: r.count ?? 0 }
+              }),
+          ),
+        ),
+        db.from('fixes').select('*', { count: 'exact', head: true }).eq('project_id', projectId),
+        db.from('fixes').select('*', { count: 'exact', head: true }).eq('project_id', projectId).eq('status', 'merged'),
+        db.from('lessons').select('*', { count: 'exact', head: true }).eq('project_id', projectId).is('retired_at', null),
+      ])
+
+      if (fixCountRes.error) throw new Error(`stats fixes: ${fixCountRes.error.message}`)
+      if (mergedFixRes.error) throw new Error(`stats fixes_merged: ${mergedFixRes.error.message}`)
+      if (lessonCountRes.error) throw new Error(`stats lessons: ${lessonCountRes.error.message}`)
+
+      statusResults = sRes
+      severityResults = sevRes
+      fixCount = fixCountRes.count ?? 0
+      mergedFixCount = mergedFixRes.count ?? 0
+      lessonCount = lessonCountRes.count ?? 0
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: msg } }, 500)
     }
 
-    const fixes = (fixCountRes.data ?? []) as Array<{ status?: string }>
-    const fixesMerged = fixes.filter((f) => f.status === 'merged').length
+    const byStatus = Object.fromEntries(statusResults.map((r) => [r.key, r.count]))
+    const bySeverity = Object.fromEntries(severityResults.map((r) => [r.key, r.count]))
 
     return c.json({
       ok: true,
@@ -119,9 +147,9 @@ export function registerSyncRoutes(app: Hono) {
         project_name: projectName,
         by_status: byStatus,
         by_severity: bySeverity,
-        fixes_count: fixes.length,
-        fixes_merged: fixesMerged,
-        lessons_count: lessonCountRes.count ?? 0,
+        fixes_count: fixCount,
+        fixes_merged: mergedFixCount,
+        lessons_count: lessonCount,
       },
     })
   })
@@ -154,7 +182,9 @@ export function registerSyncRoutes(app: Hono) {
     if (severity) query = query.eq('severity', severity)
     if (search) {
       // Bilateral ILIKE search across summary and description fields.
-      const escaped = search.replace(/[%_]/g, '\\$&')
+      // Strip commas in addition to % and _ — a comma in a PostgREST .or()
+      // condition string splits the expression and can malform the query.
+      const escaped = search.replace(/[%_,]/g, (c) => c === ',' ? ' ' : `\\${c}`)
       query = query.or(`summary.ilike.%${escaped}%,description.ilike.%${escaped}%`)
     }
 
@@ -201,12 +231,15 @@ export function registerSyncRoutes(app: Hono) {
     }
 
     // Attach linked fix ID if present, via the report_groups table.
+    // Scope to project_id to prevent cross-project data leakage if a
+    // report_group_id is ever corrupted or guessed.
     let fix_id: string | null = null
     if (data.report_group_id) {
       const { data: group } = await db
         .from('report_groups')
         .select('fix_id')
         .eq('id', data.report_group_id)
+        .eq('project_id', projectId)
         .maybeSingle()
       fix_id = group?.fix_id ?? null
     }
@@ -314,9 +347,9 @@ export function registerSyncRoutes(app: Hono) {
 
   // ── POST /v1/sync/codebase/upload ─────────────────────────────────────────
   // Ingest a single source file into the Mushi RAG vector index.
-  // Used by `mushi index <path>`. The legacy admin route
-  // (/v1/admin/codebase/upload) requires jwtAuth — this sync variant accepts
-  // the SDK API key so that CI pipelines don't need a user session.
+  // Used by `mushi index <path>`. The admin route (/v1/admin/codebase/upload)
+  // requires a Supabase JWT — this sync variant accepts the SDK API key so
+  // that CI pipelines don't need a browser session.
   app.post('/v1/sync/codebase/upload', apiKeyAuth, async (c) => {
     const db = getServiceClient()
     const projectId = c.get('projectId') as string

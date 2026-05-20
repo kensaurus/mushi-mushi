@@ -109,6 +109,426 @@ export const COPY: CopyRegistry = {
     },
   },
   beginner: {
+    '/inbox': {
+      title: 'Your to-do list',
+      description: 'One place to see everything that needs your attention right now — across every stage of the bug-fix loop.',
+      help: {
+        title: 'About the inbox',
+        whatIsIt: 'A single dashboard that shows every action waiting for you — bugs to triage, fixes to review, and connections to set up.',
+        useCases: [
+          'Start every morning here — see what actually needs you today',
+          'Jump to the highest-priority bug in one click',
+          'Quickly check if everything is on track or if something is stuck',
+        ],
+        howToUse: 'Click any open action card to jump straight to that page. Stages with a green check are all clear — no action needed.',
+      },
+    },
+    '/projects': {
+      title: 'Your projects',
+      description: 'Create and manage projects — one per app or environment. Each project gets its own bug inbox, API key, and settings.',
+      help: {
+        title: 'About projects',
+        whatIsIt: 'A project is a container for one app or environment. Everything in Mushi — bugs, fixes, reports — belongs to a project.',
+        useCases: [
+          'Create a project for your main app (takes 30 seconds)',
+          'Add a separate project for staging so test bugs don\'t mix with real ones',
+          'Generate an API key here to paste into your app code',
+        ],
+        howToUse: 'Click "New project" to create one. Click any existing project card to see its API keys, settings, and health.',
+      },
+    },
+    '/queue': {
+      title: 'Stuck reports',
+      description: 'Bug reports that couldn\'t be processed automatically. Retry them, inspect why they failed, or clear the backlog.',
+      help: {
+        title: 'About the processing queue',
+        whatIsIt: 'A holding area for reports that got stuck during automatic processing — like a jammed printer tray you can fix without losing any pages.',
+        useCases: [
+          'Retry reports that failed due to a temporary API outage',
+          'See exactly why a report got stuck (error message, step, timestamp)',
+          'Clear old failures to keep the queue tidy',
+        ],
+        howToUse: 'Click "Retry" on any failed item. If the same item keeps failing, click it to see the full error details and contact support.',
+      },
+    },
+    '/inventory': {
+      title: 'App inventory',
+      description: 'A map of every screen and user flow in your app, with bug counts attached. Know where the pain lives.',
+      help: {
+        title: 'About app inventory',
+        whatIsIt: 'An automatically built map of your app\'s pages and features, with live bug counts so you can see which parts are healthiest.',
+        useCases: [
+          'Find which screen has the most unfixed bugs right now',
+          'Check that a new feature was picked up and is being monitored',
+          'See coverage gaps — flows Mushi hasn\'t seen a report from yet',
+        ],
+        howToUse: 'Browse by screen or user flow. Click any item to see all bug reports linked to it.',
+      },
+    },
+    '/query': {
+      title: 'Ask your data',
+      description: 'Type a question in plain English and get a live answer from your project\'s bug data. No SQL needed.',
+      help: {
+        title: 'About data queries',
+        whatIsIt: 'Ask questions like "How many critical bugs landed this week?" and get instant answers straight from your project\'s database.',
+        useCases: [
+          'Answer a manager\'s question without exporting a spreadsheet',
+          'Check trends ("Are bugs up or down this sprint?")',
+          'Find specific reports without clicking through filters',
+        ],
+        howToUse: 'Type your question in plain English and press Enter. Results appear as a table. Click "Export" to download as CSV.',
+      },
+    },
+    '/research': {
+      title: 'AI research',
+      description: 'Ask the AI a question about your bugs, patterns, or codebase and get a researched answer with sources.',
+      help: {
+        title: 'About AI research',
+        whatIsIt: 'An AI that reads your bug history, code, and fixes to answer specific questions — like having a senior engineer who\'s read everything.',
+        useCases: [
+          '"Why does the login screen keep breaking?" — get a pattern analysis',
+          '"What changed before the spike in crashes last Tuesday?"',
+          'Get a plain-language summary of a complex bug cluster',
+        ],
+        howToUse: 'Type your question and hit Enter. The AI cites which reports and fixes it used to answer.',
+      },
+    },
+    '/repo': {
+      title: 'Code connection',
+      description: 'Link Mushi to your GitHub repository so auto-fixes can open pull requests directly on your codebase.',
+      help: {
+        title: 'About repo connection',
+        whatIsIt: 'Link your GitHub repo here once, and every auto-fix Mushi drafts will appear as a pull request in the right branch.',
+        useCases: [
+          'Connect your repo so the auto-fix agent has somewhere to open PRs',
+          'Check connection health if PRs stopped appearing',
+          'Switch to a different repo or branch',
+        ],
+        howToUse: 'Click "Connect GitHub" and follow the OAuth flow. Once connected, a green pill confirms auto-fixes will land in your repo.',
+      },
+    },
+    '/sso': {
+      title: 'Single sign-on',
+      description: 'Let your whole team log in with Google, GitHub, or your company\'s identity provider — no separate passwords.',
+      help: {
+        title: 'About single sign-on',
+        whatIsIt: 'Set up SSO so your team logs into Mushi with the same credentials they use for everything else — no new passwords to manage.',
+        useCases: [
+          'Enable Google or GitHub login for your whole organization',
+          'Connect your company\'s Okta or Azure AD if you\'re enterprise',
+          'Enforce SSO-only access so passwords can\'t be a weak point',
+        ],
+        howToUse: 'Pick an identity provider and follow the setup steps. Test the connection before enforcing it so you don\'t lock yourself out.',
+      },
+    },
+    '/audit': {
+      title: 'Activity history',
+      description: 'A full log of every action taken in your account — who did what, and when. Useful for security reviews and debugging.',
+      help: {
+        title: 'About the audit log',
+        whatIsIt: 'A tamper-proof record of every significant action in your account — logins, key rotations, settings changes, and fix dispatches.',
+        useCases: [
+          'Find out who changed a setting or rotated an API key',
+          'Investigate a suspicious login or unexpected change',
+          'Export the log for a security or compliance review',
+        ],
+        howToUse: 'Use the date range and filter to narrow down events. Click any row for the full detail. Export button downloads the filtered view as CSV.',
+      },
+    },
+    '/prompt-lab': {
+      title: 'Prompt editor',
+      description: 'Edit the instructions that tell the AI how to classify bugs and draft fixes. Improve accuracy without any code changes.',
+      help: {
+        title: 'About the prompt editor',
+        whatIsIt: 'A live editor where you can tune the instructions the AI uses — like telling a new employee how you want bugs described.',
+        useCases: [
+          'Fix a prompt that\'s consistently mis-labelling severity or category',
+          'Run a test against real past reports before publishing a change',
+          'Compare two prompt versions side-by-side to find the better one',
+        ],
+        howToUse: 'Pick a prompt stage, edit the text, then click "Test" to see results against real reports before saving.',
+      },
+    },
+    '/intelligence': {
+      title: 'Weekly digest',
+      description: 'An AI-written summary of what happened this week — patterns, improvements, and things that need your attention.',
+      help: {
+        title: 'About the intelligence report',
+        whatIsIt: 'A weekly AI-written narrative that turns your raw bug numbers into an easy-to-read story — like a Monday morning briefing.',
+        useCases: [
+          'Share a one-paragraph status with your team without writing it yourself',
+          'Spot a trend that\'s not obvious from the dashboard numbers',
+          'Get a "state of the app" summary before a planning meeting',
+        ],
+        howToUse: 'Reports generate automatically each week. Click "Generate now" to get a fresh one. Copy the text to paste into Slack or a status doc.',
+      },
+    },
+    '/compliance': {
+      title: 'Data & privacy',
+      description: 'Control what data Mushi stores, how long it\'s kept, and who can access it. Required reading before going live in regulated industries.',
+      help: {
+        title: 'About compliance settings',
+        whatIsIt: 'Settings that control how Mushi handles your users\' data — storage duration, PII masking, data residency, and access controls.',
+        useCases: [
+          'Set data retention rules to comply with GDPR or CCPA',
+          'Enable PII masking so user data is never stored in bug reports',
+          'Download a data export if a user requests their data',
+        ],
+        howToUse: 'Work through each section top to bottom. Changes take effect immediately. Check the "Verify" button on each section to confirm your settings are applied.',
+      },
+    },
+    '/storage': {
+      title: 'Screenshots & files',
+      description: 'All the screenshots, screen recordings, and attachments Mushi captured from bug reports — browse, download, or delete.',
+      help: {
+        title: 'About storage',
+        whatIsIt: 'All the screenshots and files attached to bug reports, stored securely and linked back to the report they came from.',
+        useCases: [
+          'Download a screenshot to include in a Jira ticket or Slack message',
+          'Clear old screenshots to free up storage space',
+          'Check storage usage if you\'re approaching a plan limit',
+        ],
+        howToUse: 'Browse by date or project. Click any thumbnail to preview. Click the report link to jump to the bug it belongs to.',
+      },
+    },
+    '/marketplace': {
+      title: 'Plugin library',
+      description: 'Browse and install plugins that connect Mushi to tools like Sentry, Linear, Discord, and more.',
+      help: {
+        title: 'About the plugin library',
+        whatIsIt: 'A library of one-click plugins that connect Mushi to your existing tools — install one and bugs automatically flow where your team already works.',
+        useCases: [
+          'Install the Sentry plugin to sync bugs between both tools',
+          'Install Linear or Jira to auto-create tickets from critical reports',
+          'Install Slack to get instant notifications when a critical bug lands',
+        ],
+        howToUse: 'Click any plugin to see what it does and how to configure it. Most plugins need a single API key to activate.',
+      },
+    },
+    '/mcp': {
+      title: 'AI agent connection',
+      description: 'Connect Cursor, Claude, or any AI coding assistant to your live bug queue. The agent reads reports and dispatches fixes.',
+      help: {
+        title: 'About MCP (AI agent connection)',
+        whatIsIt: 'A one-time setup that lets your AI coding assistant read your bug reports and open fix PRs without copy-pasting anything.',
+        useCases: [
+          'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
+          'Have the AI agent draft a fix for a specific report in one command',
+          'Query your bug data in plain English from inside your editor',
+        ],
+        howToUse: 'Click "Generate a key" then copy the config snippet into your AI tool\'s MCP settings. Restart your IDE. Done.',
+      },
+    },
+    '/qa-coverage': {
+      title: 'Automated QA tests',
+      description: 'Write user-story tests in plain English, run them on a schedule, and catch regressions before your users do.',
+      help: {
+        title: 'About QA coverage',
+        whatIsIt: 'Automated tests written in plain English that run on your live app on a schedule — like hiring a robot QA tester that never sleeps.',
+        useCases: [
+          'Write a test like "A user can log in and see their dashboard" and run it every hour',
+          'Catch a broken flow before users report it',
+          'See a screenshot of what the test saw when it failed',
+        ],
+        howToUse: 'Click "New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.',
+      },
+    },
+    '/anti-gaming': {
+      title: 'Spam controls',
+      description: 'Detect and block fake or spammy bug reports so your inbox stays clean and your credits aren\'t wasted.',
+      help: {
+        title: 'About spam controls',
+        whatIsIt: 'Automatic filters that catch fake, duplicate, or deliberately spammy reports before they waste your credits or clog your inbox.',
+        useCases: [
+          'Review flagged devices that are sending suspicious reports',
+          'Unblock a real user who was incorrectly flagged',
+          'Tune sensitivity so the filter catches more (or fewer) reports',
+        ],
+        howToUse: 'Flagged devices appear in the list with the reason. Click any row to review. Use "Unflag" if the block was a false positive.',
+      },
+    },
+    '/rewards': {
+      title: 'User rewards',
+      description: 'Incentivise your users to submit more bug reports by rewarding them with points for every report they file.',
+      help: {
+        title: 'About rewards',
+        whatIsIt: 'A points system that rewards your users for submitting bug reports — more reports, better software, happier users.',
+        useCases: [
+          'Enable rewards to motivate your power users to report more bugs',
+          'Set how many points each report category earns',
+          'See a leaderboard of your most helpful reporters',
+        ],
+        howToUse: 'Toggle rewards on, set point values, then add the rewards badge to your app using the SDK snippet provided.',
+      },
+    },
+    '/lessons': {
+      title: 'Learned rules',
+      description: 'Patterns Mushi noticed across many bug reports — turned into rules so the same class of bug never slips through again.',
+      help: {
+        title: 'About lessons',
+        whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi names it and uses it to catch the next one early.',
+        useCases: [
+          'See what classes of bugs keep coming back in your project',
+          'Use these rules in AI code review so the agent knows your history',
+          'Export lessons to a file so your whole team\'s tools share them',
+        ],
+        howToUse: 'Lessons are created automatically. Click any lesson to read the full rule and see which past reports triggered it.',
+      },
+    },
+    '/releases': {
+      title: 'Release tracking',
+      description: 'See how bug rates change with each release. Spot regressions before they spread.',
+      help: {
+        title: 'About release tracking',
+        whatIsIt: 'A timeline that links your app releases to bug report volumes — so you can instantly see if a deploy made things better or worse.',
+        useCases: [
+          'Check if yesterday\'s deploy caused a spike in errors',
+          'Compare two releases side-by-side to measure improvement',
+          'Get a bug-rate graph to share in a release retrospective',
+        ],
+        howToUse: 'Releases appear automatically when you tag them in your SDK config. Click any release bar to see every report that came in during that window.',
+      },
+    },
+    '/iterate': {
+      title: 'Sprint planning',
+      description: 'Turn bug reports into sprint tasks with priority scores, estimated effort, and direct links to auto-fix.',
+      help: {
+        title: 'About iteration planning',
+        whatIsIt: 'A board that groups bugs by sprint priority so you can plan your next iteration without switching between Mushi and your project tracker.',
+        useCases: [
+          'Plan next sprint\'s bug-fix work with priority scores already calculated',
+          'Estimate effort based on how many users felt each bug',
+          'One-click dispatch the highest-priority bugs to the auto-fix agent',
+        ],
+        howToUse: 'Drag bugs into your next sprint. Click "Dispatch all" to send the selected bugs to auto-fix at once.',
+      },
+    },
+    '/drift': {
+      title: 'Code health drift',
+      description: 'Track how your codebase\'s quality is changing over time. Catch gradual degradation before it becomes a crisis.',
+      help: {
+        title: 'About code drift',
+        whatIsIt: 'A trend chart showing whether your app\'s bug rate is slowly getting better or worse — catching a drift early costs much less than fixing a crisis.',
+        useCases: [
+          'Spot a gradual increase in bug volume before it becomes urgent',
+          'Measure the impact of a refactor on overall quality',
+          'Share a "quality is improving" chart with leadership',
+        ],
+        howToUse: 'Look at the trend line. Flat or declining = healthy. Climbing = investigate. Click any spike to see which component drifted.',
+      },
+    },
+    '/experiments': {
+      title: 'A/B experiments',
+      description: 'Test whether a change actually reduced bugs — compare two groups of users to see which version performed better.',
+      help: {
+        title: 'About experiments',
+        whatIsIt: 'A/B testing for bug rates — compare two versions of your app to see which one your users hit fewer problems with.',
+        useCases: [
+          'Verify that a UI redesign actually reduced confusion-related reports',
+          'Test two error-handling approaches and measure which produces fewer reports',
+          'Run a canary deployment and watch bug rates on the new version in real time',
+        ],
+        howToUse: 'Create an experiment, pick the two variants, set a duration. Mushi automatically splits incoming reports and shows you the difference.',
+      },
+    },
+    '/anomalies': {
+      title: 'Unusual patterns',
+      description: 'Alerts when bug volume, severity, or types change in a way that looks unusual — catch surprises before they escalate.',
+      help: {
+        title: 'About anomaly detection',
+        whatIsIt: 'An automatic alarm system that spots unusual spikes or drops in your bug data and alerts you before users start complaining.',
+        useCases: [
+          'Get notified if a deploy suddenly tripled the error rate',
+          'Catch a silent regression that\'s slowly getting worse',
+          'See a list of all anomalies sorted by how unusual they are',
+        ],
+        howToUse: 'Active anomalies appear at the top. Click any to see the full detail and which reports triggered the alert. Dismiss when investigated.',
+      },
+    },
+    '/cost': {
+      title: 'AI spending',
+      description: 'See exactly how much each AI step costs — classification, fix drafts, judge runs — broken down by day and provider.',
+      help: {
+        title: 'About AI cost tracking',
+        whatIsIt: 'A breakdown of every penny spent on AI calls — so you know exactly what Mushi costs and which steps are the most expensive.',
+        useCases: [
+          'Check your daily AI spend before approving a budget',
+          'Find which LLM step costs the most and tune it',
+          'Set a budget cap so you\'re never surprised by a big bill',
+        ],
+        howToUse: 'The chart breaks cost by step and day. Click any bar to see individual call breakdowns. Set a monthly cap in Settings → Budget.',
+      },
+    },
+    '/notifications': {
+      title: 'Alert settings',
+      description: 'Choose when Mushi pings you — new critical bug, fix merged, judge score drops — and where to send the alert.',
+      help: {
+        title: 'About notification settings',
+        whatIsIt: 'Controls for when Mushi alerts you and where — Slack, email, or webhook. Set it once and only hear about what actually matters.',
+        useCases: [
+          'Get a Slack ping the moment a critical bug lands',
+          'Turn off low-severity notifications so you\'re not spammed',
+          'Set up a webhook to pipe alerts into your on-call system',
+        ],
+        howToUse: 'Toggle each notification type on or off. Click "Configure destination" to add a Slack channel, email, or webhook URL.',
+      },
+    },
+    '/billing': {
+      title: 'Plan & billing',
+      description: 'See your current plan, usage, and invoices. Upgrade when you\'re ready to unlock more reports, projects, or auto-fixes.',
+      help: {
+        title: 'About billing',
+        whatIsIt: 'Your subscription, usage limits, and invoice history — all in one place. Upgrade or downgrade without contacting anyone.',
+        useCases: [
+          'Check how many reports you\'ve used this month vs your plan limit',
+          'Upgrade to unlock more projects or auto-fix runs',
+          'Download an invoice for expenses or accounting',
+        ],
+        howToUse: 'Current usage is at the top. Click "Upgrade" to change plans. Click "Invoices" to download past bills.',
+      },
+    },
+    '/organization/members': {
+      title: 'Team members',
+      description: 'Invite your colleagues, assign roles, and manage who has access to your Mushi workspace.',
+      help: {
+        title: 'About team management',
+        whatIsIt: 'Invite teammates, set what each person can see or change, and remove access when someone leaves the team.',
+        useCases: [
+          'Invite a colleague with their email address (they get a link)',
+          'Give a designer read-only access so they can see bugs without changing anything',
+          'Remove a former teammate\'s access in one click',
+        ],
+        howToUse: 'Click "Invite" and enter their email. Pick a role: Viewer (read-only), Member, Admin, or Owner. They\'ll get an email with a link.',
+      },
+    },
+    '/explore': {
+      title: 'Codebase map',
+      description: 'A visual map of your codebase — see every file, how they connect, and search your code with plain English.',
+      help: {
+        title: 'About the codebase explorer',
+        whatIsIt: 'A visual map of your code that shows every file, how files connect to each other, and lets you search with plain English.',
+        useCases: [
+          'See which part of the codebase a bug report\'s file lives in',
+          'Search "where is the login logic?" and jump to the right file',
+          'Explore a new codebase visually without reading hundreds of files',
+        ],
+        howToUse: 'Graph view shows the full map — click any node to open the detail panel. Search tab lets you type a question. Layers view groups files by type.',
+      },
+    },
+    '/users': {
+      title: 'User directory',
+      description: 'Operator-only view of all signups, plans, and activity. Useful for support and growth tracking.',
+      help: {
+        title: 'About the user directory',
+        whatIsIt: 'A full list of every Mushi account — visible only to operators — showing signup date, plan, and recent activity.',
+        useCases: [
+          'Look up a specific user to check their plan or recent activity',
+          'See how many new users signed up this week',
+          'Find accounts that signed up but never submitted a report',
+        ],
+        howToUse: 'Search by email or filter by plan. Click any row for the full user detail. This page is only visible to super-admins.',
+      },
+    },
     '/dashboard': {
       title: 'Your bug-fix loop',
       description: 'Watch a real user complaint travel from your app to a merged PR.',
