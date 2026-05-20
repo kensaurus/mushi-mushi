@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { reportPermalink } from '../lib/reportUrl'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -22,6 +22,11 @@ import {
   Kbd,
   Btn,
   FreshnessPill,
+  Section,
+  StatCard,
+  SegmentedControl,
+  Badge,
+  Card,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
@@ -38,6 +43,32 @@ import { PAGE_SIZE, type ReportRow, type SortDir, type SortField } from '../comp
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
+import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
+import { EMPTY_REPORTS_STATS, type ReportsStats, type ReportsTabId } from '../components/reports/ReportsStatsTypes'
+import { PageHero } from '../components/PageHero'
+
+const REPORTS_TABS: Array<{ id: ReportsTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Triage posture, top priority, and keyboard shortcuts before you open the queue.',
+  },
+  {
+    id: 'queue',
+    label: 'Queue',
+    description: 'Sortable triage table — filter, bulk actions, dispatch fixes, dismiss noise.',
+  },
+  {
+    id: 'severity',
+    label: 'Severity',
+    description: '14-day severity tiles with sparklines — click a tile to filter the queue.',
+  },
+]
+
+function resolveReportsTab(value: string | null): ReportsTabId {
+  if (value === 'overview' || value === 'severity') return value
+  return 'queue'
+}
 
 export function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -48,6 +79,30 @@ export function ReportsPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/reports')
+
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveReportsTab(tabParam)
+  const activeTabMeta = REPORTS_TABS.find((t) => t.id === activeTab) ?? REPORTS_TABS[1]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<ReportsStats>('/v1/admin/reports/stats')
+  const stats = statsData ?? EMPTY_REPORTS_STATS
+
+  const setActiveTab = useCallback(
+    (id: ReportsTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'queue') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -109,6 +164,11 @@ export function ReportsPage() {
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reload()
+  }, [reloadStats, reload])
+
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [cursor, setCursor] = useState(0)
 
@@ -152,13 +212,13 @@ export function ReportsPage() {
   // them.
   const reportsStaged = useStagedRealtime({
     tables: ['reports'],
-    onApply: reload,
+    onApply: reloadAll,
     shouldAutoApply: () =>
       selected.size === 0 &&
       cursor === 0 &&
       (typeof window === 'undefined' || window.scrollY < 10),
   })
-  const { channelState: fixChannelState } = useRealtimeReload(['fix_attempts'], reload)
+  const { channelState: fixChannelState } = useRealtimeReload(['fix_attempts'], reloadAll)
   // Prefer the reports channel state for the freshness pill — if that drops
   // the UI is stale even if fix_attempts is still live.
   const channelState =
@@ -592,18 +652,31 @@ export function ReportsPage() {
 
   const handleDismiss = useCallback(
     async (r: ReportRow) => {
-      const res = await apiFetch(`/v1/admin/reports/${r.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'dismissed' }),
-      })
-      if (res.ok) {
-        toast.success('Report dismissed')
-        reload()
-      } else {
+      const res = await apiFetch<{ updated: number; mutation_id: string | null }>(
+        '/v1/admin/reports/bulk',
+        {
+          method: 'POST',
+          body: JSON.stringify({ ids: [r.id], action: 'dismiss' }),
+        },
+      )
+      if (!res.ok) {
         toast.error('Dismiss failed', res.error?.message)
+        return
       }
+      undoable.announce(
+        {
+          mutationId: res.data?.mutation_id ?? null,
+          affected: res.data?.updated ?? 1,
+        },
+        {
+          successTitle: 'Dismissed',
+          successDescription: '1 report updated',
+          onReload: reload,
+        },
+      )
+      setSelected(new Set())
     },
-    [toast, reload],
+    [undoable, reload, toast],
   )
 
   const handleDispatchFix = useCallback(
@@ -632,56 +705,63 @@ export function ReportsPage() {
     [toast, reload],
   )
 
-  return (
-    <div>
-      <PageHeader
-        title={copy?.title ?? 'Reports'}
-        projectScope={projectName}
-        description={copy?.description ?? 'User-felt friction reports awaiting triage. Sort by severity, dispatch fixes, or dismiss noise.'}
-      >
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
-        <span className="text-xs text-fg-muted font-mono tabular-nums">
-          {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
-        </span>
-        <Tooltip content="Show keyboard shortcuts (?)">
-          <button
-            type="button"
-            onClick={() => setShowHelp((v) => !v)}
-            className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5 rounded-sm border border-edge-subtle"
-            aria-label="Show keyboard shortcuts"
-          >
-            <Kbd>?</Kbd>
-          </button>
-        </Tooltip>
-      </PageHeader>
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : !stats.hasIngest
+        ? 'warn'
+        : stats.topPriority === 'critical'
+          ? 'danger'
+          : stats.topPriority === 'backlog'
+            ? 'warn'
+            : stats.topPriority === 'untriaged'
+              ? 'info'
+              : 'ok'
 
-      <DogfoodNarrativeBanner />
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'queue' as const,
+        label: 'Queue',
+        count: stats.newUntriaged > 0 ? stats.newUntriaged : undefined,
+      },
+      {
+        id: 'severity' as const,
+        label: 'Severity',
+        count: stats.critical14d > 0 ? stats.critical14d : undefined,
+      },
+    ],
+    [stats],
+  )
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About Reports'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'}
-        useCases={copy?.help?.useCases ?? [
-          'Triage incoming reports — sort by severity, filter by status',
-          'Bulk-dismiss noise or escalate a batch of regressions in one click',
-          'Drill into a single report for the original payload, screenshots, and pipeline timeline',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Use j/k to move, x to select, Enter to open, / to search, ? for the full cheat sheet. Click a column header to sort. Select rows to reveal bulk actions.'}
-      />
+  const handleSeverityFilter = useCallback(
+    (sev: string) => {
+      setFilter('severity', sev)
+      setActiveTab('queue')
+    },
+    [setFilter, setActiveTab],
+  )
 
-      <ReportsKpiStrip
-        activeSeverity={severity}
-        onFilter={(sev) => setFilter('severity', sev)}
-      />
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading reports">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load reports stats: ${statsError}`} onRetry={reloadAll} />
+  }
 
-      {recommendation && (
-        <RecommendedAction
-          title={recommendation.title}
-          description={recommendation.description}
-          cta={recommendation.cta}
-          tone={recommendation.tone}
-        />
-      )}
-
+  const queuePanel = (
+    <>
       <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
 
       <SavedViewsRow
@@ -731,7 +811,7 @@ export function ReportsPage() {
       {loading ? (
         <TableSkeleton rows={8} columns={6} showFilters={false} label="Loading reports" />
       ) : error ? (
-        <ErrorAlert message={`Failed to load reports: ${error}`} onRetry={reload} />
+        <ErrorAlert message={`Failed to load reports: ${error}`} onRetry={reloadAll} />
       ) : reports.length === 0 && hasFilters ? (
         <EmptyState
           icon={<HeroSearch accent="text-fg-faint" />}
@@ -753,32 +833,26 @@ export function ReportsPage() {
           }
         />
       ) : reports.length === 0 ? (
-        // RecommendedAction above already shows the generic "No reports yet"
-        // headline. Slot a connectivity diagnostic underneath so users get
-        // the *answer* — "your SDK is reaching the wrong backend" / "your
-        // SDK has never authenticated" — instead of just being told to
-        // install something they almost certainly already have.
-        // Only renders when we have a project to diagnose; the legacy
-        // fallback (no active project) keeps the bare RecommendedAction.
         setup.activeProject ? (
           <SdkConnectivityEmptyState
             projectId={setup.activeProject.project_id}
             projectName={setup.activeProject.project_name}
-            lastReportAt={null}
+            lastReportAt={stats.lastReportAt}
             diagnostic={setup.getStep('sdk_installed')?.diagnostic ?? null}
             adminHost={setup.data?.admin_endpoint_host ?? null}
             onTestReportSent={() => {
               setup.reload()
-              reload()
+              reloadAll()
             }}
           />
-        ) : null
+        ) : (
+          <EmptyState
+            icon={<HeroSearch accent="text-fg-faint" />}
+            title="No reports yet"
+            description="Install the SDK and send a test report from Setup to populate the triage queue."
+          />
+        )
       ) : (
-        // `data-mushi-reports-queue` is the engagement sentinel. The
-        // pointerdown listener installed alongside `queueEngagedRef`
-        // promotes any click inside this container to "queue is engaged"
-        // so subsequent `[` / `]` paginate; a click anywhere else
-        // disengages so the global sidebar-collapse hotkey wins again.
         <div data-mushi-reports-queue>
           <ReportsTable
             reports={reports}
@@ -806,6 +880,257 @@ export function ReportsPage() {
             onDispatchFix={handleDispatchFix}
           />
         </div>
+      )}
+    </>
+  )
+
+  return (
+    <div className="space-y-4" data-reports-root>
+      <PageHeader
+        title={copy?.title ?? 'Reports'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          (stats.newUntriaged > 0
+            ? `${stats.newUntriaged} awaiting triage — Queue tab for bulk actions`
+            : 'User-felt friction reports — Overview for posture, Queue to triage, Severity for 14d trends')
+        }
+      >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'info'
+                    ? 'bg-info/10 text-info'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'START'
+            : !stats.hasIngest
+              ? 'WAITING'
+              : stats.critical14d > 0 && stats.newUntriaged > 0
+                ? `${stats.critical14d} CRIT`
+                : stats.newUntriaged > 0
+                  ? `${stats.newUntriaged} NEW`
+                  : stats.openBacklog > 0
+                    ? `${stats.openBacklog} STALE`
+                    : 'CURRENT'}
+        </Badge>
+        <FreshnessPill
+          at={statsFetchedAt ?? lastFetchedAt}
+          isValidating={statsValidating || isValidating}
+          channel={channelState}
+        />
+        {activeTab === 'queue' && (
+          <span className="text-xs text-fg-muted font-mono tabular-nums">
+            {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
+          </span>
+        )}
+        <Tooltip content="Show keyboard shortcuts (?)">
+          <button
+            type="button"
+            onClick={() => setShowHelp((v) => !v)}
+            className="inline-flex items-center gap-1 text-2xs text-fg-faint hover:text-fg-muted px-1.5 py-0.5 rounded-sm border border-edge-subtle"
+            aria-label="Show keyboard shortcuts"
+          >
+            <Kbd>?</Kbd>
+          </button>
+        </Tooltip>
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
+          Refresh
+        </Btn>
+      </PageHeader>
+
+      <DogfoodNarrativeBanner />
+
+      <ReportsStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating || isValidating}
+      />
+
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Reports sections"
+        size="sm"
+      />
+
+      <Section title="TRIAGE SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="14d total"
+            value={stats.total14d}
+            accent={stats.total14d > 0 ? 'text-fg' : undefined}
+            hint={stats.totalAllTime > 0 ? `${stats.totalAllTime} all-time` : 'No ingest yet'}
+          />
+          <StatCard
+            label="Untriaged"
+            value={stats.newUntriaged}
+            accent={stats.newUntriaged > 0 ? 'text-info' : 'text-ok'}
+            hint={stats.openBacklog > 0 ? `${stats.openBacklog} stale > 1h` : 'Queue current'}
+          />
+          <StatCard
+            label="Critical 14d"
+            value={stats.critical14d}
+            accent={stats.critical14d > 0 ? 'text-danger' : undefined}
+            hint={stats.high14d > 0 ? `${stats.high14d} high severity` : 'Severity rollup'}
+          />
+          <StatCard
+            label="Dismissed 14d"
+            value={stats.dismissed14d}
+            accent={stats.dismissed14d > 0 ? 'text-fg-muted' : undefined}
+            hint="Noise filtered out"
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHero
+            scope="reports"
+            title="Reports"
+            kicker="Plan"
+            decide={{
+              label: stats.topPriorityLabel ?? 'Triage queue',
+              metric:
+                stats.hasIngest
+                  ? `${stats.newUntriaged} untriaged · ${stats.critical14d} critical (14d)`
+                  : undefined,
+              summary:
+                stats.topPriority === 'waiting_ingest'
+                  ? 'Brand banner means SDK ingest is not live — send a test report from Setup before triaging.'
+                  : stats.topPriority === 'critical'
+                    ? 'Red banner — critical reports still need confirmation before dispatch.'
+                    : stats.topPriority === 'backlog'
+                      ? 'Amber banner — some reports waited over an hour without triage.'
+                      : 'Green banner — queue is current. Severity tab shows 14-day momentum.',
+              severity:
+                stats.topPriority === 'critical'
+                  ? 'crit'
+                  : stats.topPriority === 'backlog' || stats.topPriority === 'waiting_ingest'
+                    ? 'info'
+                    : stats.topPriority === 'untriaged'
+                      ? 'info'
+                      : 'ok',
+            }}
+            verify={{
+              label: 'Live ingest',
+              detail: stats.lastReportAt
+                ? 'Counts reload on report webhooks — Refresh if you just sent a test report.'
+                : 'No reports ingested yet — verify SDK heartbeat on Setup.',
+            }}
+          />
+
+          {stats.topPriorityTo && stats.topPriority !== 'clear' && stats.topPriority !== 'waiting_ingest' ? (
+            <Card
+              className={`p-4 ${
+                stats.topPriority === 'critical'
+                  ? 'border-danger/30 bg-danger/5'
+                  : stats.topPriority === 'backlog'
+                    ? 'border-warn/30 bg-warn/5'
+                    : 'border-info/30 bg-info/5'
+              }`}
+            >
+              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
+              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link to={stats.topPriorityTo}>
+                  <Btn size="sm" variant="primary">
+                    Open queue →
+                  </Btn>
+                </Link>
+                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('severity')}>
+                  Severity trends
+                </Btn>
+              </div>
+            </Card>
+          ) : null}
+
+          <PageHelp
+            title={copy?.help?.title ?? 'About Reports'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Triage incoming reports — sort by severity, filter by status',
+                'Bulk-dismiss noise or escalate a batch of regressions in one click',
+                'Drill into a single report for the original payload, screenshots, and pipeline timeline',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Overview for posture. Queue for j/k navigation, bulk actions, and dispatch. Severity for 14d sparklines — click a tile to filter the queue.'
+            }
+          />
+
+          {recommendation && (
+            <RecommendedAction
+              title={recommendation.title}
+              description={recommendation.description}
+              cta={recommendation.cta}
+              tone={recommendation.tone}
+            />
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Btn size="sm" variant="primary" onClick={() => setActiveTab('queue')}>
+              Open triage queue →
+            </Btn>
+            {!stats.hasIngest ? (
+              <Link to="/onboarding?tab=verify">
+                <Btn size="sm" variant="ghost">
+                  Send test report
+                </Btn>
+              </Link>
+            ) : null}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'queue' && queuePanel}
+
+      {activeTab === 'severity' && (
+        <>
+          <ReportsKpiStrip activeSeverity={severity} onFilter={handleSeverityFilter} />
+          <Card className="border-brand/20 bg-brand/5 p-4">
+            <p className="text-sm font-medium text-fg">Click a severity tile to filter the queue</p>
+            <p className="mt-1 text-2xs text-fg-muted">
+              Sparklines show 14-day momentum. Critical + high tiles turn red/amber when counts are non-zero.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Btn size="sm" variant="primary" onClick={() => setActiveTab('queue')}>
+                Open queue →
+              </Btn>
+              {stats.critical14d > 0 ? (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    const next = new URLSearchParams(searchParams)
+                    next.set('status', 'new')
+                    next.set('severity', 'critical')
+                    next.delete('page')
+                    next.delete('tab')
+                    setSearchParams(next)
+                  }}
+                >
+                  Critical untriaged
+                </Btn>
+              ) : null}
+            </div>
+          </Card>
+        </>
       )}
 
       <ReportPreviewDrawer

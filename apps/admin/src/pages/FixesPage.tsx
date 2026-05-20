@@ -8,13 +8,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePlatformIntegrations } from '../lib/usePlatformIntegrations'
 import { pluralize, pluralizeWithCount } from '../lib/format'
 import { PageHeader, PageHelp, SegmentedControl, ErrorAlert, FreshnessPill } from '../components/ui'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ActiveFiltersRail, type ActiveFilter } from '../components/ActiveFiltersRail'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
@@ -70,6 +71,7 @@ interface CodebaseStats {
 }
 
 export function FixesPage() {
+  const [searchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -86,8 +88,24 @@ export function FixesPage() {
   const [error, setError] = useState(false)
   const [expanded, setExpanded] = useState<string | null>(null)
   const [retryingAll, setRetryingAll] = useState(false)
-  const [statusBucket, setStatusBucket] = useState<StatusBucket>('all')
+  const [retryAllConfirm, setRetryAllConfirm] = useState(false)
+  const urlStatus = searchParams.get('status')
+  const initialBucket: StatusBucket =
+    urlStatus === 'failed' ? 'failed' :
+    urlStatus === 'inflight' ? 'inflight' :
+    urlStatus === 'pr_open' ? 'pr_open' :
+    urlStatus === 'merged' ? 'merged' :
+    'all'
+  const [statusBucket, setStatusBucket] = useState<StatusBucket>(initialBucket)
   const toast = useToast()
+
+  useEffect(() => {
+    if (urlStatus === 'failed') setStatusBucket('failed')
+    else if (urlStatus === 'inflight') setStatusBucket('inflight')
+    else if (urlStatus === 'pr_open') setStatusBucket('pr_open')
+    else if (urlStatus === 'merged') setStatusBucket('merged')
+    else if (!urlStatus) setStatusBucket('all')
+  }, [urlStatus])
   // Guard refs prevent overlapping polls and post-unmount state writes —
   // both happen often in StrictMode dev because effects mount twice.
   const inFlightRef = useRef(false)
@@ -288,7 +306,7 @@ export function FixesPage() {
       const optimisticId = pushOptimistic(reportId)
       const res = await apiFetch('/v1/admin/fixes/dispatch', {
         method: 'POST',
-        body: JSON.stringify({ reportId }),
+        body: JSON.stringify({ reportId, projectId: activeProjectId }),
       })
       if (res.ok) {
         toast.push({ tone: 'success', message: 'Fix re-dispatched' })
@@ -299,7 +317,7 @@ export function FixesPage() {
         settleOptimistic(optimisticId, 'error', res.error?.message)
       }
     },
-    [loadFixes, pushOptimistic, settleOptimistic, toast],
+    [activeProjectId, loadFixes, pushOptimistic, settleOptimistic, toast],
   )
 
   const retryAllFailed = useCallback(async () => {
@@ -310,7 +328,7 @@ export function FixesPage() {
       optimisticIds.map(({ reportId }) =>
         apiFetch('/v1/admin/fixes/dispatch', {
           method: 'POST',
-          body: JSON.stringify({ reportId }),
+          body: JSON.stringify({ reportId, projectId: activeProjectId }),
         }),
       ),
     )
@@ -329,7 +347,7 @@ export function FixesPage() {
       toast.push({ tone: 'warning', message: `Re-dispatched ${ok} \u00b7 ${failed} failed` })
     }
     void loadFixes()
-  }, [failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast])
+  }, [activeProjectId, failedFixes, loadFixes, pushOptimistic, settleOptimistic, toast])
 
   // Publish page context so Ask Mushi and command palette can react
   // to the current bucket + counts (e.g. "Retry all failed fixes" only
@@ -412,7 +430,7 @@ export function FixesPage() {
         {failedFixes.length > 0 && (
           <button
             type="button"
-            onClick={retryAllFailed}
+            onClick={() => setRetryAllConfirm(true)}
             disabled={retryingAll}
             className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary disabled:opacity-50 disabled:cursor-not-allowed motion-safe:transition-colors"
             title={`Re-dispatch every fix attempt currently in failed state (${pluralizeWithCount(failedFixes.length, 'job')}).`}
@@ -546,6 +564,24 @@ export function FixesPage() {
           )}
         </>
       )}
+
+      {retryAllConfirm && failedFixes.length > 0 ? (
+        <ConfirmDialog
+          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix')}?`}
+          body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
+          confirmLabel="Retry all"
+          cancelLabel="Cancel"
+          tone="danger"
+          loading={retryingAll}
+          onConfirm={() => {
+            setRetryAllConfirm(false)
+            void retryAllFailed()
+          }}
+          onCancel={() => {
+            if (!retryingAll) setRetryAllConfirm(false)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

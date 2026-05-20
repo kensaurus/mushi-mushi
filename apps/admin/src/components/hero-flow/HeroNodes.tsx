@@ -34,6 +34,8 @@ import {
   type HeroSeverity,
   type HeroVerifyNodeData,
 } from './heroFlow.data'
+import { OperatorTraceBadge, OperatorTracePreview } from './OperatorTraceLog'
+import type { OperatorTraceLine } from './operatorTrace'
 
 // ─── Severity tokens (for tint backgrounds — hex tokens drive SVG only)
 
@@ -50,7 +52,39 @@ const SEVERITY_TEXT: Record<HeroSeverity, string> = {
   info: 'text-info',
   warn: 'text-warn',
   crit: 'text-err',
-  neutral: 'text-fg',
+  neutral: 'text-fg-muted',
+}
+
+const SEVERITY_DOT: Record<HeroSeverity, string> = {
+  ok: 'bg-ok',
+  info: 'bg-info',
+  warn: 'bg-warn',
+  crit: 'bg-err',
+  neutral: 'bg-fg-faint',
+}
+
+const ACTION_TEXT: Record<PageAction['tone'], string> = {
+  plan: 'text-info',
+  do: 'text-brand',
+  check: 'text-warn',
+  act: 'text-ok',
+  idle: 'text-fg-muted',
+}
+
+const ACTION_DOT: Record<PageAction['tone'], string> = {
+  plan: 'bg-info',
+  do: 'bg-brand',
+  check: 'bg-warn',
+  act: 'bg-ok',
+  idle: 'bg-fg-faint',
+}
+
+const ACTION_CHIP: Record<PageAction['tone'], string> = {
+  plan: 'Plan',
+  do: 'Do',
+  check: 'Check',
+  act: 'Act',
+  idle: '—',
 }
 
 const ACTION_BG: Record<PageAction['tone'], string> = {
@@ -67,6 +101,76 @@ const NODE_ACCENT_HEX = {
   act: '#f5b544',
   verify: '#94a3b8',
 } as const
+
+const KIND_BADGE: Record<'decide' | 'act' | 'verify', string> = {
+  decide: 'bg-info-muted text-info',
+  act: 'bg-brand/15 text-brand',
+  verify: 'bg-surface-overlay text-fg-muted',
+}
+
+// ─── Shared body layout (mirrors PipelineStatusRibbon tile rhythm) ───
+
+/** Right-aligned metric — larger mono numerics for scan-friendly counts. */
+function HeroMetric({
+  value,
+  toneClass,
+  title,
+}: {
+  value: string
+  toneClass: string
+  title?: string
+}) {
+  const trimmed = value.trim()
+  const numericLeading = /^[\d]/.test(trimmed) || /^[\d.,]+/.test(trimmed)
+  const sizeClass = numericLeading
+    ? 'text-base font-bold tracking-tight'
+    : 'text-xs font-semibold tracking-normal'
+
+  return (
+    <span
+      title={title}
+      className={`ml-auto shrink-0 max-w-[48%] truncate text-right font-mono tabular-nums leading-none ${sizeClass} ${toneClass}`}
+    >
+      {value}
+    </span>
+  )
+}
+
+function HeroStatRow({
+  dotClass,
+  dotPulse = false,
+  label,
+  labelClass = 'text-fg',
+  value,
+  valueClass,
+  labelTitle,
+}: {
+  dotClass: string
+  dotPulse?: boolean
+  label: string
+  labelClass?: string
+  value?: string
+  valueClass: string
+  labelTitle?: string
+}) {
+  return (
+    <div className="flex items-center gap-1.5 min-w-0">
+      <span
+        aria-hidden
+        className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotClass} ${dotPulse ? 'motion-safe:animate-pulse' : ''}`}
+      />
+      <span
+        className={`min-w-0 flex-1 text-xs font-medium leading-tight truncate ${labelClass}`}
+        title={labelTitle ?? label}
+      >
+        {label}
+      </span>
+      {value != null && value !== '' && (
+        <HeroMetric value={value} toneClass={valueClass} title={value} />
+      )}
+    </div>
+  )
+}
 
 // ─── Common shell ─────────────────────────────────────────────────────
 
@@ -89,6 +193,7 @@ interface NodeShellProps {
   /** Slot rendered when expanded — kept inside the same node so React
    *  Flow's layout doesn't shift on toggle. */
   expandedSlot?: ReactNode
+  operatorTrace?: OperatorTraceLine[]
 }
 
 function NodeShell({
@@ -103,6 +208,7 @@ function NodeShell({
   onToggle,
   children,
   expandedSlot,
+  operatorTrace,
 }: NodeShellProps) {
   const headingId = `hero-${scope}-${kind}`
   const borderHex = NODE_ACCENT_HEX[kind]
@@ -111,6 +217,7 @@ function NodeShell({
     <article
       aria-labelledby={headingId}
       data-hero-tile={kind}
+      data-hero-expanded={expanded ? 'true' : 'false'}
       tabIndex={0}
       onClick={onToggle}
       onKeyDown={(e) => {
@@ -124,17 +231,14 @@ function NodeShell({
         'motion-safe:transition-all motion-safe:duration-200',
         bgClass,
         expanded
-          ? 'shadow-md scale-[1.01]'
+          ? 'ring-1 ring-inset shadow-md scale-[1.01]'
           : 'shadow-sm hover:shadow-md hover:scale-[1.005]',
       ].join(' ')}
       style={{
         borderLeft: `3px solid ${borderHex}`,
-        borderTop: `1px solid ${borderHex}30`,
-        borderRight: `1px solid ${borderHex}30`,
-        borderBottom: `1px solid ${borderHex}30`,
-        ...(expanded
-          ? { boxShadow: `0 0 0 2px ${accentHex}40, 0 4px 12px ${accentHex}15` }
-          : {}),
+        boxShadow: expanded
+          ? `0 0 0 2px ${accentHex}45, 0 6px 16px ${accentHex}18`
+          : `inset 0 -1px 0 ${borderHex}20`,
       }}
     >
       <Handle
@@ -152,7 +256,13 @@ function NodeShell({
 
       <header className="flex items-center gap-1.5">
         <span
-          className="relative inline-block h-2 w-2 rounded-full"
+          aria-hidden
+          className={`inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-sm text-[0.6rem] font-bold leading-none ${KIND_BADGE[kind]}`}
+        >
+          {kind === 'decide' ? 'D' : kind === 'act' ? 'A' : 'V'}
+        </span>
+        <span
+          className="relative inline-block h-1.5 w-1.5 shrink-0 rounded-full"
           style={{ backgroundColor: accentHex }}
           aria-hidden="true"
         >
@@ -166,11 +276,13 @@ function NodeShell({
         </span>
         <h3
           id={headingId}
-          className="text-2xs uppercase tracking-wider font-semibold"
-          style={{ color: borderHex }}
+          className="text-2xs font-medium uppercase tracking-wider text-fg-secondary"
         >
           {eyebrow}
         </h3>
+        {operatorTrace && operatorTrace.length > 0 && (
+          <OperatorTraceBadge lines={operatorTrace} />
+        )}
         {glyph && (
           <span aria-hidden="true" className="text-2xs text-fg-muted">
             {glyph}
@@ -223,24 +335,26 @@ function DecideInner({ data }: NodeProps) {
       pulse={decide.severity === 'crit' || decide.severity === 'warn'}
       expanded={node.expanded}
       onToggle={node.onToggle}
+      operatorTrace={node.operatorTrace}
       expandedSlot={
         <p className="text-3xs text-fg-faint italic">
-          Details below ↓
+          Operator trace below ↓
         </p>
       }
     >
-      <p
-        className={`text-xs font-medium leading-tight truncate ${SEVERITY_TEXT[decide.severity]}`}
-        title={decide.label}
-      >
-        {decide.label}
-      </p>
-      {decide.metric && (
-        <p className="mt-0.5 text-base font-semibold text-fg tabular-nums leading-tight">
-          {decide.metric}
-        </p>
+      <HeroStatRow
+        dotClass={SEVERITY_DOT[decide.severity]}
+        dotPulse={decide.severity === 'crit' || decide.severity === 'warn'}
+        label={decide.label}
+        labelClass="text-fg"
+        value={decide.metric}
+        valueClass={SEVERITY_TEXT[decide.severity]}
+        labelTitle={decide.label}
+      />
+      <p className="mt-0.5 text-3xs text-fg-muted leading-snug line-clamp-2">{decide.summary}</p>
+      {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
+        <OperatorTracePreview lines={node.operatorTrace} />
       )}
-      <p className="mt-1 text-2xs text-fg-muted leading-snug line-clamp-2">{decide.summary}</p>
       {!node.expanded && (node.accessory as ReactNode | undefined) && (
         <div className="mt-1.5">{node.accessory as ReactNode}</div>
       )}
@@ -267,12 +381,21 @@ function ActInner({ data }: NodeProps) {
         glyph={<span className="text-ok">✓</span>}
         expanded={node.expanded}
         onToggle={node.onToggle}
-        expandedSlot={<p className="text-3xs text-fg-faint italic">Details below ↓</p>}
+        operatorTrace={node.operatorTrace}
+        expandedSlot={<p className="text-3xs text-fg-faint italic">Operator trace below ↓</p>}
       >
-        <p className="text-xs font-medium text-fg leading-tight">All clear</p>
-        <p className="mt-1 text-2xs text-fg-muted leading-snug line-clamp-2">
+        <HeroStatRow
+          dotClass={ACTION_DOT.idle}
+          label="All clear"
+          value="0"
+          valueClass={ACTION_TEXT.act}
+        />
+        <p className="mt-0.5 text-3xs text-fg-muted leading-snug line-clamp-2">
           Nothing actionable here right now. The next ingest will refresh this tile.
         </p>
+        {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
+          <OperatorTracePreview lines={node.operatorTrace} />
+        )}
       </NodeShell>
     )
   }
@@ -293,11 +416,20 @@ function ActInner({ data }: NodeProps) {
       pulse={action.tone === 'check' || action.tone === 'do'}
       expanded={node.expanded}
       onToggle={node.onToggle}
-      expandedSlot={<p className="text-3xs text-fg-faint italic">Details below ↓</p>}
+      operatorTrace={node.operatorTrace}
+      expandedSlot={<p className="text-3xs text-fg-faint italic">Operator trace below ↓</p>}
     >
-      <p className="text-xs font-medium text-fg leading-snug line-clamp-2">{action.title}</p>
+      <HeroStatRow
+        dotClass={ACTION_DOT[action.tone]}
+        dotPulse={action.tone === 'check' || action.tone === 'do'}
+        label={action.title}
+        labelClass="text-fg"
+        value={ACTION_CHIP[action.tone]}
+        valueClass={ACTION_TEXT[action.tone]}
+        labelTitle={action.title}
+      />
       {action.reason && (
-        <p className="mt-0.5 text-2xs text-fg-muted leading-snug line-clamp-2">{action.reason}</p>
+        <p className="mt-0.5 text-3xs text-fg-muted leading-snug line-clamp-2">{action.reason}</p>
       )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {action.primary && <HeroCta cta={action.primary} variant="primary" />}
@@ -305,6 +437,9 @@ function ActInner({ data }: NodeProps) {
           <HeroCta key={i} cta={s} variant="ghost" />
         ))}
       </div>
+      {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
+        <OperatorTracePreview lines={node.operatorTrace} />
+      )}
     </NodeShell>
   )
 }
@@ -326,17 +461,20 @@ function VerifyInner({ data }: NodeProps) {
       glyph={<span className="text-fg-muted">◎</span>}
       expanded={node.expanded}
       onToggle={node.onToggle}
-      expandedSlot={<p className="text-3xs text-fg-faint italic">Details below ↓</p>}
+      operatorTrace={node.operatorTrace}
+      expandedSlot={<p className="text-3xs text-fg-faint italic">Operator trace below ↓</p>}
     >
-      <p className="text-xs font-medium text-fg leading-tight truncate" title={node.verify.label}>
-        {node.verify.label}
-      </p>
-      <p
-        className={`mt-1 text-2xs font-mono leading-snug text-fg-muted ${node.expanded ? 'break-all' : 'truncate'}`}
-        title={node.verify.detail}
-      >
-        {node.verify.detail}
-      </p>
+      <HeroStatRow
+        dotClass="bg-fg-faint"
+        label={node.verify.label}
+        labelClass="text-fg"
+        value={node.verify.detail}
+        valueClass={node.verify.detail === 'no reports yet' ? 'text-warn' : 'text-fg-muted'}
+        labelTitle={node.verify.label}
+      />
+      {!node.expanded && node.operatorTrace && node.operatorTrace.length > 0 && (
+        <OperatorTracePreview lines={node.operatorTrace} />
+      )}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
         {node.verify.to && (
           <Link

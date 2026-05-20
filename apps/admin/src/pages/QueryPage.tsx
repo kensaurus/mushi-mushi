@@ -1,6 +1,14 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
+import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { QueryStatusBanner } from '../components/query/QueryStatusBanner'
+import { EMPTY_QUERY_STATS, type QueryStats, type QueryTabId } from '../components/query/types'
+import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
   PageHelp,
@@ -15,6 +23,7 @@ import {
   Kbd,
   Tooltip,
   Badge,
+  StatCard,
 } from '../components/ui'
 import {
   IconClock,
@@ -26,10 +35,11 @@ import {
   IconCheck,
 } from '../components/icons'
 import { useToast } from '../lib/toast'
+import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 
 type QueryMode = 'nl' | 'raw'
 
@@ -713,7 +723,53 @@ function PromptLibrary({
   )
 }
 
+const QUERY_TABS: Array<{ id: QueryTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Run health, PageHero decide/act/verify, and query posture for the active project.',
+  },
+  {
+    id: 'ask',
+    label: 'Ask',
+    description: 'Natural-language or raw SQL composer with live results and prompt library.',
+  },
+  {
+    id: 'history',
+    label: 'History',
+    description: 'Saved pins, recent runs, and teammate queries — rerun with one click.',
+  },
+  {
+    id: 'schema',
+    label: 'Schema',
+    description: 'Approved read-only tables and columns — use $1 for project_id in raw SQL.',
+  },
+]
+
+function isQueryTab(value: string | null): value is QueryTabId {
+  return QUERY_TABS.some((t) => t.id === value)
+}
+
 export function QueryPage() {
+  const copy = usePageCopy('/query')
+  const activeProjectId = useActiveProjectId()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab: QueryTabId = isQueryTab(tabParam) ? tabParam : 'overview'
+  const activeTabMeta = QUERY_TABS.find((t) => t.id === activeTab) ?? QUERY_TABS[0]
+
+  const statsPath = activeProjectId ? '/v1/admin/query/stats' : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<QueryStats>(statsPath)
+  const stats = statsData ?? EMPTY_QUERY_STATS
+
   const toast = useToast()
   const [queryMode, setQueryMode] = useState<QueryMode>('nl')
   const [question, setQuestion] = useState('')
@@ -731,7 +787,9 @@ export function QueryPage() {
     loading: historyLoading,
     reload: loadHistory,
     error: historyError,
-  } = usePageData<{ history: HistoryRow[] }>('/v1/admin/query/history?limit=25')
+  } = usePageData<{ history: HistoryRow[] }>(
+    activeProjectId ? '/v1/admin/query/history?limit=25' : null,
+  )
   const history = historyData?.history ?? []
 
   const {
@@ -739,8 +797,28 @@ export function QueryPage() {
     loading: teamLoading,
     reload: loadTeam,
     error: teamError,
-  } = usePageData<{ team: TeamRow[] }>('/v1/admin/query/team?limit=25')
+  } = usePageData<{ team: TeamRow[] }>(
+    activeProjectId ? '/v1/admin/query/team?limit=25' : null,
+  )
   const team = teamData?.team ?? []
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    loadHistory()
+    loadTeam()
+  }, [reloadStats, loadHistory, loadTeam])
+
+  useRealtimeReload(['nl_query_history'], reloadAll)
+
+  const setActiveTab = useCallback(
+    (id: QueryTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   async function handleSubmit(q?: string, overrideMode?: QueryMode) {
     const mode = overrideMode ?? queryMode
@@ -780,6 +858,7 @@ export function QueryPage() {
     }
     loadHistory()
     loadTeam()
+    reloadStats()
   }
 
   async function confirmDeleteHistory() {
@@ -830,14 +909,50 @@ export function QueryPage() {
 
   const saved = useMemo(() => history.filter((h) => h.is_saved), [history])
   const recent = useMemo(() => history.filter((h) => !h.is_saved), [history])
-  const lastRunHoursAgo = history[0]?.created_at
-    ? Math.floor((Date.now() - new Date(history[0].created_at).getTime()) / 3_600_000)
-    : null
+  const lastRunHoursAgo = stats.lastRunAt
+    ? Math.floor((Date.now() - new Date(stats.lastRunAt).getTime()) / 3_600_000)
+    : history[0]?.created_at
+      ? Math.floor((Date.now() - new Date(history[0].created_at).getTime()) / 3_600_000)
+      : null
   const queryAction = useNextBestAction({
     scope: 'query',
     savedQueries: saved.length,
     lastRunHoursAgo,
   })
+  const querySeverity: 'crit' | 'warn' | 'ok' | 'neutral' | 'info' =
+    stats.errors24h > 0
+      ? 'crit'
+      : stats.runs24h === 0 && stats.savedCount === 0
+        ? 'neutral'
+        : stats.savedCount === 0
+          ? 'info'
+          : 'ok'
+
+  usePublishPageContext({
+    route: '/query',
+    title: `${activeTabMeta.label} · Ask Your Data`,
+    summary: activeTabMeta.description,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount: stats.errors24h,
+  })
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'ask' as const,
+        label: 'Ask',
+        count: stats.runs24h > 0 ? stats.runs24h : undefined,
+      },
+      {
+        id: 'history' as const,
+        label: 'History',
+        count: saved.length + recent.length > 0 ? saved.length + recent.length : undefined,
+      },
+      { id: 'schema' as const, label: 'Schema' },
+    ],
+    [stats.runs24h, saved.length, recent.length],
+  )
 
   // Map prompt → boolean so a run card can render "Saved" once the row
   // exists in history. Keyed by prompt text because the run-card only
@@ -848,45 +963,120 @@ export function QueryPage() {
     return map
   }, [history])
 
+  if (!activeProjectId) {
+    return (
+      <div className="space-y-4">
+        <PageHeader
+          title={copy?.title ?? 'Ask Your Data'}
+          description={copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
+        />
+        <SetupNudge
+          requires={['project']}
+          emptyTitle="Select a project"
+          emptyDescription="Queries are scoped per project — pick mushi-mushi (or your app) first."
+        />
+      </div>
+    )
+  }
+
+  if (statsLoading && !statsData) {
+    return <TableSkeleton rows={5} columns={4} showFilters label="Loading query stats" />
+  }
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load query stats: ${statsError}`} onRetry={reloadAll} />
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Ask Your Data"
-        description="Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited."
+        title={copy?.title ?? 'Ask Your Data'}
+        projectScope={stats.projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited.'
+        }
+      >
+        <Badge className={stats.errors24h > 0 ? 'bg-danger-subtle text-danger' : stats.runs24h > 0 ? 'bg-ok-muted text-ok' : 'bg-info/10 text-info'}>
+          {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
+        </Badge>
+      </PageHeader>
+
+      <QueryStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onViewErrors={() => {
+          setActiveTab('history')
+          setSidebarTab('recent')
+        }}
       />
 
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Query sections"
+        size="sm"
+      />
+
+      <Section title="Query snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Runs 24h"
+            value={stats.runs24h}
+            accent={stats.runs24h > 0 ? 'text-brand' : undefined}
+            hint={`${stats.nlRuns24h} NL · ${stats.rawRuns24h} raw`}
+          />
+          <StatCard
+            label="Errors 24h"
+            value={stats.errors24h}
+            accent={stats.errors24h > 0 ? 'text-danger' : 'text-ok'}
+            hint={stats.lastRunError ? 'Latest run failed' : 'All recent runs OK'}
+          />
+          <StatCard
+            label="Saved"
+            value={stats.savedCount}
+            accent={stats.savedCount > 0 ? 'text-ok' : 'text-warn'}
+            hint={`${stats.teamSavedCount} from team`}
+          />
+          <StatCard
+            label="Latency"
+            value={stats.avgLatencyMs != null ? `${stats.avgLatencyMs}ms` : '—'}
+            accent="text-info"
+            hint={stats.recentCount > 0 ? `${stats.recentCount} recent unpinned` : 'No recent runs'}
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+        <>
       <PageHero
         scope="query"
         title="Ask Your Data"
         kicker="Natural-language analytics"
         decide={{
           label:
-            saved.length === 0 && history.length === 0
+            stats.runs24h === 0 && stats.savedCount === 0
               ? 'No queries yet'
-              : saved.length === 0
+              : stats.savedCount === 0
                 ? 'No saved queries'
                 : 'Saved queries ready',
-          metric: `${saved.length} saved · ${recent.length} recent · ${team.length} from team`,
+          metric: `${stats.savedCount} saved · ${stats.recentCount} recent · ${stats.teamSavedCount} from team`,
           summary:
-            saved.length === 0 && history.length === 0
+            stats.runs24h === 0 && stats.savedCount === 0
               ? 'Ask your first question — the LLM writes the SQL, you see the rows. No setup required.'
-              : saved.length === 0
-                ? 'Save a useful query so it becomes a one-click tile on other pages.'
-                : `Rerun any saved query from the sidebar or edit the SQL before running.`,
-          severity:
-            saved.length === 0 && history.length === 0
-              ? 'neutral'
-              : saved.length === 0
-                ? 'info'
-                : 'ok',
+              : stats.savedCount === 0
+                ? 'Save a useful query so it becomes a one-click tile for your team.'
+                : 'Rerun any saved query from History or edit the SQL before running.',
+          severity: querySeverity,
           anchor: 'query:decide',
           evidence: {
             kind: 'metric-breakdown',
             items: [
-              { label: 'Saved', value: saved.length, tone: saved.length > 0 ? 'ok' : 'neutral' },
-              { label: 'Recent', value: recent.length, tone: recent.length > 0 ? 'info' : 'neutral' },
-              { label: 'From team', value: team.length, tone: team.length > 0 ? 'info' : 'neutral' },
-              ...(lastRunHoursAgo != null ? [{ label: 'Last run', value: `${lastRunHoursAgo}h ago`, tone: 'neutral' as const }] : []),
+              { label: 'Saved', value: stats.savedCount, tone: stats.savedCount > 0 ? 'ok' : 'neutral' },
+              { label: 'Recent', value: stats.recentCount, tone: stats.recentCount > 0 ? 'info' : 'neutral' },
+              { label: 'Team', value: stats.teamSavedCount, tone: stats.teamSavedCount > 0 ? 'info' : 'neutral' },
+              { label: 'Errors 24h', value: stats.errors24h, tone: stats.errors24h > 0 ? 'crit' : 'ok' },
             ],
           },
         }}
@@ -902,15 +1092,15 @@ export function QueryPage() {
                 ? 'Last run less than an hour ago'
                 : `Last run ${lastRunHoursAgo}h ago`,
           to: '/query?tab=history',
-          secondaryTo: '/query?action=new',
+          secondaryTo: '/query?tab=ask',
           secondaryLabel: 'New query',
           anchor: 'query:verify',
-          evidence: history[0] ? {
+          evidence: stats.lastRunAt ? {
             kind: 'last-event',
-            at: history[0].created_at,
+            at: stats.lastRunAt,
             by: 'user',
-            payloadSummary: history[0].prompt.slice(0, 60),
-            status: 'ok',
+            payloadSummary: stats.lastRunPrompt?.slice(0, 60) ?? 'Query run',
+            status: stats.lastRunError ? 'error' : 'ok',
           } : undefined,
         }}
       />
@@ -918,17 +1108,41 @@ export function QueryPage() {
       <PageActionBar scope="query" action={queryAction} />
 
       <PageHelp
-        title="About Ask Your Data"
-        whatIsIt="A natural-language interface to your bug database. Type a question and the LLM converts it to read-only SQL, runs it, and summarizes the answer — or switch to Raw SQL mode and write the query yourself. Every query is sandboxed, rate-limited, and persisted for rerun and audit."
-        useCases={[
-          'Answer ad-hoc questions without writing SQL (Natural language mode)',
-          'Write precise queries against approved tables (Raw SQL mode)',
-          'Investigate trends without leaving the admin console',
-          'Reuse questions saved by your teammates',
-        ]}
-        howToUse="Natural language: type a question or pick from the prompt library, press Enter to run. Raw SQL: switch the toggle, write SELECT-only SQL using $1 for your project_id, press ⌘↵ (Ctrl+Enter) or click Run. The Schema button lists approved tables and columns. The Saved tab pins your favorites; Team shows ones your org has saved."
+        title={copy?.help?.title ?? 'About Ask Your Data'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Natural-language or raw SQL interface to approved bug tables — every run is sandboxed and logged.'
+        }
+        useCases={copy?.help?.useCases ?? []}
+        howToUse={copy?.help?.howToUse ?? 'Use the Ask tab to run queries. History pins favorites. Schema lists approved tables.'}
       />
+        </>
+      )}
 
+      {activeTab === 'schema' && (
+        <Card className="p-3">
+          <div className="text-xs font-medium uppercase tracking-wider mb-2">Approved tables</div>
+          <p className="text-2xs text-fg-muted mb-3">
+            Raw SQL mode accepts SELECT-only statements. Bind your project with <code className="text-brand">$1</code> — max 100 rows returned.
+          </p>
+          <div className="divide-y divide-edge-subtle/30 rounded-sm border border-edge-subtle overflow-hidden">
+            {SCHEMA_REFERENCE.map((t) => (
+              <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised/30">
+                <code className="text-2xs font-mono text-brand shrink-0">{t.table}</code>
+                <span className="text-3xs text-fg-faint font-mono leading-relaxed">
+                  {t.columns}
+                  {t.note ? <span className="block text-info/80 not-italic mt-0.5">{t.note}</span> : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {(activeTab === 'ask' || activeTab === 'history') && (
+        <>
+      {activeTab === 'ask' && (
+      <>
       {/* ── Composer ─────────────────────────────────────────────────────── */}
       <Card className="p-4 md:p-5 border-brand/20 bg-gradient-to-b from-brand/[0.04] to-transparent">
         {/* Mode toggle */}
@@ -1098,8 +1312,11 @@ export function QueryPage() {
           </div>
         )}
       </Card>
+      </>
+      )}
 
-      <div className="grid gap-3 md:grid-cols-[1fr_18rem]">
+      <div className={`grid gap-3 ${activeTab === 'history' ? '' : 'md:grid-cols-[1fr_18rem]'}`}>
+        {activeTab === 'ask' && (
         <div className="space-y-3 min-w-0">
           {/* Run results — live results push down, prompt library hides when runs exist */}
           {runs.length > 0 ? (
@@ -1224,8 +1441,9 @@ export function QueryPage() {
             )
           )}
         </div>
+        )}
 
-        <div className="self-start space-y-3">
+        <div className={`space-y-3 ${activeTab === 'history' ? '' : 'self-start'}`}>
           <Section title="Library">
             <SegmentedControl<SidebarTab>
               value={sidebarTab}
@@ -1314,6 +1532,8 @@ export function QueryPage() {
           </Section>
         </div>
       </div>
+      </>
+      )}
 
       {pendingDeleteHistory && (
         <ConfirmDialog

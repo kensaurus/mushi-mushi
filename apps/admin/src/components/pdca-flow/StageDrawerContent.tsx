@@ -592,7 +592,7 @@ function ActDrawer({ stage, onClose }: { stage?: PdcaStage | null; onClose: () =
         )}
       </section>
 
-      <FooterCta label="Open integrations" onClick={() => { onClose(); navigate('/integrations') }} />
+      <FooterCta label="Open integrations" onClick={() => { onClose(); navigate('/integrations/config') }} />
     </>
   )
 }

@@ -16,8 +16,10 @@
  *          severity ring + node glow can be driven by the same flow
  *          tokens the dashboard uses, and clicking outside a node
  *          collapses every tile in one place.
+ *          Wave W (2026-05-20) — container-aware layout: nodes stretch to
+ *          fill the hero width; edge pills wrap long action titles.
  */
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 import { ReactFlow, ReactFlowProvider, type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -27,13 +29,15 @@ import { HeroGradientEdge } from './HeroGradientEdge'
 import {
   buildHeroEdges,
   buildHeroNodes,
-  HERO_FLOW_LAYOUT,
+  computeHeroLayout,
   type HeroActData,
   type HeroDecideData,
   type HeroEdgeData,
+  type HeroLayoutMetrics,
   type HeroNodeData,
   type HeroVerifyData,
 } from './heroFlow.data'
+import type { OperatorTraceLine } from './operatorTrace'
 
 const NODE_TYPES = {
   heroDecide: HeroDecideNode,
@@ -42,10 +46,8 @@ const NODE_TYPES = {
 }
 const EDGE_TYPES = { heroGradient: HeroGradientEdge }
 
-// Padding around the 3-node lane so the bezier curves don't clip on the
-// node edges. Matches `fitViewOptions.padding` so the canvas viewport
-// always shows the full diagram regardless of container width.
-const CANVAS_PADDING_Y = 4
+// Extra top slack so edge pills (stacked above the bezier) don't clip.
+const CANVAS_PADDING_Y = 18
 
 export interface HeroFlowProps {
   scope: string
@@ -60,9 +62,37 @@ export interface HeroFlowProps {
    *  trend chip). Pages opt into this via the existing
    *  `decideAccessory` prop on PageHero. */
   decideAccessory?: ReactNode
+  operatorTraces?: {
+    decide: OperatorTraceLine[]
+    act: OperatorTraceLine[]
+    verify: OperatorTraceLine[]
+  }
 }
 
 export function HeroFlow(props: HeroFlowProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const measure = () => setContainerWidth(el.clientWidth)
+    measure()
+
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const layout: HeroLayoutMetrics = useMemo(
+    () =>
+      computeHeroLayout(containerWidth || 960, {
+        expanded: Boolean(props.expandedTile),
+      }),
+    [containerWidth, props.expandedTile],
+  )
+
   const nodes: Node<HeroNodeData>[] = useMemo(
     () =>
       buildHeroNodes({
@@ -70,9 +100,11 @@ export function HeroFlow(props: HeroFlowProps) {
         decide: props.decide,
         act: props.act,
         verify: props.verify,
+        layout,
         expanded: props.expandedTile,
         onToggle: props.onToggleTile,
         decideAccessory: props.decideAccessory,
+        operatorTraces: props.operatorTraces,
       }),
     [
       props.scope,
@@ -82,52 +114,59 @@ export function HeroFlow(props: HeroFlowProps) {
       props.expandedTile,
       props.onToggleTile,
       props.decideAccessory,
+      props.operatorTraces,
+      layout,
     ],
   )
 
   const edges: Edge<HeroEdgeData>[] = useMemo(
-    () => buildHeroEdges({ decide: props.decide, act: props.act, verify: props.verify }),
-    [props.decide, props.act, props.verify],
+    () =>
+      buildHeroEdges({
+        decide: props.decide,
+        act: props.act,
+        verify: props.verify,
+        layout,
+      }),
+    [props.decide, props.act, props.verify, layout],
   )
 
-  // The hero canvas must grow taller when a tile is expanded — otherwise
-  // ReactFlow clips the expanded body. We compute the height from the
-  // base node height + a generous slack for the expanded slot's text.
-  const canvasHeight =
-    HERO_FLOW_LAYOUT.nodeHeight + (props.expandedTile ? 60 : 0) + CANVAS_PADDING_Y * 2
+  const canvasHeight = layout.nodeHeight + CANVAS_PADDING_Y * 2
 
   return (
     <div
+      ref={containerRef}
       data-hero-flow
-      className="relative w-full overflow-hidden"
+      className="relative w-full overflow-x-clip overflow-y-visible"
       style={{ height: canvasHeight }}
     >
-      <ReactFlowProvider>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={NODE_TYPES}
-          edgeTypes={EDGE_TYPES}
-          fitView
-          fitViewOptions={{
-            padding: 0.04,
-            includeHiddenNodes: false,
-          }}
-          proOptions={{ hideAttribution: true }}
-          panOnDrag={false}
-          panOnScroll={false}
-          zoomOnScroll={false}
-          zoomOnPinch={false}
-          zoomOnDoubleClick={false}
-          nodesDraggable={false}
-          nodesConnectable={false}
-          elementsSelectable={false}
-          preventScrolling={false}
-          minZoom={0.5}
-          maxZoom={1}
-          defaultEdgeOptions={{ type: 'heroGradient' }}
-        />
-      </ReactFlowProvider>
+      {containerWidth > 0 && (
+        <ReactFlowProvider>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
+            fitView
+            fitViewOptions={{
+              padding: 0.02,
+              includeHiddenNodes: false,
+            }}
+            proOptions={{ hideAttribution: true }}
+            panOnDrag={false}
+            panOnScroll={false}
+            zoomOnScroll={false}
+            zoomOnPinch={false}
+            zoomOnDoubleClick={false}
+            nodesDraggable={false}
+            nodesConnectable={false}
+            elementsSelectable={false}
+            preventScrolling={false}
+            minZoom={0.5}
+            maxZoom={1}
+            defaultEdgeOptions={{ type: 'heroGradient' }}
+          />
+        </ReactFlowProvider>
+      )}
     </div>
   )
 }

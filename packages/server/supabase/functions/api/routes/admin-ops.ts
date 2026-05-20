@@ -18,7 +18,9 @@ import {
 import { getPlan } from '../../_shared/plans.ts';
 import { notifyOperator } from '../../_shared/operator-notify.ts';
 import { SUPPORT_EMAIL, SUPPORT_URL } from '../../_shared/support.ts';
-import { dbError, ownedProjectIds } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject } from '../shared.ts';
+import { requireSuperAdmin } from '../../_shared/super-admin.ts';
+import { resolveActiveEntitlement } from '../../_shared/entitlements.ts';
 
 const SUPPORT_CATEGORIES = ['billing', 'bug', 'feature', 'other'] as const;
 type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
@@ -163,28 +165,89 @@ export function registerAdminOpsRoutes(app: Hono): void {
     return c.json({ ok: true, data: { id, unflagged: true } });
   });
 
+  app.get('/v1/admin/notifications/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const empty = {
+      total: 0,
+      unread: 0,
+      last24h: 0,
+      lastNotificationAt: null as string | null,
+      byType: {} as Record<string, number>,
+      notificationsEnabled: false,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [{ data: settings }, { data: rows, error }] = await Promise.all([
+      db
+        .from('project_settings')
+        .select('reporter_notifications_enabled')
+        .eq('project_id', project.id)
+        .maybeSingle(),
+      db
+        .from('reporter_notifications')
+        .select('notification_type, read_at, created_at')
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ]);
+
+    if (error) return dbError(c, error);
+
+    const list = rows ?? [];
+    const byType: Record<string, number> = {};
+    let unread = 0;
+    let last24h = 0;
+    for (const row of list) {
+      const t = row.notification_type as string;
+      byType[t] = (byType[t] ?? 0) + 1;
+      if (!row.read_at) unread += 1;
+      if ((row.created_at as string) >= since24h) last24h += 1;
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        total: list.length,
+        unread,
+        last24h,
+        lastNotificationAt: (list[0]?.created_at as string | undefined) ?? null,
+        byType,
+        notificationsEnabled: !!(settings as { reporter_notifications_enabled?: boolean } | null)
+          ?.reporter_notifications_enabled,
+      },
+    });
+  });
+
   app.get('/v1/admin/notifications', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
     const type = c.req.query('type');
     const onlyUnread = c.req.query('unread') === '1';
-    // Sidebar count badge mode — server runs `count: 'exact'` against an empty
-    // row select so we get just `{ unread_count: N }` back, not 200 row payloads
-    // every time the user navigates. The full list mode below is unchanged.
     const countOnly = c.req.query('count_only') === '1';
-    if (projectIds.length === 0) {
-      return c.json({
-        ok: true,
-        data: countOnly ? { unread_count: 0 } : { notifications: [] },
-      });
-    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: countOnly ? { unread_count: 0 } : { notifications: [] },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     if (countOnly) {
       let countQuery = db
         .from('reporter_notifications')
         .select('id', { count: 'exact', head: true })
-        .in('project_id', projectIds);
+        .eq('project_id', project.id);
       if (type) countQuery = countQuery.eq('notification_type', type);
       if (onlyUnread) countQuery = countQuery.is('read_at', null);
       const { count, error } = await countQuery;
@@ -196,7 +259,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
     let query = db
       .from('reporter_notifications')
       .select('*')
-      .in('project_id', projectIds)
+      .eq('project_id', project.id)
       .order('created_at', { ascending: false })
       .limit(limit);
     if (type) query = query.eq('notification_type', type);
@@ -211,15 +274,15 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const notifId = c.req.param('id');
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (projectIds.length === 0)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No projects' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { error } = await db
       .from('reporter_notifications')
       .update({ read_at: new Date().toISOString() })
       .eq('id', notifId)
-      .in('project_id', projectIds);
+      .eq('project_id', project.id);
     if (error) return dbError(c, error);
     return c.json({ ok: true });
   });
@@ -227,17 +290,17 @@ export function registerAdminOpsRoutes(app: Hono): void {
   app.post('/v1/admin/notifications/read-all', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
-    const projectIds = await ownedProjectIds(db, userId);
-    if (projectIds.length === 0)
-      return c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No projects' } }, 404);
+    const resolvedProject = await resolveOwnedProject(c, db, userId);
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
 
     const { error, count } = await db
       .from('reporter_notifications')
       .update({ read_at: new Date().toISOString() }, { count: 'exact' })
-      .in('project_id', projectIds)
+      .eq('project_id', project.id)
       .is('read_at', null);
     if (error) return dbError(c, error);
-    await logAudit(db, projectIds[0], userId, 'settings.updated', 'notifications', undefined, {
+    await logAudit(db, project.id, userId, 'settings.updated', 'notifications', undefined, {
       marked_read: count ?? 0,
     });
     return c.json({ ok: true, data: { marked_read: count ?? 0 } });
@@ -246,6 +309,139 @@ export function registerAdminOpsRoutes(app: Hono): void {
   // ============================================================
   // SOC 2 Type 1
   // ============================================================
+  app.get('/v1/admin/compliance/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const GDPR_SLA_DAYS = 30;
+    const OVERDUE_THRESHOLD_DAYS = GDPR_SLA_DAYS - 9;
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      soc2Entitlement: false,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      projectCount: 0,
+      controlsTotal: 0,
+      controlsPass: 0,
+      controlsWarn: 0,
+      controlsFail: 0,
+      openDsars: 0,
+      overdueDsars: 0,
+      atRiskDsars: 0,
+      legalHoldCount: 0,
+      policiesCount: 0,
+      latestEvidenceAt: null as string | null,
+      evidenceNeverGenerated: true,
+      currentRegion: currentRegion(),
+      activeProjectRegion: null as string | null,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const soc2Entitlement = entitlement?.hasFeature('soc2') ?? false;
+
+    const projectIds = await ownedProjectIds(db, userId);
+
+    const [{ data: evidenceRows }, { data: dsarRows }, { data: policyRows }, { data: residencyRow }] =
+      await Promise.all([
+        db
+          .from('soc2_evidence')
+          .select('project_id, control, status, generated_at')
+          .in('project_id', projectIds)
+          .order('generated_at', { ascending: false })
+          .limit(500),
+        db
+          .from('data_subject_requests')
+          .select('status, created_at')
+          .in('project_id', projectIds),
+        db
+          .from('project_retention_policies')
+          .select('project_id, legal_hold')
+          .in('project_id', projectIds),
+        db
+          .from('projects')
+          .select('data_residency_region')
+          .eq('id', project.id)
+          .maybeSingle(),
+      ]);
+
+    const latestByControl = new Map<string, { status: string; generated_at: string }>();
+    for (const row of evidenceRows ?? []) {
+      const key = `${row.project_id}:${row.control}`;
+      const existing = latestByControl.get(key);
+      if (!existing || existing.generated_at < row.generated_at) {
+        latestByControl.set(key, {
+          status: row.status as string,
+          generated_at: row.generated_at as string,
+        });
+      }
+    }
+
+    let controlsPass = 0;
+    let controlsWarn = 0;
+    let controlsFail = 0;
+    let latestEvidenceAt: string | null = null;
+    for (const ev of latestByControl.values()) {
+      if (ev.status === 'pass') controlsPass += 1;
+      else if (ev.status === 'warn') controlsWarn += 1;
+      else if (ev.status === 'fail') controlsFail += 1;
+      if (!latestEvidenceAt || ev.generated_at > latestEvidenceAt) {
+        latestEvidenceAt = ev.generated_at;
+      }
+    }
+
+    const now = Date.now();
+    const daysSince = (iso: string) =>
+      Math.max(0, Math.floor((now - new Date(iso).getTime()) / (24 * 60 * 60 * 1000)));
+
+    let openDsars = 0;
+    let overdueDsars = 0;
+    let atRiskDsars = 0;
+    for (const d of dsarRows ?? []) {
+      const status = d.status as string;
+      if (status === 'completed' || status === 'rejected') continue;
+      openDsars += 1;
+      const age = daysSince(d.created_at as string);
+      if (age >= OVERDUE_THRESHOLD_DAYS) overdueDsars += 1;
+      else if (age >= 14) atRiskDsars += 1;
+    }
+
+    const policies = policyRows ?? [];
+    const legalHoldCount = policies.filter((p) => p.legal_hold).length;
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        soc2Entitlement,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        projectCount: projectIds.length,
+        controlsTotal: latestByControl.size,
+        controlsPass,
+        controlsWarn,
+        controlsFail,
+        openDsars,
+        overdueDsars,
+        atRiskDsars,
+        legalHoldCount,
+        policiesCount: policies.length,
+        latestEvidenceAt,
+        evidenceNeverGenerated: latestByControl.size === 0,
+        currentRegion: currentRegion(),
+        activeProjectRegion: (residencyRow?.data_residency_region as string | null) ?? null,
+      },
+    });
+  });
+
   app.get('/v1/admin/compliance/retention', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -715,6 +911,137 @@ export function registerAdminOpsRoutes(app: Hono): void {
   // ============================================================
   // C8: BYO Storage admin endpoints
   // ============================================================
+
+  app.get('/v1/admin/storage/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      projectCount: 0,
+      configuredCount: 0,
+      unconfiguredCount: 0,
+      healthyCount: 0,
+      degradedCount: 0,
+      failingCount: 0,
+      unknownCount: 0,
+      neverProbedCount: 0,
+      totalObjects: 0,
+      activeProjectObjects: 0,
+      activeProjectLastWrite: null as string | null,
+      activeProjectHealthStatus: 'unknown' as string,
+      activeProjectProvider: 'supabase' as string,
+      activeProjectConfigured: false,
+      lastHealthCheckAt: null as string | null,
+      latestFailureError: null as string | null,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const projectIds = await ownedProjectIds(db, userId);
+
+    const [{ data: settingsRows }, usageRows] = await Promise.all([
+      db
+        .from('project_storage_settings')
+        .select(
+          'project_id, provider, health_status, last_health_check_at, last_health_error',
+        )
+        .in('project_id', projectIds),
+      Promise.all(
+        projectIds.map(async (pid) => {
+          const [{ count }, { data: latest }] = await Promise.all([
+            db
+              .from('reports')
+              .select('id', { count: 'exact', head: true })
+              .eq('project_id', pid)
+              .not('screenshot_path', 'is', null),
+            db
+              .from('reports')
+              .select('created_at')
+              .eq('project_id', pid)
+              .not('screenshot_path', 'is', null)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle(),
+          ]);
+          return {
+            project_id: pid,
+            object_count: count ?? 0,
+            last_write_at: latest?.created_at ?? null,
+          };
+        }),
+      ),
+    ]);
+
+    const settings = settingsRows ?? [];
+    const settingsByProject = new Map(settings.map((s) => [s.project_id, s]));
+    let healthyCount = 0;
+    let degradedCount = 0;
+    let failingCount = 0;
+    let unknownCount = 0;
+    let neverProbedCount = 0;
+    for (const row of settings) {
+      const status = row.health_status as string;
+      if (status === 'healthy') healthyCount += 1;
+      else if (status === 'degraded') degradedCount += 1;
+      else if (status === 'failing') failingCount += 1;
+      else unknownCount += 1;
+      if (!row.last_health_check_at) neverProbedCount += 1;
+    }
+
+    const configuredCount = settings.length;
+    const unconfiguredCount = Math.max(projectIds.length - configuredCount, 0);
+    let totalObjects = 0;
+    let activeProjectObjects = 0;
+    let activeProjectLastWrite: string | null = null;
+    for (const u of usageRows) {
+      totalObjects += u.object_count;
+      if (u.project_id === project.id) {
+        activeProjectObjects = u.object_count;
+        activeProjectLastWrite = u.last_write_at;
+      }
+    }
+
+    const activeSetting = settingsByProject.get(project.id);
+    const activeProjectConfigured = Boolean(activeSetting);
+    const activeProjectHealthStatus = (activeSetting?.health_status as string) ?? 'unknown';
+    const activeProjectProvider = (activeSetting?.provider as string) ?? 'supabase';
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        projectCount: projectIds.length,
+        configuredCount,
+        unconfiguredCount,
+        healthyCount,
+        degradedCount,
+        failingCount,
+        unknownCount,
+        neverProbedCount,
+        totalObjects,
+        activeProjectObjects,
+        activeProjectLastWrite,
+        activeProjectHealthStatus,
+        activeProjectProvider,
+        activeProjectConfigured,
+        lastHealthCheckAt: (activeSetting?.last_health_check_at as string | undefined) ?? null,
+        latestFailureError: (activeSetting?.last_health_error as string | undefined) ?? null,
+      },
+    });
+  });
 
   app.get('/v1/admin/storage', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
@@ -1357,6 +1684,214 @@ export function registerAdminOpsRoutes(app: Hono): void {
     });
   });
 
+  // Lightweight posture for the My feedback shell — banner, KPI strip, tabs.
+  app.get('/v1/admin/feedback/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      totalTickets: 0,
+      activeTickets: 0,
+      awaitingReply: 0,
+      shippedTickets: 0,
+      bugTickets: 0,
+      featureTickets: 0,
+      billingTickets: 0,
+      resolvedTickets: 0,
+      lastSubmittedAt: null as string | null,
+      lastShippedAt: null as string | null,
+      latestReplyAt: null as string | null,
+      topTicketId: null as string | null,
+      topTicketSubject: null as string | null,
+      topTicketCategory: null as string | null,
+      topPriority: 'first_submit' as 'reply' | 'active' | 'clear' | 'first_submit',
+      topPriorityLabel: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+
+    const { data, error } = await db
+      .from('support_tickets')
+      .select(
+        'id, subject, category, status, admin_response, admin_responded_at, shipped_in_release_id, shipped_at, created_at, updated_at',
+      )
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    if (error) return dbError(c, error);
+
+    const rows = data ?? [];
+    let activeTickets = 0;
+    let awaitingReply = 0;
+    let shippedTickets = 0;
+    let bugTickets = 0;
+    let featureTickets = 0;
+    let billingTickets = 0;
+    let resolvedTickets = 0;
+    let lastSubmittedAt: string | null = rows[0]?.created_at ?? null;
+    let lastShippedAt: string | null = null;
+    let latestReplyAt: string | null = null;
+    let topReplyTicket: (typeof rows)[number] | null = null;
+
+    for (const t of rows) {
+      const status = String(t.status ?? '');
+      const category = String(t.category ?? '');
+      if (status === 'open' || status === 'in_progress') activeTickets += 1;
+      if (category === 'bug') bugTickets += 1;
+      else if (category === 'feature') featureTickets += 1;
+      else if (category === 'billing') billingTickets += 1;
+      if (status === 'resolved' || status === 'closed') resolvedTickets += 1;
+      if (t.shipped_in_release_id) {
+        shippedTickets += 1;
+        const shippedAt = t.shipped_at ?? t.updated_at ?? t.created_at;
+        if (shippedAt && (!lastShippedAt || new Date(String(shippedAt)).getTime() > new Date(lastShippedAt).getTime())) {
+          lastShippedAt = String(shippedAt);
+        }
+      }
+      const hasReply =
+        (status === 'open' || status === 'in_progress') &&
+        typeof t.admin_response === 'string' &&
+        t.admin_response.trim().length > 0;
+      if (hasReply) {
+        awaitingReply += 1;
+        const repliedAt = t.admin_responded_at ?? t.updated_at ?? t.created_at;
+        if (
+          repliedAt &&
+          (!latestReplyAt || new Date(String(repliedAt)).getTime() > new Date(String(latestReplyAt)).getTime())
+        ) {
+          latestReplyAt = String(repliedAt);
+          topReplyTicket = t;
+        }
+      }
+    }
+
+    let topPriority: 'reply' | 'active' | 'clear' | 'first_submit' = 'first_submit';
+    let topPriorityLabel: string | null = null;
+    let topTicketId: string | null = null;
+    let topTicketSubject: string | null = null;
+    let topTicketCategory: string | null = null;
+
+    if (rows.length === 0) {
+      topPriority = 'first_submit';
+      topPriorityLabel = 'Send your first bug report or feature request';
+    } else if (topReplyTicket) {
+      topPriority = 'reply';
+      topPriorityLabel = `Team replied on “${topReplyTicket.subject}”`;
+      topTicketId = topReplyTicket.id;
+      topTicketSubject = topReplyTicket.subject;
+      topTicketCategory = topReplyTicket.category;
+    } else if (activeTickets > 0) {
+      topPriority = 'active';
+      topPriorityLabel = `${activeTickets} submission${activeTickets === 1 ? '' : 's'} awaiting triage`;
+      const firstActive = rows.find((t) => t.status === 'open' || t.status === 'in_progress') ?? null;
+      if (firstActive) {
+        topTicketId = firstActive.id;
+        topTicketSubject = firstActive.subject;
+        topTicketCategory = firstActive.category;
+      }
+    } else {
+      topPriority = 'clear';
+      topPriorityLabel =
+        shippedTickets > 0
+          ? `${shippedTickets} idea${shippedTickets === 1 ? '' : 's'} shipped in releases`
+          : 'No active submissions — inbox clear';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        totalTickets: rows.length,
+        activeTickets,
+        awaitingReply,
+        shippedTickets,
+        bugTickets,
+        featureTickets,
+        billingTickets,
+        resolvedTickets,
+        lastSubmittedAt,
+        lastShippedAt,
+        latestReplyAt,
+        topTicketId,
+        topTicketSubject,
+        topTicketCategory,
+        topPriority,
+        topPriorityLabel,
+      },
+    });
+  });
+
+  // Lightweight counts for sidebar badge + dashboard strip.
+  app.get('/v1/admin/support/tickets/summary', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const { data, error } = await db
+      .from('support_tickets')
+      .select('status, admin_response, shipped_in_release_id')
+      .eq('user_id', userId);
+    if (error) return dbError(c, error);
+    const rows = data ?? [];
+    const active = rows.filter((t) => t.status === 'open' || t.status === 'in_progress').length;
+    const withReply = rows.filter(
+      (t) =>
+        (t.status === 'open' || t.status === 'in_progress') &&
+        typeof t.admin_response === 'string' &&
+        t.admin_response.trim().length > 0,
+    ).length;
+    const shipped = rows.filter((t) => t.shipped_in_release_id != null).length;
+    return c.json({
+      ok: true,
+      data: { total: rows.length, active, with_reply: withReply, shipped },
+    });
+  });
+
+  // Tickets eligible to credit in a release draft (project-scoped).
+  app.get('/v1/admin/projects/:projectId/support-tickets/linkable', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const projectId = c.req.param('projectId');
+    if (!projectId) {
+      return c.json({ ok: false, error: { code: 'PROJECT_ID_REQUIRED' } }, 400);
+    }
+    const db = getServiceClient();
+    const owned = await ownedProjectIds(db, userId);
+    if (!owned.includes(projectId)) {
+      return c.json({ ok: false, error: { code: 'FORBIDDEN' } }, 403);
+    }
+    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit') ?? '50')));
+    const { data, error } = await db
+      .from('support_tickets')
+      .select('id, subject, category, status, user_email, created_at, shipped_in_release_id')
+      .eq('project_id', projectId)
+      .in('category', ['bug', 'feature'])
+      .neq('status', 'cancelled')
+      .is('shipped_in_release_id', null)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) return dbError(c, error);
+    return c.json({ ok: true, data: { tickets: data ?? [] } });
+  });
+
   // List the caller's own tickets (across all projects they own). Used by
   // the BillingPage history section so paid users can see which questions
   // are still open. We include `body` and `admin_response` here (small
@@ -1366,15 +1901,26 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
     const limit = Math.min(50, Math.max(1, Number(c.req.query('limit') ?? '20')));
+    const category = (c.req.query('category') ?? '').trim();
+    const shippedOnly = c.req.query('shipped') === '1';
 
-    const { data, error } = await db
+    let query = db
       .from('support_tickets')
       .select(
-        'id, project_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at',
+        'id, project_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at, shipped_in_release_id, shipped_at, shipped_note, release:releases!support_tickets_shipped_in_release_id_fkey(id, version, title, status, published_at)',
       )
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    if (SUPPORT_CATEGORIES.includes(category as SupportCategory)) {
+      query = query.eq('category', category);
+    }
+    if (shippedOnly) {
+      query = query.not('shipped_in_release_id', 'is', null);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return dbError(c, error);
@@ -1396,7 +1942,7 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const { data, error } = await db
       .from('support_tickets')
       .select(
-        'id, project_id, user_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at',
+        'id, project_id, user_id, subject, body, category, status, plan_id, admin_response, admin_responded_at, created_at, updated_at, resolved_at, cancelled_at, shipped_in_release_id, shipped_at, shipped_note, release:releases!support_tickets_shipped_in_release_id_fkey(id, version, title, status, published_at)',
       )
       .eq('id', ticketId)
       .maybeSingle();
@@ -1471,5 +2017,90 @@ export function registerAdminOpsRoutes(app: Hono): void {
     }
 
     return c.json({ ok: true, data: { ticket_id: ticket.id, status: 'cancelled' } });
+  });
+
+  // Operator triage — link ticket to a published release + optional customer note.
+  app.patch('/v1/super-admin/support/tickets/:id', jwtAuth, requireSuperAdmin, async (c) => {
+    const ticketId = c.req.param('id');
+    if (!ticketId) {
+      return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
+    }
+
+    const body = (await c.req.json().catch(() => null)) as {
+      status?: string;
+      admin_response?: string;
+      shipped_in_release_id?: string | null;
+      shipped_note?: string | null;
+      operator_notes?: string;
+    } | null;
+    if (!body) return c.json({ ok: false, error: { code: 'INVALID_JSON' } }, 400);
+
+    const db = getServiceClient();
+    const patch: Record<string, unknown> = {};
+
+    const allowedStatuses = ['open', 'in_progress', 'resolved', 'closed', 'cancelled'];
+    if (body.status && allowedStatuses.includes(body.status)) {
+      patch.status = body.status;
+    }
+    if (typeof body.admin_response === 'string') {
+      patch.admin_response = body.admin_response.trim() || null;
+      patch.admin_responded_at = new Date().toISOString();
+    }
+    if (typeof body.operator_notes === 'string') {
+      patch.operator_notes = body.operator_notes.trim() || null;
+    }
+    if (body.shipped_note !== undefined) {
+      patch.shipped_note = body.shipped_note?.trim() || null;
+    }
+
+    if (body.shipped_in_release_id !== undefined) {
+      if (body.shipped_in_release_id === null) {
+        patch.shipped_in_release_id = null;
+        patch.shipped_at = null;
+      } else {
+        const { data: release } = await db
+          .from('releases')
+          .select('id, status, published_at')
+          .eq('id', body.shipped_in_release_id)
+          .maybeSingle();
+        if (!release) {
+          return c.json({ ok: false, error: { code: 'RELEASE_NOT_FOUND' } }, 404);
+        }
+        if (release.status !== 'published') {
+          return c.json(
+            {
+              ok: false,
+              error: {
+                code: 'RELEASE_NOT_PUBLISHED',
+                message: 'Only published releases can be linked to shipped tickets.',
+              },
+            },
+            409,
+          );
+        }
+        patch.shipped_in_release_id = release.id;
+        patch.shipped_at = release.published_at ?? new Date().toISOString();
+        if (!patch.status) {
+          patch.status = 'resolved';
+        }
+      }
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return c.json({ ok: false, error: { code: 'NO_CHANGES' } }, 400);
+    }
+
+    const { data, error } = await db
+      .from('support_tickets')
+      .update(patch)
+      .eq('id', ticketId)
+      .select(
+        'id, status, admin_response, admin_responded_at, shipped_in_release_id, shipped_at, shipped_note',
+      )
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+    if (!data) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+    return c.json({ ok: true, data: { ticket: data } });
   });
 }

@@ -590,6 +590,155 @@ export function registerRewardsRoutes(app: Hono): void {
   })
 
   // ===========================================================
+  // ADMIN: GET /v1/admin/rewards/stats
+  // Workspace health summary for the rewards program banner + KPI strip.
+  // ===========================================================
+  app.get('/v1/admin/rewards/stats', jwtAuth, async (c) => {
+    const orgId = getOrgIdFromContext(c)
+    const projectIdHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null
+
+    const empty = {
+      organizationId: null as string | null,
+      organizationName: null as string | null,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectRewardsEnabled: false,
+      enabledRulesCount: 0,
+      enabledTiersCount: 0,
+      activeContributors30d: 0,
+      pointsAwarded30d: 0,
+      pendingPayoutLiabilityUsd: 0,
+      activity24hTotal: 0,
+      activity24hRejected: 0,
+      rejectionRatePct24h: 0,
+      webhooksConfigured: 0,
+      webhooksFailing: 0,
+      identityProvidersConfigured: 0,
+    }
+
+    if (!orgId) return c.json({ ok: true, data: empty })
+
+    const db = getServiceClient()
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+
+    const [
+      { data: orgRow },
+      { count: rulesCount },
+      { count: tiersCount },
+      { data: agg30d },
+      { data: agg24h },
+      { data: webhooks },
+      { data: projects },
+      payoutLiabilityRes,
+    ] = await Promise.all([
+      db.from('organizations').select('id, name').eq('id', orgId).maybeSingle(),
+      db
+        .from('reward_rules')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('enabled', true),
+      db
+        .from('reward_tiers')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
+        .eq('enabled', true),
+      db
+        .from('end_user_activity')
+        .select('end_user_id, points_awarded')
+        .eq('organization_id', orgId)
+        .gte('created_at', since30d)
+        .limit(10000),
+      db
+        .from('end_user_activity')
+        .select('rejected_reason')
+        .eq('organization_id', orgId)
+        .gte('created_at', since24h),
+      db
+        .from('reward_webhooks')
+        .select('enabled, last_status')
+        .eq('organization_id', orgId),
+      db.from('projects').select('id, name').eq('organization_id', orgId),
+      db
+        .from('reward_payouts')
+        .select('status, amount_usd.sum()')
+        .eq('organization_id', orgId)
+        .in('status', ['pending', 'processing'])
+        .single(),
+    ])
+
+    const distinctUsers = new Set<string>()
+    let totalPts = 0
+    for (const row of (agg30d ?? []) as Array<{ end_user_id: string; points_awarded: number | null }>) {
+      if (row.end_user_id) distinctUsers.add(row.end_user_id)
+      totalPts += row.points_awarded ?? 0
+    }
+
+    const rows24h = (agg24h ?? []) as Array<{ rejected_reason: string | null }>
+    const activity24hTotal = rows24h.length
+    const activity24hRejected = rows24h.filter((r) => r.rejected_reason).length
+    const rejectionRatePct24h =
+      activity24hTotal > 0 ? Math.round((activity24hRejected / activity24hTotal) * 100) : 0
+
+    const webhookRows = (webhooks ?? []) as Array<{ enabled: boolean; last_status: number | null }>
+    const webhooksConfigured = webhookRows.filter((w) => w.enabled).length
+    const webhooksFailing = webhookRows.filter(
+      (w) => w.enabled && w.last_status != null && w.last_status >= 400,
+    ).length
+
+    const projectRows = (projects ?? []) as Array<{ id: string; name: string }>
+    const projectIds = projectRows.map((p) => p.id)
+    let identityProvidersConfigured = 0
+    if (projectIds.length > 0) {
+      const { count } = await db
+        .from('host_auth_providers')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .eq('enabled', true)
+      identityProvidersConfigured = count ?? 0
+    }
+
+    const activeProject =
+      projectIdHint && projectRows.some((p) => p.id === projectIdHint)
+        ? projectRows.find((p) => p.id === projectIdHint)!
+        : projectRows[0] ?? null
+
+    let projectRewardsEnabled = false
+    if (activeProject) {
+      const { data: ps } = await db
+        .from('project_settings')
+        .select('rewards_enabled')
+        .eq('project_id', activeProject.id)
+        .maybeSingle()
+      projectRewardsEnabled = Boolean((ps as { rewards_enabled?: boolean } | null)?.rewards_enabled)
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        organizationId: orgId,
+        organizationName: (orgRow as { name?: string } | null)?.name ?? null,
+        projectId: activeProject?.id ?? null,
+        projectName: activeProject?.name ?? null,
+        projectRewardsEnabled,
+        enabledRulesCount: rulesCount ?? 0,
+        enabledTiersCount: tiersCount ?? 0,
+        activeContributors30d: distinctUsers.size,
+        pointsAwarded30d: totalPts,
+        pendingPayoutLiabilityUsd:
+          (payoutLiabilityRes.data as Record<string, number> | null)?.sum ?? 0,
+        activity24hTotal,
+        activity24hRejected,
+        rejectionRatePct24h,
+        webhooksConfigured,
+        webhooksFailing,
+        identityProvidersConfigured,
+      },
+    })
+  })
+
+  // ===========================================================
   // ADMIN: GET /v1/admin/rewards/overview
   // ===========================================================
   app.get('/v1/admin/rewards/overview', jwtAuth, async (c) => {

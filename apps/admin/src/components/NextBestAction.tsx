@@ -252,7 +252,7 @@ function computeNextAction(
       tone: 'act',
       title: 'Wire merged fixes back to Sentry / Slack',
       why: 'Close the loop end-to-end so your team sees fixes where they already work.',
-      cta: { kind: 'link', to: '/integrations', label: 'Set up routing' },
+      cta: { kind: 'link', to: '/integrations/config', label: 'Set up routing' },
     }
   }
 

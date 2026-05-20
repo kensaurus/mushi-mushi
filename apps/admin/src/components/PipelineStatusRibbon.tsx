@@ -28,6 +28,7 @@
 
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Tooltip } from './ui'
 import { useAdminMode } from '../lib/mode'
 import { useNavCounts } from '../lib/useNavCounts'
 
@@ -101,8 +102,8 @@ function PulseArrow({ fromHex, toHex }: { fromHex: string; toHex: string }) {
   const animId = `pm-${fromHex.slice(1)}-${toHex.slice(1)}`
   // Marching dashes: same approach as HeroGradientEdge, no blur.
   return (
-    <div className="hidden md:flex items-center justify-center w-8 shrink-0" aria-hidden="true">
-      <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
+    <div className="hidden lg:flex items-center justify-center w-6 xl:w-8 shrink-0" aria-hidden="true">
+      <svg width="28" height="20" viewBox="0 0 28 20" fill="none" className="w-full h-auto">
         <defs>
           <linearGradient id={gId} x1="0" y1="0" x2="1" y2="0">
             <stop offset="0%" stopColor={fromHex} />
@@ -227,6 +228,9 @@ export function PipelineStatusRibbon() {
   // the operator collapsed the strip an hour ago and forgot.
   const worst = tiles.reduce<RibbonTile>((acc, t) => (TONE_RANK[t.tone] > TONE_RANK[acc.tone] ? t : acc), tiles[0])
   const worstTone = TONE_CLASS[worst.tone]
+  const collapsedTooltip = tiles
+    .map((t) => `${t.label}: ${t.metric} — ${t.summary}`)
+    .join('\n')
 
   if (collapsed) {
     return (
@@ -237,6 +241,7 @@ export function PipelineStatusRibbon() {
         data-collapsed="true"
         className="mb-3"
       >
+        <Tooltip content={<span className="whitespace-pre-wrap text-3xs leading-relaxed">{collapsedTooltip}</span>} side="bottom" nowrap={false} portal>
         <button
           type="button"
           onClick={() => setCollapsed(false)}
@@ -245,7 +250,7 @@ export function PipelineStatusRibbon() {
           // Reads as a single chip rather than a card so collapsed mode
           // costs ~28px instead of the expanded ~64px. Tone-tints to the
           // worst stage so a danger condition still grabs the eye.
-          className={`group flex items-center gap-2 w-full rounded-sm border ${worstTone.ring} bg-surface-raised/40 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
+          className={`group flex items-center gap-2 w-full rounded-sm bg-surface-raised/25 px-2.5 py-1.5 text-left motion-safe:transition-colors hover:bg-surface-overlay focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
           title="Pipeline pulse — click to expand"
         >
           <span aria-hidden className={`inline-block h-2 w-2 rounded-full ${worstTone.dot}`} />
@@ -270,10 +275,11 @@ export function PipelineStatusRibbon() {
           <span className={`text-2xs font-mono font-semibold truncate ${worstTone.label}`}>
             {worst.label}: {worst.summary}
           </span>
-          <span aria-hidden className="ml-auto text-2xs text-fg-muted shrink-0 group-hover:text-fg motion-safe:transition-colors">
+          <span aria-hidden className="ml-auto shrink-0 text-2xs text-fg-muted group-hover:text-fg motion-safe:transition-colors">
             Expand ▾
           </span>
         </button>
+        </Tooltip>
       </section>
     )
   }
@@ -284,14 +290,22 @@ export function PipelineStatusRibbon() {
       aria-label="Pipeline pulse"
       data-testid="pipeline-status-ribbon"
       data-collapsed="false"
-      className="mb-3 rounded-md border border-edge bg-surface-raised/40 px-1.5 py-1.5"
+      className="mb-3 w-full rounded-md bg-surface-raised/20 px-1 py-1"
     >
       {/* Header strip — provides the collapse affordance + a context label.
           Kept tight (one line) so the ribbon's vertical footprint barely
           grows from the previous version. */}
-      <div className="flex items-center justify-between gap-2 px-1 pb-1.5">
-        <span className="text-3xs font-medium text-fg-faint uppercase tracking-wider">
+      <div className="flex items-center justify-between gap-2 px-2 pb-1">
+        <span className="flex items-center gap-2 text-3xs font-medium text-fg-faint uppercase tracking-wider">
           Pipeline pulse
+          {!nav.ready && (
+            <span className="inline-block h-1.5 w-8 animate-pulse rounded-full bg-fg-faint/30" aria-label="Loading counts" />
+          )}
+          {nav.ready && worst.tone === 'danger' && (
+            <span className="normal-case rounded bg-danger/15 px-1 py-px text-3xs font-semibold text-danger motion-safe:animate-pulse">
+              attention
+            </span>
+          )}
         </span>
         <button
           type="button"
@@ -304,29 +318,28 @@ export function PipelineStatusRibbon() {
           Collapse <span aria-hidden>▴</span>
         </button>
       </div>
+      {/* Mobile/tablet: 2×2 grid. Desktop: single row with animated arrows. */}
       <div
         id="pipeline-status-ribbon-tiles"
-        className="flex items-stretch gap-0 md:gap-0"
+        className="grid grid-cols-2 gap-1.5 px-1 pb-1 lg:flex lg:items-stretch lg:gap-0"
       >
         {tiles.map((tile, i) => {
           const tone = TONE_CLASS[tile.tone]
           const borderHex = STAGE_BORDER_HEX[tile.stage]
           return (
-            <div key={tile.stage} className="flex items-stretch flex-1 min-w-0">
+            <div key={tile.stage} className="flex items-stretch min-w-0 lg:flex-1">
               <Link
                 to={tile.to}
-                className="group relative flex items-center gap-2 rounded-sm bg-surface px-2 py-1.5 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand flex-1 min-w-0"
+                className="group relative flex w-full items-center gap-2 rounded-sm bg-surface/80 px-2.5 py-2 motion-safe:transition-all motion-safe:duration-150 hover:bg-surface-overlay hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand min-w-0"
                 title={tile.summary}
                 style={{
                   borderLeft: `3px solid ${borderHex}`,
-                  borderTop: `1px solid ${borderHex}30`,
-                  borderRight: `1px solid ${borderHex}30`,
-                  borderBottom: `1px solid ${borderHex}30`,
+                  boxShadow: `inset 0 -1px 0 ${borderHex}18`,
                 }}
               >
                 <span
                   aria-hidden
-                  className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[0.55rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
+                  className={`inline-flex items-center justify-center w-5 h-5 rounded-sm text-[0.6rem] font-bold leading-none shrink-0 ${STAGE_TONE[tile.stage]}`}
                 >
                   {tile.stage}
                 </span>
@@ -334,18 +347,24 @@ export function PipelineStatusRibbon() {
                   <span className="flex items-center gap-1.5">
                     <span
                       aria-hidden
-                      className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`}
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot} ${tile.tone === 'danger' ? 'motion-safe:animate-pulse' : ''}`}
                     />
                     <span className="text-2xs font-medium text-fg-secondary uppercase tracking-wider">
                       {tile.label}
                     </span>
-                    <span className={`ml-auto text-2xs font-mono font-semibold ${tone.label}`}>
-                      {tile.metric}
+                    <span className={`ml-auto text-sm font-mono font-bold tabular-nums tracking-tight leading-none ${tone.label} ${tile.tone === 'danger' ? 'motion-safe:animate-pulse' : ''}`}>
+                      {!nav.ready && tile.metric === '—' ? (
+                        <span className="inline-block h-3 w-6 animate-pulse rounded bg-fg-faint/25" aria-hidden />
+                      ) : (
+                        tile.metric
+                      )}
                     </span>
                   </span>
-                  <span className="block text-3xs text-fg-muted truncate leading-snug mt-0.5">
-                    {tile.summary}
-                  </span>
+                  <Tooltip content={tile.summary} side="bottom" nowrap={false} portal>
+                    <span className="block text-3xs text-fg-muted leading-snug mt-0.5 line-clamp-2 lg:truncate cursor-help">
+                      {tile.summary}
+                    </span>
+                  </Tooltip>
                 </span>
               </Link>
               {i < tiles.length - 1 && (

@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -43,6 +43,125 @@ import {
 } from '../helpers.ts';
 
 export function registerQueryFixesRepoRoutes(app: Hono): void {
+  app.get('/v1/admin/query/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      savedCount: 0,
+      recentCount: 0,
+      teamSavedCount: 0,
+      runs24h: 0,
+      errors24h: 0,
+      nlRuns24h: 0,
+      rawRuns24h: 0,
+      avgLatencyMs: null as number | null,
+      lastRunAt: null as string | null,
+      lastRunPrompt: null as string | null,
+      lastRunError: null as string | null,
+      schemaDegraded: false,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const entitlement = await resolveActiveEntitlement(c);
+    const plan = entitlement?.plan;
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [userHistoryRes, teamCountRes, runs24hRes] = await Promise.all([
+      db
+        .from('nl_query_history')
+        .select('id, is_saved, error, latency_ms, mode, prompt, created_at')
+        .eq('user_id', userId)
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: false })
+        .limit(200),
+      db
+        .from('nl_query_history')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', await ownedProjectIds(db, userId))
+        .eq('is_saved', true)
+        .neq('user_id', userId),
+      db
+        .from('nl_query_history')
+        .select('error, latency_ms, mode, created_at')
+        .eq('project_id', project.id)
+        .gte('created_at', since24h),
+    ]);
+
+    const schemaDegraded =
+      userHistoryRes.error?.code === '42703' ||
+      teamCountRes.error?.code === '42703' ||
+      runs24hRes.error?.code === '42703';
+
+    if (userHistoryRes.error && userHistoryRes.error.code !== '42703') {
+      return dbError(c, userHistoryRes.error);
+    }
+    if (teamCountRes.error && teamCountRes.error.code !== '42703') {
+      return dbError(c, teamCountRes.error);
+    }
+    if (runs24hRes.error && runs24hRes.error.code !== '42703') {
+      return dbError(c, runs24hRes.error);
+    }
+
+    const userRows = userHistoryRes.data ?? [];
+    let savedCount = 0;
+    let recentCount = 0;
+    for (const row of userRows) {
+      if (row.is_saved) savedCount += 1;
+      else recentCount += 1;
+    }
+
+    const runs24hRows = runs24hRes.data ?? [];
+    let errors24h = 0;
+    let nlRuns24h = 0;
+    let rawRuns24h = 0;
+    let latencySum = 0;
+    let latencyCount = 0;
+    for (const row of runs24hRows) {
+      if (row.error) errors24h += 1;
+      const mode = (row.mode as string | null) ?? 'nl';
+      if (mode === 'raw') rawRuns24h += 1;
+      else nlRuns24h += 1;
+      if (typeof row.latency_ms === 'number') {
+        latencySum += row.latency_ms;
+        latencyCount += 1;
+      }
+    }
+
+    const latest = userRows[0] ?? null;
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        planId: plan?.id ?? 'hobby',
+        planDisplayName: plan?.display_name ?? 'Hobby',
+        savedCount,
+        recentCount,
+        teamSavedCount: teamCountRes.count ?? 0,
+        runs24h: runs24hRows.length,
+        errors24h,
+        nlRuns24h,
+        rawRuns24h,
+        avgLatencyMs: latencyCount > 0 ? Math.round(latencySum / latencyCount) : null,
+        lastRunAt: latest?.created_at ?? null,
+        lastRunPrompt: latest?.prompt ?? null,
+        lastRunError: latest?.error ?? null,
+        schemaDegraded,
+      },
+    });
+  });
+
   app.get('/v1/admin/query/history', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

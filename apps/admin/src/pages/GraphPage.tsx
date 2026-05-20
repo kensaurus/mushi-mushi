@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
   type Edge,
   type Node,
@@ -9,11 +10,20 @@ import '@xyflow/react/dist/style.css'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
+import { usePageCopy } from '../lib/copy'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
 import {
   PageHeader,
   PageHelp,
   SegmentedControl,
   ErrorAlert,
+  Section,
+  StatCard,
+  FreshnessPill,
+  Badge,
+  Btn,
+  Card,
 } from '../components/ui'
 import { GraphSkeleton } from '../components/skeletons/GraphSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
@@ -23,7 +33,6 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
-import { usePageCopy } from '../lib/copy'
 import { GraphBackendPanel } from '../components/graph/GraphBackendPanel'
 import { OntologyPanel } from '../components/graph/OntologyPanel'
 import { GroupsPanel } from '../components/graph/GroupsPanel'
@@ -55,6 +64,35 @@ import {
   type GraphNode,
   type NodeType,
 } from '../components/graph/types'
+import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
+import {
+  EMPTY_GRAPH_STATS,
+  type GraphStats,
+  type GraphTabId,
+} from '../components/graph/GraphStatsTypes'
+
+const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Posture banner, fragility summary, and how the map relates to Reports and Inventory.',
+  },
+  {
+    id: 'explore',
+    label: 'Explore',
+    description: 'Interactive canvas, table, or inventory surface — click nodes for blast radius.',
+  },
+  {
+    id: 'backend',
+    label: 'Backend',
+    description: 'Apache AGE sync status, ontology tags, and node groups for advanced debugging.',
+  },
+]
+
+function resolveGraphTab(value: string | null): GraphTabId {
+  if (value === 'overview' || value === 'backend') return value
+  return 'explore'
+}
 
 type ViewMode = 'graph' | 'table' | 'surface'
 
@@ -72,6 +110,31 @@ export function GraphPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/graph')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveGraphTab(tabParam)
+  const activeTabMeta = GRAPH_TABS.find((t) => t.id === activeTab) ?? GRAPH_TABS[1]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<GraphStats>('/v1/admin/graph/stats')
+  const stats = statsData ?? EMPTY_GRAPH_STATS
+
+  const setActiveTab = useCallback(
+    (id: GraphTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'explore') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
   const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
 
@@ -80,9 +143,15 @@ export function GraphPage() {
   const loading = nodesQuery.loading || edgesQuery.loading
   const error = nodesQuery.error ?? edgesQuery.error
   const reloadGraph = useCallback(() => {
+    reloadStats()
     nodesQuery.reload()
     edgesQuery.reload()
-  }, [nodesQuery, edgesQuery])
+  }, [reloadStats, nodesQuery, edgesQuery])
+
+  useRealtimeReload(['graph_nodes', 'graph_edges', 'reports'], reloadGraph, {
+    debounceMs: 1500,
+    enabled: stats.hasAnyProject,
+  })
 
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [blastRadius, setBlastRadius] = useState<BlastRadiusItem[]>([])
@@ -132,6 +201,15 @@ export function GraphPage() {
       setEnabledNodeTypes(new Set(NODE_TYPES))
     }
   }, [])
+
+  // Deep-link quick views from stats CTAs (?view=fragile|regressions|fixes)
+  useEffect(() => {
+    if (activeTab !== 'explore') return
+    const preset = searchParams.get('view')
+    if (preset === 'fragile' || preset === 'regressions' || preset === 'fixes' || preset === 'all') {
+      applyView(preset)
+    }
+  }, [activeTab, searchParams, applyView])
 
   const filteredNodes = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -344,123 +422,87 @@ export function GraphPage() {
     for (const count of incoming.values()) if (count >= 3) n += 1
     return n
   }, [componentIds, rawEdges])
-  const regressionCount = useMemo(
-    () => rawEdges.filter((e) => e.edge_type === 'regression').length,
-    [rawEdges],
-  )
   const graphAction = useNextBestAction({
     scope: 'graph',
-    fragileComponents,
+    fragileComponents: fragileComponents || stats.fragileComponents,
     untestedComponents: 0,
   })
 
-  if (loading) return <GraphSkeleton />
-  if (error)
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : !stats.hasIngest
+        ? 'brand'
+        : stats.topPriority === 'fragile'
+          ? 'danger'
+          : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
+            ? 'warn'
+            : stats.topPriority === 'clear'
+              ? 'ok'
+              : 'brand'
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'explore' as const,
+        label: 'Explore',
+        count: stats.nodeCount > 0 ? stats.nodeCount : undefined,
+      },
+      { id: 'backend' as const, label: 'Backend' },
+    ],
+    [stats],
+  )
+
+  usePublishPageContext({
+    route: '/graph',
+    title: 'Knowledge graph',
+    summary: `${activeTabMeta.label} · ${stats.nodeCount} nodes · ${stats.fragileComponents} fragile`,
+    filters: { tab: activeTab, view: view },
+    criticalCount: stats.fragileComponents,
+    actions: [{ id: 'graph-refresh', label: 'Refresh', hint: 'Re-fetch stats + nodes/edges', run: reloadGraph }],
+  })
+
+  if (statsLoading && !statsData) {
     return (
-      <ErrorAlert message={`Failed to load knowledge graph: ${error}`} onRetry={reloadGraph} />
-    )
-
-  return (
-    <div className="space-y-3">
-      <PageHeader
-        title={copy?.title ?? 'Knowledge Graph'}
-        projectScope={projectName}
-        description={copy?.description ?? 'See how reports cluster into components, pages, and releases. Click any node for its blast radius.'}
-      >
-        <div className="flex items-center gap-2">
-          {view === 'surface' && (
-            <span className="rounded-sm bg-brand/12 text-brand text-2xs px-1.5 py-0.5 font-medium uppercase tracking-wide">
-              Surface · inventory overlay
-            </span>
-          )}
-          <span className="text-2xs text-fg-faint font-mono">
-            {filteredNodes.length}/{rawNodes.length} nodes ·{' '}
-            {filteredEdges.length}/{rawEdges.length} edges
-          </span>
-          <div data-dav-anchor="graph:decide">
-            <SegmentedControl<ViewMode>
-              size="sm"
-              ariaLabel="Graph view mode"
-              value={view}
-              options={VIEW_MODE_OPTIONS}
-              onChange={setView}
-            />
-          </div>
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading graph">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
         </div>
-      </PageHeader>
+      </div>
+    )
+  }
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load graph stats: ${statsError}`} onRetry={reloadGraph} />
+  }
 
-      <PageHero
-        scope="graph"
-        title="Knowledge Graph"
-        kicker="Blast radius map"
-        decide={{
-          label:
-            fragileComponents > 0
-              ? 'Fragile components detected'
-              : rawNodes.length === 0
-                ? 'Graph is empty'
-                : 'Graph is healthy',
-          metric:
-            rawNodes.length === 0
-              ? '—'
-              : `${fragileComponents} fragile · ${regressionCount} regressions`,
-          summary:
-            rawNodes.length === 0
-              ? 'Trigger the indexer after you connect a repo to populate the graph.'
-              : fragileComponents > 0
-                ? 'Components with ≥3 incoming affects edges are fragility hotspots — prioritise tests.'
-                : 'No fragility hotspots right now. Use quick views to browse the map.',
-          severity:
-            rawNodes.length === 0
-              ? 'neutral'
-              : fragileComponents > 0
-                ? 'warn'
-                : 'ok',
-          anchor: 'graph:decide',
-          evidence: rawNodes.length > 0 ? {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Fragile', value: fragileComponents, tone: fragileComponents > 0 ? 'crit' : 'ok' },
-              { label: 'Regressions', value: regressionCount, tone: regressionCount > 0 ? 'warn' : 'ok' },
-              { label: 'Total nodes', value: rawNodes.length, tone: 'neutral' },
-              { label: 'Total edges', value: rawEdges.length, tone: 'neutral' },
-            ],
-          } : undefined,
-        }}
-        act={graphAction}
-        actAnchor="graph:act"
-        actEvidence={graphAction ? { kind: 'rule-trace', why: graphAction.reason ?? graphAction.title, threshold: fragileComponents > 0 ? `${fragileComponents} fragile components` : undefined } : undefined}
-        verify={{
-          label: 'Graph snapshot',
-          detail: `${filteredNodes.length}/${rawNodes.length} nodes · ${filteredEdges.length}/${rawEdges.length} edges`,
-          to: '/graph?view=fragile',
-          secondaryTo: '/graph?view=regressions',
-          secondaryLabel: 'Regressions',
-          anchor: 'graph:verify',
-          evidence: rawNodes.length > 0 ? {
-            kind: 'metric-breakdown',
-            items: [
-              { label: 'Nodes', value: `${filteredNodes.length}/${rawNodes.length}`, tone: 'neutral' },
-              { label: 'Edges', value: `${filteredEdges.length}/${rawEdges.length}`, tone: 'neutral' },
-              { label: 'Regressions', value: regressionCount, tone: regressionCount > 0 ? 'warn' : 'ok' },
-              { label: 'Fragile', value: fragileComponents, tone: fragileComponents > 0 ? 'crit' : 'ok' },
-            ],
-          } : undefined,
-        }}
-      />
-      <PageActionBar scope="graph" action={graphAction} />
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Knowledge Graph'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'}
-        useCases={copy?.help?.useCases ?? [
-          'See blast radius: click any node to highlight everything it can affect',
-          'Find regressions: pick the Regressions view to focus on bugs that reappeared after a fix',
-          'Spot fragile components: pick the Fragile components view to surface high-incoming-affects nodes',
-          'Audit fix coverage: pick the Fix coverage view to trace fix_verified edges',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Use the quick views to focus on a story, or filter manually with the chips. Drag the canvas to pan, scroll to zoom, click any node for its blast radius. Re-layout shakes the graph into a fresh arrangement.'}
-      />
+  const explorePanel = loading ? (
+    <GraphSkeleton />
+  ) : error ? (
+    <ErrorAlert message={`Failed to load knowledge graph: ${error}`} onRetry={reloadGraph} />
+  ) : (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        {view === 'surface' && (
+          <span className="rounded-sm bg-brand/12 text-brand text-2xs px-1.5 py-0.5 font-medium uppercase tracking-wide">
+            Surface · inventory overlay
+          </span>
+        )}
+        <span className="text-2xs text-fg-faint font-mono">
+          {filteredNodes.length}/{rawNodes.length} nodes · {filteredEdges.length}/{rawEdges.length} edges
+        </span>
+        <SegmentedControl<ViewMode>
+          size="sm"
+          ariaLabel="Graph view mode"
+          value={view}
+          options={VIEW_MODE_OPTIONS}
+          onChange={setView}
+        />
+      </div>
 
       <div data-dav-anchor="graph:act">
         <QuickViewsRow
@@ -481,18 +523,10 @@ export function GraphPage() {
           blockedIcon={<HeroGraphNodes accent="text-fg-faint" />}
           emptyHints={[
             'Each report becomes a node — duplicates collapse into the same fingerprint.',
-            'Edges link reports that share a feature, route, or fingerprint.',
+            'Edges link reports that share a component, route, or fingerprint.',
           ]}
         />
       ) : (
-        // Single-column layout. Pre-2026-05-07 this was a
-        // `md:grid-cols-[1fr_18rem]` split with the GraphSidePanel pinned
-        // to the right — the user reported "wasted a lot of space" and
-        // "graph could extend on the right" because that 18rem column
-        // sat empty until a node was clicked. The detail panel now lives
-        // inside the canvas as a floating Panel (top-right) — see
-        // GraphCanvas. Storyboard + table views still render the panel
-        // inline because they don't have a viewport to float into.
         <div className="space-y-2" data-dav-anchor="graph:verify">
           <GraphFilterChips
             search={search}
@@ -581,13 +615,220 @@ export function GraphPage() {
           )}
         </div>
       )}
+    </>
+  )
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <GraphBackendPanel />
-        <OntologyPanel />
-      </div>
+  return (
+    <div className="space-y-4" data-testid="mushi-page-graph">
+      <PageHeader
+        title={copy?.title ?? 'Knowledge Graph'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          (stats.nodeCount > 0
+            ? `${stats.nodeCount} nodes · Explore tab for blast radius`
+            : 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map.')
+        }
+      >
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasIngest
+            ? 'WAITING'
+            : stats.nodeCount === 0
+              ? 'EMPTY'
+              : stats.fragileComponents > 0
+                ? `${stats.fragileComponents} FRAGILE`
+                : stats.regressionEdges > 0
+                  ? `${stats.regressionEdges} REGR`
+                  : 'CURRENT'}
+        </Badge>
+        <FreshnessPill
+          at={statsFetchedAt ?? nodesQuery.lastFetchedAt}
+          isValidating={statsValidating || nodesQuery.isValidating || edgesQuery.isValidating}
+        />
+        <Btn
+          size="sm"
+          variant="ghost"
+          onClick={reloadGraph}
+          loading={statsValidating || nodesQuery.isValidating}
+        >
+          Refresh
+        </Btn>
+      </PageHeader>
 
-      <GroupsPanel />
+      <GraphStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadGraph}
+        refreshing={statsValidating || loading}
+      />
+
+      <SegmentedControl<GraphTabId>
+        size="sm"
+        ariaLabel="Graph sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="GRAPH SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Nodes"
+            value={stats.nodeCount}
+            accent={stats.nodeCount > 0 ? 'text-fg' : undefined}
+            hint={stats.reportNodes > 0 ? `${stats.reportNodes} report groups` : 'Seeds from reports'}
+          />
+          <StatCard
+            label="Edges"
+            value={stats.edgeCount}
+            accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
+            hint={stats.duplicateEdges > 0 ? `${stats.duplicateEdges} duplicates` : 'Relationship count'}
+          />
+          <StatCard
+            label="Fragile"
+            value={stats.fragileComponents}
+            accent={stats.fragileComponents > 0 ? 'text-danger' : 'text-ok'}
+            hint="Components with ≥3 affects"
+          />
+          <StatCard
+            label="Inventory"
+            value={stats.inventoryNodes}
+            accent={stats.inventoryNodes > 0 ? 'text-info' : undefined}
+            hint={stats.inventoryNodes > 0 ? 'Surface overlay nodes' : 'Enable via User stories'}
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHero
+            scope="graph"
+            title="Knowledge Graph"
+            kicker="Plan"
+            decide={{
+              label: stats.topPriorityLabel ?? 'Blast radius map',
+              metric:
+                stats.nodeCount > 0
+                  ? `${stats.fragileComponents} fragile · ${stats.regressionEdges} regressions`
+                  : undefined,
+              summary:
+                stats.topPriority === 'waiting_ingest'
+                  ? 'Brand banner — graph seeds when reports ingest and the classifier links components.'
+                  : stats.topPriority === 'fragile'
+                    ? 'Red banner — fragile components have ≥3 incoming affects edges.'
+                    : stats.topPriority === 'regressions'
+                      ? 'Amber banner — regression edges mean bugs came back after a fix.'
+                      : 'Green banner — explore the map and click nodes for blast radius.',
+              severity:
+                stats.topPriority === 'fragile'
+                  ? 'crit'
+                  : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
+                    ? 'warn'
+                    : stats.topPriority === 'clear'
+                      ? 'ok'
+                      : 'info',
+            }}
+            verify={{
+              label: 'Graph backend',
+              detail: `${stats.graphBackend}${stats.unsyncedNodes > 0 ? ` · ${stats.unsyncedNodes} unsynced nodes` : ''}`,
+            }}
+          />
+
+          {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
+            <Card
+              className={`p-4 ${
+                stats.topPriority === 'fragile'
+                  ? 'border-danger/30 bg-danger/5'
+                  : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
+                    ? 'border-warn/30 bg-warn/5'
+                    : 'border-brand/30 bg-brand/5'
+              }`}
+            >
+              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
+              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Link to={stats.topPriorityTo}>
+                  <Btn size="sm" variant="primary">
+                    Take action →
+                  </Btn>
+                </Link>
+                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('explore')}>
+                  Open map
+                </Btn>
+              </div>
+            </Card>
+          ) : null}
+
+          <PageActionBar scope="graph" action={graphAction} />
+
+          <PageHelp
+            title={copy?.help?.title ?? 'About the Knowledge Graph'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'See blast radius: click any node to highlight everything it can affect',
+                'Find regressions: pick the Regressions quick view on Explore tab',
+                'Spot fragile components: red banner means ≥3 incoming affects edges',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Overview for posture. Explore for canvas/table/surface. Backend tab shows AGE sync and ontology debug info.'
+            }
+          />
+
+          <div className="flex flex-wrap gap-2">
+            <Btn size="sm" variant="primary" onClick={() => setActiveTab('explore')}>
+              Open map →
+            </Btn>
+            {!stats.hasIngest ? (
+              <Link to="/onboarding?tab=verify">
+                <Btn size="sm" variant="ghost">
+                  Send test report
+                </Btn>
+              </Link>
+            ) : null}
+          </div>
+        </>
+      )}
+
+      {activeTab === 'explore' && explorePanel}
+
+      {activeTab === 'backend' && (
+        <div className="space-y-3">
+          <Card className="border-info/20 bg-info/5 p-4">
+            <p className="text-sm font-medium text-fg">Graph backend debug</p>
+            <p className="mt-1 text-2xs text-fg-muted">
+              Backend: <span className="font-mono text-fg-secondary">{stats.graphBackend}</span>
+              {stats.ageAvailable ? ' · Apache AGE available' : ' · SQL-only mode'}
+              {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0
+                ? ` · ${stats.unsyncedNodes} unsynced nodes · ${stats.unsyncedEdges} unsynced edges`
+                : ' · fully synced'}
+            </p>
+          </Card>
+          <div className="grid gap-3 md:grid-cols-2">
+            <GraphBackendPanel />
+            <OntologyPanel />
+          </div>
+          <GroupsPanel />
+        </div>
+      )}
     </div>
   )
 }

@@ -52,9 +52,10 @@ const CompliancePage = lazy(() => import('./pages/CompliancePage').then(m => ({ 
 const StoragePage = lazy(() => import('./pages/StoragePage').then(m => ({ default: m.StoragePage })))
 const MarketplacePage = lazy(() => import('./pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })))
 const IntegrationsPage = lazy(() => import('./pages/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
-const PublicIntegrationsPage = lazy(() => import('./pages/PublicIntegrationsPage').then(m => ({ default: m.PublicIntegrationsPage })))
+import { IntegrationsRouteGate } from './pages/IntegrationsRouteGate'
 const McpPage = lazy(() => import('./pages/McpPage').then(m => ({ default: m.McpPage })))
 const OnboardingPage = lazy(() => import('./pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const FeedbackPage = lazy(() => import('./pages/FeedbackPage').then(m => ({ default: m.FeedbackPage })))
 const HealthPage = lazy(() => import('./pages/HealthPage').then(m => ({ default: m.HealthPage })))
 const QaCoveragePage = lazy(() => import('./pages/QaCoveragePage').then(m => ({ default: m.QaCoveragePage })))
 const AntiGamingPage = lazy(() => import('./pages/AntiGamingPage').then(m => ({ default: m.AntiGamingPage })))
@@ -206,14 +207,7 @@ export function App() {
             auth-gated /integrations route inside ProtectedRoute because React
             Router v6 picks the more-specific match over `/*`. The admin
             integration config is available at /integrations/config. */}
-        <Route
-          path="/integrations"
-          element={
-            <Suspense fallback={<Loading text="Loading..." />}>
-              <PublicIntegrationsPage />
-            </Suspense>
-          }
-        />
+        <Route path="/integrations" element={<IntegrationsRouteGate />} />
         <Route
           path="/*"
           element={
@@ -247,6 +241,7 @@ export function App() {
                   <Route path="/integrations/config" element={<IntegrationsPage />} />
                   <Route path="/mcp" element={<McpPage />} />
                   <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route path="/feedback" element={<FeedbackPage />} />
                   <Route path="/health" element={<HealthPage />} />
                   <Route path="/qa-coverage" element={<QaCoveragePage />} />
                   <Route path="/anti-gaming" element={<AntiGamingPage />} />

@@ -48,6 +48,20 @@ export interface ReliabilityStats {
   avgLatency: number
 }
 
+export interface MarketplaceStats {
+  catalogTotal: number
+  installedTotal: number
+  installedActive: number
+  installedPaused: number
+  deliveries7d: number
+  deliveriesOk: number
+  deliveriesFailed: number
+  lastDeliveryAt: string | null
+  failingPlugins: number
+}
+
+export type MarketplaceTabId = 'browse' | 'installed' | 'deliveries'
+
 export const STATUS_CHIP: Record<string, string> = {
   ok: 'bg-ok/15 text-ok border border-ok/30',
   error: 'bg-danger/15 text-danger border border-danger/30',

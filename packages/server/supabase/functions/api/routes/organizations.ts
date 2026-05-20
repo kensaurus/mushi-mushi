@@ -542,6 +542,94 @@ export function registerOrganizationRoutes(app: Hono): void {
     });
   });
 
+  app.get('/v1/org/:id/members/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const orgId = c.req.param('id');
+    if (!UUID_RE.test(orgId)) return c.json({ ok: false, error: { code: 'BAD_ORG' } }, 400);
+    const db = getServiceClient();
+    const role = await loadMembership(db, orgId, userId);
+    if (!role) return c.json({ ok: false, error: { code: 'NOT_FOUND' } }, 404);
+
+    const inactiveSince = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const activeSince7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const expiringBefore = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const nowIso = new Date().toISOString();
+
+    const [{ data: org }, { data: memberRows, error: memberErr }, { data: inviteRows, error: inviteErr }] =
+      await Promise.all([
+        db.from('organizations').select('id, slug, name, plan_id').eq('id', orgId).maybeSingle(),
+        db
+          .from('organization_members')
+          .select('last_active_at')
+          .eq('organization_id', orgId),
+        db
+          .from('invitations')
+          .select('id, expires_at')
+          .eq('organization_id', orgId)
+          .is('accepted_at', null)
+          .is('revoked_at', null)
+          .gt('expires_at', nowIso),
+      ]);
+
+    if (memberErr) return dbError(c, memberErr);
+    if (inviteErr) return dbError(c, inviteErr);
+
+    const members = memberRows ?? [];
+    const invites = inviteRows ?? [];
+    const memberCount = members.length;
+    const pendingInvites = invites.length;
+
+    let seatLimit: number | null = null;
+    let planDisplayName: string | null = null;
+    if (org?.plan_id) {
+      const { data: plan } = await db
+        .from('pricing_plans')
+        .select('seat_limit, display_name')
+        .eq('id', org.plan_id)
+        .maybeSingle();
+      seatLimit = (plan as { seat_limit?: number | null } | null)?.seat_limit ?? null;
+      planDisplayName = (plan as { display_name?: string | null } | null)?.display_name ?? null;
+    }
+
+    const seatsUsed = memberCount + pendingInvites;
+    const seatsRemaining = seatLimit === null ? null : Math.max(0, seatLimit - seatsUsed);
+    const atSeatCap = seatLimit !== null && seatsUsed >= seatLimit;
+
+    let inactiveCount = 0;
+    let activeLast7d = 0;
+    for (const m of members) {
+      const last = (m as { last_active_at?: string | null }).last_active_at ?? null;
+      if (!last || last < inactiveSince) inactiveCount += 1;
+      if (last && last >= activeSince7d) activeLast7d += 1;
+    }
+
+    const expiringSoonInvites = invites.filter(
+      (i) => (i as { expires_at: string }).expires_at <= expiringBefore,
+    ).length;
+
+    const canManage = role === 'owner' || role === 'admin';
+
+    return c.json({
+      ok: true,
+      data: {
+        memberCount,
+        pendingInvites,
+        seatLimit,
+        seatsUsed,
+        seatsRemaining,
+        inactiveCount,
+        activeLast7d,
+        expiringSoonInvites,
+        atSeatCap,
+        planId: (org as { plan_id?: string | null } | null)?.plan_id ?? null,
+        planDisplayName,
+        currentUserRole: role,
+        canManage,
+        organizationName: (org as { name?: string | null } | null)?.name ?? null,
+      },
+    });
+  });
+
   app.patch('/v1/org/:id/members/:userId', jwtAuth, async (c) => {
     const actorId = c.get('userId') as string;
     const orgId = c.req.param('id');

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { ConfirmDialog } from '../ConfirmDialog'
 import { Section, RelativeTime, InfoHint, Tooltip } from '../ui'
 import { IconChat } from '../icons'
 import { useReportComments, type FeedbackSignal } from '../../lib/reportComments'
@@ -43,6 +44,8 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
   const [body, setBody] = useState('')
   const [visibleToReporter, setVisibleToReporter] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -61,11 +64,15 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
   }
 
   const handleDelete = async (id: number) => {
+    setDeleting(true)
     try {
       await deleteComment(id)
+      setDeleteTarget(null)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Try again in a moment.'
       toast.error('Couldn\u2019t delete comment', msg)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -109,7 +116,7 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
             </div>
             <button
               type="button"
-              onClick={() => void handleDelete(c.id)}
+              onClick={() => setDeleteTarget(c.id)}
               className="text-2xs text-fg-faint hover:text-danger px-1"
               aria-label="Delete comment"
             >
@@ -151,6 +158,21 @@ export function ReportComments({ reportId, projectId }: { reportId: string; proj
           </button>
         </div>
       </form>
+
+      {deleteTarget != null ? (
+        <ConfirmDialog
+          title="Delete this comment?"
+          body="The triage note will be removed permanently. Reporter-visible replies cannot be recovered."
+          confirmLabel="Delete"
+          cancelLabel="Keep"
+          tone="danger"
+          loading={deleting}
+          onConfirm={() => void handleDelete(deleteTarget)}
+          onCancel={() => {
+            if (!deleting) setDeleteTarget(null)
+          }}
+        />
+      ) : null}
     </Section>
   )
 }
