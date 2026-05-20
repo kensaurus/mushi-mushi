@@ -55,6 +55,8 @@ type PackageJson = {
   workspaces?: string[] | { packages?: string[] }
   scripts?: Record<string, string>
   private?: boolean
+  /** corepack-managed field: "pnpm@9.1.0", "yarn@4.1.0", etc. */
+  packageManager?: string
 }
 
 // ─── Detection rules ─────────────────────────────────────────────────────────
@@ -79,17 +81,33 @@ function depVersion(pkg: PackageJson, name: string): string | null {
   )
 }
 
+/**
+ * Normalise a dependency version range to a plain semver before parsing.
+ * Handles workspace: prefixes (workspace:^, workspace:*, workspace:~),
+ * npm: aliases (npm:foo@^1.2.3), and regular semver operators (^, ~, >=).
+ */
+function normaliseSemver(range: string | null): string {
+  if (!range) return ''
+  // Strip workspace: prefix (workspace:^1.2, workspace:*, etc.)
+  let v = range.replace(/^workspace:/, '')
+  // Strip npm: alias prefix — "npm:pkg@^1.2" → "^1.2"
+  v = v.replace(/^npm:[^@]+@/, '')
+  // Strip remaining semver operators
+  v = v.replace(/[\^~>=<\s]/g, '')
+  return v
+}
+
 /** Parse the major version from a semver range like "^0.8.1" → 0 */
 function majorVersion(range: string | null): number {
-  if (!range) return 0
-  const m = range.replace(/[\^~>=<]/g, '').match(/^(\d+)/)
+  const v = normaliseSemver(range)
+  const m = v.match(/^(\d+)/)
   return m ? parseInt(m[1], 10) : 0
 }
 
 /** Parse the minor version from a semver range like "^0.8.1" → 8 */
 function minorVersion(range: string | null): number {
-  if (!range) return 0
-  const m = range.replace(/[\^~>=<]/g, '').match(/^\d+\.(\d+)/)
+  const v = normaliseSemver(range)
+  const m = v.match(/^\d+\.(\d+)/)
   return m ? parseInt(m[1], 10) : 0
 }
 
@@ -99,11 +117,15 @@ function detectMonorepo(pkg: PackageJson): DetectedMonorepo {
     pkg.workspaces !== undefined &&
     (Array.isArray(pkg.workspaces) || typeof pkg.workspaces === 'object')
   ) {
-    // Distinguish npm/yarn vs pnpm via package manager field or lockfile presence.
-    // We can't read the filesystem, so we use heuristics on the scripts.
+    // Use packageManager field first (most reliable — set by corepack)
+    const pm = pkg.packageManager ?? ''
+    if (pm.startsWith('pnpm')) return 'pnpm-workspaces'
+    if (pm.startsWith('yarn')) return 'yarn-workspaces'
+    // Fall back to script heuristics
     const scripts = pkg.scripts ?? {}
     const scriptText = Object.values(scripts).join(' ')
     if (scriptText.includes('pnpm')) return 'pnpm-workspaces'
+    if (scriptText.includes('yarn')) return 'yarn-workspaces'
     return 'npm-workspaces'
   }
   if (hasDep(pkg, 'lerna')) return 'lerna'
@@ -186,17 +208,18 @@ export function detectFromPackageJson(input: string | PackageJson): DetectionRes
   // React Native / Expo
   if (hasDep(pkg, 'react-native')) {
     const rnMushiVersion = depVersion(pkg, '@mushi-mushi/react-native')
+    // Hermes compat fix ships in 0.11.0 — all 0.x.y where minor < 11 are affected.
     const isOldVersion =
       rnMushiVersion !== null &&
       majorVersion(rnMushiVersion) === 0 &&
-      minorVersion(rnMushiVersion) <= 8
+      minorVersion(rnMushiVersion) < 11
 
     const needsHermesTriggerFix = isOldVersion
 
     if (isOldVersion) {
       warnings.push(
         `@mushi-mushi/react-native ${rnMushiVersion} has a Hermes compatibility bug — ` +
-          'upgrade to ^0.10.1 and change widget.trigger from "manual" to "button".',
+          'upgrade to ^0.11.0 and change widget.trigger from "manual" to "button".',
       )
     }
 
@@ -301,16 +324,20 @@ export function detectFromPackageJson(input: string | PackageJson): DetectionRes
     }
   }
 
-  // Angular — not yet a Mushi adapter, but we can suggest vanilla
+  // Angular — @mushi-mushi/angular ships with provideMushi(); use the Vanilla
+  // tab for the snippet (no dedicated tab yet) but guide users to the right pkg.
   if (hasDep(pkg, '@angular/core')) {
     warnings.push(
-      'Angular detected. Use the Vanilla JS tab — paste the snippet into your AppModule bootstrap.',
+      'Angular detected. Install @mushi-mushi/angular, then add ' +
+      'provideMushi({ projectId, apiKey }) to your app.config.ts providers array.',
     )
     return {
       framework: 'vanilla',
-      confidence: 0.7,
+      confidence: 0.75,
       reason:
-        'Found @angular/core → Angular app. No dedicated adapter yet — use the Vanilla JS tab.',
+        'Found @angular/core → Angular app. Install @mushi-mushi/angular and use ' +
+        'provideMushi() in app.config.ts. The Vanilla JS tab shows the raw init call ' +
+        'as a fallback if needed.',
       monorepo,
       workspacePath,
       workspaceHint: workspacePath,
@@ -362,12 +389,22 @@ export function monorepoInstallGuidance(
   const tool = toolLabel[result.monorepo]
   const appPath = result.workspaceHint ?? 'your app workspace'
 
+  // Extract just the package name(s) from installCmd so we can rewrite it
+  // for the workspace manager. installCmd examples:
+  //   "npm install @mushi-mushi/react"
+  //   "npx expo install @mushi-mushi/react-native expo-sensors"
+  //   "npm install @mushi-mushi/capacitor && npx cap sync"
+  const pkgArgs = installCmd
+    .split(/&&/)[0]              // take only the install part before any &&
+    .replace(/^(npx expo install|npm install|pnpm add|yarn add)\s+/, '')
+    .trim()
+
   const runIn = result.monorepo === 'npm-workspaces'
-    ? `npm install --workspace=${appPath} @mushi-mushi/...`
+    ? `npm install --workspace=${appPath} ${pkgArgs}`
     : result.monorepo === 'pnpm-workspaces'
-      ? `pnpm add --filter ${appPath} @mushi-mushi/...`
+      ? `pnpm add --filter ${appPath} ${pkgArgs}`
       : result.monorepo === 'yarn-workspaces'
-        ? `yarn workspace ${appPath} add @mushi-mushi/...`
+        ? `yarn workspace ${appPath} add ${pkgArgs}`
         : installCmd
 
   return (
@@ -470,12 +507,13 @@ export function buildSetupSteps(
 
   // Step 5 for mobile: verify env vars exist
   if (isMobile) {
+    const envFile = fw === 'expo' ? '.env.local' : 'apps/mobile/.env'
     steps.push({
       id: 'env-vars',
       title: '5. Add env vars to your .env file',
       body:
-        `The SDK reads its credentials from env vars at build time. Add these to \`apps/mobile/.env\`:`,
-      code: `GLOTIT_MUSHI_PROJECT_ID=${projectId}\nGLOTIT_MUSHI_API_KEY=${apiKey ?? 'paste-key-here'}`,
+        `The SDK reads its credentials from env vars at build time. Add these to \`${envFile}\`:`,
+      code: `MUSHI_PROJECT_ID=${projectId}\nMUSHI_API_KEY=${apiKey ?? 'paste-key-here'}`,
       done: Boolean(apiKey),
     })
   }
