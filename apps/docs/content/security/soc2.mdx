@@ -39,12 +39,15 @@ In the admin console: **Compliance → SOC 2**.
 
 ## Generating an evidence pack manually
 
-```sql
--- Via the SQL editor or MCP
-select soc2_evidence_snapshot();
+Click **Regenerate** in the admin console under **Compliance → SOC 2**, or trigger the edge function directly:
+
+```bash
+# Trigger via the admin API (requires a service-role or admin-scoped key)
+curl -X POST https://<your-project>.supabase.co/functions/v1/soc2-evidence \
+  -H "Authorization: Bearer <service-role-key>"
 ```
 
-Or click **Regenerate** in the admin console. The new pack appears in `soc2_evidence` within ~30 seconds.
+The new pack appears in `soc2_evidence` within ~30 seconds.
 
 ## Data retention policies
 
@@ -61,9 +64,14 @@ The nightly cron hard-deletes rows older than the configured window and logs the
 
 ## DSAR (Data Subject Access Request)
 
-```sql
-select request_dsar('user@example.com');
--- Returns a signed URL to a tarball of all rows referencing that email.
+Submit a DSAR via the admin API:
+
+```bash
+curl -X POST https://<your-project>.supabase.co/functions/v1/api/v1/admin/dsar \
+  -H "Authorization: Bearer <admin-api-key>" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com"}'
+# Returns a signed URL to a tarball of all rows referencing that email.
 ```
 
-The tarball includes: `reports`, `reporter_identities`, `activity_events`, `audit_log` rows where `actor_email = ?`. PII columns are decrypted in the export (the tarball itself is signed and expires in 48h).
+The tarball includes: `reports`, `reporter_identities`, `activity_events`, `audit_log` rows where `actor_email = ?`. PII columns are decrypted in the export (the tarball itself is signed and expires in 48 hours).

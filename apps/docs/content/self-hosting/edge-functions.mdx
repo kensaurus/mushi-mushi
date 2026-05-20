@@ -6,7 +6,7 @@ import { Callout } from 'nextra/components'
 
 # Edge Functions deploy
 
-Mushi ships 14 Supabase Edge Functions. Deploy them from `packages/server/`:
+Mushi ships 15 core Supabase Edge Functions. Deploy them from `packages/server/` (the repo contains additional experimental functions — only the 15 below are required for a fully functional self-hosted instance):
 
 ```bash
 cd packages/server
@@ -75,9 +75,9 @@ Tenants can override `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` per project via [B
 
 ## JWT verification
 
-Most functions require a valid user JWT (`verify_jwt = true`, the default). Two functions bypass this because they're called by a cron with no user context:
+All 15 functions set `verify_jwt = false` in `packages/server/supabase/config.toml`. Auth is enforced **inside** each handler via one of two patterns:
 
-- `intelligence-report` — set `verify_jwt = false` in `supabase/config.toml`
-- `pdca-runner` — uses the service-role key directly
+- **Service-role guard** (`requireServiceRoleAuth`) — cron-triggered functions (`intelligence-report`, `pdca-runner`, `judge-batch`, etc.) verify the Supabase service-role key in the `Authorization` header, so only the Supabase scheduler can call them.
+- **User JWT guard** (`requireAuth`) — user-facing functions (`api`, `fix-worker`, `classify-report`, etc.) extract and verify the user JWT themselves, giving them full control over RBAC and error responses.
 
-See `packages/server/supabase/config.toml` for the canonical settings.
+This two-layer approach lets functions be deployed with `--no-verify-jwt` while keeping security equivalent to the platform default. See `packages/server/supabase/config.toml` for the per-function settings.

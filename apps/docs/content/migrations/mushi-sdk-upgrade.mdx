@@ -61,7 +61,7 @@ If you build only against the documented public API (everything under
 <MigrationChecklist
   id="mushi-sdk-upgrade"
   steps={[
-    { id: 'read-changelog', label: 'Read the package changelog for every Mushi SDK you use', content: <>Each package ships its own CHANGELOG.md in the GitHub repo (e.g. <a href="https://github.com/kensaurus/mushi-mushi/blob/main/packages/web/CHANGELOG.md">@mushi-mushi/web</a>). Skim the 1.0.0 entry for breaking changes.</> },
+    { id: 'read-changelog', label: 'Read the package changelog for every Mushi SDK you use', content: <>Each package ships its own CHANGELOG.md in the GitHub repo (e.g. <a href="https://github.com/kensaurus/mushi-mushi/blob/master/packages/web/CHANGELOG.md">@mushi-mushi/web</a>). Skim the 1.0.0 entry for breaking changes.</> },
     { id: 'pin-current', label: 'Pin your current versions before upgrading', content: <>If you\'re on a range like <code>"@mushi-mushi/react": "^0.x.y"</code>, change to the exact pin first so your lockfile is clean.</> },
     { id: 'codemod', label: 'Run the upgrade codemod (when 1.0 ships)', content: <pre className="text-xs">{`# Available on 1.0 release day
 npx mushi-mushi upgrade@latest`}</pre> },

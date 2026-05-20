@@ -28,6 +28,7 @@ Mushi is **OSS-first**. The cloud product at `app.mushimushi.dev` runs the exact
 git clone https://github.com/kensaurus/mushi-mushi.git
 cd mushi-mushi
 npm install                                        # installs all workspaces
+cd packages/server                                 # Supabase CLI works relative to this dir
 npx supabase link --project-ref <your-ref>
 npx supabase db push                               # applies all migrations
 ```
@@ -35,6 +36,6 @@ npx supabase db push                               # applies all migrations
 Then follow the guides in order:
 
 1. [Supabase setup](/self-hosting/supabase) — extensions, RLS, and required seed data
-2. [Edge Functions deploy](/self-hosting/edge-functions) — all 14 functions + secrets
+2. [Edge Functions deploy](/self-hosting/edge-functions) — all 15 functions + secrets
 3. [Admin SPA deploy](/self-hosting/admin-spa) — build and deploy the console
 4. [Observability (Langfuse + Sentry)](/self-hosting/observability) — traces and error tracking

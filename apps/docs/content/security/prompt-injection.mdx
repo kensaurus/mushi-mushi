@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 Bug reports are user-supplied content fed directly into LLMs. That makes prompt injection a first-class threat — a malicious user could craft a report body that overrides the system prompt and leaks other users' data or produces a harmful fix.
 
 <Callout type="info">
-  The regression suite in `packages/server/tests/injection.test.ts` runs the full OWASP LLM01 corpus on every CI push. A new injection pattern entering `sanitizeForLLM()` is a test failure, not a PR merge.
+  The regression suite in `packages/server/src/__tests__/injection.test.ts` runs the full OWASP LLM01 corpus on every CI push. A new injection pattern entering `sanitizeForLLM()` is a test failure, not a PR merge.
 </Callout>
 
 ## Defence layers
@@ -47,7 +47,7 @@ Screenshots pass through a pixel-level OCR scrub before being forwarded to multi
 
 ### 5. Regression suite
 
-`packages/server/tests/injection.test.ts` covers:
+`packages/server/src/__tests__/injection.test.ts` covers:
 
 - OWASP LLM01 injection corpus (100+ test cases)
 - Indirect injection via URL-embedded instructions
@@ -58,5 +58,5 @@ Run locally with:
 
 ```bash
 cd packages/server
-npm test -- --testPathPattern injection
+npx vitest run src/__tests__/injection.test.ts
 ```

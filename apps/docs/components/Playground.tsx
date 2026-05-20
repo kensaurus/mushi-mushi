@@ -23,7 +23,7 @@
 import { useState } from 'react'
 
 const REPO   = 'kensaurus/mushi-mushi'
-const BRANCH = 'main'
+const BRANCH = 'master'
 
 export interface PlaygroundProps {
   /**
