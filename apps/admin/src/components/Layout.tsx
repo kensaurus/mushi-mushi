@@ -372,6 +372,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Evaluations tab links each grade to the source report and judge reasoning.',
     },
   },
+  '/health': {
+    title: 'Health',
+    kicker: 'Check',
+    scope: 'health',
+    decide: {
+      label: 'Pipeline vitals',
+      summary: 'Banner + HEALTH SNAPSHOT — LLM error/fallback rates, cron cadence, and provider probes.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Trace proof',
+      detail: 'Activity tab links each LLM call to Langfuse and the source report.',
+    },
+  },
   '/mcp': {
     title: 'MCP',
     kicker: 'Act',

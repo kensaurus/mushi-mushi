@@ -926,7 +926,7 @@ export const COPY: CopyRegistry = {
     },
     '/health': {
       title: 'LLM health',
-      description: 'p50/p95 latency, error rate, $/call across providers and chains.',
+      description: 'Banner + HEALTH SNAPSHOT — Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
     },
     '/integrations': {
       title: 'Integrations',
