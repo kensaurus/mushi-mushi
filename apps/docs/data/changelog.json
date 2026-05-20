@@ -16,6 +16,14 @@
       {
         "title": "Search",
         "description": "— semantic search via the `match_codebase_files` embedding RPC"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       }
     ],
     "packages": []

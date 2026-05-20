@@ -10,9 +10,11 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ### Highlights
 
-- **Graph** — interactive ReactFlow canvas with layer-filter pills
-- **Layer Sankey** — horizontal lane diagram showing files per architectural tier
-- **Search** — semantic search via the `match_codebase_files` embedding RPC
+- **Graph** — — interactive ReactFlow canvas with layer-filter pills
+- **Layer Sankey** — — horizontal lane diagram showing files per architectural tier
+- **Search** — — semantic search via the `match_codebase_files` embedding RPC
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ## v1.1.x
 
@@ -20,12 +22,12 @@ Latest tag: `v1.1.0`
 
 ### Highlights
 
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ### Packages bumped
 
@@ -39,15 +41,15 @@ Latest tag: `v1.0.0`
 
 ### Highlights
 
-- **`createBreadcrumbBuffer(options?)`** — 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean.
-- **`normaliseThrown(thrown)`** — turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation.
-- **`captureEnvironment()` expansion** — same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload.
-- **`createBreadcrumbBuffer(options?)`** — 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean.
-- **`normaliseThrown(thrown)`** — turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation.
-- **`captureEnvironment()` expansion** — same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload.
-- **`createBreadcrumbBuffer(options?)`** — 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean.
-- **`normaliseThrown(thrown)`** — turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation.
-- **`captureEnvironment()` expansion** — same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload.
+- **`createBreadcrumbBuffer(options?)`** — — 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean.
+- **`normaliseThrown(thrown)`** — — turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation.
+- **`captureEnvironment()` expansion** — — same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload.
+- **`createBreadcrumbBuffer(options?)`** — — 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean.
+- **`normaliseThrown(thrown)`** — — turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation.
+- **`captureEnvironment()` expansion** — — same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload.
+- **`createBreadcrumbBuffer(options?)`** — — 50-entry ring buffer of `{ timestamp, category, level, message, data? }`. Long messages truncate at 500 chars _at insert time_ so a runaway log line can't push useful crumbs out of the buffer. PII scrubbing runs at report-snapshot time (not at insert) so in-app debugging stays unredacted while the wire payload stays clean.
+- **`normaliseThrown(thrown)`** — — turns any thrown value (`Error`, string, plain object, `null`, frozen `DOMException`) into `{ name, message, stack?, cause? }` with an 8 KB stack cap and cyclic-cause guards. Powers `Mushi.captureException()`; exposed so adapters (Vue / Svelte / Angular / RN) can ship their own thin wrappers without re-implementing the normalisation.
+- **`captureEnvironment()` expansion** — — same one-call API, richer payload: viewport + screen + DPR, **User-Agent Client Hints** when supported (`brands`, `mobile`, `platform`, `model`, plus the high-entropy values resolved out-of-band and folded back in on the next capture), accessibility prefs (`prefers-reduced-motion`, `prefers-color-scheme`, `prefers-contrast`), online / displayMode / page title, and a one-shot **page-load timing** read from `PerformanceNavigationTiming` (TTFB, DOMContentLoaded, FCP, LCP). Every individual field stays optional so a Safari / Firefox / iOS WebView still produces a useful payload.
 
 ### Packages bumped
 
@@ -61,8 +63,8 @@ Latest tag: `v0.11.0`
 
 ### Highlights
 
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ### Packages bumped
 
@@ -84,12 +86,12 @@ Latest tag: `v0.8.3`
 
 ### Highlights
 
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ### Packages bumped
 
@@ -107,8 +109,8 @@ Latest tag: `v0.7.0`
 
 ### Highlights
 
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ### Packages bumped
 
@@ -127,8 +129,8 @@ Latest tag: `v0.6.5`
 
 ### Highlights
 
-- **`mushi sync-lessons`** — pulls promoted lessons from
-- **MCP** — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 - **Launcher README** — adds a Socket.dev badge and a new "Supply-chain &
 - **CLI** — bumped `@clack/prompts` from `^0.11.0` to `^1.2.0`. v1 widened
 - **npm keyword arrays expanded across all 14 publishable packages.** — Added
