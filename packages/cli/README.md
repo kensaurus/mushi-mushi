@@ -3,6 +3,16 @@
 > **The mutation that closes the loop** — run Mushi Mushi bug-intelligence from
 > your terminal and CI pipelines, without ever opening a browser.
 
+<div align="center">
+
+<a href="https://kensaur.us/mushi-mushi/docs/" title="Full docs with screenshots">
+  <img src="https://raw.githubusercontent.com/kensaurus/mushi-mushi/main/docs/screenshots/tour-pdca-loop.gif" alt="Admin console PDCA tour — what mushi init wires your project into" width="100%" />
+</a>
+
+<sub>↑ what the CLI connects to · <a href="https://kensaur.us/mushi-mushi/docs/admin/">admin docs with screenshots</a></sub>
+
+</div>
+
 ## What it does
 
 Like DNA repair enzymes that scan a genome for transcription errors and patch
