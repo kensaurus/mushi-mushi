@@ -1,9 +1,15 @@
 /**
  * FILE: apps/admin/src/components/explore/exploreLayers.ts
  * PURPOSE: Layer detection heuristic and colour tokens for the codebase atlas.
- *          Must stay in sync with detectExploreLayer() in
- *          billing-projects-queue-graph.ts on the backend — if the heuristic
- *          changes, update both sides.
+ *
+ * NOTE: The backend has its own `detectExploreLayer()` in
+ * `billing-projects-queue-graph.ts` which runs during indexing and stores the
+ * layer on each `project_codebase_files` row. The two implementations need not
+ * be identical — the backend's version is the source of truth for what's in the
+ * DB. This client-side heuristic is only used for nodes returned without a
+ * pre-computed layer (e.g. fresh uploads that haven't been re-indexed). When in
+ * doubt, the backend label wins; update the backend function to change how nodes
+ * are categorised.
  */
 
 import type { ExploreLayer } from './exploreTypes'

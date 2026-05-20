@@ -393,7 +393,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     // SDK heartbeat (`last_seen_*`) so the dashboard can prove the SDK has
     // reached THIS backend without waiting for a real user-triggered report —
     // see migration 20260505000000_project_api_keys_last_seen.sql for rationale.
-    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes] = await Promise.all([
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes, codebaseFilesRes] = await Promise.all([
       db
         .from('project_api_keys')
         .select(
@@ -417,6 +417,10 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         .in('project_id', projectIds)
         .limit(1000),
       db.from('project_repos').select('project_id').in('project_id', projectIds),
+      // Pull only project_id so we can count indexed files per project without
+      // transferring payload. Used by ExplorePage to determine the "not indexed
+      // yet" empty state.
+      db.from('project_codebase_files').select('project_id').in('project_id', projectIds),
     ]);
 
     const keyByProject = new Set<string>();
@@ -456,6 +460,11 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
 
     const reposByProject = new Set<string>();
     for (const r of reposRes.data ?? []) reposByProject.add(r.project_id);
+
+    const indexedFileCountByProject = new Map<string, number>();
+    for (const f of codebaseFilesRes.data ?? []) {
+      indexedFileCountByProject.set(f.project_id, (indexedFileCountByProject.get(f.project_id) ?? 0) + 1);
+    }
 
     // Legacy fallback signal: at least one report whose `environment.platform`
     // is a real platform (not the admin-only `mushi-admin` synthetic the
@@ -651,6 +660,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         report_count: reportInfo.count,
         fix_count: fixCount,
         merged_fix_count: mergedFixCount,
+        indexed_file_count: indexedFileCountByProject.get(p.id) ?? 0,
       };
     });
 
