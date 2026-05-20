@@ -574,16 +574,16 @@ export const COPY: CopyRegistry = {
     },
     '/explore': {
       title: 'Codebase map',
-      description: 'A visual map of your codebase — see every file, how they connect, and search your code with plain English.',
+      description: 'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas, Index for debug.',
       help: {
         title: 'About the codebase explorer',
-        whatIsIt: 'A visual map of your code that shows every file, how files connect to each other, and lets you search with plain English.',
+        whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search with plain English.',
         useCases: [
-          'See which part of the codebase a bug report\'s file lives in',
-          'Search "where is the login logic?" and jump to the right file',
-          'Explore a new codebase visually without reading hundreds of files',
+          'Red banner = index error; brand = indexing off or in progress',
+          'Graph tab: canvas coloured by UI / Backend / Test layer',
+          'Search tab: semantic lookup once embeddings are populated',
         ],
-        howToUse: 'Graph view shows the full map — click any node to open the detail panel. Search tab lets you type a question. Layers view groups files by type.',
+        howToUse: 'Overview for posture. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.',
       },
     },
     '/users': {
@@ -898,7 +898,7 @@ export const COPY: CopyRegistry = {
     },
     '/explore': {
       title: 'Codebase atlas',
-      description: 'Indexed file graph, import edges, semantic search over symbols.',
+      description: 'Banner + EXPLORE SNAPSHOT — Overview | Graph | Layers | Search | Index. Indexed file graph + semantic search.',
     },
     '/users': {
       title: 'Users',

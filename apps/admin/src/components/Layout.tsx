@@ -302,6 +302,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Click any node on Explore tab to highlight blast radius and related edges.',
     },
   },
+  '/explore': {
+    title: 'Codebase atlas',
+    kicker: 'Plan',
+    scope: 'explore',
+    decide: {
+      label: 'Source map',
+      summary: 'Banner + EXPLORE SNAPSHOT — indexed files by layer with import edges and semantic search.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Index evidence',
+      detail: 'Index tab shows repo, webhook, last error, and embedding coverage for debug.',
+    },
+  },
   '/fixes': {
     title: 'Fixes',
     kicker: 'Do',
