@@ -36,7 +36,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
-import { detectFromPackageJson, monorepoInstallGuidance } from '../lib/frameworkDetect'
+import { detectFromPackageJson } from '../lib/frameworkDetect'
 import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
