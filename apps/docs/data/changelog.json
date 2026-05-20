@@ -4,18 +4,32 @@
     "headline": "pending (pending release)",
     "pending": true,
     "versions": [],
+    "highlights": [],
+    "packages": []
+  },
+  {
+    "majorMinor": "1.2",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "1.2.0"
+    ],
     "highlights": [
       {
-        "title": "Graph",
-        "description": "— interactive ReactFlow canvas with layer-filter pills"
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
       },
       {
-        "title": "Layer Sankey",
-        "description": "— horizontal lane diagram showing files per architectural tier"
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       },
       {
-        "title": "Search",
-        "description": "— semantic search via the `match_codebase_files` embedding RPC"
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       },
       {
         "title": "`mushi sync-lessons`",
@@ -26,7 +40,20 @@
         "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       }
     ],
-    "packages": []
+    "packages": [
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.2.0"
+      },
+      {
+        "name": "@mushi-mushi/react",
+        "version": "1.2.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.2.0"
+      }
+    ]
   },
   {
     "majorMinor": "1.1",
@@ -137,6 +164,30 @@
     ]
   },
   {
+    "majorMinor": "0.12",
+    "headline": null,
+    "pending": false,
+    "versions": [
+      "0.12.0"
+    ],
+    "highlights": [
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      }
+    ],
+    "packages": [
+      {
+        "name": "@mushi-mushi/react-native",
+        "version": "0.12.0"
+      }
+    ]
+  },
+  {
     "majorMinor": "0.11",
     "headline": null,
     "pending": false,
@@ -188,6 +239,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.8.4",
       "0.8.3",
       "0.8.2",
       "0.8.1",
@@ -217,12 +269,40 @@
       {
         "title": "MCP",
         "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
-        "version": "0.8.3"
+        "version": "0.8.4"
+      },
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.8.0"
       },
       {
         "name": "@mushi-mushi/core",
@@ -238,11 +318,11 @@
       },
       {
         "name": "@mushi-mushi/svelte",
-        "version": "0.8.3"
+        "version": "0.8.4"
       },
       {
         "name": "@mushi-mushi/vue",
-        "version": "0.8.3"
+        "version": "0.8.4"
       },
       {
         "name": "@mushi-mushi/web",
@@ -265,11 +345,35 @@
       {
         "title": "MCP",
         "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
+      },
+      {
+        "title": "Graph",
+        "description": "— interactive ReactFlow canvas with layer-filter pills"
+      },
+      {
+        "title": "Layer Sankey",
+        "description": "— horizontal lane diagram showing files per architectural tier"
+      },
+      {
+        "title": "Search",
+        "description": "— semantic search via the `match_codebase_files` embedding RPC"
       }
     ],
     "packages": [
       {
         "name": "@mushi-mushi/angular",
+        "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/capacitor",
         "version": "0.7.0"
       },
       {
@@ -298,6 +402,10 @@
       },
       {
         "name": "@mushi-mushi/web",
+        "version": "0.7.0"
+      },
+      {
+        "name": "mushi-mushi",
         "version": "0.7.0"
       }
     ]
@@ -342,6 +450,14 @@
       {
         "title": "New `docs/marketing/` folder",
         "description": "with the full growth kit: `VOICE.md`,"
+      },
+      {
+        "title": "`mushi sync-lessons`",
+        "description": "— pulls promoted lessons from"
+      },
+      {
+        "title": "MCP",
+        "description": "— `lessons.query(diff_text, max_tokens)` tool for"
       }
     ],
     "packages": [
@@ -354,6 +470,10 @@
         "version": "0.6.1"
       },
       {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.6.0"
+      },
+      {
         "name": "mushi-mushi",
         "version": "0.6.5"
       }
@@ -364,6 +484,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.5",
       "0.5.4",
       "0.5.3",
       "0.5.2",
@@ -447,7 +568,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.4"
+        "version": "0.5.5"
       },
       {
         "name": "mushi-mushi",
@@ -544,7 +665,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       {
         "name": "@mushi-mushi/react",
@@ -796,7 +917,7 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.5"
+        "version": "0.2.6"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",

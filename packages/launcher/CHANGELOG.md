@@ -1,5 +1,120 @@
 # mushi-mushi
 
+## 0.7.0
+
+### Minor Changes
+
+- 506df78: feat(admin): Codebase Atlas (/explore) — force-directed graph of indexed source
+
+  New `/explore` route in the admin console visualises your indexed codebase as a
+  force-directed ReactFlow graph. Nodes are coloured by architectural layer
+  (UI, Lib, Backend, Test, Config, Other). Three view modes:
+  - **Graph** — interactive ReactFlow canvas with layer-filter pills
+  - **Layer Sankey** — horizontal lane diagram showing files per architectural tier
+  - **Search** — semantic search via the `match_codebase_files` embedding RPC
+
+  New server endpoints supporting the page:
+  - `GET /v1/admin/projects/:id/codebase/explore` — returns `{ nodes, edges, layers, total_files }`
+  - `POST /v1/admin/projects/:id/codebase/search` — semantic search returning top-k similar files
+
+  New semver utility (`semver.ts`) for build-time vs changelog version comparison
+  in the VersionBadge component, replacing ad-hoc string splits.
+
+- c2fe328: feat(admin): Cost console overhaul + Settings UX polish
+
+  **Cost page (`/cost`)**
+  - Merged `llm_invocations` (primary telemetry) with legacy `llm_cost_usd` ledger into
+    one unified cost view — no gaps between old and new telemetry sources.
+  - New `CostRawLogTable`: server-side pagination, sort (7 columns), and full-text search
+    across operation names, models, and IDs. Powered by URL-synced query params so deep
+    links work (`?log_sort=cost_usd&log_order=desc`).
+  - Backend `/v1/admin/costs` endpoint rewritten to support `page`, `limit`, `sort`,
+    `order`, `q` params and return a `{ rows, total, capped }` payload. Falls back to
+    the legacy ledger for search across both sources with dedup by ID.
+  - Summary cards (By operation, By model) now use `OperationChip` for click-through
+    to the operation's admin page.
+
+  **Settings panels**
+  - New shared primitives: `SettingsPanelLayout` (2-col lg grid), `SettingsCard`,
+    `SettingsFormFooter` (sticky save/discard bar), `SettingsChangeHint` (inline
+    "Was: X" delta), `settingsDiff` utilities.
+  - `GeneralPanel`, `FirecrawlPanel`, `DevToolsPanel`, and `ByokPanel` all migrated
+    to the new layout primitives — unsaved changes tracked, change count shown,
+    sticky save bar replaces scattered per-field save buttons.
+
+  **New chip components**
+  - `OperationChip` — colour-coded by pipeline category (ingest/fix/iterate/release/intel/qa/ops).
+  - `PipelineStageChip` — links to the owning admin page.
+  - `AuditResourceChip` — resource-type chip with tooltip and nav link.
+  - All chips backed by typed registries (`llmOperations.ts`, `pipelineStages.ts`,
+    `auditResources.ts`) with ELI5 descriptions.
+
+  **`PageHelp` component enhanced**
+  - New `PageHelpPanel` with full-width 2-col layout, related-page flow links,
+    rich text body, and a "Keep tips open on every page" localStorage preference.
+    Cross-tab sync via `CustomEvent`. Auto-open for first-time visitors only.
+
+  **Tooltip API widened**
+  - `Tooltip.content` now accepts `ReactNode` (was `string`), enabling rich tooltip
+    bodies used by all new chip components.
+
+### Patch Changes
+
+- 506df78: fix(cli): robust sync endpoints, new commands, shell-safe setup wizard
+
+  **CLI v0.7.0 additions:**
+  - New commands: `whoami`, `ping`, `reports resolve/reopen/dismiss/search`, `lessons list/show`
+  - All commands use `/v1/sync/*` API-key-authenticated endpoints — no Supabase JWT required
+  - Robust `apiCall()`: safe JSON parsing, 15 s timeout, typed `ApiResult<T>`, clear exit codes (0/1/2/3)
+  - Config loading now respects `MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, `MUSHI_API_ENDPOINT` env vars over `~/.mushirc`
+
+  **Server `/v1/sync/*` endpoints (apiKeyAuth):**
+  - `GET /v1/sync/whoami` — verify key + return project name and report summary
+  - `GET /v1/sync/stats` — accurate DB-level counts (no 1 000-row cap) for status/severity/fixes/lessons
+  - `GET /v1/sync/reports` + `GET /v1/sync/reports/:id` + `PATCH /v1/sync/reports/:id` — list, show, triage/resolve/reopen/dismiss
+  - `GET /v1/sync/lessons/:id` — fetch a lesson by ID
+  - `POST /v1/sync/codebase/upload` — ingest source file into the vector index
+
+  **Bug fixes:**
+  - `@mushi-mushi/mcp` setup guidance now uses the correct package name (`@mushi-mushi/mcp`, not `mushi-mcp`)
+  - `/v1/sync/stats` uses DB-level HEAD count queries instead of client-side row counting, eliminating silent 1 000-row cap
+  - Setup wizard SDK banner respects the user's selected framework tab when detection confidence < 50%
+  - frameworkDetect uses shell-safe `your-app` placeholder (no angle brackets) and `your-app` fallback (no spaces)
+
+- 76501f1: fix(seo): add X-Robots-Tag noindex to /mushi-mushi/\* 302 redirect responses
+
+  CloudFront SPA router now sets `x-robots-tag: noindex, nofollow` on the 302
+  redirect that bounces bare `/mushi-mushi/<route>` paths to `/mushi-mushi/admin/`.
+  Google Search Console was indexing 47 redirect-source URLs because the 3xx
+  response itself carried no hint — even though the destination SPA shell already
+  has `<meta name="robots" content="noindex">`. Adding the header at the edge
+  drops those entries on the next crawl without waiting for the destination to
+  be re-evaluated.
+
+  Also adds:
+  - `scripts/bootstrap-publish-new-packages.mjs` — one-shot npm bootstrap script
+    for new `@mushi-mushi/*` packages that can't use OIDC on first publish (npm
+    limitation, see npm/cli#8544). Run with `pnpm bootstrap:new-npm-packages`.
+  - `docs/HANDOVER-2026-05-05-npm-trusted-publisher-bootstrap.md` — step-by-step
+    handover guide for configuring Trusted Publisher after first publish.
+
+- acdf1fe: fix(cli): accept UUID project IDs and read config from env vars
+  - `PROJECT_ID_PATTERN` now accepts both UUID format (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
+    and the `proj_xxx` prefix format. All existing projects use UUID format from
+    `gen_random_uuid()`. The `proj_xxx` format was never actually used by the backend.
+  - `loadConfig()` now overlays `MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, and
+    `MUSHI_API_ENDPOINT` env vars over the `~/.mushirc` file so CI pipelines and
+    `npx @mushi-mushi/cli sync-lessons` work without an interactive `mushi init` first.
+  - Error messages, placeholders and the non-interactive example now show the UUID format.
+  - `sync-lessons` command now calls `/v1/sync/lessons` (API-key-authenticated) instead of
+    `/v1/admin/lessons` (JWT-authenticated) so it works with the project API key.
+
+- Updated dependencies [506df78]
+- Updated dependencies [acdf1fe]
+- Updated dependencies [acdf1fe]
+- Updated dependencies [506df78]
+  - @mushi-mushi/cli@0.8.0
+
 ## 0.6.5
 
 ### Patch Changes
