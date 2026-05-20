@@ -116,16 +116,18 @@ function hintBadges(spec: ToolSpec) {
   return chips
 }
 
+const MUSHI_CLOUD_API = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+
 function buildCursorJson(projectId: string, projectName: string): string {
   return JSON.stringify(
     {
       mcpServers: {
         [`mushi-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32)}`]: {
           command: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp'],
           env: {
-            MUSHI_API_ENDPOINT: 'https://api.mushimushi.dev',
-            MUSHI_API_KEY: 'paste-your-key-here',
+            MUSHI_API_ENDPOINT: MUSHI_CLOUD_API,
+            MUSHI_API_KEY: 'paste-your-mushi-api-key-here',
             MUSHI_PROJECT_ID: projectId,
           },
         },
@@ -139,8 +141,8 @@ function buildCursorJson(projectId: string, projectName: string): string {
 function buildEnvBlock(projectId: string): string {
   return [
     '# Mushi MCP — paste into .env.local (gitignored).',
-    'MUSHI_API_ENDPOINT=https://api.mushimushi.dev',
-    'MUSHI_API_KEY=paste-your-key-here',
+    `MUSHI_API_ENDPOINT=${MUSHI_CLOUD_API}`,
+    'MUSHI_API_KEY=paste-your-mushi-api-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
     '',
   ].join('\n')

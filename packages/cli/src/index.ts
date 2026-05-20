@@ -333,11 +333,13 @@ program
     const cwd = opts.cwd ?? process.cwd()
     const target = nodePath.join(cwd, '.mushi', 'lessons.json')
 
-    // Fetch from API
+    // Fetch from the SDK-auth sync endpoint (API key, not JWT).
+    // /v1/sync/lessons resolves the project from the API key's project binding
+    // so no projectId query param is needed — the server already knows it.
     const res = await apiCall(
-      `/v1/admin/lessons?projectId=${config.projectId}&limit=500`,
+      `/v1/sync/lessons?limit=500`,
       config,
-    ) as { ok?: boolean; data?: LessonRow[]; error?: string }
+    ) as { ok?: boolean; data?: LessonRow[]; error?: string; meta?: { count: number } }
 
     if (!res.ok || !res.data) {
       console.error('Failed to fetch lessons:', res.error ?? JSON.stringify(res))
