@@ -18,6 +18,7 @@ import { PaperEdge } from './edges/PaperEdge'
 import { LogTicker } from './LogTicker'
 import { StageNode } from './nodes/StageNode'
 import { StageDrawer } from './StageDrawer'
+import { StageLivePreview } from './StageLivePreview'
 import {
   reportSample,
   stageEdges,
@@ -47,19 +48,25 @@ function CanvasInner() {
   const [selectedStageId, setSelectedStageId] = useState<MushiStageId | null>(null)
   const [hovering, setHovering] = useState(false)
   const reducedMotion = useReducedMotion()
-  const { fitView, setCenter } = useReactFlow()
+  const { fitView } = useReactFlow()
   const focusStage = stages[focusIndex] ?? stages[0]
   const selectedStage = selectedStageId
     ? stages.find((stage) => stage.id === selectedStageId) ?? null
     : null
+  const previewStage = selectedStage ?? focusStage
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      fitView({ padding: 0.18, duration: reducedMotion ? 0 : 560 })
+      fitView({
+        padding: selectedStageId ? 0.42 : 0.3,
+        duration: reducedMotion ? 0 : 560,
+        minZoom: 0.48,
+        maxZoom: 0.88,
+      })
     }, 80)
 
     return () => window.clearTimeout(id)
-  }, [fitView, reducedMotion])
+  }, [fitView, reducedMotion, focusIndex, selectedStageId])
 
   useEffect(() => {
     if (reducedMotion) return
@@ -72,17 +79,6 @@ function CanvasInner() {
 
     return () => window.clearInterval(id)
   }, [reducedMotion, selectedStageId, hovering])
-
-  useEffect(() => {
-    const target = selectedStage ?? focusStage
-    const drawerOpen = !!selectedStage
-    const centerX = target.position.x + 110
-    const centerY = target.position.y + 96 - (drawerOpen ? 110 : 0)
-    setCenter(centerX, centerY, {
-      zoom: drawerOpen ? 1.05 : 0.92,
-      duration: reducedMotion ? 0 : 620,
-    })
-  }, [focusStage, selectedStage, reducedMotion, setCenter])
 
   const nodes = useMemo<Node<StageNodeData>[]>(
     () =>
@@ -128,8 +124,9 @@ function CanvasInner() {
   )
 
   return (
-    <div
-      className="mushi-canvas-light mushi-canvas-frame relative h-[min(620px,calc(100vh-9rem))] min-h-[480px] w-full overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] shadow-[0_30px_100px_-64px_rgba(14,13,11,0.55)]"
+    <div className="mushi-canvas-light mushi-canvas-shell grid w-full gap-4 lg:grid-cols-[minmax(0,1fr)_min(400px,38%)] lg:items-stretch">
+      <div
+      className="mushi-canvas-frame relative h-[min(680px,calc(100vh-8rem))] min-h-[520px] w-full overflow-hidden rounded-[2rem] border border-[var(--mushi-rule)] shadow-[0_30px_100px_-64px_rgba(14,13,11,0.55)]"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
@@ -170,7 +167,6 @@ function CanvasInner() {
                 type="button"
                 onClick={() => {
                   setFocusIndex(stage.index)
-                  setSelectedStageId(stage.id)
                 }}
                 aria-label={`Jump to stage ${stage.index + 1}: ${stage.title}`}
                 aria-current={isActive ? 'step' : undefined}
@@ -202,9 +198,9 @@ function CanvasInner() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.18 }}
-        minZoom={0.5}
-        maxZoom={1.4}
+        fitViewOptions={{ padding: 0.3 }}
+        minZoom={0.42}
+        maxZoom={1.05}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -232,6 +228,14 @@ function CanvasInner() {
         sample={reportSample}
         onClose={() => setSelectedStageId(null)}
       />
+      </div>
+
+      <aside
+        className="mushi-canvas-preview-rail flex min-h-[420px]"
+        aria-label="Live demo for the selected loop stage"
+      >
+        <StageLivePreview stage={previewStage} layout="panel" remountKey={focusIndex} />
+      </aside>
     </div>
   )
 }
