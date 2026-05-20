@@ -236,3 +236,78 @@ Supabase advisors clean. Remaining items are P2 cosmetic and low-urgency:
 - Intelligence page browser timeout is LLM latency, not a bug.
 - BYOK delete confirm and Org role confirm (surfaces #9, #10) may still need
   wiring if those pages ship destructive mutations; verify at next deploy.
+
+---
+
+## Round 6 QA Pass — 2026-05-20 (Complete Page Sweep + Status Banner Completion)
+
+**Status: ✅ Complete**  
+**Branch:** `feat/round-6-qa-status-banners`
+
+### Page sweep results
+
+All 30 admin pages loaded without JS errors or console warnings in this pass.
+Tab navigation, quick filters, trigger actions, and realtime updates all functional.
+
+| Page | Status | Notes |
+|------|--------|-------|
+| `/inbox` | ✅ | Tabs: Overview/Actions/Stages/Activity all navigate correctly |
+| `/inventory` | ✅ | No errors |
+| `/graph` | ✅ | 2 nodes loaded |
+| `/explore` | ✅ | No errors |
+| `/anti-gaming` | ✅ | PageHero + 4 flagged devices displayed |
+| `/repo` | ✅ | New RepoStatusBanner: "No GitHub repo configured" |
+| `/prompt-lab` | ✅ | New PromptLabStatusBanner: "No eval dataset" |
+| `/judge` | ✅ | Loaded with scores |
+| `/health` | ✅ | 3 warnings · 2 calls (live data) |
+| `/qa-coverage` | ✅ | 2 stories · 11 runs/24h; manual trigger worked |
+| `/lessons` | ✅ | No errors |
+| `/drift` | ✅ | Snapshots and delta working |
+| `/experiments` | ✅ | 1 total experiment |
+| `/anomalies` | ✅ | "No metric data yet" empty state |
+| `/releases` | ✅ | 3 published |
+| `/intelligence` | ✅ | "No digests yet" empty state |
+| `/research` | ✅ | Firecrawl setup required message |
+| `/iterate` | ✅ | "No runs yet" empty state |
+| `/fixes` | ✅ | New FixesStatusBanner: "Connect GitHub"; Retry button fixed |
+| `/integrations/config` | ✅ | "No integrations configured" |
+| `/mcp` | ✅ | MCP posture overview |
+| `/marketplace` | ✅ | Plugin posture overview |
+| `/notifications` | ✅ | Reporter loop posture |
+| `/projects` | ✅ | Workspace posture |
+| `/organization/members` | ✅ | Roster loaded |
+| `/settings` | ✅ | General settings (minor password-field-not-in-form DOM warning; non-critical) |
+| `/billing` | ✅ | Plan + usage loaded |
+| `/sso` | ✅ | Registration health overview |
+| `/compliance` | ✅ | Posture summary |
+| `/audit` | ✅ | 36 audit events |
+| `/storage` | ✅ | Bucket health |
+| `/cost` | ✅ | Daily trend loaded |
+| `/query` | ✅ | Ask Your Data posture |
+| `/rewards` | ✅ | KPIs + tier distribution |
+
+### Bug fixes in Round 6
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | `fixes/stats` endpoint missing — FixesStatusBanner never rendered | Added `GET /v1/admin/fixes/stats` to `query-fixes-repo.ts` |
+| 2 | `repo/stats` endpoint missing — RepoStatusBanner never rendered | Added `GET /v1/admin/repo/stats` to `query-fixes-repo.ts` |
+| 3 | `prompt-lab/stats` endpoint missing — PromptLabStatusBanner never rendered | Added `GET /v1/admin/prompt-lab/stats` to `reports-dashboard.ts` |
+| 4 | `anti-gaming/stats` endpoint missing | Added `GET /v1/admin/anti-gaming/stats` to `admin-ops.ts` |
+| 5 | `queue/stats` endpoint missing | Added `GET /v1/admin/queue/stats` to `billing-projects-queue-graph.ts` |
+| 6 | FixesPage missing FixesStatusBanner | Wired in with `usePageData('/v1/admin/fixes/stats')` |
+| 7 | RepoPage missing RepoStatusBanner | Wired in with `usePageData('/v1/admin/repo/stats')` |
+| 8 | PromptLabPage missing PromptLabStatusBanner | Wired in with `usePageData('/v1/admin/prompt-lab/stats')` |
+| 9 | "Retry N failed fixs?" typo (pluralize bug) | `pluralize(n, 'fix', 'fixes')` — explicit plural |
+| 10 | FeedbackModal captured `pathname` only | Now captures `pathname + search` for full page context |
+
+### Notes
+
+- **AntiGamingPage** and **DLQPage** already have `PageHero` (richer decide/act/verify) — StatusBanner skipped to avoid duplication.
+- **Settings page** shows a minor Chrome DOM advisory ("Password field not in form") from `GeneralPanel.tsx` Webhook Secret field. Input is React-controlled, not broken.
+- All 5 new backend stats endpoints deployed to Supabase (`dxptnwrhwsqckaftyymj`) and confirmed live.
+- Frontend TypeScript: zero errors (`npx tsc --noEmit` clean on admin workspace).
+
+### Commit
+
+`9bb481b` — `feat(admin): Round 6 QA — status banners for Fixes/Repo/PromptLab + 5 new /stats endpoints`
