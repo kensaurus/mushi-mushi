@@ -81,6 +81,13 @@ export interface MushiWidgetConfig {
    * actively inviting feedback.
    */
   betaMode?: MushiBetaModeConfig;
+  /**
+   * Minimum description length (characters) required before the user can submit.
+   * Overrides the SDK default of 20. The widget halves this automatically for
+   * CJK locales (ja/zh/ko) where a short string carries more semantic content
+   * than in English. Forwarded from `preFilter.minDescriptionLength` if unset.
+   */
+  minDescriptionLength?: number;
 }
 
 export interface MushiBetaModeConfig {
