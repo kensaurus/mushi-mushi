@@ -106,6 +106,13 @@ jobs:
       - name: Verify public changelog is in sync
         run: pnpm changelog:check
 
+      # Block orphaned changesets (frontmatter targets only ignored
+      # packages) before they reach the version PR. See
+      # scripts/check-changeset-orphans.mjs header for the incident
+      # context (PR #102 / #121, 2026-05-19).
+      - name: Check for orphaned changesets
+        run: pnpm check:changeset-orphans
+
       - name: Check publish readiness
         run: node scripts/check-publish-readiness.mjs
 
@@ -207,17 +214,42 @@ jobs:
       # don't block the release, but tampered/missing signatures will.
       - name: Audit signatures of installed dependencies
         if: steps.changesets.outputs.published == 'true'
+        # CDN PROPAGATION RACE (observed 2026-05-20, run 26149167393):
+        #   `npm install` against a freshly-published version can return
+        #   `ETARGET / No matching version found for <pkg>@<ver>` for up
+        #   to ~30s after `changeset publish` succeeds, because npm's
+        #   registry mirror takes time to propagate the new manifest.
+        #   The tarball is already signed and verified by the previous
+        #   step — this audit just needs the registry to catch up. Retry
+        #   with exponential backoff (1, 2, 4, 8, 16, 32s = 63s max wait)
+        #   before failing the release, since this race never lasts longer.
         run: |
-          # Materialise an npm-style install just to feed `audit signatures`.
-          # We don't replace pnpm — we use a throwaway folder so it doesn't
-          # touch the workspace lockfile or node_modules.
+          set -euo pipefail
           mkdir -p /tmp/audit-sigs && cd /tmp/audit-sigs
-          # Reuse the published tarballs we just verified so the audit set
-          # mirrors what real users will install.
+
+          install_with_retry() {
+            local pkg="$1"
+            local ver="$2"
+            local max_attempts=6
+            local delay=1
+            for attempt in $(seq 1 "$max_attempts"); do
+              if npm install --no-save --ignore-scripts "${pkg}@${ver}" 2>&1; then
+                return 0
+              fi
+              if [ "$attempt" -eq "$max_attempts" ]; then
+                echo "::error::Failed to install ${pkg}@${ver} after ${max_attempts} attempts — npm registry did not propagate the new manifest in time."
+                return 1
+              fi
+              echo "::warning::npm install ${pkg}@${ver} failed (attempt ${attempt}/${max_attempts}); retrying in ${delay}s (CDN propagation race)"
+              sleep "$delay"
+              delay=$((delay * 2))
+            done
+          }
+
           for pkg in $(echo "$PUBLISHED" | jq -r '.[].name'); do
             ver=$(echo "$PUBLISHED" | jq -r --arg n "$pkg" '.[] | select(.name == $n) | .version')
             echo "Auditing signatures for ${pkg}@${ver}"
-            npm install --no-save --ignore-scripts "${pkg}@${ver}"
+            install_with_retry "$pkg" "$ver"
           done
           npm audit signatures --audit-level=high
         env:
