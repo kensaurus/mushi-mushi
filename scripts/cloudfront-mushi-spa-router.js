@@ -86,12 +86,22 @@ function handler(event) {
   var suffix = uri.replace(/^\/mushi-mushi\/?/, '');
   var location = '/mushi-mushi/admin/' + suffix;
 
+  // X-Robots-Tag on the 302 itself so Google drops the source URL on first
+  // crawl instead of reporting 47 "Page with redirect" entries (one per
+  // /mushi-mushi/<route> -> /mushi-mushi/admin/<route> pair) in GSC. The
+  // destination is already noindex'd (apps/admin/index.html shell since
+  // PR #91), but Google still indexes the redirect *source* unless the
+  // 3xx response itself carries noindex. Per Google's robots-meta-tag
+  // docs, X-Robots-Tag works on every response status including 3xx and
+  // is the canonical way to drop a redirect URL from the index.
+  // https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag#xrobotstag
   return {
     statusCode: 302,
     statusDescription: 'Found',
     headers: {
       'location': { value: location },
       'cache-control': { value: 'no-cache' },
+      'x-robots-tag': { value: 'noindex, nofollow' },
     },
   };
 }
