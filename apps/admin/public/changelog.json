@@ -2,6 +2,34 @@
   "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
+      "id": "2026-05-20-cost-settings-ux",
+      "date": "2026-05-20",
+      "title": "Cost console overhaul + Settings UX polish",
+      "summary": "The /cost page now merges llm_invocations (primary telemetry) with the legacy llm_cost_usd ledger into a single unified view. New CostRawLogTable: server-side pagination, 7-column sort, and full-text search. Summary charts use OperationChip for click-through navigation. Settings panels get shared layout primitives — sticky save/discard bar, inline change hints, and a 2-col grid layout. Five new chip components (OperationChip, PipelineStageChip, AuditResourceChip, ModelChip, token display) backed by typed registries with ELI5 descriptions. PageHelp enhanced with rich body, related-page cards, and a persistent \"keep tips open\" preference.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Cost page: merged llm_invocations + legacy llm_cost_usd into one unified view. CostRawLogTable adds server-side pagination (25/50/100/200 rows), 7-column sort, full-text search, URL-synced params, and a capped-results notice for large projects."
+        },
+        {
+          "tone": "feature",
+          "text": "Settings: new shared primitives — SettingsPanelLayout (2-col lg grid), SettingsFormFooter (sticky save/discard bar with change count), SettingsChangeHint (inline 'Was: X' delta). GeneralPanel, FirecrawlPanel, DevToolsPanel, ByokPanel all migrated."
+        },
+        {
+          "tone": "feature",
+          "text": "5 new chip components: OperationChip (pipeline-category colours + tooltip), PipelineStageChip (links to owning page), AuditResourceChip (resource-type nav chip), ModelChip, TokenIn/TokenOut/UsdAmount display atoms. All backed by typed registries."
+        },
+        {
+          "tone": "feature",
+          "text": "PageHelp enhanced: full-width 2-col layout, related-page flow link cards, rich text body (backtick/bold parsing), 'Keep tips open' localStorage preference with cross-tab CustomEvent sync."
+        },
+        {
+          "tone": "fix",
+          "text": "Tooltip.content widened to ReactNode — enables rich JSX tooltip bodies used by all chip components."
+        }
+      ]
+    },
+    {
       "id": "2026-05-20-cli-codebase-atlas",
       "date": "2026-05-20",
       "title": "Robust CLI + Codebase Atlas explorer + Bug fixes",
