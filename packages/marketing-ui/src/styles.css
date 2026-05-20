@@ -305,6 +305,12 @@
   object-position: top center;
 }
 
+.mushi-stage-preview__img--sdk {
+  object-fit: contain;
+  object-position: center center;
+  background: #1a1917;
+}
+
 .mushi-stage-preview__img--animated {
   image-rendering: auto;
 }
