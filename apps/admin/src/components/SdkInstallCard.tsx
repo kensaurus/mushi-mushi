@@ -294,11 +294,12 @@ export function SdkInstallCard({ projectId, apiKey, compact }: Props) {
             }}
           />
 
-          {/* Detection result banner */}
+          {/* Detection result banner — always uses detected framework's install
+              command, even when confidence < 0.5 kept the tab on the default. */}
           {detection && (
             <DetectionBanner
               result={detection}
-              installCmd={installCommand(framework)}
+              installCmd={installCommand(detection.framework)}
               onDismiss={() => setDetection(null)}
             />
           )}

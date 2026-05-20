@@ -411,7 +411,15 @@ export function McpPage() {
                 <button type="button" disabled={!detectText.trim()}
                   onClick={() => {
                     const result = detectFromPackageJson(detectText)
-                    setMonorepoNote(monorepoInstallGuidance(result, 'npm install -g mushi-mcp'))
+                    // mushi-mcp is a global CLI tool — workspace scoping (--workspace=,
+                    // --filter) doesn't apply. Use a note about global vs. local installs.
+                    const globalNote = result.monorepo
+                      ? `Detected ${result.monorepo} monorepo.\n\n` +
+                        `mushi-mcp is a CLI tool — install it globally on your dev machine:\n\n` +
+                        `  npm install -g mushi-mcp\n\n` +
+                        `Then run \`npx mushi-mcp\` from any workspace directory.`
+                      : null
+                    setMonorepoNote(globalNote)
                     setMonoWarnings(result.warnings)
                     setDetectOpen(false)
                   }}
