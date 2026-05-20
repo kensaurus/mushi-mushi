@@ -23,11 +23,163 @@ import { Hono } from 'npm:hono@4'
 import { requireAuth } from '../middleware/auth.ts'
 import { requireProjectAccess } from '../middleware/project.ts'
 import { getServiceClient } from '../../_shared/db.ts'
+import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 import type { Variables } from '../types.ts'
 
 function db() { return getServiceClient() }
 
 export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>) {
+  // GET /v1/admin/experiments/stats — posture banner + EXPERIMENTS SNAPSHOT.
+  parent.get('/v1/admin/experiments/stats', requireAuth, async (c) => {
+    const userId = c.get('userId') as string
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      totalExperiments: 0,
+      draftCount: 0,
+      runningCount: 0,
+      stoppedCount: 0,
+      completedCount: 0,
+      winnersFound: 0,
+      draftsReadyToLaunch: 0,
+      banditEnabledCount: 0,
+      totalVariants: 0,
+      totalAssignments: 0,
+      totalConversions: 0,
+      conversionRatePct: 0,
+      lastExperimentAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'no_experiments'
+        | 'running'
+        | 'draft_ready'
+        | 'winners_found'
+        | 'draft_incomplete'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db(), userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db(), userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const [experimentsRes, variantsRes, assignmentsRes] = await Promise.all([
+      db()
+        .from('experiments')
+        .select('id, status, bandit_enabled, winner_variant_id, created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false }),
+      db()
+        .from('experiment_variants')
+        .select('id, experiment_id, experiments!inner(project_id)')
+        .eq('experiments.project_id', pid),
+      db()
+        .from('experiment_assignments')
+        .select('converted, experiments!inner(project_id)')
+        .eq('experiments.project_id', pid),
+    ])
+
+    const experiments = experimentsRes.data ?? []
+    const variants = variantsRes.data ?? []
+    const assignments = assignmentsRes.data ?? []
+
+    const variantCountByExp = variants.reduce<Record<string, number>>((acc, v) => {
+      const expId = v.experiment_id as string
+      acc[expId] = (acc[expId] ?? 0) + 1
+      return acc
+    }, {})
+
+    const draftCount = experiments.filter((e) => e.status === 'draft').length
+    const runningCount = experiments.filter((e) => e.status === 'running').length
+    const stoppedCount = experiments.filter((e) => e.status === 'stopped').length
+    const completedCount = experiments.filter((e) => e.status === 'completed').length
+    const winnersFound = experiments.filter((e) => e.winner_variant_id != null).length
+    const banditEnabledCount = experiments.filter((e) => e.bandit_enabled).length
+    const draftsReadyToLaunch = experiments.filter(
+      (e) => e.status === 'draft' && (variantCountByExp[e.id] ?? 0) >= 2,
+    ).length
+    const draftIncomplete = experiments.filter(
+      (e) => e.status === 'draft' && (variantCountByExp[e.id] ?? 0) < 2,
+    ).length
+
+    const totalAssignments = assignments.length
+    const totalConversions = assignments.filter((a) => a.converted).length
+    const conversionRatePct =
+      totalAssignments > 0 ? Math.round((totalConversions / totalAssignments) * 1000) / 10 : 0
+
+    let topPriority = empty.topPriority
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (experiments.length === 0) {
+      topPriority = 'no_experiments'
+      topPriorityLabel = 'Create your first A/B test to compare UI variants with mSPRT significance tracking.'
+      topPriorityTo = '/experiments?tab=new'
+    } else if (runningCount > 0) {
+      topPriority = 'running'
+      topPriorityLabel = `${totalAssignments} assignment${totalAssignments === 1 ? '' : 's'} · ${conversionRatePct}% conversion — run Analyze for always-valid p-values.`
+      topPriorityTo = '/experiments?tab=experiments'
+    } else if (draftsReadyToLaunch > 0) {
+      topPriority = 'draft_ready'
+      topPriorityLabel = `${draftsReadyToLaunch} draft${draftsReadyToLaunch === 1 ? '' : 's'} with ≥2 variants — launch to start SDK assignment.`
+      topPriorityTo = '/experiments?tab=experiments'
+    } else if (winnersFound > 0) {
+      topPriority = 'winners_found'
+      topPriorityLabel = `${winnersFound} experiment${winnersFound === 1 ? '' : 's'} with a declared winner — review and ship the winning variant.`
+      topPriorityTo = '/experiments?tab=experiments'
+    } else if (draftIncomplete > 0) {
+      topPriority = 'draft_incomplete'
+      topPriorityLabel = `${draftIncomplete} draft${draftIncomplete === 1 ? '' : 's'} need at least 2 variants before launch.`
+      topPriorityTo = '/experiments?tab=experiments'
+    } else {
+      topPriority = 'healthy'
+      topPriorityLabel = `${experiments.length} experiment${experiments.length === 1 ? '' : 's'} · none running · ${winnersFound} winner${winnersFound === 1 ? '' : 's'}.`
+      topPriorityTo = '/experiments?tab=experiments'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        totalExperiments: experiments.length,
+        draftCount,
+        runningCount,
+        stoppedCount,
+        completedCount,
+        winnersFound,
+        draftsReadyToLaunch,
+        banditEnabledCount,
+        totalVariants: variants.length,
+        totalAssignments,
+        totalConversions,
+        conversionRatePct,
+        lastExperimentAt: experiments[0]?.created_at ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   // Admin routes
   const admin = new Hono<{ Variables: Variables }>()
   admin.use('*', requireAuth, requireProjectAccess)
@@ -36,7 +188,11 @@ export function registerExperimentsRoutes(parent: Hono<{ Variables: Variables }>
     const projectId = c.req.query('project_id')
     if (!projectId) return c.json({ ok: false, error: { code: 'ERROR', message: 'project_id required' } }, 400)
     const status = c.req.query('status')
-    let q = db().from('experiments').select('*', { count: 'exact' }).eq('project_id', projectId).order('created_at', { ascending: false })
+    let q = db()
+      .from('experiments')
+      .select('*, experiment_variants(id, name, traffic_weight, bandit_alpha, bandit_beta)', { count: 'exact' })
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
     if (status) q = q.eq('status', status)
     const { data, error, count } = await q
     if (error) return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)

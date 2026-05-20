@@ -490,16 +490,16 @@ export const COPY: CopyRegistry = {
     },
     '/experiments': {
       title: 'A/B experiments',
-      description: 'Test whether a change actually reduced bugs — compare two groups of users to see which version performed better.',
+      description: 'Banner + EXPERIMENTS SNAPSHOT — create variants, launch tests, analyze with mSPRT significance.',
       help: {
         title: 'About experiments',
-        whatIsIt: 'A/B testing for bug rates — compare two versions of your app to see which one your users hit fewer problems with.',
+        whatIsIt: 'A/B testing with SDK assignment — compare UI variants with CUPED variance reduction, mSPRT always-valid p-values, and SRM checks.',
         useCases: [
-          'Verify that a UI redesign actually reduced confusion-related reports',
-          'Test two error-handling approaches and measure which produces fewer reports',
-          'Run a canary deployment and watch bug rates on the new version in real time',
+          'Test button copy, colour, or layout variants',
+          'Measure impact of a new feature on conversion rate',
+          'Use bandit mode for fast exploration with small samples',
         ],
-        howToUse: 'Create an experiment, pick the two variants, set a duration. Mushi automatically splits incoming reports and shows you the difference.',
+        howToUse: 'Create an experiment, add variants, launch it. The SDK assigns users via mushi.experiment(). Analyze at any time — mSPRT prevents false positives.',
       },
     },
     '/anomalies': {

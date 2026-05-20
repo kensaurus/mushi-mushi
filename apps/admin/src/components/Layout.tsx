@@ -428,6 +428,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Snapshots tab shows edge counts; Findings drawer shows expected vs actual JSON.',
     },
   },
+  '/experiments': {
+    title: 'Experiments',
+    kicker: 'Check',
+    scope: 'experiments',
+    decide: {
+      label: 'Variant tests',
+      summary: 'Banner + EXPERIMENTS SNAPSHOT — draft, launch, and analyze A/B tests with mSPRT significance.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Analysis proof',
+      detail: 'Experiment drawer shows SRM check, p-value, and per-variant conversion rates.',
+    },
+  },
   '/mcp': {
     title: 'MCP',
     kicker: 'Act',

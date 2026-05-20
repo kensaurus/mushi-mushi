@@ -25,8 +25,16 @@ export interface MushiLocale {
     descriptionPlaceholder: string;
     screenshotButton: string;
     screenshotAttached: string;
+    screenshotCapturing: string;
+    screenshotFailed: string;
     elementButton: string;
     elementSelected: string;
+    elementCapturing: string;
+    elementSelectorHint: string;
     optional: string;
+    /** Inline validation: description is below the minimum length. */
+    tooShort: string;
+    /** Example starter chips rendered above the textarea to lower the barrier. */
+    examplePrompts: string[];
   };
 }
