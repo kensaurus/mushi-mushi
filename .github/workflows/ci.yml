@@ -12,12 +12,25 @@ name: CI
 on:
   pull_request:
     branches: [master]
-  # Manual fallback: when GitHub silently drops the `pull_request` event for
-  # a branch (rare, but it happens — observed on PR #45 where only the
-  # Copilot review fired), an operator with write access can run this
-  # workflow against the PR branch directly so the Build & Test check
-  # required by the master ruleset reports a status. Strictly belt-and-
-  # suspenders — the normal flow is the `pull_request` trigger above.
+  # AUTOMATIC FALLBACK for the changesets release PR:
+  #   GitHub silently drops the `pull_request` event whenever the branch
+  #   push is attributed to `github-actions[bot]` (anti-loop protection).
+  #   The Release workflow's changesets/action *always* pushes to
+  #   `changeset-release/master` as that bot, so the required Build & Test
+  #   check never fires on PR #N+1 without operator intervention. Observed
+  #   on PR #45, #102, #124 — and on every Changesets version PR before we
+  #   added this trigger.
+  #
+  #   By listening on `push` to `changeset-release/master` we register
+  #   Build & Test directly against the head commit of the release PR,
+  #   which satisfies the master branch protection ruleset without any
+  #   manual `gh workflow run` or empty-commit nudge.
+  push:
+    branches: [changeset-release/master]
+  # Manual fallback for the rare case where the `pull_request` trigger is
+  # also dropped on a feature branch (observed once on PR #45). Operator
+  # with write access can `gh workflow run ci.yml -r <branch>` to backfill
+  # the required check.
   workflow_dispatch:
 
 concurrency:
@@ -90,6 +103,14 @@ jobs:
       # changesets without regenerating, this fails with an actionable error.
       - name: Verify public changelog is in sync
         run: pnpm changelog:check
+
+      # Block orphaned changesets (frontmatter targets only ignored
+      # packages) before they reach master. Without this gate they
+      # explode the release with "No commits between master and
+      # changeset-release/master" — see scripts/check-changeset-orphans.mjs
+      # header for the full incident (PR #102 / #121, 2026-05-19).
+      - name: Check for orphaned changesets
+        run: pnpm check:changeset-orphans
 
       - name: Check publish readiness
         run: node scripts/check-publish-readiness.mjs
