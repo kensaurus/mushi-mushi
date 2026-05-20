@@ -15,10 +15,14 @@ import { ConfirmDialog } from '../ConfirmDialog'
 import { ConfigHelp } from '../ConfigHelp'
 import { useEntitlements } from '../../lib/useEntitlements'
 import { UpgradePrompt } from '../billing/UpgradePrompt'
+import { SettingsChangeHint } from './SettingsChangeHint'
+import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
+import { ConfiguredSecretField } from './ConfiguredSecretField'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
   configured: boolean
+  keyHint: string | null
   addedAt: string | null
   lastUsedAt: string | null
   testStatus: 'ok' | 'error_auth' | 'error_network' | 'error_quota' | null
@@ -49,6 +53,11 @@ interface ByokProviderMeta {
   help: string
   consoleUrl: string
   setupSteps: string[]
+}
+
+const BYOK_KEY_PREFIX: Record<ByokKey['provider'], string> = {
+  anthropic: 'sk-ant-api03-',
+  openai: 'sk-',
 }
 
 const BYOK_PROVIDER_LABELS: Record<ByokKey['provider'], ByokProviderMeta> = {
@@ -252,9 +261,11 @@ export function ByokPanel() {
   // IntelligencePage pattern.
   if (byokLocked) {
     return (
-      <Section title="LLM Keys (BYOK)" className="space-y-3">
-        <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
-      </Section>
+      <SettingsPanelLayout>
+        <Section title="LLM Keys (BYOK)" className="lg:col-span-2 space-y-3">
+          <UpgradePrompt flag="byok" currentPlan={entitlements.planName} />
+        </Section>
+      </SettingsPanelLayout>
     )
   }
 
@@ -262,7 +273,8 @@ export function ByokPanel() {
   if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
 
   return (
-    <Section title="LLM Keys (BYOK)" className="space-y-3">
+    <SettingsPanelLayout>
+      <Section title="LLM Keys (BYOK)" className="lg:col-span-2 space-y-3">
       <div className="text-2xs text-fg-muted space-y-1">
         <p>
           <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the LLM keys, you pay your own provider, you keep full control over which models touch your bug data. Mushi never proxies, caches, or fine-tunes on your traffic.
@@ -272,12 +284,8 @@ export function ByokPanel() {
         </p>
       </div>
 
-      {/* Provider cards live in a 2-up grid on xl viewports (1280+) — each
-          card carries setup steps, base URL, key input, and three buttons,
-          so the lg breakpoint is too tight. Below xl the cards stack
-          full-width, matching the original behaviour. `items-start` keeps
-          the cards top-aligned even when one is taller than the other. */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
+      {/* Provider cards — 2-up on xl; each card uses SettingsCard for aligned chrome */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
       {keys?.map((k) => {
         const meta = BYOK_PROVIDER_LABELS[k.provider]
         const fb = feedback?.provider === k.provider ? feedback : null
@@ -288,13 +296,12 @@ export function ByokPanel() {
         const statusMeta = testStatus ? TEST_STATUS_LABEL[testStatus] : null
 
         return (
-          <div key={k.provider} className="border border-edge rounded-md p-3 space-y-2.5 bg-surface-raised/40">
+          <SettingsCard key={k.provider}>
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-medium text-fg-primary inline-flex items-center gap-1">
                     {meta.name}
-                    <ConfigHelp helpId={k.provider === 'anthropic' ? 'settings.byok.anthropic_key' : 'settings.byok.openai_key'} />
                   </span>
                   <span className={`text-2xs font-mono px-1.5 py-0.5 rounded-sm ${k.configured ? 'bg-ok/10 text-ok' : 'bg-surface-raised text-fg-muted'}`}>
                     {k.configured ? 'BYOK' : 'platform default'}
@@ -351,6 +358,20 @@ export function ByokPanel() {
                   onChange={(e) => setBaseUrlDraft(e.target.value)}
                   placeholder="https://openrouter.ai/api/v1"
                 />
+                <SettingsChangeHint
+                  current={baseUrlDraft}
+                  saved={openaiBaseUrl ?? ''}
+                  kind="url"
+                />
+                {baseUrlDraft !== (openaiBaseUrl ?? '') && (
+                  <button
+                    type="button"
+                    onClick={() => setBaseUrlDraft(openaiBaseUrl ?? '')}
+                    className="text-2xs text-accent hover:text-accent-hover underline-offset-2 hover:underline"
+                  >
+                    Reset URL to saved
+                  </button>
+                )}
                 <div className="flex flex-wrap gap-1.5">
                   {OPENAI_BASE_URL_PRESETS.map((p) => (
                     <button
@@ -371,12 +392,15 @@ export function ByokPanel() {
               </div>
             )}
 
-            <Input
-              type="password"
+            <ConfiguredSecretField
+              label="API key"
+              helpId={k.provider === 'anthropic' ? 'settings.byok.anthropic_key' : 'settings.byok.openai_key'}
+              configured={k.configured}
+              keyHint={k.keyHint}
+              fallbackPrefix={BYOK_KEY_PREFIX[k.provider]}
               value={drafts[k.provider]}
-              onChange={(e) => setDrafts((d) => ({ ...d, [k.provider]: e.target.value }))}
+              onChange={(v) => setDrafts((d) => ({ ...d, [k.provider]: v }))}
               placeholder={meta.placeholder}
-              autoComplete="new-password"
             />
 
             <div className="flex items-center gap-2 flex-wrap">
@@ -440,7 +464,7 @@ export function ByokPanel() {
                 {testResult.status === 'error_quota' && 'Your account hit a rate limit (HTTP 429). The key works — you just need to top up or wait.'}
               </div>
             )}
-          </div>
+          </SettingsCard>
         )
       })}
       </div>
@@ -459,6 +483,7 @@ export function ByokPanel() {
           }}
         />
       )}
-    </Section>
+      </Section>
+    </SettingsPanelLayout>
   )
 }
