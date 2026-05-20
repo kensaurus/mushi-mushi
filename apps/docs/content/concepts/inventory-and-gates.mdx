@@ -2,56 +2,50 @@
 title: 'Inventory and gates (v2)'
 ---
 
+import { Callout } from 'nextra/components'
+import { InventoryModelDiagram, GatesStrip } from '../../components/InventoryDiagram'
+import { SpecTracePipeline } from '../../components/SpecTracePipeline'
+
 # Inventory and gates
 
-Mushi v1 was the **negative side** of the loop: catch what your users
-*felt* break, classify it, dedupe it, optionally draft a fix. v2 adds
-the **positive side**: a declarative `inventory.yaml` that names every
-user-facing story, page, and action — and five composite gates that
-fail the build when the agent's drafts diverge from the contract.
+Mushi v1 was the **negative side** of the loop: catch what your users *felt* break,
+classify it, dedupe it, optionally draft a fix. v2 adds the **positive side**: a
+declarative `inventory.yaml` that names every user-facing story, page, and action —
+and five composite gates that fail the build when the agent's drafts diverge from
+the contract.
+
+---
 
 ## The model
 
-```
-project ──► story ──► page ──► element ──► action
-                                              │
-                                              └─► expected_outcome
-```
+<InventoryModelDiagram />
 
-Each `action` has a trigger (click, type, submit) and an
-`expected_outcome` block — the assertions a healthy session would still
-make. The synthetic monitor re-walks those expectations on a cron, the
-crawler discovers candidate routes the SDK has observed in production,
-and the gates fail when reality diverges from the file.
+Each `action` carries a trigger (`click`, `type`, `submit`) and an `expected_outcome`
+block — the assertions a healthy session would still satisfy. The synthetic monitor
+re-walks those expectations on a cron; the crawler proposes new actions from
+production traffic; the gates fail when reality diverges from the file.
 
-`expected_outcome` is the load-bearing field for the v2 closed loop. It
-threads through every stage of the agent pipeline — see
-[Spec traceability — read AND write side](#spec-traceability--read-and-write-side)
-below for the full chain.
+`expected_outcome` is the load-bearing field for the v2 closed loop. It threads
+through every stage of the agent pipeline — see
+[Spec traceability](#spec-traceability--read-and-write-side) below for the full chain.
+
+---
 
 ## Five gates
 
-The composite GitHub status `mushi-mushi/gates` rolls up:
+The composite GitHub status `mushi-mushi/gates` rolls up five checks:
 
-1. **`mushi-mushi/no-dead-handler`** — empty `onClick` / `onSubmit` etc.
-   surfaced by [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin).
-2. **`mushi-mushi/no-mock-leak`** — faker / `John Doe` arrays in
-   non-test paths.
-3. **Inventory drift** — actions added, removed, or renamed since the
-   last push. Drift requires a changeset entry; the run will fail if
-   the diff is uncommitted.
-4. **Agentic-failure detection** — handlers that *used* to satisfy
-   `expected_outcome` and no longer do (regression across deploys).
-5. **Synthetic walk health** — the synthetic monitor's last walk
-   against staging.
+<GatesStrip />
 
-The composite check is what your branch protection should require —
-gates 1 + 2 are static, gates 3 + 4 + 5 talk to the Mushi gateway.
+Gates 1 and 2 run statically in CI — no network call. Gates 3, 4, and 5 reach the
+Mushi gateway. **Branch protection should require the composite check**, not the
+individual gates, so a transient monitor hiccup doesn't block merges permanently.
+
+---
 
 ## Discovery — the SDK proposes the inventory
 
-Most teams will never hand-author `inventory.yaml`. Turn on the new
-v2.1 SDK option:
+Most teams will never hand-author `inventory.yaml`. Turn on the v2.1 SDK option:
 
 ```ts
 <MushiProvider config={{
@@ -61,80 +55,64 @@ v2.1 SDK option:
 }}>
 ```
 
-The SDK quietly observes routes, `data-testid`s, and outbound API paths
-in production. Claude reads the stream and drafts an `inventory.yaml`
-in the **Discovery** tab on the User stories surface. You accept,
-edit, or skip — the production payload itself never carries user data.
+The SDK quietly observes routes, `data-testid`s, and outbound API paths in
+production. Claude reads the stream and drafts an `inventory.yaml` in the
+**Discovery** tab on the User Stories surface. You accept, edit, or skip —
+the production payload itself never carries user data.
+
+---
 
 ## Synthetic monitor
 
-The monitor re-walks every action's `expected_outcome` against your
-staging URL (or any explicit `synthetic_target_url`). Defaults are
-**fail-closed**: write paths (POST / PUT / DELETE actions) are skipped
-unless you opt in per-project:
+The monitor re-walks every action's `expected_outcome` against your staging URL
+(or any explicit `synthetic_target_url`). Defaults are **fail-closed**: write paths
+(POST / PUT / DELETE actions) are skipped unless you opt in per-project:
 
 ```yaml filename="inventory.yaml"
 synthetic_monitor_allow_mutations: true
 ```
 
-The opt-in is meant for staging environments that are isolated from
-production data and have either an idempotency key or a clean rollback.
+<Callout type="warning">
+  Only set `synthetic_monitor_allow_mutations: true` when staging is fully isolated
+  from production data and the write endpoints have an idempotency key or roll back
+  cleanly.
+</Callout>
+
+---
 
 ## Surface mode in the graph
 
 The same inventory powers a **Surface** toggle on the
-[knowledge graph](/concepts/knowledge-graph) — every Page, Element,
-and Action node from `inventory.yaml` overlaid on the live bug graph.
-Dead corners (high-traffic pages with no `expected_outcome`) light up.
+[knowledge graph](/concepts/knowledge-graph) — every Page, Element, and Action
+node from `inventory.yaml` overlaid on the live bug graph. Dead corners
+(high-traffic pages with no `expected_outcome`) light up so you can prioritise
+which stories to instrument next.
+
+---
 
 ## Spec traceability — read AND write side
 
-The v1 question every team asked was *"how do you keep agent work tied
-back to the original spec once implementation starts?"* Until the
-2026-05-09 release the **read side** (proposer → ingest → gates →
-status reconciler → admin UI) was tight, and the **write side** (report
-→ fix → PR → re-verify) was a U-turn — the worker dropped the inventory
-pointer the moment dispatch started. That's now closed end-to-end.
+The v1 question every team asked was *"how do you keep agent work tied back to the
+original spec once implementation starts?"* Until the 2026-05-09 release the
+**read side** (proposer → ingest → gates → status reconciler → admin UI) was tight,
+and the **write side** (report → fix → PR → re-verify) was a U-turn — the worker
+dropped the inventory pointer the moment dispatch started. That's now closed
+end-to-end:
 
-```text
-report ──► classify-report writes graph_edge (reports_against)
-                │
-                ▼
-          inventory Action node ◄─── inventory.yaml (expected_outcome)
-                │
-                ▼
-       POST /v1/admin/fixes/dispatch  (or A2A /v1/a2a/tasks, MCP dispatch_fix)
-                │   body may carry { inventoryActionNodeId } — else worker walks the edge
-                ▼
-       fix_dispatch_jobs.inventory_action_node_id  ──► persisted
-                │
-                ▼
-       fix-worker assembles FixContext + inventoryAction.expectedOutcome
-                │   → Markdown spec block in the LLM prompt
-                ▼
-       validateAgainstSpec  (deterministic pre-PR gate)
-                │   HARD ERROR  if the diff removes a json_path field the contract asserts on
-                │   WARN to fix_attempts.spec_validation_warnings if no file references the table / route
-                ▼
-       GitHub PR + fix_attempts row stamped with inventory_action_node_id
-                │
-                ▼
-       synthetic_runs queued (status='skipped', error_message='queued_post_pr', action_node_id=…)
-                │
-                ▼
-       synthetic-monitor cron drains the queue with priority on its next tick,
-       runs an HTTP probe, evaluates expected_outcome (status_in + JSONPath assertions),
-       records a real synthetic_runs row.
-                │
-                ▼
-       Status reconciler picks it up → admin UI flips the Action to verified / regressed.
-```
+<SpecTracePipeline />
 
-What the agent sees in its prompt today:
+<Callout type="info">
+  External orchestrators (Cursor, Claude Code, OpenAI Agents SDK, LangGraph,
+  CrewAI, A2A v1.0.0) see the **same** anchor through the MCP `get_fix_context`
+  tool, the A2A Task `metadata.inventoryActionNodeId` field, or the dispatch
+  row's column directly. See [Connecting your orchestrator](/concepts/orchestrator-interop).
+</Callout>
 
-```markdown filename="rendered by renderSpecContext()"
+**What the agent sees in its prompt today** (rendered by `renderSpecContext()`):
+
+```markdown
 ## Inventory Spec Context (whitepaper §2.10 spec-traceability)
-This fix was dispatched against a tracked Action in the project's `inventory.yaml`.
+This fix was dispatched against a tracked Action in the project's inventory.yaml.
 The agent and the reviewer MUST keep the diff scoped to making the action work as
 specified — do NOT refactor unrelated code or break sibling actions on the same page.
 
@@ -143,25 +121,14 @@ specified — do NOT refactor unrelated code or break sibling actions on the sam
 - Page: `/signup` (id=`signup`)
 - User story: New user signup (`signup`)
 
-### Expected outcome contract (success criteria after fix)
+### Expected outcome contract
 - Summary: POST /signup returns 200 and creates a user row
 - HTTP status MUST be one of: 200, 201
-- Response body assertions:
-  - `$.user.id` exists
+- Response body: `$.user.id` exists
 - Database: `public.users` MUST row_exists
 - UI MUST show text containing: "Welcome"
 - UI MUST navigate to: `/dashboard`
-
-After the PR merges, the synthetic monitor will probe the action against this
-contract. A draft fix that the synthetic monitor will then immediately mark
-`regressed` is worse than no fix at all.
 ```
-
-External orchestrators (Cursor, Claude Code, OpenAI Agents SDK,
-LangGraph, CrewAI, A2A v1.0.0 agents) see the **same** anchor through
-the MCP `get_fix_context` tool, the A2A Task `metadata.inventoryActionNodeId`
-field, or the dispatch row's column directly. See
-[Connecting your orchestrator](/concepts/orchestrator-interop).
 
 ### Where each link lives
 
@@ -174,17 +141,12 @@ field, or the dispatch row's column directly. See
 | Post-PR probe | `drainPostPrQueue()` + `evaluateExpectedOutcome()` in the `synthetic-monitor` Edge Function |
 | External orchestrators | MCP tools `dispatch_fix` + `get_fix_context`, A2A `POST /v1/a2a/tasks` |
 
+---
+
 ## Related packages
 
-- [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — Zod +
-  JSON Schema for `inventory.yaml`.
-- [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner)
-  — bootstrap an authenticated session so the crawler / monitor can
-  reach pages behind a login wall.
-- [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action that runs
-  all five gates, plus `propose`, `discover-api`, `discovery-status`,
-  and `auth-bootstrap` sub-commands.
-- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — `no-dead-handler`
-  and `no-mock-leak`.
-- [Admin → User stories · Inventory](/admin/inventory) — the in-app
-  surface where you accept proposals and trigger one-off gate runs.
+- [`@mushi-mushi/inventory-schema`](/sdks/inventory-schema) — Zod + JSON Schema for `inventory.yaml`.
+- [`@mushi-mushi/inventory-auth-runner`](/sdks/inventory-auth-runner) — bootstrap an authenticated session so the crawler / monitor can reach pages behind a login wall.
+- [`@mushi-mushi/mcp-ci`](/sdks/mcp-ci) — the GitHub Action that runs all five gates, plus `propose`, `discover-api`, `discovery-status`, and `auth-bootstrap` sub-commands.
+- [`eslint-plugin-mushi-mushi`](/sdks/eslint-plugin) — `no-dead-handler` and `no-mock-leak`.
+- [Admin → User stories · Inventory](/admin/inventory) — the in-app surface where you accept proposals and trigger one-off gate runs.

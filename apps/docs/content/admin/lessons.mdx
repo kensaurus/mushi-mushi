@@ -1,0 +1,159 @@
+---
+title: Lessons
+---
+
+import { Callout, Steps } from 'nextra/components'
+
+# Lessons
+
+**Route:** `/lessons`
+
+> **Scenario:** Three separate users have reported that the "Save" button on the
+> Settings page does nothing on iOS Safari. You've fixed each one individually over
+> the past month — but the same root cause (missing `async/await` on the submit
+> handler) keeps slipping through PR review. Lessons is the page that stops this
+> cycle permanently.
+
+A lesson is a structured coding rule extracted from a cluster of similar bug reports.
+Once promoted, it's injected into the LLM's context before every fix-worker run and
+every PR review — so the agent and your reviewers are both pre-warned about patterns
+that historically caused real user pain.
+
+---
+
+## The lifecycle: how a report becomes a rule
+
+1. **Reports arrive** — users submit feedback via the SDK.
+2. **Embeddings cluster** — reports with similar semantics are grouped into a
+   **mistake cluster** automatically.
+3. **Coherence gate** — when a cluster reaches coherence ≥ 0.75 and at least 3 reports,
+   it becomes a **candidate** — eligible for promotion but not yet active.
+4. **You promote** — open the Clusters tab, review the suggested rule, and click
+   **Promote**. The cluster becomes a lesson.
+5. **Injection** — the lesson is packed into every fix-worker and PR review context
+   (up to 3,000 tokens), ranked by severity × relevance.
+
+<Callout type="info">
+When GitHub is connected, promoted lessons are also written to `.mushi/lessons.json`
+in your repo. Cursor, Copilot, and other AI assistants that have access to your repo
+read this file automatically — no extra setup required.
+</Callout>
+
+---
+
+## Tab: Lessons
+
+Your active coding rules. Each row shows the severity, how many reports have matched
+this lesson, the cluster it came from, and the first two lines of the rule text.
+
+**Click any row** to open the detail drawer with the full content:
+
+- **Rule** — the positive instruction (e.g. *"Always await the form submit handler
+  before accessing `event.target` values in Safari"*)
+- **Anti-pattern** — the specific code pattern to avoid
+- **Cluster summary** — what the original reports described
+- **Coherence score and report count** — how strong the underlying signal is
+
+### When to retire a lesson
+
+Use **Retire** when:
+- The affected code has been fully refactored and the pattern no longer applies.
+- The rule is generating false positives — the agent is avoiding good patterns.
+- A newer, more specific lesson supersedes it.
+
+Retired lessons are hidden from injection but preserved. Use the **Active / Retired**
+toggle to review them and restore if needed.
+
+---
+
+## Tab: Clusters
+
+Candidate clusters waiting for your review. This is where you decide what rises to the
+level of a codebase rule.
+
+**Filter to `Candidate`** to see only clusters that are new and eligible.
+
+For each cluster, check:
+1. **Coherence %** — above 80%? The reports really are describing the same root cause.
+2. **Suggested rule** — does it make sense as a coding instruction?
+3. **Last seen** — is this still happening? If it's months old and you've shipped a fix, dismiss instead of promoting.
+
+Click **Promote** to create the lesson. The cluster becomes `promoted` and the rule
+starts being injected immediately.
+
+<Callout type="warning">
+The **Promote** button is only enabled when `cluster_size ≥ 3`. A cluster of 2 reports
+isn't statistically reliable enough to write a codebase rule — wait for more signal or
+review manually.
+</Callout>
+
+---
+
+## Tab: Query Sim
+
+> **Use this when:** You've just promoted a new lesson and want to confirm it will be
+> retrieved when the fix-worker handles a related bug. Or you want to check that a
+> retired lesson is no longer surfacing.
+
+Paste any code diff or problem description into the textarea, set a token budget (start
+with the default 3000), and click **Query lessons**. The results show exactly what the
+fix-worker would receive — with rank, similarity score, and the full rule text.
+
+**Practical example:**
+- Paste the diff of a recent iOS bug fix.
+- Check whether the Settings submit-handler lesson appears in the top results.
+- If it doesn't, the embedding may not be close enough — consider editing the lesson's
+  rule text to include more specific terminology.
+
+---
+
+## Common tasks
+
+### Reviewing new candidates (weekly)
+1. Open the **Clusters** tab, filter to `Candidate`.
+2. For each cluster with coherence > 0.75: read the suggested rule. Sensible? Click **Promote**.
+3. For clusters with coherence < 0.75 or only 1–2 reports: leave them to accumulate more signal.
+
+### After fixing a recurring bug
+1. Open the **Clusters** tab, find the cluster for this bug pattern.
+2. If coherence ≥ 0.75 and size ≥ 3, promote it.
+3. Verify with **Query Sim** that your next fix-worker run will see the lesson.
+
+### Cleaning up stale lessons
+1. Open the **Lessons** tab, toggle to **Active**.
+2. Sort by frequency — lessons with frequency 0 in the last 30 days may be stale.
+3. Click each → review the rule → **Retire** if the underlying code has changed.
+
+---
+
+## How injection works at fix time
+
+When fix-worker starts a run:
+1. The incoming report's embedding is used to query the lesson store.
+2. Top-N lessons are ranked by `severity × similarity_score`.
+3. Lessons are packed into the LLM system prompt up to the 3,000-token budget.
+4. The LLM generates a patch with those rules as hard constraints.
+
+**Result:** a lesson promoted from 3 iOS Safari reports means the fix-worker
+will never generate a submit handler without `await` again — for any iOS report.
+
+---
+
+## API
+
+```bash
+GET   /v1/admin/lessons?limit=100
+PATCH /v1/admin/lessons/:id          { "retired": true }
+GET   /v1/admin/clusters?limit=100&status=candidate
+POST  /v1/admin/clusters/:id/promote
+POST  /v1/admin/lessons/query        { "diff": "...", "token_budget": 3000 }
+```
+
+---
+
+## Related pages
+
+- [Knowledge graph](/admin/graph) — visual view of the same clusters as a force-directed graph
+- [Judge dashboard](/admin/judge) — the coherence scores that gate promotion
+- [Fix orchestrator](/admin/fixes) — see lessons in action on real fix runs
+- [Prompt lab](/admin/prompt-lab) — edit the LLM prompt that generates lesson rule text

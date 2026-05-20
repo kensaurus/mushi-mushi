@@ -1,0 +1,173 @@
+---
+title: Compliance
+---
+
+import { Callout } from 'nextra/components'
+
+# Compliance
+
+**Route:** `/compliance`
+
+> **Scenario 1:** Your enterprise customer is asking for your SOC 2 Type 1 evidence
+> before signing. You need to export a PDF of your current control status without
+> scheduling a meeting with your security team.
+>
+> **Scenario 2:** A user emails saying they want all their data deleted (GDPR Article
+> 17). You need to log the request, track its status, and respond within 30 days.
+
+The Compliance page handles both of these without leaving the console — SOC 2 evidence
+snapshots, data-residency pinning, retention policies, and DSAR management.
+
+---
+
+## Navigating the page
+
+Use the filter chips at the top to focus on what matters right now:
+
+| Chip | Use it when |
+|------|-------------|
+| **All** | General review |
+| **Open** | Pre-audit — see which controls haven't reached PASS yet |
+| **Failing** | Urgent — controls at FAIL need immediate attention |
+| **At risk** | Controls at WARN — review before your next audit window |
+| **Legal hold** | Projects with active legal holds — deletion is suspended |
+
+The **hero stat cards** give you a quick dashboard: green/warn/fail counts and the
+number of open DSARs.
+
+---
+
+## SOC 2 control evidence
+
+The evidence table shows a snapshot of your control state across SOC 2 trust service
+criteria. Each row is a control that the `soc2-evidence` edge function assesses
+automatically.
+
+| Status | Meaning |
+|--------|---------|
+| **PASS** ✓ | Control is satisfied — evidence is clean |
+| **WARN** ⚠ | Control is partially satisfied — needs attention |
+| **FAIL** ✗ | Control is violated — action required before audit |
+
+Click **View payload** on any row to see the raw JSON evidence that was used to compute
+the status — this is what you'd share with an auditor.
+
+**To generate a fresh snapshot:** click **Refresh evidence**. This triggers the
+`soc2-evidence` edge function which re-assesses all controls against the current state.
+
+**To export for an auditor:** click **Export PDF** — this prints the current evidence
+table as a PDF document.
+
+---
+
+## Data residency
+
+Each project can be pinned to a region. Once pinned, Mushi routes all data (reports,
+fixes, LLM traces) through infrastructure in that region.
+
+| Region | Infrastructure |
+|--------|---------------|
+| **US** | Supabase US East |
+| **EU** | Supabase EU West |
+| **JP** | Supabase AP Northeast |
+| **Self** | Your self-hosted Supabase instance |
+
+<Callout type="warning">
+Region pinning is **permanent** for a project. There is no UI migration path — changing
+regions requires a data migration. Pin carefully, ideally before any real data is
+collected.
+</Callout>
+
+---
+
+## Retention policies
+
+Control how long Mushi keeps different data categories for each project.
+
+| Category | Default | When to change |
+|----------|---------|---------------|
+| **Reports** | 365 days | Shorten if you have GDPR delete obligations; lengthen for longer-term trend analysis |
+| **Audit log** | 730 days | Keep at 730 (2 years) for SOC 2 CC7.2; shorten only if legally required |
+| **LLM traces** | 90 days | Shorten for cost (storage); lengthen if you need longer A/B test history |
+| **BYOK audit** | 365 days | Keep at 365 for key rotation audit trails |
+
+**Legal hold** toggle — enable for a project to suspend all automated deletion. Use
+when you receive a litigation hold notice.
+
+Values save automatically when you blur each input field.
+
+---
+
+## Data Subject Access Requests (DSAR)
+
+Use this section to manage requests from users exercising their rights under GDPR, CCPA,
+or similar regulations.
+
+### Filing a DSAR
+
+1. Click **File DSAR**.
+2. Enter the **request type** (access, deletion, rectification, or portability).
+3. Enter the **subject email** and/or **subject ID** (the Mushi reporter token hash
+   if you have it).
+4. Add **notes** — include any context from the user's email.
+5. Click **File**.
+
+The request appears in the DSAR table with status `pending`.
+
+### DSAR workflow
+
+| Status | Action | When |
+|--------|--------|------|
+| `pending` | **Start triage** | Within 24 hours of receipt |
+| `in_progress` | **Complete** | When data export/deletion is done |
+| `in_progress` | **Reject** | Only with a valid legal basis — you must provide a written reason |
+
+**SLA badge** — an **overdue** badge appears if the request is > 30 days old without
+resolution. An **at-risk** badge appears at 25 days. Both are surfaced in the **At risk**
+filter chip for quick triage.
+
+---
+
+## Common tasks
+
+### Preparing for a SOC 2 audit
+1. Open the **Failing** filter — resolve every FAIL control first.
+2. Switch to **At risk** — plan remediation for WARN controls.
+3. Click **Refresh evidence** to get a fresh snapshot.
+4. Click **Export PDF** and share with your auditor.
+
+### Responding to a deletion request (GDPR Article 17)
+1. **File DSAR** → type: `deletion`, enter subject email → **File**.
+2. **Start triage** immediately.
+3. Manually delete the user's reports from your database (or use the DSAR export to identify them).
+4. Mark as **Complete** with a note of when deletion was performed.
+5. Archive the DSAR row as your compliance record.
+
+### Checking a project's data location before sharing with an enterprise customer
+1. Open the Data Residency section.
+2. Find the customer's project. If region shows `US` and they require EU: pin to `EU`
+   before any sensitive data is collected.
+
+---
+
+## API
+
+```bash
+GET   /v1/admin/compliance/evidence
+POST  /v1/admin/compliance/evidence/refresh
+GET   /v1/admin/compliance/retention
+PUT   /v1/admin/compliance/retention/:projectId    { reports_days, audit_days, llm_days, byok_days, legal_hold }
+GET   /v1/admin/compliance/dsars
+POST  /v1/admin/compliance/dsars                   { type, subject_email, subject_id, notes }
+PATCH /v1/admin/compliance/dsars/:id               { status, rejection_reason }
+GET   /v1/admin/residency
+PUT   /v1/admin/residency/:projectId               { region }
+```
+
+---
+
+## Related pages
+
+- [Audit log](/admin/audit) — source data for many SOC 2 controls
+- [Security → Data residency](/security/data-residency) — infrastructure and encryption detail
+- [Security → SOC 2](/security/soc2) — the full control framework Mushi maps to

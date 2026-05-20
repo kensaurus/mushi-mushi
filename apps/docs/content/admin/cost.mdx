@@ -1,0 +1,61 @@
+---
+title: Cost & usage
+---
+
+# Cost & usage
+
+**Route:** `/cost`
+
+The Cost page shows LLM token consumption and estimated spend across all AI pipelines
+for the selected project and time range.
+
+---
+
+## What's tracked
+
+| Pipeline | Models logged |
+|----------|---------------|
+| **fix-worker** | Primary model (Anthropic / OpenAI), per `fix_attempts` row |
+| **classify-report** | Classifier model, per `classifications` row |
+| **judge-batch** | Judge model, per `judge_results` row |
+| **inventory-propose** | Inventory model, per `inventory_proposals` row |
+| **pdca-runner** | Planner model, per `pdca_runs` row |
+| **test-gen-from-report** | Test generator model |
+
+Each row records `model`, `prompt_tokens`, `completion_tokens`, and `cost_usd` (estimated
+using public pricing at time of logging).
+
+---
+
+## Charts
+
+- **Daily spend** — bar chart of estimated USD per day
+- **By pipeline** — donut chart showing which workflows consume the most tokens
+- **By model** — which models are used and what they cost
+- **Token efficiency** — completion tokens per successful fix (lower is better)
+
+---
+
+## Controlling costs
+
+| Lever | Where to set it |
+|-------|----------------|
+| **Model selection** | Settings → PDCA settings → Model (use a smaller model for planning) |
+| **Max iterations** | Settings → PDCA settings → Max iterations per run |
+| **Fix worker retries** | `fix-worker` retries on Zod validation failure — reduce max_retries in env |
+| **Integration health probe cadence** | Probes run on demand; avoid automating frequent polling |
+
+---
+
+## Export
+
+Click **Export CSV** to download the raw cost log for the selected date range. Useful
+for chargeback / showback reporting in multi-team setups.
+
+---
+
+## Related pages
+
+- [Iterate (PDCA)](/admin/iterate) — the highest per-run cost driver
+- [Fix orchestrator](/admin/fixes) — fix-worker spend
+- [Settings](/admin/settings) — model and iteration configuration

@@ -1,6 +1,8 @@
 # Concepts
 
-Mushi is more than a feedback widget. It's a four-layer system:
+Mushi is more than a feedback widget. It's a six-layer system that closes
+the loop from a user feeling friction to a codebase that never makes the same
+mistake twice:
 
 1. **Capture** — SDKs across web, mobile, and AI agents collect structured
    reports with screenshots, breadcrumbs, and device context.
@@ -10,9 +12,12 @@ Mushi is more than a feedback widget. It's a four-layer system:
 3. **Connect** — Every report is embedded into a knowledge graph
    (pgvector + Apache AGE) so similar bugs deduplicate and component
    hot-spots emerge.
-4. **Fix** — Approved triage decisions hand off to an agentic fix
-   orchestrator that runs in a sandboxed environment (E2B) and opens a
-   PR via a scoped GitHub App.
+4. **Fix** — Approved triage decisions hand off to `fix-worker`, a sandboxed
+   LLM agent that drafts code and opens a PR via a scoped GitHub App.
+5. **Iterate (PDCA)** — `pdca-runner` runs autonomous Plan→Do→Check→Act cycles:
+   crawl a live URL, find issues, fix them, verify, repeat.
+6. **Drift** — `drift-walker` continuously compares the live app against the
+   stored contract snapshot. Regressions surface before users report them.
 
 Every layer is observable (Langfuse + OpenTelemetry), auditable (immutable
 audit log), and self-improving (judge loop with A/B-tested prompts).
@@ -28,5 +33,7 @@ import { Cards } from 'nextra/components'
   <Cards.Card title="Connecting your orchestrator" href="/concepts/orchestrator-interop" arrow />
   <Cards.Card title="Judge & self-improvement" href="/concepts/judge-loop" arrow />
   <Cards.Card title="Anti-gaming & reputation" href="/concepts/anti-gaming" arrow />
+  <Cards.Card title="Trigger modes" href="/concepts/trigger-modes" arrow />
+  <Cards.Card title="Rewards" href="/concepts/rewards" arrow />
   <Cards.Card title="Closed-loop evolution — the thesis" href="/concepts/closed-loop" arrow />
 </Cards>

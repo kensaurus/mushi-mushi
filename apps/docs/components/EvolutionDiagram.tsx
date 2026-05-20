@@ -1,174 +1,222 @@
 /**
  * FILE: apps/docs/components/EvolutionDiagram.tsx
- * PURPOSE: Animated SVG diagram showing the closed-loop feedback system
- *   that Mushi enables — catch the bug → cluster it → name it → encode it
- *   as a heuristic → inject into next PR → reward the user → repeat.
+ * PURPOSE: Closed-loop pipeline diagram — HTML/CSS, same visual language as
+ *   LoopComparison.tsx so theme tokens resolve correctly in light + dark mode.
  *
- * Reuses brand tokens (--mushi-vermillion, --mushi-ink) from globals.css.
- * Renders dark/light correctly via currentColor and CSS custom properties.
- * Animation is CSS-only (no framer-motion dependency in the docs app).
+ * WHY NOT SVG?
+ * SVG `<style>` blocks and `fill="var(...)"` attributes don't reliably inherit
+ * Nextra/Mushi theme tokens after static export. The production site rendered
+ * black node fills with illegible red-on-black text. Div-based nodes with
+ * inline styles (identical to LoopComparison's Step component) fix this.
  */
 'use client'
 
-import { useEffect, useRef } from 'react'
-
-interface Node {
-  id: string
+// ── Shared node primitive (mirrors LoopComparison Step) ───────────────────────
+interface NodeProps {
   label: string
-  sublabel?: string
-  x: number
-  y: number
+  sub: string
   accent?: boolean
+  compact?: boolean
 }
 
-const NODES: Node[] = [
-  { id: 'user',    label: 'End user',      sublabel: 'feels friction',       x: 50,  y: 50,  accent: false },
-  { id: 'sdk',     label: 'Mushi SDK',     sublabel: 'shake to report',      x: 220, y: 50,  accent: false },
-  { id: 'cluster', label: 'Mistake DB',    sublabel: 'vector cluster',       x: 395, y: 50,  accent: true  },
-  { id: 'lesson',  label: 'Learning rule', sublabel: 'named + summarised',   x: 570, y: 50,  accent: true  },
-  { id: 'pr',      label: 'PR review',     sublabel: 'rule injected at 3kt', x: 745, y: 50,  accent: false },
-  { id: 'reward',  label: 'Reward loop',   sublabel: 'credits reporter',     x: 395, y: 160, accent: false },
-  { id: 'drift',   label: 'Drift agent',   sublabel: 'walks live app',       x: 570, y: 160, accent: false },
-  { id: 'pdca',    label: 'PDCA agent',    sublabel: 'N iterations',         x: 745, y: 160, accent: false },
-]
-
-const EDGES: Array<{ from: string; to: string; label?: string; back?: boolean }> = [
-  { from: 'user',    to: 'sdk',     label: 'report' },
-  { from: 'sdk',     to: 'cluster', label: 'embed' },
-  { from: 'cluster', to: 'lesson',  label: 'promote' },
-  { from: 'lesson',  to: 'pr',      label: 'inject' },
-  { from: 'pr',      to: 'reward',  label: 'merge', back: true },
-  { from: 'reward',  to: 'user',    label: 'thank' },
-  { from: 'drift',   to: 'cluster', label: 'findings' },
-  { from: 'pdca',    to: 'cluster', label: 'regressions' },
-]
-
-function nodeById(id: string) {
-  return NODES.find((n) => n.id === id)!
+function Node({ label, sub, accent, compact }: NodeProps) {
+  return (
+    <div
+      style={{
+        border: `1.5px solid ${accent ? 'var(--mushi-vermillion, #e03c2c)' : 'var(--nextra-border, #e5e7eb)'}`,
+        borderRadius: 8,
+        padding: compact ? '7px 10px' : '9px 12px',
+        backgroundColor: accent
+          ? 'color-mix(in srgb, var(--mushi-vermillion, #e03c2c) 7%, transparent)'
+          : 'var(--nextra-bg, transparent)',
+        textAlign: 'center',
+        minWidth: compact ? 72 : 80,
+        flex: '1 1 0',
+      }}
+    >
+      <div
+        style={{
+          fontSize: compact ? 11 : 12,
+          fontWeight: 600,
+          lineHeight: 1.25,
+          color: accent ? 'var(--mushi-vermillion, #e03c2c)' : 'inherit',
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 9.5,
+          opacity: accent ? 0.75 : 0.55,
+          marginTop: 2,
+          fontFamily: 'var(--mushi-font-mono, monospace)',
+          letterSpacing: '0.04em',
+          color: accent ? 'var(--mushi-vermillion, #e03c2c)' : 'inherit',
+        }}
+      >
+        {sub}
+      </div>
+    </div>
+  )
 }
 
-function edgePath(from: Node, to: Node) {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const mx = from.x + dx * 0.5
-  const my = from.y + dy * 0.5 + (Math.abs(dy) < 5 ? -18 : 0)
-  return `M ${from.x + 52} ${from.y + 22} Q ${mx} ${my} ${to.x} ${to.y + 22}`
+function HArrow({ label, accent }: { label?: string; accent?: boolean }) {
+  const color = accent ? 'var(--mushi-vermillion, #e03c2c)' : 'var(--nextra-border, #cbd5e1)'
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+        width: 28,
+        gap: 2,
+      }}
+    >
+      {label && (
+        <span
+          style={{
+            fontSize: 8,
+            opacity: 0.65,
+            fontFamily: 'var(--mushi-font-mono, monospace)',
+            letterSpacing: '0.06em',
+            color: accent ? 'var(--mushi-vermillion, #e03c2c)' : 'inherit',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {label}
+        </span>
+      )}
+      <svg width="24" height="12" viewBox="0 0 24 12" aria-hidden>
+        <path
+          d="M0 6 H18 M14 2 L22 6 L14 10"
+          stroke={color}
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
+function VArrow({ label }: { label?: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      {label && (
+        <span
+          style={{
+            fontSize: 8,
+            opacity: 0.55,
+            fontFamily: 'var(--mushi-font-mono, monospace)',
+            letterSpacing: '0.06em',
+          }}
+        >
+          {label}
+        </span>
+      )}
+      <svg width="12" height="18" viewBox="0 0 12 18" aria-hidden>
+        <path
+          d="M6 0 L6 12 M2 8 L6 16 L10 8"
+          stroke="var(--nextra-border, #cbd5e1)"
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  )
 }
 
 export function EvolutionDiagram() {
-  const svgRef = useRef<SVGSVGElement>(null)
-
-  useEffect(() => {
-    const nodes = svgRef.current?.querySelectorAll<SVGElement>('.evo-node')
-    if (!nodes) return
-    nodes.forEach((el, i) => {
-      el.style.animationDelay = `${i * 80}ms`
-    })
-  }, [])
-
   return (
-    <div className="not-prose my-8 overflow-x-auto rounded-xl border border-[color:var(--nextra-border)] bg-[color:var(--nextra-bg)] p-4">
-      <svg
-        ref={svgRef}
-        viewBox="0 0 820 220"
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label="Mushi closed-loop diagram: end user reports → SDK → mistake DB → learning rule → PR review → reward loop back to end user; drift agent and PDCA agent feed discoveries back into the mistake DB"
-        className="w-full max-w-[820px] mx-auto"
-        style={{ minWidth: 540 }}
+    <div
+      className="not-prose my-8 rounded-xl border border-[color:var(--nextra-border)] bg-[color:var(--nextra-bg)] p-5"
+      role="img"
+      aria-label="Mushi closed loop: user reports friction, SDK captures, Mistake DB clusters, Learning rule encoded, PR review inherits genome, Reward loop credits reporter, cycles back to user. Drift and PDCA agents feed findings into Mistake DB."
+    >
+      {/* Row 1 — main pipeline */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0,
+          overflowX: 'auto',
+          paddingBottom: 4,
+        }}
       >
-        <defs>
-          <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3 z" fill="var(--mushi-vermillion, #c0392b)" />
-          </marker>
-          <style>{`
-            .evo-node { animation: evo-pop 0.4s ease both; }
-            @keyframes evo-pop {
-              from { opacity: 0; transform: scale(0.85); }
-              to   { opacity: 1; transform: scale(1); }
-            }
-            .evo-edge {
-              stroke: var(--mushi-vermillion, #c0392b);
-              stroke-width: 1.5;
-              fill: none;
-              stroke-dasharray: 4 3;
-              animation: evo-dash 0.8s linear infinite;
-            }
-            @keyframes evo-dash {
-              to { stroke-dashoffset: -14; }
-            }
-            .evo-node-rect {
-              fill: var(--nextra-bg, #fff);
-              stroke: var(--nextra-border, #e5e7eb);
-              stroke-width: 1.5;
-              rx: 8;
-            }
-            .evo-node-rect.accent {
-              stroke: var(--mushi-vermillion, #c0392b);
-              stroke-width: 2;
-            }
-            .evo-label {
-              font-family: inherit;
-              font-size: 10.5px;
-              font-weight: 600;
-              fill: var(--nextra-content, currentColor);
-            }
-            .evo-sublabel {
-              font-family: inherit;
-              font-size: 8.5px;
-              fill: var(--nextra-content-secondary, currentColor);
-              opacity: 0.65;
-            }
-            .evo-edge-label {
-              font-family: inherit;
-              font-size: 8px;
-              fill: var(--mushi-vermillion, #c0392b);
-              font-weight: 500;
-            }
-          `}</style>
-        </defs>
+        <Node label="End user" sub="feels friction" />
+        <HArrow label="report" />
+        <Node label="Mushi SDK" sub="shake to report" />
+        <HArrow label="embed" accent />
+        <Node label="Mistake DB" sub="vector cluster" accent />
+        <HArrow label="promote" accent />
+        <Node label="Learning rule" sub="named + encoded" accent />
+        <HArrow label="inject" />
+        <Node label="PR review" sub="rule injected" />
+        <HArrow label="merge" />
+        <Node label="Reward loop" sub="credits reporter" />
+      </div>
 
-        {EDGES.map((e) => {
-          const f = nodeById(e.from)
-          const t = nodeById(e.to)
-          const mid = { x: (f.x + t.x) / 2 + 26, y: (f.y + t.y) / 2 + 16 }
-          return (
-            <g key={`${e.from}-${e.to}`}>
-              <path
-                className="evo-edge"
-                d={edgePath(f, t)}
-                markerEnd="url(#arrow)"
-              />
-              {e.label && (
-                <text className="evo-edge-label" x={mid.x} y={mid.y - 6} textAnchor="middle">
-                  {e.label}
-                </text>
-              )}
-            </g>
-          )
-        })}
+      {/* Row 2 — autonomous agents feeding Mistake DB
+           Centering below Mistake DB (3rd of 6 nodes) is approximate — the row
+           scrolls horizontally as a unit so pixel-perfect alignment isn't possible
+           without measuring the DOM. The visual intent is "agents feed upward into
+           the middle of the pipeline". */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          gap: 16,
+          marginTop: 8,
+        }}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <VArrow label="findings" />
+          <Node label="Drift agent" sub="walks live app" compact />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <VArrow label="regressions" />
+          <Node label="PDCA agent" sub="N iterations" compact />
+        </div>
+      </div>
 
-        {NODES.map((n) => (
-          <g key={n.id} className="evo-node" transform={`translate(${n.x}, ${n.y})`}>
-            <rect
-              className={`evo-node-rect${n.accent ? ' accent' : ''}`}
-              width={104}
-              height={44}
-              rx={8}
-            />
-            <text className="evo-label" x={52} y={18} textAnchor="middle">
-              {n.label}
-            </text>
-            {n.sublabel && (
-              <text className="evo-sublabel" x={52} y={32} textAnchor="middle">
-                {n.sublabel}
-              </text>
-            )}
-          </g>
-        ))}
-      </svg>
-      <p className="text-center text-xs text-[color:var(--nextra-content-secondary)] mt-3 not-prose">
-        The Mushi closed loop — <span style={{ color: 'var(--mushi-vermillion, #c0392b)' }}>red border</span> = new capabilities (Mistake DB + Learning rules)
+      {/* Return loop */}
+      <div
+        style={{
+          textAlign: 'center',
+          marginTop: 14,
+          fontSize: 11,
+          color: 'var(--mushi-vermillion, #e03c2c)',
+          fontFamily: 'var(--mushi-font-mono, monospace)',
+          letterSpacing: '0.05em',
+          opacity: 0.85,
+        }}
+      >
+        ↻ thank — reporter credited → next session starts the loop again
+      </div>
+
+      <p
+        className="not-prose mt-3 flex items-center justify-center gap-1.5 text-center text-xs"
+        style={{ color: 'var(--nextra-content-secondary, #6b7280)' }}
+      >
+        The Mushi closed loop —
+        <span
+          aria-hidden
+          style={{
+            display: 'inline-block',
+            width: 10,
+            height: 10,
+            borderRadius: 2,
+            border: '1.5px solid var(--mushi-vermillion, #e03c2c)',
+            background: 'color-mix(in srgb, var(--mushi-vermillion, #e03c2c) 7%, transparent)',
+            verticalAlign: 'middle',
+          }}
+        />
+        selection nodes (Mistake DB + Learning rule)
       </p>
     </div>
   )
