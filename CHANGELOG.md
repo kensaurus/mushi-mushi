@@ -8,13 +8,24 @@ For per-package, per-bullet detail see each package's `CHANGELOG.md`.
 
 ## pending (pending release) *(pending release)*
 
+## v1.2.x
+
+Latest tag: `v1.2.0`
+
 ### Highlights
 
-- **Graph** — — interactive ReactFlow canvas with layer-filter pills
-- **Layer Sankey** — — horizontal lane diagram showing files per architectural tier
-- **Search** — — semantic search via the `match_codebase_files` embedding RPC
 - **`mushi sync-lessons`** — — pulls promoted lessons from
 - **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+
+### Packages bumped
+
+- `@mushi-mushi/core` → 1.2.0
+- `@mushi-mushi/react` → 1.2.0
+- `@mushi-mushi/web` → 1.2.0
 
 ## v1.1.x
 
@@ -57,6 +68,19 @@ Latest tag: `v1.0.0`
 - `@mushi-mushi/react` → 1.0.0
 - `@mushi-mushi/web` → 1.0.0
 
+## v0.12.x
+
+Latest tag: `v0.12.0`
+
+### Highlights
+
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+
+### Packages bumped
+
+- `@mushi-mushi/react-native` → 0.12.0
+
 ## v0.11.x
 
 Latest tag: `v0.11.0`
@@ -82,7 +106,7 @@ Latest tag: `v0.9.0`
 
 ## v0.8.x
 
-Latest tag: `v0.8.3`
+Latest tag: `v0.8.4`
 
 ### Highlights
 
@@ -92,15 +116,22 @@ Latest tag: `v0.8.3`
 - **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 - **`mushi sync-lessons`** — — pulls promoted lessons from
 - **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ### Packages bumped
 
-- `@mushi-mushi/angular` → 0.8.3
+- `@mushi-mushi/angular` → 0.8.4
+- `@mushi-mushi/cli` → 0.8.0
 - `@mushi-mushi/core` → 0.8.0
 - `@mushi-mushi/react` → 0.8.0
 - `@mushi-mushi/react-native` → 0.8.2
-- `@mushi-mushi/svelte` → 0.8.3
-- `@mushi-mushi/vue` → 0.8.3
+- `@mushi-mushi/svelte` → 0.8.4
+- `@mushi-mushi/vue` → 0.8.4
 - `@mushi-mushi/web` → 0.8.0
 
 ## v0.7.x
@@ -111,10 +142,16 @@ Latest tag: `v0.7.0`
 
 - **`mushi sync-lessons`** — — pulls promoted lessons from
 - **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
+- **Graph** — — interactive ReactFlow canvas with layer-filter pills
+- **Layer Sankey** — — horizontal lane diagram showing files per architectural tier
+- **Search** — — semantic search via the `match_codebase_files` embedding RPC
 
 ### Packages bumped
 
 - `@mushi-mushi/angular` → 0.7.0
+- `@mushi-mushi/capacitor` → 0.7.0
 - `@mushi-mushi/cli` → 0.7.0
 - `@mushi-mushi/core` → 0.7.0
 - `@mushi-mushi/react` → 0.7.0
@@ -122,6 +159,7 @@ Latest tag: `v0.7.0`
 - `@mushi-mushi/svelte` → 0.7.0
 - `@mushi-mushi/vue` → 0.7.0
 - `@mushi-mushi/web` → 0.7.0
+- `mushi-mushi` → 0.7.0
 
 ## v0.6.x
 
@@ -136,16 +174,19 @@ Latest tag: `v0.6.5`
 - **npm keyword arrays expanded across all 14 publishable packages.** — Added
 - **README star CTA footer.** — Added the bilingual _"もしMushi-chanのお役に立てたら、
 - **New `docs/marketing/` folder** — with the full growth kit: `VOICE.md`,
+- **`mushi sync-lessons`** — — pulls promoted lessons from
+- **MCP** — — `lessons.query(diff_text, max_tokens)` tool for
 
 ### Packages bumped
 
 - `@mushi-mushi/capacitor` → 0.6.0
 - `@mushi-mushi/cli` → 0.6.1
+- `@mushi-mushi/mcp` → 0.6.0
 - `mushi-mushi` → 0.6.5
 
 ## v0.5.x
 
-Latest tag: `v0.5.4`
+Latest tag: `v0.5.5`
 
 ### Highlights
 
@@ -170,7 +211,7 @@ Latest tag: `v0.5.4`
 - `@mushi-mushi/mcp` → 0.5.0
 - `@mushi-mushi/react` → 0.5.0
 - `@mushi-mushi/web` → 0.5.1
-- `create-mushi-mushi` → 0.5.4
+- `create-mushi-mushi` → 0.5.5
 - `mushi-mushi` → 0.5.2
 
 ## v0.4.x
@@ -200,7 +241,7 @@ Latest tag: `v0.4.6`
 - `@mushi-mushi/mcp` → 0.4.0
 - `@mushi-mushi/mcp-ci` → 0.4.0
 - `@mushi-mushi/node` → 0.4.0
-- `@mushi-mushi/plugin-sdk` → 0.4.1
+- `@mushi-mushi/plugin-sdk` → 0.4.2
 - `@mushi-mushi/react` → 0.4.1
 - `@mushi-mushi/web` → 0.4.1
 - `create-mushi-mushi` → 0.4.0
@@ -273,7 +314,7 @@ Latest tag: `v0.2.8`
 - `@mushi-mushi/plugin-linear` → 0.2.4
 - `@mushi-mushi/plugin-pagerduty` → 0.2.4
 - `@mushi-mushi/plugin-sdk` → 0.2.1
-- `@mushi-mushi/plugin-sentry` → 0.2.5
+- `@mushi-mushi/plugin-sentry` → 0.2.6
 - `@mushi-mushi/plugin-slack-app` → 0.2.2
 - `@mushi-mushi/plugin-zapier` → 0.2.4
 - `@mushi-mushi/react` → 0.2.1
