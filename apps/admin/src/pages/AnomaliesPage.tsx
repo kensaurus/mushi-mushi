@@ -33,6 +33,7 @@ import {
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
+import { BarSparkline } from '../components/charts'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -332,19 +333,32 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
                 return (
                   <Card key={name} className="p-4">
                     <h4 className="text-sm font-medium font-mono mb-2">{name}</h4>
-                    <div className="flex items-end gap-[2px] h-14">
-                      {pts.map((p, i) => {
-                        const h = max === min ? 50 : Math.round(((p.value - min) / (max - min)) * 100)
-                        return (
-                          <div key={i} title={`${new Date(p.ts).toLocaleString()}: ${p.value}`}
-                            className="flex-1 min-w-[3px] rounded-t-sm bg-primary opacity-70 hover:opacity-100 transition-opacity"
-                            style={{ height: `${Math.max(h, 4)}%` }} />
-                        )
-                      })}
-                    </div>
-                    <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-                      <span>{pts.length} pts</span>
-                      <span>min {min.toFixed(3)} · max {max.toFixed(3)}</span>
+                    <BarSparkline
+                      values={vals}
+                      xLabels={pts.map((p) =>
+                        new Date(p.ts).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                        }),
+                      )}
+                      barTitles={pts.map(
+                        (p) => `${new Date(p.ts).toLocaleString()}: ${p.value}`,
+                      )}
+                      accent="bg-brand"
+                      height={80}
+                      showAxes
+                      scaleToData
+                      valueFormat="raw"
+                      yAxisCaption={name}
+                      xAxisCaption="Sample time"
+                      showPeakLabel
+                      ariaLabel={`${name} metric samples`}
+                    />
+                    <div className="flex justify-between mt-2 text-2xs text-fg-muted tabular-nums">
+                      <span>{pts.length} samples</span>
+                      <span>
+                        min {min.toFixed(3)} · max {max.toFixed(3)}
+                      </span>
                     </div>
                   </Card>
                 )

@@ -31,7 +31,7 @@ import { executeNaturalLanguageQuery, sanitizeSql } from '../../_shared/nl-query
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, ownedProjectIds, userCanAccessProject } from '../shared.ts';
+import { dbError, ownedProjectIds, resolveOwnedProject, userCanAccessProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -43,6 +43,225 @@ import {
 } from '../helpers.ts';
 
 export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
+  // =================================================================================
+  // GET /v1/admin/billing/stats
+  // Workspace health summary for billing banner + KPI strip (active project focus).
+  // =================================================================================
+  app.get('/v1/admin/billing/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const projectIdHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null;
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      organizationId: null as string | null,
+      billingMode: null as 'stripe' | 'complimentary' | null,
+      planId: 'hobby',
+      planDisplayName: 'Hobby',
+      subscriptionStatus: null as string | null,
+      isComplimentary: false,
+      hasStripeCustomer: false,
+      paymentOk: false,
+      cancelAtPeriodEnd: false,
+      reportsUsed: 0,
+      reportsLimit: null as number | null,
+      usagePct: null as number | null,
+      overQuota: false,
+      approachingQuota: false,
+      fixesAttempted: 0,
+      fixesSucceeded: 0,
+      llmCostUsdMonth: 0,
+      periodEnd: null as string | null,
+      projectCount: 0,
+      freeLimitReports: 1000,
+      pastDueProjects: 0,
+      unpaidProjects: 0,
+    };
+
+    const projectIdsForUser = await ownedProjectIds(db, userId);
+    if (projectIdsForUser.length === 0) {
+      const plans = await listPlans();
+      const hobby = plans.find((pl) => pl.id === 'hobby');
+      return c.json({
+        ok: true,
+        data: {
+          ...empty,
+          freeLimitReports:
+            hobby?.included_reports_per_month ??
+            Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000'),
+        },
+      });
+    }
+
+    const { data: projects } = await db
+      .from('projects')
+      .select('id, name, organization_id')
+      .in('id', projectIdsForUser)
+      .order('created_at', { ascending: true });
+
+    const projectRows = projects ?? [];
+    const activeProject =
+      projectIdHint && projectRows.some((p) => p.id === projectIdHint)
+        ? projectRows.find((p) => p.id === projectIdHint)!
+        : projectRows[0] ?? null;
+
+    const periodStart = new Date();
+    periodStart.setUTCDate(1);
+    periodStart.setUTCHours(0, 0, 0, 0);
+    const periodEnd = new Date(periodStart);
+    periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+
+    const projectIds = projectRows.map((p) => p.id);
+    const orgIds = Array.from(
+      new Set(projectRows.map((p) => p.organization_id).filter((x): x is string => Boolean(x))),
+    );
+
+    const [
+      { data: subs },
+      { data: customers },
+      { data: usage },
+      { data: llmCosts },
+      { data: orgs },
+      plans,
+    ] = await Promise.all([
+      db
+        .from('billing_subscriptions')
+        .select('project_id, status, plan_id, current_period_end, cancel_at_period_end')
+        .in('project_id', projectIds),
+      db
+        .from('billing_customers')
+        .select('project_id, stripe_customer_id, default_payment_ok')
+        .in('project_id', projectIds),
+      db
+        .from('usage_events')
+        .select('project_id, event_name, quantity')
+        .in('project_id', projectIds)
+        .gte('occurred_at', periodStart.toISOString()),
+      activeProject
+        ? db
+          .from('llm_invocations')
+          .select('cost_usd')
+          .eq('project_id', activeProject.id)
+          .gte('created_at', periodStart.toISOString())
+          .not('cost_usd', 'is', null)
+        : Promise.resolve({ data: [] as { cost_usd: number }[] }),
+      orgIds.length > 0
+        ? db.from('organizations').select('id, plan_id, billing_mode').in('id', orgIds)
+        : Promise.resolve({ data: [] as { id: string; plan_id: string; billing_mode: string }[] }),
+      listPlans(),
+    ]);
+
+    const orgById = new Map<string, { plan_id: string; billing_mode: string }>();
+    for (const o of orgs ?? []) orgById.set(o.id, { plan_id: o.plan_id, billing_mode: o.billing_mode });
+
+    let pastDueProjects = 0;
+    let unpaidProjects = 0;
+    const subByProject = new Map<string, { status: string; plan_id: string | null; current_period_end: string | null; cancel_at_period_end: boolean }>();
+    for (const s of subs ?? []) {
+      subByProject.set(s.project_id, s);
+      if (s.status === 'past_due') pastDueProjects += 1;
+      if (s.status === 'unpaid') unpaidProjects += 1;
+    }
+    const customerByProject = new Map<string, { stripe_customer_id?: string; default_payment_ok?: boolean }>();
+    for (const cu of customers ?? []) customerByProject.set(cu.project_id, cu);
+
+    const usageByProject = new Map<string, { reports: number; fixes: number; fixesSucceeded: number }>();
+    for (const u of usage ?? []) {
+      const cur = usageByProject.get(u.project_id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0 };
+      if (u.event_name === 'reports_ingested') cur.reports += Number(u.quantity);
+      else if (u.event_name === 'fixes_attempted') cur.fixes += Number(u.quantity);
+      else if (u.event_name === 'fixes_succeeded') cur.fixesSucceeded += Number(u.quantity);
+      usageByProject.set(u.project_id, cur);
+    }
+
+    let llmCostUsdMonth = 0;
+    const llmCostRows =
+      llmCosts && typeof llmCosts === 'object' && 'data' in llmCosts
+        ? ((llmCosts as { data: { cost_usd: number }[] | null }).data ?? [])
+        : [];
+    for (const row of llmCostRows) {
+      llmCostUsdMonth += Number(row.cost_usd ?? 0);
+    }
+    llmCostUsdMonth = Math.round(llmCostUsdMonth * 10000) / 10000;
+
+    const hobby = plans.find((pl) => pl.id === 'hobby');
+    const freeLimitReports =
+      hobby?.included_reports_per_month ??
+      Number(Deno.env.get('MUSHI_FREE_REPORTS_PER_MONTH') ?? '1000');
+
+    if (!activeProject) {
+      return c.json({
+        ok: true,
+        data: { ...empty, projectCount: projectRows.length, freeLimitReports, pastDueProjects, unpaidProjects },
+      });
+    }
+
+    const sub = subByProject.get(activeProject.id) ?? null;
+    const cust = customerByProject.get(activeProject.id) ?? null;
+    const u = usageByProject.get(activeProject.id) ?? { reports: 0, fixes: 0, fixesSucceeded: 0 };
+    const orgInfo = activeProject.organization_id ? orgById.get(activeProject.organization_id) ?? null : null;
+    const isComplimentary = orgInfo?.billing_mode === 'complimentary';
+    const subPlanActive = sub && ['active', 'trialing', 'past_due'].includes(sub.status);
+    const planId = subPlanActive
+      ? (sub!.plan_id ?? 'hobby')
+      : isComplimentary
+        ? orgInfo!.plan_id
+        : 'hobby';
+    const plan = await getPlan(planId);
+    const limit = plan.included_reports_per_month;
+    const usagePct = limit ? Math.round((u.reports / limit) * 100) : null;
+    const overQuota =
+      !isComplimentary &&
+      limit !== null &&
+      u.reports >= limit &&
+      !plan.overage_price_lookup_key;
+    const approachingQuota = usagePct != null && usagePct >= 80 && !overQuota;
+
+    const subscriptionStatus = subPlanActive
+      ? sub!.status
+      : isComplimentary && plan.id !== 'hobby'
+        ? 'active'
+        : plan.id === 'hobby'
+          ? 'free'
+          : sub?.status ?? null;
+
+    const periodEndIso = subPlanActive && sub?.current_period_end
+      ? sub.current_period_end
+      : periodEnd.toISOString();
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: activeProject.id,
+        projectName: activeProject.name,
+        organizationId: activeProject.organization_id ?? null,
+        billingMode: (orgInfo?.billing_mode as 'stripe' | 'complimentary' | undefined) ?? 'stripe',
+        planId: plan.id,
+        planDisplayName: plan.display_name,
+        subscriptionStatus,
+        isComplimentary,
+        hasStripeCustomer: Boolean(cust?.stripe_customer_id),
+        paymentOk: Boolean(cust?.default_payment_ok),
+        cancelAtPeriodEnd: Boolean(sub?.cancel_at_period_end),
+        reportsUsed: u.reports,
+        reportsLimit: limit,
+        usagePct,
+        overQuota,
+        approachingQuota,
+        fixesAttempted: u.fixes,
+        fixesSucceeded: u.fixesSucceeded,
+        llmCostUsdMonth,
+        periodEnd: periodEndIso,
+        projectCount: projectRows.length,
+        freeLimitReports,
+        pastDueProjects,
+        unpaidProjects,
+      },
+    });
+  });
+
   app.get('/v1/admin/billing', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
@@ -342,6 +561,174 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return c.json({
       ok: true,
       data: { projects: items, plans, free_limit_reports_per_month: freeLimit },
+    });
+  });
+
+  // =================================================================================
+  // GET /v1/admin/onboarding/stats
+  // Focused setup posture for the active (or first accessible) project.
+  // =================================================================================
+  app.get('/v1/admin/onboarding/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const adminHost = (() => {
+      try {
+        return new URL(c.req.url).host || null;
+      } catch {
+        return null;
+      }
+    })();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      requiredComplete: 0,
+      requiredTotal: 4,
+      stepsComplete: 0,
+      stepsTotal: 8,
+      optionalComplete: 0,
+      optionalTotal: 4,
+      setupDone: false,
+      nextStepId: 'project_created' as string | null,
+      nextStepLabel: 'Create your first project' as string | null,
+      sdkInstalled: false,
+      sdkHostMismatch: false,
+      adminEndpointHost: adminHost,
+      sdkEndpointHost: null as string | null,
+      hasApiKey: false,
+      reportCount: 0,
+      fixCount: 0,
+      mergedFixCount: 0,
+    };
+
+    const accessibleIds = await ownedProjectIds(db, userId);
+    if (accessibleIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: { ...empty, hasAnyProject: true } }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+    const pid = project.id;
+
+    const [keysRes, settingsRes, reportsRes, fixesRes, reposRes] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select(
+          'project_id, is_active, last_seen_at, last_seen_origin, last_seen_user_agent, last_seen_endpoint_host',
+        )
+        .eq('project_id', pid)
+        .eq('is_active', true),
+      db
+        .from('project_settings')
+        .select('project_id, github_repo_url, sentry_org_slug, byok_anthropic_key_ref')
+        .eq('project_id', pid)
+        .maybeSingle(),
+      db
+        .from('reports')
+        .select('id, environment, created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      db.from('fix_attempts').select('id, merged_at').eq('project_id', pid).limit(200),
+      db.from('project_repos').select('project_id').eq('project_id', pid).limit(1),
+    ]);
+
+    const hasKey = (keysRes.data ?? []).length > 0;
+    let heartbeat: {
+      last_seen_at: string;
+      last_seen_endpoint_host: string | null;
+    } | null = null;
+    for (const k of keysRes.data ?? []) {
+      const seenAt = (k as { last_seen_at?: string | null }).last_seen_at ?? null;
+      if (!seenAt) continue;
+      if (heartbeat && heartbeat.last_seen_at >= seenAt) continue;
+      heartbeat = {
+        last_seen_at: seenAt,
+        last_seen_endpoint_host:
+          (k as { last_seen_endpoint_host?: string | null }).last_seen_endpoint_host ?? null,
+      };
+    }
+
+    let sdkReportSignal = false;
+    const reports = reportsRes.data ?? [];
+    for (const r of reports) {
+      const env = (r.environment ?? {}) as Record<string, unknown>;
+      const platform = typeof env.platform === 'string' ? env.platform : '';
+      if (platform && platform !== 'mushi-admin') sdkReportSignal = true;
+    }
+
+    const hasSdk = Boolean(heartbeat) || sdkReportSignal;
+    const sdkEndpointHost = heartbeat?.last_seen_endpoint_host ?? null;
+    const sdkHostMismatch = Boolean(
+      adminHost && sdkEndpointHost && sdkEndpointHost !== adminHost && hasSdk,
+    );
+
+    const settings = settingsRes.data;
+    const hasGithub = Boolean(settings?.github_repo_url) || (reposRes.data ?? []).length > 0;
+    const hasSentry = Boolean(settings?.sentry_org_slug);
+    const hasByok = Boolean(settings?.byok_anthropic_key_ref);
+    const reportCount = reports.length;
+    const fixes = fixesRes.data ?? [];
+    const fixCount = fixes.length;
+    const mergedFixCount = fixes.filter((f) => f.merged_at).length;
+
+    type StepDef = { id: string; label: string; complete: boolean; required: boolean };
+    const steps: StepDef[] = [
+      { id: 'project_created', label: 'Create your first project', complete: true, required: true },
+      { id: 'api_key_generated', label: 'Generate an API key', complete: hasKey, required: true },
+      { id: 'sdk_installed', label: 'Install the SDK in your app', complete: hasSdk, required: true },
+      {
+        id: 'first_report_received',
+        label: 'Receive your first bug report',
+        complete: reportCount > 0,
+        required: true,
+      },
+      { id: 'github_connected', label: 'Connect GitHub', complete: hasGithub, required: false },
+      { id: 'sentry_connected', label: 'Connect Sentry (optional)', complete: hasSentry, required: false },
+      { id: 'byok_anthropic', label: 'Add your Anthropic key (optional)', complete: hasByok, required: false },
+      {
+        id: 'first_fix_dispatched',
+        label: 'Dispatch your first auto-fix',
+        complete: fixCount > 0,
+        required: false,
+      },
+    ];
+
+    const requiredSteps = steps.filter((s) => s.required);
+    const optionalSteps = steps.filter((s) => !s.required);
+    const requiredComplete = requiredSteps.filter((s) => s.complete).length;
+    const setupDone = requiredComplete === requiredSteps.length;
+    const nextRequired = requiredSteps.find((s) => !s.complete) ?? null;
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: project.name,
+        requiredComplete,
+        requiredTotal: requiredSteps.length,
+        stepsComplete: steps.filter((s) => s.complete).length,
+        stepsTotal: steps.length,
+        optionalComplete: optionalSteps.filter((s) => s.complete).length,
+        optionalTotal: optionalSteps.length,
+        setupDone,
+        nextStepId: nextRequired?.id ?? null,
+        nextStepLabel: nextRequired?.label ?? null,
+        sdkInstalled: hasSdk,
+        sdkHostMismatch,
+        adminEndpointHost: adminHost,
+        sdkEndpointHost,
+        hasApiKey: hasKey,
+        reportCount,
+        fixCount,
+        mergedFixCount,
+      },
     });
   });
 
@@ -1216,6 +1603,102 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return c.json({
       ok: true,
       data: { projects: enriched, admin_host: adminHost, latest_sdk_versions: latestSdkVersions },
+    });
+  });
+
+  app.get('/v1/admin/projects/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const accessibleIds = await ownedProjectIds(db, userId);
+    const activeProjectHint =
+      c.req.header('x-mushi-project-id') ?? c.req.header('X-Mushi-Project-Id') ?? null;
+
+    const empty = {
+      projectCount: 0,
+      activeKeyCount: 0,
+      projectsWithReports: 0,
+      sdkConnectedCount: 0,
+      neverIngestedCount: 0,
+      reportsLast24h: 0,
+      reportsLast30d: 0,
+      activeProjectId: activeProjectHint,
+      activeProjectHasReports: false,
+      activeProjectSdkConnected: false,
+    };
+
+    if (accessibleIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const since30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      { data: keyRows, error: keyErr },
+      { data: reportProjectRows, error: reportProjErr },
+      { count: reports24h, error: r24Err },
+      { count: reports30d, error: r30Err },
+    ] = await Promise.all([
+      db
+        .from('project_api_keys')
+        .select('project_id, is_active, last_seen_at')
+        .in('project_id', accessibleIds),
+      db.from('reports').select('project_id').in('project_id', accessibleIds),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', accessibleIds)
+        .gte('created_at', since24h),
+      db
+        .from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', accessibleIds)
+        .gte('created_at', since30d),
+    ]);
+
+    if (keyErr) return dbError(c, keyErr);
+    if (reportProjErr) return dbError(c, reportProjErr);
+    if (r24Err) return dbError(c, r24Err);
+    if (r30Err) return dbError(c, r30Err);
+
+    const activeKeyCount = (keyRows ?? []).filter((k) => k.is_active !== false).length;
+    const sdkConnectedProjects = new Set<string>();
+    for (const k of keyRows ?? []) {
+      if ((k as { last_seen_at?: string | null }).last_seen_at) {
+        sdkConnectedProjects.add(k.project_id as string);
+      }
+    }
+    const projectsWithReportsSet = new Set<string>();
+    for (const r of reportProjectRows ?? []) {
+      projectsWithReportsSet.add(r.project_id as string);
+    }
+
+    const projectCount = accessibleIds.length;
+    const projectsWithReports = projectsWithReportsSet.size;
+    const sdkConnectedCount = sdkConnectedProjects.size;
+    const neverIngestedCount = Math.max(0, projectCount - projectsWithReports);
+
+    const activeProjectId =
+      activeProjectHint && accessibleIds.includes(activeProjectHint) ? activeProjectHint : null;
+
+    return c.json({
+      ok: true,
+      data: {
+        projectCount,
+        activeKeyCount,
+        projectsWithReports,
+        sdkConnectedCount,
+        neverIngestedCount,
+        reportsLast24h: reports24h ?? 0,
+        reportsLast30d: reports30d ?? 0,
+        activeProjectId,
+        activeProjectHasReports: activeProjectId
+          ? projectsWithReportsSet.has(activeProjectId)
+          : false,
+        activeProjectSdkConnected: activeProjectId
+          ? sdkConnectedProjects.has(activeProjectId)
+          : false,
+      },
     });
   });
 
@@ -2319,6 +2802,191 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     return resolved.join('/')
   }
 
+  // GET /v1/admin/explore/stats — codebase atlas posture (banner + EXPLORE SNAPSHOT).
+  // Must be registered BEFORE /v1/admin/projects/:id/codebase/explore so "stats"
+  // is never swallowed as a project id.
+  app.get('/v1/admin/explore/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const emptyLayers = { ui: 0, lib: 0, backend: 0, test: 0, config: 0, other: 0 }
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      codebaseIndexEnabled: false,
+      indexingEnabled: null as boolean | null,
+      repoUrl: null as string | null,
+      hasWebhookSecret: false,
+      indexedFiles: 0,
+      symbolCount: 0,
+      withEmbeddings: 0,
+      layers: emptyLayers,
+      topLanguages: [] as string[],
+      lastIndexedAt: null as string | null,
+      lastIndexAttemptAt: null as string | null,
+      lastIndexError: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'not_enabled'
+        | 'indexing'
+        | 'error'
+        | 'empty'
+        | 'ready'
+        | 'stale',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty })
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    })
+    if ('response' in resolvedProject) return resolvedProject.response
+    const activeProject = resolvedProject.project
+    const pid = activeProject.id
+
+    const [
+      settingsRes,
+      primaryRepoRes,
+      filesCountRes,
+      symbolsCountRes,
+      embeddingsCountRes,
+      fileSampleRes,
+    ] = await Promise.all([
+      db
+        .from('project_settings')
+        .select('codebase_index_enabled, codebase_repo_url, github_webhook_secret')
+        .eq('project_id', pid)
+        .maybeSingle(),
+      db
+        .from('project_repos')
+        .select(
+          'repo_url, default_branch, last_indexed_at, last_index_error, last_index_attempt_at, indexing_enabled',
+        )
+        .eq('project_id', pid)
+        .eq('is_primary', true)
+        .maybeSingle(),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .not('symbol_name', 'is', null),
+      db
+        .from('project_codebase_files')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .not('embedding', 'is', null),
+      db
+        .from('project_codebase_files')
+        .select('file_path, language')
+        .eq('project_id', pid)
+        .is('tombstoned_at', null)
+        .is('symbol_name', null)
+        .limit(5000),
+    ])
+
+    const settings = settingsRes.data
+    const primaryRepo = primaryRepoRes.data
+    const indexedFiles = filesCountRes.count ?? 0
+    const symbolCount = symbolsCountRes.count ?? 0
+    const withEmbeddings = embeddingsCountRes.count ?? 0
+    const codebaseIndexEnabled = !!settings?.codebase_index_enabled
+    const indexingEnabled = primaryRepo?.indexing_enabled ?? null
+    const repoUrl = primaryRepo?.repo_url ?? settings?.codebase_repo_url ?? null
+    const lastIndexedAt = primaryRepo?.last_indexed_at ?? null
+    const lastIndexAttemptAt = primaryRepo?.last_index_attempt_at ?? null
+    const lastIndexError = primaryRepo?.last_index_error ?? null
+
+    const layers = { ...emptyLayers }
+    const langCounts = new Map<string, number>()
+    for (const row of fileSampleRes.data ?? []) {
+      const layer = detectExploreLayer(String(row.file_path ?? ''))
+      layers[layer] = (layers[layer] ?? 0) + 1
+      const lang = row.language ? String(row.language) : null
+      if (lang) langCounts.set(lang, (langCounts.get(lang) ?? 0) + 1)
+    }
+    const topLanguages = [...langCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([lang]) => lang)
+
+    let topPriority: typeof empty.topPriority = 'ready'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (!codebaseIndexEnabled && indexedFiles === 0) {
+      topPriority = 'not_enabled'
+      topPriorityLabel = 'Codebase indexing is off — enable in Settings or run mushi index'
+      topPriorityTo = '/explore?tab=index'
+    } else if (lastIndexError) {
+      topPriority = 'error'
+      topPriorityLabel = `Last index error — ${lastIndexError.slice(0, 120)}${lastIndexError.length > 120 ? '…' : ''}`
+      topPriorityTo = '/explore?tab=index'
+    } else if (indexedFiles === 0 && lastIndexAttemptAt && !lastIndexedAt) {
+      topPriority = 'indexing'
+      topPriorityLabel = 'Indexer is running — files should appear within ~90s'
+      topPriorityTo = '/explore?tab=index'
+    } else if (indexedFiles === 0) {
+      topPriority = 'empty'
+      topPriorityLabel = 'No files indexed yet — connect a repo or run mushi index'
+      topPriorityTo = '/settings'
+    } else if (
+      lastIndexedAt &&
+      Date.now() - new Date(lastIndexedAt).getTime() > 7 * 24 * 60 * 60 * 1000
+    ) {
+      topPriority = 'stale'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files · index may be stale (>7d)`
+      topPriorityTo = '/explore?tab=graph'
+    } else {
+      topPriority = 'ready'
+      topPriorityLabel = `${indexedFiles.toLocaleString()} files · ${withEmbeddings} embedded for search`
+      topPriorityTo = '/explore?tab=graph'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name ?? null,
+        projectCount: projectIds.length,
+        codebaseIndexEnabled,
+        indexingEnabled,
+        repoUrl,
+        hasWebhookSecret: !!settings?.github_webhook_secret,
+        indexedFiles,
+        symbolCount,
+        withEmbeddings,
+        layers,
+        topLanguages,
+        lastIndexedAt,
+        lastIndexAttemptAt,
+        lastIndexError,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   app.get('/v1/admin/projects/:id/codebase/explore', jwtAuth, async (c) => {
     const projectId = c.req.param('id')
     const userId = c.get('userId') as string
@@ -2755,6 +3423,194 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // ============================================================
   // PHASE 2: KNOWLEDGE GRAPH
   // ============================================================
+
+  app.get('/v1/admin/graph/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasIngest: false,
+      nodeCount: 0,
+      edgeCount: 0,
+      reportNodes: 0,
+      inventoryNodes: 0,
+      fragileComponents: 0,
+      regressionEdges: 0,
+      duplicateEdges: 0,
+      fixVerifiedEdges: 0,
+      lastNodeAt: null as string | null,
+      graphBackend: 'sql_only' as string,
+      ageAvailable: false,
+      unsyncedNodes: 0,
+      unsyncedEdges: 0,
+      topPriority: 'waiting_ingest' as
+        | 'waiting_ingest'
+        | 'empty'
+        | 'fragile'
+        | 'regressions'
+        | 'clear',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const INVENTORY_NODE_TYPES = [
+      'app',
+      'page_v2',
+      'element',
+      'action',
+      'api_dep',
+      'db_dep',
+      'test',
+      'user_story',
+    ];
+
+    const [
+      reportCountRes,
+      nodesRes,
+      edgesRes,
+      settingsRes,
+      ageAvailRes,
+      unsyncedNodesRes,
+      unsyncedEdgesRes,
+      latestNodeRes,
+    ] = await Promise.all([
+      db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid),
+      db
+        .from('graph_nodes')
+        .select('id, node_type, created_at')
+        .eq('project_id', pid)
+        .limit(500),
+      db
+        .from('graph_edges')
+        .select('id, edge_type, source_node_id, target_node_id')
+        .eq('project_id', pid)
+        .limit(1000),
+      db.from('project_settings').select('graph_backend').eq('project_id', pid).maybeSingle(),
+      db.rpc('mushi_age_available'),
+      db
+        .from('graph_nodes')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('age_synced_at', null),
+      db
+        .from('graph_edges')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('age_synced_at', null),
+      db
+        .from('graph_nodes')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const nodes = nodesRes.data ?? [];
+    const edges = edgesRes.data ?? [];
+    const nodeCount = nodes.length;
+    const edgeCount = edges.length;
+    const hasIngest = (reportCountRes.count ?? 0) > 0;
+    const reportNodes = nodes.filter((n) => n.node_type === 'report_group').length;
+    const inventoryNodes = nodes.filter((n) => INVENTORY_NODE_TYPES.includes(String(n.node_type))).length;
+
+    const componentIds = new Set(
+      nodes.filter((n) => n.node_type === 'component').map((n) => n.id),
+    );
+    const incomingAffects = new Map<string, number>();
+    let regressionEdges = 0;
+    let duplicateEdges = 0;
+    let fixVerifiedEdges = 0;
+    for (const e of edges) {
+      const et = String(e.edge_type ?? '');
+      if (et === 'regression_of') regressionEdges += 1;
+      else if (et === 'duplicate_of') duplicateEdges += 1;
+      else if (et === 'fix_verified') fixVerifiedEdges += 1;
+      else if (et === 'affects' && componentIds.has(String(e.target_node_id))) {
+        incomingAffects.set(
+          String(e.target_node_id),
+          (incomingAffects.get(String(e.target_node_id)) ?? 0) + 1,
+        );
+      }
+    }
+    let fragileComponents = 0;
+    for (const count of incomingAffects.values()) {
+      if (count >= 3) fragileComponents += 1;
+    }
+
+    let topPriority: typeof empty.topPriority = 'waiting_ingest';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!hasIngest) {
+      topPriority = 'waiting_ingest';
+      topPriorityLabel = 'No reports ingested — graph seeds from classified bug reports';
+      topPriorityTo = '/onboarding?tab=verify';
+    } else if (nodeCount === 0) {
+      topPriority = 'empty';
+      topPriorityLabel = 'Reports ingested but graph empty — classifier may still be indexing';
+      topPriorityTo = '/reports?tab=queue';
+    } else if (fragileComponents > 0) {
+      topPriority = 'fragile';
+      topPriorityLabel = `${fragileComponents} fragile component${fragileComponents === 1 ? '' : 's'} (≥3 incoming affects edges)`;
+      topPriorityTo = '/graph?view=fragile';
+    } else if (regressionEdges > 0) {
+      topPriority = 'regressions';
+      topPriorityLabel = `${regressionEdges} regression edge${regressionEdges === 1 ? '' : 's'} — bugs that came back after a fix`;
+      topPriorityTo = '/graph?view=regressions';
+    } else {
+      topPriority = 'clear';
+      topPriorityLabel = `${nodeCount} nodes · ${edgeCount} edges — map is current`;
+      topPriorityTo = '/graph';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        hasIngest,
+        nodeCount,
+        edgeCount,
+        reportNodes,
+        inventoryNodes,
+        fragileComponents,
+        regressionEdges,
+        duplicateEdges,
+        fixVerifiedEdges,
+        lastNodeAt: latestNodeRes.data?.created_at ?? null,
+        graphBackend: settingsRes.data?.graph_backend ?? 'sql_only',
+        ageAvailable: ageAvailRes.data === true,
+        unsyncedNodes: unsyncedNodesRes.count ?? 0,
+        unsyncedEdges: unsyncedEdgesRes.count ?? 0,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
 
   app.get('/v1/admin/graph/nodes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;

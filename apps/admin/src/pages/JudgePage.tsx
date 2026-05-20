@@ -1,5 +1,5 @@
-import { useCallback, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useMergedErrors } from '../lib/useMergedErrors'
@@ -220,6 +220,8 @@ function ScorePill({ value }: { value: number | null }) {
 }
 
 export function JudgePage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const disagreementOnly = searchParams.get('filter') === 'disagreement'
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
@@ -255,8 +257,16 @@ export function JudgePage() {
   const distQuery = usePageData<Distribution>('/v1/admin/judge/distribution')
 
   const weeks = weeksQuery.data?.weeks ?? []
-  const evals = evalsQuery.data?.evaluations ?? []
+  const evalsRaw = evalsQuery.data?.evaluations ?? []
+  const evals = useMemo(
+    () =>
+      disagreementOnly
+        ? evalsRaw.filter((e) => e.classification_agreed === false)
+        : evalsRaw,
+    [evalsRaw, disagreementOnly],
+  )
   const prompts = promptsQuery.data?.prompts ?? []
+
   const dist = distQuery.data ?? null
   // Single source of truth for first-paint loading + error gating across
   // the four panels of this page Background refetches
@@ -296,6 +306,15 @@ export function JudgePage() {
       setRunResult({ tone: 'error', message, at })
     }
   }
+
+  const runAction = searchParams.get('action')
+  useEffect(() => {
+    if (runAction !== 'run' || running) return
+    void runNow()
+    const next = new URLSearchParams(searchParams)
+    next.delete('action')
+    setSearchParams(next, { replace: true })
+  }, [runAction, running, searchParams, setSearchParams])
 
   // Publish page context so the browser tab reflects the latest judge
   // week score (e.g. "Judge · 65% this week — Mushi Mushi") and the
@@ -342,8 +361,8 @@ export function JudgePage() {
   // Shared inputs for the hero + action bar — kept as plain consts so the
   // NBA hook is only called once per render (react-hooks/exhaustive-deps
   // stays happy and downstream widgets read a single source of truth).
-  const disagreementRate = evals.length > 0
-    ? evals.filter((e) => e.classification_agreed === false).length / evals.length
+  const disagreementRate = evalsRaw.length > 0
+    ? evalsRaw.filter((e) => e.classification_agreed === false).length / evalsRaw.length
     : null
   const staleHoursAgo = evals[0]?.created_at
     ? Math.floor((Date.now() - new Date(evals[0].created_at).getTime()) / 3_600_000)
@@ -351,7 +370,7 @@ export function JudgePage() {
   const heroAction = useNextBestAction({
     scope: 'judge',
     disagreementRate,
-    sampledCount: evals.length,
+    sampledCount: evalsRaw.length,
     staleHoursAgo,
   })
   const overallScore = latest?.avg_score
@@ -548,12 +567,6 @@ export function JudgePage() {
                   onRangeSelect={
                     trendTimestamps.every(Boolean)
                       ? ({ fromIso, toIso }) => {
-                          // Deep-link to the evaluations table scoped to the
-                          // brushed window. Downstream consumers read `from`
-                          // and `to` off the search params (Wave T.4.7b
-                          // contract). We use `navigate` instead of setSearchParams
-                          // so the URL change is a proper history entry users
-                          // can navigate away from with the back button.
                           const next = new URLSearchParams(window.location.search)
                           next.set('from', fromIso)
                           next.set('to', toIso)
@@ -562,7 +575,13 @@ export function JudgePage() {
                       : undefined
                   }
                   accent="text-brand"
-                  height={42}
+                  height={72}
+                  showAxes
+                  scaleToData
+                  valueFormat="percent"
+                  yAxisCaption="Score"
+                  xAxisCaption="Week"
+                  showPeakLabel
                   ariaLabel="Weekly judge score trend"
                 />
                 {trendTimestamps.every(Boolean) && chartEvents.length > 0 && (
@@ -620,9 +639,13 @@ export function JudgePage() {
             <>
               <Histogram
                 buckets={dist.buckets}
-                labels={['0', '', '', '', '', '5', '', '', '', '10']}
+                labels={['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']}
                 accent="bg-brand/70"
-                height={90}
+                height={100}
+                showAxes
+                valueFormat="count"
+                yAxisCaption="Evals"
+                xAxisCaption="Score (0–10)"
               />
               <p className="text-2xs text-fg-faint mt-2">
                 {dist.total} evals · 0–100 scale, deciles
@@ -717,6 +740,21 @@ export function JudgePage() {
         title="Recent evaluations"
         action={
           <div className="flex flex-wrap items-center gap-1.5">
+            {disagreementOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams)
+                  next.delete('filter')
+                  setSearchParams(next, { replace: true })
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-2xs rounded-sm border border-warn/40 bg-warn/10 text-warn hover:bg-warn/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warn/60"
+                aria-label="Clear disagreement filter"
+              >
+                <span>Disagreements only</span>
+                <span aria-hidden="true">×</span>
+              </button>
+            )}
             {promptFilter && (
               <button
                 type="button"

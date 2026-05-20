@@ -1,10 +1,9 @@
 /**
  * FILE: apps/admin/src/components/intelligence/IntelligenceReportCard.tsx
- * PURPOSE: Single weekly report card. Stats strip + collapsible markdown
- *          summary + PDF download. Pure presentation.
+ * PURPOSE: Single weekly report card with stats strip + collapsible summary.
  */
 
-import { Card, Btn, Pct } from '../ui'
+import { Card, Btn, Badge, Pct, RelativeTime } from '../ui'
 import type { IntelligenceReport } from './types'
 
 interface Props {
@@ -15,37 +14,37 @@ interface Props {
 export function IntelligenceReportCard({ report, onDownload }: Props) {
   const completionRate = report.stats?.fixes?.completionRate
   const completionPct = completionRate != null ? completionRate * 100 : null
+  const topCategory = topEntry(report.stats?.reports?.byCategory)
+  const topSeverity = topEntry(report.stats?.reports?.bySeverity)
+
   return (
-    <Card className="p-3">
-      <div className="flex items-baseline justify-between gap-3 mb-2">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <span className="text-xs font-medium text-fg">Week of {report.week_start}</span>
-          <span className="text-2xs text-fg-faint">{report.generated_by}</span>
+    <Card className="p-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-fg">Week of {report.week_start}</span>
+          <Badge className="bg-surface-raised text-fg-secondary">{report.generated_by}</Badge>
           {report.benchmarks?.optedIn && (
-            <span className="text-2xs text-ok">benchmarks ✓</span>
+            <Badge className="bg-ok-muted text-ok">Benchmarks</Badge>
           )}
+          <span className="text-2xs text-fg-faint">
+            Generated <RelativeTime value={report.created_at} />
+          </span>
         </div>
-        <div className="flex gap-1.5">
-          <Btn size="sm" variant="ghost" onClick={onDownload}>
-            Download PDF
-          </Btn>
-        </div>
+        <Btn size="sm" variant="ghost" onClick={onDownload}>
+          Open / Print PDF
+        </Btn>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 rounded-md border border-edge-subtle/55 bg-surface-overlay/25 p-2">
+      <div className="mb-3 grid grid-cols-2 gap-2 rounded-md border border-edge-subtle bg-surface-raised/25 p-2 sm:grid-cols-4">
         <Stat label="Reports" value={report.stats?.reports?.total?.toLocaleString() ?? '—'} />
         <Stat label="Fix attempts" value={report.stats?.fixes?.total?.toLocaleString() ?? '—'} />
-        <div
-          className="md:border-l md:border-edge-subtle/45 md:pl-2"
-          title="Share of fix attempts that finished without errors this week. Higher is healthier."
-        >
+        <div title="Share of fix attempts that finished without errors this week.">
           <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint">Completion</div>
           <div className="mt-0.5 font-mono tabular-nums">
             <Pct value={completionPct} precision={0} direction="higher-better" />
           </div>
         </div>
         <Stat
-          divider
           label="Avg fix"
           value={
             report.stats?.fixes?.avgDurationSeconds != null && report.stats.fixes.avgDurationSeconds > 0
@@ -55,23 +54,45 @@ export function IntelligenceReportCard({ report, onDownload }: Props) {
         />
       </div>
 
+      {(topCategory || topSeverity || report.llm_model) && (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {topCategory && (
+            <Badge className="bg-info-muted text-info">Top category: {topCategory}</Badge>
+          )}
+          {topSeverity && (
+            <Badge className="bg-warn-muted text-warn">Top severity: {topSeverity}</Badge>
+          )}
+          {report.llm_model && (
+            <span className="font-mono text-3xs text-fg-faint">{report.llm_model}</span>
+          )}
+        </div>
+      )}
+
       <details className="group">
         <summary className="cursor-pointer text-2xs text-fg-muted hover:text-fg-secondary">
-          Read summary
+          Read AI summary
         </summary>
-        <div className="mt-2 p-2 rounded-sm bg-surface-raised/50 border border-edge-subtle text-xs text-fg-secondary whitespace-pre-wrap leading-relaxed">
-          {report.summary_md}
+        <div className="mt-2 whitespace-pre-wrap rounded-md border border-edge-subtle bg-surface-raised/50 p-3 text-xs leading-relaxed text-fg-secondary">
+          {report.summary_md || 'No summary text was captured for this report.'}
         </div>
       </details>
     </Card>
   )
 }
 
-function Stat({ label, value, divider }: { label: string; value: string; divider?: boolean }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className={divider ? 'md:border-l md:border-edge-subtle/45 md:pl-2' : undefined}>
+    <div>
       <div className="text-3xs font-medium uppercase tracking-wider text-fg-faint">{label}</div>
-      <div className="mt-0.5 text-sm text-fg font-mono tabular-nums">{value}</div>
+      <div className="mt-0.5 font-mono text-sm tabular-nums text-fg">{value}</div>
     </div>
   )
+}
+
+function topEntry(map: Record<string, number> | undefined): string | null {
+  if (!map) return null
+  const entries = Object.entries(map).filter(([, v]) => v > 0)
+  if (entries.length === 0) return null
+  entries.sort((a, b) => b[1] - a[1])
+  return entries[0]?.[0] ?? null
 }

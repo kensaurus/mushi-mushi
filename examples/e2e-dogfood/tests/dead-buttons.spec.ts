@@ -43,7 +43,7 @@ const PAGES_UNDER_TEST = [
   '/graph',
   '/intelligence',
   '/prompt-lab',
-  '/integrations',
+  '/integrations/config',
   '/mcp',
   '/billing',
   '/compliance',

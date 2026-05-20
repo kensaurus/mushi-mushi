@@ -26,6 +26,7 @@ import { PageHeader, Card, Btn, Skeleton } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
 import { SetupChecklist } from '../SetupChecklist'
 import { useActiveProjectId } from '../ProjectSwitcher'
+import { FeedbackHubStrip } from '../support/FeedbackHubStrip'
 
 interface LoopStage {
   id: PdcaStageId
@@ -35,7 +36,7 @@ interface LoopStage {
   status?: string
 }
 
-export function GettingStartedEmpty() {
+export function GettingStartedEmpty({ embedded = false }: { embedded?: boolean }) {
   const navigate = useNavigate()
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
@@ -81,10 +82,12 @@ export function GettingStartedEmpty() {
 
   return (
     <div>
-      <PageHeader
-        title="Welcome to Mushi Mushi"
-        description="Run your first user-felt-bug PDCA loop. Four stages, one closed loop."
-      />
+      {!embedded && (
+        <PageHeader
+          title="Welcome to Mushi Mushi"
+          description="Run your first user-felt-bug PDCA loop. Four stages, one closed loop."
+        />
+      )}
 
       <SetupChecklist
         project={project}
@@ -92,6 +95,8 @@ export function GettingStartedEmpty() {
         onRefresh={setup.reload}
         adminEndpointHost={setup.data?.admin_endpoint_host ?? null}
       />
+
+      {!embedded && <FeedbackHubStrip className="mt-4" />}
 
       <FirstLoopPanel stages={stages} project={project} />
 
@@ -153,7 +158,7 @@ function buildStages(args: BuildStageArgs): LoopStage[] {
       id: 'do',
       cta: hasReports
         ? { to: '/reports', label: 'Open Reports', primary: true }
-        : { to: '/integrations', label: 'Connect GitHub & Anthropic', primary: false },
+        : { to: '/integrations/config', label: 'Connect GitHub & Anthropic', primary: false },
       state: hasFix ? 'done' : hasReports ? 'active' : 'next',
       status: hasReports
         ? 'Open the latest report and click "Dispatch fix" to draft a PR on a feature branch.'
@@ -172,8 +177,8 @@ function buildStages(args: BuildStageArgs): LoopStage[] {
     {
       id: 'act',
       cta: hasMerged
-        ? { to: '/integrations', label: 'See routing destinations', primary: true }
-        : { to: '/integrations', label: 'Set up routing', primary: false },
+        ? { to: '/integrations/config', label: 'See routing destinations', primary: true }
+        : { to: '/integrations/config', label: 'Set up routing', primary: false },
       state: hasMerged ? 'done' : 'next',
       status: hasMerged
         ? 'Loop closed. Merged fixes flow back to Sentry, Slack, and your CI automatically.'

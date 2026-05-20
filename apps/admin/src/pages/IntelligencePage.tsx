@@ -1,20 +1,33 @@
 /**
  * FILE: apps/admin/src/pages/IntelligencePage.tsx
  * PURPOSE: V5.3 §2.16 — weekly LLM-authored bug intelligence digests.
- *          Page-level orchestration only — data load, polling, mutation
- *          handlers. Visual pieces live in components/intelligence/* so the
- *          job card, modernization findings, opt-in toggle, and report card
- *          can each evolve in isolation.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { apiFetch, apiFetchRaw } from '../lib/supabase'
-import { PageHeader, PageHelp, Card, Btn, ErrorAlert, EmptyState } from '../components/ui'
+import { usePageData } from '../lib/usePageData'
+import { useRealtimeReload } from '../lib/realtime'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { SetupNudge } from '../components/SetupNudge'
+import {
+  PageHeader,
+  PageHelp,
+  Card,
+  Section,
+  Btn,
+  ErrorAlert,
+  EmptyState,
+  StatCard,
+  SegmentedControl,
+} from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import {
   ActiveJobCard,
   LastFailureNote,
+  PipelineStatusBanner,
   RecentJobsList,
 } from '../components/intelligence/IntelligenceJobs'
 import { BenchmarkOptInCard } from '../components/intelligence/BenchmarkOptInCard'
@@ -23,9 +36,11 @@ import { IntelligenceReportCard } from '../components/intelligence/IntelligenceR
 import { PageActionBar } from '../components/PageActionBar'
 import { useNextBestAction } from '../lib/useNextBestAction'
 import { PageHero } from '../components/PageHero'
+import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
+import { IconSparkle } from '../components/icons'
 import type {
   BenchmarkSettings,
   IntelligenceJob,
@@ -33,67 +48,161 @@ import type {
   ModernizationFinding,
 } from '../components/intelligence/types'
 
+type TabId = 'overview' | 'reports' | 'pipeline'
+
+const TABS: Array<{ id: TabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'This week\'s narrative, pipeline health, and benchmarking opt-in.',
+  },
+  {
+    id: 'reports',
+    label: 'Reports',
+    description: 'Archived weekly digests with stats and exportable summaries.',
+  },
+  {
+    id: 'pipeline',
+    label: 'Pipeline',
+    description: 'Generation job history and pending library modernization findings.',
+  },
+]
+
+function isTabId(v: string | null): v is TabId {
+  return TABS.some((t) => t.id === v)
+}
+
 export function IntelligencePage() {
-  const [reports, setReports] = useState<IntelligenceReport[]>([])
-  const [jobs, setJobs] = useState<IntelligenceJob[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [benchmark, setBenchmark] = useState<BenchmarkSettings>({ optIn: false, optInAt: null })
-  const [findings, setFindings] = useState<ModernizationFinding[]>([])
-  const [dispatchingId, setDispatchingId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const param = searchParams.get('tab')
+  const activeTab: TabId = isTabId(param) ? param : 'overview'
+  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+
+  const activeProjectId = useActiveProjectId()
+  const setup = useSetupStatus(activeProjectId)
+  const projectName = setup.activeProject?.project_name ?? null
+
   const toast = useToast()
-  const pollRef = useRef<number | null>(null)
   const entitlements = useEntitlements()
   const intelligenceUnlocked = entitlements.has('intelligence_reports')
 
-  const fetchData = useCallback(async () => {
-    setError(false)
-    const [reportsRes, settingsRes, jobsRes, findingsRes] = await Promise.all([
-      apiFetch<{ reports: IntelligenceReport[] }>('/v1/admin/intelligence'),
-      apiFetch<{ benchmarking_optin?: boolean; benchmarking_optin_at?: string | null }>('/v1/admin/settings'),
-      apiFetch<{ jobs: IntelligenceJob[] }>('/v1/admin/intelligence/jobs'),
-      apiFetch<{ findings: ModernizationFinding[] }>('/v1/admin/modernization?status=pending'),
-    ])
-    if (reportsRes.ok && reportsRes.data) setReports(reportsRes.data.reports)
-    else setError(true)
-    if (settingsRes.ok && settingsRes.data) {
+  const [generating, setGenerating] = useState(false)
+  const [benchmark, setBenchmark] = useState<BenchmarkSettings>({ optIn: false, optInAt: null })
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null)
+
+  const reportsPath = activeProjectId ? '/v1/admin/intelligence' : null
+  const jobsPath = activeProjectId ? '/v1/admin/intelligence/jobs' : null
+  const findingsPath = activeProjectId ? '/v1/admin/modernization?status=pending' : null
+
+  const {
+    data: reportsPayload,
+    loading: reportsLoading,
+    error: reportsError,
+    reload: reloadReports,
+    lastFetchedAt,
+    isValidating,
+  } = usePageData<{ reports: IntelligenceReport[] }>(reportsPath, { deps: [activeProjectId] })
+
+  const {
+    data: jobsPayload,
+    loading: jobsLoading,
+    error: jobsError,
+    reload: reloadJobs,
+  } = usePageData<{ jobs: IntelligenceJob[] }>(jobsPath, { deps: [activeProjectId] })
+
+  const {
+    data: findingsPayload,
+    loading: findingsLoading,
+    reload: reloadFindings,
+  } = usePageData<{ findings: ModernizationFinding[] }>(findingsPath, { deps: [activeProjectId] })
+
+  const { data: settingsPayload } = usePageData<{
+    benchmarking_optin?: boolean
+    benchmarking_optin_at?: string | null
+  }>('/v1/admin/settings')
+
+  useEffect(() => {
+    if (settingsPayload) {
       setBenchmark({
-        optIn: settingsRes.data.benchmarking_optin === true,
-        optInAt: settingsRes.data.benchmarking_optin_at ?? null,
+        optIn: settingsPayload.benchmarking_optin === true,
+        optInAt: settingsPayload.benchmarking_optin_at ?? null,
       })
     }
-    if (jobsRes.ok && jobsRes.data) setJobs(jobsRes.data.jobs)
-    if (findingsRes.ok && findingsRes.data) setFindings(findingsRes.data.findings)
-    setLoading(false)
-  }, [])
+  }, [settingsPayload])
+
+  const reloadAll = useCallback(() => {
+    reloadReports()
+    reloadJobs()
+    reloadFindings()
+  }, [reloadReports, reloadJobs, reloadFindings])
+
+  useRealtimeReload(
+    ['intelligence_reports', 'intelligence_generation_jobs', 'modernization_findings'],
+    reloadAll,
+  )
+
+  const reports = reportsPayload?.reports ?? []
+  const jobs = jobsPayload?.jobs ?? []
+  const findings = findingsPayload?.findings ?? []
+
+  const activeJob = jobs.find((j) => j.status === 'queued' || j.status === 'running') ?? null
+  const lastFailed = jobs.find((j) => j.status === 'failed') ?? null
+  const recentJobs = jobs.slice(0, 8)
+
+  const loading = reportsLoading || jobsLoading
+  const fetchError = reportsError ?? jobsError
 
   useEffect(() => {
-    void fetchData()
-  }, [fetchData])
+    if (!activeJob) return
+    const id = window.setInterval(() => {
+      reloadJobs()
+      reloadReports()
+    }, 3000)
+    return () => clearInterval(id)
+  }, [activeJob, reloadJobs, reloadReports])
 
-  // Auto-poll while any job is queued/running so the progress card stays
-  // honest. Stop polling when nothing is in flight to avoid wasted requests.
-  useEffect(() => {
-    const inFlight = jobs.some((j) => j.status === 'queued' || j.status === 'running')
-    if (!inFlight) {
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
-      }
+  const setTab = useCallback((tab: TabId) => {
+    const next = new URLSearchParams(searchParams)
+    if (tab === 'overview') next.delete('tab')
+    else next.set('tab', tab)
+    setSearchParams(next, { replace: true, preventScrollReset: true })
+  }, [searchParams, setSearchParams])
+
+  const generateNow = async () => {
+    if (!activeProjectId) {
+      toast.error('Select a project first')
       return
     }
-    if (pollRef.current) return
-    pollRef.current = window.setInterval(() => {
-      void fetchData()
-    }, 3000)
-    return () => {
-      if (pollRef.current) {
-        clearInterval(pollRef.current)
-        pollRef.current = null
+    setGenerating(true)
+    try {
+      const res = await apiFetch<{ jobId: string; deduplicated?: boolean }>(
+        '/v1/admin/intelligence',
+        { method: 'POST' },
+      )
+      if (res.ok && res.data) {
+        if (res.data.deduplicated) {
+          toast.push({ tone: 'info', message: 'A generation job is already running for this project' })
+        } else {
+          toast.push({ tone: 'success', message: 'Generation started — watch the progress card below' })
+        }
+      } else {
+        toast.push({ tone: 'error', message: res.error?.message ?? 'Failed to enqueue job' })
       }
+      reloadAll()
+    } finally {
+      setGenerating(false)
     }
-  }, [jobs, fetchData])
+  }
+
+  const cancelJob = async (id: string) => {
+    const res = await apiFetch(`/v1/admin/intelligence/jobs/${id}/cancel`, { method: 'POST' })
+    if (res.ok) {
+      toast.push({ tone: 'info', message: 'Job cancelled' })
+      reloadAll()
+    } else {
+      toast.push({ tone: 'error', message: res.error?.message ?? 'Cancel failed' })
+    }
+  }
 
   const dispatchFinding = async (id: string) => {
     setDispatchingId(id)
@@ -103,8 +212,8 @@ export function IntelligencePage() {
         { method: 'POST' },
       )
       if (res.ok) {
-        toast.push({ tone: 'success', message: 'Modernization fix dispatched — track on Fixes page' })
-        await fetchData()
+        toast.push({ tone: 'success', message: 'Modernization fix dispatched — track on Fixes' })
+        reloadFindings()
       } else {
         toast.push({ tone: 'error', message: res.error?.message ?? 'Dispatch failed' })
       }
@@ -116,42 +225,10 @@ export function IntelligencePage() {
   const dismissFinding = async (id: string) => {
     const res = await apiFetch(`/v1/admin/modernization/${id}/dismiss`, { method: 'POST' })
     if (res.ok) {
-      setFindings((prev) => prev.filter((f) => f.id !== id))
-      toast.push({ tone: 'info', message: 'Dismissed' })
+      toast.push({ tone: 'info', message: 'Finding dismissed' })
+      reloadFindings()
     } else {
       toast.push({ tone: 'error', message: res.error?.message ?? 'Dismiss failed' })
-    }
-  }
-
-  const generateNow = async () => {
-    setGenerating(true)
-    try {
-      const res = await apiFetch<{ jobId: string; deduplicated?: boolean }>(
-        '/v1/admin/intelligence',
-        { method: 'POST' },
-      )
-      if (res.ok && res.data) {
-        if (res.data.deduplicated) {
-          toast.push({ tone: 'info', message: 'A generation job is already running' })
-        } else {
-          toast.push({ tone: 'success', message: 'Generation started — watch the progress card below' })
-        }
-      } else {
-        toast.push({ tone: 'error', message: res.error?.message ?? 'Failed to enqueue job' })
-      }
-      await fetchData()
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  const cancelJob = async (id: string) => {
-    const res = await apiFetch(`/v1/admin/intelligence/jobs/${id}/cancel`, { method: 'POST' })
-    if (res.ok) {
-      toast.push({ tone: 'info', message: 'Job cancelled' })
-      await fetchData()
-    } else {
-      toast.push({ tone: 'error', message: res.error?.message ?? 'Cancel failed' })
     }
   }
 
@@ -198,54 +275,101 @@ export function IntelligencePage() {
     }
   }
 
-  const activeJob = jobs.find((j) => j.status === 'queued' || j.status === 'running')
-  const recentJobs = jobs.slice(0, 5)
-
-  usePublishPageContext({
-    route: '/intelligence',
-    title: 'Intelligence',
-    summary: loading
-      ? 'Loading digests…'
-      : activeJob
-        ? `Generating this week · ${activeJob.status}`
-        : reports.length === 0
-          ? 'No digests yet'
-          : `${reports.length} digest${reports.length === 1 ? '' : 's'}${findings.length > 0 ? ` · ${findings.length} modernization finding${findings.length === 1 ? '' : 's'}` : ''}`,
-    criticalCount: findings.length,
-  })
-
-  // IA-4 (Wave S): derive hero inputs once so the Decide / Act / Verify
-  // tiles and the PageActionBar share the same rule engine state. Done
-  // at the top of the render body to keep `useNextBestAction` unconditional.
   const lastDigestHoursAgo = reports[0]?.created_at
     ? Math.floor((Date.now() - new Date(reports[0].created_at).getTime()) / 3_600_000)
     : null
+
+  usePublishPageContext({
+    route: '/intelligence',
+    title: `${activeMeta.label} · Intelligence`,
+    summary: activeMeta.description,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount: findings.length,
+  })
+
   const intelligenceAction = useNextBestAction({
     scope: 'intelligence',
     lastDigestHoursAgo,
     topCategory: null,
     weekReports: reports.length,
   })
+
   const intelligenceSeverity: 'ok' | 'info' | 'warn' =
-    lastDigestHoursAgo == null || lastDigestHoursAgo > 7 * 24
-      ? 'warn'
-      : findings.length > 0
-        ? 'info'
-        : 'ok'
+    activeJob
+      ? 'info'
+      : lastDigestHoursAgo == null || lastDigestHoursAgo > 7 * 24
+        ? 'warn'
+        : findings.length > 0
+          ? 'info'
+          : 'ok'
+
+  const tabOptions = useMemo(() => [
+    { id: 'overview' as const, label: 'Overview' },
+    { id: 'reports' as const, label: 'Reports', count: reports.length },
+    { id: 'pipeline' as const, label: 'Pipeline', count: findings.length + (activeJob ? 1 : 0) },
+  ], [reports.length, findings.length, activeJob])
+
+  const totalFixAttempts = reports.reduce((sum, r) => sum + (r.stats?.fixes?.total ?? 0), 0)
+
+  const decideDebugLines: OperatorTraceLine[] = [
+    {
+      level: 'debug',
+      source: 'pipeline',
+      message: `reports=${reports.length} findings=${findings.length} fixAttempts=${totalFixAttempts}`,
+    },
+    ...(activeJob
+      ? [
+          {
+            level: 'info' as const,
+            source: 'job.active',
+            message: `${activeJob.status} · ${activeJob.id.slice(0, 8)}…`,
+            ts: activeJob.started_at ?? activeJob.created_at,
+          },
+          {
+            level: 'debug' as const,
+            source: 'job.trigger',
+            message: activeJob.trigger,
+          },
+        ]
+      : []),
+    ...(lastFailed && !activeJob
+      ? [
+          {
+            level: 'error' as const,
+            source: 'job.last_fail',
+            message: lastFailed.error ?? 'Generation failed',
+            ts: lastFailed.finished_at ?? lastFailed.created_at,
+          },
+        ]
+      : []),
+  ]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="Bug Intelligence"
         description="Aggregate signals across reports — hotspot components, regression patterns, and shifting severity trends."
       >
         <Btn
-          onClick={generateNow}
-          disabled={generating || !!activeJob || (!intelligenceUnlocked && !entitlements.loading)}
+          variant="primary"
+          onClick={() => void generateNow()}
+          disabled={
+            !activeProjectId ||
+            generating ||
+            !!activeJob ||
+            (!intelligenceUnlocked && !entitlements.loading)
+          }
           loading={generating || !!activeJob}
-          title={!intelligenceUnlocked && !entitlements.loading ? 'Locked on your current plan' : undefined}
+          leadingIcon={<IconSparkle className="h-3.5 w-3.5" aria-hidden="true" />}
+          title={
+            !activeProjectId
+              ? 'Select a project first'
+              : !intelligenceUnlocked && !entitlements.loading
+                ? 'Locked on your current plan'
+                : undefined
+          }
         >
-          {activeJob ? 'Generating' : 'Generate this week'}
+          {activeJob ? 'Generating…' : 'Generate this week'}
         </Btn>
       </PageHeader>
 
@@ -260,18 +384,15 @@ export function IntelligencePage() {
               : lastDigestHoursAgo > 7 * 24
                 ? `Last digest ${Math.floor(lastDigestHoursAgo / 24)}d ago`
                 : `${reports.length} digest${reports.length === 1 ? '' : 's'} on file`,
-          metric:
-            findings.length > 0
-              ? `${findings.length} finding${findings.length === 1 ? '' : 's'}`
-              : `${reports.length}`,
+          metric: findings.length > 0 ? `${findings.length} finding${findings.length === 1 ? '' : 's'}` : `${reports.length}`,
           summary:
-            lastDigestHoursAgo == null
-              ? 'Generate the first digest to seed trend analysis.'
-              : lastDigestHoursAgo > 7 * 24
-                ? 'Weekly digests drift without a fresh run — Monday cron may be paused.'
+            activeJob
+              ? 'A digest job is running — results land in Reports when complete.'
+              : lastDigestHoursAgo == null
+                ? 'Generate the first digest to seed trend analysis.'
                 : findings.length > 0
-                  ? 'Modernization findings are waiting for triage below.'
-                  : 'This week\u2019s digest is fresh. Check hotspots and category drift.',
+                  ? 'Modernization findings are waiting for triage in Pipeline.'
+                  : 'This week\'s digest is fresh. Check hotspots and category drift.',
           severity: intelligenceSeverity,
           anchor: 'intelligence:decide',
           evidence: {
@@ -279,23 +400,27 @@ export function IntelligencePage() {
             items: [
               { label: 'Digests', value: reports.length, tone: reports.length === 0 ? 'neutral' : 'ok' },
               { label: 'Findings', value: findings.length, tone: findings.length > 0 ? 'warn' : 'ok' },
-              ...(lastDigestHoursAgo != null
-                ? [{ label: 'Last digest', value: `${Math.round(lastDigestHoursAgo)}h ago`, tone: lastDigestHoursAgo > 7 * 24 ? 'warn' as const : 'ok' as const }]
-                : []),
+              { label: 'Jobs', value: jobs.length, tone: activeJob ? 'info' : 'neutral' },
             ],
           },
           missingConfigIds: lastDigestHoursAgo == null ? ['intelligence.benchmarking_optin'] : [],
+          debugLines: decideDebugLines,
         }}
         act={intelligenceAction}
         actAnchor="intelligence:act"
         actEvidence={intelligenceAction ? { kind: 'rule-trace', why: intelligenceAction.reason ?? intelligenceAction.title } : undefined}
+        actDebugLines={
+          intelligenceAction
+            ? [{ level: 'debug', source: 'nba', message: `tone=${intelligenceAction.tone}` }]
+            : undefined
+        }
         verify={{
           label: 'Latest report',
           detail: reports[0]
             ? `${new Date(reports[0].created_at).toLocaleDateString()} · ${reports[0].week_start ?? 'week unknown'}`
             : 'no reports yet',
-          to: '/intelligence#reports',
-          secondaryTo: activeJob ? '/intelligence#job' : undefined,
+          to: '/intelligence?tab=reports',
+          secondaryTo: activeJob ? '/intelligence?tab=pipeline' : undefined,
           secondaryLabel: activeJob ? 'View active job' : undefined,
           anchor: 'intelligence:verify',
           evidence: reports[0] ? {
@@ -305,6 +430,9 @@ export function IntelligencePage() {
             payloadSummary: `Week of ${reports[0].week_start ?? 'unknown'} · ${findings.length} finding${findings.length === 1 ? '' : 's'}`,
             status: 'ok',
           } : undefined,
+          debugLines: reports[0]
+            ? [{ level: 'debug', source: 'report.id', message: reports[0].id }]
+            : undefined,
         }}
       />
 
@@ -318,107 +446,171 @@ export function IntelligencePage() {
           'Spot regressions early — week-over-week category and severity drift',
           'Compare your fix velocity against anonymised industry benchmarks (opt-in)',
         ]}
-        howToUse="Reports are generated automatically every Monday by cron. Click Generate to run for the current week — the job runs in the background and the progress card below stays live. If a job is wedged you can cancel it."
+        howToUse="Reports generate automatically every Monday by cron. Click Generate to run for the current project — the job runs in the background and Pipeline shows live status."
       />
 
       {!intelligenceUnlocked && !entitlements.loading && (
         <UpgradePrompt flag="intelligence_reports" currentPlan={entitlements.planName} />
       )}
 
-      <ThisWeekNarrative
-        latest={reports[0] ?? null}
-        loading={loading}
-        onGenerate={generateNow}
-        generating={generating || !!activeJob}
-      />
-
-      {activeJob && (
-        <div data-dav-anchor="intelligence:act">
-          <ActiveJobCard job={activeJob} onCancel={() => void cancelJob(activeJob.id)} />
+      <Section
+        title="Intelligence pipeline"
+        freshness={{ at: lastFetchedAt, isValidating }}
+      >
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard label="Digests" value={reports.length} />
+          <StatCard label="Pending findings" value={findings.length} accent={findings.length > 0 ? 'text-warn' : undefined} />
+          <StatCard
+            label="Fix attempts (all digests)"
+            value={totalFixAttempts}
+            hint="Sum of fix attempts across archived weekly digests"
+          />
+          <StatCard
+            label="Project"
+            value={projectName ?? '—'}
+            hint={activeProjectId ? 'Lists filter to the active project in the header' : 'Select a project to load intelligence data'}
+          />
         </div>
-      )}
 
-      {!activeJob && <LastFailureNote jobs={recentJobs} />}
-
-      <BenchmarkOptInCard benchmark={benchmark} onToggle={toggleOptIn} />
-
-      <div data-dav-anchor="intelligence:decide">
-        <ModernizationFindings
-          findings={findings}
-          dispatchingId={dispatchingId}
-          onDispatch={(id) => void dispatchFinding(id)}
-          onDismiss={(id) => void dismissFinding(id)}
-        />
-      </div>
-
-      <RecentJobsList jobs={recentJobs} />
-
-      {loading ? (
-        <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading intelligence reports" />
-      ) : error ? (
-        <ErrorAlert message="Failed to load intelligence reports." onRetry={fetchData} />
-      ) : reports.length === 0 ? (
-        <EmptyState
-          title="No intelligence reports yet"
-          description="Reports are generated weekly by the cron job. Click Generate above to produce one immediately."
-        />
-      ) : (
-        <div className="space-y-2" data-dav-anchor="intelligence:verify">
-          {reports.map((r) => (
-            <IntelligenceReportCard
-              key={r.id}
-              report={r}
-              onDownload={() => void downloadPdf(r.id, r.week_start)}
-            />
-          ))}
+        <div className="mb-4">
+          <PipelineStatusBanner
+            activeJob={activeJob}
+            lastFailed={lastFailed}
+            reportCount={reports.length}
+            projectName={projectName}
+            benchmarkOptIn={benchmark.optIn}
+          />
         </div>
-      )}
+
+        <SegmentedControl
+          value={activeTab}
+          onChange={(v) => setTab(v)}
+          options={tabOptions}
+          ariaLabel="Intelligence sections"
+          className="mb-4"
+        />
+
+        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+
+        {!activeProjectId ? (
+          <SetupNudge
+            requires={['project']}
+            emptyTitle="Select a project"
+            emptyDescription="Intelligence digests, jobs, and modernization findings are scoped to the active project. Pick one in the header."
+          />
+        ) : loading ? (
+          <TableSkeleton rows={4} columns={4} showFilters={false} label="Loading intelligence data" />
+        ) : fetchError ? (
+          <ErrorAlert message={fetchError} onRetry={reloadAll} />
+        ) : (
+          <>
+            {activeTab === 'overview' && (
+              <div className="space-y-4">
+                <ThisWeekNarrative latest={reports[0] ?? null} projectName={projectName} />
+                {activeJob && (
+                  <div data-dav-anchor="intelligence:act">
+                    <ActiveJobCard job={activeJob} onCancel={() => void cancelJob(activeJob.id)} />
+                  </div>
+                )}
+                {!activeJob && (
+                  <LastFailureNote
+                    jobs={recentJobs}
+                    onRetry={() => void generateNow()}
+                    retrying={generating}
+                  />
+                )}
+                <BenchmarkOptInCard benchmark={benchmark} onToggle={(v) => void toggleOptIn(v)} />
+              </div>
+            )}
+
+            {activeTab === 'reports' && (
+              <div className="space-y-3" data-dav-anchor="intelligence:verify">
+                {reports.length === 0 ? (
+                  <EmptyState
+                    title="No intelligence reports yet"
+                    description={
+                      projectName
+                        ? `No digests archived for ${projectName}. Generate this week or wait for Monday cron.`
+                        : 'Generate a weekly digest to see archived reports here.'
+                    }
+                    hints={[
+                      'Each digest includes report volume, fix velocity, and AI narrative',
+                      'Open / Print PDF exports via the browser print dialog',
+                      'Benchmark comparison requires opt-in on Overview',
+                    ]}
+                    action={
+                      <Btn
+                        size="sm"
+                        variant="primary"
+                        onClick={() => void generateNow()}
+                        disabled={generating || !!activeJob || !intelligenceUnlocked}
+                        loading={generating}
+                      >
+                        Generate this week
+                      </Btn>
+                    }
+                  />
+                ) : (
+                  reports.map((r) => (
+                    <IntelligenceReportCard
+                      key={r.id}
+                      report={r}
+                      onDownload={() => void downloadPdf(r.id, r.week_start)}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+
+            {activeTab === 'pipeline' && (
+              <div className="space-y-4" data-dav-anchor="intelligence:decide">
+                <ModernizationFindings
+                  findings={findings}
+                  dispatchingId={dispatchingId}
+                  projectName={projectName}
+                  loading={findingsLoading}
+                  onDispatch={(id) => void dispatchFinding(id)}
+                  onDismiss={(id) => void dismissFinding(id)}
+                />
+                <RecentJobsList jobs={recentJobs} projectName={projectName} loading={jobsLoading} />
+              </div>
+            )}
+          </>
+        )}
+      </Section>
     </div>
   )
 }
 
 interface ThisWeekNarrativeProps {
   latest: IntelligenceReport | null
-  loading: boolean
-  generating: boolean
-  onGenerate: () => void
+  projectName: string | null
 }
 
-// Surface the most-recent generated report as a one-paragraph "this week"
-// strip so the Intelligence page leads with insight, not a wall of buttons.
-// Falls back to NN/G-shape empty state (status + learning cue + CTA) when
-// no report exists yet. .
-function ThisWeekNarrative({ latest, loading, generating, onGenerate }: ThisWeekNarrativeProps) {
-  if (loading) return null
-
+function ThisWeekNarrative({ latest, projectName }: ThisWeekNarrativeProps) {
   if (!latest) {
     return (
-      <Card className="p-5 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-fg">This week</h3>
-          <p className="text-xs text-fg-muted mt-1 max-w-prose">
-            No intelligence digest has been generated yet. The cron writes one every Monday,
-            but you can fire one immediately to see this week's hotspots, fix velocity, and
-            severity drift in narrative form.
-          </p>
-        </div>
-        <div>
-          <Btn size="sm" variant="primary" onClick={onGenerate} disabled={generating} loading={generating}>
-            Generate this week
-          </Btn>
-        </div>
+      <Card className="p-4">
+        <h3 className="text-sm font-semibold text-fg">This week</h3>
+        <p className="mt-1 max-w-prose text-xs text-fg-muted">
+          {projectName
+            ? `No intelligence digest for ${projectName} yet. Monday cron writes automatically, or use Generate this week for an immediate run.`
+            : 'No intelligence digest yet. Generate one to see hotspots, fix velocity, and severity drift in narrative form.'}
+        </p>
       </Card>
     )
   }
 
   const headline = firstParagraph(latest.summary_md)
   return (
-    <Card className="p-5 space-y-4 border-brand/20 bg-brand/5">
-      <div className="flex items-baseline justify-between gap-2 flex-wrap">
+    <Card className="border-brand/20 bg-brand/5 p-4">
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold text-brand">Week of {latest.week_start}</h3>
-        <span className="text-3xs text-fg-faint font-mono">{latest.llm_model ?? ''}</span>
+        {latest.llm_model && (
+          <span className="font-mono text-3xs text-fg-faint">{latest.llm_model}</span>
+        )}
       </div>
-      <p className="text-xs text-fg-secondary leading-relaxed max-w-prose whitespace-pre-line">
+      <p className="max-w-prose text-xs leading-relaxed whitespace-pre-line text-fg-secondary">
         {headline}
       </p>
     </Card>

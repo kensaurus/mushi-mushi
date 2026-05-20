@@ -4,7 +4,8 @@
  *          Compact, dark-themed, data-dense design system components.
  */
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { PDCA_STAGES, PDCA_OVERVIEW_CHIP, chipForPath } from '../lib/pdca'
@@ -2502,15 +2503,75 @@ interface TooltipProps {
   side?: 'top' | 'bottom' | 'left' | 'right'
   /** When false, wraps are allowed — use under narrow headers where long tips would clip. */
   nowrap?: boolean
+  /** Render in document.body so tips escape overflow:hidden ancestors (e.g. React Flow). */
+  portal?: boolean
 }
 
-export function Tooltip({ content, children, side = 'top', nowrap = true }: TooltipProps) {
+const TOOLTIP_SURFACE =
+  'px-2.5 py-1.5 text-2xs font-medium text-fg bg-surface-overlay border border-edge-subtle rounded-md shadow-raised pointer-events-none tooltip-enter'
+
+export function Tooltip({
+  content,
+  children,
+  side = 'top',
+  nowrap = true,
+  portal = false,
+}: TooltipProps) {
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const anchorRef = useRef<HTMLSpanElement>(null)
+  const [portalStyle, setPortalStyle] = useState<React.CSSProperties>({})
+
+  const updatePortalPosition = useCallback(() => {
+    const el = anchorRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const gap = 8
+    switch (side) {
+      case 'bottom':
+        setPortalStyle({
+          position: 'fixed',
+          left: r.left + r.width / 2,
+          top: r.bottom + gap,
+          transform: 'translate(-50%, 0)',
+          zIndex: 10_000,
+        })
+        break
+      case 'left':
+        setPortalStyle({
+          position: 'fixed',
+          left: r.left - gap,
+          top: r.top + r.height / 2,
+          transform: 'translate(-100%, -50%)',
+          zIndex: 10_000,
+        })
+        break
+      case 'right':
+        setPortalStyle({
+          position: 'fixed',
+          left: r.right + gap,
+          top: r.top + r.height / 2,
+          transform: 'translate(0, -50%)',
+          zIndex: 10_000,
+        })
+        break
+      default:
+        setPortalStyle({
+          position: 'fixed',
+          left: r.left + r.width / 2,
+          top: r.top - gap,
+          transform: 'translate(-50%, -100%)',
+          zIndex: 10_000,
+        })
+    }
+  }, [side])
 
   const show = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    timeoutRef.current = setTimeout(() => setVisible(true), 400)
+    timeoutRef.current = setTimeout(() => {
+      if (portal) updatePortalPosition()
+      setVisible(true)
+    }, 400)
   }
   const hide = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
@@ -2522,6 +2583,17 @@ export function Tooltip({ content, children, side = 'top', nowrap = true }: Tool
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
   }, [])
 
+  useEffect(() => {
+    if (!visible || !portal) return
+    const reposition = () => updatePortalPosition()
+    window.addEventListener('scroll', reposition, true)
+    window.addEventListener('resize', reposition)
+    return () => {
+      window.removeEventListener('scroll', reposition, true)
+      window.removeEventListener('resize', reposition)
+    }
+  }, [visible, portal, updatePortalPosition])
+
   const positions = {
     top: 'bottom-full left-1/2 -translate-x-1/2 mb-1.5',
     bottom: 'top-full left-1/2 -translate-x-1/2 mt-1.5',
@@ -2529,8 +2601,24 @@ export function Tooltip({ content, children, side = 'top', nowrap = true }: Tool
     right: 'left-full top-1/2 -translate-y-1/2 ml-1.5',
   }
 
+  const wrapClass = nowrap ? 'whitespace-nowrap' : 'whitespace-normal text-left leading-snug'
+  const tooltipNode = visible ? (
+    <span
+      role="tooltip"
+      style={portal ? portalStyle : undefined}
+      className={
+        portal
+          ? `${TOOLTIP_SURFACE} max-w-[min(22rem,calc(100vw-1.5rem))] ${wrapClass}`
+          : `absolute ${positions[side]} z-[100] max-w-[min(18rem,calc(100vw-2rem))] ${TOOLTIP_SURFACE} ${wrapClass}`
+      }
+    >
+      {content}
+    </span>
+  ) : null
+
   return (
     <span
+      ref={anchorRef}
       className="relative inline-flex"
       onMouseEnter={show}
       onMouseLeave={hide}
@@ -2538,14 +2626,9 @@ export function Tooltip({ content, children, side = 'top', nowrap = true }: Tool
       onBlurCapture={hide}
     >
       {children}
-      {visible && (
-        <span
-          role="tooltip"
-          className={`absolute ${positions[side]} z-[100] max-w-[min(18rem,calc(100vw-2rem))] px-2 py-1 text-2xs font-medium text-fg bg-surface-overlay border border-edge-subtle rounded-sm shadow-raised pointer-events-none tooltip-enter ${nowrap ? 'whitespace-nowrap' : 'whitespace-normal text-left leading-snug'}`}
-        >
-          {content}
-        </span>
-      )}
+      {portal && tooltipNode && typeof document !== 'undefined'
+        ? createPortal(tooltipNode, document.body)
+        : tooltipNode}
     </span>
   )
 }

@@ -10,10 +10,16 @@
  *          admin sees.
  */
 
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
-import { Btn, Card, Input, PageHelp, ErrorAlert, ResultChip, type ResultChipTone, CopyButton } from '../components/ui'
+import { usePageData } from '../lib/usePageData'
+import { Btn, Card, Input, PageHelp, PageHeader, ErrorAlert, ResultChip, type ResultChipTone, CopyButton, Section, StatCard, SegmentedControl, Badge } from '../components/ui'
+import { OnboardingStatusBanner } from '../components/onboarding/OnboardingStatusBanner'
+import { EMPTY_ONBOARDING_STATS, type OnboardingStats, type OnboardingTabId } from '../components/onboarding/types'
+import { usePublishPageContext } from '../lib/pageContext'
+import { useRealtimeReload } from '../lib/realtime'
+import { PageHero } from '../components/PageHero'
 import { OnboardingSkeleton } from '../components/skeletons/OnboardingSkeleton'
 import { ConnectionStatus } from '../components/ConnectionStatus'
 import { SetupChecklist } from '../components/SetupChecklist'
@@ -34,12 +40,71 @@ interface ApiKey {
   prefix: string
 }
 
+const ONBOARDING_TABS: Array<{ id: OnboardingTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Setup posture, loop explainer, and what to do next on the active project.',
+  },
+  {
+    id: 'steps',
+    label: 'Steps',
+    description: 'Checklist with required + optional milestones — synced from live DB state.',
+  },
+  {
+    id: 'verify',
+    label: 'Verify',
+    description: 'API key mint, connection probe, and admin test-report submission.',
+  },
+  {
+    id: 'sdk',
+    label: 'SDK',
+    description: 'Install snippet and init copy — bookmark this tab after setup completes.',
+  },
+]
+
+function isOnboardingTab(value: string | null): value is OnboardingTabId {
+  return ONBOARDING_TABS.some((t) => t.id === value)
+}
+
 export function OnboardingPage() {
   const navigate = useNavigate()
   const toast = useToast()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/onboarding')
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab: OnboardingTabId = isOnboardingTab(tabParam) ? tabParam : 'overview'
+  const activeTabMeta = ONBOARDING_TABS.find((t) => t.id === activeTab) ?? ONBOARDING_TABS[0]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<OnboardingStats>('/v1/admin/onboarding/stats')
+  const stats = statsData ?? EMPTY_ONBOARDING_STATS
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    setup.reload()
+  }, [reloadStats, setup])
+
+  useRealtimeReload(['projects', 'project_api_keys', 'reports', 'fix_attempts'], reloadAll)
+
+  const setActiveTab = useCallback(
+    (id: OnboardingTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
 
   const [projectName, setProjectName] = useState('')
   const [apiKey, setApiKey] = useState<ApiKey | null>(null)
@@ -83,9 +148,6 @@ export function OnboardingPage() {
   // the app, so finished users had no way to look it up again. Instead we
   // render a "Setup complete" hero at the top so the page reads well in
   // both first-run and post-onboarding states.
-
-  if (setup.loading) return <OnboardingSkeleton />
-  if (setup.error) return <ErrorAlert message={setup.error} onRetry={setup.reload} />
 
   async function createProject() {
     setError('')
@@ -181,6 +243,7 @@ export function OnboardingPage() {
     if (res.ok) {
       toast.success('Test report sent', 'Look for it on the Reports page in a few seconds.')
       setup.reload()
+      reloadStats()
     } else {
       const msg = res.error?.message ?? 'Test report submission failed'
       setError(msg)
@@ -214,8 +277,106 @@ export function OnboardingPage() {
   // reference for fully onboarded users.
   const setupComplete = Boolean(project?.done && project.complete >= project.total)
 
+  const setupSeverity: 'ok' | 'warn' | 'neutral' | 'info' =
+    stats.setupDone ? 'ok' : stats.sdkHostMismatch ? 'warn' : !stats.hasAnyProject ? 'neutral' : 'info'
+
+  usePublishPageContext({
+    route: '/onboarding',
+    title: `${activeTabMeta.label} · Setup`,
+    summary: activeTabMeta.description,
+    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    criticalCount: stats.setupDone ? 0 : stats.requiredTotal - stats.requiredComplete,
+  })
+
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      {
+        id: 'steps' as const,
+        label: 'Steps',
+        count:
+          stats.requiredTotal - stats.requiredComplete > 0
+            ? stats.requiredTotal - stats.requiredComplete
+            : stats.stepsComplete > 0
+              ? stats.stepsComplete
+              : undefined,
+      },
+      {
+        id: 'verify' as const,
+        label: 'Verify',
+        count: stats.hasApiKey && stats.reportCount === 0 ? 1 : undefined,
+      },
+      { id: 'sdk' as const, label: 'SDK' },
+    ],
+    [stats],
+  )
+
+  if (setup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
+  if (setup.error) return <ErrorAlert message={setup.error} onRetry={reloadAll} />
+  if (statsError) return <ErrorAlert message={`Failed to load setup stats: ${statsError}`} onRetry={reloadAll} />
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <PageHeader
+        title={copy?.title ?? 'Setup'}
+        projectScope={stats.projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Create a project, mint an ingest key, verify the pipeline, and install the SDK snippet.'
+        }
+      >
+        <Badge className={stats.setupDone ? 'bg-ok-muted text-ok' : stats.hasAnyProject ? 'bg-warn/10 text-warn' : 'bg-info/10 text-info'}>
+          {stats.setupDone ? 'READY' : stats.hasAnyProject ? `${stats.requiredComplete}/${stats.requiredTotal}` : 'START'}
+        </Badge>
+      </PageHeader>
+
+      <OnboardingStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRunTest={project ? () => void submitTestReport() : undefined}
+        testing={testStatus === 'running'}
+      />
+
+      <SegmentedControl
+        value={activeTab}
+        onChange={setActiveTab}
+        options={tabOptions}
+        ariaLabel="Setup sections"
+        size="sm"
+      />
+
+      <Section title="Setup snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <StatCard
+            label="Required"
+            value={`${stats.requiredComplete}/${stats.requiredTotal}`}
+            accent={stats.setupDone ? 'text-ok' : 'text-warn'}
+            hint={stats.nextStepLabel ?? 'All required steps done'}
+          />
+          <StatCard
+            label="SDK"
+            value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
+            accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
+            hint={stats.sdkHostMismatch ? 'Backend mismatch' : stats.sdkInstalled ? 'Heartbeat seen' : 'Install snippet'}
+          />
+          <StatCard
+            label="Reports"
+            value={stats.reportCount}
+            accent={stats.reportCount > 0 ? 'text-brand' : undefined}
+            hint={stats.reportCount > 0 ? 'Pipeline proven' : 'Send test report'}
+          />
+          <StatCard
+            label="Optional"
+            value={`${stats.optionalComplete}/${stats.optionalTotal}`}
+            accent="text-fg-secondary"
+            hint={`${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched`}
+          />
+        </div>
+      </Section>
+
+      {activeTab === 'overview' && (
+        <>
       <div className="overflow-hidden rounded-xl border border-edge bg-surface-raised p-5">
         <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
         <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
@@ -227,6 +388,42 @@ export function OnboardingPage() {
           install the SDK once, then let every report enter the repair loop.
         </p>
       </div>
+
+      <PageHero
+        scope="onboarding"
+        title="Get started"
+        kicker="Start here"
+        decide={{
+          label: stats.setupDone ? 'Pipeline wired' : stats.nextStepLabel ?? 'Begin setup',
+          metric: `${stats.requiredComplete}/${stats.requiredTotal} required`,
+          summary: stats.setupDone
+            ? `${stats.projectName ?? 'Project'} ingests reports — optional integrations remain on the Steps tab.`
+            : stats.hasAnyProject
+              ? `Finish ${stats.nextStepLabel ?? 'the next step'} so Dashboard and Reports stop showing empty shells.`
+              : 'Create a project first — everything else (keys, SDK, test report) hangs off that row.',
+          severity: setupSeverity,
+          anchor: 'onboarding:decide',
+          evidence: {
+            kind: 'metric-breakdown',
+            items: [
+              { label: 'Required', value: `${stats.requiredComplete}/${stats.requiredTotal}`, tone: stats.setupDone ? 'ok' : 'warn' },
+              { label: 'Reports', value: stats.reportCount, tone: stats.reportCount > 0 ? 'ok' : 'neutral' },
+              { label: 'Fixes', value: stats.fixCount, tone: stats.fixCount > 0 ? 'info' : 'neutral' },
+              { label: 'SDK', value: stats.sdkInstalled ? '✓' : '—', tone: stats.sdkInstalled ? 'ok' : 'neutral' },
+            ],
+          },
+        }}
+        verify={{
+          label: stats.reportCount > 0 ? 'Pipeline verified' : 'Awaiting first report',
+          detail: stats.reportCount > 0
+            ? `${stats.reportCount} report${stats.reportCount === 1 ? '' : 's'} on ${stats.projectName ?? 'project'}`
+            : 'Verify tab sends an admin test report without copying the key',
+          to: '/reports',
+          secondaryTo: '/dashboard',
+          secondaryLabel: 'Dashboard',
+          anchor: 'onboarding:verify',
+        }}
+      />
 
       {setupComplete && (
         <>
@@ -295,7 +492,11 @@ export function OnboardingPage() {
         </div>
         <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
       </section>
+        </>
+      )}
 
+      {activeTab === 'steps' && (
+        <>
       {project && (
         <SetupChecklist
           project={project}
@@ -304,7 +505,6 @@ export function OnboardingPage() {
         />
       )}
 
-      {/* Card 1: Create Project (only when no project yet) */}
       {!setup.hasAnyProject && (
         <Card className="p-5 space-y-4">
           <div>
@@ -346,8 +546,11 @@ export function OnboardingPage() {
           )}
         </Card>
       )}
+        </>
+      )}
 
-      {/* Card 2: API Key (only when project exists but no key) */}
+      {activeTab === 'verify' && (
+        <>
       {project && nextRequired?.id === 'api_key_generated' && (
         <Card className="p-5 space-y-4">
           <div>
@@ -372,7 +575,6 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {/* Card 3: Test connection */}
       {project && !setup.isStepIncomplete('api_key_generated') && setup.isStepIncomplete('first_report_received') && (
         <Card className="p-5 space-y-4">
           <div>
@@ -408,17 +610,31 @@ export function OnboardingPage() {
         </Card>
       )}
 
-      {/* Card 4: SDK snippet — always available once a key exists. Lives in
-          the shared `<SdkInstallCard>` so the same install + init copy
-          renders identically here, on Projects, in Settings → Health, and
-          on the MCP page. */}
-      {project && !setup.isStepIncomplete('api_key_generated') && (
+      {project && setup.isStepIncomplete('api_key_generated') && (
+        <Card className="p-4 border border-edge-subtle">
+          <p className="text-xs text-fg-muted">Generate an API key on the Steps tab first — verification needs an active ingest key.</p>
+          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('steps')}>Go to Steps</Btn>
+        </Card>
+      )}
+        </>
+      )}
+
+      {activeTab === 'sdk' && (
+        <>
+      {project && !setup.isStepIncomplete('api_key_generated') ? (
         <div className="space-y-3">
           <SdkInstallCard projectId={project.project_id} apiKey={apiKey?.key} />
           <div className="flex gap-2">
             <Btn variant="ghost" onClick={() => navigate('/dashboard')}>Go to Dashboard</Btn>
           </div>
         </div>
+      ) : (
+        <Card className="p-4 border border-info/30 bg-info/5">
+          <p className="text-xs text-fg-muted">Mint an API key on Verify before copying the install snippet.</p>
+          <Btn size="sm" variant="ghost" className="mt-2" onClick={() => setActiveTab('verify')}>Go to Verify</Btn>
+        </Card>
+      )}
+        </>
       )}
 
       <p className="text-center flex items-center justify-center gap-3">

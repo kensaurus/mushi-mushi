@@ -34,6 +34,95 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     return c.json({ ok: true, data: data ?? {} });
   });
 
+  app.get('/v1/admin/settings/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      projectId: null as string | null,
+      projectName: null as string | null,
+      updatedAt: null as string | null,
+      slackConfigured: false,
+      sentryConfigured: false,
+      reporterNotificationsEnabled: false,
+      stage2Model: null as string | null,
+      sdkConfigEnabled: false,
+      sdkConfigUpdatedAt: null as string | null,
+      byokAnthropicConfigured: false,
+      byokOpenaiConfigured: false,
+      byokFirecrawlConfigured: false,
+      byokKeysConfigured: 0,
+      byokKeysPassing: 0,
+      byokKeysFailing: 0,
+      byokKeysUntested: 0,
+      githubRepoConfigured: false,
+      autofixEnabled: false,
+    };
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () => c.json({ ok: true, data: empty }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const { data, error } = await db
+      .from('project_settings')
+      .select(
+        'updated_at, slack_webhook_url, sentry_dsn, reporter_notifications_enabled, stage2_model, ' +
+          'sdk_config_enabled, sdk_config_updated_at, ' +
+          'byok_anthropic_key_ref, byok_anthropic_test_status, ' +
+          'byok_openai_key_ref, byok_openai_test_status, ' +
+          'byok_firecrawl_key_ref, byok_firecrawl_test_status, ' +
+          'github_repo_url, autofix_enabled',
+      )
+      .eq('project_id', project.id)
+      .maybeSingle();
+
+    if (error) return dbError(c, error);
+
+    const row = (data as Record<string, unknown> | null) ?? {};
+    const byokFlags = [
+      { configured: Boolean(row.byok_anthropic_key_ref), status: row.byok_anthropic_test_status as string | null },
+      { configured: Boolean(row.byok_openai_key_ref), status: row.byok_openai_test_status as string | null },
+      { configured: Boolean(row.byok_firecrawl_key_ref), status: row.byok_firecrawl_test_status as string | null },
+    ];
+    let byokKeysConfigured = 0;
+    let byokKeysPassing = 0;
+    let byokKeysFailing = 0;
+    let byokKeysUntested = 0;
+    for (const k of byokFlags) {
+      if (!k.configured) continue;
+      byokKeysConfigured += 1;
+      if (k.status === 'ok') byokKeysPassing += 1;
+      else if (k.status && k.status.startsWith('error')) byokKeysFailing += 1;
+      else byokKeysUntested += 1;
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        projectId: project.id,
+        projectName: project.name,
+        updatedAt: (row.updated_at as string | null) ?? null,
+        slackConfigured: Boolean(row.slack_webhook_url),
+        sentryConfigured: Boolean(row.sentry_dsn),
+        reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
+        stage2Model: (row.stage2_model as string | null) ?? null,
+        sdkConfigEnabled: Boolean(row.sdk_config_enabled),
+        sdkConfigUpdatedAt: (row.sdk_config_updated_at as string | null) ?? null,
+        byokAnthropicConfigured: Boolean(row.byok_anthropic_key_ref),
+        byokOpenaiConfigured: Boolean(row.byok_openai_key_ref),
+        byokFirecrawlConfigured: Boolean(row.byok_firecrawl_key_ref),
+        byokKeysConfigured,
+        byokKeysPassing,
+        byokKeysFailing,
+        byokKeysUntested,
+        githubRepoConfigured: Boolean(row.github_repo_url),
+        autofixEnabled: Boolean(row.autofix_enabled),
+      },
+    });
+  });
+
   app.patch('/v1/admin/settings', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const body = await c.req.json();
@@ -828,6 +917,63 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         query,
         results: snippets ?? [],
         errCode,
+      },
+    });
+  });
+
+  app.get('/v1/admin/research/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: {
+            sessions: 0,
+            snippets: 0,
+            attached: 0,
+            lastSessionAt: null,
+          },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const project = resolvedProject.project;
+
+    const [
+      { count: sessionCount },
+      { count: snippetCount },
+      { count: attachedCount },
+      { data: lastSessionRow },
+    ] = await Promise.all([
+      db
+        .from('research_sessions')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', project.id),
+      db
+        .from('research_snippets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', project.id),
+      db
+        .from('research_snippets')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', project.id)
+        .not('attached_to_report_id', 'is', null),
+      db
+        .from('research_sessions')
+        .select('created_at')
+        .eq('project_id', project.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    return c.json({
+      ok: true,
+      data: {
+        sessions: sessionCount ?? 0,
+        snippets: snippetCount ?? 0,
+        attached: attachedCount ?? 0,
+        lastSessionAt: (lastSessionRow?.created_at as string | null) ?? null,
       },
     });
   });

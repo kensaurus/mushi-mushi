@@ -5,7 +5,7 @@
  *          ingest path works end-to-end.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { Section, Btn, ResultChip, type ResultChipTone } from '../ui'
 import { ConnectionStatus } from '../ConnectionStatus'
@@ -13,22 +13,13 @@ import { RESOLVED_API_URL } from '../../lib/env'
 import { SdkInstallCard } from '../SdkInstallCard'
 import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
 
-interface TestProject {
-  id: string
-  name: string
+interface HealthPanelProps {
+  projectId: string
+  projectName?: string | null
 }
 
-export function HealthPanel() {
-  const [project, setProject] = useState<TestProject | null>(null)
-  const [projectLoading, setProjectLoading] = useState(true)
-
-  useEffect(() => {
-    apiFetch<{ projects: TestProject[] }>('/v1/admin/projects')
-      .then((res) => {
-        if (res.ok && res.data) setProject(res.data.projects?.[0] ?? null)
-      })
-      .finally(() => setProjectLoading(false))
-  }, [])
+export function HealthPanel({ projectId, projectName }: HealthPanelProps) {
+  const project = { id: projectId, name: projectName ?? projectId }
 
   return (
     <SettingsPanelLayout
@@ -50,37 +41,29 @@ export function HealthPanel() {
         </div>
       </Section>
 
-      <QuickTestSection project={project} projectLoading={projectLoading} />
+      <QuickTestSection project={project} />
 
       <Section title="Install the SDK" className="lg:col-span-2">
         <p className="text-2xs text-fg-muted mb-2">
           Per-framework <code className="font-mono">npm install</code> command and init snippet,
           pre-filled with this project&apos;s id.
         </p>
-        {project ? (
-          <SdkInstallCard projectId={project.id} />
-        ) : projectLoading ? (
-          <p className="text-2xs text-fg-faint">Loading project…</p>
-        ) : (
-          <p className="text-2xs text-fg-faint">Create a project first to see install snippets.</p>
-        )}
+        <SdkInstallCard projectId={project.id} />
       </Section>
     </SettingsPanelLayout>
   )
 }
 
 interface QuickTestSectionProps {
-  project: TestProject | null
-  projectLoading: boolean
+  project: { id: string; name: string }
 }
 
-function QuickTestSection({ project, projectLoading }: QuickTestSectionProps) {
+function QuickTestSection({ project }: QuickTestSectionProps) {
   const [status, setStatus] = useState<'idle' | 'running' | 'pass' | 'fail'>('idle')
   const [detail, setDetail] = useState('')
   const [lastRunAt, setLastRunAt] = useState<string | null>(null)
 
   async function runTest() {
-    if (!project) return
     setStatus('running')
     setDetail('')
     const res = await apiFetch<{ reportId: string; projectName: string }>(
@@ -104,7 +87,7 @@ function QuickTestSection({ project, projectLoading }: QuickTestSectionProps) {
     <Section title="Pipeline Quick Test">
       <p className="text-2xs text-fg-muted mb-2">
         Submit a test report to verify the ingest pipeline works end-to-end.
-        {project && <> Tests the project <span className="font-mono text-fg-secondary">{project.name}</span>.</>}
+        Tests the project <span className="font-mono text-fg-secondary">{project.name}</span>.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Btn
@@ -112,13 +95,9 @@ function QuickTestSection({ project, projectLoading }: QuickTestSectionProps) {
           variant="primary"
           onClick={runTest}
           loading={status === 'running'}
-          disabled={projectLoading || !project}
         >
           Send test report
         </Btn>
-        {!projectLoading && !project && (
-          <span className="text-2xs text-fg-muted">Create a project first to run this test.</span>
-        )}
         {status !== 'idle' && (
           <ResultChip tone={chipTone} at={lastRunAt}>
             {detail || (status === 'running' ? 'Sending…' : 'Done')}

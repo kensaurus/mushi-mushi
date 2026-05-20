@@ -43,11 +43,18 @@ function classify(
 ): Status {
   if (!platform?.platform) return 'idle'
   const kinds = Object.entries(platform.platform)
+  // Only string values count as "configured" — boolean columns like
+  // sentry_seer_enabled / sentry_consume_user_feedback have DB defaults
+  // (false / true) that are present even on a brand-new project with no
+  // real credentials set. Checking for non-empty strings ensures we only
+  // show "healthy" when the user has actually entered a DSN/key/URL.
   const configured = kinds.some(
-    ([, v]) => v && Object.values(v).some((x) => x != null && x !== ''),
+    ([, v]) => v && Object.values(v).some((x) => typeof x === 'string' && x !== ''),
   )
   if (!configured) return 'idle'
-  if (history.length === 0) return 'green'
+  // No probe history yet for this project → unknown, not green.
+  // "Green" should only come from an actual passing probe run.
+  if (history.length === 0) return 'unknown'
 
   // Take the most recent status per kind, then pick the worst.
   const latest = new Map<string, HistoryRow>()

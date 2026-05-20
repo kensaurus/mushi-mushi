@@ -34,12 +34,12 @@ interface Props {
 }
 
 const STATUS_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'info' | 'brand' | 'ok' }> = [
-  { value: '',          label: 'All',         tone: 'default' },
-  { value: 'new',       label: 'New',         tone: 'warn' },
-  { value: 'queued',    label: 'Queued',      tone: 'info' },
-  { value: 'triaged',   label: 'Triaged',     tone: 'brand' },
-  { value: 'resolved',  label: 'Resolved',    tone: 'ok' },
-  { value: 'dismissed', label: 'Dismissed',   tone: 'default' },
+  { value: '',           label: 'All',         tone: 'default' },
+  { value: 'new',        label: 'New',         tone: 'warn' },
+  { value: 'classified', label: 'Classified',  tone: 'brand' },
+  { value: 'fixing',     label: 'Fixing',      tone: 'info' },
+  { value: 'fixed',      label: 'Fixed',       tone: 'ok' },
+  { value: 'dismissed',  label: 'Dismissed',   tone: 'default' },
 ]
 
 const SEVERITY_BUCKETS: Array<{ value: string; label: string; tone: 'default' | 'warn' | 'danger' }> = [

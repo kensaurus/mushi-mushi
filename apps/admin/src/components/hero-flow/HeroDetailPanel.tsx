@@ -30,6 +30,9 @@ import { getConfigDoc } from '../../lib/configDocs'
 import { getDavManifest, type DavEvidence } from '../../lib/davManifest'
 import type { PageHeroDecide, PageHeroVerify } from '../PageHero'
 import type { PageAction } from '../PageActionBar'
+import { OperatorTraceLog } from './OperatorTraceLog'
+import { buildOperatorTrace } from './operatorTrace'
+import type { OperatorTraceLine } from './operatorTrace'
 
 // ─── Props ─────────────────────────────────────────────────────────────────
 
@@ -43,6 +46,7 @@ interface HeroDetailPanelProps {
   actEvidence?: DavEvidence
   actAnchor?: string
   actMissingConfigIds?: string[]
+  actDebugLines?: OperatorTraceLine[]
   /** Full verify tile data from the consumer page. */
   verify: PageHeroVerify
   /** Trigger on-page spotlight for the given anchor value. */
@@ -74,10 +78,14 @@ function MetricChip({ label, value, tone = 'neutral' }: {
   value: string | number
   tone?: string
 }) {
+  const valueStr = String(value)
+  const numeric = /^[\d]/.test(valueStr)
   return (
-    <div className={`inline-flex flex-col items-center rounded-md px-2.5 py-1 text-center ${TONE_CLASS[tone] ?? TONE_CLASS.neutral}`}>
-      <span className="text-base font-semibold tabular-nums leading-tight">{value}</span>
-      <span className="mt-0.5 text-3xs uppercase tracking-wider opacity-70">{label}</span>
+    <div className={`inline-flex min-w-[4.5rem] flex-col items-center rounded-md px-2.5 py-1.5 text-center ${TONE_CLASS[tone] ?? TONE_CLASS.neutral}`}>
+      <span className={`tabular-nums leading-none ${numeric ? 'text-lg font-bold tracking-tight' : 'text-sm font-semibold'}`}>
+        {value}
+      </span>
+      <span className="mt-1 text-3xs uppercase tracking-wider opacity-70">{label}</span>
     </div>
   )
 }
@@ -258,6 +266,7 @@ export function HeroDetailPanel({
   actEvidence,
   actAnchor,
   actMissingConfigIds,
+  actDebugLines,
   verify,
   onSpotlight,
   onClose,
@@ -337,6 +346,17 @@ export function HeroDetailPanel({
 
   const tileLabel = tile === 'decide' ? 'Decide' : tile === 'act' ? 'Act' : 'Verify'
 
+  const operatorTrace = buildOperatorTrace({
+    scope,
+    tile,
+    decide,
+    action,
+    verify,
+    evidence,
+    anchor,
+    extraDebugLines: tile === 'act' ? actDebugLines : undefined,
+  })
+
   // ── Spot-on-page handler ──────────────────────────────────────────────
 
   function handleSpotlight() {
@@ -365,6 +385,10 @@ export function HeroDetailPanel({
               : tile === 'act' ? (action?.title ?? 'All clear')
               : verify.label}
           </h4>
+          <span className="hidden md:inline font-mono text-3xs text-fg-faint truncate" title="DAV scope and anchor">
+            {scope}
+            {anchor ? ` · ${anchor}` : ''}
+          </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {anchor && (
@@ -400,12 +424,14 @@ export function HeroDetailPanel({
           <Section heading="Why now" tone="lead">
             <p className="text-fg">{whyNow}</p>
             {evidence?.kind === 'rule-trace' && evidence.threshold && (
-              <p className="mt-0.5 text-fg-faint">
-                Threshold: <code className="font-mono">{evidence.threshold}</code>
-              </p>
+              <pre className="mt-1.5 overflow-x-auto rounded-md border border-edge-subtle/60 bg-[#0a0c10]/80 px-2 py-1.5 font-mono text-3xs text-brand leading-relaxed">
+                {evidence.threshold}
+              </pre>
             )}
           </Section>
         )}
+
+        <OperatorTraceLog lines={operatorTrace} variant="full" />
 
         {/* 2. Live data ───────────────────────────────────────────────── */}
         {evidence?.kind === 'metric-breakdown' && evidence.items.length > 0 && (
