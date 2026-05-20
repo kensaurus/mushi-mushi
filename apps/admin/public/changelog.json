@@ -2,6 +2,62 @@
   "$schema": "https://json.schemastore.org/package",
   "entries": [
     {
+      "id": "2026-05-20-closed-loop-evolution",
+      "date": "2026-05-20",
+      "title": "Closed-loop evolution — Lessons, Releases, Iterate, Drift, Experiments, Anomalies, Rewards",
+      "summary": "Six phases of the antifragile feedback loop: every bug report is now embedded, clustered into a named learning rule, synced to .mushi/lessons.json, injected into your next PR review and AI agent run, and credited back to the user who found it. Plus SDK v0.11.0 (Hermes-compatible React Native), framework auto-detection in the setup wizard, and copyable Project IDs on the Projects page.",
+      "highlights": [
+        {
+          "tone": "feature",
+          "text": "Lessons (/lessons) — BIRCH-style streaming mistake clusterer promotes coherent bug clusters to named learning rules. mushi sync-lessons writes .mushi/lessons.json into your repo automatically. lessons.query MCP tool injects token-budget-ranked rules into PR review and AI agent context."
+        },
+        {
+          "tone": "feature",
+          "text": "Releases (/releases) — auto-drafted changelogs with exact reporter attribution. SDK widget shows a toast to the user whose report triggered the fix: 'v1.2.3 shipped — you helped fix the settings back-button'."
+        },
+        {
+          "tone": "feature",
+          "text": "Iterate (/iterate) — PDCA producer/critic loop with selectable critique personas (Tufte, NN/g-heuristic, WCAG a11y, mobile-first). Live progress + draft-PR exit. Typical run: 3 iterations, < 3 min, score ≥ 0.7 on dogfood pages."
+        },
+        {
+          "tone": "feature",
+          "text": "Drift (/drift) — Stagehand-based contract walker compares live app behaviour against inventory + OpenAPI + DB schema. Findings feed back into the lesson library. Thompson-sampled walk priority revisits drift-prone pages on subsequent cycles."
+        },
+        {
+          "tone": "feature",
+          "text": "Experiments (/experiments) — sticky A/B assignments via mushi.experiment(). CUPED + mSPRT sequential analysis with automatic SRM detection. Power-curve calculator prevents under-powered runs."
+        },
+        {
+          "tone": "feature",
+          "text": "Anomalies (/anomalies) — STL + Page-Hinkley + isolation-forest detectors on inbound adapter metrics. Confirmed regressions auto-open reports and feed into the lesson library."
+        },
+        {
+          "tone": "feature",
+          "text": "Rewards (/rewards) — full reward rules, tiers, quests, webhooks, disputes, and fraud-detection. End users earn points for reports that lead to fixes, with configurable payout rules and a dispute workflow."
+        },
+        {
+          "tone": "feature",
+          "text": "Cost (/cost) — LLM spend breakdown across clustering, judging, PDCA, drift, and anomaly pipelines. Every new LLM call is attributed to a pipeline and surfaced per-project."
+        },
+        {
+          "tone": "feature",
+          "text": "Setup wizard auto-detects framework and monorepo type from a pasted package.json (React, Vue, Svelte, Angular, React Native, Expo, Capacitor, Vanilla JS; npm / yarn / pnpm workspaces, Turborepo, Nx, Lerna). Shows workspace-scoped install commands automatically."
+        },
+        {
+          "tone": "feature",
+          "text": "Project ID is now a copyable chip on the Projects page — no more digging through settings to find MUSHI_PROJECT_ID for the MCP server or CLI."
+        },
+        {
+          "tone": "fix",
+          "text": "@mushi-mushi/react-native v0.11.0 — Hermes compatibility fix: replaced new Function() dynamic imports with lazy require() for netinfo and expo-sensors. Enables trigger: 'button' safely on all RN 0.84+ Hermes/AOT builds. Update your dependency to ^0.11.0."
+        },
+        {
+          "tone": "fix",
+          "text": "BYOK hardening: all LLM calls now route through resolveLlmKey() from _shared/byok.ts. OpenAI and Anthropic test probes both return 'Connection OK'. PDCA runner no longer targets localhost."
+        }
+      ]
+    },
+    {
       "id": "2026-05-10-data-pipeline-loop-closure",
       "date": "2026-05-10",
       "title": "Closing the data pipeline loop — failure categories, fix RAG, drift watch, multi-repo",

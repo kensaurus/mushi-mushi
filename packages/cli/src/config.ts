@@ -21,14 +21,34 @@ export const CONFIG_PATH = join(homedir(), '.mushirc')
 
 const SECURE_FILE_MODE = 0o600
 
+/**
+ * Load CLI config from ~/.mushirc, then overlay env vars so operators
+ * can configure the CLI via environment without writing a config file.
+ * Env var precedence: env vars WIN over the saved file (so CI can pin
+ * a different project without touching the dev's ~/.mushirc).
+ *
+ * Supported env vars:
+ *   MUSHI_API_KEY       — API key (matches the SDK's env var name)
+ *   MUSHI_PROJECT_ID    — Project UUID
+ *   MUSHI_API_ENDPOINT  — Backend edge-function URL
+ */
 export function loadConfig(path = CONFIG_PATH): CliConfig {
-  if (!existsSync(path)) return {}
-  tightenPermissions(path)
-  try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as CliConfig
-  } catch {
-    return {}
+  let file: CliConfig = {}
+  if (existsSync(path)) {
+    tightenPermissions(path)
+    try {
+      file = JSON.parse(readFileSync(path, 'utf-8')) as CliConfig
+    } catch {
+      // malformed rc — fall back to env vars
+    }
   }
+  // Env vars overlay the file: a set env var always wins.
+  const fromEnv: CliConfig = {
+    ...(process.env['MUSHI_API_KEY'] ? { apiKey: process.env['MUSHI_API_KEY'] } : {}),
+    ...(process.env['MUSHI_PROJECT_ID'] ? { projectId: process.env['MUSHI_PROJECT_ID'] } : {}),
+    ...(process.env['MUSHI_API_ENDPOINT'] ? { endpoint: process.env['MUSHI_API_ENDPOINT'] } : {}),
+  }
+  return { ...file, ...fromEnv }
 }
 
 export function saveConfig(config: CliConfig, path = CONFIG_PATH): void {
