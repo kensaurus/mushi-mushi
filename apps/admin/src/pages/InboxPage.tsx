@@ -48,12 +48,14 @@ import {
   Btn,
   FreshnessPill,
   PageHelp,
+  AgeChip,
+  Tooltip,
 } from '../components/ui'
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
 import { usePublishPageContext } from '../lib/pageContext'
 import type { PageAction } from '../components/PageActionBar'
-import type { DashboardData } from '../components/dashboard/types'
+import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
 
 type Group = InboxCardGroup
@@ -119,6 +121,18 @@ export function InboxPage() {
     : filter === 'clear' || filter === 'all'
       ? clearCards
       : clearCards.filter((c) => c.group === filter)
+
+  const activity = data?.activity ?? []
+  const activityAtByGroup = useMemo(() => {
+    const map: Partial<Record<Group, string>> = {}
+    for (const item of activity) {
+      if (item.kind === 'report' && !map.plan) map.plan = item.at
+      if (item.kind === 'fix' && !map.do) map.do = item.at
+    }
+    return map
+  }, [activity])
+
+  const pdcaGroups: Group[] = ['plan', 'do', 'check', 'act', 'ops']
 
   usePublishPageContext({
     route: '/inbox',
@@ -192,7 +206,7 @@ export function InboxPage() {
           <p className="text-xs text-fg-muted mt-0.5">
             {unreadCritical > 0
               ? `${unreadCritical} open action${unreadCritical === 1 ? '' : 's'} across the PDCA loop · ${clearCards.length} stage${clearCards.length === 1 ? '' : 's'} clear`
-              : 'No open actions. The loop is settled — check back after the next ingest.'}
+              : 'No open actions — the loop is clear. New reports will surface here automatically.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -218,12 +232,7 @@ export function InboxPage() {
           tone="act"
           hint={`Stage${clearCards.length === 1 ? '' : 's'} settled`}
         />
-        <KpiTile
-          label="Coverage"
-          value={cards.length}
-          tone="idle"
-          hint="PDCA surfaces watched"
-        />
+        <CoverageKpiTile cards={cards} groups={pdcaGroups} />
       </div>
 
       {/* Filter pills — 'All' / 'Open' / 'Clear' / per-stage. Echoes the
@@ -286,10 +295,19 @@ export function InboxPage() {
             </h2>
             <span className="text-2xs text-fg-faint">·</span>
             <span className="text-2xs text-fg-muted">{visibleOpen.length} card{visibleOpen.length === 1 ? '' : 's'}</span>
+            {visibleOpen.length > 1 && (
+              <span className="ml-auto text-2xs text-fg-faint">Work top-to-bottom</span>
+            )}
           </header>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {visibleOpen.map((card) => (
-              <OpenInboxCard key={card.id} card={card} />
+            {visibleOpen.map((card, index) => (
+              <OpenInboxCard
+                key={card.id}
+                card={card}
+                priority={index + 1}
+                isFirst={index === 0}
+                activityAt={activityAtByGroup[card.group]}
+              />
             ))}
           </div>
         </section>
@@ -327,11 +345,13 @@ export function InboxPage() {
           aria-label="Empty inbox"
           className="rounded-lg border border-dashed border-edge bg-surface-raised/30 p-6 text-center"
         >
-          <p className="text-sm font-medium text-fg">Nothing matches this filter.</p>
+          <p className="text-sm font-medium text-fg">
+            {filter === 'all' ? 'All clear' : 'Nothing here'}
+          </p>
           <p className="text-xs text-fg-muted mt-1 leading-snug">
             {filter === 'all'
-              ? 'The PDCA loop is settled. Reports will refresh this view as they land.'
-              : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now. Try the All filter to see everything Mushi watches.`}
+              ? 'The loop is clear — new reports will appear here automatically.'
+              : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now. Switch back to All to see everything.`}
           </p>
           {filter !== 'all' && (
             <button
@@ -345,24 +365,23 @@ export function InboxPage() {
         </section>
       ) : null}
 
-      <details className="mt-8 group rounded-md border border-edge-subtle bg-surface-raised/30">
-        <summary className="cursor-pointer list-none px-3 py-2 text-2xs uppercase tracking-wider text-fg-faint flex items-center gap-2 hover:text-fg-muted motion-safe:transition-colors">
-          <span aria-hidden className="motion-safe:transition-transform group-open:rotate-90">›</span>
-          How to read this inbox
-        </summary>
-        <div className="px-3 py-2 border-t border-edge-subtle/50 space-y-1.5 text-xs text-fg-muted leading-relaxed">
-          <p>
-            Every card here maps one-to-one with the next-best-action strip
-            on the corresponding PDCA page — it's the single place to see
-            every actionable item across the loop.
-          </p>
-          <p>
-            Bookmark this page as your first stop each morning — work
-            through the Awaiting cards top-to-bottom, then jump into the
-            owning PDCA page for detail.
-          </p>
-        </div>
-      </details>
+      {activity.length > 0 ? (
+        <section aria-labelledby="inbox-activity" className="mb-6">
+          <header className="mb-2 flex items-center gap-2">
+            <h2 id="inbox-activity" className="text-sm font-semibold text-fg-secondary">
+              Recent activity
+            </h2>
+            <span className="text-2xs text-fg-faint">·</span>
+            <span className="text-2xs text-fg-muted">Last {activity.length} events</span>
+          </header>
+          <ul className="rounded-md border border-edge-subtle bg-surface-raised/30 divide-y divide-edge-subtle/60">
+            {activity.map((item) => (
+              <ActivityFeedRow key={`${item.kind}-${item.id}`} item={item} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
     </div>
   )
 }
@@ -445,7 +464,63 @@ function ClearChip({ card }: { card: InboxCard }) {
   )
 }
 
-function OpenInboxCard({ card }: { card: InboxCard }) {
+function CoverageKpiTile({ cards, groups }: { cards: InboxCard[]; groups: Group[] }) {
+  return (
+    <div className={`rounded-md border ${TONE_RING.idle} px-3 py-2`}>
+      <p className="text-3xs uppercase tracking-wider text-fg-faint font-semibold">Coverage</p>
+      <p className="mt-0.5 text-xl font-semibold tabular-nums text-fg leading-none">{cards.length}</p>
+      <p className="mt-1 text-2xs text-fg-muted leading-snug">PDCA surfaces watched</p>
+      <div className="mt-2 flex items-center gap-1.5" aria-label="PDCA stage coverage">
+        {groups.map((g) => {
+          const hasSurface = cards.some((c) => c.group === g)
+          return (
+            <Tooltip key={g} content={`${GROUP_LONG_LABEL[g]}${hasSurface ? ' — watched' : ' — not mapped'}`}>
+              <span
+                className={`inline-flex h-2 w-2 rounded-full ${hasSurface ? 'bg-ok' : 'bg-surface-overlay border border-edge-subtle'}`}
+                aria-hidden
+              />
+            </Tooltip>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ActivityFeedRow({ item }: { item: ActivityItem }) {
+  const to = item.kind === 'report' ? `/reports/${item.id}` : `/fixes`
+  return (
+    <li>
+      <Link
+        to={to}
+        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-colors"
+      >
+        <span
+          className={`shrink-0 text-3xs font-semibold uppercase tracking-wider px-1 py-0.5 rounded-sm ${
+            item.kind === 'report' ? 'bg-info-muted text-info' : 'bg-brand/15 text-brand'
+          }`}
+        >
+          {item.kind}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-fg-secondary">{item.label}</span>
+        {item.meta ? <span className="shrink-0 text-2xs text-fg-faint truncate max-w-[8rem]">{item.meta}</span> : null}
+        <AgeChip at={item.at} />
+      </Link>
+    </li>
+  )
+}
+
+function OpenInboxCard({
+  card,
+  priority,
+  isFirst,
+  activityAt,
+}: {
+  card: InboxCard
+  priority: number
+  isFirst?: boolean
+  activityAt?: string
+}) {
   const action = card.action
   if (!action) return null
   const groupTone = GROUP_TONE[card.group]
@@ -453,9 +528,10 @@ function OpenInboxCard({ card }: { card: InboxCard }) {
     <article
       data-inbox-card={card.id}
       data-inbox-state="open"
-      className={`rounded-lg border p-4 ${TONE_RING[action.tone]}`}
+      className={`rounded-lg border p-4 ${TONE_RING[action.tone]}${isFirst ? ' md:col-span-2' : ''}`}
     >
       <header className="flex items-center gap-2 mb-1.5">
+        <span className="text-2xs font-mono text-fg-faint tabular-nums shrink-0">#{priority}</span>
         {/* Stage eyebrow chip — preserves the PDCA mapping even though
             the cards are no longer rendered inside per-stage sections. */}
         <span
@@ -463,7 +539,11 @@ function OpenInboxCard({ card }: { card: InboxCard }) {
         >
           {GROUP_LABEL[card.group]}
         </span>
-        <span className="text-2xs text-fg-faint truncate">{card.pageLabel}</span>
+        <span className="text-2xs text-fg-faint truncate flex-1">{card.pageLabel}</span>
+        {isFirst && !activityAt && (
+          <span className="shrink-0 text-2xs text-brand font-medium">Start here ↑</span>
+        )}
+        {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
       </header>
       <p className="text-sm font-medium text-fg leading-snug">{action.title}</p>
       {action.reason && (
