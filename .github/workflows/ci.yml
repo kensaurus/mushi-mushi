@@ -36,6 +36,9 @@ jobs:
   # SOURCE: https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configuring-the-dependency-review-action
   dependency-review:
     name: Dependency review
+    # dependency-review-action requires pull_request context (needs base/head ref).
+    # Skip on workflow_dispatch (manual CI trigger fallback for the release PR).
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
