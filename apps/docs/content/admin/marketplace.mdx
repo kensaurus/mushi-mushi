@@ -1,0 +1,98 @@
+---
+title: Plugin marketplace
+---
+
+import { Callout } from 'nextra/components'
+
+# Plugin marketplace
+
+**Route:** `/marketplace`
+
+The marketplace lets you install outbound plugins — PagerDuty, Linear, Zapier, and
+others — that receive webhook events from Mushi when reports are classified, fixes are
+deployed, or tiers are triggered.
+
+<Callout type="info">
+The `plugins` entitlement is required to install plugins. An upgrade prompt appears if
+it isn't active on your plan.
+</Callout>
+
+---
+
+## Sections
+
+### Available plugins
+
+A card grid showing all plugins in the catalogue. Each card shows:
+- Plugin name, publisher, category, short description, version
+- **Install status** — installed badge if already active
+- **Reliability stats** — total dispatches, ok rate, avg latency (from the dispatch log)
+
+Use the **text search**, **category filter**, and **Installed only** toggle to narrow
+the list.
+
+### Installed
+
+The installed plugins list with per-plugin controls (see Actions below).
+
+### Recent deliveries
+
+A dispatch log table showing the most recent outbound webhook calls. Filterable by
+**plugin slug** and **status** (`ok`, `error`, `timeout`). Use this to debug delivery
+problems or confirm an event fired.
+
+---
+
+## Installing a plugin
+
+1. Find the plugin in the Available section.
+2. Click **Install**.
+3. Fill in the install form:
+   - **Webhook URL** — your endpoint that receives events
+   - **Signing secret** — auto-generated; verify the `X-Mushi-Signature` header in your handler
+   - **Subscribed events** — select which event types to receive
+4. Click **Install**.
+
+---
+
+## Managing installed plugins
+
+| Action | Description |
+|--------|-------------|
+| **Test** | Fires a test webhook event to confirm delivery |
+| **Pause / Resume** | Toggle `isActive` — paused plugins skip dispatch |
+| **Edit URL** | Update the webhook URL without reinstalling |
+| **Rotate secret** | Generate a new signing secret |
+| **Uninstall** | Removes the plugin (confirmation required) |
+
+---
+
+## Signing verification
+
+Every outbound webhook includes an `X-Mushi-Signature` header (HMAC-SHA256 of the
+request body using your signing secret). Always verify this in your handler before
+processing events:
+
+```ts
+import crypto from 'crypto'
+
+function verify(body: string, signature: string, secret: string) {
+  const expected = crypto.createHmac('sha256', secret).update(body).digest('hex')
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+}
+```
+
+---
+
+## Building a plugin
+
+See [Plugins → Building a plugin](/plugins/building) for the full plugin schema,
+event payload reference, and publishing guide.
+
+---
+
+## Related pages
+
+- [Plugins → Building a plugin](/plugins/building) — create your own integration
+- [Plugins → Events reference](/plugins/events) — full event payload schemas
+- [Settings](/admin/settings) — API keys for BYOK plugin providers

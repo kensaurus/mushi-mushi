@@ -2,7 +2,7 @@
 title: Mushi Mushi — bugs your users feel
 ---
 
-import { Cards, Callout } from 'nextra/components'
+import { Callout } from 'nextra/components'
 import { LoopComparison } from '../components/LoopComparison'
 
 {/* The EditorialHero IS the page H1 — do NOT add a markdown `# Mushi Mushi`
@@ -11,53 +11,41 @@ import { LoopComparison } from '../components/LoopComparison'
     breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack. */}
 
 <EditorialHero
-  eyebrow="Mushi · little bug helper"
-  title={<>Sentry sees what code throws. Mushi sees what users feel — <em>and remembers what fixed it last time.</em></>}
-  lead={<>When something&rsquo;s off &mdash; a dead button, a 12-second screen, a layout that breaks on one Android &mdash; your user wants to tell you. Mushi gives them a way, clusters the report with every similar one, names the pattern, and encodes it as a rule the next developer and the next AI agent inherit automatically.</>}
+  eyebrow="Mushi · cumulative selection for software"
+  title={<>Sentry sees what code throws. Mushi sees what users feel — <em>and encodes every fix into the codebase genome.</em></>}
+  lead={<>When something&rsquo;s off &mdash; a dead button, a 12-second screen, a layout that breaks on one device &mdash; your user wants to tell you. Mushi gives them a way, clusters the report with every similar mutation, names the pattern, and writes it into <code>.mushi/lessons.json</code> &mdash; the evolving ruleset every subsequent developer and AI agent inherits automatically.</>}
 />
 
-## The old loop and the new loop
+## Software evolves by selection, not random walk
 
-Software development has followed one model for 50 years: PM defines spec → dev implements → QA tests → ships → user encounters a bug → support ticket → someday fixed. The feedback loop takes weeks; the lesson is lost.
+For 50 years, software development has followed a **random walk**: PM defines spec → dev implements → QA tests happy paths → ships → user hits a bug → support ticket → maybe fixed two sprints later. The cycle resets. Mistakes repeat because **the genome never updates**.
 
-Mushi flips this. Every user report is embedded, clustered with similar ones, and promoted to a **named learning rule** — then injected into the next PR review and the next agent fix run. The user who found the bug gets credited in the changelog. The next developer can&rsquo;t repeat the same mistake because the rule is already in the review context.
+Mushi turns the random walk into **cumulative selection**. Every user report is a selection event — embedded, clustered with similar patterns, and promoted to a named learning rule when the cluster crosses the coherence threshold. That rule is encoded into `.mushi/lessons.json` (the codebase genome) and injected into the next PR review and the next AI agent fix run. The user who triggered the selection event gets credited in the changelog.
 
-This is **cumulative selection with memory** — [Dawkins&rsquo; phrase](https://en.wikipedia.org/wiki/Climbing_Mount_Improbable) for why selection beats random search. Every iteration starts from a better baseline than the last.
+This is **selection with memory** — [Dawkins&rsquo; phrase](https://en.wikipedia.org/wiki/Climbing_Mount_Improbable) for why cumulative selection beats random search by orders of magnitude. Every iteration starts from a fitter baseline than the last.
 
 <LoopComparison />
 
 <Callout type="info">
-  Aviation&rsquo;s NTSB turns every crash into institutional memory. *&ldquo;In a world where crashes are dissected, progress compounds.&rdquo;* — Matthew Syed, *Black Box Thinking* (2015). Mushi is that layer for software. [Read the full thesis →](/concepts/closed-loop)
+  Aviation&rsquo;s NTSB turns every crash into institutional memory. *&ldquo;In a world where crashes are dissected, progress compounds.&rdquo;* &mdash; Matthew Syed, *Black Box Thinking* (2015). Nassim Taleb makes the same argument in *Antifragile*: **systems improve through trial and error, not in spite of it &mdash; provided the error is recorded and inherited.** Mushi is that recording layer for software. [Read the full thesis &rarr;](/concepts/closed-loop)
 </Callout>
 
-## Software&rsquo;s NTSB moment
+## Four properties selection requires
 
 Sentry sees what your code throws. Mushi sees what your users feel. The two
 are designed to compose: Mushi&rsquo;s classifier reads Sentry breadcrumbs,
 and Sentry User Feedback events forward into Mushi via webhook &mdash; so
-nothing about your existing setup has to change. But Mushi goes further:
+nothing about your existing setup has to change. But Mushi adds what selection
+needs and Sentry alone cannot provide:
 
-- **Mistake DB**: every report is embedded and clustered. The same broken button collapses to one row, not 200 duplicate tickets.
-- **Learning rules**: when a cluster reaches coherence ≥ 0.75 and size ≥ 3, it is promoted to a named lesson and synced to `.mushi/lessons.json` in your repo.
-- **Token-budget injection**: lessons are ranked, reranked by severity, and packed to ≤ 3 000 tokens before being injected into PR review context — so neither human reviewer nor AI agent can repeat the same class of mistake.
-- **Reporter attribution**: the user who found the bug is credited in the changelog. The SDK shows them a toast: *&ldquo;v1.2.3 shipped — you helped fix this.&rdquo;* This closes the feedback loop that makes beta testers keep reporting.
+- **Variation capture**: every report is embedded and clustered. The same broken button collapses to one row, not 200 duplicate tickets.
+- **Selection pressure**: when a cluster reaches coherence &ge; 0.75 and size &ge; 3, it is promoted to a named lesson and synced to `.mushi/lessons.json` in your repo.
+- **Inheritance**: lessons are ranked by severity and packed to &le;&thinsp;3&thinsp;000 tokens before being injected into PR review context &mdash; so neither human reviewer nor AI agent can repeat the same class of mistake.
+- **Reward loop**: the user who found the mutation is credited in the changelog. The SDK shows them a toast: *&ldquo;v1.2.3 shipped &mdash; you helped fix this.&rdquo;* This closes the feedback loop that keeps beta testers reporting.
 
 ## Try it in 60 seconds
 
-<Cards>
-  <Cards.Card title="React" href="/quickstart/react" arrow>
-    Drop the provider in. Your users get a shake-to-report widget the same day.
-  </Cards.Card>
-  <Cards.Card title="Vue, Svelte, Angular" href="/sdks" arrow>
-    Same widget, same reports, in the framework you already ship.
-  </Cards.Card>
-  <Cards.Card title="iOS, Android, Flutter" href="/quickstart/mobile" arrow>
-    Shake detection, offline queue, and a Sentry bridge already wired up.
-  </Cards.Card>
-  <Cards.Card title="MCP server" href="/sdks/mcp" arrow>
-    Triage from inside Claude, Cursor, or Codex without leaving your editor.
-  </Cards.Card>
-</Cards>
+<QuickstartGrid />
 
 ## Where Sentry stops, this picks up.
 
@@ -67,7 +55,7 @@ nothing about your existing setup has to change. But Mushi goes further:
     { label: 'What it sees',            foil: 'Errors your code throws',                mushi: 'Friction your users feel' },
     { label: 'What lands in your queue',foil: 'A stack trace',                          mushi: 'A short user note plus the screenshot they were looking at' },
     { label: 'Repeat bugs',             foil: 'Each one shows up as a new issue',       mushi: 'The same broken button collapses to one row' },
-    { label: 'Institutional memory',    foil: 'None — the next dev repeats the mistake',mushi: 'Lessons encoded in .mushi/lessons.json and injected into every PR' },
+    { label: 'Institutional memory',    foil: 'None — the next dev repeats the mistake',mushi: 'Rules encoded in .mushi/lessons.json and injected into every PR' },
     { label: 'Closing the loop',        foil: 'Assign a ticket and remember to update', mushi: 'An optional draft PR you can merge or ignore' },
     { label: 'Reporter attribution',    foil: 'Anonymous',                              mushi: '"Fixed by Kenji" in the changelog; SDK toast on next session' },
     { label: 'From your IDE',           foil: 'Copy the issue ID into Cursor',          mushi: 'Cursor reads the report + relevant lessons and proposes the diff' },
@@ -79,5 +67,5 @@ nothing about your existing setup has to change. But Mushi goes further:
 
 <Pillars />
 
-See **[Concepts → Architecture](/concepts/architecture)** for the wire-level
+See **[Concepts &rarr; Architecture](/concepts/architecture)** for the wire-level
 sequence diagram and component-by-component spec.

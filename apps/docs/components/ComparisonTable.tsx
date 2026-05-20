@@ -52,6 +52,7 @@ interface ComparisonTableProps {
 
 export function ComparisonTable({ foil, rows }: ComparisonTableProps) {
   return (
+    <div className="not-prose my-6 overflow-x-auto">
     <table data-compare="2">
       <thead>
         <tr>
@@ -71,6 +72,7 @@ export function ComparisonTable({ foil, rows }: ComparisonTableProps) {
           </tr>
         ))}
       </tbody>
-    </table>
+      </table>
+    </div>
   )
 }

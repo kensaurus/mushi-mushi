@@ -2,23 +2,51 @@
 title: Data residency
 ---
 
+import { Callout } from 'nextra/components'
+
 # Data residency
 
-Mushi Cloud runs three independent Supabase projects:
+> **Scenario:** Your EU customers' data must stay in the EU to comply with GDPR. You need to ensure that report ingestion, embeddings, screenshots, and AI calls never leave `eu-central-1`.
 
-| Region | Endpoint                          | Supabase region         |
-| ------ | --------------------------------- | ----------------------- |
-| US     | `us.api.mushimushi.dev`           | `us-east-1`             |
-| EU     | `eu.api.mushimushi.dev`           | `eu-central-1`          |
-| JP     | `jp.api.mushimushi.dev`           | `ap-northeast-1`        |
+Mushi Cloud runs three independent Supabase projects — one per region. All data processing (report ingestion, classification, embeddings, knowledge graph, fine-tuning) stays inside the chosen region with **no inter-region replication**.
 
-Pick the region when creating the project. The choice is immutable —
-report ingestion, screenshots, embeddings, knowledge graph, and
-fine-tuning data all stay inside the chosen region.
+## Available regions
 
-The SDK reads `MushiOptions.region` (or auto-detects from the
-`reporterToken` prefix) and routes to the correct DNS name. There is no
-inter-region replication.
+| Region | API endpoint | Supabase region |
+| --- | --- | --- |
+| **US** (default) | `us.api.mushimushi.dev` | `us-east-1` |
+| **EU** | `eu.api.mushimushi.dev` | `eu-central-1` |
+| **JP** | `jp.api.mushimushi.dev` | `ap-northeast-1` |
 
-A nightly cron writes a "no row crossed regions" attestation into
-`soc2_evidence` so auditors get a clean trail.
+<Callout type="warning">
+  Region is **immutable** — it is set at project creation and cannot be changed. Create a new project to move regions.
+</Callout>
+
+## How the SDK routes
+
+The SDK reads `MushiOptions.region` (or auto-detects from the `reporterToken` prefix `us_`, `eu_`, `jp_`) and routes to the corresponding DNS name:
+
+```ts
+import { init } from '@mushi-mushi/web'
+
+const mushi = init({
+  projectId: 'YOUR_PROJECT_ID',
+  apiKey: 'eu_pk_…',   // prefix auto-selects eu.api.mushimushi.dev
+})
+```
+
+If no region prefix is present, the SDK defaults to `us.api.mushimushi.dev`.
+
+## Attestation
+
+A nightly cron writes a `no_cross_region_transfer` attestation row to `soc2_evidence`. This record confirms that no row in `reports`, `embeddings`, `fix_attempts`, or `reporter_identities` was written outside the configured region that day. The evidence is included in the quarterly SOC 2 pack.
+
+## Self-hosting
+
+If you self-host on your own Supabase project, you control the region entirely — pick any Supabase-supported region at project creation.
+
+## GDPR notes
+
+- All PII columns (`reporter_email`, `reporter_name`, `screenshot_url`) are encrypted at rest via `pgsodium`.
+- DSAR (data subject access requests) are handled via `request_dsar()` — see [SOC 2 readiness](/security/soc2#dsar-data-subject-access-request).
+- The EU region does not replicate to US or JP. AI model calls from the EU region are routed to Anthropic's EU endpoints where available.
