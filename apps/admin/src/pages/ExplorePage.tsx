@@ -155,7 +155,7 @@ export function ExplorePage() {
     lastFetchedAt: statsFetchedAt,
     isValidating: statsValidating,
   } = usePageData<ExploreStats>('/v1/admin/explore/stats')
-  const stats = statsData ?? EMPTY_EXPLORE_STATS
+  const stats = { ...EMPTY_EXPLORE_STATS, ...statsData }
 
   const { resolved: theme } = useTheme()
 
@@ -427,8 +427,8 @@ export function ExplorePage() {
     ? LAYER_ORDER.filter((l) => (payload.layers[l] ?? 0) > 0).map(
         (l) => [l, payload.layers[l]] as [ExploreLayer, number],
       )
-    : LAYER_ORDER.filter((l) => stats.layers[l] > 0).map(
-        (l) => [l, stats.layers[l]] as [ExploreLayer, number],
+    : LAYER_ORDER.filter((l) => (stats.layers?.[l] ?? 0) > 0).map(
+        (l) => [l, stats.layers?.[l] ?? 0] as [ExploreLayer, number],
       )
 
   const mapControls =
@@ -651,13 +651,13 @@ export function ExplorePage() {
           />
           <StatCard
             label="UI layer"
-            value={stats.layers.ui}
+            value={stats.layers?.ui ?? 0}
             accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
             hint="Components, pages, screens"
           />
           <StatCard
             label="Backend"
-            value={stats.layers.backend}
+            value={stats.layers?.backend ?? 0}
             accent={stats.layers.backend > 0 ? 'text-info' : undefined}
             hint="API routes, edge functions"
           />
@@ -680,7 +680,7 @@ export function ExplorePage() {
               label: stats.topPriorityLabel ?? 'Indexed codebase map',
               metric:
                 stats.indexedFiles > 0
-                  ? `${stats.layers.ui} UI · ${stats.layers.backend} backend`
+                  ? `${stats.layers?.ui ?? 0} UI · ${stats.layers?.backend ?? 0} backend`
                   : undefined,
               summary:
                 stats.topPriority === 'not_enabled'
@@ -747,7 +747,7 @@ export function ExplorePage() {
             </Card>
           ) : null}
 
-          {stats.topLanguages.length > 0 && (
+          {stats.topLanguages?.length > 0 && (
             <Card className="p-4">
               <p className="text-2xs font-medium text-fg-muted uppercase tracking-wider mb-2">Top languages</p>
               <div className="flex flex-wrap gap-2">
@@ -805,7 +805,7 @@ export function ExplorePage() {
               <code className="font-mono">project_codebase_files</code>. Use this when the banner
               shows ERROR or INDEXING.
             </p>
-            <DetailRows rows={buildIndexRows(stats)} />
+            <DetailRows items={buildIndexRows(stats)} />
           </Card>
           <div className="flex flex-wrap gap-2">
             <Link to="/settings">
