@@ -32,6 +32,7 @@ export const ADMIN_SCREENSHOTS: Record<string, AdminScreenshotEntry> = {
   dashboard: {
     image: 'dashboard-dark.png',
     light: 'dashboard-light.png',
+    gif: 'dashboard-demo.gif',
     alt: 'Dashboard — PDCA cockpit with KPI tiles, severity histogram, and triage queue',
     caption: 'Morning check in 30 seconds — backlog, in-flight fixes, LLM cost',
     route: '/dashboard',
