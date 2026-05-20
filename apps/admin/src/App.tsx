@@ -83,6 +83,7 @@ const UsersPage = lazy(() => import('./pages/UsersPage').then(m => ({ default: m
 // short-lived access token via postMessage. Mounted INSIDE ProtectedRoute
 // so unauthenticated callers go through /login first, then come back here.
 const DocsBridgePage = lazy(() => import('./pages/DocsBridgePage').then(m => ({ default: m.DocsBridgePage })))
+const ExplorePage = lazy(() => import('./pages/ExplorePage').then(m => ({ default: m.ExplorePage })))
 
 /**
  * NotFoundPage — rendered for any unknown route the SPA's React Router
@@ -262,6 +263,7 @@ export function App() {
                   <Route path="/organization/members" element={<OrganizationSettingsPage />} />
                   <Route path="/org/:slug/settings/*" element={<OrganizationSettingsPage />} />
                   <Route path="/inbox" element={<InboxPage />} />
+                  <Route path="/explore" element={<ExplorePage />} />
                   <Route path="/users" element={<UsersPage />} />
                   <Route path="/docs-bridge" element={<DocsBridgePage />} />
                   <Route path="*" element={<NotFoundPage />} />

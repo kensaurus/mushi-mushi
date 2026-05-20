@@ -1219,10 +1219,10 @@ export function PageHeader({ title, description, children, contextChip, projectS
   // forcing every page to import PdcaContextHint manually.
   const chip = contextChip === undefined ? <AutoPdcaChip /> : contextChip
   return (
-    <div className="flex items-start justify-between mb-5 gap-3">
-      <div className="min-w-0">
-        {chip && <div className="mb-1.5">{chip}</div>}
-        <h2 className="text-base font-semibold text-fg">
+    <div className="mb-5 space-y-1.5">
+      {chip && <div>{chip}</div>}
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="min-w-0 flex-1 text-base font-semibold text-fg leading-snug">
           {title}
           {projectScope && (
             <>
@@ -1231,17 +1231,17 @@ export function PageHeader({ title, description, children, contextChip, projectS
             </>
           )}
         </h2>
-        {description && (
-          <p className="text-xs text-fg-muted mt-1.5 max-w-2xl leading-relaxed text-pretty">
-            {description}
-          </p>
+        {(children || showCopyLink) && (
+          <div className="flex items-center gap-2 shrink-0">
+            {showCopyLink && <CopyViewLinkButton />}
+            {children}
+          </div>
         )}
       </div>
-      {(children || showCopyLink) && (
-        <div className="flex items-center gap-2 shrink-0">
-          {showCopyLink && <CopyViewLinkButton />}
-          {children}
-        </div>
+      {description && (
+        <p className="text-xs text-fg-muted max-w-3xl leading-relaxed text-pretty text-balance">
+          {description}
+        </p>
       )}
     </div>
   )
