@@ -1,6 +1,14 @@
 # @mushi-mushi/mcp
 
-[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that exposes Mushi Mushi reports, fixes, and project state to coding agents (Claude Code, Cursor, Codex, Continue, Cline, Zed, Windsurf, and any other MCP-compatible client).
+[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi Mushi's closed-loop bug intelligence into your AI coding agent — so Cursor, Claude Code, Copilot, and any other MCP-compatible client can read classified reports, query the lesson library, and dispatch AI-generated fixes directly from the editor.
+
+**The evolutionary angle:** the lesson library (`lessons.query` tool) is the agent's institutional memory. Every bug cluster your team has ever named is available to the agent before it touches a single line of code — so it doesn't repeat the same class of mistake the last agent made. That's the "cumulative selection" loop the [main README](https://www.npmjs.com/package/mushi-mushi) describes, delivered to your IDE.
+
+> **What this is, and what it isn't**
+>
+> - **This package** is the MCP **server** — runs locally next to your editor, talks to the Mushi Mushi API, and presents bug reports as MCP tools/resources to your coding agent.
+> - **`@mushi-mushi/agents`** ships the MCP **client adapter** — used by the autofix orchestrator when your project's `autofix_agent = 'mcp'`. See `packages/agents/src/adapters/mcp.ts`.
+> - The `generic_mcp` adapter shipped before V5.3 was a misnomer (it spoke plain REST). It is now `RestFixWorkerAgent`; the old export is kept as a deprecated alias for one more minor.
 
 > **What this is, and what it isn't**
 >
@@ -41,6 +49,9 @@ npx -y @mushi-mushi/mcp@latest
 ```
 
 Set the same three env vars (`MUSHI_API_KEY`, `MUSHI_PROJECT_ID`, optional `MUSHI_API_ENDPOINT`).
+
+> **Where do I find `MUSHI_PROJECT_ID`?**
+> Log into your [Mushi admin console](https://kensaur.us/mushi-mushi/admin/) → **Projects** → click your project → the Project ID chip next to the project name is copyable with one click. It looks like `542b34e0-019e-41fe-b900-7b637717bb86`. Without it the MCP server starts but all tool calls return an empty result with a clear message pointing you here.
 
 ### 3. From the command line
 

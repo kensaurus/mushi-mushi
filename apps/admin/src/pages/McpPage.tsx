@@ -36,7 +36,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
-import { detectFromPackageJson, monorepoInstallGuidance } from '../lib/frameworkDetect'
+import { detectFromPackageJson } from '../lib/frameworkDetect'
 import {
   TOOL_CATALOG,
   RESOURCE_CATALOG,
@@ -116,16 +116,18 @@ function hintBadges(spec: ToolSpec) {
   return chips
 }
 
+const MUSHI_CLOUD_API = 'https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/api'
+
 function buildCursorJson(projectId: string, projectName: string): string {
   return JSON.stringify(
     {
       mcpServers: {
         [`mushi-${projectName.toLowerCase().replace(/[^a-z0-9-]/g, '-').slice(0, 32)}`]: {
           command: 'npx',
-          args: ['-y', 'mushi-mcp@latest'],
+          args: ['-y', '@mushi-mushi/mcp'],
           env: {
-            MUSHI_API_ENDPOINT: 'https://api.mushimushi.dev',
-            MUSHI_API_KEY: 'paste-your-key-here',
+            MUSHI_API_ENDPOINT: MUSHI_CLOUD_API,
+            MUSHI_API_KEY: 'paste-your-mushi-api-key-here',
             MUSHI_PROJECT_ID: projectId,
           },
         },
@@ -139,8 +141,8 @@ function buildCursorJson(projectId: string, projectName: string): string {
 function buildEnvBlock(projectId: string): string {
   return [
     '# Mushi MCP — paste into .env.local (gitignored).',
-    'MUSHI_API_ENDPOINT=https://api.mushimushi.dev',
-    'MUSHI_API_KEY=paste-your-key-here',
+    `MUSHI_API_ENDPOINT=${MUSHI_CLOUD_API}`,
+    'MUSHI_API_KEY=paste-your-mushi-api-key-here',
     `MUSHI_PROJECT_ID=${projectId}`,
     '',
   ].join('\n')
@@ -411,7 +413,15 @@ export function McpPage() {
                 <button type="button" disabled={!detectText.trim()}
                   onClick={() => {
                     const result = detectFromPackageJson(detectText)
-                    setMonorepoNote(monorepoInstallGuidance(result, 'npm install -g mushi-mcp'))
+                    // mushi-mcp is a global CLI tool — workspace scoping (--workspace=,
+                    // --filter) doesn't apply. Use a note about global vs. local installs.
+                    const globalNote = result.monorepo
+                      ? `Detected ${result.monorepo} monorepo.\n\n` +
+                        `mushi-mcp is a CLI tool — install it globally on your dev machine:\n\n` +
+                        `  npm install -g mushi-mcp\n\n` +
+                        `Then run \`npx mushi-mcp\` from any workspace directory.`
+                      : null
+                    setMonorepoNote(globalNote)
                     setMonoWarnings(result.warnings)
                     setDetectOpen(false)
                   }}

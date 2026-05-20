@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, afterAll } from 'vitest'
+import { describe, it, expect, afterEach, afterAll, beforeEach } from 'vitest'
 import { loadConfig, saveConfig } from './config.js'
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
@@ -19,7 +19,24 @@ afterAll(() => {
 })
 
 describe('loadConfig', () => {
-  it('returns empty object when file does not exist', () => {
+  // Save and restore env vars so tests are hermetic.
+  const WATCHED_VARS = ['MUSHI_API_KEY', 'MUSHI_PROJECT_ID', 'MUSHI_API_ENDPOINT'] as const
+  let savedEnv: Partial<Record<typeof WATCHED_VARS[number], string | undefined>> = {}
+
+  beforeEach(() => {
+    savedEnv = {}
+    for (const v of WATCHED_VARS) savedEnv[v] = process.env[v]
+    for (const v of WATCHED_VARS) delete process.env[v]
+  })
+
+  afterEach(() => {
+    for (const v of WATCHED_VARS) {
+      if (savedEnv[v] === undefined) delete process.env[v]
+      else process.env[v] = savedEnv[v]
+    }
+  })
+
+  it('returns empty object when file does not exist and no env vars set', () => {
     expect(loadConfig('/tmp/nonexistent-mushirc')).toEqual({})
   })
 
@@ -28,6 +45,32 @@ describe('loadConfig', () => {
     const config = loadConfig(TEST_PATH)
     expect(config.apiKey).toBe('test-key')
     expect(config.endpoint).toBe('https://example.com')
+  })
+
+  it('env vars overlay file values (env wins)', () => {
+    saveConfig({ apiKey: 'from-file', endpoint: 'https://file.example.com' }, TEST_PATH)
+    process.env['MUSHI_API_KEY'] = 'from-env'
+    process.env['MUSHI_API_ENDPOINT'] = 'https://env.example.com'
+    const config = loadConfig(TEST_PATH)
+    expect(config.apiKey).toBe('from-env')
+    expect(config.endpoint).toBe('https://env.example.com')
+  })
+
+  it('env vars work without a config file', () => {
+    process.env['MUSHI_API_KEY'] = 'mushi_envkey123'
+    process.env['MUSHI_PROJECT_ID'] = '542b34e0-019e-41fe-b900-7b637717bb86'
+    process.env['MUSHI_API_ENDPOINT'] = 'https://xyz.supabase.co/functions/v1/api'
+    const config = loadConfig('/tmp/nonexistent-mushirc')
+    expect(config.apiKey).toBe('mushi_envkey123')
+    expect(config.projectId).toBe('542b34e0-019e-41fe-b900-7b637717bb86')
+    expect(config.endpoint).toBe('https://xyz.supabase.co/functions/v1/api')
+  })
+
+  it('file values survive when env vars are absent', () => {
+    saveConfig({ apiKey: 'from-file', projectId: 'proj_fileonly' }, TEST_PATH)
+    const config = loadConfig(TEST_PATH)
+    expect(config.apiKey).toBe('from-file')
+    expect(config.projectId).toBe('proj_fileonly')
   })
 
   it('tightens permissions of a world-readable legacy config on load', () => {

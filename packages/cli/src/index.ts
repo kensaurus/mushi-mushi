@@ -1,3 +1,27 @@
+/**
+ * FILE: packages/cli/src/index.ts
+ * PURPOSE: @mushi-mushi/cli — full CLI for managing Mushi Mushi bug-intelligence
+ *          from the terminal and CI pipelines.
+ *
+ * AUTH MODEL
+ * ----------
+ * All network commands use the project's SDK API key (MUSHI_API_KEY), validated
+ * server-side via `apiKeyAuth` middleware. The CLI never needs an interactive
+ * Supabase JWT — the API key alone is sufficient for every operation here.
+ *
+ * Auth precedence (highest wins):
+ *   1. Explicit flags (--api-key, --endpoint, --project-id)
+ *   2. Environment variables (MUSHI_API_KEY, MUSHI_API_ENDPOINT, MUSHI_PROJECT_ID)
+ *   3. ~/.mushirc config file (written by `mushi login`)
+ *
+ * EXIT CODES
+ * ----------
+ *   0  — success
+ *   1  — API or runtime error
+ *   2  — configuration error (missing credentials / bad endpoint)
+ *   3  — not found (report/lesson ID does not exist)
+ */
+
 import { Command } from 'commander'
 import { loadConfig, saveConfig } from './config.js'
 import type { CliConfig } from './config.js'
@@ -8,39 +32,212 @@ import { MUSHI_CLI_VERSION } from './version.js'
 import { assertEndpoint } from './endpoint.js'
 import { runSourcemapsUpload } from './sourcemaps.js'
 
-async function apiCall(path: string, config: CliConfig, options: RequestInit = {}): Promise<unknown> {
+// ─── API client ─────────────────────────────────────────────────────────────
+
+const API_TIMEOUT_MS = 15_000
+
+/**
+ * Typed API response envelope. Every Mushi sync endpoint returns
+ * `{ ok: true, data: T }` or `{ ok: false, error: { code, message } }`.
+ */
+interface ApiOk<T> { ok: true; data: T; meta?: Record<string, unknown> }
+interface ApiError { ok: false; error: { code: string; message: string }; httpStatus?: number }
+type ApiResult<T> = ApiOk<T> | ApiError
+
+/**
+ * Make an authenticated request to a Mushi sync endpoint.
+ *
+ * - Always resolves (never throws on HTTP errors) — callers inspect `result.ok`.
+ * - Handles non-JSON responses gracefully (router 404s, Supabase gateway errors).
+ * - Enforces a 15 s timeout so CI pipelines don't hang forever.
+ * - Sends `X-Mushi-Api-Key` header; sync endpoints use `apiKeyAuth` which
+ *   reads that header and resolves the project from the API key's DB row.
+ */
+async function apiCall<T = unknown>(
+  path: string,
+  config: CliConfig,
+  options: RequestInit = {},
+): Promise<ApiResult<T>> {
   const endpoint = config.endpoint
   if (!endpoint) {
-    throw new Error(
-      'No API endpoint configured. Run `mushi init` or set MUSHI_API_ENDPOINT. ' +
-        'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
-    )
+    return {
+      ok: false,
+      error: {
+        code: 'NO_ENDPOINT',
+        message:
+          'No API endpoint configured.\n' +
+          '  Run: mushi login --api-key <key> --endpoint <url> --project-id <id>\n' +
+          '  Or:  export MUSHI_API_ENDPOINT=https://<project-ref>.supabase.co/functions/v1/api',
+      },
+    }
   }
-  const res = await fetch(`${endpoint}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-      'X-Mushi-Api-Key': config.apiKey ?? '',
-      'X-Mushi-Project': config.projectId ?? '',
-      ...options.headers,
-    },
-  })
-  return res.json()
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(`${endpoint}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        // `apiKeyAuth` reads X-Mushi-Api-Key; the Authorization header is a
+        // fallback accepted by some older middleware. Both are sent.
+        'Authorization': `Bearer ${config.apiKey ?? ''}`,
+        'X-Mushi-Api-Key': config.apiKey ?? '',
+        'X-Mushi-Project': config.projectId ?? '',
+        'X-Mushi-Cli-Version': MUSHI_CLI_VERSION,
+        ...options.headers,
+      },
+    })
+
+    clearTimeout(timer)
+
+    // Safe JSON parse — gateway 404s and Deno edge runtime cold-start errors
+    // return plain text. Wrapping protects callers from an unhandled exception.
+    let body: unknown
+    const contentType = res.headers.get('content-type') ?? ''
+    if (contentType.includes('application/json')) {
+      try { body = await res.json() } catch { body = null }
+    } else {
+      const text = await res.text()
+      try { body = JSON.parse(text) } catch {
+        // Non-JSON body — surface as a structured error.
+        body = {
+          ok: false,
+          error: {
+            code: `HTTP_${res.status}`,
+            message: text.trim().slice(0, 300) || `HTTP ${res.status}`,
+          },
+        }
+      }
+    }
+
+    // Normalise: if the server returned a bare error object without `ok: false`
+    if (
+      !res.ok &&
+      typeof body === 'object' &&
+      body !== null &&
+      !('ok' in body)
+    ) {
+      const b = body as Record<string, unknown>
+      return {
+        ok: false,
+        httpStatus: res.status,
+        error: {
+          code: (b['code'] as string) ?? `HTTP_${res.status}`,
+          message: (b['message'] as string) ?? `Request failed (${res.status})`,
+        },
+      }
+    }
+
+    return body as ApiResult<T>
+  } catch (err) {
+    clearTimeout(timer)
+    if (err instanceof Error && err.name === 'AbortError') {
+      return {
+        ok: false,
+        error: {
+          code: 'TIMEOUT',
+          message: `Request timed out after ${API_TIMEOUT_MS / 1000}s. Check your network or endpoint.`,
+        },
+      }
+    }
+    return {
+      ok: false,
+      error: {
+        code: 'NETWORK_ERROR',
+        message: err instanceof Error ? err.message : String(err),
+      },
+    }
+  }
 }
+
+// ─── Shared helpers ──────────────────────────────────────────────────────────
+
+/** Print an API error and exit with the appropriate code. */
+function die(result: ApiError, exitCode = 1): never {
+  const { code, message } = result.error
+  const status = result.httpStatus ? ` [${result.httpStatus}]` : ''
+  process.stderr.write(`error${status}: ${code} — ${message}\n`)
+  process.exit(exitCode)
+}
+
+/**
+ * Load config and assert that api key + endpoint are present.
+ * Exits with code 2 (config error) if either is missing.
+ */
+function requireConfig(opts: { needsProject?: boolean } = {}): Required<Pick<CliConfig, 'apiKey' | 'endpoint'>> & CliConfig {
+  const config = loadConfig()
+  if (!config.apiKey) {
+    process.stderr.write(
+      'error: API key not configured.\n' +
+      '  Run:  mushi login --api-key <key> --endpoint <url>\n' +
+      '  Or:   export MUSHI_API_KEY=<key>\n',
+    )
+    process.exit(2)
+  }
+  if (!config.endpoint) {
+    process.stderr.write(
+      'error: API endpoint not configured.\n' +
+      '  Run:  mushi login --endpoint https://<ref>.supabase.co/functions/v1/api\n' +
+      '  Or:   export MUSHI_API_ENDPOINT=<url>\n',
+    )
+    process.exit(2)
+  }
+  if (opts.needsProject && !config.projectId) {
+    process.stderr.write(
+      'error: Project ID not configured.\n' +
+      '  Run:  mushi login --project-id <uuid>\n' +
+      '  Or:   export MUSHI_PROJECT_ID=<uuid>\n' +
+      '  Find your project ID: https://kensaur.us/mushi-mushi/projects\n',
+    )
+    process.exit(2)
+  }
+  return config as Required<Pick<CliConfig, 'apiKey' | 'endpoint'>> & CliConfig
+}
+
+/** Format a UTC date string to a compact local date+time string. */
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+}
+
+/** Right-pad a string to a fixed width (for aligned table output). */
+function pad(s: string, width: number): string {
+  return s.length >= width ? s : s + ' '.repeat(width - s.length)
+}
+
+// ─── CLI program ─────────────────────────────────────────────────────────────
 
 const program = new Command()
   .name('mushi')
   .description('Mushi Mushi CLI — set up the SDK, manage bug reports, monitor pipeline')
   .version(MUSHI_CLI_VERSION)
+  .addHelpText('after', `
+Environment variables:
+  MUSHI_API_KEY        Project API key (from Settings → API Keys in the console)
+  MUSHI_PROJECT_ID     Project UUID    (from the Projects page in the console)
+  MUSHI_API_ENDPOINT   Supabase edge function URL
+                       e.g. https://<ref>.supabase.co/functions/v1/api
 
+Exit codes:
+  0  success
+  1  API / runtime error
+  2  configuration error (missing credentials or endpoint)
+  3  not found (resource does not exist)
+
+Console: https://kensaur.us/mushi-mushi/
+Docs:    https://github.com/kensaurus/mushi-mushi`)
+
+// ─── init ────────────────────────────────────────────────────────────────────
 program
   .command('init')
   .description('Set up the Mushi Mushi SDK in this project (auto-detects framework)')
-  .option('--project-id <id>', 'Skip the prompt by passing the project ID')
-  .option('--api-key <key>', 'Skip the prompt by passing the API key')
+  .option('--project-id <id>', 'Skip the prompt — pass UUID from the Projects page')
+  .option('--api-key <key>', 'Skip the prompt — pass the API key (CI only)')
   .option('--framework <id>', 'Force a framework (next, react, vue, nuxt, svelte, sveltekit, angular, expo, react-native, capacitor, vanilla)')
-  .option('--skip-install', 'Don\'t auto-install the SDK package — print the command instead')
+  .option('--skip-install', "Print the install command instead of running it")
   .option('-y, --yes', 'Accept detected framework without prompting')
   .option('--cwd <path>', 'Run the wizard in a different directory')
   .option('--endpoint <url>', 'Override the Mushi API endpoint (self-hosted)')
@@ -67,284 +264,549 @@ program
     })
   })
 
+// ─── migrate ─────────────────────────────────────────────────────────────────
 program
   .command('migrate')
-  .description(
-    'Suggest the most relevant Mushi Mushi migration guide based on your package.json',
-  )
+  .description('Suggest the most relevant Mushi Mushi migration guide based on your package.json')
   .option('--cwd <path>', 'Run from a different directory')
   .option('--json', 'Machine-readable JSON output')
   .action((opts: { cwd?: string; json?: boolean }) => {
     const { matches } = runMigrate({ cwd: opts.cwd, json: opts.json })
-    /* Non-zero exit when nothing matched so the command composes well in
-     * shell scripts (`mushi migrate || echo "no suggestions"`). The
-     * --json mode still respects this so CI gates can branch on it. */
     if (matches.length === 0) process.exit(1)
   })
 
+// ─── login ───────────────────────────────────────────────────────────────────
 program
   .command('login')
-  .description('Store API key for authentication')
-  .requiredOption('--api-key <key>', 'API key')
-  .option('--endpoint <url>', 'API endpoint URL')
-  .option('--project-id <id>', 'Default project ID')
-  .action((opts) => {
+  .description('Save API credentials to ~/.mushirc (mode 0o600)')
+  .requiredOption('--api-key <key>', 'Mushi API key (mushi_...)')
+  .option('--endpoint <url>', 'Supabase edge function URL')
+  .option('--project-id <id>', 'Project UUID (from the Projects page)')
+  .addHelpText('after', `
+Examples:
+  mushi login --api-key mushi_xxx --endpoint https://xyz.supabase.co/functions/v1/api
+  mushi login --api-key mushi_xxx --project-id 542b34e0-019e-41fe-b900-7b637717bb86`)
+  .action((opts: { apiKey: string; endpoint?: string; projectId?: string }) => {
     const config = loadConfig()
     config.apiKey = opts.apiKey
     if (opts.endpoint) config.endpoint = assertEndpoint(opts.endpoint)
     if (opts.projectId) config.projectId = opts.projectId
     saveConfig(config)
-    console.log('Saved credentials to ~/.mushirc (mode 0o600)')
+    console.log('✓ Credentials saved to ~/.mushirc (mode 0o600)')
+    console.log("  Run 'mushi whoami' to verify the connection.")
   })
 
+// ─── whoami ──────────────────────────────────────────────────────────────────
+program
+  .command('whoami')
+  .description('Verify API key and display project info')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Verifies that MUSHI_API_KEY is valid and shows which project it belongs to.
+Useful after 'mushi login' to confirm credentials are correct.`)
+  .action(async (opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const result = await apiCall<WhoamiData>('/v1/sync/whoami', config)
+    if (!result.ok) die(result)
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      const d = result.data
+      console.log(`✓ Authenticated`)
+      console.log(`  Project:  ${d.project_name} (${d.project_id})`)
+      console.log(`  Endpoint: ${config.endpoint}`)
+      console.log(`  Reports:  ${d.stats.total_reports} total · ${d.stats.open_reports} open`)
+    }
+  })
+
+// ─── ping ─────────────────────────────────────────────────────────────────────
+program
+  .command('ping')
+  .description('Check connectivity to the Mushi backend')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const t0 = Date.now()
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+      const res = await fetch(`${config.endpoint}/health`, { signal: controller.signal })
+      clearTimeout(timer)
+      const latency = Date.now() - t0
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: res.ok, status: res.status, latency_ms: latency }))
+      } else {
+        const symbol = res.ok ? '✓' : '✗'
+        console.log(`${symbol} ${res.ok ? 'OK' : 'FAIL'} — ${res.status} (${latency}ms)`)
+        if (!res.ok) process.exit(1)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: false, error: msg, latency_ms: Date.now() - t0 }))
+      } else {
+        process.stderr.write(`✗ Unreachable: ${msg}\n`)
+      }
+      process.exit(1)
+    }
+  })
+
+// ─── status ──────────────────────────────────────────────────────────────────
 program
   .command('status')
-  .description('Show project stats')
-  .action(async () => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    const data = await apiCall('/v1/admin/stats', config) as Record<string, unknown>
-    console.log(JSON.stringify(data, null, 2))
+  .description('Show project stats: report counts by severity and status')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const result = await apiCall<StatsData>('/v1/sync/stats', config)
+    if (!result.ok) die(result)
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+      return
+    }
+    const d = result.data
+    console.log(`Project: ${d.project_name}`)
+    console.log('')
+    console.log('Reports by status:')
+    for (const [status, count] of Object.entries(d.by_status)) {
+      console.log(`  ${pad(status, 14)} ${count}`)
+    }
+    console.log('')
+    console.log('Reports by severity:')
+    for (const [severity, count] of Object.entries(d.by_severity)) {
+      console.log(`  ${pad(severity, 14)} ${count}`)
+    }
+    console.log('')
+    console.log(`Fixes:   ${d.fixes_count} total · ${d.fixes_merged} merged`)
+    console.log(`Lessons: ${d.lessons_count} active rules`)
   })
 
+// ─── config ──────────────────────────────────────────────────────────────────
+program
+  .command('config')
+  .description('View or update CLI config (stored in ~/.mushirc)')
+  .argument('[key]', 'Config key to set: apiKey | endpoint | projectId')
+  .argument('[value]', 'New value')
+  .addHelpText('after', `
+Keys:
+  apiKey     — Mushi API key (mushi_...)
+  endpoint   — Supabase edge function URL
+  projectId  — Project UUID
+
+Examples:
+  mushi config                        # show all config
+  mushi config apiKey mushi_xxx       # set API key
+  mushi config endpoint https://...   # set endpoint
+  mushi config projectId <uuid>       # set project`)
+  .action((key: string | undefined, value: string | undefined) => {
+    const config = loadConfig()
+    const ALLOWED_KEYS = new Set(['apiKey', 'endpoint', 'projectId'])
+    if (key && value) {
+      if (!ALLOWED_KEYS.has(key)) {
+        process.stderr.write(`error: unknown config key "${key}". Allowed: ${[...ALLOWED_KEYS].join(', ')}\n`)
+        process.exit(2)
+      }
+      const safeValue = key === 'endpoint' ? assertEndpoint(value) : value
+      ;(config as Record<string, unknown>)[key] = safeValue
+      saveConfig(config)
+      console.log(`✓ Set ${key}`)
+    } else {
+      // Never print the full API key value to the terminal
+      const safe = { ...config, apiKey: config.apiKey ? `${config.apiKey.slice(0, 10)}…` : undefined }
+      console.log(JSON.stringify(safe, null, 2))
+    }
+  })
+
+// ─── deploy ───────────────────────────────────────────────────────────────────
+const deploy = program.command('deploy').description('Deployment management')
+
+deploy
+  .command('check')
+  .description('Check edge function health and measure latency')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const t0 = Date.now()
+    try {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
+      const res = await fetch(`${config.endpoint}/health`, { signal: controller.signal })
+      clearTimeout(timer)
+      const latency = Date.now() - t0
+      const body: Record<string, unknown> = res.headers.get('content-type')?.includes('json')
+        ? await res.json().catch(() => ({}))
+        : {}
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: res.ok, status: res.status, latency_ms: latency, ...body }))
+      } else {
+        console.log(`Health: ${res.status === 200 ? 'OK' : 'FAIL'} (${res.status}) — ${latency}ms`)
+        if (body['version']) console.log(`  Version: ${body['version']}`)
+        if (body['region']) console.log(`  Region:  ${body['region']}`)
+      }
+      if (!res.ok) process.exit(1)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: false, error: msg }))
+      } else {
+        process.stderr.write(`error: ${msg}\n`)
+      }
+      process.exit(1)
+    }
+  })
+
+// ─── reports ──────────────────────────────────────────────────────────────────
 const reports = program.command('reports').description('Manage bug reports')
 
 reports
   .command('list')
-  .description('List recent reports')
-  .option('--limit <n>', 'Max results', '20')
-  .option('--status <status>', 'Filter by status')
-  .option('--json', 'JSON output')
-  .action(async (opts) => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    const params = new URLSearchParams()
-    params.set('limit', opts.limit)
+  .description('List recent reports for the current project')
+  .option('--limit <n>', 'Max results (1–100)', '20')
+  .option('--status <status>', 'Filter by status: new|triaged|in_progress|resolved|dismissed')
+  .option('--severity <severity>', 'Filter by severity: critical|high|medium|low')
+  .option('--search <query>', 'Full-text search in summary and description')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi reports list
+  mushi reports list --status new --severity critical
+  mushi reports list --search "button not working" --limit 5 --json`)
+  .action(async (opts: { limit: string; status?: string; severity?: string; search?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const limit = Math.min(Math.max(1, parseInt(opts.limit) || 20), 100)
+    const params = new URLSearchParams({ limit: String(limit) })
     if (opts.status) params.set('status', opts.status)
-    const data = await apiCall(`/v1/admin/reports?${params}`, config) as Record<string, unknown>
+    if (opts.severity) params.set('severity', opts.severity)
+    if (opts.search) params.set('search', opts.search)
+    const result = await apiCall<ReportListData>(`/v1/sync/reports?${params}`, config)
+    if (!result.ok) die(result)
     if (opts.json) {
-      console.log(JSON.stringify(data, null, 2))
-    } else {
-      const reports = ((data as Record<string, unknown>).data as Record<string, unknown>)?.reports as Record<string, unknown>[] ?? []
-      for (const r of reports) {
-        console.log(`${r.id}  ${r.severity ?? 'unset'}  ${r.status ?? 'new'}  ${(r.summary as string ?? '').slice(0, 60)}`)
-      }
+      console.log(JSON.stringify(result.data, null, 2))
+      return
+    }
+    const rows = result.data.reports
+    if (rows.length === 0) {
+      console.log('No reports found.')
+      return
+    }
+    console.log(`${pad('ID', 38)} ${pad('SEV', 9)} ${pad('STATUS', 12)} ${pad('CREATED', 17)} SUMMARY`)
+    console.log('─'.repeat(110))
+    for (const r of rows) {
+      const sev = r.severity ?? 'unset'
+      const status = r.status ?? 'new'
+      const summary = (r.summary ?? r.description ?? '').slice(0, 50)
+      console.log(`${pad(r.id, 38)} ${pad(sev, 9)} ${pad(status, 12)} ${pad(fmtDate(r.created_at), 17)} ${summary}`)
+    }
+    if (result.data.total > rows.length) {
+      console.log(`\n  … ${result.data.total - rows.length} more. Use --limit to see more.`)
     }
   })
 
 reports
   .command('show <id>')
-  .description('Show report details')
-  .action(async (id) => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    const data = await apiCall(`/v1/admin/reports/${id}`, config) as Record<string, unknown>
-    console.log(JSON.stringify(data, null, 2))
+  .description('Show full details for a single report')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (id: string, opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config)
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+      return
+    }
+    const r = result.data
+    console.log(`Report: ${r.id}`)
+    console.log(`  Status:   ${r.status ?? 'new'}`)
+    console.log(`  Severity: ${r.severity ?? 'unset'}`)
+    console.log(`  Category: ${r.category ?? '—'}`)
+    console.log(`  Created:  ${fmtDate(r.created_at)}`)
+    if (r.summary) console.log(`  Summary:  ${r.summary}`)
+    if (r.description) {
+      console.log(`  Description:`)
+      console.log(`    ${r.description.replace(/\n/g, '\n    ')}`)
+    }
+    if (r.environment?.url) console.log(`  URL:      ${r.environment.url}`)
+    if (r.component) console.log(`  Component: ${r.component}`)
+    if (r.sentry_event_id) console.log(`  Sentry:   ${r.sentry_event_id}`)
+    if (r.fix_id) console.log(`  Fix:      ${r.fix_id}`)
+    if (r.tags && Object.keys(r.tags).length > 0) {
+      console.log(`  Tags:     ${JSON.stringify(r.tags)}`)
+    }
   })
 
 reports
   .command('triage <id>')
-  .description('Update report status/severity')
-  .option('--status <status>', 'New status')
-  .option('--severity <severity>', 'New severity')
-  .action(async (id, opts) => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
+  .description('Update the status and/or severity of a report')
+  .option('--status <status>', 'New status: new|triaged|in_progress|resolved|dismissed')
+  .option('--severity <severity>', 'New severity: critical|high|medium|low')
+  .option('--note <text>', 'Internal triage note')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi reports triage <id> --status triaged --severity high
+  mushi reports triage <id> --status in_progress --note "assigned to @alice"`)
+  .action(async (id: string, opts: { status?: string; severity?: string; note?: string; json?: boolean }) => {
+    const config = requireConfig()
     const body: Record<string, string> = {}
-    if (opts.status) body.status = opts.status
-    if (opts.severity) body.severity = opts.severity
-    const data = await apiCall(`/v1/admin/reports/${id}`, config, { method: 'PATCH', body: JSON.stringify(body) }) as Record<string, unknown>
-    console.log(JSON.stringify(data, null, 2))
-  })
-
-program
-  .command('config')
-  .description('View or update CLI config')
-  .argument('[key]', 'Config key to set')
-  .argument('[value]', 'Value')
-  .action((key, value) => {
-    const config = loadConfig()
-    if (key && value) {
-      const safeValue = key === 'endpoint' ? assertEndpoint(value) : value
-      ;(config as Record<string, unknown>)[key] = safeValue
-      saveConfig(config)
-      console.log(`Set ${key} = ${safeValue}`)
-    } else {
-      console.log(JSON.stringify(config, null, 2))
+    if (opts.status) body['status'] = opts.status
+    if (opts.severity) body['severity'] = opts.severity
+    if (opts.note) body['note'] = opts.note
+    if (Object.keys(body).length === 0) {
+      process.stderr.write('error: provide at least one of --status, --severity, or --note\n')
+      process.exit(2)
     }
-  })
-
-const deploy = program.command('deploy').description('Deployment management')
-
-deploy
-  .command('check')
-  .description('Check edge function health')
-  .action(async () => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    if (!config.endpoint) {
-      console.error(
-        'No API endpoint configured. Run `mushi init` or set MUSHI_API_ENDPOINT.\n' +
-          'Set endpoint to your Supabase edge function URL, e.g. https://xyz.supabase.co/functions/v1/api',
-      )
-      process.exit(1)
-    }
-    const endpoint = config.endpoint
-    try {
-      const res = await fetch(`${endpoint}/health`)
-      console.log(`Health: ${res.status === 200 ? 'OK' : 'FAIL'} (${res.status})`)
-    } catch (err) {
-      console.error('Failed:', err)
-    }
-  })
-
-program
-  .command('index <path>')
-  .description('Walk a local repo and upload code chunks to the RAG indexer (non-GitHub fallback for V5.3 §2.3.4)')
-  .option('--language <lang>', 'Limit to one language (ts, tsx, js, py, go, rs)')
-  .option('--dry-run', 'Show what would be uploaded without sending')
-  .action(async (path, opts) => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    if (!config.projectId) { console.error('Set projectId via `mushi config projectId <id>`'); process.exit(1) }
-
-    const { readdir, readFile, stat } = await import('node:fs/promises')
-    const nodePath = await import('node:path')
-
-    const SKIP = /node_modules|\.git|dist|build|\.next|\.turbo|coverage/
-    const EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs'])
-
-    async function* walk(dir: string): AsyncGenerator<string> {
-      const entries = await readdir(dir, { withFileTypes: true })
-      for (const e of entries) {
-        const full = nodePath.join(dir, e.name)
-        if (SKIP.test(full)) continue
-        if (e.isDirectory()) yield* walk(full)
-        else if (EXTS.has(nodePath.extname(e.name))) yield full
-      }
-    }
-
-    let count = 0
-    let bytes = 0
-    const root = nodePath.resolve(path)
-    for await (const file of walk(root)) {
-      const lang = nodePath.extname(file).slice(1)
-      if (opts.language && opts.language !== lang) continue
-      const stats = await stat(file)
-      if (stats.size > 500_000) continue
-      const source = await readFile(file, 'utf8')
-      const relative = nodePath.relative(root, file).replaceAll('\\', '/')
-      count++
-      bytes += source.length
-      if (opts.dryRun) {
-        console.log(`  ${relative} (${source.length} bytes)`)
-        continue
-      }
-      const res = await apiCall('/v1/admin/codebase/upload', config, {
-        method: 'POST',
-        body: JSON.stringify({
-          projectId: config.projectId,
-          filePath: relative,
-          source,
-        }),
-      }) as { ok?: boolean; chunks?: number; error?: string }
-      if (!res.ok) console.error(`  FAIL ${relative}: ${res.error ?? 'unknown'}`)
-      else process.stdout.write(`  ${relative} → ${res.chunks ?? 0} chunks\n`)
-    }
-    console.log(`Indexed ${count} files (${(bytes / 1024).toFixed(1)} KB) into project ${config.projectId}`)
-  })
-
-program
-  .command('test')
-  .description('Submit a test report to verify pipeline')
-  .action(async () => {
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    const data = await apiCall('/v1/reports', config, {
-      method: 'POST',
-      body: JSON.stringify({
-        projectId: config.projectId,
-        description: 'CLI test report — verifying pipeline',
-        category: 'other',
-        reporterToken: `cli-test-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        environment: {
-          url: 'cli://test',
-          userAgent: 'mushi-cli',
-          platform: process.platform,
-          language: 'en',
-          viewport: { width: 0, height: 0 },
-          referrer: '',
-          timestamp: new Date().toISOString(),
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
-      }),
-    }) as Record<string, unknown>
-    console.log('Test report submitted:', JSON.stringify(data, null, 2))
-  })
-
-const sourcemaps = program.command('sourcemaps').description('Source map management')
-
-sourcemaps
-  .command('upload')
-  .description('Upload source map files to the Mushi platform (idempotent, sha256-keyed)')
-  .requiredOption('--release <version>', 'Release version (e.g. 1.0.0 or git SHA)')
-  .option('--dir <path>', 'Directory containing source maps', './dist')
-  .option('--dry-run', 'List files that would be uploaded without uploading')
-  .option('-e, --endpoint <url>', 'API endpoint (overrides MUSHI_API_ENDPOINT)')
-  .option('--api-key <key>', 'API key (overrides MUSHI_API_KEY)')
-  .option('--silent', 'Suppress progress output (exit code still reflects failure)')
-  .action(async (opts: {
-    release: string
-    dir: string
-    dryRun?: boolean
-    endpoint?: string
-    apiKey?: string
-    silent?: boolean
-  }) => {
-    await runSourcemapsUpload({
-      release: opts.release,
-      dir: opts.dir,
-      dryRun: opts.dryRun,
-      endpoint: opts.endpoint,
-      apiKey: opts.apiKey,
-      silent: opts.silent,
+    const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
     })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Updated report ${id}`)
+      if (opts.status) console.log(`  Status:   ${opts.status}`)
+      if (opts.severity) console.log(`  Severity: ${opts.severity}`)
+      if (opts.note) console.log(`  Note:     ${opts.note}`)
+    }
   })
 
-// ─── sync-lessons command ────────────────────────────────────────────────────
-// Pulls promoted lessons from the Mushi API and writes .mushi/lessons.json
-// into the current repo. Designed to be called from CI or mushi-cron.
+reports
+  .command('resolve <id>')
+  .description('Mark a report as resolved (shorthand for triage --status resolved)')
+  .option('--note <text>', 'Resolution note')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (id: string, opts: { note?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { status: 'resolved' }
+    if (opts.note) body['note'] = opts.note
+    const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Resolved report ${id}`)
+      if (opts.note) console.log(`  Note: ${opts.note}`)
+    }
+  })
 
+reports
+  .command('reopen <id>')
+  .description('Reopen a resolved or dismissed report')
+  .option('--note <text>', 'Note explaining the reopen')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (id: string, opts: { note?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { status: 'new' }
+    if (opts.note) body['note'] = opts.note
+    const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Reopened report ${id}`)
+    }
+  })
+
+reports
+  .command('dismiss <id>')
+  .description('Dismiss a report (not a real bug / out of scope)')
+  .option('--note <text>', 'Reason for dismissal')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (id: string, opts: { note?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const body: Record<string, string> = { status: 'dismissed' }
+    if (opts.note) body['note'] = opts.note
+    const result = await apiCall<ReportDetail>(`/v1/sync/reports/${id}`, config, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: report "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      console.log(`✓ Dismissed report ${id}`)
+    }
+  })
+
+reports
+  .command('search <query>')
+  .description('Search reports by keyword in summary and description')
+  .option('--limit <n>', 'Max results (1–50)', '10')
+  .option('--status <status>', 'Filter by status')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Examples:
+  mushi reports search "login button"
+  mushi reports search "404 error" --status new --limit 20`)
+  .action(async (query: string, opts: { limit: string; status?: string; json?: boolean }) => {
+    const config = requireConfig()
+    const limit = Math.min(Math.max(1, parseInt(opts.limit) || 10), 50)
+    const params = new URLSearchParams({ search: query, limit: String(limit) })
+    if (opts.status) params.set('status', opts.status)
+    const result = await apiCall<ReportListData>(`/v1/sync/reports?${params}`, config)
+    if (!result.ok) die(result)
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+      return
+    }
+    const rows = result.data.reports
+    if (rows.length === 0) {
+      console.log(`No reports matching "${query}".`)
+      return
+    }
+    console.log(`${rows.length} result${rows.length === 1 ? '' : 's'} for "${query}":`)
+    console.log('')
+    for (const r of rows) {
+      console.log(`  ${r.id}`)
+      console.log(`    ${r.severity ?? 'unset'} · ${r.status ?? 'new'} · ${fmtDate(r.created_at)}`)
+      const text = r.summary ?? r.description ?? ''
+      if (text) console.log(`    ${text.slice(0, 80)}`)
+      console.log('')
+    }
+  })
+
+// ─── lessons ─────────────────────────────────────────────────────────────────
+const lessons = program.command('lessons').description('Manage learned mistake rules')
+
+lessons
+  .command('list')
+  .description('List active lessons (mistake rules) for the current project')
+  .option('--severity <sev>', 'Filter: info|warn|critical')
+  .option('--limit <n>', 'Max results (1–200)', '50')
+  .option('--json', 'Machine-readable JSON output')
+  .addHelpText('after', `
+Lessons are mistake rules extracted from past bug reports by the clustering
+pipeline. They are injected into AI code-review context via the MCP server.`)
+  .action(async (opts: { severity?: string; limit: string; json?: boolean }) => {
+    const config = requireConfig()
+    const limit = Math.min(Math.max(1, parseInt(opts.limit) || 50), 200)
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (opts.severity) params.set('severity', opts.severity)
+    const result = await apiCall<LessonListData>(`/v1/sync/lessons?${params}`, config)
+    if (!result.ok) die(result)
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+      return
+    }
+    const rows = result.data
+    if (!Array.isArray(rows) || rows.length === 0) {
+      console.log('No active lessons yet. Reports are clustered nightly.')
+      return
+    }
+    console.log(`${pad('SEV', 9)} ${pad('FREQ', 6)} RULE`)
+    console.log('─'.repeat(90))
+    for (const l of rows as LessonRow[]) {
+      const sev = l.severity ?? 'info'
+      const freq = String(l.frequency ?? 0)
+      const rule = (l.rule_text ?? '').slice(0, 70)
+      console.log(`${pad(sev, 9)} ${pad(freq, 6)} ${rule}`)
+    }
+    console.log(`\n  ${rows.length} active lesson${rows.length === 1 ? '' : 's'}`)
+  })
+
+lessons
+  .command('show <id>')
+  .description('Show full detail for a single lesson (rule text, anti-pattern, source reports)')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (id: string, opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const result = await apiCall<LessonRow>(`/v1/sync/lessons/${id}`, config)
+    if (!result.ok) {
+      if (result.httpStatus === 404 || result.error.code === 'NOT_FOUND') {
+        process.stderr.write(`error: lesson "${id}" not found\n`)
+        process.exit(3)
+      }
+      die(result)
+    }
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+      return
+    }
+    const l = result.data
+    console.log(`Lesson: ${l.id}`)
+    console.log(`  Severity:  ${l.severity}`)
+    console.log(`  Frequency: ${l.frequency} reports`)
+    if (l.last_reinforced_at) console.log(`  Updated:   ${fmtDate(l.last_reinforced_at)}`)
+    console.log('')
+    console.log(`Rule:`)
+    console.log(`  ${l.rule_text}`)
+    if (l.anti_pattern) {
+      console.log('')
+      console.log(`Anti-pattern:`)
+      console.log(`  ${l.anti_pattern}`)
+    }
+    if (l.summary_paragraph) {
+      console.log('')
+      console.log(`Summary:`)
+      console.log(`  ${l.summary_paragraph}`)
+    }
+  })
+
+// ─── sync-lessons ─────────────────────────────────────────────────────────────
 program
   .command('sync-lessons')
-  .description('Sync promoted lessons from Mushi into .mushi/lessons.json in this repo')
+  .description('Pull promoted lessons from Mushi and write .mushi/lessons.json into this repo')
   .option('--cwd <path>', 'Target directory (default: current working dir)')
-  .option('--dry-run', 'Print what would be written without writing')
-  .option('--json', 'Machine-readable JSON output')
+  .option('--dry-run', 'Print the JSON that would be written without writing anything')
+  .option('--json', 'Machine-readable output: { ok, path, count }')
+  .addHelpText('after', `
+Used in CI to keep .mushi/lessons.json up to date so the Mushi MCP server
+and Cursor rules can inject the latest project-specific mistake rules into
+AI code review context.
+
+Typical CI usage:
+  MUSHI_API_KEY=$KEY MUSHI_PROJECT_ID=$PID MUSHI_API_ENDPOINT=$URL \\
+    npx @mushi-mushi/cli sync-lessons --cwd .`)
   .action(async (opts: { cwd?: string; dryRun?: boolean; json?: boolean }) => {
     const { writeFile, mkdir } = await import('node:fs/promises')
     const nodePath = await import('node:path')
 
-    const config = loadConfig()
-    if (!config.apiKey) { console.error('Run `mushi login` first'); process.exit(1) }
-    if (!config.projectId) { console.error('Set projectId via `mushi config projectId <id>`'); process.exit(1) }
+    const config = requireConfig()
 
     const cwd = opts.cwd ?? process.cwd()
     const target = nodePath.join(cwd, '.mushi', 'lessons.json')
 
-    // Fetch from API
-    const res = await apiCall(
-      `/v1/admin/lessons?projectId=${config.projectId}&limit=500`,
-      config,
-    ) as { ok?: boolean; data?: LessonRow[]; error?: string }
+    const result = await apiCall<LessonRow[]>('/v1/sync/lessons?limit=500', config)
+    if (!result.ok) die(result)
 
-    if (!res.ok || !res.data) {
-      console.error('Failed to fetch lessons:', res.error ?? JSON.stringify(res))
-      process.exit(1)
-    }
-
-    const lessons: LessonsJson['lessons'] = res.data.map((l) => ({
+    const rows = Array.isArray(result.data) ? result.data : []
+    const lessons: LessonsJson['lessons'] = rows.map((l) => ({
       id: l.id,
       rule: l.rule_text,
       anti_pattern: l.anti_pattern ?? undefined,
@@ -356,7 +818,7 @@ program
 
     const output: LessonsJson = {
       schema_version: '1',
-      project_id: config.projectId,
+      project_id: config.projectId ?? '',
       generated_at: new Date().toISOString(),
       lessons,
     }
@@ -372,33 +834,212 @@ program
     if (opts.json) {
       console.log(JSON.stringify({ ok: true, path: target, count: lessons.length }))
     } else {
-      console.log(`✓ Wrote ${lessons.length} lessons to ${target}`)
+      console.log(`✓ Wrote ${lessons.length} lesson${lessons.length === 1 ? '' : 's'} to ${target}`)
     }
   })
+
+// ─── test ─────────────────────────────────────────────────────────────────────
+program
+  .command('test')
+  .description('Submit a synthetic test report to verify the ingestion pipeline end-to-end')
+  .option('--json', 'Machine-readable JSON output')
+  .action(async (opts: { json?: boolean }) => {
+    const config = requireConfig()
+    const result = await apiCall<{ reportId: string; status: string }>('/v1/reports', config, {
+      method: 'POST',
+      body: JSON.stringify({
+        projectId: config.projectId,
+        description: 'CLI test report — verifying ingestion pipeline',
+        category: 'other',
+        reporterToken: `cli-test-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        environment: {
+          url: 'cli://test',
+          userAgent: `mushi-cli/${MUSHI_CLI_VERSION}`,
+          platform: process.platform,
+          language: 'en',
+          viewport: { width: 0, height: 0 },
+          referrer: '',
+          timestamp: new Date().toISOString(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+      }),
+    })
+    if (!result.ok) die(result)
+    if (opts.json) {
+      console.log(JSON.stringify(result.data, null, 2))
+    } else {
+      const d = result.data
+      console.log(`✓ Test report submitted`)
+      console.log(`  ID:     ${d.reportId}`)
+      console.log(`  Status: ${d.status}`)
+      console.log(`  View:   https://kensaur.us/mushi-mushi/reports/${d.reportId}`)
+    }
+  })
+
+// ─── index ────────────────────────────────────────────────────────────────────
+program
+  .command('index <path>')
+  .description('Walk a local repo and upload code chunks to the Mushi RAG indexer')
+  .option('--language <lang>', 'Limit to one language: ts, tsx, js, py, go, rs')
+  .option('--dry-run', 'Show what would be uploaded without sending')
+  .option('--json', 'Machine-readable summary: { files, bytes }')
+  .addHelpText('after', `
+Uploads source code into the Mushi vector index so the fix-worker can
+retrieve relevant context when generating patches. Only needed for private
+repos that cannot be auto-indexed via GitHub App.
+
+Examples:
+  mushi index ./src
+  mushi index ./src --language ts --dry-run`)
+  .action(async (path: string, opts: { language?: string; dryRun?: boolean; json?: boolean }) => {
+    const config = requireConfig({ needsProject: true })
+
+    const { readdir, readFile, stat } = await import('node:fs/promises')
+    const nodePath = await import('node:path')
+
+    const SKIP = /node_modules|\.git|dist|build|\.next|\.turbo|coverage/
+    const EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.py', '.go', '.rs'])
+    const MAX_FILE_BYTES = 500_000
+
+    async function* walk(dir: string): AsyncGenerator<string> {
+      const entries = await readdir(dir, { withFileTypes: true })
+      for (const e of entries) {
+        const full = nodePath.join(dir, e.name)
+        if (SKIP.test(full)) continue
+        if (e.isDirectory()) yield* walk(full)
+        else if (EXTS.has(nodePath.extname(e.name))) yield full
+      }
+    }
+
+    let count = 0; let bytes = 0; let errors = 0
+    const root = nodePath.resolve(path)
+
+    for await (const file of walk(root)) {
+      const lang = nodePath.extname(file).slice(1)
+      if (opts.language && opts.language !== lang) continue
+      const stats = await stat(file)
+      if (stats.size > MAX_FILE_BYTES) {
+        if (!opts.json) process.stdout.write(`  skip  ${nodePath.relative(root, file)} (>${MAX_FILE_BYTES / 1000}KB)\n`)
+        continue
+      }
+      const source = await readFile(file, 'utf8')
+      const relative = nodePath.relative(root, file).replaceAll('\\', '/')
+      count++; bytes += source.length
+      if (opts.dryRun) {
+        if (!opts.json) process.stdout.write(`  ${relative} (${source.length} bytes)\n`)
+        continue
+      }
+      const result = await apiCall<{ chunks: number }>('/v1/sync/codebase/upload', config, {
+        method: 'POST',
+        body: JSON.stringify({ projectId: config.projectId, filePath: relative, source }),
+      })
+      if (!result.ok) {
+        errors++
+        process.stderr.write(`  FAIL  ${relative}: ${result.error.message}\n`)
+      } else if (!opts.json) {
+        process.stdout.write(`  ok    ${relative} → ${result.data.chunks} chunks\n`)
+      }
+    }
+
+    if (opts.json) {
+      console.log(JSON.stringify({ ok: errors === 0, files: count, bytes, errors }))
+    } else {
+      const kb = (bytes / 1024).toFixed(1)
+      console.log(`\nIndexed ${count} files (${kb} KB) into project ${config.projectId}${errors ? ` — ${errors} failed` : ''}`)
+    }
+    if (errors > 0) process.exit(1)
+  })
+
+// ─── sourcemaps ───────────────────────────────────────────────────────────────
+const sourcemaps = program.command('sourcemaps').description('Source map management')
+
+sourcemaps
+  .command('upload')
+  .description('Upload source maps to Mushi (idempotent, SHA256-keyed) for stack trace symbolication')
+  .requiredOption('--release <version>', 'Release identifier, e.g. 1.0.0 or a git SHA')
+  .option('--dir <path>', 'Directory containing .map files', './dist')
+  .option('--dry-run', 'List files that would be uploaded without uploading')
+  .option('-e, --endpoint <url>', 'API endpoint (overrides MUSHI_API_ENDPOINT)')
+  .option('--api-key <key>', 'API key (overrides MUSHI_API_KEY)')
+  .option('--silent', 'Suppress progress output')
+  .addHelpText('after', `
+Examples:
+  mushi sourcemaps upload --release 1.0.0
+  mushi sourcemaps upload --release $(git rev-parse --short HEAD) --dir ./dist`)
+  .action(async (opts: {
+    release: string; dir: string; dryRun?: boolean
+    endpoint?: string; apiKey?: string; silent?: boolean
+  }) => {
+    await runSourcemapsUpload({
+      release: opts.release, dir: opts.dir, dryRun: opts.dryRun,
+      endpoint: opts.endpoint, apiKey: opts.apiKey, silent: opts.silent,
+    })
+  })
+
+program.parse()
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface WhoamiData {
+  project_id: string
+  project_name: string
+  stats: { total_reports: number; open_reports: number }
+}
+
+interface StatsData {
+  project_id: string
+  project_name: string
+  by_status: Record<string, number>
+  by_severity: Record<string, number>
+  fixes_count: number
+  fixes_merged: number
+  lessons_count: number
+}
+
+interface ReportListData {
+  reports: ReportRow[]
+  total: number
+}
+
+interface ReportRow {
+  id: string
+  severity?: string | null
+  status?: string | null
+  summary?: string | null
+  description?: string | null
+  category?: string | null
+  created_at?: string | null
+}
+
+interface ReportDetail extends ReportRow {
+  environment?: Record<string, unknown> | null
+  component?: string | null
+  sentry_event_id?: string | null
+  fix_id?: string | null
+  tags?: Record<string, unknown> | null
+}
 
 interface LessonRow {
   id: string
   rule_text: string
   anti_pattern?: string | null
+  summary_paragraph?: string | null
   severity: 'info' | 'warn' | 'critical'
   frequency: number
-  last_reinforced_at?: string
+  last_reinforced_at?: string | null
   cluster_id?: string | null
 }
+
+type LessonListData = LessonRow[]
 
 interface LessonsJson {
   schema_version: '1'
   project_id: string
   generated_at: string
   lessons: Array<{
-    id: string
-    rule: string
-    anti_pattern?: string
+    id: string; rule: string; anti_pattern?: string
     severity: 'info' | 'warn' | 'critical'
-    frequency: number
-    last_reinforced: string
-    cluster_id?: string
+    frequency: number; last_reinforced: string; cluster_id?: string
   }>
 }
-
-program.parse()

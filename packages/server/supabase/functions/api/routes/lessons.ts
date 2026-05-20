@@ -10,12 +10,18 @@
 //   GET  /v1/admin/clusters/:id          — cluster detail
 //   POST /v1/admin/clusters/:id/promote  — manually promote to lesson
 //   POST /v1/admin/lessons/query         — token-budget retrieval (lessons.query)
+//
+// SDK / CI (API-key-authenticated, read-only):
+//   GET  /v1/sync/lessons                — pull promoted lessons for CLI sync
+//                                          Accepts X-Mushi-Api-Key. Used by
+//                                          `npx @mushi-mushi/cli sync-lessons`
+//                                          and mushi-mcp lessons.query.
 // ============================================================
 
 import type { Hono } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
-import { jwtAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
+import { jwtAuth, apiKeyAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
 
 export function registerLessonsRoutes(app: Hono) {
   // ─── List lessons ────────────────────────────────────────────────────────
@@ -284,6 +290,49 @@ export function registerLessonsRoutes(app: Hono) {
         tokens_used: Math.ceil(totalChars / charsPerToken),
         total_candidates: stage1.length,
       },
+    })
+  })
+
+  // ─── SDK / CI sync endpoint (API-key-authenticated, read-only) ──────────
+  // Used by `npx @mushi-mushi/cli sync-lessons` and Cursor MCP `lessons.query`.
+  // Unlike the admin lessons endpoints (which require a Supabase user JWT),
+  // this accepts the project's API key so CI pipelines and the MCP server
+  // can pull lessons without requiring an interactive login.
+  //
+  // Security: apiKeyAuth validates the key against `project_api_keys`, so
+  // only requests with a valid, active key for the exact project can read
+  // that project's lessons. No cross-project access is possible.
+  app.get('/v1/sync/lessons', apiKeyAuth, async (c) => {
+    const db = getServiceClient()
+    const projectId = c.get('projectId') as string
+
+    if (!projectId) {
+      return c.json({ ok: false, error: { code: 'MISSING_PROJECT', message: 'projectId could not be resolved from API key' } }, 400)
+    }
+
+    const limit = Math.min(parseInt(c.req.query('limit') ?? '500'), 1000)
+    const severity = c.req.query('severity')
+
+    let query = db
+      .from('lessons')
+      .select('id, rule_text, anti_pattern, severity, frequency, last_reinforced_at, cluster_id')
+      .eq('project_id', projectId)
+      .is('retired_at', null)
+      .order('frequency', { ascending: false })
+      .order('last_reinforced_at', { ascending: false })
+      .limit(limit)
+
+    if (severity) query = query.eq('severity', severity)
+
+    const { data, error } = await query
+    if (error) {
+      return c.json({ ok: false, error: { code: 'DB_ERROR', message: error.message } }, 500)
+    }
+
+    return c.json({
+      ok: true,
+      data: data ?? [],
+      meta: { project_id: projectId, count: (data ?? []).length, limit },
     })
   })
 }
