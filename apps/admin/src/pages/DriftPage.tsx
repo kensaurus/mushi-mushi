@@ -1,21 +1,17 @@
 /**
  * FILE: apps/admin/src/pages/DriftPage.tsx
- * PURPOSE: Contract drift console — view findings, dismiss, create tests,
- *   inspect contract snapshots, diff API vs DB.
- *   Phase 4d of the closed-loop evolution plan.
- *
- *   Tabs:
- *     Findings    — open findings table with dismiss / create-lesson actions
- *     Snapshots   — contract snapshot history + edge count trend
- *     Scanner     — trigger a manual drift scan
+ * PURPOSE: Contract drift console — banner + DRIFT SNAPSHOT + tabs:
+ *          Overview | Findings | Snapshots | Scanner.
  */
 
-import { useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useCallback, useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { useActiveProjectSignal } from '../lib/activeProject'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -29,7 +25,15 @@ import {
   RelativeTime,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
 } from '../components/ui'
+import { DriftStatusBanner } from '../components/drift/DriftStatusBanner'
+import {
+  EMPTY_DRIFT_STATS,
+  type DriftStats,
+  type DriftTabId,
+} from '../components/drift/DriftStatsTypes'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
@@ -63,9 +67,9 @@ interface ContractSnapshot {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const SEVERITY_CLS: Record<DriftFinding['severity'], string> = {
-  info:     'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  warn:     'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-  critical: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  info: 'bg-info/10 text-info border border-info/20',
+  warn: 'bg-warn/10 text-warn border border-warn/20',
+  critical: 'bg-danger/10 text-danger border border-danger/20',
 }
 
 const SEVERITY_LABEL: Record<DriftFinding['severity'], string> = {
@@ -81,49 +85,114 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   return Array.isArray(payload) ? payload : (payload.data ?? [])
 }
 
+const TABS: Array<{ id: DriftTabId; label: string; description: string }> = [
+  { id: 'overview', label: 'Overview', description: 'Posture banner and how contract drift detection works.' },
+  { id: 'findings', label: 'Findings', description: 'Open gaps between OpenAPI spec, inventory nodes, and DB schema.' },
+  { id: 'snapshots', label: 'Snapshots', description: 'Contract snapshot history and edge-count trend.' },
+  { id: 'scanner', label: 'Scanner', description: 'Trigger a manual drift-walker scan on demand.' },
+]
+
+function resolveDriftTab(value: string | null): DriftTabId {
+  if (value === 'findings' || value === 'snapshots' || value === 'scanner') return value
+  return 'overview'
+}
+
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export function DriftPage() {
-  const [searchParams] = useSearchParams()
+  const copy = usePageCopy('/drift')
   const toast = useToast()
-  const [tab, setTab] = useState<'findings' | 'snapshots' | 'scanner'>('findings')
+  const projectId = useActiveProjectId()
+  const setup = useSetupStatus(projectId)
+  const projectName = setup.activeProject?.project_name ?? null
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveDriftTab(tabParam)
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+
   const [selectedFinding, setSelectedFinding] = useState<DriftFinding | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
 
-  const activeProjectSignal = useActiveProjectSignal()
-  const projectId = searchParams.get('project_id') || activeProjectSignal
-
-  usePublishPageContext({
-    route: '/drift',
-    title: 'Contract Drift',
-    summary: 'Frontend/API contract drift detection — spot schema or route divergence before users do.',
-    filters: { tab, project_id: projectId ?? undefined },
-  })
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<DriftStats>('/v1/admin/drift/stats')
+  const stats = { ...EMPTY_DRIFT_STATS, ...statsData }
 
   const {
     data: findingsData,
     loading: findingsLoading,
     error: findingsError,
     reload: reloadFindings,
+    isValidating: findingsValidating,
   } = usePageData<{ data: DriftFinding[]; total: number }>(
-    projectId ? `/v1/admin/drift?project_id=${projectId}&limit=100` : null,
-    { deps: [projectId] },
+    projectId && activeTab === 'findings' ? `/v1/admin/drift?project_id=${projectId}&limit=100` : null,
+    { deps: [projectId, activeTab] },
   )
 
   const {
     data: snapshotsData,
     loading: snapshotsLoading,
     reload: reloadSnapshots,
+    isValidating: snapshotsValidating,
   } = usePageData<{ data: ContractSnapshot[] }>(
-    projectId ? `/v1/admin/drift/snapshots?project_id=${projectId}` : null,
-    { deps: [projectId] },
+    projectId && activeTab === 'snapshots' ? `/v1/admin/drift/snapshots?project_id=${projectId}` : null,
+    { deps: [projectId, activeTab] },
   )
 
   const findings = listRows(findingsData)
   const snapshots = listRows(snapshotsData)
 
-  const critical = findings.filter(f => f.severity === 'critical').length
-  const warn = findings.filter(f => f.severity === 'warn').length
+  const setActiveTab = useCallback(
+    (tab: DriftTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reloadFindings()
+    reloadSnapshots()
+  }, [reloadStats, reloadFindings, reloadSnapshots])
+
+  const tabOptions = useMemo(
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'findings' && stats.openFindings > 0
+            ? stats.openFindings
+            : t.id === 'findings' && stats.criticalOpen > 0
+              ? stats.criticalOpen
+              : undefined,
+      })),
+    [stats.openFindings, stats.criticalOpen],
+  )
+
+  usePublishPageContext({
+    route: '/drift',
+    title: projectName ? `Drift · ${projectName}` : 'Drift',
+    summary: statsLoading
+      ? 'Loading contract drift…'
+      : stats.snapshotCount === 0
+        ? 'No contract snapshot yet'
+        : `${stats.openFindings} open · ${stats.snapshotCount} snapshots`,
+    criticalCount: stats.criticalOpen,
+    questions: stats.openFindings > 0
+      ? ['Which API routes diverged from the OpenAPI spec?', 'Should I promote this critical finding to a lesson?']
+      : ['How do I run the first drift scan?', 'What surfaces does the walker compare?'],
+  })
 
   const dismiss = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/drift/${id}`, {
@@ -131,84 +200,205 @@ export function DriftPage() {
       body: JSON.stringify({ status: 'dismissed' }),
     })
     if (!res.ok) { toast.error(res.error?.message ?? 'Failed'); return }
-    reloadFindings()
+    reloadAll()
     toast.success('Finding dismissed')
-  }, [reloadFindings, toast])
+  }, [reloadAll, toast])
 
   const createLesson = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/drift/${id}/create-lesson`, { method: 'POST' })
-    if (res.ok) { toast.success('Candidate lesson created'); reloadFindings() }
+    if (res.ok) { toast.success('Candidate lesson created'); reloadAll() }
     else toast.error(res.error?.message ?? 'Failed to create lesson')
-  }, [reloadFindings, toast])
+  }, [reloadAll, toast])
 
-  const tabs = [
-    { id: 'findings',  label: `Findings (${findings.length})` },
-    { id: 'snapshots', label: 'Snapshots' },
-    { id: 'scanner',   label: 'Scanner' },
-  ] as const
+  const onScanDone = useCallback(() => {
+    reloadAll()
+    setActiveTab('findings')
+  }, [reloadAll, setActiveTab])
+
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading drift">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load drift stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'critical_findings'
+        ? 'danger'
+        : stats.topPriority === 'warn_findings' || stats.topPriority === 'stale_scan'
+          ? 'warn'
+          : stats.topPriority === 'never_scanned'
+            ? 'brand'
+            : stats.topPriority === 'healthy'
+              ? 'ok'
+              : 'info'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-drift">
       <PageHeader
-        title="Drift"
-        description="Contract drift detection — compare OpenAPI spec, inventory nodes, and DB schema to find gaps before users do."
+        title={copy?.title ?? 'Drift'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + DRIFT SNAPSHOT — Overview for posture, Findings to triage, Snapshots for history, Scanner to run walker.'
+        }
         contextChip={<PdcaContextHint stage="check" />}
       >
-        <Btn variant="ghost" size="sm" onClick={() => setTab('scanner')}>Run scan</Btn>
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.criticalOpen > 0
+              ? `${stats.criticalOpen} CRIT`
+              : stats.openFindings > 0
+                ? `${stats.openFindings} OPEN`
+                : stats.snapshotCount === 0
+                  ? 'NO SCAN'
+                  : 'IN SYNC'}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || findingsValidating || snapshotsValidating}>
+          Refresh
+        </Btn>
+        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('scanner')}>
+          Run scan
+        </Btn>
       </PageHeader>
 
-      <PageHelp
-        title="Contract drift detection"
-        whatIsIt="The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first."
-        useCases={[
-          'Find API endpoints present in inventory but missing in OpenAPI spec',
-          'Detect DB columns expected by the FE but removed from the schema',
-          'Promote high-severity findings to candidate lessons',
-        ]}
-        howToUse="Select a project, run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler."
+      <DriftStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating}
       />
 
-      <Section title="Drift summary">
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          <StatCard label="Open findings" value={findings.length} />
-          <StatCard label="Critical" value={critical} />
-          <StatCard label="Warn" value={warn} />
+      <SegmentedControl<DriftTabId>
+        size="sm"
+        ariaLabel="Drift sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="DRIFT SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Open findings" value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} hint={`${stats.dismissedFindings} dismissed`} />
+          <StatCard label="Critical" value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} hint="Needs triage" />
+          <StatCard label="Warnings" value={stats.warnOpen} accent={stats.warnOpen > 0 ? 'text-warn' : undefined} hint={`${stats.infoOpen} info`} />
+          <StatCard label="Snapshots" value={stats.snapshotCount} accent={stats.snapshotCount > 0 ? 'text-brand' : undefined} hint={stats.lastSnapshotAt ? 'Latest captured' : 'None yet'} />
+          <StatCard label="Contract edges" value={stats.lastSnapshotEdges} accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined} hint={stats.edgeCountDelta != null ? `${stats.edgeCountDelta >= 0 ? '+' : ''}${stats.edgeCountDelta} vs prior` : '—'} />
+          <StatCard label="Surfaces" value={stats.surfacesWithFindings} accent={stats.surfacesWithFindings > 0 ? 'text-warn' : undefined} hint="With open gaps" />
         </div>
-
-        <SegmentedControl
-          value={tab}
-          onChange={(v) => setTab(v as typeof tab)}
-          options={tabs}
-          className="mb-6"
-        />
-
-        {tab === 'findings' && (
-          <FindingsTab
-            findings={findings}
-            loading={findingsLoading}
-            error={findingsError}
-            onDismiss={dismiss}
-            onCreateLesson={createLesson}
-            onOpen={(f) => { setSelectedFinding(f); setDrawerOpen(true) }}
-            projectId={projectId}
-          />
-        )}
-
-        {tab === 'snapshots' && (
-          <SnapshotsTab
-            snapshots={snapshots}
-            loading={snapshotsLoading}
-            projectId={projectId}
-          />
-        )}
-
-        {tab === 'scanner' && (
-          <ScannerTab
-            projectId={projectId}
-            onDone={() => { reloadFindings(); reloadSnapshots(); setTab('findings') }}
-          />
-        )}
       </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'critical_findings'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'never_scanned'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'Contract drift detection'}
+            whatIsIt={copy?.help?.whatIsIt ?? 'The drift-walker builds a contract snapshot then walks every route with Thompson-sampled priority — routes with more historical findings are checked first.'}
+            useCases={copy?.help?.useCases ?? [
+              'Find API endpoints present in inventory but missing in OpenAPI spec',
+              'Detect DB columns expected by the FE but removed from the schema',
+              'Promote high-severity findings to candidate lessons',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Run a scan from the Scanner tab, then triage findings. Dismiss false positives to train the sampler.'}
+          />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Contracts are in sync"
+              description={`${stats.snapshotCount} snapshot${stats.snapshotCount === 1 ? '' : 's'} · ${stats.lastSnapshotEdges} edges tracked · 0 open findings.`}
+            />
+          )}
+          {stats.topPriority === 'never_scanned' && (
+            <RecommendedAction
+              tone="info"
+              title="Build your first contract baseline"
+              description="The drift-walker compares OpenAPI, inventory nodes, and Postgres schema. Run a scan to capture edges and detect gaps."
+              cta={{ label: 'Open Scanner', to: '/drift?tab=scanner' }}
+            />
+          )}
+          {(stats.topPriority === 'critical_findings' || stats.topPriority === 'warn_findings') && (
+            <RecommendedAction
+              tone="info"
+              title="Triage open drift findings"
+              description={stats.topPriorityLabel ?? 'Review findings and dismiss false positives or promote critical gaps to lessons.'}
+              cta={{ label: 'Open Findings', to: '/drift?tab=findings' }}
+            />
+          )}
+        </>
+      )}
+
+      {activeTab === 'findings' && (
+        <FindingsTab
+          findings={findings}
+          loading={findingsLoading}
+          error={findingsError}
+          onDismiss={dismiss}
+          onCreateLesson={createLesson}
+          onOpen={(f) => { setSelectedFinding(f); setDrawerOpen(true) }}
+          projectId={projectId ?? ''}
+          neverScanned={stats.snapshotCount === 0}
+          onRunScan={() => setActiveTab('scanner')}
+        />
+      )}
+
+      {activeTab === 'snapshots' && (
+        <SnapshotsTab
+          snapshots={snapshots}
+          loading={snapshotsLoading}
+          projectId={projectId ?? ''}
+          onRunScan={() => setActiveTab('scanner')}
+        />
+      )}
+
+      {activeTab === 'scanner' && (
+        <ScannerTab projectId={projectId ?? ''} onDone={onScanDone} />
+      )}
 
       {drawerOpen && selectedFinding && (
         <FindingDetailDrawer
@@ -226,7 +416,7 @@ export function DriftPage() {
 // ─── Findings tab ────────────────────────────────────────────────────────────
 
 function FindingsTab({
-  findings, loading, error, onDismiss, onCreateLesson, onOpen, projectId,
+  findings, loading, error, onDismiss, onCreateLesson, onOpen, projectId, neverScanned, onRunScan,
 }: {
   findings: DriftFinding[]
   loading: boolean
@@ -235,14 +425,21 @@ function FindingsTab({
   onCreateLesson: (id: string) => void
   onOpen: (f: DriftFinding) => void
   projectId: string
+  neverScanned: boolean
+  onRunScan: () => void
 }) {
   if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to see drift findings." />
   if (loading) return <TableSkeleton rows={5} />
   if (error) return <ErrorAlert message={error} />
   if (!findings.length) return (
     <EmptyState
-      title="No open findings"
-      description="Run a drift scan or wait for the scheduled walker. A clean bill of health means OpenAPI, inventory, and DB schema are in sync."
+      title={neverScanned ? 'No scan yet' : 'No open findings'}
+      description={
+        neverScanned
+          ? 'Run a drift scan to build the first contract snapshot and detect OpenAPI / inventory / DB gaps.'
+          : 'OpenAPI, inventory, and DB schema are in sync — or dismissed findings were cleared.'
+      }
+      action={neverScanned ? <Btn size="sm" variant="primary" onClick={onRunScan}>Run scan</Btn> : undefined}
     />
   )
 
@@ -253,9 +450,9 @@ function FindingsTab({
   return (
     <div className="space-y-4">
       {Object.keys(bySurface).length > 1 && (
-        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <div className="flex flex-wrap gap-2 text-xs text-fg-muted">
           {Object.entries(bySurface).map(([s, n]) => (
-            <span key={s} className="rounded border px-2 py-0.5 font-mono">
+            <span key={s} className="rounded border border-edge-subtle px-2 py-0.5 font-mono">
               {s}: {n}
             </span>
           ))}
@@ -265,7 +462,7 @@ function FindingsTab({
       <Card className="overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+            <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
               <th className="px-3 py-2 text-left">Severity</th>
               <th className="px-3 py-2 text-left">Surface</th>
               <th className="px-3 py-2 text-left">Path</th>
@@ -276,12 +473,12 @@ function FindingsTab({
           </thead>
           <tbody>
             {findings.map((f) => (
-              <tr key={f.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+              <tr key={f.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
                 <td className="px-3 py-2">{severityBadge(f.severity)}</td>
-                <td className="px-3 py-2 text-xs font-mono text-muted-foreground">{f.surface}</td>
+                <td className="px-3 py-2 text-xs font-mono text-fg-muted">{f.surface}</td>
                 <td className="px-3 py-2 max-w-[180px] truncate font-mono text-xs">{f.path ?? '—'}</td>
                 <td className="px-3 py-2 max-w-[280px] truncate text-xs">{f.message}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground"><RelativeTime value={f.created_at} /></td>
+                <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={f.created_at} /></td>
                 <td className="px-3 py-2">
                   <div className="flex items-center gap-1 justify-end">
                     <Btn size="sm" variant="ghost" onClick={() => onOpen(f)}>View</Btn>
@@ -302,16 +499,31 @@ function FindingsTab({
 
 // ─── Snapshots tab ────────────────────────────────────────────────────────────
 
-function SnapshotsTab({ snapshots, loading, projectId }: { snapshots: ContractSnapshot[]; loading: boolean; projectId: string }) {
+function SnapshotsTab({
+  snapshots, loading, projectId, onRunScan,
+}: {
+  snapshots: ContractSnapshot[]
+  loading: boolean
+  projectId: string
+  onRunScan: () => void
+}) {
   if (!projectId) return <EmptyState title="Select a project" />
   if (loading) return <TableSkeleton rows={5} />
-  if (!snapshots.length) return <EmptyState title="No snapshots" description="Trigger a scan to build the first contract snapshot." />
+  if (!snapshots.length) {
+    return (
+      <EmptyState
+        title="No snapshots"
+        description="Trigger a scan to build the first contract snapshot."
+        action={<Btn size="sm" variant="primary" onClick={onRunScan}>Run scan</Btn>}
+      />
+    )
+  }
 
   return (
     <Card className="overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+          <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
             <th className="px-3 py-2 text-left">Snapshot</th>
             <th className="px-3 py-2 text-right">Edges</th>
             <th className="px-3 py-2 text-left">Taken</th>
@@ -319,10 +531,10 @@ function SnapshotsTab({ snapshots, loading, projectId }: { snapshots: ContractSn
         </thead>
         <tbody>
           {snapshots.map((s) => (
-            <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20">
-              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{s.id.slice(0, 8)}…</td>
+            <tr key={s.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50">
+              <td className="px-3 py-2 font-mono text-xs text-fg-muted">{s.id.slice(0, 8)}…</td>
               <td className="px-3 py-2 text-right tabular-nums">{s.edge_count}</td>
-              <td className="px-3 py-2 text-xs text-muted-foreground"><RelativeTime value={s.snapshot_at} /></td>
+              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={s.snapshot_at} /></td>
             </tr>
           ))}
         </tbody>
@@ -362,32 +574,36 @@ function ScannerTab({ projectId, onDone }: { projectId: string; onDone: () => vo
   return (
     <Card className="max-w-lg p-6 space-y-4">
       <div className="space-y-1">
-        <h2 className="text-base font-semibold">Manual drift scan</h2>
-        <p className="text-sm text-muted-foreground">
+        <h2 className="text-base font-semibold text-fg-primary">Manual drift scan</h2>
+        <p className="text-sm text-fg-muted">
           Builds a fresh contract snapshot then walks routes with Thompson-sampled priority.
           Findings are deduplicated against the last 24 h.
         </p>
       </div>
+      {!projectId && (
+        <p className="text-xs text-warn">Select a project from the switcher before running a scan.</p>
+      )}
       <label className="block space-y-1">
-        <span className="text-sm font-medium">Max paths to walk</span>
+        <span className="text-sm font-medium text-fg-primary">Max paths to walk</span>
         <input
           type="number"
-          min={10} max={1000}
+          min={10}
+          max={1000}
           value={maxPaths}
-          onChange={e => setMaxPaths(parseInt(e.target.value, 10))}
+          onChange={(e) => setMaxPaths(parseInt(e.target.value, 10))}
           className="block w-32 rounded-md border border-edge-subtle bg-surface px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand/50"
         />
       </label>
-      <Btn variant="primary" onClick={run} loading={loading} className="w-full sm:w-auto">
+      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId} className="w-full sm:w-auto">
         {loading ? 'Scanning…' : 'Run scan'}
       </Btn>
       {result && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-700 dark:bg-emerald-950/30">
-          <p className="font-medium text-emerald-800 dark:text-emerald-300">Scan complete</p>
-          <p className="text-emerald-700 dark:text-emerald-400">
+        <div className="rounded-md border border-ok/30 bg-ok/5 px-4 py-3 text-sm">
+          <p className="font-medium text-ok">Scan complete</p>
+          <p className="text-fg-muted">
             {result.findings_found} findings discovered · {result.findings_inserted} new stored
           </p>
-          <p className="text-xs text-emerald-600 dark:text-emerald-500 font-mono mt-1">
+          <p className="text-xs text-fg-muted font-mono mt-1">
             snapshot: {result.snapshot_id?.slice(0, 8)}…
           </p>
         </div>
@@ -412,26 +628,26 @@ function FindingDetailDrawer({
       <div className="space-y-5 pb-8">
         <div className="flex flex-wrap items-center gap-2">
           {severityBadge(finding.severity)}
-          <Badge className="bg-muted text-muted-foreground">{finding.surface}</Badge>
+          <Badge className="bg-surface-overlay text-fg-muted">{finding.surface}</Badge>
         </div>
 
-        <div className="rounded-md bg-muted/40 px-4 py-3 text-sm">{finding.message}</div>
+        <div className="rounded-md bg-surface-overlay px-4 py-3 text-sm text-fg-primary">{finding.message}</div>
 
         {finding.expected != null && (
           <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Expected</p>
-            <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs">{JSON.stringify(finding.expected, null, 2)}</pre>
+            <p className="mb-1 text-xs font-medium text-fg-muted uppercase tracking-wide">Expected</p>
+            <pre className="overflow-x-auto rounded-md bg-surface-overlay px-3 py-2 text-xs">{JSON.stringify(finding.expected, null, 2)}</pre>
           </div>
         )}
 
         {finding.actual != null && (
           <div>
-            <p className="mb-1 text-xs font-medium text-muted-foreground uppercase tracking-wide">Actual</p>
-            <pre className="overflow-x-auto rounded-md bg-muted px-3 py-2 text-xs">{JSON.stringify(finding.actual, null, 2)}</pre>
+            <p className="mb-1 text-xs font-medium text-fg-muted uppercase tracking-wide">Actual</p>
+            <pre className="overflow-x-auto rounded-md bg-surface-overlay px-3 py-2 text-xs">{JSON.stringify(finding.actual, null, 2)}</pre>
           </div>
         )}
 
-        <div className="rounded-md border bg-muted/20 px-4 py-3 space-y-1 text-xs text-muted-foreground">
+        <div className="rounded-md border border-edge-subtle bg-surface-overlay/50 px-4 py-3 space-y-1 text-xs text-fg-muted">
           <div className="flex gap-2"><span className="w-28">Type</span><span className="font-mono">{finding.finding_type}</span></div>
           <div className="flex gap-2"><span className="w-28">Path</span><span className="font-mono">{finding.path ?? '—'}</span></div>
           <div className="flex gap-2"><span className="w-28">Surface</span><span>{finding.surface}</span></div>

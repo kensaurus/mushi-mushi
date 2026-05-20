@@ -1,21 +1,17 @@
 /**
  * FILE: apps/admin/src/pages/AnomaliesPage.tsx
- * PURPOSE: Anomaly detection console — view detected metric regressions,
- *   confirm/dismiss, trigger detection runs, and ingest metric data.
- *   Phase 6 of the closed-loop evolution plan.
- *
- *   Tabs:
- *     Anomalies   — list of detected anomalies with method, score, status
- *     Metrics     — timeseries chart + ingest
- *     Detect      — manual trigger panel
+ * PURPOSE: Anomaly detection console — banner + ANOMALIES SNAPSHOT + tabs:
+ *          Overview | Anomalies | Metrics | Detect.
  */
 
-import { useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useCallback, useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
-import { useActiveProjectSignal } from '../lib/activeProject'
+import { useSetupStatus } from '../lib/useSetupStatus'
+import { useActiveProjectId } from '../components/ProjectSwitcher'
+import { usePageCopy } from '../lib/copy'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -30,12 +26,18 @@ import {
   RelativeTime,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
 } from '../components/ui'
+import { AnomaliesStatusBanner } from '../components/anomalies/AnomaliesStatusBanner'
+import {
+  EMPTY_ANOMALIES_STATS,
+  type AnomaliesStats,
+  type AnomaliesTabId,
+} from '../components/anomalies/AnomaliesStatsTypes'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { BarSparkline } from '../components/charts'
-
-// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface AnomalyDetection {
   id: string
@@ -62,16 +64,14 @@ interface MetricPoint {
   dimension: string | null
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 const METHOD_CLS: Record<string, string> = {
-  'page-hinkley': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
-  'z-score': 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
-  'release-regression': 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  'page-hinkley': 'bg-warn/10 text-warn border border-warn/20',
+  'z-score': 'bg-danger/10 text-danger border border-danger/20',
+  'release-regression': 'bg-danger/10 text-danger border border-danger/20',
 }
 
 function methodBadge(m: string) {
-  return <Badge className={METHOD_CLS[m] ?? 'bg-muted text-muted-foreground'}>{m}</Badge>
+  return <Badge className={METHOD_CLS[m] ?? 'bg-surface-overlay text-fg-muted border border-edge-subtle'}>{m}</Badge>
 }
 
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
@@ -79,43 +79,100 @@ function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   return Array.isArray(payload) ? payload : (payload.data ?? [])
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+const TABS: Array<{ id: AnomaliesTabId; label: string; description: string }> = [
+  { id: 'overview', label: 'Overview', description: 'Posture banner and how metric ingestion feeds detection.' },
+  { id: 'anomalies', label: 'Anomalies', description: 'Open statistical findings — confirm, dismiss, or follow auto-reports.' },
+  { id: 'metrics', label: 'Metrics', description: 'Ingest data points and preview timeseries sparklines.' },
+  { id: 'detect', label: 'Detect', description: 'Trigger Page-Hinkley, Z-score, and release-regression analysis.' },
+]
+
+function resolveAnomaliesTab(value: string | null): AnomaliesTabId {
+  if (value === 'anomalies' || value === 'metrics' || value === 'detect') return value
+  return 'overview'
+}
 
 export function AnomaliesPage() {
-  const [searchParams] = useSearchParams()
+  const copy = usePageCopy('/anomalies')
   const toast = useToast()
-  const [tab, setTab] = useState<'anomalies' | 'metrics' | 'detect'>('anomalies')
-  const activeProjectSignal = useActiveProjectSignal()
-  const projectId = searchParams.get('project_id') || activeProjectSignal
+  const projectId = useActiveProjectId()
+  const setup = useSetupStatus(projectId)
+  const projectName = setup.activeProject?.project_name ?? null
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = resolveAnomaliesTab(searchParams.get('tab'))
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
-  usePublishPageContext({
-    route: '/anomalies',
-    title: 'Anomalies',
-    summary: 'Statistical anomaly detection on any metric series you feed in.',
-    filters: { tab, project_id: projectId ?? undefined },
-  })
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<AnomaliesStats>('/v1/admin/anomalies/stats')
+  const stats = { ...EMPTY_ANOMALIES_STATS, ...statsData }
 
   const {
     data: anomalyData,
     loading: anomalyLoading,
     error: anomalyError,
     reload: reloadAnomalies,
+    isValidating: anomaliesValidating,
   } = usePageData<{ data: AnomalyDetection[]; total: number }>(
-    projectId ? `/v1/admin/anomalies?project_id=${projectId}&limit=100` : null,
-    { deps: [projectId] },
+    projectId && activeTab === 'anomalies' ? `/v1/admin/anomalies?project_id=${projectId}&limit=100` : null,
+    { deps: [projectId, activeTab] },
   )
 
   const {
     data: metricsData,
     loading: metricsLoading,
     reload: reloadMetrics,
+    isValidating: metricsValidating,
   } = usePageData<{ data: MetricPoint[] }>(
-    projectId ? `/v1/admin/metric-series?project_id=${projectId}` : null,
-    { deps: [projectId] },
+    projectId && activeTab === 'metrics' ? `/v1/admin/metric-series?project_id=${projectId}` : null,
+    { deps: [projectId, activeTab] },
   )
 
   const anomalies = listRows(anomalyData)
   const metrics = listRows(metricsData)
+
+  const setActiveTab = useCallback(
+    (tab: AnomaliesTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reloadAnomalies()
+    reloadMetrics()
+  }, [reloadStats, reloadAnomalies, reloadMetrics])
+
+  const tabOptions = useMemo(
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count: t.id === 'anomalies' && stats.openAnomalies > 0 ? stats.openAnomalies : undefined,
+      })),
+    [stats.openAnomalies],
+  )
+
+  usePublishPageContext({
+    route: '/anomalies',
+    title: projectName ? `Anomalies · ${projectName}` : 'Anomalies',
+    summary: statsLoading
+      ? 'Loading anomaly posture…'
+      : stats.metricPointCount === 0
+        ? 'No metric data yet'
+        : `${stats.openAnomalies} open · ${stats.distinctMetrics} metrics`,
+    criticalCount: stats.releaseRegressionOpen + stats.highScoreOpen,
+  })
 
   const confirm = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/anomalies/${id}`, {
@@ -124,8 +181,8 @@ export function AnomaliesPage() {
     })
     if (!res.ok) { toast.error(res.error?.message ?? 'Failed'); return }
     toast.success('Anomaly confirmed')
-    reloadAnomalies()
-  }, [reloadAnomalies, toast])
+    reloadAll()
+  }, [reloadAll, toast])
 
   const dismiss = useCallback(async (id: string) => {
     const res = await apiFetch(`/v1/admin/anomalies/${id}`, {
@@ -134,90 +191,234 @@ export function AnomaliesPage() {
     })
     if (!res.ok) { toast.error(res.error?.message ?? 'Failed'); return }
     toast.success('Anomaly dismissed')
-    reloadAnomalies()
-  }, [reloadAnomalies, toast])
+    reloadAll()
+  }, [reloadAll, toast])
 
-  const tabs = [
-    { id: 'anomalies', label: `Anomalies (${anomalies.length})` },
-    { id: 'metrics',   label: 'Metrics' },
-    { id: 'detect',    label: 'Detect' },
-  ] as const
+  const onDetectDone = useCallback(() => {
+    reloadAll()
+    setActiveTab('anomalies')
+  }, [reloadAll, setActiveTab])
+
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading anomalies">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load anomaly stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'open_critical'
+        ? 'danger'
+        : stats.topPriority === 'open_anomalies'
+          ? 'warn'
+          : stats.topPriority === 'no_metrics'
+            ? 'brand'
+            : stats.topPriority === 'healthy'
+              ? 'ok'
+              : 'info'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-anomalies">
       <PageHeader
-        title="Anomalies"
-        description="Statistical anomaly detection (Page-Hinkley, Z-score, release regression) on any metric series you feed in."
+        title={copy?.title ?? 'Anomalies'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.'
+        }
         contextChip={<PdcaContextHint stage="check" />}
       >
-        <Btn variant="ghost" size="sm" onClick={() => setTab('detect')}>Run detection</Btn>
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.openAnomalies > 0
+              ? `${stats.openAnomalies} OPEN`
+              : stats.metricPointCount === 0
+                ? 'NO DATA'
+                : 'NORMAL'}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || anomaliesValidating || metricsValidating}>
+          Refresh
+        </Btn>
+        <Btn size="sm" variant="ghost" onClick={() => setActiveTab('detect')}>
+          Run detection
+        </Btn>
       </PageHeader>
 
-      <PageHelp
-        title="Anomaly detection"
-        whatIsIt="Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions."
-        useCases={[
-          'Detect crash-rate spikes after a release',
-          'Flag latency regressions against rolling baseline',
-          'Auto-open a bug report when a regression is confirmed',
-        ]}
-        howToUse="Select a project, ingest metric data points in the Metrics tab, then run detection or wait for the hourly cron."
+      <AnomaliesStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating}
       />
 
-      <Section title="Anomaly summary">
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          <StatCard label="Open" value={anomalies.filter(a => a.status === 'open').length} />
-          <StatCard label="Confirmed" value={anomalies.filter(a => a.confirmed).length} />
-          <StatCard label="Auto-reported" value={anomalies.filter(a => a.auto_report_id).length} />
+      <SegmentedControl<AnomaliesTabId>
+        size="sm"
+        ariaLabel="Anomalies sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="ANOMALIES SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Open" value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} hint={`${stats.confirmedAnomalies} confirmed`} />
+          <StatCard label="Release regressions" value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} hint="Open · critical" />
+          <StatCard label="High score" value={stats.highScoreOpen} accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined} hint="Above threshold" />
+          <StatCard label="Auto-reported" value={stats.autoReported} accent={stats.autoReported > 0 ? 'text-brand' : undefined} hint="Linked reports" />
+          <StatCard label="Metric points" value={stats.metricPointCount} accent={stats.metricPointCount > 0 ? 'text-brand' : undefined} hint={`${stats.distinctMetrics} series`} />
+          <StatCard label="Dismissed" value={stats.dismissedAnomalies} accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined} hint="Closed findings" />
         </div>
-
-        <SegmentedControl value={tab} onChange={v => setTab(v as typeof tab)} options={tabs} className="mb-6" />
-
-        {tab === 'anomalies' && (
-          <AnomaliesTab
-            anomalies={anomalies}
-            loading={anomalyLoading}
-            error={anomalyError}
-            onConfirm={confirm}
-            onDismiss={dismiss}
-            projectId={projectId}
-          />
-        )}
-
-        {tab === 'metrics' && (
-          <MetricsTab metrics={metrics} loading={metricsLoading} projectId={projectId} onIngest={reloadMetrics} />
-        )}
-
-        {tab === 'detect' && (
-          <DetectTab projectId={projectId} onDone={() => { reloadAnomalies(); setTab('anomalies') }} />
-        )}
       </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'open_critical'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'no_metrics'
+                ? 'border-brand/30 bg-brand/5'
+                : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
+
+      {activeTab === 'overview' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'Anomaly detection'}
+            whatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
+            useCases={copy?.help?.useCases ?? [
+              'Detect crash-rate spikes after a release',
+              'Flag latency regressions against rolling baseline',
+              'Auto-open a bug report when a regression is confirmed',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
+          />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="No open anomalies"
+              description={`${stats.distinctMetrics} metric series · ${stats.metricPointCount} data points · detection can run on demand.`}
+            />
+          )}
+          {stats.topPriority === 'no_metrics' && (
+            <RecommendedAction
+              tone="info"
+              title="Seed metric data first"
+              description="Page-Hinkley and Z-score detectors need a timeseries baseline — ingest points before running detection."
+              cta={{ label: 'Open Metrics', to: '/anomalies?tab=metrics' }}
+            />
+          )}
+          {(stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
+            <RecommendedAction
+              tone="info"
+              title="Triage open anomalies"
+              description={stats.topPriorityLabel ?? 'Confirm real regressions or dismiss false positives.'}
+              cta={{ label: 'Open Anomalies', to: '/anomalies?tab=anomalies' }}
+            />
+          )}
+        </>
+      )}
+
+      {activeTab === 'anomalies' && (
+        <AnomaliesTab
+          anomalies={anomalies}
+          loading={anomalyLoading}
+          error={anomalyError}
+          onConfirm={confirm}
+          onDismiss={dismiss}
+          projectId={projectId ?? ''}
+          noMetrics={stats.metricPointCount === 0}
+          onIngestMetrics={() => setActiveTab('metrics')}
+          onRunDetect={() => setActiveTab('detect')}
+        />
+      )}
+
+      {activeTab === 'metrics' && (
+        <MetricsTab metrics={metrics} loading={metricsLoading} projectId={projectId ?? ''} onIngest={reloadAll} />
+      )}
+
+      {activeTab === 'detect' && (
+        <DetectTab projectId={projectId ?? ''} onDone={onDetectDone} hasMetrics={stats.metricPointCount > 0} />
+      )}
     </div>
   )
 }
 
-// ─── Anomalies tab ────────────────────────────────────────────────────────────
-
-function AnomaliesTab({ anomalies, loading, error, onConfirm, onDismiss, projectId }: {
+function AnomaliesTab({
+  anomalies, loading, error, onConfirm, onDismiss, projectId, noMetrics, onIngestMetrics, onRunDetect,
+}: {
   anomalies: AnomalyDetection[]
   loading: boolean
   error: string | null
   onConfirm: (id: string) => void
   onDismiss: (id: string) => void
   projectId: string
+  noMetrics: boolean
+  onIngestMetrics: () => void
+  onRunDetect: () => void
 }) {
-  if (!projectId) return <EmptyState title="Select a project" />
+  if (!projectId) return <EmptyState title="Select a project" description="Pick a project from the switcher to view anomalies." />
   if (loading) return <TableSkeleton rows={5} />
   if (error) return <ErrorAlert message={error} />
-  if (!anomalies.length) return (
-    <EmptyState title="No open anomalies" description="Run the detector or wait for the hourly cron. No news is good news." />
-  )
+  if (!anomalies.length) {
+    return (
+      <EmptyState
+        title={noMetrics ? 'No metric data yet' : 'No open anomalies'}
+        description={
+          noMetrics
+            ? 'Ingest metric data points before running Page-Hinkley or Z-score detection.'
+            : 'Run the detector or wait for the hourly cron — no open findings is good news.'
+        }
+        action={
+          noMetrics
+            ? <Btn size="sm" variant="primary" onClick={onIngestMetrics}>Ingest metrics</Btn>
+            : <Btn size="sm" variant="primary" onClick={onRunDetect}>Run detection</Btn>
+        }
+      />
+    )
+  }
 
   return (
     <Card className="overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b bg-muted/30 text-xs text-muted-foreground">
+          <tr className="border-b border-edge-subtle bg-surface-overlay text-xs text-fg-muted">
             <th className="px-3 py-2 text-left">Metric</th>
             <th className="px-3 py-2 text-left">Method</th>
             <th className="px-3 py-2 text-right">Score</th>
@@ -228,18 +429,18 @@ function AnomaliesTab({ anomalies, loading, error, onConfirm, onDismiss, project
           </tr>
         </thead>
         <tbody>
-          {anomalies.map(a => (
-            <tr key={a.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
+          {anomalies.map((a) => (
+            <tr key={a.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
               <td className="px-3 py-2 font-mono text-xs">{a.metric_name}</td>
               <td className="px-3 py-2">{methodBadge(a.method)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-xs">{a.score.toFixed(2)}</td>
               <td className="px-3 py-2 text-right tabular-nums text-xs">{a.value.toFixed(3)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-xs text-muted-foreground">
+              <td className="px-3 py-2 text-right tabular-nums text-xs text-fg-muted">
                 {a.baseline_mean != null ? `μ=${a.baseline_mean.toFixed(3)}` : '—'}
               </td>
-              <td className="px-3 py-2 text-xs text-muted-foreground"><RelativeTime value={a.detected_at} /></td>
+              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={a.detected_at} /></td>
               <td className="px-3 py-2">
-                <div className="flex gap-1 justify-end">
+                <div className="flex gap-1 justify-end flex-wrap">
                   {a.status === 'open' && (
                     <>
                       <Btn size="sm" variant="primary" onClick={() => onConfirm(a.id)}>Confirm</Btn>
@@ -247,7 +448,7 @@ function AnomaliesTab({ anomalies, loading, error, onConfirm, onDismiss, project
                     </>
                   )}
                   {a.auto_report_id && (
-                    <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs">
+                    <Badge className="bg-brand/10 text-brand border border-brand/20 text-xs">
                       Auto-reported
                     </Badge>
                   )}
@@ -260,8 +461,6 @@ function AnomaliesTab({ anomalies, loading, error, onConfirm, onDismiss, project
     </Card>
   )
 }
-
-// ─── Metrics tab ─────────────────────────────────────────────────────────────
 
 function MetricsTab({ metrics, loading, projectId, onIngest }: {
   metrics: MetricPoint[]
@@ -295,7 +494,7 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
     } finally { setSaving(false) }
   }
 
-  const uniqueMetrics = [...new Set(metrics.map(m => m.metric_name))]
+  const uniqueMetrics = [...new Set(metrics.map((m) => m.metric_name))]
 
   return (
     <div className="space-y-6">
@@ -303,19 +502,19 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
       {projectId && (
         <>
           <Card className="p-5 space-y-4 max-w-lg">
-            <h3 className="text-sm font-semibold">Ingest a data point</h3>
+            <h3 className="text-sm font-semibold text-fg-primary">Ingest a data point</h3>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs font-medium">Metric name</span>
-                <Input value={form.metric_name} onChange={e => setForm(f => ({ ...f, metric_name: e.target.value }))} placeholder="error_rate" />
+                <span className="text-xs font-medium text-fg-muted">Metric name</span>
+                <Input value={form.metric_name} onChange={(e) => setForm((f) => ({ ...f, metric_name: e.target.value }))} placeholder="error_rate" />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs font-medium">Value</span>
-                <Input type="number" step="any" value={form.value} onChange={e => setForm(f => ({ ...f, value: e.target.value }))} placeholder="0.042" />
+                <span className="text-xs font-medium text-fg-muted">Value</span>
+                <Input type="number" step="any" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} placeholder="0.042" />
               </label>
               <label className="block space-y-1 col-span-2">
-                <span className="text-xs font-medium">Timestamp (UTC)</span>
-                <Input type="datetime-local" value={form.ts} onChange={e => setForm(f => ({ ...f, ts: e.target.value }))} />
+                <span className="text-xs font-medium text-fg-muted">Timestamp (UTC)</span>
+                <Input type="datetime-local" value={form.ts} onChange={(e) => setForm((f) => ({ ...f, ts: e.target.value }))} />
               </label>
             </div>
             <Btn variant="primary" size="sm" onClick={ingest} loading={saving}>Ingest</Btn>
@@ -325,25 +524,20 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
             <EmptyState title="No metric data" description="Ingest data points above or send via SDK." />
           ) : (
             <div className="space-y-4">
-              {uniqueMetrics.map(name => {
-                const pts = metrics.filter(m => m.metric_name === name).slice(0, 50)
-                const vals = pts.map(p => p.value)
+              {uniqueMetrics.map((name) => {
+                const pts = metrics.filter((m) => m.metric_name === name).slice(0, 50)
+                const vals = pts.map((p) => p.value)
                 const max = Math.max(...vals)
                 const min = Math.min(...vals)
                 return (
                   <Card key={name} className="p-4">
-                    <h4 className="text-sm font-medium font-mono mb-2">{name}</h4>
+                    <h4 className="text-sm font-medium font-mono mb-2 text-fg-primary">{name}</h4>
                     <BarSparkline
                       values={vals}
                       xLabels={pts.map((p) =>
-                        new Date(p.ts).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                        }),
+                        new Date(p.ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
                       )}
-                      barTitles={pts.map(
-                        (p) => `${new Date(p.ts).toLocaleString()}: ${p.value}`,
-                      )}
+                      barTitles={pts.map((p) => `${new Date(p.ts).toLocaleString()}: ${p.value}`)}
                       accent="bg-brand"
                       height={80}
                       showAxes
@@ -356,9 +550,7 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
                     />
                     <div className="flex justify-between mt-2 text-2xs text-fg-muted tabular-nums">
                       <span>{pts.length} samples</span>
-                      <span>
-                        min {min.toFixed(3)} · max {max.toFixed(3)}
-                      </span>
+                      <span>min {min.toFixed(3)} · max {max.toFixed(3)}</span>
                     </div>
                   </Card>
                 )
@@ -371,9 +563,7 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
   )
 }
 
-// ─── Detect tab ───────────────────────────────────────────────────────────────
-
-function DetectTab({ projectId, onDone }: { projectId: string; onDone: () => void }) {
+function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDone: () => void; hasMetrics: boolean }) {
   const toast = useToast()
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ anomalies: number; ids: string[] } | null>(null)
@@ -399,25 +589,31 @@ function DetectTab({ projectId, onDone }: { projectId: string; onDone: () => voi
 
   return (
     <Card className="max-w-lg p-6 space-y-4">
-      <h2 className="text-base font-semibold">Manual detection run</h2>
-      <p className="text-sm text-muted-foreground">
+      <h2 className="text-base font-semibold text-fg-primary">Manual detection run</h2>
+      <p className="text-sm text-fg-muted">
         Analyzes metric_series data using Page-Hinkley, Z-score, and release-boundary regression.
         Leaves all findings in the Anomalies tab.
       </p>
+      {!projectId && (
+        <p className="text-xs text-warn">Select a project from the switcher before running detection.</p>
+      )}
+      {!hasMetrics && projectId && (
+        <p className="text-xs text-warn">No metric data yet — ingest points on the Metrics tab first.</p>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Metric name (optional)</span>
-          <Input value={form.metric_name} onChange={e => setForm(f => ({ ...f, metric_name: e.target.value }))} placeholder="all metrics" />
+          <span className="text-sm font-medium text-fg-primary">Metric name (optional)</span>
+          <Input value={form.metric_name} onChange={(e) => setForm((f) => ({ ...f, metric_name: e.target.value }))} placeholder="all metrics" />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Lookback (hours)</span>
-          <Input type="number" min={1} max={720} value={form.lookback_hours} onChange={e => setForm(f => ({ ...f, lookback_hours: parseInt(e.target.value, 10) }))} />
+          <span className="text-sm font-medium text-fg-primary">Lookback (hours)</span>
+          <Input type="number" min={1} max={720} value={form.lookback_hours} onChange={(e) => setForm((f) => ({ ...f, lookback_hours: parseInt(e.target.value, 10) }))} />
         </label>
       </div>
-      <Btn variant="primary" onClick={run} loading={loading}>Run detection</Btn>
+      <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Run detection</Btn>
       {result && (
-        <div className="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-700 dark:bg-emerald-950/30">
-          <p className="font-medium text-emerald-800 dark:text-emerald-300">{result.anomalies} anomalies detected</p>
+        <div className="rounded-md border border-ok/30 bg-ok/5 px-4 py-3 text-sm">
+          <p className="font-medium text-ok">{result.anomalies} anomalies detected</p>
         </div>
       )}
     </Card>

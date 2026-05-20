@@ -22,8 +22,145 @@ import type { Hono } from 'npm:hono@4'
 import { z } from 'npm:zod@3'
 import { getServiceClient } from '../../_shared/db.ts'
 import { jwtAuth, apiKeyAuth, getOrgIdFromContext } from '../../_shared/auth.ts'
+import { ownedProjectIds, resolveOwnedProject } from '../shared.ts'
 
 export function registerLessonsRoutes(app: Hono) {
+  // GET /v1/admin/lessons/stats — posture banner + LESSONS SNAPSHOT.
+  app.get('/v1/admin/lessons/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      activeLessons: 0,
+      retiredLessons: 0,
+      criticalLessons: 0,
+      candidateClusters: 0,
+      promotedClusters: 0,
+      readyToPromote: 0,
+      highCoherenceCandidates: 0,
+      totalClusterReports: 0,
+      lastLessonReinforcedAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'candidates_ready'
+        | 'critical_lessons'
+        | 'no_data'
+        | 'no_lessons'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const [activeRes, retiredRes, criticalRes, clustersRes, lastLessonRes] = await Promise.all([
+      db.from('lessons').select('id', { count: 'exact', head: true }).eq('project_id', pid).is('retired_at', null),
+      db.from('lessons').select('id', { count: 'exact', head: true }).eq('project_id', pid).not('retired_at', 'is', null),
+      db
+        .from('lessons')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .eq('severity', 'critical')
+        .is('retired_at', null),
+      db
+        .from('mistake_clusters')
+        .select('id, status, cluster_size, judge_coherence_score')
+        .eq('project_id', pid),
+      db
+        .from('lessons')
+        .select('last_reinforced_at')
+        .eq('project_id', pid)
+        .is('retired_at', null)
+        .order('last_reinforced_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const clusters = clustersRes.data ?? [];
+    const candidateClusters = clusters.filter((cl) => cl.status === 'candidate').length;
+    const promotedClusters = clusters.filter((cl) => cl.status === 'promoted').length;
+    const readyToPromote = clusters.filter(
+      (cl) => cl.status === 'candidate' && (cl.cluster_size ?? 0) >= 3,
+    ).length;
+    const highCoherenceCandidates = clusters.filter(
+      (cl) =>
+        cl.status === 'candidate' &&
+        (cl.cluster_size ?? 0) >= 3 &&
+        (cl.judge_coherence_score ?? 0) >= 0.75,
+    ).length;
+    const totalClusterReports = clusters.reduce((sum, cl) => sum + (cl.cluster_size ?? 0), 0);
+
+    const activeLessons = activeRes.count ?? 0;
+    const retiredLessons = retiredRes.count ?? 0;
+    const criticalLessons = criticalRes.count ?? 0;
+
+    let topPriority = empty.topPriority;
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (highCoherenceCandidates > 0 || readyToPromote > 0) {
+      topPriority = 'candidates_ready';
+      topPriorityLabel = `${readyToPromote} cluster${readyToPromote === 1 ? '' : 's'} ready to promote${highCoherenceCandidates > 0 ? ` · ${highCoherenceCandidates} above coherence threshold` : ''}.`;
+      topPriorityTo = '/lessons?tab=clusters';
+    } else if (criticalLessons > 0) {
+      topPriority = 'critical_lessons';
+      topPriorityLabel = `${criticalLessons} critical lesson${criticalLessons === 1 ? '' : 's'} active — review before PR context injection.`;
+      topPriorityTo = '/lessons?tab=lessons';
+    } else if (activeLessons === 0 && clusters.length === 0) {
+      topPriority = 'no_data';
+      topPriorityLabel = 'No clusters or lessons yet — submit bug reports to seed mistake memory.';
+      topPriorityTo = '/reports';
+    } else if (activeLessons === 0 && candidateClusters > 0) {
+      topPriority = 'no_lessons';
+      topPriorityLabel = `${candidateClusters} candidate cluster${candidateClusters === 1 ? '' : 's'} forming — promote when coherence ≥ 75%.`;
+      topPriorityTo = '/lessons?tab=clusters';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${activeLessons} active lesson${activeLessons === 1 ? '' : 's'} · ${candidateClusters} candidate cluster${candidateClusters === 1 ? '' : 's'}.`;
+      topPriorityTo = '/lessons?tab=query';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.project_name ?? null,
+        projectCount: projectIds.length,
+        activeLessons,
+        retiredLessons,
+        criticalLessons,
+        candidateClusters,
+        promotedClusters,
+        readyToPromote,
+        highCoherenceCandidates,
+        totalClusterReports,
+        lastLessonReinforcedAt: lastLessonRes.data?.last_reinforced_at ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   // ─── List lessons ────────────────────────────────────────────────────────
   app.get('/v1/admin/lessons', jwtAuth, async (c) => {
     const db = getServiceClient()

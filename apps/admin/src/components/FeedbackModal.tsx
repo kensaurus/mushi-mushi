@@ -52,9 +52,9 @@ const TYPE_CONFIG: Record<FeedbackType, {
   bug: {
     label: 'Report a bug',
     emoji: '🐛',
-    subjectPlaceholder: 'e.g. "Clicking Save does nothing on the Settings page"',
-    bodyPlaceholder: 'What were you trying to do?\nWhat happened instead?\nWhich page / browser / OS?\n\nThe more detail, the faster we fix it.',
-    incentive: 'Every report reaches the inbox directly — no email client needed.',
+    subjectPlaceholder: 'e.g. "Clicking Save does nothing on Settings"',
+    bodyPlaceholder: 'Optional — a sentence is plenty.\n\nWhat happened? Which page / browser / OS?',
+    incentive: 'Takes 30 seconds. Reaches us directly — no email client needed.',
     ctaLabel: 'Send report',
     successHeadline: 'Bug report received!',
     successBody: "We read every one. You'll hear back at your account email if we need more info.",
@@ -62,12 +62,12 @@ const TYPE_CONFIG: Record<FeedbackType, {
   feature: {
     label: 'Request a feature',
     emoji: '✨',
-    subjectPlaceholder: 'e.g. "Export reports to CSV"',
-    bodyPlaceholder: "What problem are you trying to solve?\nHow would this feature help you?\nAny examples from other tools you love?\n\nYour idea goes directly into the roadmap inbox.",
-    incentive: 'Your idea goes straight into the roadmap. The most-upvoted requests ship first.',
+    subjectPlaceholder: 'e.g. "Export reports to CSV" or "Dark mode"',
+    bodyPlaceholder: 'Optional — a sentence is plenty.\n\nWhat problem would this solve?',
+    incentive: 'Every idea reaches the roadmap directly. Takes 30 seconds.',
     ctaLabel: 'Submit idea',
     successHeadline: 'Idea received!',
-    successBody: "Thank you — your request is in the roadmap inbox. We ship what users actually need.",
+    successBody: "Thank you — your request is in the roadmap inbox. We ship what users actually ask for.",
   },
 }
 
@@ -119,17 +119,22 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
     const cleanBody = body.trim()
 
     if (cleanSubject.length < 3) { setError('Please add a short title (at least 3 characters).'); return }
-    if (cleanBody.length < 10) { setError('Please add a bit more detail (at least 10 characters).'); return }
+    // Body is optional — page context is always appended automatically.
 
     setError(null)
     setSubmitting(true)
+
+    const pageCtx = `Page: ${window.location.pathname}`
+    const bodyWithContext = cleanBody
+      ? `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n${cleanBody}\n\n---\n${pageCtx}`
+      : `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n(no description provided)\n\n---\n${pageCtx}`
 
     const result = await apiFetch<{ ticket_id: string; created_at: string }>('/v1/support/contact', {
       method: 'POST',
       body: JSON.stringify({
         project_id: activeProjectId ?? null,
         subject: cleanSubject,
-        body: `[${type === 'bug' ? 'Bug' : 'Feature Request'}]\n\n${cleanBody}\n\n---\nPage: ${window.location.href}`,
+        body: bodyWithContext,
         category: type === 'bug' ? 'bug' : 'feature',
       }),
     })
@@ -262,17 +267,23 @@ export function FeedbackModal({ onClose, initialType = 'bug', onSubmitted }: Fee
                 />
               </div>
 
-              {/* Body */}
+              {/* Body — optional */}
               <div className="space-y-1">
-                <label htmlFor="feedback-body" className="text-xs font-medium text-fg">
-                  {type === 'bug' ? 'More details' : 'Tell us more'}
-                </label>
+                <div className="flex items-baseline justify-between gap-2">
+                  <label htmlFor="feedback-body" className="text-xs font-medium text-fg">
+                    {type === 'bug' ? 'More details' : 'Tell us more'}
+                    <span className="ml-1 text-2xs font-normal text-fg-faint">(optional)</span>
+                  </label>
+                  <span className="text-2xs text-fg-faint tabular-nums shrink-0">
+                    Page: {typeof window !== 'undefined' ? window.location.pathname : '—'} ↗ captured
+                  </span>
+                </div>
                 <textarea
                   id="feedback-body"
                   value={body}
                   onChange={(e) => setBody(e.target.value.slice(0, MAX_BODY))}
                   placeholder={config.bodyPlaceholder}
-                  rows={5}
+                  rows={4}
                   className="w-full rounded-sm border border-edge bg-surface-raised px-2.5 py-1.5 text-xs text-fg placeholder:text-fg-faint focus:outline-none focus:ring-2 focus:ring-brand/40 focus:border-brand resize-y leading-relaxed"
                   maxLength={MAX_BODY}
                 />

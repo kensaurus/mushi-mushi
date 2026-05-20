@@ -316,8 +316,22 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onScreenshotRequest: async () => {
       if (!screenshotCap || activeConfig.capture?.screenshot === 'off') return;
       log.debug('Taking screenshot');
-      pendingScreenshot = await screenshotCap.take();
-      widget.setScreenshotAttached(pendingScreenshot !== null);
+      widget.setScreenshotCapturing(true);
+      const result = await screenshotCap.take();
+      if (result.ok) {
+        pendingScreenshot = result.dataUrl;
+        widget.setScreenshotAttached(true);
+        log.debug('Screenshot captured');
+      } else {
+        pendingScreenshot = null;
+        // 'cancelled' means the user dismissed the getDisplayMedia picker — not an error.
+        if (result.reason !== 'cancelled') {
+          widget.setScreenshotError(true);
+          log.debug('Screenshot failed', { reason: result.reason, message: result.message });
+        } else {
+          widget.setScreenshotCapturing(false);
+        }
+      }
     },
     onScreenshotRemove: () => {
       log.debug('Screenshot attachment removed');
@@ -327,11 +341,19 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
     onElementSelectorRequest: async () => {
       if (!elementSelector || activeConfig.capture?.elementSelector === false) return;
       log.debug('Element selector activated');
-      const el = await elementSelector.activate();
-      if (el) {
-        pendingElement = el;
-        widget.setElementSelected(true);
-        log.debug('Element selected', { tagName: el.tagName, xpath: el.xpath });
+      widget.setElementCapturing(true);
+      widget.hidePanel();
+      try {
+        const el = await elementSelector.activate();
+        if (el) {
+          pendingElement = el;
+          widget.setElementSelected(true);
+          log.debug('Element selected', { tagName: el.tagName, xpath: el.xpath });
+        } else {
+          widget.setElementCapturing(false);
+        }
+      } finally {
+        widget.showPanel();
       }
     },
     async onReporterReportsRequest() {

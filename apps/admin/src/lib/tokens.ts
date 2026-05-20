@@ -151,7 +151,7 @@ export const STATUS_LABELS: Record<string, string> = {
   dismissed:  'Dismissed',
   // Legacy rows / SDK ingest — shown until migrated server-side
   triaged:    'Classified',
-  resolved:   'Fixed',
+  resolved:   'Resolved (close external)',
   queued:     'Queued',
   grouped:    'Classified',
 }

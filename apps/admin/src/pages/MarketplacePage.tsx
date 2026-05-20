@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -15,13 +15,14 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
-import { PageHero } from '../components/PageHero'
 import { useEntitlements } from '../lib/useEntitlements'
 import { UpgradePrompt } from '../components/billing/UpgradePrompt'
 import {
   PageHeader,
   PageHelp,
   Btn,
+  Badge,
+  Card,
   ErrorAlert,
   EmptyState,
   Input,
@@ -29,6 +30,9 @@ import {
   FilterSelect,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
+  RelativeTime,
 } from '../components/ui'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
@@ -38,6 +42,7 @@ import { InstalledList } from '../components/marketplace/InstalledList'
 import { PluginCard } from '../components/marketplace/PluginCard'
 import { MarketplaceStatusBanner } from '../components/marketplace/MarketplaceStatusBanner'
 import {
+  EMPTY_MARKETPLACE_STATS,
   type DispatchEntry,
   type InstalledPlugin,
   type MarketplacePlugin,
@@ -47,6 +52,11 @@ import {
 } from '../components/marketplace/types'
 
 const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Plugin posture — installed count, delivery success rate, and recommended next steps.',
+  },
   {
     id: 'browse',
     label: 'Browse',
@@ -64,8 +74,10 @@ const TABS: Array<{ id: MarketplaceTabId; label: string; description: string }> 
   },
 ]
 
-function isTabId(v: string | null): v is MarketplaceTabId {
-  return TABS.some((t) => t.id === v)
+function resolveMarketplaceTab(value: string | null, urlFilter: string | null): MarketplaceTabId {
+  if (urlFilter === 'disabled') return 'installed'
+  if (value === 'browse' || value === 'installed' || value === 'deliveries') return value
+  return 'overview'
 }
 
 export function MarketplacePage() {
@@ -81,8 +93,7 @@ export function MarketplacePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const param = searchParams.get('tab')
   const urlFilter = searchParams.get('filter')
-  const activeTab: MarketplaceTabId =
-    urlFilter === 'disabled' ? 'installed' : isTabId(param) ? param : 'browse'
+  const activeTab: MarketplaceTabId = resolveMarketplaceTab(param, urlFilter)
   const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const catalogQuery = usePageData<{ plugins: MarketplacePlugin[] }>('/v1/marketplace/plugins')
@@ -101,17 +112,7 @@ export function MarketplacePage() {
   const catalog = catalogQuery.data?.plugins ?? []
   const installed = installedQuery.data?.plugins ?? []
   const dispatchLog = dispatchQuery.data?.entries ?? []
-  const stats = statsQuery.data ?? {
-    catalogTotal: catalog.length,
-    installedTotal: 0,
-    installedActive: 0,
-    installedPaused: 0,
-    deliveries7d: 0,
-    deliveriesOk: 0,
-    deliveriesFailed: 0,
-    lastDeliveryAt: null,
-    failingPlugins: 0,
-  }
+  const stats = { ...EMPTY_MARKETPLACE_STATS, ...statsQuery.data, catalogTotal: statsQuery.data?.catalogTotal ?? catalog.length }
 
   const loading = Boolean(
     catalogQuery.loading ||
@@ -135,7 +136,7 @@ export function MarketplacePage() {
   const setTab = useCallback(
     (tab: MarketplaceTabId) => {
       const next = new URLSearchParams(searchParams)
-      if (tab === 'browse') next.delete('tab')
+      if (tab === 'overview') next.delete('tab')
       else next.set('tab', tab)
       next.delete('filter')
       setSearchParams(next, { replace: true, preventScrollReset: true })
@@ -225,14 +226,19 @@ export function MarketplacePage() {
     return ['', ...Array.from(set).sort()]
   }, [dispatchLog])
 
-  const marketplaceSeverity: 'ok' | 'warn' | 'crit' | 'neutral' =
-    stats.deliveriesFailed > 0 || stats.failingPlugins > 0
-      ? 'crit'
-      : stats.installedPaused > 0
-        ? 'warn'
-        : stats.installedTotal > 0
-          ? 'ok'
-          : 'neutral'
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: 'Overview' },
+      { id: 'browse' as const, label: 'Browse', count: stats.catalogTotal },
+      { id: 'installed' as const, label: 'Installed', count: stats.installedTotal || undefined },
+      {
+        id: 'deliveries' as const,
+        label: 'Deliveries',
+        count: stats.deliveriesFailed > 0 ? stats.deliveriesFailed : stats.deliveries7d || undefined,
+      },
+    ],
+    [stats.catalogTotal, stats.installedTotal, stats.deliveries7d, stats.deliveriesFailed],
+  )
 
   usePublishPageContext({
     route: '/marketplace',
@@ -241,15 +247,6 @@ export function MarketplacePage() {
     filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
     criticalCount: stats.deliveriesFailed + stats.failingPlugins,
   })
-
-  const tabOptions = useMemo(
-    () => [
-      { id: 'browse' as const, label: 'Browse', count: stats.catalogTotal },
-      { id: 'installed' as const, label: 'Installed', count: stats.installedTotal },
-      { id: 'deliveries' as const, label: 'Deliveries', count: stats.deliveries7d },
-    ],
-    [stats.catalogTotal, stats.installedTotal, stats.deliveries7d],
-  )
 
   const beginInstall = useCallback((plugin: MarketplacePlugin) => {
     setInstallTarget(plugin)
@@ -312,9 +309,7 @@ export function MarketplacePage() {
     const { slug, name } = uninstallTarget
     setInstalling(slug)
     try {
-      const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, {
-        method: 'DELETE',
-      })
+      const res = await apiFetch(`/v1/admin/plugins/${encodeURIComponent(slug)}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(res.error?.message ?? 'Uninstall failed')
       toast.success(`Removed ${name}`)
       reloadAll()
@@ -448,103 +443,130 @@ export function MarketplacePage() {
     return <ErrorAlert message={`Failed to load marketplace: ${error}`} onRetry={reloadAll} />
   }
 
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    stats.topPriority === 'delivery_failures'
+      ? 'danger'
+      : stats.topPriority === 'plugins_paused'
+        ? 'warn'
+        : stats.topPriority === 'healthy'
+          ? 'ok'
+          : stats.topPriority === 'no_plugins_installed'
+            ? 'brand'
+            : 'neutral'
+
+  const headerBadge =
+    stats.topPriority === 'healthy'
+      ? 'DELIVERING'
+      : stats.topPriority === 'delivery_failures'
+        ? `${stats.deliveriesFailed} FAILED`
+        : stats.topPriority === 'plugins_paused'
+          ? `${stats.installedPaused} PAUSED`
+          : stats.installedTotal === 0
+            ? 'EMPTY'
+            : 'SETUP'
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-marketplace">
       <PageHeader
         title={copy?.title ?? 'Marketplace'}
         description={
           copy?.description ??
-          'Install HMAC-signed webhook plugins — PagerDuty, Linear, Zapier, and custom receivers.'
+          'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.'
         }
-        projectScope={projectName}
+        projectScope={stats.projectName ?? projectName ?? undefined}
       >
-        <Btn variant="ghost" size="sm" onClick={reloadAll}>
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'danger'
+                ? 'bg-danger/10 text-danger'
+                : bannerSeverity === 'warn'
+                  ? 'bg-warn/10 text-warn'
+                  : bannerSeverity === 'brand'
+                    ? 'bg-brand/15 text-brand'
+                    : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {headerBadge}
+        </Badge>
+        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+        <Btn variant="ghost" size="sm" onClick={reloadAll} loading={isValidating}>
           Refresh
         </Btn>
       </PageHeader>
 
       <MarketplaceStatusBanner
         stats={stats}
-        projectName={projectName}
         pluginsUnlocked={pluginsUnlocked}
+        onTab={setTab}
+        onRefresh={reloadAll}
+        refreshing={isValidating}
       />
 
-      <PageHero
-        scope="marketplace"
-        title={copy?.title ?? 'Marketplace'}
-        kicker="Event routing"
-        decide={{
-          label:
-            stats.installedTotal > 0
-              ? `${stats.installedActive} plugin${stats.installedActive === 1 ? '' : 's'} active`
-              : 'No plugins installed',
-          metric: `${stats.catalogTotal} in catalog`,
-          summary:
-            stats.installedTotal > 0
-              ? `${stats.deliveriesOk} successful deliveries in the last 7 days — each payload is HMAC-SHA256 signed.`
-              : 'Pick a plugin from the catalog, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault.',
-          severity: marketplaceSeverity,
-          anchor: 'marketplace:decide',
-          evidence: {
-            kind: 'metric-breakdown',
-            items: [
-              {
-                label: 'Installed',
-                value: String(stats.installedTotal),
-                tone: stats.installedTotal > 0 ? 'ok' : 'neutral',
-              },
-              {
-                label: 'Paused',
-                value: String(stats.installedPaused),
-                tone: stats.installedPaused > 0 ? 'warn' : 'neutral',
-              },
-              {
-                label: 'Failed (7d)',
-                value: String(stats.deliveriesFailed),
-                tone: stats.deliveriesFailed > 0 ? 'crit' : 'ok',
-              },
-            ],
-          },
-        }}
-        verify={{
-          label: stats.lastDeliveryAt ? 'Last delivery' : 'Delivery log empty',
-          detail: stats.lastDeliveryAt
-            ? new Date(stats.lastDeliveryAt).toLocaleString()
-            : 'Install a plugin and send a test event — deliveries appear on the Deliveries tab.',
-          to: '/marketplace?tab=deliveries',
-          secondaryTo: '/audit?source=marketplace',
-          secondaryLabel: 'Audit log',
-          anchor: 'marketplace:verify',
-          evidence: stats.lastDeliveryAt
-            ? {
-                kind: 'last-event',
-                at: stats.lastDeliveryAt,
-                by: 'webhook',
-                payloadSummary: `${stats.deliveriesOk} ok · ${stats.deliveriesFailed} failed (7d)`,
-                status: stats.deliveriesFailed > 0 ? 'warn' : 'ok',
-              }
-            : undefined,
-        }}
+      <SegmentedControl
+        value={activeTab}
+        onChange={setTab}
+        options={tabOptions}
+        ariaLabel="Marketplace sections"
+        size="sm"
       />
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About the marketplace'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events (report.created, report.classified, fix.applied, sla.breached, etc.). Every payload is signed with HMAC-SHA256 so your receiver can verify it came from your project.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Page on-call via PagerDuty when a critical bug is reported',
-            'Mirror reports to Linear and keep issue status in sync',
-            'Fan out any event to a Zapier catch-hook for no-code workflows',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'Pick a plugin, deploy its webhook receiver, click Install, and paste the HTTPS URL. Mushi generates a signing secret (shown once) and stores it in Supabase Vault.'
-        }
-      />
+      <Section title="MARKETPLACE SNAPSHOT" freshness={{ at: lastFetchedAt, isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Catalog" value={stats.catalogTotal} accent={stats.catalogTotal > 0 ? 'text-brand' : undefined} hint="Listed plugins" />
+          <StatCard
+            label="Installed"
+            value={stats.installedTotal}
+            accent={stats.installedTotal > 0 ? 'text-ok' : undefined}
+            hint={`${stats.installedActive} active · ${stats.installedPaused} paused`}
+          />
+          <StatCard
+            label="Deliveries · 7d"
+            value={stats.deliveries7d}
+            accent={stats.deliveries7d > 0 ? 'text-info' : undefined}
+            hint={`${stats.deliveriesOk} ok · ${stats.deliveriesFailed} failed`}
+          />
+          <StatCard
+            label="Success rate"
+            value={stats.deliveries7d > 0 ? `${stats.deliverySuccessRatePct}%` : '—'}
+            accent={stats.deliverySuccessRatePct >= 95 ? 'text-ok' : stats.deliveriesFailed > 0 ? 'text-danger' : undefined}
+            hint="Last 7 days"
+          />
+          <StatCard
+            label="Failing"
+            value={stats.failingPlugins}
+            accent={stats.failingPlugins > 0 ? 'text-danger' : undefined}
+            hint="Last delivery error/timeout"
+          />
+          <StatCard
+            label="Never delivered"
+            value={stats.neverDeliveredPlugins}
+            accent={stats.neverDeliveredPlugins > 0 ? 'text-warn' : undefined}
+            hint="Active but no delivery yet"
+          />
+        </div>
+      </Section>
+
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'delivery_failures'
+              ? 'border-danger/30 bg-danger/5'
+              : stats.topPriority === 'plugins_paused'
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       {!pluginsUnlocked && !entitlements.loading && (
         <UpgradePrompt flag="plugins" currentPlan={entitlements.planName} />
@@ -565,143 +587,190 @@ export function MarketplacePage() {
         />
       ) : null}
 
-      <Section title="Plugin workspace" freshness={{ at: lastFetchedAt, isValidating }}>
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Catalog" value={stats.catalogTotal} hint="Listed plugins" />
-          <StatCard
-            label="Installed"
-            value={stats.installedTotal}
-            hint={
-              stats.installedPaused > 0
-                ? `${stats.installedPaused} paused`
-                : `${stats.installedActive} active`
+      {activeTab === 'overview' && (
+        <div className="space-y-4">
+          <PageHelp
+            title={copy?.help?.title ?? 'About the marketplace'}
+            whatIsIt={
+              copy?.help?.whatIsIt ??
+              'Mushi plugins are HTTPS webhook receivers that subscribe to lifecycle events. Every payload is HMAC-SHA256 signed so your receiver can verify it came from your project.'
+            }
+            useCases={
+              copy?.help?.useCases ?? [
+                'Page on-call via PagerDuty when a critical bug is reported',
+                'Mirror reports to Linear and keep issue status in sync',
+                'Fan out any event to a Zapier catch-hook for no-code workflows',
+              ]
+            }
+            howToUse={
+              copy?.help?.howToUse ??
+              'Pick a plugin on Browse, paste your HTTPS webhook URL, and Mushi stores the signing secret in Vault. Send a test event from Installed to verify delivery.'
             }
           />
-          <StatCard
-            label="Deliveries (7d)"
-            value={stats.deliveries7d}
-            hint={`${stats.deliveriesOk} ok · ${stats.deliveriesFailed} failed`}
-          />
-          <StatCard
-            label="Failing"
-            value={stats.failingPlugins}
-            hint={stats.failingPlugins > 0 ? 'Last delivery error/timeout' : 'All plugins healthy'}
-          />
-        </div>
-
-        <SegmentedControl
-          value={activeTab}
-          onChange={setTab}
-          options={tabOptions}
-          ariaLabel="Marketplace sections"
-          className="mb-4"
-        />
-
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
-
-        {activeTab === 'browse' && (
-          <div data-dav-anchor="marketplace:decide">
-            <div className="flex flex-wrap gap-2 mb-3">
-              <Input
-                placeholder="Search by name, publisher, description…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="max-w-sm"
-              />
-              <FilterSelect
-                label="Category"
-                value={categoryFilter}
-                options={categories}
-                onChange={(e) => setCategoryFilter(e.currentTarget.value)}
-              />
-              <Btn
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowInstalledOnly((v) => !v)}
-                className={showInstalledOnly ? 'border-brand text-brand' : ''}
-              >
-                {showInstalledOnly ? '✓ Installed only' : 'Installed only'}
-              </Btn>
-            </div>
-
-            {visibleCatalog.length === 0 ? (
-              <EmptyState
-                title={catalog.length === 0 ? 'No plugins listed' : 'No plugins match these filters'}
-                description={
-                  catalog.length === 0
-                    ? 'Seed plugin_registry with the reference catalog or set is_listed = true.'
-                    : 'Try clearing search, category, or the installed-only toggle.'
-                }
-              />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {visibleCatalog.map((p) => (
-                  <PluginCard
-                    key={p.slug}
-                    plugin={p}
-                    installed={installedBySlug.get(p.slug)}
-                    stats={reliabilityBySlug.get(p.slug)}
-                    busy={installing === p.slug}
-                    onInstall={() => beginInstall(p)}
-                    onUninstall={() => uninstall(p.slug, p.name)}
-                  />
-                ))}
-              </div>
-            )}
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Plugins delivering"
+              description={stats.topPriorityLabel ?? `${stats.installedActive} active plugins with recent deliveries.`}
+              cta={{ label: 'View delivery log', to: '/marketplace?tab=deliveries' }}
+            />
+          )}
+          {stats.topPriority === 'no_plugins_installed' && (
+            <RecommendedAction
+              tone="info"
+              title="Install your first plugin"
+              description={stats.topPriorityLabel ?? `${stats.catalogTotal} plugins available in the catalog.`}
+              cta={{ label: 'Browse catalog', to: '/marketplace?tab=browse' }}
+            />
+          )}
+          {stats.topPriority === 'delivery_failures' && (
+            <RecommendedAction
+              tone="urgent"
+              title="Debug failed webhook deliveries"
+              description={stats.topPriorityLabel ?? 'Check HTTP status and response excerpts in the Deliveries tab.'}
+              cta={{ label: 'Open Deliveries', to: '/marketplace?tab=deliveries' }}
+            />
+          )}
+          {stats.topPriority === 'plugins_paused' && (
+            <RecommendedAction
+              tone="info"
+              title="Resume paused plugins"
+              description={stats.topPriorityLabel ?? 'Paused plugins stop receiving lifecycle events.'}
+              cta={{ label: 'Open Installed', to: '/marketplace?tab=installed' }}
+            />
+          )}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Active</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-ok">{stats.installedActive}</p>
+              <p className="text-2xs text-fg-muted">Receiving lifecycle events</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Paused</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums text-warn">{stats.installedPaused}</p>
+              <p className="text-2xs text-fg-muted">Events suppressed until resumed</p>
+            </Card>
+            <Card className="p-3 border-edge">
+              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last delivery</p>
+              <p className="mt-1 text-sm font-semibold text-fg-primary">
+                {stats.lastDeliveryAt ? <RelativeTime value={stats.lastDeliveryAt} /> : 'Never'}
+              </p>
+              <p className="text-2xs text-fg-muted">
+                {stats.daysSinceLastDelivery != null && stats.daysSinceLastDelivery > 0
+                  ? `${stats.daysSinceLastDelivery}d ago`
+                  : stats.deliveries7d > 0
+                    ? `${stats.deliverySuccessRatePct}% success (7d)`
+                    : 'Send a test from Installed'}
+              </p>
+            </Card>
           </div>
-        )}
+        </div>
+      )}
 
-        {activeTab === 'installed' && (
-          <div data-dav-anchor="marketplace:act">
-            {stats.installedPaused > 0 && (
-              <div className="mb-3 flex flex-wrap items-center gap-2">
+      {activeTab !== 'overview' && (
+        <Section title={activeTab === 'browse' ? 'Plugin catalog' : activeTab === 'installed' ? 'Installed plugins' : 'Delivery log'}>
+          <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+
+          {activeTab === 'browse' && (
+            <div data-dav-anchor="marketplace:decide">
+              <div className="flex flex-wrap gap-2 mb-3">
+                <Input
+                  placeholder="Search by name, publisher, description…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="max-w-sm"
+                />
+                <FilterSelect
+                  label="Category"
+                  value={categoryFilter}
+                  options={categories}
+                  onChange={(e) => setCategoryFilter(e.currentTarget.value)}
+                />
                 <Btn
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowPausedOnly((v) => !v)}
-                  className={showPausedOnly ? 'border-warn text-warn' : ''}
+                  onClick={() => setShowInstalledOnly((v) => !v)}
+                  className={showInstalledOnly ? 'border-brand text-brand' : ''}
                 >
-                  {showPausedOnly ? '✓ Paused only' : 'Show paused only'}
+                  {showInstalledOnly ? '✓ Installed only' : 'Installed only'}
                 </Btn>
               </div>
-            )}
-            <InstalledList
-              installed={visibleInstalled}
-              projectName={projectName}
-              busySlug={installing}
-              onTest={testPlugin}
-              onTogglePause={togglePausePlugin}
-              onEditUrl={editPluginUrl}
-              onRotateSecret={rotatePluginSecret}
-              onUninstall={uninstall}
-            />
-          </div>
-        )}
 
-        {activeTab === 'deliveries' && (
-          <div data-dav-anchor="marketplace:verify">
-            {dispatchLog.length === 0 ? (
-              <EmptyState
-                title={
-                  projectName
-                    ? `No deliveries for ${projectName} yet`
-                    : 'No deliveries yet'
-                }
-                description="Webhook deliveries appear here once events fire or you send a test from the Installed tab."
+              {visibleCatalog.length === 0 ? (
+                <EmptyState
+                  title={catalog.length === 0 ? 'No plugins listed' : 'No plugins match these filters'}
+                  description={
+                    catalog.length === 0
+                      ? 'Seed plugin_registry with the reference catalog or set is_listed = true.'
+                      : 'Try clearing search, category, or the installed-only toggle.'
+                  }
+                />
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {visibleCatalog.map((p) => (
+                    <PluginCard
+                      key={p.slug}
+                      plugin={p}
+                      installed={installedBySlug.get(p.slug)}
+                      stats={reliabilityBySlug.get(p.slug)}
+                      busy={installing === p.slug}
+                      onInstall={() => beginInstall(p)}
+                      onUninstall={() => uninstall(p.slug, p.name)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'installed' && (
+            <div data-dav-anchor="marketplace:act">
+              {stats.installedPaused > 0 && (
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <Btn
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowPausedOnly((v) => !v)}
+                    className={showPausedOnly ? 'border-warn text-warn' : ''}
+                  >
+                    {showPausedOnly ? '✓ Paused only' : 'Show paused only'}
+                  </Btn>
+                </div>
+              )}
+              <InstalledList
+                installed={visibleInstalled}
+                projectName={projectName}
+                busySlug={installing}
+                onTest={testPlugin}
+                onTogglePause={togglePausePlugin}
+                onEditUrl={editPluginUrl}
+                onRotateSecret={rotatePluginSecret}
+                onUninstall={uninstall}
               />
-            ) : (
-              <DispatchTable
-                entries={visibleDispatch}
-                installedPluginOptions={installedPluginOptions}
-                pluginFilter={pluginFilter}
-                statusFilter={statusFilter}
-                onPluginFilter={setPluginFilter}
-                onStatusFilter={setStatusFilter}
-              />
-            )}
-          </div>
-        )}
-      </Section>
+            </div>
+          )}
+
+          {activeTab === 'deliveries' && (
+            <div data-dav-anchor="marketplace:verify">
+              {dispatchLog.length === 0 ? (
+                <EmptyState
+                  title={projectName ? `No deliveries for ${projectName} yet` : 'No deliveries yet'}
+                  description="Webhook deliveries appear here once events fire or you send a test from the Installed tab."
+                />
+              ) : (
+                <DispatchTable
+                  entries={visibleDispatch}
+                  installedPluginOptions={installedPluginOptions}
+                  pluginFilter={pluginFilter}
+                  statusFilter={statusFilter}
+                  onPluginFilter={setPluginFilter}
+                  onStatusFilter={setStatusFilter}
+                />
+              )}
+            </div>
+          )}
+        </Section>
+      )}
 
       {uninstallTarget && (
         <ConfirmDialog

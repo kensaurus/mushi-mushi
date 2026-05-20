@@ -2,7 +2,14 @@
  * FILE: apps/admin/src/components/projects/types.ts
  */
 
-export type ProjectsTabId = 'list' | 'create'
+export type ProjectsTabId = 'overview' | 'list' | 'create'
+
+export type ProjectsTopPriority =
+  | 'no_projects'
+  | 'never_ingested'
+  | 'no_sdk_heartbeat'
+  | 'partial_ingest'
+  | 'healthy'
 
 export interface ProjectsStats {
   projectCount: number
@@ -13,8 +20,13 @@ export interface ProjectsStats {
   reportsLast24h: number
   reportsLast30d: number
   activeProjectId: string | null
+  activeProjectName: string | null
   activeProjectHasReports: boolean
   activeProjectSdkConnected: boolean
+  staleKeyCount: number
+  topPriority: ProjectsTopPriority
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
 export const EMPTY_PROJECTS_STATS: ProjectsStats = {
@@ -26,6 +38,11 @@ export const EMPTY_PROJECTS_STATS: ProjectsStats = {
   reportsLast24h: 0,
   reportsLast30d: 0,
   activeProjectId: null,
+  activeProjectName: null,
   activeProjectHasReports: false,
   activeProjectSdkConnected: false,
+  staleKeyCount: 0,
+  topPriority: 'no_projects',
+  topPriorityLabel: null,
+  topPriorityTo: null,
 }

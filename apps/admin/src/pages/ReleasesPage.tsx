@@ -1,15 +1,11 @@
 /**
  * FILE: apps/admin/src/pages/ReleasesPage.tsx
- * PURPOSE: Release management — draft changelogs with reporter attribution.
- *   Phase 2 of the closed-loop evolution plan.
- *
- *   Tabs:
- *     Drafts    — edit + publish draft releases
- *     Published — history of published releases with credit count
+ * PURPOSE: Release management — banner + RELEASES SNAPSHOT + tabs:
+ *          Overview | Drafts | Published | Draft.
  */
 
-import { useState, useCallback } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useState, useCallback, useMemo } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -18,6 +14,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { useSetupStatus } from '../lib/useSetupStatus'
+import { usePageCopy } from '../lib/copy'
 import { pluralizeWithCount } from '../lib/format'
 import {
   PageHeader,
@@ -31,19 +28,24 @@ import {
   RelativeTime,
   StatCard,
   SegmentedControl,
+  FreshnessPill,
+  RecommendedAction,
 } from '../components/ui'
+import { ReleasesStatusBanner } from '../components/releases/ReleasesStatusBanner'
+import {
+  EMPTY_RELEASES_STATS,
+  type ReleasesStats,
+  type ReleasesTabId,
+} from '../components/releases/ReleasesStatsTypes'
 import { IconSparkle, IconChevronRight } from '../components/icons'
 import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { FulfilledTicketsPicker } from '../components/support/FulfilledTicketsPicker'
 
-/** List routes return `{ ok, data: T[] }`; usePageData exposes `data` as `T[]`. */
 function listRows<T>(payload: T[] | { data: T[] } | null | undefined): T[] {
   if (!payload) return []
   return Array.isArray(payload) ? payload : (payload.data ?? [])
 }
-
-// ─── Types ────────────────────────────────────────────────────
 
 interface Release {
   id: string
@@ -71,8 +73,8 @@ interface Credit {
 }
 
 const STATUS_CLS: Record<Release['status'], string> = {
-  draft: 'bg-warn-muted text-warn',
-  published: 'bg-ok-muted text-ok',
+  draft: 'bg-warn/10 text-warn border border-warn/20',
+  published: 'bg-ok/10 text-ok border border-ok/20',
 }
 
 const STATUS_LABEL: Record<Release['status'], string> = {
@@ -84,7 +86,17 @@ function statusBadge(status: Release['status']) {
   return <Badge className={STATUS_CLS[status]}>{STATUS_LABEL[status]}</Badge>
 }
 
-// ─── Draft release form ───────────────────────────────────────
+const TABS: Array<{ id: ReleasesTabId; label: string; description: string }> = [
+  { id: 'overview', label: 'Overview', description: 'Posture banner and how AI drafting, reporter credits, and publish notifications work.' },
+  { id: 'drafts', label: 'Drafts', description: 'Edit changelog Markdown, link feedback tickets, then publish to notify credited reporters.' },
+  { id: 'published', label: 'Published', description: 'Shipped changelogs with fix counts, contributor credits, and notification stamps.' },
+  { id: 'draft', label: 'Draft', description: 'Generate a new AI changelog from fixed reports in a time window.' },
+]
+
+function resolveReleasesTab(value: string | null): ReleasesTabId {
+  if (value === 'drafts' || value === 'published' || value === 'draft') return value
+  return 'overview'
+}
 
 function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectName: string | null }) {
   const [version, setVersion] = useState('')
@@ -125,20 +137,11 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
 
   return (
     <Card className="p-4">
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-fg-secondary">Generate draft with AI</h2>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-3">
-          <Input
-            label="Version"
-            placeholder="1.2.3"
-            value={version}
-            onChange={(e) => setVersion(e.target.value)}
-          />
-          <Input
-            label="Title (optional)"
-            placeholder="Performance update"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <Input label="Version" placeholder="1.2.3" value={version} onChange={(e) => setVersion(e.target.value)} />
+          <Input label="Title (optional)" placeholder="Performance update" value={title} onChange={(e) => setTitle(e.target.value)} />
           <Input
             label="Report window (days)"
             type="number"
@@ -167,20 +170,14 @@ function DraftForm({ onCreated, projectName }: { onCreated: () => void; projectN
   )
 }
 
-// ─── Release drawer ───────────────────────────────────────────
-
 function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; onClose: () => void; onPublished: () => void }) {
   const [body, setBody] = useState(release.body_md)
-  const [fulfilledTicketIds, setFulfilledTicketIds] = useState<string[]>(
-    release.fulfilled_ticket_ids ?? [],
-  )
+  const [fulfilledTicketIds, setFulfilledTicketIds] = useState<string[]>(release.fulfilled_ticket_ids ?? [])
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const toast = useToast()
 
-  const { data: detailData } = usePageData<Release>(
-    `/v1/admin/releases/${release.id}`,
-  )
+  const { data: detailData } = usePageData<Release>(`/v1/admin/releases/${release.id}`)
   const credits = detailData?.credits ?? []
   const detailRelease = detailData ?? release
   const ticketCount = fulfilledTicketIds.length
@@ -297,8 +294,10 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
                   </span>
                   <div className="flex items-center gap-2">
                     <Badge className="bg-surface-raised text-fg-secondary">{credit.contribution_type}</Badge>
-                    {credit.notified_at && (
+                    {credit.notified_at ? (
                       <span className="text-xs text-ok">notified</span>
+                    ) : (
+                      <span className="text-xs text-warn">pending</span>
                     )}
                   </div>
                 </div>
@@ -309,20 +308,14 @@ function ReleaseDrawer({ release, onClose, onPublished }: { release: Release; on
 
         {release.status === 'draft' && (
           <div className="flex gap-2 pt-2">
-            <Btn loading={saving} variant="ghost" onClick={handleSave}>
-              Save draft
-            </Btn>
-            <Btn loading={publishing} variant="primary" onClick={handlePublish}>
-              Publish + notify
-            </Btn>
+            <Btn loading={saving} variant="ghost" onClick={handleSave}>Save draft</Btn>
+            <Btn loading={publishing} variant="primary" onClick={handlePublish}>Publish + notify</Btn>
           </div>
         )}
       </div>
     </Drawer>
   )
 }
-
-// ─── Releases list ────────────────────────────────────────────
 
 function ReleasesList({
   status,
@@ -352,7 +345,7 @@ function ReleasesList({
         emptyDescription={
           status === 'draft'
             ? projectName
-              ? `No drafts for ${projectName} yet. Generate one from recent fixed reports above.`
+              ? `No drafts for ${projectName} yet. Generate one from the Draft tab.`
               : 'Generate a changelog draft from recent fixed reports.'
             : projectName
               ? `Nothing published for ${projectName} yet. Publish a draft to notify credited reporters.`
@@ -398,9 +391,7 @@ function ReleasesList({
                 <td className="hidden px-3 py-2.5 tabular-nums text-xs text-fg-muted md:table-cell">
                   {r.credited_reporter_ids.length}
                   {(r.fulfilled_ticket_ids?.length ?? 0) > 0 && (
-                    <span className="text-ok ml-1" title="Admin feedback credited">
-                      +{r.fulfilled_ticket_ids!.length}
-                    </span>
+                    <span className="text-ok ml-1" title="Admin feedback credited">+{r.fulfilled_ticket_ids!.length}</span>
                   )}
                 </td>
                 <td className="px-3 py-2.5 text-xs text-fg-muted">
@@ -420,145 +411,284 @@ function ReleasesList({
       </Card>
 
       {selected && (
-        <ReleaseDrawer
-          release={selected}
-          onClose={() => setSelected(null)}
-          onPublished={onReload}
-        />
+        <ReleaseDrawer release={selected} onClose={() => setSelected(null)} onPublished={onReload} />
       )}
     </>
   )
 }
 
-// ─── Page ─────────────────────────────────────────────────────
-
-type TabId = 'drafts' | 'published'
-
-const TABS: Array<{ id: TabId; label: string; description: string }> = [
-  { id: 'drafts', label: 'Drafts', description: 'Draft changelogs with AI — edit, attribute reporters, then publish.' },
-  { id: 'published', label: 'Published', description: 'Published changelogs with reporter credits and in-app notification stamps.' },
-]
-
-function isTabId(v: string | null): v is TabId {
-  return TABS.some((t) => t.id === v)
-}
-
 export function ReleasesPage() {
+  const copy = usePageCopy('/releases')
   const [searchParams, setSearchParams] = useSearchParams()
-  const param = searchParams.get('tab')
-  const activeTab: TabId = isTabId(param) ? param : 'drafts'
-  const activeMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
+  const activeTab = resolveReleasesTab(searchParams.get('tab'))
+  const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
 
-  const listPath = activeProjectId ? `/v1/admin/releases?limit=100` : null
+  const {
+    data: statsData,
+    loading: statsLoading,
+    error: statsError,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<ReleasesStats>('/v1/admin/releases/stats')
+  const stats = { ...EMPTY_RELEASES_STATS, ...statsData }
+
+  const listPath = activeProjectId && (activeTab === 'drafts' || activeTab === 'published')
+    ? `/v1/admin/releases?limit=100`
+    : null
 
   const {
     data,
-    loading,
-    error,
-    isValidating,
-    lastFetchedAt,
-    reload,
-  } = usePageData<Release[]>(listPath, { deps: [activeProjectId] })
+    loading: listLoading,
+    error: listError,
+    reload: reloadList,
+    isValidating: listValidating,
+  } = usePageData<Release[]>(listPath, { deps: [activeProjectId, activeTab] })
 
-  useRealtimeReload(['releases', 'release_credits'], reload)
+  useRealtimeReload(['releases', 'release_credits'], () => {
+    reloadStats()
+    reloadList()
+  })
 
   const allReleases = listRows(data)
   const drafts = allReleases.filter((r) => r.status === 'draft')
   const published = allReleases.filter((r) => r.status === 'published')
-  const releases = activeTab === 'drafts' ? drafts : published
+  const listReleases = activeTab === 'drafts' ? drafts : published
 
-  const setTab = useCallback((tab: TabId) => {
-    const next = new URLSearchParams(searchParams)
-    if (tab === 'drafts') next.delete('tab')
-    else next.set('tab', tab)
-    setSearchParams(next, { replace: true, preventScrollReset: true })
-  }, [searchParams, setSearchParams])
+  const setActiveTab = useCallback(
+    (tab: ReleasesTabId) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (tab === 'overview') next.delete('tab')
+        else next.set('tab', tab)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    reloadList()
+  }, [reloadStats, reloadList])
+
+  const tabOptions = useMemo(
+    () =>
+      TABS.map((t) => ({
+        id: t.id,
+        label: t.label,
+        count:
+          t.id === 'drafts' && stats.draftCount > 0
+            ? stats.draftCount
+            : t.id === 'published' && stats.publishedCount > 0
+              ? stats.publishedCount
+              : undefined,
+      })),
+    [stats.draftCount, stats.publishedCount],
+  )
 
   usePublishPageContext({
     route: '/releases',
-    title: `${activeMeta.label} · Releases`,
-    summary: activeMeta.description,
-    filters: { tab: activeTab, project_id: activeProjectId ?? undefined },
+    title: projectName ? `Releases · ${projectName}` : 'Releases',
+    summary: statsLoading
+      ? 'Loading releases…'
+      : stats.draftCount > 0
+        ? `${stats.draftCount} draft${stats.draftCount === 1 ? '' : 's'} pending publish`
+        : `${stats.publishedCount} published`,
+    criticalCount: stats.draftCount,
   })
 
-  const totalFixes = releases.reduce((sum, r) => sum + r.fixed_report_ids.length, 0)
-  const totalCredits = releases.reduce((sum, r) => sum + r.credited_reporter_ids.length, 0)
+  if (statsLoading && !statsData) {
+    return (
+      <div className="space-y-4 animate-pulse" aria-hidden role="status" aria-label="Loading releases">
+        <div className="h-8 w-48 rounded bg-surface-raised" />
+        <div className="h-16 rounded bg-surface-raised/60" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-20 rounded bg-surface-raised/40" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
-  const tabOptions = [
-    { id: 'drafts' as const, label: 'Drafts', count: drafts.length },
-    { id: 'published' as const, label: 'Published', count: published.length },
-  ]
+  if (statsError) {
+    return <ErrorAlert message={`Failed to load release stats: ${statsError}`} onRetry={reloadStats} />
+  }
+
+  const bannerSeverity: 'ok' | 'warn' | 'danger' | 'brand' | 'info' | 'neutral' =
+    !stats.hasAnyProject
+      ? 'neutral'
+      : stats.topPriority === 'drafts_pending'
+        ? 'warn'
+        : stats.topPriority === 'ready_to_draft' || stats.topPriority === 'no_releases'
+          ? 'brand'
+          : stats.topPriority === 'no_fixes'
+            ? 'brand'
+            : 'ok'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-releases">
       <PageHeader
-        title="Releases"
-        description="Draft changelogs with AI, credit the users who helped, and close the feedback loop."
-      />
-
-      <PageHelp
-        title="About Releases"
-        whatIsIt="Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI."
-        useCases={[
-          'Auto-generate changelogs linked to the users who reported each fix',
-          'Notify credited reporters in the feedback stamp when you publish',
-          'Close the feedback loop: users see what their reports fixed',
-        ]}
-        howToUse="Select a date window and click Generate draft — AI writes the changelog. Review credited contributors, edit if needed, then publish to queue in-app toasts for each reporter."
-      />
-
-      <Section
-        title="Release pipeline"
-        freshness={{ at: lastFetchedAt, isValidating }}
+        title={copy?.title ?? 'Releases'}
+        projectScope={stats.projectName ?? projectName ?? undefined}
+        description={
+          copy?.description ??
+          'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.'
+        }
       >
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="In this tab" value={releases.length} />
-          <StatCard label="Fixes linked" value={totalFixes} />
-          <StatCard label="Contributors" value={totalCredits} />
-          <StatCard
-            label="Project"
-            value={activeProjectId ? 'Scoped' : '—'}
-            hint={activeProjectId ? 'Lists are filtered to the active project in the header' : 'Select a project to load releases'}
-          />
+        <Badge
+          className={
+            bannerSeverity === 'ok'
+              ? 'bg-ok-muted text-ok'
+              : bannerSeverity === 'warn'
+                ? 'bg-warn/10 text-warn'
+                : bannerSeverity === 'brand'
+                  ? 'bg-brand/15 text-brand'
+                  : 'bg-surface-overlay text-fg-muted'
+          }
+        >
+          {!stats.hasAnyProject
+            ? 'NO PROJECT'
+            : stats.draftCount > 0
+              ? `${stats.draftCount} DRAFT`
+              : stats.totalReleases === 0
+                ? 'EMPTY'
+                : `${stats.publishedCount} SHIPPED`}
+        </Badge>
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || listValidating}>
+          Refresh
+        </Btn>
+        <Btn size="sm" variant="primary" onClick={() => setActiveTab('draft')}>
+          + Draft
+        </Btn>
+      </PageHeader>
+
+      <ReleasesStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating}
+      />
+
+      <SegmentedControl<ReleasesTabId>
+        size="sm"
+        ariaLabel="Releases sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+      />
+
+      <Section title="RELEASES SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <StatCard label="Drafts" value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} hint="Awaiting publish" />
+          <StatCard label="Published" value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} hint="Shipped changelogs" />
+          <StatCard label="Fixes linked" value={stats.totalFixesLinked} accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined} hint="Across all releases" />
+          <StatCard label="Contributors" value={stats.totalContributors} accent={stats.totalContributors > 0 ? 'text-brand' : undefined} hint={`${stats.totalCredits} credit rows`} />
+          <StatCard label="Fixed reports" value={stats.fixedReportsCount} accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined} hint="Ready to draft" />
+          <StatCard label="Feedback shipped" value={stats.fulfilledTicketsShipped} accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined} hint={`${stats.openFeedbackTickets} open tickets`} />
         </div>
+      </Section>
 
-        <SegmentedControl
-          value={activeTab}
-          onChange={(v) => setTab(v)}
-          options={tabOptions}
-          ariaLabel="Release sections"
-          className="mb-4"
-        />
-
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
-
-        {activeTab === 'drafts' && activeProjectId && (
-          <div className="mb-4">
-            <DraftForm onCreated={() => reload()} projectName={projectName} />
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+        <Card
+          className={`p-4 ${
+            stats.topPriority === 'drafts_pending'
+              ? 'border-warn/30 bg-warn/5'
+              : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Link to={stats.topPriorityTo}>
+              <Btn size="sm" variant="ghost">Take action →</Btn>
+            </Link>
           </div>
-        )}
+        </Card>
+      ) : null}
 
-        {!activeProjectId ? (
+      {activeTab === 'overview' && (
+        <>
+          <PageHelp
+            title={copy?.help?.title ?? 'About Releases'}
+            whatIsIt={copy?.help?.whatIsIt ?? 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.'}
+            useCases={copy?.help?.useCases ?? [
+              'Auto-generate changelogs linked to the users who reported each fix',
+              'Notify credited reporters in the feedback stamp when you publish',
+              'Close the feedback loop: users see what their reports fixed',
+            ]}
+            howToUse={copy?.help?.howToUse ?? 'Select a date window and click Generate draft — AI writes the changelog. Review credited contributors, edit if needed, then publish to queue in-app toasts for each reporter.'}
+          />
+          {stats.topPriority === 'healthy' && (
+            <RecommendedAction
+              tone="success"
+              title="Release pipeline healthy"
+              description={stats.topPriorityLabel ?? `${stats.publishedCount} published releases with reporter credits.`}
+            />
+          )}
+          {stats.topPriority === 'drafts_pending' && (
+            <RecommendedAction
+              tone="info"
+              title="Drafts waiting to publish"
+              description={stats.topPriorityLabel ?? 'Review changelog Markdown and publish to notify reporters.'}
+              cta={{ label: 'Open Drafts', to: '/releases?tab=drafts' }}
+            />
+          )}
+          {(stats.topPriority === 'ready_to_draft' || stats.topPriority === 'no_releases') && (
+            <RecommendedAction
+              tone="info"
+              title="Generate a changelog draft"
+              description={stats.topPriorityLabel ?? 'Fixed reports are ready — AI will credit reporters automatically.'}
+              cta={{ label: 'Open Draft tab', to: '/releases?tab=draft' }}
+            />
+          )}
+          {stats.topPriority === 'no_fixes' && (
+            <RecommendedAction
+              tone="info"
+              title="No fixed reports yet"
+              description="Mark bug reports as fixed in Reports before generating a release draft."
+              cta={{ label: 'View fixed reports', to: '/reports?status=fixed' }}
+            />
+          )}
+        </>
+      )}
+
+      {activeTab === 'draft' && (
+        !activeProjectId ? (
           <SetupNudge
             requires={['project']}
             emptyTitle="Select a project"
-            emptyDescription="Releases are scoped to the active project. Pick one in the header to view drafts and publish changelogs."
+            emptyDescription="Releases are scoped to the active project. Pick one in the header to generate a draft."
+          />
+        ) : (
+          <DraftForm onCreated={reloadAll} projectName={projectName} />
+        )
+      )}
+
+      {(activeTab === 'drafts' || activeTab === 'published') && (
+        !activeProjectId ? (
+          <SetupNudge
+            requires={['project']}
+            emptyTitle="Select a project"
+            emptyDescription="Releases are scoped to the active project. Pick one in the header to view drafts and published changelogs."
           />
         ) : (
           <ReleasesList
             status={activeTab === 'drafts' ? 'draft' : 'published'}
-            releases={releases}
-            loading={loading}
-            error={error}
+            releases={listReleases}
+            loading={listLoading}
+            error={listError}
             projectName={projectName}
-            onReload={reload}
+            onReload={reloadAll}
           />
-        )}
-      </Section>
+        )
+      )}
     </div>
   )
 }
