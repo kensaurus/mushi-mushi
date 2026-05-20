@@ -638,18 +638,18 @@ export const COPY: CopyRegistry = {
     },
     '/graph': {
       title: 'How bugs connect',
-      description: 'A live map of which components, pages, and releases your bugs cluster around. Click any node to see what it can break.',
+      description: 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map, Backend for AGE sync debug.',
       help: {
         title: 'About the bug map',
         whatIsIt:
-          'Every bug points at a component, page, or release. This map joins those dots so you can see where the breakage clusters.',
+          'Every bug points at a component, page, or release. This map joins those dots so you can see where breakage clusters.',
         useCases: [
-          'Find your most fragile component (the one with the most incoming bugs)',
-          'Spot regressions — bugs that came back after a fix',
-          'See the blast radius of a single bug before you ship a fix',
+          'Red banner = fragile components (≥3 incoming affects edges)',
+          'Explore tab: canvas, table, or inventory surface — click nodes for blast radius',
+          'Backend tab: Apache AGE sync status and ontology groups',
         ],
         howToUse:
-          'Click a node to highlight everything it can affect. Drag the canvas to pan. Switch to the table view if you prefer rows.',
+          'Overview for posture. Explore for quick views (Fragile, Regressions, Fixes). Backend when debugging sync drift.',
       },
     },
     '/fixes': {
@@ -914,7 +914,7 @@ export const COPY: CopyRegistry = {
     },
     '/graph': {
       title: 'Bug graph',
-      description: 'Component / page / release adjacency with bug-incidence weighting.',
+      description: 'Banner + GRAPH SNAPSHOT — Overview | Explore | Backend. Component/page adjacency with bug-incidence weighting.',
     },
     '/fixes': {
       title: 'Auto-fix pipeline',

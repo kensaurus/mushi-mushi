@@ -3239,6 +3239,194 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   // PHASE 2: KNOWLEDGE GRAPH
   // ============================================================
 
+  app.get('/v1/admin/graph/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      hasIngest: false,
+      nodeCount: 0,
+      edgeCount: 0,
+      reportNodes: 0,
+      inventoryNodes: 0,
+      fragileComponents: 0,
+      regressionEdges: 0,
+      duplicateEdges: 0,
+      fixVerifiedEdges: 0,
+      lastNodeAt: null as string | null,
+      graphBackend: 'sql_only' as string,
+      ageAvailable: false,
+      unsyncedNodes: 0,
+      unsyncedEdges: 0,
+      topPriority: 'waiting_ingest' as
+        | 'waiting_ingest'
+        | 'empty'
+        | 'fragile'
+        | 'regressions'
+        | 'clear',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
+
+    const projectIds = await ownedProjectIds(db, userId);
+    if (projectIds.length === 0) {
+      return c.json({ ok: true, data: empty });
+    }
+
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({
+          ok: true,
+          data: { ...empty, hasAnyProject: true, projectCount: projectIds.length },
+        }),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+    const activeProject = resolvedProject.project;
+    const pid = activeProject.id;
+
+    const INVENTORY_NODE_TYPES = [
+      'app',
+      'page_v2',
+      'element',
+      'action',
+      'api_dep',
+      'db_dep',
+      'test',
+      'user_story',
+    ];
+
+    const [
+      reportCountRes,
+      nodesRes,
+      edgesRes,
+      settingsRes,
+      ageAvailRes,
+      unsyncedNodesRes,
+      unsyncedEdgesRes,
+      latestNodeRes,
+    ] = await Promise.all([
+      db.from('reports').select('id', { count: 'exact', head: true }).eq('project_id', pid),
+      db
+        .from('graph_nodes')
+        .select('id, node_type, created_at')
+        .eq('project_id', pid)
+        .limit(500),
+      db
+        .from('graph_edges')
+        .select('id, edge_type, source_node_id, target_node_id')
+        .eq('project_id', pid)
+        .limit(1000),
+      db.from('project_settings').select('graph_backend').eq('project_id', pid).maybeSingle(),
+      db.rpc('mushi_age_available'),
+      db
+        .from('graph_nodes')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('age_synced_at', null),
+      db
+        .from('graph_edges')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', pid)
+        .is('age_synced_at', null),
+      db
+        .from('graph_nodes')
+        .select('created_at')
+        .eq('project_id', pid)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const nodes = nodesRes.data ?? [];
+    const edges = edgesRes.data ?? [];
+    const nodeCount = nodes.length;
+    const edgeCount = edges.length;
+    const hasIngest = (reportCountRes.count ?? 0) > 0;
+    const reportNodes = nodes.filter((n) => n.node_type === 'report_group').length;
+    const inventoryNodes = nodes.filter((n) => INVENTORY_NODE_TYPES.includes(String(n.node_type))).length;
+
+    const componentIds = new Set(
+      nodes.filter((n) => n.node_type === 'component').map((n) => n.id),
+    );
+    const incomingAffects = new Map<string, number>();
+    let regressionEdges = 0;
+    let duplicateEdges = 0;
+    let fixVerifiedEdges = 0;
+    for (const e of edges) {
+      const et = String(e.edge_type ?? '');
+      if (et === 'regression_of') regressionEdges += 1;
+      else if (et === 'duplicate_of') duplicateEdges += 1;
+      else if (et === 'fix_verified') fixVerifiedEdges += 1;
+      else if (et === 'affects' && componentIds.has(String(e.target_node_id))) {
+        incomingAffects.set(
+          String(e.target_node_id),
+          (incomingAffects.get(String(e.target_node_id)) ?? 0) + 1,
+        );
+      }
+    }
+    let fragileComponents = 0;
+    for (const count of incomingAffects.values()) {
+      if (count >= 3) fragileComponents += 1;
+    }
+
+    let topPriority: typeof empty.topPriority = 'waiting_ingest';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!hasIngest) {
+      topPriority = 'waiting_ingest';
+      topPriorityLabel = 'No reports ingested — graph seeds from classified bug reports';
+      topPriorityTo = '/onboarding?tab=verify';
+    } else if (nodeCount === 0) {
+      topPriority = 'empty';
+      topPriorityLabel = 'Reports ingested but graph empty — classifier may still be indexing';
+      topPriorityTo = '/reports?tab=queue';
+    } else if (fragileComponents > 0) {
+      topPriority = 'fragile';
+      topPriorityLabel = `${fragileComponents} fragile component${fragileComponents === 1 ? '' : 's'} (≥3 incoming affects edges)`;
+      topPriorityTo = '/graph?view=fragile';
+    } else if (regressionEdges > 0) {
+      topPriority = 'regressions';
+      topPriorityLabel = `${regressionEdges} regression edge${regressionEdges === 1 ? '' : 's'} — bugs that came back after a fix`;
+      topPriorityTo = '/graph?view=regressions';
+    } else {
+      topPriority = 'clear';
+      topPriorityLabel = `${nodeCount} nodes · ${edgeCount} edges — map is current`;
+      topPriorityTo = '/graph';
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName: activeProject.name,
+        projectCount: projectIds.length,
+        hasIngest,
+        nodeCount,
+        edgeCount,
+        reportNodes,
+        inventoryNodes,
+        fragileComponents,
+        regressionEdges,
+        duplicateEdges,
+        fixVerifiedEdges,
+        lastNodeAt: latestNodeRes.data?.created_at ?? null,
+        graphBackend: settingsRes.data?.graph_backend ?? 'sql_only',
+        ageAvailable: ageAvailRes.data === true,
+        unsyncedNodes: unsyncedNodesRes.count ?? 0,
+        unsyncedEdges: unsyncedEdgesRes.count ?? 0,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    });
+  });
+
   app.get('/v1/admin/graph/nodes', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

@@ -288,6 +288,20 @@ const PAGE_HERO_FALLBACKS: Record<string, PageHeroFallback> = {
       detail: 'Gates tab lists open findings; Tree tab shows backend and test wiring per action.',
     },
   },
+  '/graph': {
+    title: 'Knowledge graph',
+    kicker: 'Plan',
+    scope: 'graph',
+    decide: {
+      label: 'Blast radius map',
+      summary: 'Banner + GRAPH SNAPSHOT — see how reports cluster into components, pages, and regressions.',
+      severity: 'info',
+    },
+    verify: {
+      label: 'Node evidence',
+      detail: 'Click any node on Explore tab to highlight blast radius and related edges.',
+    },
+  },
   '/fixes': {
     title: 'Fixes',
     kicker: 'Do',
