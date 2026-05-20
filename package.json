@@ -40,6 +40,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "check:publish": "node scripts/check-workspace-protocol.mjs",
+    "check:changeset-orphans": "node scripts/check-changeset-orphans.mjs",
     "check:secrets": "node scripts/check-no-secrets.mjs --all",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
     "check:catalog-sync": "node scripts/check-mcp-catalog-sync.mjs",

@@ -701,6 +701,8 @@ pnpm dev
 
 Requires Node.js ≥ 22 and pnpm ≥ 10. See individual package READMEs for setup, [`docs/`](./docs/) for handover notes (newest first), and [`docs/SCREENSHOTS.md`](./docs/SCREENSHOTS.md) for the full admin tour.
 
+If your PR touches a published package and you're new to the release flow, read [`CONTRIBUTING.md`](./CONTRIBUTING.md#release-flow) — it covers the Changesets workflow and the [known CI/CD quirks](./CONTRIBUTING.md#known-cicd-quirks-and-their-automatic-safeguards) (silent-dropped `pull_request` events on `changeset-release/master`, orphaned changesets, the npm CDN propagation race on `audit signatures`) that are now caught automatically. The recovery procedures are in the same section if a release ever stalls in spite of the safeguards.
+
 ## License & branding
 
 This repository is dual-licensed because the **code** is open source but
