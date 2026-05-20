@@ -74,16 +74,16 @@ export function StageNode({ data }: NodeProps) {
       <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--mushi-ink-faint)]">
         {stage.kicker}
       </p>
-      <h3 className="mt-1.5 font-serif text-[1.5rem] leading-[1.08] tracking-[-0.03em] text-[var(--mushi-ink)]">
+      <h3 className="mt-1.5 font-serif text-[1.2rem] leading-[1.12] tracking-[-0.03em] text-[var(--mushi-ink)]">
         {stage.title}
       </h3>
-      <p className="mt-2.5 text-left text-[13px] leading-[1.55] text-[var(--mushi-ink-muted)]">
+      <p className="mt-2 text-left text-[12px] leading-[1.5] text-[var(--mushi-ink-muted)] line-clamp-3">
         {stage.oneLiner}
       </p>
       {/* "Inspect →" — keep the brand colour on hover (it earns the affordance
           tint for one card at a time, the one the cursor is on); idle state
           stays neutral. */}
-      <span className="mt-3.5 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)] transition group-hover:text-[var(--mushi-vermillion)]">
+      <span className="mt-2.5 inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--mushi-ink-muted)] transition group-hover:text-[var(--mushi-vermillion)]">
         Inspect
         <span aria-hidden="true" className="transition-transform group-hover:translate-x-0.5">→</span>
       </span>

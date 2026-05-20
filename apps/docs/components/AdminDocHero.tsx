@@ -8,27 +8,34 @@ import { ADMIN_DEMO_BASE, ADMIN_SCREENSHOTS } from '../data/admin-screenshots'
 
 export interface AdminDocHeroProps {
   page: string
-  /** Prefer GIF over static PNG when both exist. */
+  /** Prefer per-page GIF when available (default true). */
   preferGif?: boolean
-  /** Show static PNG even when a GIF exists (below the GIF). */
+  /** Also show static PNG below the GIF (default false). */
   showStatic?: boolean
 }
 
-export function AdminDocHero({ page, preferGif = false, showStatic = true }: AdminDocHeroProps) {
+export function AdminDocHero({
+  page,
+  preferGif = true,
+  showStatic = false,
+}: AdminDocHeroProps) {
   const entry = ADMIN_SCREENSHOTS[page]
   if (!entry) return null
 
   const demoHref = `${ADMIN_DEMO_BASE}${entry.route}`
+  const gifSrc = entry.gif ?? `${page}-demo.gif`
 
-  if (preferGif && entry.gif) {
+  if (preferGif) {
     return (
       <>
         <DocScreenshot
-          src={entry.gif}
+          src={gifSrc}
           alt={entry.alt}
-          caption={<><strong>{entry.caption}</strong></>}
+          caption={<strong>{entry.caption}</strong>}
           href={demoHref}
           animated
+          variant="preview"
+          expandable
         />
         {showStatic ? (
           <DocScreenshot
@@ -37,6 +44,8 @@ export function AdminDocHero({ page, preferGif = false, showStatic = true }: Adm
             alt={entry.alt}
             caption="Static view"
             href={demoHref}
+            variant="preview"
+            expandable
           />
         ) : null}
       </>
@@ -48,8 +57,10 @@ export function AdminDocHero({ page, preferGif = false, showStatic = true }: Adm
       src={entry.image}
       lightSrc={entry.light}
       alt={entry.alt}
-      caption={<><strong>{entry.caption}</strong></>}
+      caption={<strong>{entry.caption}</strong>}
       href={demoHref}
+      variant="preview"
+      expandable
     />
   )
 }
