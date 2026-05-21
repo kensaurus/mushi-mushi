@@ -1,40 +1,67 @@
 [
   {
+    "majorMinor": "next",
+    "headline": "pending (pending release)",
+    "pending": true,
+    "versions": [],
+    "highlights": [
+      {
+        "title": "Fix `fix.status` event name",
+        "description": "the `fix poll` loop was emitting `poll.status`"
+      },
+      {
+        "title": "Fix ESM-safe `unlinkSync`",
+        "description": "`migrateLegacyConfig` was using a"
+      },
+      {
+        "title": "Fix scope fallback on typo",
+        "description": "if `MUSHI_SCOPES` is set but contains only"
+      }
+    ],
+    "packages": []
+  },
+  {
     "majorMinor": "1.4",
-    "headline": "Cursor Cloud Agent integration — auto-fix classified reports with a single PR",
+    "headline": null,
     "pending": false,
     "versions": [
       "1.4.0"
     ],
     "highlights": [
       {
-        "title": "`@mushi-mushi/plugin-cursor-cloud` v0.2.0",
-        "description": "New first-party Marketplace plugin. Install from Admin → Marketplace → Cursor Cloud Agent to dispatch a Cursor Cloud Agent run automatically when `report.classified`, `fix.requested`, or `qa_story.failed` fires. The agent opens a signed draft PR and posts the link back into the Fixes view."
+        "title": "INP (Interaction to Next Paint) capture",
+        "description": "a Google Core Web Vital since March 2024, replacing First Input Delay. The SDK now installs a `PerformanceObserver({ type: 'event', durationThreshold: 40 })` and records the worst-observed user-interaction latency on every report, with **attribution** — `eventType`, `targetSelector` (e.g. `button#submit.primary`), and per-phase timings (input delay / processing / presentation) so the triage UI can render \"1200 ms click on `<button.checkout>`\" instead of a bare number. Falls back to a `first-input` observer for FID on Safari < 16.4. Adds ~700 B gzipped to the bundle (still under the 44 KB budget at 43.07 kB)."
       },
       {
-        "title": "`mushi fix` CLI command",
-        "description": "`mushi fix <reportId> --agent cursor_cloud --wait` dispatches a Cursor Cloud Agent from the terminal and streams structured events to stdout. Integrates with CI — exits non-zero on failure."
+        "title": "`beforeSendFeedback` hook",
+        "description": "(Sentry SDK feedback spec §4): last-chance synchronous or async hook fired AFTER pre-filter / on-device classifier / rate-limit gates pass and BEFORE the report is sent or queued. Returning `null` drops the report silently; throwing or timing out (>2 s) ships the unmodified report so a buggy hook never swallows feedback."
       },
       {
-        "title": "MCP `dispatch_fix` — `agent=cursor_cloud`",
-        "description": "Pass `agent: 'cursor_cloud'` to the `dispatch_fix` MCP tool (or via `--agent cursor_cloud` in the CLI) to route directly to a Cursor Cloud Agent. Returns typed `{ fixId, status, agentId, runId, prUrl }` via `outputSchema`."
+        "title": "`onCrashedLastRun` hook",
+        "description": "(Sentry SDK feedback spec §6): fires once on `Mushi.init` after detecting that the previous tab session ended without a clean `pagehide`. The SDK never auto-opens the widget — copy and timing are the host's call. Implementation uses a `localStorage` sentinel that's set on init and cleared on `pagehide` (the only reliably-fired end-of-session event in 2026)."
       },
       {
-        "title": "Plugin SDK — new events: `fix.requested`, `qa_story.failed`, `qa_story.passed`",
-        "description": "Three new `MushiEventName` values. Subscribe to `fix.requested` to trigger an agent immediately after dispatch; subscribe to `qa_story.failed` for automated healing of broken QA stories."
+        "title": "INP (Interaction to Next Paint) capture",
+        "description": "a Google Core Web Vital since March 2024, replacing First Input Delay. The SDK now installs a `PerformanceObserver({ type: 'event', durationThreshold: 40 })` and records the worst-observed user-interaction latency on every report, with **attribution** — `eventType`, `targetSelector` (e.g. `button#submit.primary`), and per-phase timings (input delay / processing / presentation) so the triage UI can render \"1200 ms click on `<button.checkout>`\" instead of a bare number. Falls back to a `first-input` observer for FID on Safari < 16.4. Adds ~700 B gzipped to the bundle (still under the 44 KB budget at 43.07 kB)."
       },
       {
-        "title": "Admin UI — Cursor badge and artifact gallery",
-        "description": "The Fixes view shows a ◆ Cursor badge on agent runs with a link to the run transcript. Artifacts (screenshots, logs) produced by the agent are displayed in an expandable gallery."
+        "title": "`beforeSendFeedback` hook",
+        "description": "(Sentry SDK feedback spec §4): last-chance synchronous or async hook fired AFTER pre-filter / on-device classifier / rate-limit gates pass and BEFORE the report is sent or queued. Returning `null` drops the report silently; throwing or timing out (>2 s) ships the unmodified report so a buggy hook never swallows feedback."
+      },
+      {
+        "title": "`onCrashedLastRun` hook",
+        "description": "(Sentry SDK feedback spec §6): fires once on `Mushi.init` after detecting that the previous tab session ended without a clean `pagehide`. The SDK never auto-opens the widget — copy and timing are the host's call. Implementation uses a `localStorage` sentinel that's set on init and cleared on `pagehide` (the only reliably-fired end-of-session event in 2026)."
       }
     ],
     "packages": [
-      { "name": "@mushi-mushi/plugin-cursor-cloud", "version": "0.2.0" },
-      { "name": "@mushi-mushi/plugin-sdk", "version": "0.5.0" },
-      { "name": "@mushi-mushi/cli", "version": "0.9.0" },
-      { "name": "@mushi-mushi/mcp", "version": "0.7.0" },
-      { "name": "@mushi-mushi/core", "version": "1.4.0" },
-      { "name": "@mushi-mushi/web", "version": "1.4.0" }
+      {
+        "name": "@mushi-mushi/core",
+        "version": "1.4.0"
+      },
+      {
+        "name": "@mushi-mushi/web",
+        "version": "1.4.0"
+      }
     ]
   },
   {
@@ -262,10 +289,28 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.9.1",
       "0.9.0"
     ],
-    "highlights": [],
+    "highlights": [
+      {
+        "title": "XDG Base Directory compliance",
+        "description": "config now lives at `$XDG_CONFIG_HOME/mushi/config.json` on Linux/macOS (defaulting to `~/.config/mushi/config.json`) and `%APPDATA%/mushi/config.json` on Windows. A pre-existing `~/.mushirc` is **automatically migrated on first load** — moved (not copied) into the new path so we never have two copies of the API key on disk simultaneously. Malformed legacy files are left in place for manual recovery rather than silently dropped. `loadConfig` now respects `MUSHI_API_KEY` / `MUSHI_PROJECT_ID` / `MUSHI_API_ENDPOINT` env vars even when no file exists, so CI pipelines work zero-config."
+      },
+      {
+        "title": "POSIX signal handling",
+        "description": "SIGINT (Ctrl-C) and SIGTERM (`docker stop`, `kill <pid>`) are wired into a process-wide `AbortController`. Long-running commands (`mushi index`, `mushi sourcemaps upload`) now abort their in-flight HTTP requests immediately instead of hanging on the 15 s `apiCall` timeout. Exit codes follow POSIX convention: `130` for SIGINT, `143` for SIGTERM. Uses `AbortSignal.any` on Node ≥ 20 to compose with the per-request timeout signal."
+      },
+      {
+        "title": "Trackable error codes",
+        "description": "every user-visible failure now flows through a structured `MushiCliError` carrying a stable `[E_*]` code (`E_AUTH_MISSING`, `E_NETWORK`, `E_RATE_LIMITED`, `E_INTERRUPTED`, etc.) and an actionable fix hint. Output format is grep-friendly:"
+      }
+    ],
     "packages": [
+      {
+        "name": "@mushi-mushi/cli",
+        "version": "0.9.1"
+      },
       {
         "name": "@mushi-mushi/core",
         "version": "0.9.0"
@@ -412,6 +457,18 @@
       {
         "title": "Search",
         "description": "— semantic search via the `match_codebase_files` embedding RPC"
+      },
+      {
+        "title": "Per-scope tool filtering",
+        "description": "`createMushiServer({ scopes })` now restricts which tools appear in `tools/list`. A read-only API key (e.g. `MUSHI_SCOPES=mcp:read` env var on the stdio entry) hides every write tool, so the LLM never picks `dispatch_fix` only to receive an `INSUFFICIENT_SCOPE` 403 — round-trips and tokens saved on every interaction. Default behaviour (no `scopes` config) is unchanged: every tool is registered."
+      },
+      {
+        "title": "Output schemas + structuredContent (MCP 2025-06-18)",
+        "description": "`get_recent_reports`, `search_reports`, `get_similar_bugs`, and `dispatch_fix` now declare an `outputSchema` and emit `structuredContent` alongside the existing text payload. Modern clients (Claude Desktop, Cursor 0.54+) read the typed object directly and pipe it into downstream tools without re-parsing JSON; older clients still see the text content."
+      },
+      {
+        "title": "MCP Inspector",
+        "description": "`pnpm --filter @mushi-mushi/mcp inspector` now spawns the official `@modelcontextprotocol/inspector` against the local build for interactive tool exploration during development."
       }
     ],
     "packages": [
@@ -430,6 +487,10 @@
       {
         "name": "@mushi-mushi/core",
         "version": "0.7.0"
+      },
+      {
+        "name": "@mushi-mushi/mcp",
+        "version": "0.7.1"
       },
       {
         "name": "@mushi-mushi/react",
@@ -453,7 +514,7 @@
       },
       {
         "name": "mushi-mushi",
-        "version": "0.7.0"
+        "version": "0.7.1"
       }
     ]
   },
@@ -531,6 +592,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.5.6",
       "0.5.5",
       "0.5.4",
       "0.5.3",
@@ -606,6 +668,10 @@
         "version": "0.5.0"
       },
       {
+        "name": "@mushi-mushi/plugin-sdk",
+        "version": "0.5.0"
+      },
+      {
         "name": "@mushi-mushi/react",
         "version": "0.5.0"
       },
@@ -615,7 +681,7 @@
       },
       {
         "name": "create-mushi-mushi",
-        "version": "0.5.5"
+        "version": "0.5.6"
       },
       {
         "name": "mushi-mushi",
@@ -823,6 +889,10 @@
         "version": "0.3.5"
       },
       {
+        "name": "@mushi-mushi/plugin-cursor-cloud",
+        "version": "0.3.0"
+      },
+      {
         "name": "@mushi-mushi/plugin-sdk",
         "version": "0.3.1"
       },
@@ -947,16 +1017,20 @@
         "version": "0.2.1"
       },
       {
+        "name": "@mushi-mushi/plugin-cursor-cloud",
+        "version": "0.2.0"
+      },
+      {
         "name": "@mushi-mushi/plugin-jira",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/plugin-linear",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/plugin-pagerduty",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/plugin-sdk",
@@ -964,15 +1038,15 @@
       },
       {
         "name": "@mushi-mushi/plugin-sentry",
-        "version": "0.2.6"
+        "version": "0.2.7"
       },
       {
         "name": "@mushi-mushi/plugin-slack-app",
-        "version": "0.2.2"
+        "version": "0.2.3"
       },
       {
         "name": "@mushi-mushi/plugin-zapier",
-        "version": "0.2.4"
+        "version": "0.2.5"
       },
       {
         "name": "@mushi-mushi/react",
@@ -1009,6 +1083,7 @@
     "headline": null,
     "pending": false,
     "versions": [
+      "0.1.2",
       "0.1.1",
       "0.1.0"
     ],
@@ -1032,27 +1107,27 @@
       },
       {
         "name": "@mushi-mushi/plugin-bugsnag",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/plugin-crashlytics",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/plugin-discord",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/plugin-github-issues",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/plugin-msteams",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/plugin-rollbar",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       {
         "name": "@mushi-mushi/react",
