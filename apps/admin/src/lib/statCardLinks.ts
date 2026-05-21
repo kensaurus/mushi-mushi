@@ -325,3 +325,112 @@ export function statLink<T>(
 ): string {
   return typeof target === 'function' ? target(stats as T) : target
 }
+
+const PAGE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard',
+  inbox: 'Inbox',
+  reports: 'Reports',
+  fixes: 'Fixes',
+  health: 'Health',
+  graph: 'Graph',
+  cost: 'LLM Cost',
+  billing: 'Billing',
+  releases: 'Releases',
+  repo: 'Repo',
+  judge: 'Judge',
+  integrations: 'Integrations',
+  settings: 'Settings',
+  onboarding: 'Setup',
+  mcp: 'MCP',
+  rewards: 'Rewards',
+  explore: 'Codebase',
+  lessons: 'Lessons',
+  anomalies: 'Anomalies',
+  drift: 'Drift',
+  experiments: 'Experiments',
+  feedback: 'Feedback',
+  'qa-coverage': 'QA Coverage',
+  query: 'Query',
+  research: 'Research',
+  storage: 'Storage',
+  sso: 'SSO',
+  users: 'Users',
+  audit: 'Audit',
+  compliance: 'Compliance',
+  intelligence: 'Intelligence',
+  iterate: 'Iterate',
+  marketplace: 'Marketplace',
+  inventory: 'Inventory',
+  notifications: 'Notifications',
+  sdk: 'SDK Setup',
+  'anti-gaming': 'Anti-gaming',
+}
+
+const TAB_LABELS: Record<string, string> = {
+  overview: 'Overview',
+  queue: 'Queue',
+  severity: 'Severity',
+  attempts: 'Attempts',
+  pipeline: 'Pipeline',
+  llm: 'LLM',
+  cron: 'Cron',
+  activity: 'Activity',
+  explore: 'Explore',
+  backend: 'Backend',
+  breakdown: 'Breakdown',
+  log: 'Raw log',
+  drafts: 'Drafts',
+  published: 'Published',
+  branches: 'Branches',
+  scores: 'Scores',
+  disagreements: 'Disagreements',
+  prompts: 'Prompts',
+  platform: 'Platform',
+  routing: 'Routing',
+  byok: 'BYOK keys',
+  sdk: 'SDK widget',
+  general: 'General',
+  setup: 'Checklist',
+  keys: 'API keys',
+  tools: 'Tools',
+  contributors: 'Contributors',
+  rules: 'Rules',
+  tiers: 'Tiers',
+  quests: 'Quests',
+  plans: 'Plans',
+  inbox: 'Inbox',
+  anomalies: 'Findings',
+  metrics: 'Metrics',
+  findings: 'Findings',
+  snapshots: 'Snapshots',
+  scanner: 'Scanner',
+  loop: 'Loop',
+}
+
+function titleCase(slug: string): string {
+  return slug
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
+/** Human label for a StatCard link target — used in hover "Go to …" copy. */
+export function statDestinationLabel(to: string): string {
+  const [pathname, search = ''] = to.split('?')
+  const pageKey = pathname.replace(/^\//, '').split('/')[0] ?? ''
+  const page = PAGE_LABELS[pageKey] ?? titleCase(pageKey)
+
+  const params = new URLSearchParams(search)
+  const tab = params.get('tab')
+  if (tab) {
+    const tabLabel = TAB_LABELS[tab] ?? titleCase(tab)
+    return `${page} · ${tabLabel}`
+  }
+
+  const status = params.get('status')
+  if (status) {
+    return `${page} · ${titleCase(status)}`
+  }
+
+  return page
+}

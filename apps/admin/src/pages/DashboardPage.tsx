@@ -130,7 +130,9 @@ export function DashboardPage() {
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
   const navigate = useNavigate()
-  const [showFullDashboard, setShowFullDashboard] = useState(false)
+  const [showFullDashboard, setShowFullDashboard] = useState(
+    () => searchParams.get('tab') === 'metrics',
+  )
   const copy = usePageCopy('/dashboard')
   const ux = useDashboardUx()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -165,11 +167,16 @@ export function DashboardPage() {
     [searchParams, setSearchParams],
   )
 
+  const peekMetrics = useCallback(() => {
+    setShowFullDashboard(true)
+    setActiveTab('metrics')
+  }, [setActiveTab])
+
   useEffect(() => {
-    if (!ux.isQuickstart || statsLoading) return
+    if (!ux.isQuickstart || statsLoading || showFullDashboard) return
     const quickTab = resolveQuickDashboardTab(stats)
     if (activeTab !== quickTab) setActiveTab(quickTab)
-  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab, showFullDashboard])
 
   const isEmpty = !data || data.empty
   const realtimeEnabled = !loading && !error && !!stats.hasAnyProject
@@ -285,6 +292,24 @@ export function DashboardPage() {
     !setup.selectors.done &&
     setup.selectors.required_complete < setup.selectors.required_total
   const renderFullDashboard = !setupIncomplete || showFullDashboard
+  const metricsCounts =
+    counts ?? {
+      reports14d: stats.reports14d,
+      openBacklog: stats.openBacklog,
+      fixesTotal: stats.fixesInProgress + stats.fixesFailed,
+      openPrs: stats.openPrs,
+      llmCalls14d: stats.llmCalls14d,
+      llmTokens14d: 0,
+      llmFailures14d: stats.llmFailures14d,
+    }
+  const metricsFixSummary =
+    fixSummary ?? {
+      total: stats.fixesInProgress + stats.fixesFailed,
+      completed: 0,
+      failed: stats.fixesFailed,
+      inProgress: stats.fixesInProgress,
+      openPrs: stats.openPrs,
+    }
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
     !stats.hasAnyProject
       ? 'neutral'
@@ -481,7 +506,7 @@ export function DashboardPage() {
               <p className="text-xs text-fg-muted">
                 Finish setup above to unlock Metrics tab. You can peek now if you like.
               </p>
-              <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
+              <Btn size="sm" variant="ghost" onClick={peekMetrics}>
                 Show full metrics
               </Btn>
             </div>
@@ -542,42 +567,79 @@ export function DashboardPage() {
               <p className="mt-1 text-2xs text-fg-muted">
                 Finish required setup steps on Overview, or peek metrics now.
               </p>
-              <Btn size="sm" variant="ghost" className="mt-3" onClick={() => setShowFullDashboard(true)}>
+              <Btn size="sm" variant="ghost" className="mt-3" onClick={peekMetrics}>
                 Show metrics anyway
               </Btn>
             </Card>
-          ) : isEmpty ? (
-            <Card className="p-4">
-              <p className="text-xs font-medium text-info">No metrics yet</p>
-              <p className="mt-1 text-2xs text-fg-muted">
-                Charts populate after the first report lands — usually within seconds of SDK ingest.
-              </p>
-            </Card>
           ) : (
             <>
-              <QuotaBanner />
-              {counts && fixSummary && (
-                <KpiRow
-                  counts={counts}
-                  fixSummary={fixSummary}
-                  reportsByDay={reportsByDay}
-                  llmByDay={llmByDay}
-                />
+              {ux.hideTabs && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+                  <div>
+                    <p className="text-xs font-medium text-fg">Metrics preview</p>
+                    <p className="text-2xs text-fg-muted">
+                      {setupIncomplete
+                        ? 'Preview while setup finishes — charts fill in after first ingest.'
+                        : stats.hasData
+                          ? '14-day intake, auto-fix throughput, and LLM activity.'
+                          : 'Waiting for first report — tiles update as soon as ingest is live.'}
+                    </p>
+                  </div>
+                  <Btn size="sm" variant="ghost" onClick={() => setActiveTab('overview')}>
+                    Back to overview
+                  </Btn>
+                </div>
               )}
+
+              {setupIncomplete && (
+                <Card className="p-4 border-warn/30 bg-warn/5">
+                  <p className="text-xs font-medium text-warn">
+                    Setup {stats.requiredComplete}/{stats.requiredTotal} — metrics preview
+                  </p>
+                  <p className="mt-1 text-2xs text-fg-muted">
+                    Finish the checklist on Overview to unlock live charts. These tiles use workspace stats until ingest lands.
+                  </p>
+                  <Link to="/onboarding?tab=steps" className="mt-3 inline-block">
+                    <Btn size="sm" variant="ghost">Continue setup</Btn>
+                  </Link>
+                </Card>
+              )}
+
+              {!stats.hasData && isEmpty && !setupIncomplete && (
+                <Card className="p-4">
+                  <p className="text-xs font-medium text-info">No metrics yet</p>
+                  <p className="mt-1 text-2xs text-fg-muted">
+                    Charts populate after the first report lands — usually within seconds of SDK ingest.
+                  </p>
+                  <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
+                    <Btn size="sm" variant="ghost">Send test report</Btn>
+                  </Link>
+                </Card>
+              )}
+
+              <QuotaBanner />
+              <KpiRow
+                counts={metricsCounts}
+                fixSummary={metricsFixSummary}
+                reportsByDay={reportsByDay}
+                llmByDay={llmByDay}
+              />
               <ChartsRow
                 reportsByDay={reportsByDay}
                 llmByDay={llmByDay}
-                totalLlmCalls={counts?.llmCalls14d ?? stats.llmCalls14d}
+                totalLlmCalls={metricsCounts.llmCalls14d}
                 chartEvents={chartEvents}
               />
-              {fixSummary && (
+              {!isEmpty && fixSummary && (
                 <TriageAndFixRow triageQueue={data!.triageQueue ?? []} fixSummary={fixSummary} />
               )}
-              <InsightsRow
-                topComponents={data!.topComponents ?? []}
-                integrations={data!.integrations ?? []}
-                activity={activity}
-              />
+              {!isEmpty && (
+                <InsightsRow
+                  topComponents={data!.topComponents ?? []}
+                  integrations={data!.integrations ?? []}
+                  activity={activity}
+                />
+              )}
             </>
           )}
         </>

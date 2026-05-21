@@ -291,10 +291,10 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       'Use "Send to Cursor" from any report to trigger on-demand',
     ],
     fields: [
-      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_… (or vault://id)', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'cursor-api-key', validator: 'token' },
-      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model slug. Leave blank to use your account default.', helpId: 'cursor-default-model' },
-      { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'cursor-auto-create-pr' },
-      { name: 'cursor_max_iterations', label: 'Max iterations', placeholder: '1', help: 'How many agent iterations Cursor runs per dispatch (1–10). Higher values cost more API credit but can recover from a first-pass miss.', helpId: 'cursor-max-iterations' },
+      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'crsr_… (or vault://id)', type: 'password', help: 'Create at cursor.com/dashboard/integrations → API Keys.', required: true, helpId: 'integrations.cursor_cloud.api_key', validator: 'token' },
+      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Optional Cursor model slug. Leave blank to use your account default.', helpId: 'integrations.cursor_cloud.default_model' },
+      { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'integrations.cursor_cloud.auto_create_pr' },
+      { name: 'cursor_max_iterations', label: 'Max iterations', placeholder: '1', help: 'How many agent iterations Cursor runs per dispatch (1–10). Higher values cost more API credit but can recover from a first-pass miss.', helpId: 'integrations.cursor_cloud.max_iterations' },
     ],
   },
   {
@@ -330,7 +330,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
         help:
           'Stored in Mushi vault for health probes only. The actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.',
         required: true,
-        helpId: 'claude-api-key',
+        helpId: 'integrations.claude_code_agent.api_key',
         validator: 'token',
       },
       {
@@ -338,21 +338,21 @@ export const PLATFORM_DEFS: PlatformDef[] = [
         label: 'Default model',
         placeholder: 'claude-opus-4-1',
         help: 'Model slug passed in the dispatch payload (your workflow may ignore this if Claude Code picks its own default).',
-        helpId: 'claude-default-model',
+        helpId: 'integrations.claude_code_agent.default_model',
       },
       {
         name: 'claude_workflow_event',
         label: 'Workflow event',
         placeholder: 'mushi_claude_fix',
         help: 'repository_dispatch event type. Must match `on.repository_dispatch.types` in your workflow YAML.',
-        helpId: 'claude-workflow-event',
+        helpId: 'integrations.claude_code_agent.workflow_event',
       },
       {
         name: 'claude_default_branch',
         label: 'Base branch',
         placeholder: 'main',
         help: 'Branch checked out before Claude applies the fix.',
-        helpId: 'claude-default-branch',
+        helpId: 'integrations.claude_code_agent.default_branch',
       },
     ],
   },

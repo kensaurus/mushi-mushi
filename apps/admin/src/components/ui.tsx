@@ -4,7 +4,7 @@
  *          Compact, dark-themed, data-dense design system components.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
@@ -23,7 +23,9 @@ import {
   IconEye,
   IconSparkle,
   IconTerminal,
+  IconArrowRight,
 } from './icons'
+import { statDestinationLabel } from '../lib/statCardLinks'
 import { usePageHelpRegister } from '../lib/pageHelpContext'
 import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../lib/pageHelpRead'
 
@@ -569,7 +571,7 @@ export function DetailRows({ items, className = '', dense }: DetailRowsProps) {
 
 export function InfoHint({ content }: { content: string }) {
   return (
-    <Tooltip content={content}>
+    <Tooltip content={content} side="auto" portal nowrap={content.length > 48}>
       <button
         type="button"
         aria-label={content}
@@ -1408,6 +1410,31 @@ interface StatCardProps {
   tooltip?: string | MetricTooltipData
   /** When set, the whole card links to this route (info icon still opens tooltip). */
   to?: string
+  /** Override hover CTA copy (defaults to "Go to {destination}"). */
+  linkLabel?: string
+}
+
+function StatCardSwapLine({
+  primary,
+  secondary,
+  primaryClassName = '',
+  secondaryClassName = 'text-brand',
+  variant = 'label',
+}: {
+  primary: ReactNode
+  secondary: ReactNode
+  primaryClassName?: string
+  secondaryClassName?: string
+  /** Detail line swaps slightly later so the label leads. */
+  variant?: 'label' | 'detail'
+}) {
+  const lineClass = variant === 'detail' ? 'stat-card-swap-line stat-card-swap-line--detail' : 'stat-card-swap-line'
+  return (
+    <span className={`${lineClass} ${primaryClassName}`}>
+      <span className="stat-card-swap-primary truncate">{primary}</span>
+      <span className={`stat-card-swap-secondary truncate ${secondaryClassName}`}>{secondary}</span>
+    </span>
+  )
 }
 
 function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData; hint?: string }) {
@@ -1423,7 +1450,7 @@ function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData;
         <MetricTooltipContent data={tooltip} />
       )
     return (
-      <Tooltip content={content} side="top" nowrap={false} portal>
+      <Tooltip content={content} side="auto" nowrap={false} portal>
         <button
           type="button"
           aria-label="About this metric"
@@ -1440,21 +1467,30 @@ function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData;
   return null
 }
 
-export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip, to }: StatCardProps) {
+export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip, to, linkLabel }: StatCardProps) {
   const help = tooltip ?? hint
+  const destination = to ? (linkLabel ?? statDestinationLabel(to)) : null
   const inner = (
     <>
-      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0" title={tooltip ? undefined : hint}>
-        <span className="truncate">{label}</span>
+      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0">
+        {to && destination ? (
+          <span className="flex-1 min-w-0 font-medium uppercase tracking-wide">
+            <StatCardSwapLine
+              primary={label}
+              secondary={`Go to ${destination}`}
+              secondaryClassName="text-brand font-semibold normal-case tracking-normal"
+            />
+          </span>
+        ) : (
+          <span className="truncate">{label}</span>
+        )}
         {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
         {to ? (
-          <span className="ml-auto shrink-0 text-fg-faint opacity-0 motion-safe:transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" aria-hidden>
-            →
-          </span>
+          <IconArrowRight size={12} className="stat-card-arrow ml-auto shrink-0 text-brand" />
         ) : null}
       </div>
       <div className="flex items-baseline gap-2">
-        <div className={`text-xl font-semibold font-mono stat-value ${accent ?? 'text-fg'}`}>
+        <div className={`text-xl font-semibold font-mono stat-value stat-card-value ${accent ?? 'text-fg'}`}>
           {value}
         </div>
         {delta && (
@@ -1469,18 +1505,34 @@ export function StatCard({ label, value, accent, delta, trend, detail, hint, too
         )}
       </div>
       {detail ? (
-        <p className="mt-1 text-3xs text-fg-faint leading-snug">{detail}</p>
+        to ? (
+          <div className="mt-1 text-3xs leading-snug">
+            <StatCardSwapLine
+              variant="detail"
+              primary={detail}
+              secondary="Open page →"
+              primaryClassName="text-fg-faint"
+              secondaryClassName="text-brand/80 font-medium"
+            />
+          </div>
+        ) : (
+          <p className="mt-1 text-3xs text-fg-faint leading-snug">{detail}</p>
+        )
+      ) : to ? (
+        <p className="stat-card-cta-hint mt-1 text-3xs leading-snug">
+          <span className="text-brand/70 font-medium">Open page →</span>
+        </p>
       ) : null}
     </>
   )
 
   if (to) {
     return (
-      <Card elevated interactive className="group px-3 py-2.5">
+      <Card elevated className="stat-card-link px-3 py-2.5">
         <Link
           to={to}
-          aria-label={`${label} — open details`}
-          className="block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+          aria-label={`${label} — go to ${destination}`}
+          className="group/stat relative z-[1] block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
         >
           {inner}
         </Link>
@@ -2714,10 +2766,12 @@ export function Abbr({ children, title, className = '' }: AbbrProps) {
 
 /* ── Tooltip ───────────────────────────────────────────────────────────── */
 
+type TooltipSide = 'top' | 'bottom' | 'left' | 'right' | 'auto'
+
 interface TooltipProps {
   content: ReactNode
   children: ReactNode
-  side?: 'top' | 'bottom' | 'left' | 'right'
+  side?: TooltipSide
   /** When false, wraps are allowed — use under narrow headers where long tips would clip. */
   nowrap?: boolean
   /** Render in document.body so tips escape overflow:hidden ancestors (e.g. React Flow). */
@@ -2726,6 +2780,99 @@ interface TooltipProps {
 
 const TOOLTIP_SURFACE =
   'px-3 py-2 text-2xs text-fg bg-surface-overlay border border-edge-subtle rounded-md shadow-raised pointer-events-none tooltip-enter'
+
+const TOOLTIP_VIEWPORT_PAD = 12
+const TOOLTIP_GAP = 8
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(Math.max(n, min), max)
+}
+
+function resolveTooltipSide(
+  preferred: TooltipSide,
+  anchor: DOMRect,
+  tipW: number,
+  tipH: number,
+): 'top' | 'bottom' | 'left' | 'right' {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const space = {
+    top: anchor.top - TOOLTIP_VIEWPORT_PAD,
+    bottom: vh - anchor.bottom - TOOLTIP_VIEWPORT_PAD,
+    left: anchor.left - TOOLTIP_VIEWPORT_PAD,
+    right: vw - anchor.right - TOOLTIP_VIEWPORT_PAD,
+  }
+
+  const fits = (side: 'top' | 'bottom' | 'left' | 'right') => {
+    if (side === 'top') return space.top >= tipH + TOOLTIP_GAP
+    if (side === 'bottom') return space.bottom >= tipH + TOOLTIP_GAP
+    if (side === 'left') return space.left >= tipW + TOOLTIP_GAP
+    return space.right >= tipW + TOOLTIP_GAP
+  }
+
+  if (preferred === 'auto') {
+    const ranked: Array<{ side: 'top' | 'bottom' | 'left' | 'right'; score: number }> = [
+      { side: 'top', score: space.top },
+      { side: 'bottom', score: space.bottom },
+      { side: 'right', score: space.right },
+      { side: 'left', score: space.left },
+    ]
+    const viable = ranked.filter((c) => fits(c.side)).sort((a, b) => b.score - a.score)
+    if (viable[0]) return viable[0].side
+    return ranked.sort((a, b) => b.score - a.score)[0]?.side ?? 'top'
+  }
+
+  if (preferred === 'top' && !fits('top') && fits('bottom')) return 'bottom'
+  if (preferred === 'bottom' && !fits('bottom') && fits('top')) return 'top'
+  if (preferred === 'left' && !fits('left') && fits('right')) return 'right'
+  if (preferred === 'right' && !fits('right') && fits('left')) return 'left'
+
+  if (preferred === 'top' || preferred === 'bottom') return preferred
+  return preferred
+}
+
+function computeTooltipPortalPosition(
+  anchor: DOMRect,
+  tipW: number,
+  tipH: number,
+  preferred: TooltipSide,
+): { left: number; top: number; resolvedSide: 'top' | 'bottom' | 'left' | 'right' } {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const resolvedSide = resolveTooltipSide(preferred, anchor, tipW, tipH)
+
+  let left = 0
+  let top = 0
+
+  switch (resolvedSide) {
+    case 'top':
+      top = anchor.top - TOOLTIP_GAP - tipH
+      left = anchor.left + anchor.width / 2 - tipW / 2
+      break
+    case 'bottom':
+      top = anchor.bottom + TOOLTIP_GAP
+      left = anchor.left + anchor.width / 2 - tipW / 2
+      break
+    case 'left':
+      left = anchor.left - TOOLTIP_GAP - tipW
+      top = anchor.top + anchor.height / 2 - tipH / 2
+      break
+    case 'right':
+      left = anchor.right + TOOLTIP_GAP
+      top = anchor.top + anchor.height / 2 - tipH / 2
+      break
+  }
+
+  if (resolvedSide === 'top' || resolvedSide === 'bottom') {
+    left = clamp(left, TOOLTIP_VIEWPORT_PAD, vw - tipW - TOOLTIP_VIEWPORT_PAD)
+    top = clamp(top, TOOLTIP_VIEWPORT_PAD, vh - tipH - TOOLTIP_VIEWPORT_PAD)
+  } else {
+    top = clamp(top, TOOLTIP_VIEWPORT_PAD, vh - tipH - TOOLTIP_VIEWPORT_PAD)
+    left = clamp(left, TOOLTIP_VIEWPORT_PAD, vw - tipW - TOOLTIP_VIEWPORT_PAD)
+  }
+
+  return { left, top, resolvedSide }
+}
 
 export function Tooltip({
   content,
@@ -2737,56 +2884,28 @@ export function Tooltip({
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const anchorRef = useRef<HTMLSpanElement>(null)
+  const tooltipRef = useRef<HTMLSpanElement>(null)
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>({})
 
   const updatePortalPosition = useCallback(() => {
     const el = anchorRef.current
+    const tip = tooltipRef.current
     if (!el) return
-    const r = el.getBoundingClientRect()
-    const gap = 8
-    switch (side) {
-      case 'bottom':
-        setPortalStyle({
-          position: 'fixed',
-          left: r.left + r.width / 2,
-          top: r.bottom + gap,
-          transform: 'translate(-50%, 0)',
-          zIndex: 10_000,
-        })
-        break
-      case 'left':
-        setPortalStyle({
-          position: 'fixed',
-          left: r.left - gap,
-          top: r.top + r.height / 2,
-          transform: 'translate(-100%, -50%)',
-          zIndex: 10_000,
-        })
-        break
-      case 'right':
-        setPortalStyle({
-          position: 'fixed',
-          left: r.right + gap,
-          top: r.top + r.height / 2,
-          transform: 'translate(0, -50%)',
-          zIndex: 10_000,
-        })
-        break
-      default:
-        setPortalStyle({
-          position: 'fixed',
-          left: r.left + r.width / 2,
-          top: r.top - gap,
-          transform: 'translate(-50%, -100%)',
-          zIndex: 10_000,
-        })
-    }
+    const anchor = el.getBoundingClientRect()
+    const tipW = tip?.offsetWidth ?? 288
+    const tipH = tip?.offsetHeight ?? 96
+    const { left, top } = computeTooltipPortalPosition(anchor, tipW, tipH, side)
+    setPortalStyle({
+      position: 'fixed',
+      left,
+      top,
+      zIndex: 10_000,
+    })
   }, [side])
 
   const show = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
-      if (portal) updatePortalPosition()
       setVisible(true)
     }, 400)
   }
@@ -2800,16 +2919,19 @@ export function Tooltip({
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!visible || !portal) return
+    updatePortalPosition()
+    const raf = requestAnimationFrame(() => updatePortalPosition())
     const reposition = () => updatePortalPosition()
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener('scroll', reposition, true)
       window.removeEventListener('resize', reposition)
     }
-  }, [visible, portal, updatePortalPosition])
+  }, [visible, portal, content, updatePortalPosition])
 
   const positions = {
     top: 'bottom-full left-1/2 -translate-x-1/2 mb-1.5',
@@ -2819,14 +2941,18 @@ export function Tooltip({
   }
 
   const wrapClass = nowrap ? 'whitespace-nowrap' : 'whitespace-normal text-left leading-snug'
+  const widthClass = nowrap
+    ? 'max-w-[min(20rem,calc(100vw-2rem))]'
+    : 'min-w-[13rem] w-max max-w-[min(26rem,calc(100vw-1.5rem))]'
   const tooltipNode = visible ? (
     <span
+      ref={portal ? tooltipRef : undefined}
       role="tooltip"
       style={portal ? portalStyle : undefined}
       className={
         portal
-          ? `${TOOLTIP_SURFACE} max-w-[min(24rem,calc(100vw-1.5rem))] ${wrapClass}`
-          : `absolute ${positions[side]} z-[100] max-w-[min(20rem,calc(100vw-2rem))] ${TOOLTIP_SURFACE} ${wrapClass}`
+          ? `${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
+          : `absolute ${positions[side === 'auto' ? 'top' : side]} z-[100] ${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
       }
     >
       {content}

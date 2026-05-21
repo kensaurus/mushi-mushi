@@ -620,7 +620,7 @@ const INTEGRATIONS: ConfigDoc[] = [
       'Set this once you want PR check-run conclusions (CI passing/failing) reflected in the Auto-Fix Pipeline UI.',
   },
   {
-    id: 'cursor-api-key',
+    id: 'integrations.cursor_cloud.api_key',
     label: 'Cursor API key',
     summary:
       'API key from cursor.com/dashboard/integrations — authorizes Cloud Agent dispatches from Mushi.',
@@ -636,7 +636,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Rotate when the key is revoked in Cursor dashboard or you switch Cursor accounts.',
   },
   {
-    id: 'cursor-default-model',
+    id: 'integrations.cursor_cloud.default_model',
     label: 'Cursor default model',
     summary: 'Model slug sent to Cursor Cloud Agents API on each dispatch.',
     howItWorks:
@@ -651,7 +651,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Change when you want a different default model for auto-dispatched agent runs.',
   },
   {
-    id: 'cursor-auto-create-pr',
+    id: 'integrations.cursor_cloud.auto_create_pr',
     label: 'Cursor auto-create PRs',
     summary: 'When enabled, Cursor opens a signed draft PR when the agent finishes.',
     howItWorks:
@@ -666,7 +666,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Disable for repos with strict PR review gates where branches must be vetted first.',
   },
   {
-    id: 'cursor-max-iterations',
+    id: 'integrations.cursor_cloud.max_iterations',
     label: 'Cursor max iterations',
     summary: 'How many agent loops Cursor runs per dispatch (1–10).',
     howItWorks:
@@ -681,7 +681,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Raise for complex bugs that often need a second pass; lower to control cost.',
   },
   {
-    id: 'claude-api-key',
+    id: 'integrations.claude_code_agent.api_key',
     label: 'Anthropic API key',
     summary:
       'Vault-stored Anthropic key used for Mushi health probes only — the actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.',
@@ -697,7 +697,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Rotate when your Anthropic key is revoked or you switch workspaces.',
   },
   {
-    id: 'claude-default-model',
+    id: 'integrations.claude_code_agent.default_model',
     label: 'Claude default model',
     summary: 'Model slug included in the repository_dispatch client_payload for your workflow.',
     howItWorks:
@@ -712,7 +712,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Change when you want a different default model for Claude Code Agent dispatches.',
   },
   {
-    id: 'claude-workflow-event',
+    id: 'integrations.claude_code_agent.workflow_event',
     label: 'Claude workflow event',
     summary: 'GitHub repository_dispatch event type that triggers mushi-claude-fix.yml.',
     howItWorks:
@@ -727,7 +727,7 @@ const INTEGRATIONS: ConfigDoc[] = [
     whenToChange: 'Only if you renamed the event type in your workflow YAML.',
   },
   {
-    id: 'claude-default-branch',
+    id: 'integrations.claude_code_agent.default_branch',
     label: 'Claude base branch',
     summary: 'Branch your GitHub Actions workflow checks out before Claude applies the fix.',
     howItWorks:

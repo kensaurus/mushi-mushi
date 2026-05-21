@@ -538,9 +538,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Cursor API key
 
-<a id="cursor-api-key"></a>
+<a id="integrations-cursor-cloud-api-key"></a>
 
-`cursor-api-key`
+`integrations.cursor_cloud.api_key`
 
 **Summary** — API key from cursor.com/dashboard/integrations — authorizes Cloud Agent dispatches from Mushi.
 
@@ -554,9 +554,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Cursor default model
 
-<a id="cursor-default-model"></a>
+<a id="integrations-cursor-cloud-default-model"></a>
 
-`cursor-default-model`
+`integrations.cursor_cloud.default_model`
 
 **Summary** — Model slug sent to Cursor Cloud Agents API on each dispatch.
 
@@ -570,9 +570,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Cursor auto-create PRs
 
-<a id="cursor-auto-create-pr"></a>
+<a id="integrations-cursor-cloud-auto-create-pr"></a>
 
-`cursor-auto-create-pr`
+`integrations.cursor_cloud.auto_create_pr`
 
 **Summary** — When enabled, Cursor opens a signed draft PR when the agent finishes.
 
@@ -586,9 +586,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Cursor max iterations
 
-<a id="cursor-max-iterations"></a>
+<a id="integrations-cursor-cloud-max-iterations"></a>
 
-`cursor-max-iterations`
+`integrations.cursor_cloud.max_iterations`
 
 **Summary** — How many agent loops Cursor runs per dispatch (1–10).
 
@@ -602,9 +602,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Anthropic API key
 
-<a id="claude-api-key"></a>
+<a id="integrations-claude-code-agent-api-key"></a>
 
-`claude-api-key`
+`integrations.claude_code_agent.api_key`
 
 **Summary** — Vault-stored Anthropic key used for Mushi health probes only — the actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.
 
@@ -618,9 +618,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Claude default model
 
-<a id="claude-default-model"></a>
+<a id="integrations-claude-code-agent-default-model"></a>
 
-`claude-default-model`
+`integrations.claude_code_agent.default_model`
 
 **Summary** — Model slug included in the repository_dispatch client_payload for your workflow.
 
@@ -634,9 +634,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Claude workflow event
 
-<a id="claude-workflow-event"></a>
+<a id="integrations-claude-code-agent-workflow-event"></a>
 
-`claude-workflow-event`
+`integrations.claude_code_agent.workflow_event`
 
 **Summary** — GitHub repository_dispatch event type that triggers mushi-claude-fix.yml.
 
@@ -650,9 +650,9 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 
 ### Claude base branch
 
-<a id="claude-default-branch"></a>
+<a id="integrations-claude-code-agent-default-branch"></a>
 
-`claude-default-branch`
+`integrations.claude_code_agent.default_branch`
 
 **Summary** — Branch your GitHub Actions workflow checks out before Claude applies the fix.
 
