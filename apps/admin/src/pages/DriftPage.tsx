@@ -52,6 +52,7 @@ import {
   warnOpenDetail,
   warnOpenTooltip,
 } from '../lib/statTooltips/drift'
+import { driftLinks } from '../lib/statCardLinks'
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -351,12 +352,12 @@ export function DriftPage() {
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.openFindings ?? 'Open findings'} value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} tooltip={openFindingsTooltip(stats)} detail={openFindingsDetail(stats)} />
-          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalOpenTooltip(stats)} detail={criticalOpenDetail()} />
-          <StatCard label={copy?.statLabels?.warnings ?? 'Warnings'} value={stats.warnOpen} accent={stats.warnOpen > 0 ? 'text-warn' : undefined} tooltip={warnOpenTooltip(stats)} detail={warnOpenDetail(stats)} />
-          <StatCard label={copy?.statLabels?.snapshots ?? 'Snapshots'} value={stats.snapshotCount} accent={stats.snapshotCount > 0 ? 'text-brand' : undefined} tooltip={snapshotsTooltip(stats)} detail={snapshotsDetail(stats)} />
-          <StatCard label={copy?.statLabels?.contractEdges ?? 'Contract edges'} value={stats.lastSnapshotEdges} accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined} tooltip={contractEdgesTooltip(stats)} detail={contractEdgesDetail(stats)} />
-          <StatCard label={copy?.statLabels?.surfaces ?? 'Surfaces'} value={stats.surfacesWithFindings} accent={stats.surfacesWithFindings > 0 ? 'text-warn' : undefined} tooltip={surfacesWithFindingsTooltip(stats)} detail={surfacesWithFindingsDetail()} />
+          <StatCard label={copy?.statLabels?.openFindings ?? 'Open findings'} value={stats.openFindings} accent={stats.openFindings > 0 ? 'text-warn' : 'text-ok'} tooltip={openFindingsTooltip(stats)} detail={openFindingsDetail(stats)} to={driftLinks.openFindings} />
+          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalOpen} accent={stats.criticalOpen > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalOpenTooltip(stats)} detail={criticalOpenDetail()} to={driftLinks.critical} />
+          <StatCard label={copy?.statLabels?.warnings ?? 'Warnings'} value={stats.warnOpen} accent={stats.warnOpen > 0 ? 'text-warn' : undefined} tooltip={warnOpenTooltip(stats)} detail={warnOpenDetail(stats)} to={driftLinks.warnings} />
+          <StatCard label={copy?.statLabels?.snapshots ?? 'Snapshots'} value={stats.snapshotCount} accent={stats.snapshotCount > 0 ? 'text-brand' : undefined} tooltip={snapshotsTooltip(stats)} detail={snapshotsDetail(stats)} to={driftLinks.snapshots} />
+          <StatCard label={copy?.statLabels?.contractEdges ?? 'Contract edges'} value={stats.lastSnapshotEdges} accent={stats.lastSnapshotEdges > 0 ? 'text-brand' : undefined} tooltip={contractEdgesTooltip(stats)} detail={contractEdgesDetail(stats)} to={driftLinks.contractEdges} />
+          <StatCard label={copy?.statLabels?.surfaces ?? 'Surfaces'} value={stats.surfacesWithFindings} accent={stats.surfacesWithFindings > 0 ? 'text-warn' : undefined} tooltip={surfacesWithFindingsTooltip(stats)} detail={surfacesWithFindingsDetail()} to={driftLinks.surfaces} />
         </div>
       </Section>
       )}

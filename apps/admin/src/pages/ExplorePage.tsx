@@ -56,6 +56,7 @@ import {
   uiLayerDetail,
   uiLayerTooltip,
 } from '../lib/statTooltips/explore'
+import { exploreLinks } from '../lib/statCardLinks'
 
 type DensityMode = 'files' | 'symbols'
 
@@ -694,6 +695,7 @@ export function ExplorePage() {
             accent={stats.indexedFiles > 0 ? 'text-fg' : undefined}
             tooltip={indexedFilesTooltip(stats)}
             detail={indexedFilesDetail(stats)}
+            to={exploreLinks.files}
           />
           <StatCard
             label={copy?.statLabels?.uiLayer ?? 'UI layer'}
@@ -701,6 +703,7 @@ export function ExplorePage() {
             accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
             tooltip={uiLayerTooltip(stats)}
             detail={uiLayerDetail()}
+            to={exploreLinks.uiLayer}
           />
           <StatCard
             label={copy?.statLabels?.backend ?? 'Backend'}
@@ -708,6 +711,7 @@ export function ExplorePage() {
             accent={stats.layers.backend > 0 ? 'text-info' : undefined}
             tooltip={backendLayerTooltip(stats)}
             detail={backendLayerDetail()}
+            to={exploreLinks.backend}
           />
           <StatCard
             label={copy?.statLabels?.embedded ?? 'Embedded'}
@@ -715,6 +719,7 @@ export function ExplorePage() {
             accent={stats.withEmbeddings > 0 ? 'text-ok' : 'text-warn'}
             tooltip={embeddingsTooltip(stats)}
             detail={embeddingsDetail()}
+            to={exploreLinks.embedded}
           />
         </div>
       </Section>

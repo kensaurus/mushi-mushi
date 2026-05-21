@@ -66,6 +66,7 @@ import {
   totalStoriesDetail,
   totalStoriesTooltip,
 } from '../lib/statTooltips/qa-coverage'
+import { qaCoverageLinks } from '../lib/statCardLinks'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
@@ -1144,6 +1145,7 @@ export function QaCoveragePage() {
             accent={stats.totalStories > 0 ? 'text-brand' : undefined}
             tooltip={totalStoriesTooltip(stats)}
             detail={totalStoriesDetail(stats)}
+            to={qaCoverageLinks.stories}
           />
           <StatCard
             label={copy?.statLabels?.passing ?? 'Passing'}
@@ -1151,6 +1153,7 @@ export function QaCoveragePage() {
             accent="text-ok"
             tooltip={passingStoriesTooltip(stats)}
             detail={passingStoriesDetail()}
+            to={qaCoverageLinks.passing}
           />
           <StatCard
             label={copy?.statLabels?.failing ?? 'Failing'}
@@ -1158,6 +1161,7 @@ export function QaCoveragePage() {
             accent={stats.failingStories > 0 ? 'text-danger' : 'text-ok'}
             tooltip={failingStoriesTooltip(stats)}
             detail={failingStoriesDetail()}
+            to={qaCoverageLinks.failing}
           />
           <StatCard
             label={copy?.statLabels?.avgPassRate ?? 'Avg pass rate'}
@@ -1171,6 +1175,7 @@ export function QaCoveragePage() {
             }
             tooltip={avgPassRateTooltip(stats)}
             detail={avgPassRateDetail()}
+            to={qaCoverageLinks.avgPassRate}
           />
           <StatCard
             label={copy?.statLabels?.runs24h ?? 'Runs (24h)'}
@@ -1178,6 +1183,7 @@ export function QaCoveragePage() {
             accent={stats.totalRuns24h > 0 ? 'text-brand' : undefined}
             tooltip={runs24hTooltip(stats)}
             detail={runs24hDetail(stats)}
+            to={qaCoverageLinks.runs24h}
           />
           <StatCard
             label={copy?.statLabels?.noData ?? 'No data'}
@@ -1185,6 +1191,7 @@ export function QaCoveragePage() {
             accent={stats.noDataStories > 0 ? 'text-warn' : undefined}
             tooltip={noDataStoriesTooltip(stats)}
             detail={noDataStoriesDetail()}
+            to={qaCoverageLinks.noData}
           />
         </div>
       </Section>

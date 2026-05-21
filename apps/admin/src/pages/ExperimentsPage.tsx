@@ -52,6 +52,7 @@ import {
   winnersFoundDetail,
   winnersFoundTooltip,
 } from '../lib/statTooltips/experiments'
+import { experimentsLinks } from '../lib/statCardLinks'
 
 interface ExperimentVariant {
   id: string
@@ -335,12 +336,12 @@ export function ExperimentsPage() {
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.total ?? 'Total'} value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} tooltip={totalExperimentsTooltip(stats)} detail={totalExperimentsDetail(stats)} />
-          <StatCard label={copy?.statLabels?.running ?? 'Running'} value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} tooltip={runningCountTooltip(stats)} detail={runningCountDetail()} />
-          <StatCard label={copy?.statLabels?.readyToLaunch ?? 'Ready to launch'} value={stats.draftsReadyToLaunch} accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined} tooltip={draftsReadyToLaunchTooltip(stats)} detail={draftsReadyToLaunchDetail()} />
-          <StatCard label={copy?.statLabels?.winners ?? 'Winners'} value={stats.winnersFound} accent={stats.winnersFound > 0 ? 'text-ok' : undefined} tooltip={winnersFoundTooltip(stats)} detail={winnersFoundDetail()} />
-          <StatCard label={copy?.statLabels?.assignments ?? 'Assignments'} value={stats.totalAssignments} accent={stats.totalAssignments > 0 ? 'text-brand' : undefined} tooltip={totalAssignmentsTooltip(stats)} detail={totalAssignmentsDetail(stats)} />
-          <StatCard label={copy?.statLabels?.conversion ?? 'Conversion'} value={`${stats.conversionRatePct}%`} accent={stats.conversionRatePct > 0 ? 'text-ok' : undefined} tooltip={conversionRateTooltip(stats)} detail={conversionRateDetail(stats)} />
+          <StatCard label={copy?.statLabels?.total ?? 'Total'} value={stats.totalExperiments} accent={stats.totalExperiments > 0 ? 'text-brand' : undefined} tooltip={totalExperimentsTooltip(stats)} detail={totalExperimentsDetail(stats)} to={experimentsLinks.total} />
+          <StatCard label={copy?.statLabels?.running ?? 'Running'} value={stats.runningCount} accent={stats.runningCount > 0 ? 'text-warn' : 'text-ok'} tooltip={runningCountTooltip(stats)} detail={runningCountDetail()} to={experimentsLinks.running} />
+          <StatCard label={copy?.statLabels?.readyToLaunch ?? 'Ready to launch'} value={stats.draftsReadyToLaunch} accent={stats.draftsReadyToLaunch > 0 ? 'text-brand' : undefined} tooltip={draftsReadyToLaunchTooltip(stats)} detail={draftsReadyToLaunchDetail()} to={experimentsLinks.readyToLaunch} />
+          <StatCard label={copy?.statLabels?.winners ?? 'Winners'} value={stats.winnersFound} accent={stats.winnersFound > 0 ? 'text-ok' : undefined} tooltip={winnersFoundTooltip(stats)} detail={winnersFoundDetail()} to={experimentsLinks.winners} />
+          <StatCard label={copy?.statLabels?.assignments ?? 'Assignments'} value={stats.totalAssignments} accent={stats.totalAssignments > 0 ? 'text-brand' : undefined} tooltip={totalAssignmentsTooltip(stats)} detail={totalAssignmentsDetail(stats)} to={experimentsLinks.assignments} />
+          <StatCard label={copy?.statLabels?.conversion ?? 'Conversion'} value={`${stats.conversionRatePct}%`} accent={stats.conversionRatePct > 0 ? 'text-ok' : undefined} tooltip={conversionRateTooltip(stats)} detail={conversionRateDetail(stats)} to={experimentsLinks.conversion} />
         </div>
       </Section>
       )}

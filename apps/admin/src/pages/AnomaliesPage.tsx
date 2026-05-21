@@ -53,6 +53,7 @@ import {
   releaseRegressionDetail,
   releaseRegressionTooltip,
 } from '../lib/statTooltips/anomalies'
+import { anomaliesLinks } from '../lib/statCardLinks'
 
 interface AnomalyDetection {
   id: string
@@ -333,12 +334,12 @@ export function AnomaliesPage() {
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.open ?? 'Open'} value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} tooltip={openAnomaliesTooltip(stats)} detail={openAnomaliesDetail(stats)} />
-          <StatCard label={copy?.statLabels?.releaseRegressions ?? 'Release regressions'} value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} tooltip={releaseRegressionTooltip(stats)} detail={releaseRegressionDetail()} />
-          <StatCard label={copy?.statLabels?.highScore ?? 'High score'} value={stats.highScoreOpen} accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined} tooltip={highScoreTooltip(stats)} detail={highScoreDetail()} />
-          <StatCard label={copy?.statLabels?.autoReported ?? 'Auto-reported'} value={stats.autoReported} accent={stats.autoReported > 0 ? 'text-brand' : undefined} tooltip={autoReportedTooltip(stats)} detail={autoReportedDetail()} />
-          <StatCard label={copy?.statLabels?.metricPoints ?? 'Metric points'} value={stats.metricPointCount} accent={stats.metricPointCount > 0 ? 'text-brand' : undefined} tooltip={metricPointsTooltip(stats)} detail={metricPointsDetail(stats)} />
-          <StatCard label={copy?.statLabels?.dismissed ?? 'Dismissed'} value={stats.dismissedAnomalies} accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined} tooltip={dismissedAnomaliesTooltip(stats)} detail={dismissedAnomaliesDetail()} />
+          <StatCard label={copy?.statLabels?.open ?? 'Open'} value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} tooltip={openAnomaliesTooltip(stats)} detail={openAnomaliesDetail(stats)} to={anomaliesLinks.open} />
+          <StatCard label={copy?.statLabels?.releaseRegressions ?? 'Release regressions'} value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} tooltip={releaseRegressionTooltip(stats)} detail={releaseRegressionDetail()} to={anomaliesLinks.releaseRegressions} />
+          <StatCard label={copy?.statLabels?.highScore ?? 'High score'} value={stats.highScoreOpen} accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined} tooltip={highScoreTooltip(stats)} detail={highScoreDetail()} to={anomaliesLinks.highScore} />
+          <StatCard label={copy?.statLabels?.autoReported ?? 'Auto-reported'} value={stats.autoReported} accent={stats.autoReported > 0 ? 'text-brand' : undefined} tooltip={autoReportedTooltip(stats)} detail={autoReportedDetail()} to={anomaliesLinks.autoReported} />
+          <StatCard label={copy?.statLabels?.metricPoints ?? 'Metric points'} value={stats.metricPointCount} accent={stats.metricPointCount > 0 ? 'text-brand' : undefined} tooltip={metricPointsTooltip(stats)} detail={metricPointsDetail(stats)} to={anomaliesLinks.metricPoints} />
+          <StatCard label={copy?.statLabels?.dismissed ?? 'Dismissed'} value={stats.dismissedAnomalies} accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined} tooltip={dismissedAnomaliesTooltip(stats)} detail={dismissedAnomaliesDetail()} to={anomaliesLinks.dismissed} />
         </div>
       </Section>
       )}

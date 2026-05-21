@@ -55,6 +55,7 @@ import {
   unattachedSnippetsDetail,
   unattachedSnippetsTooltip,
 } from '../lib/statTooltips/research'
+import { researchLinks } from '../lib/statCardLinks'
 
 type SessionMode = 'all' | 'search' | 'scrape'
 type SessionAge = 'all' | '24h' | '7d'
@@ -391,16 +392,17 @@ export function ResearchPage() {
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.sessions ?? 'Sessions'} value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} tooltip={sessionsTooltip(stats)} detail={sessionsDetail()} />
-          <StatCard label={copy?.statLabels?.snippets ?? 'Snippets'} value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} tooltip={snippetsTooltip(stats)} detail={snippetsDetail()} />
-          <StatCard label={copy?.statLabels?.attached ?? 'Attached'} value={stats.attached} accent={stats.attached > 0 ? 'text-ok' : undefined} tooltip={attachedTooltip(stats)} detail={attachedDetail()} />
-          <StatCard label={copy?.statLabels?.unattached ?? 'Unattached'} value={stats.unattachedSnippets} accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined} tooltip={unattachedSnippetsTooltip(stats)} detail={unattachedSnippetsDetail()} />
+          <StatCard label={copy?.statLabels?.sessions ?? 'Sessions'} value={stats.sessions} accent={stats.sessions > 0 ? 'text-brand' : undefined} tooltip={sessionsTooltip(stats)} detail={sessionsDetail()} to={researchLinks.sessions} />
+          <StatCard label={copy?.statLabels?.snippets ?? 'Snippets'} value={stats.snippets} accent={stats.snippets > 0 ? 'text-brand' : undefined} tooltip={snippetsTooltip(stats)} detail={snippetsDetail()} to={researchLinks.snippets} />
+          <StatCard label={copy?.statLabels?.attached ?? 'Attached'} value={stats.attached} accent={stats.attached > 0 ? 'text-ok' : undefined} tooltip={attachedTooltip(stats)} detail={attachedDetail()} to={researchLinks.attached} />
+          <StatCard label={copy?.statLabels?.unattached ?? 'Unattached'} value={stats.unattachedSnippets} accent={stats.unattachedSnippets > 0 ? 'text-warn' : undefined} tooltip={unattachedSnippetsTooltip(stats)} detail={unattachedSnippetsDetail()} to={researchLinks.unattached} />
           <StatCard
             label={copy?.statLabels?.firecrawl ?? 'Firecrawl'}
             value={stats.firecrawlReady ? 'Ready' : stats.firecrawlConfigured ? 'Test' : 'Setup'}
             accent={stats.firecrawlReady ? 'text-ok' : stats.firecrawlConfigured ? 'text-warn' : undefined}
             tooltip={firecrawlTooltip(stats)}
             detail={firecrawlDetail(stats)}
+            to={researchLinks.firecrawl}
           />
           <StatCard
             label={copy?.statLabels?.domains ?? 'Domains'}
@@ -408,6 +410,7 @@ export function ResearchPage() {
             accent={stats.allowedDomainsCount > 0 ? 'text-info' : undefined}
             tooltip={domainsTooltip(stats)}
             detail={domainsDetail(stats)}
+            to={researchLinks.domains}
           />
         </div>
       </Section>

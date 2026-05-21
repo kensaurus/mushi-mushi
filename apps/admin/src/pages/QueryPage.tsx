@@ -18,6 +18,7 @@ import {
   savedCountDetail,
   savedCountTooltip,
 } from '../lib/statTooltips/query'
+import { queryLinks } from '../lib/statCardLinks'
 import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
@@ -1037,6 +1038,7 @@ export function QueryPage() {
             accent={stats.runs24h > 0 ? 'text-brand' : undefined}
             tooltip={runs24hTooltip(stats)}
             detail={runs24hDetail(stats)}
+            to={queryLinks.runs24h}
           />
           <StatCard
             label="Errors 24h"
@@ -1044,6 +1046,7 @@ export function QueryPage() {
             accent={stats.errors24h > 0 ? 'text-danger' : 'text-ok'}
             tooltip={errors24hTooltip(stats)}
             detail={errors24hDetail(stats)}
+            to={queryLinks.errors24h}
           />
           <StatCard
             label="Saved"
@@ -1051,6 +1054,7 @@ export function QueryPage() {
             accent={stats.savedCount > 0 ? 'text-ok' : 'text-warn'}
             tooltip={savedCountTooltip(stats)}
             detail={savedCountDetail(stats)}
+            to={queryLinks.saved}
           />
           <StatCard
             label="Latency"
@@ -1058,6 +1062,7 @@ export function QueryPage() {
             accent="text-info"
             tooltip={latencyTooltip(stats)}
             detail={latencyDetail(stats)}
+            to={queryLinks.latency}
           />
         </div>
       </Section>

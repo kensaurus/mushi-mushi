@@ -29,6 +29,7 @@ import {
   unconfiguredCountDetail,
   unconfiguredCountTooltip,
 } from '../lib/statTooltips/storage'
+import { storageLinks } from '../lib/statCardLinks'
 import { PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
@@ -685,6 +686,7 @@ export function StoragePage() {
             accent={stats.failingCount > 0 ? 'text-danger' : stats.healthyCount > 0 ? 'text-ok' : undefined}
             tooltip={healthyCountTooltip(stats)}
             detail={healthyCountDetail(stats)}
+            to={storageLinks.healthy}
           />
           <StatCard
             label="Screenshots"
@@ -692,6 +694,7 @@ export function StoragePage() {
             accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
             tooltip={screenshotsTooltip(stats)}
             detail={screenshotsDetail(stats)}
+            to={storageLinks.screenshots}
           />
           <StatCard
             label="Provider"
@@ -699,6 +702,7 @@ export function StoragePage() {
             accent="text-info"
             tooltip={providerTooltip(stats)}
             detail={providerDetail(stats)}
+            to={storageLinks.provider}
           />
           <StatCard
             label="Unconfigured"
@@ -706,6 +710,7 @@ export function StoragePage() {
             accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
             tooltip={unconfiguredCountTooltip(stats)}
             detail={unconfiguredCountDetail(stats)}
+            to={storageLinks.unconfigured}
           />
         </div>
       </Section>

@@ -36,6 +36,7 @@ import {
   totalTicketsDetail,
   totalTicketsTooltip,
 } from '../lib/statTooltips/feedback'
+import { feedbackLinks } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
 import {
   Badge,
@@ -290,6 +291,7 @@ export function FeedbackPage() {
             accent={stats.totalTickets > 0 ? 'text-fg' : undefined}
             tooltip={totalTicketsTooltip(stats)}
             detail={totalTicketsDetail(stats)}
+            to={feedbackLinks.total}
           />
           <StatCard
             label="Active"
@@ -297,6 +299,7 @@ export function FeedbackPage() {
             accent={stats.activeTickets > 0 ? 'text-warn' : 'text-ok'}
             tooltip={activeTicketsTooltip(stats)}
             detail={activeTicketsDetail(stats)}
+            to={feedbackLinks.active}
           />
           <StatCard
             label="Shipped"
@@ -304,6 +307,7 @@ export function FeedbackPage() {
             accent={stats.shippedTickets > 0 ? 'text-ok' : undefined}
             tooltip={shippedTicketsTooltip(stats)}
             detail={shippedTicketsDetail(stats)}
+            to={feedbackLinks.shipped}
           />
           <StatCard
             label="Mix"
@@ -311,6 +315,7 @@ export function FeedbackPage() {
             accent="text-brand"
             tooltip={ticketMixTooltip(stats)}
             detail={ticketMixDetail()}
+            to={feedbackLinks.mix}
           />
         </div>
       </Section>
