@@ -6,6 +6,7 @@ import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useInventoryUx, resolveQuickInventoryTab } from '../lib/inventoryModeUx'
+import { inventoryLinks } from '../lib/statCardLinks'
 import { usePublishPageContext } from '../lib/pageContext'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
@@ -586,18 +587,21 @@ export function InventoryPage() {
             value={stats.hasInventory ? `${stats.verified}/${stats.total}` : '—'}
             accent={stats.regressed > 0 ? 'text-warn' : stats.verified > 0 ? 'text-ok' : undefined}
             hint={stats.hasInventory ? `${stats.userStories} stories` : 'Not ingested'}
+            to={inventoryLinks.verified}
           />
           <StatCard
             label={copy?.statLabels?.regressed ?? 'Regressed'}
             value={stats.regressed}
             accent={stats.regressed > 0 ? 'text-danger' : 'text-ok'}
             hint={stats.regressed > 0 ? 'Fix before release' : 'None flagged'}
+            to={inventoryLinks.regressed}
           />
           <StatCard
             label={copy?.statLabels?.findings ?? 'Findings'}
             value={stats.openFindings}
             accent={stats.openFindings > 0 ? 'text-warn' : undefined}
             hint={stats.lastGateRunAt ? 'From latest gate runs' : 'No runs yet'}
+            to={inventoryLinks.findings}
           />
           <StatCard
             label={copy?.statLabels?.discovery ?? 'Discovery'}
@@ -608,6 +612,7 @@ export function InventoryPage() {
                 ? `${stats.draftProposals} draft proposal${stats.draftProposals === 1 ? '' : 's'}`
                 : 'SDK events observed'
             }
+            to={inventoryLinks.discovery}
           />
         </div>
       </Section>

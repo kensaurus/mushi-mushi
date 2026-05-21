@@ -5,16 +5,7 @@
  */
 
 import type { DashboardStats } from '../components/dashboard/DashboardStatsTypes'
-import type { ReportsStats } from '../components/reports/ReportsStatsTypes'
-import type { FixesStats } from '../components/fixes/FixesStatsTypes'
-import type { HealthStats } from '../components/health/HealthStatsTypes'
-import type { GraphStats } from '../components/graph/GraphStatsTypes'
-import type { CostStats } from '../components/cost/types'
-import type { ReleasesStats } from '../components/releases/ReleasesStatsTypes'
-import type { RepoStats } from '../components/repo/RepoStatsTypes'
 import type { InboxStats } from '../components/inbox/types'
-import type { JudgeStats } from '../components/judge/JudgeStatsTypes'
-import type { RewardsStats } from '../components/rewards/types'
 
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 
@@ -263,6 +254,9 @@ export const auditLinks = {
   failures: '/audit?tab=log',
   actorMix: '/audit?tab=breakdown',
   allTime: '/audit?tab=log',
+  humanActors: '/audit?tab=breakdown',
+  agentActors: '/audit?tab=breakdown',
+  systemActors: '/audit?tab=breakdown',
 } as const
 
 export const complianceLinks = {
@@ -297,6 +291,31 @@ export const lessonsLinks = {
   promoted: '/lessons?tab=clusters',
   reportsClustered: '/reports',
   highCoherence: '/lessons?tab=clusters',
+} as const
+
+export const marketplaceLinks = {
+  catalog: '/marketplace?tab=browse',
+  installed: '/marketplace?tab=installed',
+  deliveries7d: '/marketplace?tab=deliveries',
+  successRate: '/marketplace?tab=deliveries',
+  failing: '/marketplace?tab=deliveries',
+  neverDelivered: '/marketplace?tab=installed',
+} as const
+
+export const inventoryLinks = {
+  verified: '/inventory?tab=stories',
+  regressed: '/inventory?tab=gates',
+  findings: '/inventory?tab=gates',
+  discovery: '/inventory?tab=discovery',
+} as const
+
+export const notificationsLinks = {
+  total: '/notifications?tab=inbox',
+  unread: '/notifications?tab=inbox&show=unread',
+  last24h: '/notifications?tab=inbox',
+  enabled: '/notifications?tab=setup',
+  fixFailed: '/notifications?tab=inbox',
+  lastMessage: '/notifications?tab=inbox',
 } as const
 
 /** Resolve a static or stats-aware link target. */

@@ -30,6 +30,7 @@ import {
   registeredCountDetail,
   registeredCountTooltip,
 } from '../lib/statTooltips/sso'
+import { ssoLinks } from '../lib/statCardLinks'
 import {
   PageHeader,
   PageHelp,
@@ -302,6 +303,7 @@ export function SsoPage() {
             accent={stats.registeredCount > 0 ? 'text-ok' : undefined}
             tooltip={registeredCountTooltip(stats)}
             detail={registeredCountDetail(stats)}
+            to={ssoLinks.registered}
           />
           <StatCard
             label="Pending / failed"
@@ -309,6 +311,7 @@ export function SsoPage() {
             accent={stats.failedCount > 0 ? 'text-danger' : stats.pendingCount > 0 ? 'text-warn' : undefined}
             tooltip={pendingFailedTooltip(stats)}
             detail={pendingFailedDetail(stats)}
+            to={ssoLinks.pendingFailed}
           />
           <StatCard
             label="Email domains"
@@ -316,6 +319,7 @@ export function SsoPage() {
             accent={stats.domainCount > 0 ? 'text-info' : undefined}
             tooltip={domainCountTooltip(stats)}
             detail={domainCountDetail()}
+            to={ssoLinks.emailDomains}
           />
           <StatCard
             label="Plan gate"
@@ -323,6 +327,7 @@ export function SsoPage() {
             accent={stats.ssoEntitlement ? 'text-ok' : 'text-warn'}
             tooltip={planGateTooltip(stats)}
             detail={planGateDetail(stats)}
+            to={ssoLinks.planGate}
           />
         </div>
       </Section>

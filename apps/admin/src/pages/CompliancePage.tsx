@@ -51,6 +51,7 @@ import {
   openDsarsDetail,
   openDsarsTooltip,
 } from '../lib/statTooltips/compliance'
+import { complianceLinks } from '../lib/statCardLinks'
 
 interface RetentionPolicy {
   project_id: string
@@ -624,6 +625,7 @@ export function CompliancePage() {
             accent={stats.controlsFail > 0 ? 'text-danger' : stats.controlsWarn > 0 ? 'text-warn' : stats.controlsTotal > 0 ? 'text-ok' : undefined}
             tooltip={controlsTooltip(stats)}
             detail={controlsDetail(stats)}
+            to={complianceLinks.controls}
           />
           <StatCard
             label="Open DSARs"
@@ -631,6 +633,7 @@ export function CompliancePage() {
             accent={stats.overdueDsars > 0 ? 'text-danger' : stats.atRiskDsars > 0 ? 'text-warn' : undefined}
             tooltip={openDsarsTooltip(stats)}
             detail={openDsarsDetail(stats)}
+            to={complianceLinks.openDsars}
           />
           <StatCard
             label="Legal holds"
@@ -638,6 +641,7 @@ export function CompliancePage() {
             accent={stats.legalHoldCount > 0 ? 'text-info' : undefined}
             tooltip={legalHoldsTooltip(stats)}
             detail={legalHoldsDetail(stats)}
+            to={complianceLinks.legalHolds}
           />
           <StatCard
             label="Cluster"
@@ -645,6 +649,7 @@ export function CompliancePage() {
             accent="text-brand"
             tooltip={clusterRegionTooltip(stats)}
             detail={clusterRegionDetail(stats)}
+            to={complianceLinks.cluster}
           />
         </div>
       </Section>

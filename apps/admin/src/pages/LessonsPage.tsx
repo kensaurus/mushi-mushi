@@ -57,6 +57,7 @@ import {
   reportsClusteredDetail,
   reportsClusteredTooltip,
 } from '../lib/statTooltips/lessons'
+import { lessonsLinks } from '../lib/statCardLinks'
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -715,12 +716,12 @@ export function LessonsPage() {
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.activeLessons ?? 'Active lessons'} value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} tooltip={activeLessonsTooltip(stats)} detail={activeLessonsDetail(stats)} />
-          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalLessonsTooltip(stats)} detail={criticalLessonsDetail()} />
-          <StatCard label={copy?.statLabels?.candidates ?? 'Candidates'} value={stats.candidateClusters} accent={stats.candidateClusters > 0 ? 'text-warn' : undefined} tooltip={candidatesTooltip(stats)} detail={candidatesDetail(stats)} />
-          <StatCard label={copy?.statLabels?.promoted ?? 'Promoted clusters'} value={stats.promotedClusters} accent={stats.promotedClusters > 0 ? 'text-brand' : undefined} tooltip={promotedClustersTooltip(stats)} detail={promotedClustersDetail()} />
-          <StatCard label={copy?.statLabels?.reportsClustered ?? 'Reports clustered'} value={stats.totalClusterReports} accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined} tooltip={reportsClusteredTooltip(stats)} detail={reportsClusteredDetail()} />
-          <StatCard label={copy?.statLabels?.highCoherence ?? 'High coherence'} value={stats.highCoherenceCandidates} accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined} tooltip={highCoherenceTooltip(stats)} detail={highCoherenceDetail()} />
+          <StatCard label={copy?.statLabels?.activeLessons ?? 'Active lessons'} value={stats.activeLessons} accent={stats.activeLessons > 0 ? 'text-ok' : undefined} tooltip={activeLessonsTooltip(stats)} detail={activeLessonsDetail(stats)} to={lessonsLinks.activeLessons} />
+          <StatCard label={copy?.statLabels?.critical ?? 'Critical'} value={stats.criticalLessons} accent={stats.criticalLessons > 0 ? 'text-danger' : 'text-ok'} tooltip={criticalLessonsTooltip(stats)} detail={criticalLessonsDetail()} to={lessonsLinks.critical} />
+          <StatCard label={copy?.statLabels?.candidates ?? 'Candidates'} value={stats.candidateClusters} accent={stats.candidateClusters > 0 ? 'text-warn' : undefined} tooltip={candidatesTooltip(stats)} detail={candidatesDetail(stats)} to={lessonsLinks.candidates} />
+          <StatCard label={copy?.statLabels?.promoted ?? 'Promoted clusters'} value={stats.promotedClusters} accent={stats.promotedClusters > 0 ? 'text-brand' : undefined} tooltip={promotedClustersTooltip(stats)} detail={promotedClustersDetail()} to={lessonsLinks.promoted} />
+          <StatCard label={copy?.statLabels?.reportsClustered ?? 'Reports clustered'} value={stats.totalClusterReports} accent={stats.totalClusterReports > 0 ? 'text-brand' : undefined} tooltip={reportsClusteredTooltip(stats)} detail={reportsClusteredDetail()} to={lessonsLinks.reportsClustered} />
+          <StatCard label={copy?.statLabels?.highCoherence ?? 'High coherence'} value={stats.highCoherenceCandidates} accent={stats.highCoherenceCandidates > 0 ? 'text-ok' : undefined} tooltip={highCoherenceTooltip(stats)} detail={highCoherenceDetail()} to={lessonsLinks.highCoherence} />
         </div>
       </Section>
       )}

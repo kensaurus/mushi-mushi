@@ -14,6 +14,7 @@ import { apiFetch } from '../lib/supabase'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
 import { useNotificationsUx, resolveQuickNotificationsTab } from '../lib/notificationsModeUx'
+import { notificationsLinks } from '../lib/statCardLinks'
 import {
   PageHeader,
   PageHelp,
@@ -358,30 +359,35 @@ export function NotificationsPage() {
             value={stats.total}
             accent={stats.total > 0 ? 'text-brand' : undefined}
             hint="Messages for this project"
+            to={notificationsLinks.total}
           />
           <StatCard
             label={copy?.statLabels?.unread ?? 'Unread'}
             value={stats.unread}
             accent={stats.unread > 0 ? 'text-warn' : undefined}
             hint="Not yet marked read in admin"
+            to={notificationsLinks.unread}
           />
           <StatCard
             label={copy?.statLabels?.last24h ?? 'Last 24h'}
             value={stats.last24h}
             accent={stats.last24h > 0 ? 'text-info' : undefined}
             hint="Recent outbound volume"
+            to={notificationsLinks.last24h}
           />
           <StatCard
             label={copy?.statLabels?.enabled ?? 'Enabled'}
             value={stats.notificationsEnabled ? 'Yes' : 'No'}
             accent={stats.notificationsEnabled ? 'text-ok' : 'text-warn'}
             hint={stats.notificationsEnabled ? 'SDK polling allowed' : 'Turn on in Settings'}
+            to={notificationsLinks.enabled}
           />
           <StatCard
             label={copy?.statLabels?.fixFailed ?? 'Fix failed'}
             value={stats.fixFailedCount}
             accent={stats.fixFailedCount > 0 ? 'text-danger' : undefined}
             hint="fix_failed type messages"
+            to={notificationsLinks.fixFailed}
           />
           <StatCard
             label={copy?.statLabels?.lastMessage ?? 'Last message'}
@@ -394,6 +400,7 @@ export function NotificationsPage() {
                   ? 'Today'
                   : 'Classify a report to test'
             }
+            to={notificationsLinks.lastMessage}
           />
         </div>
       </Section>

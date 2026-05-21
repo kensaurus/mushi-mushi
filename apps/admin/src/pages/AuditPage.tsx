@@ -30,6 +30,7 @@ import {
   totalEventsDetail,
   totalEventsTooltip,
 } from '../lib/statTooltips/audit'
+import { auditLinks } from '../lib/statCardLinks'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -699,6 +700,7 @@ export function AuditPage() {
             accent={stats.events24h > 0 ? 'text-brand' : undefined}
             tooltip={events24hTooltip(stats)}
             detail={events24hDetail(stats)}
+            to={auditLinks.events24h}
           />
           <StatCard
             label="Failures"
@@ -706,6 +708,7 @@ export function AuditPage() {
             accent={stats.failCount24h > 0 ? 'text-danger' : 'text-ok'}
             tooltip={failCount24hTooltip(stats)}
             detail={failCount24hDetail()}
+            to={auditLinks.failures}
           />
           <StatCard
             label="Actor mix"
@@ -713,6 +716,7 @@ export function AuditPage() {
             accent={stats.agentCount24h > 0 ? 'text-info' : undefined}
             tooltip={actorMixTooltip(stats)}
             detail={actorMixDetail()}
+            to={auditLinks.actorMix}
           />
           <StatCard
             label="All-time"
@@ -720,6 +724,7 @@ export function AuditPage() {
             accent="text-brand"
             tooltip={totalEventsTooltip(stats)}
             detail={totalEventsDetail(stats)}
+            to={auditLinks.allTime}
           />
         </div>
       </Section>
@@ -851,6 +856,7 @@ export function AuditPage() {
               accent="text-ok"
               tooltip={humanActorsTooltip(stats)}
               detail={humanActorsDetail()}
+              to={auditLinks.humanActors}
             />
             <StatCard
               label="Agent actors"
@@ -858,6 +864,7 @@ export function AuditPage() {
               accent={stats.agentCount24h > 0 ? 'text-info' : undefined}
               tooltip={agentActorsTooltip(stats)}
               detail={agentActorsDetail()}
+              to={auditLinks.agentActors}
             />
             <StatCard
               label="System actors"
@@ -865,6 +872,7 @@ export function AuditPage() {
               accent={stats.systemCount24h > 0 ? 'text-warn' : undefined}
               tooltip={systemActorsTooltip(stats)}
               detail={systemActorsDetail()}
+              to={auditLinks.systemActors}
             />
           </div>
           {stats.topAction7d ? (

@@ -55,6 +55,7 @@ import {
   totalRunsDetail,
   totalRunsTooltip,
 } from '../lib/statTooltips/iterate'
+import { iterateLinks } from '../lib/statCardLinks'
 
 const TABS: Array<{ id: IterateTabId; label: string; description: string }> = [
   {
@@ -365,22 +366,24 @@ export function IteratePage() {
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label={copy?.statLabels?.total ?? 'Total runs'} value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} tooltip={totalRunsTooltip(stats)} detail={totalRunsDetail()} />
+          <StatCard label={copy?.statLabels?.total ?? 'Total runs'} value={stats.total} accent={stats.total > 0 ? 'text-brand' : undefined} tooltip={totalRunsTooltip(stats)} detail={totalRunsDetail()} to={iterateLinks.total} />
           <StatCard
             label={copy?.statLabels?.active ?? 'Active'}
             value={stats.running + stats.queued}
             accent={stats.running + stats.queued > 0 ? 'text-warn' : undefined}
             tooltip={activeRunsTooltip(stats)}
             detail={activeRunsDetail(stats)}
+            to={iterateLinks.active}
           />
-          <StatCard label={copy?.statLabels?.succeeded ?? 'Succeeded'} value={stats.succeeded} accent={stats.succeeded > 0 ? 'text-ok' : undefined} tooltip={succeededRunsTooltip(stats)} detail={succeededRunsDetail()} />
-          <StatCard label={copy?.statLabels?.failed ?? 'Failed'} value={stats.failed} accent={stats.failed > 0 ? 'text-danger' : undefined} tooltip={failedRunsTooltip(stats)} detail={failedRunsDetail()} />
+          <StatCard label={copy?.statLabels?.succeeded ?? 'Succeeded'} value={stats.succeeded} accent={stats.succeeded > 0 ? 'text-ok' : undefined} tooltip={succeededRunsTooltip(stats)} detail={succeededRunsDetail()} to={iterateLinks.succeeded} />
+          <StatCard label={copy?.statLabels?.failed ?? 'Failed'} value={stats.failed} accent={stats.failed > 0 ? 'text-danger' : undefined} tooltip={failedRunsTooltip(stats)} detail={failedRunsDetail()} to={iterateLinks.failed} />
           <StatCard
             label={copy?.statLabels?.avgScore ?? 'Avg score'}
             value={stats.avgFinalScorePct != null ? `${stats.avgFinalScorePct}%` : '—'}
             accent={stats.avgFinalScorePct != null && stats.avgFinalScorePct >= 70 ? 'text-ok' : stats.avgFinalScorePct != null ? 'text-warn' : undefined}
             tooltip={avgScoreTooltip(stats)}
             detail={avgScoreDetail(stats)}
+            to={iterateLinks.avgScore}
           />
           <StatCard
             label={copy?.statLabels?.iterations ?? 'Iterations'}
@@ -388,6 +391,7 @@ export function IteratePage() {
             accent={stats.totalIterations > 0 ? 'text-info' : undefined}
             tooltip={iterationsTooltip(stats)}
             detail={iterationsDetail()}
+            to={iterateLinks.iterations}
           />
         </div>
       </Section>
