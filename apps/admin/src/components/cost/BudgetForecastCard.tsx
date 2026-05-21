@@ -131,11 +131,11 @@ export function BudgetForecastCard({ projectId, series, fmtSpend }: Props) {
                   onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false) }}
                   autoFocus
                 />
-                <Btn size="xs" variant="primary" onClick={handleSave} loading={saving}>Save</Btn>
-                <Btn size="xs" variant="ghost" onClick={() => setEditing(false)}>Cancel</Btn>
+                <Btn size="sm" variant="primary" onClick={handleSave} loading={saving}>Save</Btn>
+                <Btn size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Btn>
               </>
             ) : (
-              <Btn size="xs" variant="ghost" onClick={() => { setEditing(true); setTimeout(() => inputRef.current?.focus(), 50) }}>
+              <Btn size="sm" variant="ghost" onClick={() => { setEditing(true); setTimeout(() => inputRef.current?.focus(), 50) }}>
                 {budget !== null ? `Budget: ${fmtSpend(budget)} / mo` : 'Set budget'}
               </Btn>
             )}
