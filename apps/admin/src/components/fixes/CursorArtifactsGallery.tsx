@@ -59,7 +59,6 @@ export function CursorArtifactsGallery({ artifacts }: Props) {
               key={`vid-${i}`}
               className="rounded overflow-hidden border border-edge bg-surface-overlay"
             >
-              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <video
                 src={a.path}
                 controls
