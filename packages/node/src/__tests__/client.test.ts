@@ -93,6 +93,86 @@ describe('MushiNodeClient.captureReport', () => {
 })
 
 // ---------------------------------------------------------------------------
+// AbortSignal propagation (Round 8 — B4)
+// ---------------------------------------------------------------------------
+
+describe('MushiNodeClient.captureReport — AbortSignal composition', () => {
+  let fetchSpy: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    fetchSpy = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
+      // Real-world fetch promise that respects the signal.
+      return new Promise((resolve, reject) => {
+        const sig = init.signal
+        if (sig?.aborted) return reject(sig.reason ?? new Error('aborted'))
+        sig?.addEventListener('abort', () => reject(sig.reason ?? new Error('aborted')))
+        setTimeout(() => resolve({ ok: true, json: async () => ({ data: { reportId: 'r-late' } }) }), 50)
+      })
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('forwards an aborted per-call signal to fetch (early bail, no retry)', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const client = new MushiNodeClient(BASE_OPTIONS)
+    const result = await client.captureReport(
+      { description: 'about to be cancelled' },
+      { signal: controller.signal },
+    )
+    expect(result.ok).toBe(false)
+    // We forward the composed signal — already-aborted, so fetch
+    // rejects synchronously and the promise resolves to ok:false.
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit
+    expect(init.signal?.aborted).toBe(true)
+  })
+
+  it('forwards an aborted process-wide signal (constructor opt-in)', async () => {
+    const processController = new AbortController()
+    processController.abort()
+    const client = new MushiNodeClient({ ...BASE_OPTIONS, signal: processController.signal })
+    const result = await client.captureReport({ description: 'shutdown in flight' })
+    expect(result.ok).toBe(false)
+    const init = fetchSpy.mock.calls[0]?.[1] as RequestInit
+    expect(init.signal?.aborted).toBe(true)
+  })
+
+  it('aborts the in-flight fetch when the per-call signal aborts mid-flight', async () => {
+    const controller = new AbortController()
+    const client = new MushiNodeClient(BASE_OPTIONS)
+    setTimeout(() => controller.abort(new Error('user cancelled')), 5)
+    const result = await client.captureReport(
+      { description: 'cancel me' },
+      { signal: controller.signal },
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('proceeds normally when no signal aborts before the response', async () => {
+    const controller = new AbortController()
+    const client = new MushiNodeClient({ ...BASE_OPTIONS, signal: controller.signal })
+    const result = await client.captureReport({ description: 'ok flow' })
+    expect(result.ok).toBe(true)
+    expect(result.reportId).toBe('r-late')
+  })
+
+  it('captureException accepts an options.signal third argument', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const client = new MushiNodeClient(BASE_OPTIONS)
+    const result = await client.captureException(new Error('boom'), undefined, {
+      signal: controller.signal,
+    })
+    expect(result.ok).toBe(false)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // attachUnhandledHook cleanup
 // ---------------------------------------------------------------------------
 

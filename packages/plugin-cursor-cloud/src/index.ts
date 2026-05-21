@@ -170,7 +170,11 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
         if (rank < minRank) return
 
         const repoUrl = cfg.repoUrl ?? ''
-        if (!repoUrl) return // Silently skip if no repo configured
+        if (!repoUrl) {
+          console.warn('[cursor-cloud] report.classified skipped: repoUrl not configured. ' +
+            'Set repoUrl in the plugin config so the agent knows which codebase to fix.')
+          return
+        }
 
         const run = await createCursorAgentRun(
           resolvedCfg,
@@ -195,7 +199,10 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
         const data = e.data as MushiFixEvent
 
         const repoUrl = cfg.repoUrl ?? ''
-        if (!repoUrl) return
+        if (!repoUrl) {
+          console.warn('[cursor-cloud] fix.requested skipped: repoUrl not configured.')
+          return
+        }
 
         const run = await createCursorAgentRun(
           resolvedCfg,

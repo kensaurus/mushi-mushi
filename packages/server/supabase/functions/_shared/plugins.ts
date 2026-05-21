@@ -177,9 +177,26 @@ async function deliverCursorAgent(
   const workspaceId = typeof cfg.workspace_id === 'string' ? cfg.workspace_id : ''
   const model = typeof cfg.model === 'string' ? cfg.model : 'composer-2.5'
   const autoCreatePR = cfg.auto_create_pr !== false
+  const maxIterations = typeof cfg.max_iterations === 'number' ? cfg.max_iterations : 1
 
   if (!apiKey || !workspaceId) {
     pluginLog.warn('Cursor plugin skipped: missing api_key_ref or workspace_id', { projectId })
+    return
+  }
+
+  // Fetch the project's GitHub repo URL so the Cursor REST API knows which
+  // codebase to work in (required: cloud.repos[].url).
+  const { data: projSettings } = await db
+    .from('project_settings')
+    .select('github_repo_url')
+    .eq('project_id', projectId)
+    .single()
+  const repoUrl = (projSettings as { github_repo_url?: string | null } | null)?.github_repo_url ?? ''
+  if (!repoUrl) {
+    pluginLog.warn('Cursor plugin skipped: github_repo_url not configured for project', {
+      projectId,
+      hint: 'Configure GitHub integration under Admin → Integrations so the agent knows which repo to fix.',
+    })
     return
   }
 
@@ -225,11 +242,16 @@ async function deliverCursorAgent(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${resolvedApiKey}`,
       },
+      // 30 s timeout: consistent with deliverOne; prevents a slow Cursor API
+      // response from blocking the entire plugin fanout Promise.all.
+      signal: AbortSignal.timeout(30_000),
       body: JSON.stringify({
         model: { id: model },
         cloud: {
           workspaceId,
+          repos: [{ url: repoUrl }],
           autoCreatePR,
+          maxIterations,
           envVars: {
             MUSHI_PROJECT_ID: projectId,
             MUSHI_REPORT_ID: reportId,

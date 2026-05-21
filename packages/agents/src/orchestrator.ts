@@ -308,10 +308,39 @@ export class FixOrchestrator {
   ): Promise<{ fixId: string; result: FixResult; prUrl?: string }> {
     const reportId = context.reportId
 
+    // Fetch project settings BEFORE creating the fix_attempt row so the agent
+    // name is recorded correctly from the start — avoids hardcoding 'claude_code'
+    // for cursor_cloud runs (bug fix: was always 'claude_code' here).
+    const { data: rawSettings } = await this.db
+      .from('project_settings')
+      .select(
+        'autofix_agent, autofix_mcp_server_url, autofix_mcp_bearer, sandbox_provider, sandbox_image, sandbox_extra_allowed_hosts, ' +
+        'cursor_api_key_ref, cursor_workspace_id, cursor_default_model, cursor_auto_create_pr, cursor_max_iterations',
+      )
+      .eq('project_id', context.projectId)
+      .single()
+    // Cast through unknown to tolerate Supabase-generated types that pre-date
+    // the cursor_* columns migration (20260521000000_cursor_cloud_agent.sql).
+    const settings = rawSettings as {
+      autofix_agent?: string
+      autofix_mcp_server_url?: string
+      autofix_mcp_bearer?: string
+      sandbox_provider?: string
+      sandbox_image?: string
+      sandbox_extra_allowed_hosts?: string[]
+      cursor_api_key_ref?: string | null
+      cursor_workspace_id?: string | null
+      cursor_default_model?: string | null
+      cursor_auto_create_pr?: boolean | null
+      cursor_max_iterations?: number | null
+    } | null
+
+    const agentName = settings?.autofix_agent ?? 'claude_code'
+
     const { data: fix } = await this.db.from('fix_attempts').insert({
       report_id: reportId,
       project_id: context.projectId,
-      agent: 'claude_code',
+      agent: agentName,
       status: 'running',
       coordination_id: coordination?.coordinationId ?? null,
       repo_id: coordination?.repoId ?? null,
@@ -329,30 +358,6 @@ export class FixOrchestrator {
     let sandbox: Awaited<ReturnType<ReturnType<typeof resolveSandboxProvider>['createSandbox']>> | undefined
 
     try {
-      const { data: rawSettings } = await this.db
-        .from('project_settings')
-        .select(
-          'autofix_agent, autofix_mcp_server_url, autofix_mcp_bearer, sandbox_provider, sandbox_image, sandbox_extra_allowed_hosts, ' +
-          'cursor_api_key_ref, cursor_workspace_id, cursor_default_model, cursor_auto_create_pr, cursor_max_iterations',
-        )
-        .eq('project_id', context.projectId)
-        .single()
-      // Cast through unknown to tolerate Supabase-generated types that pre-date
-      // the cursor_* columns migration (20260521000000_cursor_cloud_agent.sql).
-      const settings = rawSettings as {
-        autofix_agent?: string
-        autofix_mcp_server_url?: string
-        autofix_mcp_bearer?: string
-        sandbox_provider?: string
-        sandbox_image?: string
-        sandbox_extra_allowed_hosts?: string[]
-        cursor_api_key_ref?: string | null
-        cursor_workspace_id?: string | null
-        cursor_default_model?: string | null
-        cursor_auto_create_pr?: boolean | null
-        cursor_max_iterations?: number | null
-      } | null
-
       // V5.3 §2.10 (M6): provision managed sandbox if configured.
       // The agent does not directly receive the sandbox in this milestone —
       // adapter wiring lands in M6+ — but the provisioning + audit log is
@@ -379,8 +384,6 @@ export class FixOrchestrator {
           providerSandboxId: sandbox.id,
         })
       }
-
-      const agentName = settings?.autofix_agent ?? 'claude_code'
 
       // Resolve the Cursor API key from the vault reference if needed.
       // Vault refs take the shape `vault://<uuid>` or are stored raw for
