@@ -146,7 +146,7 @@ CREATE POLICY reward_rules_org_member_select ON public.reward_rules
   USING (private.is_org_member(organization_id));
 CREATE POLICY reward_rules_org_admin_write ON public.reward_rules
   FOR ALL TO authenticated
-  USING (private.has_org_role(organization_id, 'admin'));
+  USING (private.has_org_role(organization_id, ARRAY['admin']));
 
 COMMENT ON TABLE public.reward_rules IS
   'Configurable point awards per action per project (or org-wide when project_id IS NULL). Replaces the hardcoded POINT_TABLE in _shared/reputation.ts. Seed rows for P1 actions are inserted below.';
@@ -184,7 +184,7 @@ CREATE POLICY reward_tiers_org_member_select ON public.reward_tiers
   USING (private.is_org_member(organization_id));
 CREATE POLICY reward_tiers_org_admin_write ON public.reward_tiers
   FOR ALL TO authenticated
-  USING (private.has_org_role(organization_id, 'admin'));
+  USING (private.has_org_role(organization_id, ARRAY['admin']));
 
 COMMENT ON TABLE public.reward_tiers IS
   'Tier ladder for an organization. Points thresholds are cumulative lifetime points. When an end user crosses a threshold the tier-evaluator fires a webhook and optionally enqueues a payout.';
@@ -289,7 +289,7 @@ ALTER TABLE public.reward_webhooks ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY reward_webhooks_org_admin ON public.reward_webhooks
   FOR ALL TO authenticated
-  USING (private.has_org_role(organization_id, 'admin'));
+  USING (private.has_org_role(organization_id, ARRAY['admin']));
 
 COMMENT ON TABLE public.reward_webhooks IS
   'HMAC-signed webhook endpoints the host app registers to receive reward events (tier changes, points awards). The host verifies the signature and applies credits (gems, coupons, etc.) in its own billing system.';

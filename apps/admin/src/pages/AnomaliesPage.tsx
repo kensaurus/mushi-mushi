@@ -4,7 +4,7 @@
  *          Overview | Anomalies | Metrics | Detect.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -12,6 +12,7 @@ import { usePublishPageContext } from '../lib/pageContext'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useAnomaliesUx, resolveQuickAnomaliesTab } from '../lib/anomaliesModeUx'
 import { useToast } from '../lib/toast'
 import {
   PageHeader,
@@ -38,6 +39,21 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PdcaContextHint } from '../components/PdcaContextHint'
 import { BarSparkline } from '../components/charts'
+import {
+  autoReportedDetail,
+  autoReportedTooltip,
+  dismissedAnomaliesDetail,
+  dismissedAnomaliesTooltip,
+  highScoreDetail,
+  highScoreTooltip,
+  metricPointsDetail,
+  metricPointsTooltip,
+  openAnomaliesDetail,
+  openAnomaliesTooltip,
+  releaseRegressionDetail,
+  releaseRegressionTooltip,
+} from '../lib/statTooltips/anomalies'
+import { anomaliesLinks } from '../lib/statCardLinks'
 
 interface AnomalyDetection {
   id: string
@@ -93,6 +109,7 @@ function resolveAnomaliesTab(value: string | null): AnomaliesTabId {
 
 export function AnomaliesPage() {
   const copy = usePageCopy('/anomalies')
+  const ux = useAnomaliesUx()
   const toast = useToast()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
@@ -153,14 +170,20 @@ export function AnomaliesPage() {
     reloadMetrics()
   }, [reloadStats, reloadAnomalies, reloadMetrics])
 
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickAnomaliesTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+
   const tabOptions = useMemo(
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count: t.id === 'anomalies' && stats.openAnomalies > 0 ? stats.openAnomalies : undefined,
       })),
-    [stats.openAnomalies],
+    [copy?.tabLabels, stats.openAnomalies],
   )
 
   usePublishPageContext({
@@ -232,6 +255,17 @@ export function AnomaliesPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-anomalies">
+      <PageHelp
+        title={copy?.help?.title ?? 'Anomaly detection'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
+        useCases={copy?.help?.useCases ?? [
+          'Detect crash-rate spikes after a release',
+          'Flag latency regressions against rolling baseline',
+          'Auto-open a bug report when a regression is confirmed',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Anomalies'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -241,6 +275,8 @@ export function AnomaliesPage() {
         }
         contextChip={<PdcaContextHint stage="check" />}
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -269,6 +305,8 @@ export function AnomaliesPage() {
         <Btn size="sm" variant="ghost" onClick={() => setActiveTab('detect')}>
           Run detection
         </Btn>
+          </>
+        )}
       </PageHeader>
 
       <AnomaliesStatusBanner
@@ -276,8 +314,10 @@ export function AnomaliesPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<AnomaliesTabId>
         size="sm"
         ariaLabel="Anomalies sections"
@@ -285,20 +325,26 @@ export function AnomaliesPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="ANOMALIES SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideAnomaliesSnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Open" value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} hint={`${stats.confirmedAnomalies} confirmed`} />
-          <StatCard label="Release regressions" value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} hint="Open · critical" />
-          <StatCard label="High score" value={stats.highScoreOpen} accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined} hint="Above threshold" />
-          <StatCard label="Auto-reported" value={stats.autoReported} accent={stats.autoReported > 0 ? 'text-brand' : undefined} hint="Linked reports" />
-          <StatCard label="Metric points" value={stats.metricPointCount} accent={stats.metricPointCount > 0 ? 'text-brand' : undefined} hint={`${stats.distinctMetrics} series`} />
-          <StatCard label="Dismissed" value={stats.dismissedAnomalies} accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined} hint="Closed findings" />
+          <StatCard label={copy?.statLabels?.open ?? 'Open'} value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} tooltip={openAnomaliesTooltip(stats)} detail={openAnomaliesDetail(stats)} to={anomaliesLinks.open} />
+          <StatCard label={copy?.statLabels?.releaseRegressions ?? 'Release regressions'} value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} tooltip={releaseRegressionTooltip(stats)} detail={releaseRegressionDetail()} to={anomaliesLinks.releaseRegressions} />
+          <StatCard label={copy?.statLabels?.highScore ?? 'High score'} value={stats.highScoreOpen} accent={stats.highScoreOpen > 0 ? 'text-danger' : undefined} tooltip={highScoreTooltip(stats)} detail={highScoreDetail()} to={anomaliesLinks.highScore} />
+          <StatCard label={copy?.statLabels?.autoReported ?? 'Auto-reported'} value={stats.autoReported} accent={stats.autoReported > 0 ? 'text-brand' : undefined} tooltip={autoReportedTooltip(stats)} detail={autoReportedDetail()} to={anomaliesLinks.autoReported} />
+          <StatCard label={copy?.statLabels?.metricPoints ?? 'Metric points'} value={stats.metricPointCount} accent={stats.metricPointCount > 0 ? 'text-brand' : undefined} tooltip={metricPointsTooltip(stats)} detail={metricPointsDetail(stats)} to={anomaliesLinks.metricPoints} />
+          <StatCard label={copy?.statLabels?.dismissed ?? 'Dismissed'} value={stats.dismissedAnomalies} accent={stats.dismissedAnomalies > 0 ? 'text-fg-muted' : undefined} tooltip={dismissedAnomaliesTooltip(stats)} detail={dismissedAnomaliesDetail()} to={anomaliesLinks.dismissed} />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'open_critical'
@@ -318,25 +364,15 @@ export function AnomaliesPage() {
       ) : null}
 
       {activeTab === 'overview' && (
-        <>
-          <PageHelp
-            title={copy?.help?.title ?? 'Anomaly detection'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'Ingest any numeric metric (error rate, latency, conversion rate) via the Metrics tab or SDK. The detector runs hourly and auto-creates bug reports for release regressions.'}
-            useCases={copy?.help?.useCases ?? [
-              'Detect crash-rate spikes after a release',
-              'Flag latency regressions against rolling baseline',
-              'Auto-open a bug report when a regression is confirmed',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Ingest metric data in the Metrics tab, then run detection or wait for the hourly cron.'}
-          />
-          {stats.topPriority === 'healthy' && (
+        <div className="space-y-4">
+          {!ux.hideOverviewChrome && stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
               title="No open anomalies"
               description={`${stats.distinctMetrics} metric series · ${stats.metricPointCount} data points · detection can run on demand.`}
             />
           )}
-          {stats.topPriority === 'no_metrics' && (
+          {!ux.hideOverviewChrome && stats.topPriority === 'no_metrics' && (
             <RecommendedAction
               tone="info"
               title="Seed metric data first"
@@ -344,7 +380,7 @@ export function AnomaliesPage() {
               cta={{ label: 'Open Metrics', to: '/anomalies?tab=metrics' }}
             />
           )}
-          {(stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
+          {!ux.hideOverviewChrome && (stats.topPriority === 'open_anomalies' || stats.topPriority === 'open_critical') && (
             <RecommendedAction
               tone="info"
               title="Triage open anomalies"
@@ -352,7 +388,7 @@ export function AnomaliesPage() {
               cta={{ label: 'Open Anomalies', to: '/anomalies?tab=anomalies' }}
             />
           )}
-        </>
+        </div>
       )}
 
       {activeTab === 'anomalies' && (

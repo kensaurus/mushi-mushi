@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { IterateStats, IterateTabId } from './IterateStatsTypes'
 
 interface Props {
@@ -12,9 +13,12 @@ interface Props {
   onTab?: (tab: IterateTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
-export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+  const copy = usePageCopy('/iterate')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -23,12 +27,18 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No project selected</p>
-            <p className="text-2xs text-fg-muted">Pick a project to queue producer/critic PDCA loops.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Pick a project first' : 'No project selected'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'Page improvement runs are per app — choose one in the header.'
+                : 'Pick a project to queue producer/critic PDCA loops.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -41,17 +51,19 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn motion-safe:animate-pulse" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.running} run{stats.running === 1 ? '' : 's'} running on {projectLabel}
+              {plainBanner
+                ? `${stats.running} improvement run${stats.running === 1 ? '' : 's'} in progress`
+                : `${stats.running} run${stats.running === 1 ? '' : 's'} running on ${projectLabel}`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">View runs</Btn>
+            <Btn size="sm" variant="ghost">{actions.runs ?? 'View runs'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('runs')}>View runs</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('runs')}>{actions.runs ?? 'View runs'}</Btn>
         ) : null}
       </div>
     )
@@ -70,10 +82,10 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('runs')}>Open runs</Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab('runs')}>{actions.openRuns ?? 'Open runs'}</Btn>
         ) : (
           <Link to="/iterate?tab=runs">
-            <Btn size="sm" variant="primary">Open runs</Btn>
+            <Btn size="sm" variant="primary">{actions.openRuns ?? 'Open runs'}</Btn>
           </Link>
         )}
       </div>
@@ -86,17 +98,17 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-danger">Latest PDCA run failed</p>
+            <p className="text-xs font-medium text-danger">Latest improvement run failed</p>
             <p className="text-2xs text-fg-muted truncate max-w-prose" title={stats.lastFailedUrl ?? undefined}>
               {stats.topPriorityLabel}
             </p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('new')}>Queue new run</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('new')}>{actions.queue ?? 'Queue new run'}</Btn>
         ) : (
           <Link to="/iterate?tab=new">
-            <Btn size="sm" variant="ghost">Queue new run</Btn>
+            <Btn size="sm" variant="ghost">{actions.queue ?? 'Queue new run'}</Btn>
           </Link>
         )}
       </div>
@@ -109,15 +121,17 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No PDCA runs on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No improvement runs yet' : `No PDCA runs on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('new')}>New run</Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab('new')}>{actions.newRun ?? 'New run'}</Btn>
         ) : (
           <Link to="/iterate?tab=new">
-            <Btn size="sm" variant="primary">New run</Btn>
+            <Btn size="sm" variant="primary">{actions.newRun ?? 'New run'}</Btn>
           </Link>
         )}
       </div>
@@ -129,17 +143,19 @@ export function IterateStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">PDCA pipeline idle on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Improvement pipeline idle' : `PDCA pipeline idle on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : stats.topPriorityTo ? (
         <Link to={stats.topPriorityTo}>
-          <Btn size="sm" variant="ghost">View runs</Btn>
+          <Btn size="sm" variant="ghost">{actions.runs ?? 'View runs'}</Btn>
         </Link>
       ) : null}
     </div>

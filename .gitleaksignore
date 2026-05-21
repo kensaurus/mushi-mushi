@@ -24,3 +24,11 @@
 # scans stop flagging the same already-audited finding.
 cb2768f0fc5b62c34809228937620c61f19a793d:packages/android/src/test/kotlin/dev/mushimushi/sdk/pii/PIIScrubberTest.kt:jwt:16
 cb2768f0fc5b62c34809228937620c61f19a793d:packages/ios/Tests/MushiMushiTests/PIIScrubberTests.swift:jwt:12
+
+# MCP scope-filter test fixture: `API_KEY` was a high-entropy dummy value
+# used to exercise the `MUSHI_API_KEY` env var path in scopes.test.ts.
+# Never a real credential — renamed to `TEST_MUSHI_TOKEN` with a clearly
+# non-secret placeholder in the working tree. The fingerprint below pins
+# the historical commit de552be where the old name still appeared in the
+# diff so PR-range scans stop flagging this already-audited finding.
+de552be0acaa76835bd244f732f2f2887db1e124:packages/mcp/src/__tests__/scopes.test.ts:generic-api-key:22

@@ -79,6 +79,14 @@ verify_jwt = false
 [functions.judge-batch]
 verify_jwt = false
 
+# intelligence-report is invoked from `api` (POST /v1/admin/intelligence) using
+# the service-role bearer. Same sb_secret_* gateway issue as the other internal
+# pipeline functions — without verify_jwt = false the gateway returns
+# UNAUTHORIZED_INVALID_JWT_FORMAT and every manual + cron digest generation
+# fails before the function body runs.
+[functions.intelligence-report]
+verify_jwt = false
+
 # mcp is the Model Context Protocol Streamable HTTP transport
 # (2025-03-26 spec). Public endpoint reached by external orchestrators
 # (Cursor remote MCP, OpenAI Agents SDK, Anthropic Claude Agent SDK in
@@ -229,4 +237,26 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.anomaly-detector]
+verify_jwt = false
+
+# These functions all use requireServiceRoleAuth and are invoked by pg_cron
+# or the api function using the service-role bearer. Without verify_jwt = false
+# the Supabase gateway returns UNAUTHORIZED_INVALID_JWT_FORMAT before the
+# function body runs (same sb_secret_* key format issue as above).
+[functions.generate-synthetic]
+verify_jwt = false
+
+[functions.integration-health-probe]
+verify_jwt = false
+
+[functions.plugin-dispatch-retry]
+verify_jwt = false
+
+[functions.reward-payout-aggregator]
+verify_jwt = false
+
+[functions.soc2-evidence]
+verify_jwt = false
+
+[functions.usage-aggregator]
 verify_jwt = false

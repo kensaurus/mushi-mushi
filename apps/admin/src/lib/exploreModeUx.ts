@@ -1,0 +1,44 @@
+/**
+ * FILE: apps/admin/src/lib/exploreModeUx.ts
+ * PURPOSE: Mode-aware UX flags for the Explore page.
+ */
+
+import { useAdminMode } from './mode'
+import type { ExploreStats, ExploreTabId } from '../components/explore/ExploreStatsTypes'
+
+export interface ExploreUxFlags {
+  isQuickstart: boolean
+  isBeginner: boolean
+  isAdvanced: boolean
+  hideTabs: boolean
+  plainBanner: boolean
+  hideOverviewChrome: boolean
+  hideExploreSnapshot: boolean
+}
+
+export function useExploreUx(): ExploreUxFlags {
+  const { isQuickstart, isBeginner, isAdvanced } = useAdminMode()
+  return {
+    isQuickstart,
+    isBeginner,
+    isAdvanced,
+    hideTabs: isQuickstart,
+    plainBanner: !isAdvanced,
+    hideOverviewChrome: !isAdvanced,
+    hideExploreSnapshot: isQuickstart,
+  }
+}
+
+/** Quick mode: land on the tab that matches index posture. */
+export function resolveQuickExploreTab(stats: ExploreStats): ExploreTabId {
+  if (
+    stats.topPriority === 'error' ||
+    stats.topPriority === 'not_enabled' ||
+    stats.topPriority === 'empty'
+  ) {
+    return 'index'
+  }
+  if (stats.topPriority === 'ready' && stats.withEmbeddings > 0) return 'search'
+  if (stats.topPriority === 'ready' || stats.topPriority === 'stale') return 'graph'
+  return 'overview'
+}

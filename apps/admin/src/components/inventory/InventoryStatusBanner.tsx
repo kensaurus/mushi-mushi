@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { InventoryStats, InventoryTabId } from './InventoryStatsTypes'
 
 interface Props {
@@ -12,9 +13,12 @@ interface Props {
   onTab?: (tab: InventoryTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
-export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+  const copy = usePageCopy('/inventory')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -23,12 +27,18 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No projects — inventory empty</p>
-            <p className="text-2xs text-fg-muted">Create a project on Setup before mapping user stories.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Create a project first' : 'No projects — inventory empty'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'Screen maps are per app — set one up on Setup first.'
+                : 'Create a project on Setup before mapping user stories.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -40,7 +50,9 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No inventory on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No screen map yet' : `No inventory on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">
               {stats.draftProposals > 0
                 ? `${stats.draftProposals} draft proposal${stats.draftProposals === 1 ? '' : 's'} waiting on Discovery tab.`
@@ -53,12 +65,12 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
             <Btn size="sm" variant="ghost">
-              {stats.draftProposals > 0 ? 'Review proposal' : 'Open Discovery'}
+              {stats.draftProposals > 0 ? (actions.proposal ?? 'Review proposal') : (actions.discovery ?? 'Open Discovery')}
             </Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('discovery')}>
-            Open Discovery
+            {actions.discovery ?? 'Open Discovery'}
           </Btn>
         ) : null}
       </div>
@@ -72,14 +84,16 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.regressed} regressed action{stats.regressed === 1 ? '' : 's'}
+              {plainBanner
+                ? `${stats.regressed} screen action${stats.regressed === 1 ? '' : 's'} broke`
+                : `${stats.regressed} regressed action${stats.regressed === 1 ? '' : 's'}`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">View stories</Btn>
+            <Btn size="sm" variant="ghost">{actions.stories ?? 'View stories'}</Btn>
           </Link>
         ) : null}
       </div>
@@ -93,18 +107,20 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.openFindings} open gate finding{stats.openFindings === 1 ? '' : 's'}
+              {plainBanner
+                ? `${stats.openFindings} quality check${stats.openFindings === 1 ? '' : 's'} to review`
+                : `${stats.openFindings} open gate finding${stats.openFindings === 1 ? '' : 's'}`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Open Gates</Btn>
+            <Btn size="sm" variant="ghost">{actions.gates ?? 'Open Gates'}</Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('gates')}>
-            Open Gates
+            {actions.gates ?? 'Open Gates'}
           </Btn>
         ) : null}
       </div>
@@ -118,14 +134,16 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
             <p className="text-xs font-medium text-info">
-              {stats.stub} stub action{stats.stub === 1 ? '' : 's'} need wiring
+              {plainBanner
+                ? `${stats.stub} action${stats.stub === 1 ? '' : 's'} still need wiring`
+                : `${stats.stub} stub action${stats.stub === 1 ? '' : 's'} need wiring`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('tree')}>
-            Open Tree
+            {actions.tree ?? 'Open Tree'}
           </Btn>
         ) : null}
       </div>
@@ -137,7 +155,9 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Inventory current on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Screen map is up to date' : `Inventory current on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">
             {stats.verified}/{stats.total} verified
             {stats.lastIngestAt ? (
@@ -148,11 +168,11 @@ export function InventoryStatusBanner({ stats, onTab, onRefresh, refreshing }: P
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : onTab ? (
         <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>
-          User stories
+          {actions.stories ?? 'User stories'}
         </Btn>
       ) : null}
     </div>

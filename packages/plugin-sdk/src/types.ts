@@ -11,9 +11,12 @@ export type MushiEventName =
   | 'report.status_changed'
   | 'report.commented'
   | 'report.dedup_grouped'
+  | 'fix.requested'
   | 'fix.proposed'
   | 'fix.applied'
   | 'fix.failed'
+  | 'qa_story.failed'
+  | 'qa_story.passed'
   | 'judge.score_recorded'
   | 'sla.breached'
   // Rewards program (P1+)

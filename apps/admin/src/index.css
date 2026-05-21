@@ -545,6 +545,222 @@ select, input, textarea {
   letter-spacing: -0.02em;
 }
 
+/* Linked snapshot StatCards — staged, subtle hover (StatCard with `to`). */
+.stat-card-link {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    border-color 420ms var(--ease-out-expo),
+    transform 480ms var(--ease-out-expo),
+    box-shadow 480ms var(--ease-out-expo),
+    background-color 380ms var(--ease-out-expo);
+}
+
+.stat-card-link::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+  box-shadow:
+    0 0 0 1px color-mix(in oklch, var(--color-brand) 28%, transparent),
+    0 0 10px color-mix(in oklch, var(--color-brand) 22%, transparent),
+    0 0 22px color-mix(in oklch, var(--color-brand) 10%, transparent);
+  transition: opacity 520ms var(--ease-out-expo);
+}
+
+.stat-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 0;
+  background: radial-gradient(
+    120% 80% at 50% 100%,
+    color-mix(in oklch, var(--color-brand) 7%, transparent) 0%,
+    transparent 72%
+  );
+  transition: opacity 560ms var(--ease-out-expo);
+}
+
+.stat-card-link:hover,
+.stat-card-link:focus-within {
+  border-color: color-mix(in oklch, var(--color-brand) 30%, var(--color-edge-subtle));
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-raised, 0 4px 12px rgb(0 0 0 / 0.18));
+  transition-delay: 90ms, 90ms, 90ms, 0ms;
+}
+
+.stat-card-link:hover::before,
+.stat-card-link:focus-within::before {
+  opacity: 0.72;
+  transition-delay: 140ms;
+}
+
+.stat-card-link:hover::after,
+.stat-card-link:focus-within::after {
+  opacity: 0.55;
+  transition-delay: 180ms;
+}
+
+.stat-card-value {
+  transform-origin: left center;
+  transition:
+    transform 520ms var(--ease-out-expo),
+    text-shadow 520ms var(--ease-out-expo),
+    color 380ms var(--ease-out-expo);
+}
+
+.stat-card-link:hover .stat-card-value,
+.stat-card-link:focus-within .stat-card-value {
+  text-shadow: 0 0 12px color-mix(in oklch, var(--color-brand) 24%, transparent);
+  transform: scale(1.012);
+  transition-delay: 160ms, 160ms, 0ms;
+}
+
+/* Text swap — small slide + crossfade, staggered after hover settles */
+.stat-card-swap-line {
+  position: relative;
+  display: block;
+  min-height: 1em;
+  overflow: hidden;
+}
+
+.stat-card-swap-primary,
+.stat-card-swap-secondary {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    transform 480ms var(--ease-out-expo),
+    opacity 380ms var(--ease-out-expo);
+}
+
+.stat-card-swap-primary {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.stat-card-swap-secondary {
+  position: absolute;
+  inset: 0;
+  transform: translateY(0.35em);
+  opacity: 0;
+}
+
+.group\/stat:hover .stat-card-swap-primary,
+.group\/stat:focus-visible .stat-card-swap-primary {
+  transform: translateY(-0.35em);
+  opacity: 0;
+  transition-delay: 100ms;
+}
+
+.group\/stat:hover .stat-card-swap-secondary,
+.group\/stat:focus-visible .stat-card-swap-secondary {
+  transform: translateY(0);
+  opacity: 1;
+  transition-delay: 220ms;
+}
+
+.stat-card-swap-line--detail .stat-card-swap-primary,
+.stat-card-swap-line--detail .stat-card-swap-secondary {
+  transition-duration: 440ms, 340ms;
+}
+
+.group\/stat:hover .stat-card-swap-line--detail .stat-card-swap-primary,
+.group\/stat:focus-visible .stat-card-swap-line--detail .stat-card-swap-primary {
+  transition-delay: 180ms;
+}
+
+.group\/stat:hover .stat-card-swap-line--detail .stat-card-swap-secondary,
+.group\/stat:focus-visible .stat-card-swap-line--detail .stat-card-swap-secondary {
+  transition-delay: 300ms;
+}
+
+.stat-card-arrow {
+  opacity: 0;
+  transform: translateX(-3px);
+  transition:
+    transform 480ms var(--ease-out-expo),
+    opacity 420ms var(--ease-out-expo);
+}
+
+.group\/stat:hover .stat-card-arrow,
+.group\/stat:focus-visible .stat-card-arrow {
+  opacity: 0.72;
+  transform: translateX(2px);
+  transition-delay: 280ms;
+}
+
+.stat-card-cta-hint {
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    transform 440ms var(--ease-out-expo),
+    opacity 360ms var(--ease-out-expo);
+}
+
+.group\/stat:hover .stat-card-cta-hint,
+.group\/stat:focus-visible .stat-card-cta-hint {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 320ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stat-card-link,
+  .stat-card-link::before,
+  .stat-card-link::after,
+  .stat-card-value,
+  .stat-card-swap-primary,
+  .stat-card-swap-secondary,
+  .stat-card-arrow,
+  .stat-card-cta-hint {
+    transition: none !important;
+    transition-delay: 0ms !important;
+  }
+
+  .stat-card-link:hover,
+  .stat-card-link:focus-within {
+    transform: none;
+  }
+
+  .stat-card-link:hover .stat-card-value,
+  .stat-card-link:focus-within .stat-card-value {
+    transform: none;
+  }
+
+  .group\/stat:hover .stat-card-swap-primary,
+  .group\/stat:focus-visible .stat-card-swap-primary {
+    opacity: 0;
+  }
+
+  .group\/stat:hover .stat-card-swap-secondary,
+  .group\/stat:focus-visible .stat-card-swap-secondary {
+    opacity: 1;
+    transform: none;
+  }
+
+  .group\/stat:hover .stat-card-arrow,
+  .group\/stat:focus-visible .stat-card-arrow {
+    opacity: 0.72;
+    transform: none;
+  }
+
+  .group\/stat:hover .stat-card-cta-hint,
+  .group\/stat:focus-visible .stat-card-cta-hint {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---------------------------------------------------------------------------
    TOOLTIP ANIMATION
 --------------------------------------------------------------------------- */

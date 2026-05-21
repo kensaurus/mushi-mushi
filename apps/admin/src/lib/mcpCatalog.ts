@@ -181,10 +181,10 @@ export const TOOL_CATALOG: ToolSpec[] = [
     name: 'dispatch_fix',
     title: 'Dispatch Mushi fix agent',
     description:
-      'Dispatch the Mushi agentic fix orchestrator for a classified report. Returns a fix_attempt id; poll get_fix_timeline for progress.',
+      'Dispatch the Mushi agentic fix orchestrator for a classified report. Set agent="cursor_cloud" to dispatch a Cursor Cloud Agent that opens a signed draft PR. Returns a fix_attempt id; poll get_fix_timeline for progress.',
     scope: 'mcp:write',
     hints: { readOnly: false, destructive: false, idempotent: false, openWorld: true },
-    useCase: 'Let the in-repo agent attempt this fix for me.',
+    useCase: 'Let the in-repo agent attempt this fix for me (or: dispatch a Cursor Cloud Agent).',
   },
   {
     name: 'trigger_judge',

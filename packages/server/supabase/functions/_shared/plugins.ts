@@ -120,22 +120,189 @@ export async function dispatchPluginEvent(
 ): Promise<void> {
   const { data: rows, error } = await db
     .from('project_plugins')
-    .select('plugin_slug, webhook_url, webhook_secret_vault_ref, subscribed_events')
+    .select('plugin_slug, webhook_url, webhook_secret_vault_ref, subscribed_events, config')
     .eq('project_id', projectId)
     .eq('is_active', true)
-    .not('webhook_url', 'is', null)
 
   if (error) {
     pluginLog.warn('Failed to read project_plugins for dispatch', { projectId, event, error: error.message })
     return
   }
 
-  const plugins = (rows ?? []) as WebhookPlugin[]
-  await Promise.all(
-    plugins
-      .filter((p) => p.subscribed_events.length === 0 || p.subscribed_events.includes('*') || p.subscribed_events.includes(event))
-      .map((p) => deliverOne(db, projectId, event, data, p)),
+  const allPlugins = (rows ?? []) as Array<WebhookPlugin & { config?: Record<string, unknown> | null }>
+  const subscribedPlugins = allPlugins.filter(
+    (p) => p.subscribed_events.length === 0 || p.subscribed_events.includes('*') || p.subscribed_events.includes(event),
   )
+
+  await Promise.all(
+    subscribedPlugins.map((p) => {
+      // Cursor Cloud Agent uses direct REST dispatch — no webhook hop needed.
+      if (p.plugin_slug === CURSOR_AGENT_SLUG && CURSOR_EVENTS.has(event)) {
+        return deliverCursorAgent(db, projectId, event, data, {
+          plugin_slug: p.plugin_slug,
+          subscribed_events: p.subscribed_events,
+          config: p.config ?? null,
+        })
+      }
+      // All other plugins use the HMAC-signed webhook path.
+      if (!p.webhook_url) return Promise.resolve()
+      return deliverOne(db, projectId, event, data, p)
+    }),
+  )
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Cursor Cloud Agent: direct REST dispatch (no intermediate webhook hop)
+// ──────────────────────────────────────────────────────────────────────────
+
+interface CursorPluginRow {
+  plugin_slug: string
+  subscribed_events: string[]
+  config: Record<string, unknown> | null
+}
+
+const CURSOR_AGENT_SLUG = 'cursor-cloud-agent'
+const CURSOR_EVENTS = new Set(['report.classified', 'qa_story.failed', 'fix.requested'])
+const CURSOR_SEVERITY_RANK: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 }
+
+async function deliverCursorAgent(
+  db: SupabaseClient,
+  projectId: string,
+  event: MushiEventName | string,
+  data: unknown,
+  plugin: CursorPluginRow,
+): Promise<void> {
+  const cfg = plugin.config ?? {}
+  const apiKey = typeof cfg.api_key_ref === 'string' ? cfg.api_key_ref : ''
+  const workspaceId = typeof cfg.workspace_id === 'string' ? cfg.workspace_id : ''
+  const model = typeof cfg.model === 'string' ? cfg.model : 'composer-2.5'
+  const autoCreatePR = cfg.auto_create_pr !== false
+  const maxIterations = typeof cfg.max_iterations === 'number' ? cfg.max_iterations : 1
+
+  if (!apiKey || !workspaceId) {
+    pluginLog.warn('Cursor plugin skipped: missing api_key_ref or workspace_id', { projectId })
+    return
+  }
+
+  // Fetch the project's GitHub repo URL so the Cursor REST API knows which
+  // codebase to work in (required: cloud.repos[].url).
+  const { data: projSettings } = await db
+    .from('project_settings')
+    .select('github_repo_url')
+    .eq('project_id', projectId)
+    .single()
+  const repoUrl = (projSettings as { github_repo_url?: string | null } | null)?.github_repo_url ?? ''
+  if (!repoUrl) {
+    pluginLog.warn('Cursor plugin skipped: github_repo_url not configured for project', {
+      projectId,
+      hint: 'Configure GitHub integration under Admin → Integrations so the agent knows which repo to fix.',
+    })
+    return
+  }
+
+  const severityThreshold =
+    typeof cfg.severity_threshold === 'string' &&
+    cfg.severity_threshold in CURSOR_SEVERITY_RANK
+      ? cfg.severity_threshold
+      : 'critical'
+
+  // Severity gate for report.classified
+  if (event === 'report.classified') {
+    const d = data as { classification?: { severity?: string } } | null
+    const rank = CURSOR_SEVERITY_RANK[d?.classification?.severity ?? ''] ?? 0
+    const minRank = CURSOR_SEVERITY_RANK[severityThreshold]!
+    if (rank < minRank) return
+  }
+
+  // Resolve API key if it's a vault ref
+  let resolvedApiKey = apiKey
+  if (apiKey.startsWith('vault://')) {
+    const vaultName = apiKey.slice('vault://'.length)
+    const { data: vaultData } = await db.rpc('vault_lookup', { secret_name: vaultName })
+    resolvedApiKey = typeof vaultData === 'string' ? vaultData : ''
+    if (!resolvedApiKey) {
+      pluginLog.warn('Cursor plugin: vault lookup failed for api_key_ref', { projectId })
+      return
+    }
+  }
+
+  // Build a minimal prompt from the event data
+  const dataObj = data as Record<string, unknown>
+  const reportId = (dataObj?.report as { id?: string })?.id ?? 'unknown'
+  const prompt = [
+    `Mushi Mushi dispatched a ${event} event for project ${projectId}.`,
+    `Report ID: ${reportId}`,
+    `Please investigate and open a draft PR with a fix. Do not refactor unrelated code.`,
+  ].join('\n')
+
+  const deliveryId = crypto.randomUUID()
+  const start = Date.now()
+  let dispatchStatus: 'ok' | 'error' = 'error'
+  let httpStatus: number | null = null
+  let agentId: string | null = null
+  let excerpt = ''
+
+  try {
+    const res = await fetch('https://api.cursor.com/v0/agents', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${resolvedApiKey}`,
+      },
+      // 30 s timeout: consistent with deliverOne; prevents a slow Cursor API
+      // response from blocking the entire plugin fanout Promise.all.
+      signal: AbortSignal.timeout(30_000),
+      body: JSON.stringify({
+        model: { id: model },
+        cloud: {
+          workspaceId,
+          repos: [{ url: repoUrl }],
+          autoCreatePR,
+          maxIterations,
+          envVars: {
+            MUSHI_PROJECT_ID: projectId,
+            MUSHI_REPORT_ID: reportId,
+            MUSHI_EVENT: event,
+          },
+        },
+        prompt,
+      }),
+    })
+    httpStatus = res.status
+    const text = await res.text().catch(() => '')
+    excerpt = text.slice(0, 512)
+    if (res.ok) {
+      const body = JSON.parse(text) as { agentId?: string; id?: string }
+      agentId = body.agentId ?? body.id ?? null
+      dispatchStatus = 'ok'
+    }
+  } catch (err) {
+    excerpt = String(err).slice(0, 512)
+  }
+
+  const durationMs = Date.now() - start
+
+  try {
+    await db.from('plugin_dispatch_log').insert({
+      delivery_id: deliveryId,
+      project_id: projectId,
+      plugin_slug: CURSOR_AGENT_SLUG,
+      event,
+      attempt: 1,
+      status: dispatchStatus,
+      http_status: httpStatus,
+      response_excerpt: agentId ? `agentId=${agentId}` : (excerpt || null),
+      duration_ms: durationMs,
+      next_retry_at: null,
+      payload_digest: await sha256Hex(JSON.stringify({ event, projectId, reportId })),
+    })
+  } catch { /* dispatch log is best-effort */ }
+
+  if (dispatchStatus === 'ok' && agentId) {
+    pluginLog.info('Cursor Cloud Agent dispatched', { projectId, event, agentId, durationMs })
+  } else {
+    pluginLog.warn('Cursor Cloud Agent dispatch failed', { projectId, event, excerpt })
+  }
 }
 
 async function deliverOne(

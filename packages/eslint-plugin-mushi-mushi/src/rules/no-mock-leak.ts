@@ -148,6 +148,14 @@ export default {
 
     return {
       ImportDeclaration(node: ImportDeclaration) {
+        // Type-only imports (`import type { … }`) are erased at compile
+        // time and never ship to production — the entire reason the
+        // rule exists is to prevent runtime mock code from shipping.
+        // The TS-extended ImportDeclaration node carries
+        // `importKind: 'type'`; @typescript-eslint/parser populates it
+        // and core ESLint doesn't, so we read it defensively.
+        const importKind = (node as { importKind?: string }).importKind
+        if (importKind === 'type') return
         const src = node.source.value
         if (typeof src !== 'string') return
         if (hosts.includes(src) || hosts.some((h) => src.startsWith(`${h}/`))) {

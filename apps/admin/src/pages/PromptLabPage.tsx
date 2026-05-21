@@ -31,9 +31,13 @@ import { EvalDatasetCard } from '../components/prompt-lab/EvalDatasetCard'
 import { FineTuningJobsCard } from '../components/prompt-lab/FineTuningJobsCard'
 import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsCard'
 import { ConfigHelp } from '../components/ConfigHelp'
+import { PromptLabStatusBanner } from '../components/prompt-lab/PromptLabStatusBanner'
+import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
 
 export function PromptLabPage() {
   const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
+  const { data: statsData } = usePageData<PromptLabStats>('/v1/admin/prompt-lab/stats')
+  const promptLabStats = statsData ?? EMPTY_PROMPT_LAB_STATS
   const [editing, setEditing] = useState<PromptVersion | null>(null)
   const [diffing, setDiffing] = useState<PromptVersion | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -234,6 +238,8 @@ export function PromptLabPage() {
           {data.prompts.length} prompts · {totalEvals} evals
         </span>
       </PageHeader>
+
+      <PromptLabStatusBanner stats={promptLabStats} />
 
       <PageHelp
         title="About Prompt Lab"

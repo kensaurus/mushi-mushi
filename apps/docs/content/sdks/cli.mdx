@@ -4,8 +4,8 @@ title: '@mushi-mushi/cli'
 
 # `@mushi-mushi/cli`
 
-Project setup, schema sync, RAG indexing, and report management from the
-terminal.
+Project setup, schema sync, RAG indexing, report management, and agentic fix
+dispatch from the terminal.
 
 ```bash
 npm install -g @mushi-mushi/cli
@@ -15,4 +15,45 @@ mushi project create
 mushi index ./src                 # build the codebase RAG index
 mushi reports list --status new
 mushi reports show rep_01HXY…
+mushi fix <reportId>              # dispatch an agentic fix
+```
+
+## `mushi fix`
+
+Dispatch an agentic fix for a classified report from the command line.
+
+```bash
+# Default agent (from project settings)
+mushi fix 00000000-0000-0000-0000-000000000123
+
+# Dispatch a Cursor Cloud Agent
+mushi fix 00000000-0000-0000-0000-000000000123 --agent cursor_cloud
+
+# Override model and wait for the run to complete
+mushi fix <reportId> --agent cursor_cloud --model composer-latest --wait
+
+# CI: fail the pipeline if the fix errors
+mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
+
+# Disable auto-PR creation
+mushi fix <reportId> --agent cursor_cloud --no-auto-pr
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--agent <name>` | Agent adapter: `cursor_cloud`, `claude_code`, `codex`, `mcp` |
+| `--model <slug>` | Model override for `cursor_cloud` (e.g. `composer-latest`) |
+| `--no-auto-pr` | Disable automatic PR creation for this dispatch |
+| `--wait` | Block until the run terminates; exits non-zero on failure |
+
+### Output
+
+When not `--wait`, the command streams `dispatch.start` and `dispatch.ok` events to stdout (JSON when piped, human-readable in a TTY). With `--wait`, it also streams `fix.status` poll events until the run reaches a terminal state.
+
+```json
+{"type":"dispatch.start","reportId":"…","agent":"cursor_cloud","model":null}
+{"type":"dispatch.ok","fixId":"…","status":"running","agentId":"bc-…","prUrl":null}
+{"type":"fix.status","fixId":"…","status":"completed","prUrl":"https://github.com/…"}
 ```

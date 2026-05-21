@@ -47,6 +47,15 @@ export interface RetryOptions {
    * logging. `attempt` is 1-indexed (first retry = 1).
    */
   onRetry?: (attempt: number, delayMs: number, error: unknown) => void
+  /**
+   * AbortSignal that interrupts the retry loop between attempts. When
+   * the signal aborts, `withRetry` rejects with the signal's `.reason`
+   * (a `DOMException` named `AbortError` by default) instead of waiting
+   * out the back-off. Plugin authors should plumb the signal from the
+   * inbound `dispatchPluginEvent` call so a SIGTERM cancels in-flight
+   * webhooks immediately rather than after the 30-second back-off cap.
+   */
+  signal?: AbortSignal
 }
 
 /**
@@ -107,10 +116,16 @@ export async function withRetry<T>(
   const maxAttempts = opts.maxAttempts ?? 4
   const baseDelayMs = opts.baseDelayMs ?? 1_000
   const maxDelayMs  = opts.maxDelayMs  ?? 10_000
+  const signal      = opts.signal
 
   let lastError: unknown
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Honour signal between attempts so a late SIGTERM lands at most
+    // one in-flight request later — never a full back-off + retry.
+    if (signal?.aborted) {
+      throw signal.reason ?? new Error('aborted')
+    }
     try {
       return await fn()
     } catch (err) {
@@ -141,7 +156,17 @@ export async function withRetry<T>(
       }
 
       opts.onRetry?.(attempt + 1, delayMs, err)
-      await sleep(delayMs)
+      // Abortable sleep: the moment `signal` aborts, fail with the
+      // signal's reason so the caller sees the structured cause
+      // (e.g. "SIGTERM") rather than node:timers' generic AbortError.
+      try {
+        await sleep(delayMs, undefined, { signal })
+      } catch (sleepErr) {
+        if (signal?.aborted) {
+          throw signal.reason ?? sleepErr
+        }
+        throw sleepErr
+      }
     }
   }
 
