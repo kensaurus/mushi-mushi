@@ -47,6 +47,10 @@ interface Props {
   onCopyLink: (row: ReportRow) => void
   onDismiss: (row: ReportRow) => void
   onDispatchFix: (row: ReportRow) => void
+  onDispatchCursor?: (row: ReportRow) => void
+  onDispatchClaude?: (row: ReportRow) => void
+  cursorEnabled?: boolean
+  claudeEnabled?: boolean
 }
 
 interface DisplayRow {
@@ -84,6 +88,10 @@ export function ReportsTable({
   onCopyLink,
   onDismiss,
   onDispatchFix,
+  onDispatchCursor,
+  onDispatchClaude,
+  cursorEnabled = false,
+  claudeEnabled = false,
 }: Props) {
   // Build the display list: when group-collapse is on, sibling rows that
   // share a report_group_id collapse behind their canonical (newest) row.
@@ -216,6 +224,10 @@ export function ReportsTable({
                 onCopyLink={() => onCopyLink(d.row)}
                 onDismiss={() => onDismiss(d.row)}
                 onDispatchFix={() => onDispatchFix(d.row)}
+                onDispatchCursor={onDispatchCursor ? () => onDispatchCursor(d.row) : undefined}
+                onDispatchClaude={onDispatchClaude ? () => onDispatchClaude(d.row) : undefined}
+                cursorEnabled={cursorEnabled}
+                claudeEnabled={claudeEnabled}
               />
             ))}
           </tbody>

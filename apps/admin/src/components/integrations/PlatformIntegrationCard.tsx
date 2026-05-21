@@ -1,8 +1,9 @@
 /**
  * FILE: apps/admin/src/components/integrations/PlatformIntegrationCard.tsx
- * PURPOSE: One Sentry/Langfuse/GitHub card. Pure presentation: shows status
- *          pill, last probe + sparkline, edit form. Mutations bubble up to
- *          the page via callbacks.
+ * PURPOSE: One Sentry/Langfuse/GitHub/Cursor card. Pure presentation: shows
+ *          service icon, status-coded left border, last probe + sparkline,
+ *          external link to the service, and the edit form. Mutations bubble
+ *          up to the page via callbacks.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -12,7 +13,10 @@ import { resolveValidator } from '../../lib/validators'
 import { isStale } from '../../lib/staleness'
 import { HealthPill } from '../charts'
 import { HealthSparkline } from './HealthSparkline'
-import { IconPlay, IconPencil } from '../icons'
+import { IconPlay, IconPencil, IconExternalLink, IconAlertTriangle } from '../icons'
+import { ServiceFavicon } from './ServiceFavicon'
+import { ClaudeCodeSetupPanel } from './ClaudeCodeSetupPanel'
+import { IntegrationSetupGuide } from './IntegrationSetupGuide'
 import { PLATFORM_STATUS_MAP, type HealthRow, type PlatformDef } from './types'
 
 /**
@@ -58,6 +62,17 @@ function useSuccessPulse(probe: HealthRow | undefined): string {
   return pulsing ? 'text-ok motion-safe:animate-mushi-success-pulse rounded-md' : ''
 }
 
+/** Maps probe/config status to a left-border color class on the card. */
+function statusBorderClass(status: HealthRow['status'], requiredOk: boolean): string {
+  if (!requiredOk) return 'border-l-2 border-l-edge'
+  switch (status) {
+    case 'ok': return 'border-l-2 border-l-ok/70'
+    case 'degraded': return 'border-l-2 border-l-warn/80'
+    case 'down': return 'border-l-2 border-l-danger/80'
+    default: return 'border-l-2 border-l-edge'
+  }
+}
+
 interface Props {
   def: PlatformDef
   config: Record<string, unknown>
@@ -92,104 +107,169 @@ export function PlatformIntegrationCard({
   const requiredOk = def.fields.filter((f) => f.required).every((f) => config[f.name] != null)
   const status: HealthRow['status'] = !requiredOk ? 'unknown' : (latestProbe?.status ?? 'unknown')
   const pulseClass = useSuccessPulse(latestProbe)
+  const isDown = requiredOk && (latestProbe?.status === 'down')
+  const isDegraded = requiredOk && (latestProbe?.status === 'degraded')
 
   return (
-    <Card className={`p-3 ${pulseClass}`}>
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm font-semibold text-fg">{def.label}</h3>
-            <HealthPill status={PLATFORM_STATUS_MAP[status]} />
-            {!requiredOk && (
-              <Badge className="bg-warn/10 text-warn border border-warn/30">Not configured</Badge>
+    <Card className={`p-0 overflow-hidden ${pulseClass} ${statusBorderClass(status, requiredOk)}`}>
+      <div className="px-3 pt-3 pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          {/* Left: icon + label + status chips */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Service brand favicon — real brand icon via Google's favicon CDN */}
+              <ServiceFavicon
+                domain={def.domain}
+                label={def.label}
+                FallbackIcon={def.Icon}
+                colorClass={def.color}
+              />
+              <h3 className="text-sm font-semibold text-fg">{def.label}</h3>
+              <HealthPill status={PLATFORM_STATUS_MAP[status]} />
+              {!requiredOk && (
+                <Badge className="bg-warn/10 text-warn border border-warn/30">Not configured</Badge>
+              )}
+              {requiredOk && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
+                <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
+                  <Badge className="bg-warn/10 text-warn border border-warn/30">Stale</Badge>
+                </Tooltip>
+              )}
+            </div>
+
+            {/* Down/degraded error banner — high-signal inline alert */}
+            {(isDown || isDegraded) && latestProbe?.message && (
+              <div className={`mt-1.5 flex items-start gap-1.5 rounded-sm px-2 py-1 text-2xs ${isDown ? 'bg-danger/8 border border-danger/20 text-danger' : 'bg-warn/8 border border-warn/20 text-warn'}`}>
+                <IconAlertTriangle size={11} className="mt-0.5 shrink-0" />
+                <span className="leading-snug font-mono truncate">{latestProbe.message}</span>
+              </div>
             )}
-            {requiredOk && latestProbe?.checked_at && isStale(latestProbe.checked_at) && (
-              <Tooltip content="Auto-probe runs every 15 min. Click Test to refresh now.">
-                <Badge className="bg-warn/10 text-warn border border-warn/30">Stale</Badge>
-              </Tooltip>
+
+            <p className="text-2xs text-fg-secondary mt-1.5 pl-2 border-l border-brand/20 leading-snug">{def.whyItMatters}</p>
+
+            {!requiredOk && def.setupSteps && def.setupSteps.length > 0 && (
+              <IntegrationSetupGuide
+                label={def.label}
+                steps={def.setupSteps}
+                consoleUrl={def.consoleUrl}
+                consoleLabel={def.consoleLabel}
+              />
+            )}
+
+            {!requiredOk && def.capabilitiesOnceConnected.length > 0 && (
+              <ul className="mt-1.5 space-y-1 text-2xs">
+                {def.capabilitiesOnceConnected.map((capability) => (
+                  <li key={capability} className="flex gap-1.5 items-baseline">
+                    <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
+                    <span className="text-fg-secondary leading-snug">{capability}</span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-          <p className="text-2xs text-fg-secondary mt-1 pl-2 border-l-2 border-brand/30 leading-snug">{def.whyItMatters}</p>
-          {!requiredOk && def.capabilitiesOnceConnected.length > 0 && (
-            <ul className="mt-1.5 space-y-1 text-2xs">
-              {def.capabilitiesOnceConnected.map((capability) => (
-                <li key={capability} className="flex gap-1.5 items-baseline">
-                  <span aria-hidden="true" className="shrink-0 text-ok font-semibold leading-tight">✓</span>
-                  <span className="text-fg-secondary leading-snug">{capability}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {requiredOk && testing && (
-            <ResultChip tone="running">Testing…</ResultChip>
-          )}
-          {requiredOk && !testing && latestProbe && (
-            <ResultChip
-              tone={latestProbe.status === 'ok' ? 'success' : latestProbe.status === 'degraded' ? 'info' : 'error'}
-              at={latestProbe.checked_at}
-            >
-              {latestProbe.status === 'ok'
-                ? 'Connection OK'
-                : latestProbe.status === 'degraded'
-                  ? 'Degraded'
-                  : latestProbe.message ?? 'Failed'}
-            </ResultChip>
-          )}
-          {requiredOk && (
-            <Tooltip content={testing ? 'Testing…' : 'Test connection'}>
-              <Btn
-                variant="ghost"
-                onClick={onTest}
-                disabled={testing}
-                loading={testing}
-                aria-label="Test connection"
-                className="px-2"
+
+          {/* Right: probe chip + action buttons */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {requiredOk && testing && (
+              <ResultChip tone="running">Testing…</ResultChip>
+            )}
+            {requiredOk && !testing && latestProbe && (
+              <ResultChip
+                tone={latestProbe.status === 'ok' ? 'success' : latestProbe.status === 'degraded' ? 'info' : 'error'}
+                at={latestProbe.checked_at}
               >
-                <IconPlay size={14} />
-              </Btn>
-            </Tooltip>
-          )}
-          {!isEditing && (
-            <Tooltip content={requiredOk ? 'Edit' : 'Configure'}>
-              <Btn
-                variant={requiredOk ? 'ghost' : 'primary'}
-                onClick={onStartEdit}
-                aria-label={requiredOk ? 'Edit integration' : 'Configure integration'}
-                className={requiredOk ? 'px-2' : undefined}
+                {latestProbe.status === 'ok'
+                  ? 'Connection OK'
+                  : latestProbe.status === 'degraded'
+                    ? 'Degraded'
+                    : latestProbe.message ?? 'Failed'}
+              </ResultChip>
+            )}
+
+            {/* External link to the service */}
+            <Tooltip content={`Open ${def.label}`}>
+              <a
+                href={def.externalUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label={`Open ${def.label} in a new tab`}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-sm text-fg-faint hover:text-fg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
               >
-                {requiredOk ? <IconPencil size={14} /> : 'Configure'}
-              </Btn>
+                <IconExternalLink size={13} />
+              </a>
             </Tooltip>
-          )}
-          {isEditing && (
-            <Btn variant="ghost" onClick={onCancelEdit}>
-              Cancel
-            </Btn>
-          )}
+
+            {requiredOk && (
+              <Tooltip content={testing ? 'Testing…' : 'Test connection'}>
+                <Btn
+                  variant="ghost"
+                  onClick={onTest}
+                  disabled={testing}
+                  loading={testing}
+                  aria-label="Test connection"
+                  className="px-2"
+                >
+                  <IconPlay size={14} />
+                </Btn>
+              </Tooltip>
+            )}
+            {!isEditing && (
+              <Tooltip content={requiredOk ? 'Edit credentials' : 'Configure integration'}>
+                <Btn
+                  variant={requiredOk ? 'ghost' : 'primary'}
+                  onClick={onStartEdit}
+                  aria-label={requiredOk ? 'Edit integration' : 'Configure integration'}
+                  className={requiredOk ? 'px-2' : undefined}
+                >
+                  {requiredOk ? <IconPencil size={14} /> : 'Configure'}
+                </Btn>
+              </Tooltip>
+            )}
+            {isEditing && (
+              <Btn variant="ghost" onClick={onCancelEdit}>
+                Cancel
+              </Btn>
+            )}
+          </div>
         </div>
+
+        {/* Probe metadata + sparkline */}
+        {(latestProbe || sparkline.length > 0) && (
+          <div className="mt-2 flex items-center gap-3 text-2xs text-fg-faint">
+            {latestProbe?.checked_at && (
+              <span>Last probe <RelativeTime value={latestProbe.checked_at} /></span>
+            )}
+            {latestProbe?.latency_ms != null && (
+              <span className="font-mono">{latestProbe.latency_ms}ms</span>
+            )}
+            {sparkline.length > 1 && <HealthSparkline rows={sparkline.slice(0, 14)} />}
+          </div>
+        )}
       </div>
 
-      {(latestProbe || sparkline.length > 0) && (
-        <div className="mt-2 flex items-center gap-3 text-2xs text-fg-muted">
-          {latestProbe?.checked_at && (
-            <span>Last probe <RelativeTime value={latestProbe.checked_at} /></span>
-          )}
-          {latestProbe?.latency_ms != null && (
-            <span className="font-mono">{latestProbe.latency_ms}ms</span>
-          )}
-          {latestProbe?.message && (
-            <span className="font-mono truncate" title={latestProbe.message}>
-              {latestProbe.message}
-            </span>
-          )}
-          {sparkline.length > 1 && <HealthSparkline rows={sparkline.slice(0, 14)} />}
-        </div>
-      )}
-
       {isEditing && (
-        <div className="mt-3 space-y-2 border-t border-edge-subtle pt-3">
+        <div className="mt-0 space-y-2 border-t border-edge-subtle bg-surface-raised/40 px-3 pt-3 pb-3">
+          {def.setupSteps && def.setupSteps.length > 0 && (
+            <IntegrationSetupGuide
+              label={def.label}
+              steps={def.setupSteps}
+              consoleUrl={def.consoleUrl}
+              consoleLabel={def.consoleLabel}
+              compact
+            />
+          )}
+          {def.docsUrl && (
+            <p className="text-2xs text-fg-faint">
+              Need a token?{' '}
+              <a
+                href={def.docsUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="text-brand hover:text-brand-hover underline underline-offset-2"
+              >
+                {def.label} docs <IconExternalLink size={10} className="inline -mt-0.5" />
+              </a>
+            </p>
+          )}
           {def.fields.map((field) => (
             <div key={field.name}>
               <label className="text-2xs text-fg-muted mb-0.5 flex items-center gap-1">
@@ -205,6 +285,7 @@ export function PlatformIntegrationCard({
                 value={draft[field.name] ?? ''}
                 onChange={(e) => onChangeField(field.name, e.target.value)}
                 validate={resolveValidator(field.validator)}
+                autoComplete={field.type === 'password' ? 'new-password' : 'off'}
               />
               <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
             </div>
@@ -216,6 +297,10 @@ export function PlatformIntegrationCard({
             <Btn variant="ghost" onClick={onCancelEdit}>Cancel</Btn>
           </div>
         </div>
+      )}
+
+      {def.kind === 'claude_code_agent' && !isEditing && (
+        <ClaudeCodeSetupPanel configured={requiredOk} />
       )}
     </Card>
   )

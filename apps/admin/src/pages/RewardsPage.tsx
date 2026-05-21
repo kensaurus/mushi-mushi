@@ -50,6 +50,29 @@ import { Drawer } from '../components/Drawer'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { RewardsStatusBanner } from '../components/rewards/RewardsStatusBanner'
 import { EMPTY_REWARDS_STATS, type RewardsStats, type RewardsTabId } from '../components/rewards/types'
+import {
+  contributors30dDetail,
+  contributors30dTooltip,
+  overviewContributorsDetail,
+  overviewContributorsTooltip,
+  overviewPendingLiabilityDetail,
+  overviewPendingLiabilityTooltip,
+  overviewPointsDetail,
+  overviewPointsTooltip,
+  overviewTierHoldersDetail,
+  overviewTierHoldersTooltip,
+  pendingPayoutDetail,
+  pendingPayoutTooltip,
+  points30dDetail,
+  points30dTooltip,
+  questsDetail,
+  questsTooltip,
+  rulesTiersDetail,
+  rulesTiersTooltip,
+  webhooksDetail,
+  webhooksTooltip,
+} from '../lib/statTooltips/rewards'
+import { rewardsLinks } from '../lib/statCardLinks'
 import { usePageCopy } from '../lib/copy'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
@@ -187,23 +210,31 @@ function OverviewTab() {
         <StatCard
           label="Active contributors (30d)"
           value={data?.active_contributors_30d ?? 0}
-          hint="Distinct users who earned at least 1 point in the last 30 days."
+          tooltip={overviewContributorsTooltip(data?.active_contributors_30d ?? 0)}
+          detail={overviewContributorsDetail()}
+          to={rewardsLinks.contributors30d}
         />
         <StatCard
           label="Points awarded (30d)"
           value={(data?.points_awarded_30d ?? 0).toLocaleString()}
-          hint="Total points credited to all users in the last 30 days."
+          tooltip={overviewPointsTooltip(data?.points_awarded_30d ?? 0)}
+          detail={overviewPointsDetail()}
+          to={rewardsLinks.points30d}
         />
         <StatCard
           label="Tier holders"
           value={totalHolders}
-          hint="Users who have crossed a tier threshold and hold a non-free rank."
+          tooltip={overviewTierHoldersTooltip(totalHolders)}
+          detail={overviewTierHoldersDetail()}
+          to={rewardsLinks.rulesTiers}
         />
         <StatCard
           label="Pending liability"
           value={`$${pendingLiability.toFixed(2)}`}
           accent={pendingLiability > 0 ? 'text-warn' : undefined}
-          hint="USD in pending monetary payouts awaiting the monthly Stripe aggregator run."
+          tooltip={overviewPendingLiabilityTooltip(pendingLiability)}
+          detail={overviewPendingLiabilityDetail()}
+          to={rewardsLinks.pendingPayout}
         />
       </div>
 
@@ -2283,25 +2314,33 @@ export function RewardsPage() {
             label="Contributors · 30d"
             value={stats.activeContributors30d}
             accent={stats.activeContributors30d > 0 ? 'text-ok' : undefined}
-            hint="Distinct users who earned points"
+            tooltip={contributors30dTooltip(stats)}
+            detail={contributors30dDetail()}
+            to={rewardsLinks.contributors30d}
           />
           <StatCard
             label="Points · 30d"
             value={stats.pointsAwarded30d.toLocaleString()}
             accent={stats.pointsAwarded30d > 0 ? 'text-brand' : undefined}
-            hint={`${stats.activity24hTotal} SDK events in 24h`}
+            tooltip={points30dTooltip(stats)}
+            detail={points30dDetail(stats)}
+            to={rewardsLinks.points30d}
           />
           <StatCard
             label="Rules · tiers"
             value={`${stats.enabledRulesCount} · ${stats.enabledTiersCount}`}
             accent={stats.enabledRulesCount > 0 ? 'text-ok' : 'text-warn'}
-            hint="Enabled activity rules and ladder steps"
+            tooltip={rulesTiersTooltip(stats)}
+            detail={rulesTiersDetail()}
+            to={rewardsLinks.rulesTiers}
           />
           <StatCard
             label="Quests"
             value={stats.enabledQuestsCount}
             accent={stats.enabledQuestsCount > 0 ? 'text-info' : undefined}
-            hint="Active multi-step goals"
+            tooltip={questsTooltip(stats)}
+            detail={questsDetail()}
+            to={rewardsLinks.quests}
           />
           <StatCard
             label="Webhooks"
@@ -2319,17 +2358,17 @@ export function RewardsPage() {
                   ? 'text-ok'
                   : undefined
             }
-            hint="Tier-change delivery to host app"
+            tooltip={webhooksTooltip(stats)}
+            detail={webhooksDetail(stats)}
+            to={rewardsLinks.webhooks}
           />
           <StatCard
             label="Pending payout"
             value={`$${stats.pendingPayoutLiabilityUsd.toFixed(2)}`}
             accent={stats.pendingPayoutLiabilityUsd > 0 ? 'text-warn' : undefined}
-            hint={
-              stats.rejectionRatePct24h > 0
-                ? `${stats.rejectionRatePct24h}% rejected in 24h`
-                : 'USD awaiting monthly run'
-            }
+            tooltip={pendingPayoutTooltip(stats)}
+            detail={pendingPayoutDetail(stats)}
+            to={rewardsLinks.pendingPayout}
           />
         </div>
       </Section>

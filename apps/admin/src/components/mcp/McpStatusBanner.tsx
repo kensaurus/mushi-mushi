@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { McpStats, McpTabId } from './types'
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   onTab?: (tab: McpTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
 function tabFromPath(path: string | null): McpTabId | null {
@@ -21,7 +23,9 @@ function tabFromPath(path: string | null): McpTabId | null {
   return null
 }
 
-export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function McpStatusBanner({ stats, onTab, onRefresh, refreshing, plainBanner = false }: Props) {
+  const copy = usePageCopy('/mcp')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
   const priority = stats.topPriority
   const label = stats.topPriorityLabel
@@ -47,7 +51,9 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) 
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">MCP key talking to a different backend</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner ? 'MCP key hits the wrong server' : 'MCP key talking to a different backend'}
+            </p>
             <p className="text-2xs text-fg-muted">
               {label ??
                 `Last heartbeat hit ${stats.lastSeenEndpointHost} — expected ${stats.expectedEndpointHost}. Check MUSHI_API_ENDPOINT in your snippet.`}
@@ -55,7 +61,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) 
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('setup')}>Fix snippet</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('setup')}>{actions.setup ?? 'Fix snippet'}</Btn>
         ) : null}
       </div>
     )
@@ -77,7 +83,7 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) 
           </div>
         </div>
         <Link to="/projects">
-          <Btn size="sm" variant="primary">Mint MCP key</Btn>
+          <Btn size="sm" variant="primary">{actions.mint ?? 'Mint MCP key'}</Btn>
         </Link>
       </div>
     )
@@ -89,12 +95,14 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) 
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No MCP keys for {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No MCP keys yet' : `No MCP keys for ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
         <Link to="/projects">
-          <Btn size="sm" variant="primary">Generate key</Btn>
+          <Btn size="sm" variant="primary">{actions.generate ?? 'Generate key'}</Btn>
         </Link>
       </div>
     )
@@ -113,10 +121,10 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) 
           </div>
         </div>
         {onTab && actionTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab(actionTab)}>Paste snippet</Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab(actionTab)}>{actions.setup ?? 'Paste snippet'}</Btn>
         ) : (
           <Link to="/mcp?tab=setup">
-            <Btn size="sm" variant="primary">Paste snippet</Btn>
+            <Btn size="sm" variant="primary">{actions.setup ?? 'Paste snippet'}</Btn>
           </Link>
         )}
       </div>
@@ -128,16 +136,18 @@ export function McpStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) 
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Agent access live on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Your editor can talk to Mushi' : `Agent access live on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{label}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('catalog')}>View catalog</Btn>
+        <Btn size="sm" variant="ghost" onClick={() => onTab('catalog')}>{actions.catalog ?? 'View catalog'}</Btn>
       ) : null}
     </div>
   )

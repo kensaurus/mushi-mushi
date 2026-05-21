@@ -21,12 +21,13 @@ Each row in the list shows:
 | Column | What it is |
 | ------ | ---------- |
 | **Status** | `queued` · `running` · `completed` · `failed` · `cancelled` |
-| **Agent type** | `McpFixAgent` (Cursor / Claude Code) or `RestFixWorkerAgent` (edge function) |
-| **Sandbox** | `e2b` (default cloud), `modal`, `local`, or `none` |
-| **Branch / PR** | Link to the GitHub PR, or the branch name if the PR is still opening |
+| **Agent type** | `McpFixAgent` (Cursor / Claude Code), `RestFixWorkerAgent` (edge function), or `cursor_cloud` (Cursor Cloud Agent) |
+| **Sandbox** | `e2b` (default cloud), `modal`, `local`, or `none`. Cursor Cloud runs use `none` — the agent runs in Cursor's managed cloud env. |
+| **Branch / PR** | Link to the GitHub PR. For Cursor runs, this is the Cursor-signed draft PR. |
 | **Files / lines** | Scope of the diff — files touched and net line delta |
 | **Spec warnings** | Yellow pill if `validateAgainstSpec()` flagged issues before the PR opened |
 | **AI summary** | One-sentence description of what the agent changed and why |
+| **Cursor badge** | ◆ chip (visible on `cursor_cloud` rows) — links directly to the agent run transcript in Cursor |
 
 Coordination rows have a **▶ Expand** toggle that reveals the per-repo child
 attempts grouped underneath.
@@ -74,13 +75,23 @@ before the PR opens.
 
 ---
 
+## Cursor Cloud Agent runs
+
+When `agent = cursor_cloud`, the fix row shows two additional UI elements:
+
+- **Cursor badge** — a ◆ `bc-…` chip that links to the agent run transcript in Cursor's web interface.
+- **Artifact gallery** — screenshots, videos, and log files the agent produced during the run. These are fetched via `agent.listArtifacts()` after the run terminates.
+
+The artifact gallery is visible in the expanded fix detail when artifacts are present.
+
 ## Dispatching a fix
 
-You can dispatch a fix from three places:
+You can dispatch a fix from four places:
 
 1. **Report detail** → "Dispatch fix" button (single-repo or auto multi-repo).
-2. **Fixes list** → "New fix" button with a report picker.
-3. **MCP / A2A** — `dispatch_fix` tool or `POST /v1/a2a/tasks`.
+2. **Reports list** → kebab menu → "Send to Cursor agent" (dispatches `cursor_cloud` directly).
+3. **Fixes list** → "New fix" button with a report picker.
+4. **MCP / A2A / CLI** — `dispatch_fix` tool (`agent=cursor_cloud`), `POST /v1/a2a/tasks`, or `mushi fix <reportId> --agent cursor_cloud`.
 
 All three paths produce the same `fix_dispatch_jobs` row and emit the same
 `fix.dispatched` webhook to subscribed plugins.
@@ -91,8 +102,10 @@ All three paths produce the same `fix_dispatch_jobs` row and emit the same
 
 | Event | When |
 | ----- | ---- |
-| `fix.dispatched` | Immediately after the dispatch row is created |
-| `fix.applied` | Fix completed and PR is open |
+| `fix.requested` | Immediately after a fix dispatch is requested (pre-agent launch) |
+| `fix.dispatched` | Immediately after the dispatch row is created and agent has started |
+| `fix.proposed` | Orchestrator opens a draft PR (Cursor or standard agent) |
+| `fix.applied` | Fix completed and PR is merged |
 | `fix.failed` | Orchestrator exhausted retries |
 | `fix.coordination.succeeded` | All child PRs in a multi-repo fix are open |
 

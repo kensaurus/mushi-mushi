@@ -1,5 +1,30 @@
 # @mushi-mushi/svelte
 
+## 0.9.0
+
+### Minor Changes
+
+- 0c66aa9: API-surface and SvelteKit `handleError` integration.
+  - `MushiConfig` is now re-exported from `@mushi-mushi/core`.
+  - `initMushi` returns `null` on the server so SvelteKit SSR is safe.
+  - New `mushiHandleError` exports a SvelteKit `handleError` server-hook
+    adapter that captures the error on Mushi and optionally formats
+    `App.Error` for the renderer:
+
+    ```ts
+    // src/hooks.server.ts
+    import { mushiHandleError } from '@mushi-mushi/svelte';
+    export const handleError = mushiHandleError({
+      format: (err) => ({ message: 'Something broke; we logged it.' }),
+    });
+    ```
+
+### Patch Changes
+
+- Updated dependencies
+  - @mushi-mushi/core@1.5.0
+  - @mushi-mushi/web@1.5.0
+
 ## 0.8.4
 
 ### Patch Changes

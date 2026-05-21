@@ -668,6 +668,7 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | [`eslint-plugin-mushi-mushi`](./packages/eslint-plugin-mushi-mushi)      | **v2 gate rules** — `no-dead-handler` (empty `onClick` etc.) and `no-mock-leak` (faker / "John Doe" arrays in non-test paths). Ships a `recommended` preset                                                                                                                                |
 | [`@mushi-mushi/inventory-auth-runner`](./packages/inventory-auth-runner) | **v2 helper** — `npx mushi-mushi-auth refresh` runs the `inventory.yaml` `auth.scripted` Playwright block and seeds the resulting cookies into `project_settings` so the crawler + synthetic monitor can hit auth-gated routes                                                             |
 | [`@mushi-mushi/plugin-sdk`](./packages/plugin-sdk)                       | Build third-party plugins — signed webhook verification, REST callback, retry + validate helpers                                                                                                                                                                                           |
+| [`@mushi-mushi/plugin-cursor-cloud`](./packages/plugin-cursor-cloud)     | **Cursor Cloud Agent plugin** — when a critical report is classified, dispatches a Cursor Cloud Agent that opens a signed draft PR automatically. Installs from the Marketplace. See [Cursor Cloud Agent integration](#cursor-cloud-agent) below.                                           |
 | [`@mushi-mushi/plugin-jira`](./packages/plugin-jira)                     | Bidirectional Mushi ↔ Jira Cloud sync                                                                                                                                                                                                                                                      |
 | [`@mushi-mushi/plugin-slack-app`](./packages/plugin-slack-app)           | First-class Slack app — `/mushi` slash command                                                                                                                                                                                                                                             |
 | [`@mushi-mushi/plugin-linear`](./packages/plugin-linear)                 | Create + sync Linear issues                                                                                                                                                                                                                                                                |
@@ -685,6 +686,53 @@ Most developers only install **one** SDK package — `npx mushi-mushi` picks the
 | `@mushi-mushi/verify` (BSL 1.1)                                          | Playwright fix verification — screenshot visual diff + step interpreter                                                                                                                                                                                                                    |
 
 </details>
+
+---
+
+## Cursor Cloud Agent
+
+<a name="cursor-cloud-agent"></a>
+
+Mushi integrates with [Cursor Cloud Agents](https://cursor.com/docs/cloud-agent) to close the loop automatically: when a critical report is classified, a Cursor agent spins up, opens a draft PR, and posts the link back into the Mushi console — all without a human in the loop.
+
+### Two ways to activate
+
+| Path | When to use | How it works |
+|------|-------------|-------------|
+| **Marketplace plugin** (Path A) | Opt-in per project, any agent value | Install _Cursor Cloud Agent_ from the Marketplace → Admin → Integrations, supply your API key + workspace ID. On `report.classified` / `fix.requested` / `qa_story.failed`, Mushi calls the Cursor REST API directly. Works from Deno edge functions with no Node dependency. |
+| **`autofix_agent=cursor_cloud`** (Path B) | Project-wide default, replaces Claude Code / Codex for all fixes | Set `autofix_agent` to `cursor_cloud` in Admin → Settings → Autofix. Uses `@cursor/sdk` in the Node orchestrator, waits for the run, persists the PR URL and artifacts in the Mushi DB. |
+
+### MCP dispatch
+
+```bash
+# Via MCP tool from any connected agent (Cursor, Claude Code, etc.)
+dispatch_fix --reportId <uuid> --agent cursor_cloud --cursorModel composer-latest
+```
+
+### CLI dispatch
+
+```bash
+# Dispatch and stream events to stdout
+mushi fix <reportId> --agent cursor_cloud --model composer-2.5 --wait
+
+# CI: fail the pipeline if the fix errors
+mushi fix $REPORT_ID --agent cursor_cloud --wait && echo "Fix PR opened"
+```
+
+### UI surface
+
+- **Admin → Integrations → Platform** — Cursor Cloud card with API key vault storage.
+- **Admin → Marketplace** — install the `cursor-cloud-agent` plugin with per-event subscription control.
+- **Fix detail page** — `CursorAgentBadge` links directly to the agent run in Cursor, and `CursorArtifactsGallery` renders screenshots / videos produced by the agent.
+- **Reports list** — kebab menu → _Send to Cursor agent_ for manual one-off dispatch.
+
+### Database columns added (migration `20260521000000_cursor_cloud_agent`)
+
+| Table | Column | Purpose |
+|-------|--------|---------|
+| `project_settings` | `cursor_api_key_ref` | Vault reference (never raw key) |
+| `project_settings` | `cursor_workspace_id`, `cursor_default_model`, `cursor_auto_create_pr`, `cursor_max_iterations` | Per-project defaults |
+| `fix_attempts` | `cursor_agent_id`, `cursor_run_id`, `cursor_artifacts` | Run metadata for the FixCard gallery |
 
 ---
 

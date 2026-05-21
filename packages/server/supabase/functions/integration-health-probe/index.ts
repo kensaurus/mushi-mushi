@@ -43,6 +43,8 @@ interface PlatformSettingsRow {
   langfuse_secret_key_ref: string | null
   github_repo_url: string | null
   github_installation_token_ref: string | null
+  claude_api_key_ref: string | null
+  cursor_api_key_ref: string | null
 }
 
 interface RoutingRow {
@@ -77,6 +79,14 @@ function hasGithub(s: PlatformSettingsRow): boolean {
   return !!(s.github_repo_url && s.github_installation_token_ref)
 }
 
+function hasClaudeCodeAgent(s: PlatformSettingsRow): boolean {
+  return !!s.claude_api_key_ref
+}
+
+function hasCursorCloud(s: PlatformSettingsRow): boolean {
+  return !!s.cursor_api_key_ref
+}
+
 // Map project_integrations.integration_type → probe kind.
 // 'github' in routing is stored as 'github' but probed as 'github_issues'
 // to distinguish it from the platform GitHub (code-repo) integration.
@@ -106,7 +116,7 @@ async function handler(req: Request): Promise<Response> {
     const { data: settingsRows, error: settingsErr } = await db
       .from('project_settings')
       .select(
-        'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref',
+        'project_id, sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref',
       )
     if (settingsErr) throw new Error(`project_settings load failed: ${settingsErr.message}`)
     const allSettings = (settingsRows ?? []) as PlatformSettingsRow[]
@@ -134,6 +144,12 @@ async function handler(req: Request): Promise<Response> {
       if (hasSentry(s)) tasks.push({ projectId: s.project_id, kind: 'sentry', settings: s, routingConfig: {} })
       if (hasLangfuse(s)) tasks.push({ projectId: s.project_id, kind: 'langfuse', settings: s, routingConfig: {} })
       if (hasGithub(s)) tasks.push({ projectId: s.project_id, kind: 'github', settings: s, routingConfig: {} })
+      if (hasClaudeCodeAgent(s)) {
+        tasks.push({ projectId: s.project_id, kind: 'claude_code_agent', settings: s, routingConfig: {} })
+      }
+      if (hasCursorCloud(s)) {
+        tasks.push({ projectId: s.project_id, kind: 'cursor_cloud', settings: s, routingConfig: {} })
+      }
     }
 
     for (const r of allRouting) {

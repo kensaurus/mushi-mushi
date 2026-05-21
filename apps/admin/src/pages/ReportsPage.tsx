@@ -31,6 +31,7 @@ import {
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { BulkBar } from '../components/reports/BulkBar'
 import { usePageCopy } from '../lib/copy'
+import { useReportsUx, resolveQuickReportsTab } from '../lib/reportsModeUx'
 import { HeroSearch } from '../components/illustrations/HeroIllustrations'
 import { HelpOverlay } from '../components/reports/HelpOverlay'
 import { ReportsFilterBar, type ContextChip } from '../components/reports/ReportsFilterBar'
@@ -45,7 +46,19 @@ import { DogfoodNarrativeBanner } from '../components/DogfoodNarrativeBanner'
 import { SdkConnectivityEmptyState } from '../components/SdkHealthSummary'
 import { ReportsStatusBanner } from '../components/reports/ReportsStatusBanner'
 import { EMPTY_REPORTS_STATS, type ReportsStats, type ReportsTabId } from '../components/reports/ReportsStatsTypes'
+import {
+  critical14dDetail,
+  critical14dTooltip,
+  dismissed14dDetail,
+  dismissed14dTooltip,
+  total14dDetail,
+  total14dTooltip,
+  untriagedDetail,
+  untriagedTooltip,
+} from '../lib/statTooltips/reports'
+import { reportsLinks } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
+import type { PlatformResponse } from '../components/integrations/types'
 
 const REPORTS_TABS: Array<{ id: ReportsTabId; label: string; description: string }> = [
   {
@@ -79,6 +92,7 @@ export function ReportsPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/reports')
+  const ux = useReportsUx()
 
   const tabParam = searchParams.get('tab')
   const activeTab = resolveReportsTab(tabParam)
@@ -94,6 +108,12 @@ export function ReportsPage() {
   } = usePageData<ReportsStats>('/v1/admin/reports/stats')
   const stats = statsData ?? EMPTY_REPORTS_STATS
 
+  const platformPath = activeProjectId ? '/v1/admin/integrations/platform' : null
+  const platformQuery = usePageData<PlatformResponse>(platformPath, { deps: [activeProjectId] })
+  const platformCfg = platformQuery.data?.platform
+  const cursorEnabled = Boolean(platformCfg?.cursor_cloud?.cursor_api_key_ref)
+  const claudeEnabled = Boolean(platformCfg?.claude_code_agent?.claude_api_key_ref)
+
   const setActiveTab = useCallback(
     (id: ReportsTabId) => {
       const next = new URLSearchParams(searchParams)
@@ -103,6 +123,12 @@ export function ReportsPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickReportsTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const status = searchParams.get('status') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -679,16 +705,16 @@ export function ReportsPage() {
     [undoable, reload, toast],
   )
 
-  const handleDispatchFix = useCallback(
-    async (r: ReportRow) => {
-      // Inline dispatch — fire-and-forget POST and immediately link the user
-      // to /fixes for the dispatch monitor. Subscribing to SSE per-row would
-      // be wasteful when the user can already babysit one job at a time on
-      // the Fixes page; here we just queue the work and confirm it landed.
+  const dispatchReport = useCallback(
+    async (r: ReportRow, agentOverride?: string) => {
       setDispatching(prev => new Set(prev).add(r.id))
       const res = await apiFetch<{ dispatchId: string }>(`/v1/admin/fixes/dispatch`, {
         method: 'POST',
-        body: JSON.stringify({ reportId: r.id, projectId: r.project_id }),
+        body: JSON.stringify({
+          reportId: r.id,
+          projectId: r.project_id,
+          ...(agentOverride ? { agentOverride } : {}),
+        }),
       })
       setDispatching(prev => {
         const next = new Set(prev)
@@ -699,10 +725,25 @@ export function ReportsPage() {
         toast.error('Dispatch failed', res.error?.message ?? 'Could not queue fix attempt')
         return
       }
-      toast.success('Fix dispatched', 'Track progress on the Fixes page')
+      const label = agentOverride === 'claude_code_agent'
+        ? 'Claude Code Agent dispatched'
+        : agentOverride === 'cursor_cloud'
+          ? 'Cursor agent dispatched'
+          : 'Fix dispatched'
+      toast.success(label, 'Track progress on the Fixes page')
       reload()
     },
     [toast, reload],
+  )
+
+  const handleDispatchFix = useCallback((r: ReportRow) => dispatchReport(r), [dispatchReport])
+  const handleDispatchCursor = useCallback(
+    (r: ReportRow) => dispatchReport(r, 'cursor_cloud'),
+    [dispatchReport],
+  )
+  const handleDispatchClaude = useCallback(
+    (r: ReportRow) => dispatchReport(r, 'claude_code_agent'),
+    [dispatchReport],
   )
 
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
@@ -720,19 +761,19 @@ export function ReportsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'queue' as const,
-        label: 'Queue',
+        label: copy?.tabLabels?.queue ?? 'Queue',
         count: stats.newUntriaged > 0 ? stats.newUntriaged : undefined,
       },
       {
         id: 'severity' as const,
-        label: 'Severity',
+        label: copy?.tabLabels?.severity ?? 'Severity',
         count: stats.critical14d > 0 ? stats.critical14d : undefined,
       },
     ],
-    [stats],
+    [stats, copy?.tabLabels],
   )
 
   const handleSeverityFilter = useCallback(
@@ -764,6 +805,7 @@ export function ReportsPage() {
     <>
       <ReportsQuickFilters status={status} severity={severity} onSetFilter={setFilter} />
 
+      {!ux.hideSavedViews && (
       <SavedViewsRow
         scope="reports"
         currentQuery={searchParams.toString()}
@@ -773,6 +815,7 @@ export function ReportsPage() {
           setSearchInput(next.get('q') ?? '')
         }}
       />
+      )}
 
       <ReportsFilterBar
         searchInput={searchInput}
@@ -878,6 +921,10 @@ export function ReportsPage() {
             onCopyLink={handleCopyLink}
             onDismiss={handleDismiss}
             onDispatchFix={handleDispatchFix}
+            onDispatchCursor={handleDispatchCursor}
+            onDispatchClaude={handleDispatchClaude}
+            cursorEnabled={cursorEnabled}
+            claudeEnabled={claudeEnabled}
           />
         </div>
       )}
@@ -885,7 +932,26 @@ export function ReportsPage() {
   )
 
   return (
-    <div className="space-y-4" data-reports-root>
+    <div className="space-y-4" data-testid="mushi-page-reports" data-reports-root>
+      <PageHelp
+        title={copy?.help?.title ?? 'About Reports'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Triage incoming reports — sort by severity, filter by status',
+            'Bulk-dismiss noise or escalate a batch of regressions in one click',
+            'Drill into a single report for the original payload, screenshots, and pipeline timeline',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Overview for posture. Queue for j/k navigation, bulk actions, and dispatch. Severity for 14d sparklines — click a tile to filter the queue.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Reports'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -931,6 +997,7 @@ export function ReportsPage() {
             {total} total{total > PAGE_SIZE ? ` · page ${page + 1}/${totalPages}` : ''}
           </span>
         )}
+        {!ux.hideKeyboardShortcuts && (
         <Tooltip content="Show keyboard shortcuts (?)">
           <button
             type="button"
@@ -941,20 +1008,23 @@ export function ReportsPage() {
             <Kbd>?</Kbd>
           </button>
         </Tooltip>
+        )}
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
           Refresh
         </Btn>
       </PageHeader>
 
-      <DogfoodNarrativeBanner />
+      {!ux.hideOverviewChrome && <DogfoodNarrativeBanner />}
 
       <ReportsStatusBanner
         stats={stats}
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating || isValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl
         value={activeTab}
         onChange={setActiveTab}
@@ -962,39 +1032,52 @@ export function ReportsPage() {
         ariaLabel="Reports sections"
         size="sm"
       />
+      )}
 
-      <Section title="TRIAGE SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideReportsSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'TRIAGE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="14d total"
+            label={copy?.statLabels?.total14d ?? '14d total'}
             value={stats.total14d}
             accent={stats.total14d > 0 ? 'text-fg' : undefined}
-            hint={stats.totalAllTime > 0 ? `${stats.totalAllTime} all-time` : 'No ingest yet'}
+            tooltip={total14dTooltip(stats)}
+            detail={total14dDetail(stats)}
+            to={reportsLinks.total14d}
           />
           <StatCard
-            label="Untriaged"
+            label={copy?.statLabels?.untriaged ?? 'Untriaged'}
             value={stats.newUntriaged}
             accent={stats.newUntriaged > 0 ? 'text-info' : 'text-ok'}
-            hint={stats.openBacklog > 0 ? `${stats.openBacklog} stale > 1h` : 'Queue current'}
+            tooltip={untriagedTooltip(stats)}
+            detail={untriagedDetail(stats)}
+            to={reportsLinks.untriaged}
           />
           <StatCard
-            label="Critical 14d"
+            label={copy?.statLabels?.critical ?? 'Critical 14d'}
             value={stats.critical14d}
             accent={stats.critical14d > 0 ? 'text-danger' : undefined}
-            hint={stats.high14d > 0 ? `${stats.high14d} high severity` : 'Severity rollup'}
+            tooltip={critical14dTooltip(stats)}
+            detail={critical14dDetail(stats)}
+            to={reportsLinks.critical14d}
           />
           <StatCard
-            label="Dismissed 14d"
+            label={copy?.statLabels?.dismissed ?? 'Dismissed 14d'}
             value={stats.dismissed14d}
             accent={stats.dismissed14d > 0 ? 'text-fg-muted' : undefined}
-            hint="Noise filtered out"
+            tooltip={dismissed14dTooltip(stats)}
+            detail={dismissed14dDetail()}
+            to={reportsLinks.dismissed14d}
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
+          {!ux.hideOverviewChrome && (
+          <>
           <PageHero
             scope="reports"
             title="Reports"
@@ -1054,25 +1137,8 @@ export function ReportsPage() {
               </div>
             </Card>
           ) : null}
-
-          <PageHelp
-            title={copy?.help?.title ?? 'About Reports'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'The triage inbox for every bug report submitted via the SDK. The LLM pipeline auto-classifies category, severity, component, and confidence — you confirm or override and dispatch fixes.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Triage incoming reports — sort by severity, filter by status',
-                'Bulk-dismiss noise or escalate a batch of regressions in one click',
-                'Drill into a single report for the original payload, screenshots, and pipeline timeline',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Overview for posture. Queue for j/k navigation, bulk actions, and dispatch. Severity for 14d sparklines — click a tile to filter the queue.'
-            }
-          />
+          </>
+          )}
 
           {recommendation && (
             <RecommendedAction

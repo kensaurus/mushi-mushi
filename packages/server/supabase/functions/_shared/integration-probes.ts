@@ -25,6 +25,8 @@ export type IntegrationKind =
   | 'sentry'
   | 'langfuse'
   | 'github'
+  | 'cursor_cloud'
+  | 'claude_code_agent'
   | 'anthropic'
   | 'openai'
   | 'jira'
@@ -33,7 +35,15 @@ export type IntegrationKind =
   | 'pagerduty'
   | 'reward_webhook'
 
-export const PLATFORM_KINDS: IntegrationKind[] = ['sentry', 'langfuse', 'github', 'anthropic', 'openai']
+export const PLATFORM_KINDS: IntegrationKind[] = [
+  'sentry',
+  'langfuse',
+  'github',
+  'cursor_cloud',
+  'claude_code_agent',
+  'anthropic',
+  'openai',
+]
 export const ROUTING_KINDS: IntegrationKind[] = ['jira', 'linear', 'github_issues', 'pagerduty', 'reward_webhook']
 export const ALL_INTEGRATION_KINDS: IntegrationKind[] = [...PLATFORM_KINDS, ...ROUTING_KINDS]
 
@@ -53,6 +63,8 @@ export interface PlatformSettings {
   langfuse_secret_key_ref?: string | null
   github_repo_url?: string | null
   github_installation_token_ref?: string | null
+  claude_api_key_ref?: string | null
+  cursor_api_key_ref?: string | null
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -203,6 +215,58 @@ export async function probeIntegration(
           const body = await res.text().catch(() => '')
           detail = `HTTP ${res.status}${body ? ` — ${body.slice(0, 160)}` : ''}`
         }
+      }
+
+    } else if (kind === 'claude_code_agent') {
+      // BYOK: Claude runs in the customer's GitHub Actions with secrets.ANTHROPIC_API_KEY.
+      // Mushi vault key is optional — used only to verify the operator pasted a valid key
+      // in Integrations (health probe). Dispatch does not send this key to GitHub.
+      const key = await dereferenceMaybeVault(db, settings.claude_api_key_ref ?? null)
+      if (!key) {
+        detail =
+          'Add an Anthropic API key in Integrations → Claude Code Agent (stored in vault). ' +
+          'Also set ANTHROPIC_API_KEY and MUSHI_SERVICE_ROLE_KEY as GitHub repo secrets.'
+      } else if (!settings.github_repo_url) {
+        detail = 'Connect GitHub (code repo) first — Claude Code Agent needs a target repository.'
+      } else {
+        const res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: HEALTH_PROBE_ANTHROPIC_MODEL,
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'ping' }],
+          }),
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        status = res.ok
+          ? 'ok'
+          : res.status === 401 || res.status === 403
+            ? 'down'
+            : 'degraded'
+        if (!res.ok) {
+          const body = await res.text().catch(() => '')
+          detail = `Anthropic API ${res.status}${body ? ` — ${body.slice(0, 120)}` : ''}`
+        }
+      }
+
+    } else if (kind === 'cursor_cloud') {
+      const key = await dereferenceMaybeVault(db, settings.cursor_api_key_ref ?? null)
+      if (!key) {
+        detail = 'Set cursor_api_key_ref in Integrations → Cursor Cloud.'
+      } else {
+        const res = await fetch('https://api.cursor.com/v0/me', {
+          headers: { Authorization: `Bearer ${key}` },
+          signal: AbortSignal.timeout(8_000),
+        })
+        httpStatus = res.status
+        status = res.ok ? 'ok' : res.status === 401 || res.status === 403 ? 'down' : 'degraded'
+        if (!res.ok) detail = `Cursor API HTTP ${res.status}`
       }
 
     } else if (kind === 'github') {

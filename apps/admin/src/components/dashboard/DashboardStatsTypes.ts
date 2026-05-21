@@ -27,6 +27,16 @@ export interface DashboardStats {
   integrationIssues: number
   lastActivityAt: string | null
   lastActivityKind: string | null
+  topPriority:
+    | 'no_project'
+    | 'setup'
+    | 'backlog'
+    | 'fixes_failed'
+    | 'integrations'
+    | 'waiting_data'
+    | 'healthy'
+  topPriorityLabel: string | null
+  topPriorityTo: string | null
 }
 
 export const EMPTY_DASHBOARD_STATS: DashboardStats = {
@@ -51,5 +61,8 @@ export const EMPTY_DASHBOARD_STATS: DashboardStats = {
   integrationIssues: 0,
   lastActivityAt: null,
   lastActivityKind: null,
+  topPriority: 'no_project',
+  topPriorityLabel: null,
+  topPriorityTo: '/onboarding',
 }
 

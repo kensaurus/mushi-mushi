@@ -59,9 +59,28 @@ interface FailureNoteProps {
   retrying?: boolean
 }
 
+function failureHint(error: string | null | undefined): string {
+  const raw = error ?? ''
+  if (raw.includes('UNAUTHORIZED_INVALID_JWT_FORMAT')) {
+    return (
+      'The edge gateway rejected the internal service call (JWT format). ' +
+      'This is usually fixed by redeploying intelligence-report with verify_jwt disabled — retry generation; ' +
+      'if it persists, contact support.'
+    )
+  }
+  if (raw.toLowerCase().includes('anthropic') || raw.toLowerCase().includes('api key')) {
+    return 'Check Settings → LLM Keys for a valid Anthropic BYOK key, then retry.'
+  }
+  return 'Check Settings → LLM Keys for a valid BYOK key, then retry.'
+}
+
 export function LastFailureNote({ jobs, onRetry, retrying }: FailureNoteProps) {
-  const lastFailed = jobs.find((j) => j.status === 'failed')
-  if (!lastFailed) return null
+  // Jobs are newest-first — only nag when the *latest* run failed, not a stale row
+  // from before a successful retry (e.g. gateway JWT issue fixed by redeploy).
+  const latest = jobs[0]
+  if (!latest || latest.status !== 'failed') return null
+  const lastFailed = latest
+  const hint = failureHint(lastFailed.error)
   return (
     <Card className="border border-danger/30 bg-danger/5 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -69,7 +88,8 @@ export function LastFailureNote({ jobs, onRetry, retrying }: FailureNoteProps) {
           <div className="mb-1 text-xs font-semibold text-danger">Last generation failed</div>
           <p className="text-2xs text-fg-muted leading-relaxed">
             {lastFailed.error ?? 'Unknown error.'}
-            {' '}Check Settings → LLM Keys for a valid BYOK key, then retry.
+            {' '}
+            {hint}
           </p>
           <p className="mt-1 font-mono text-3xs text-fg-faint">
             Job {lastFailed.id.slice(0, 8)}… · <RelativeTime value={lastFailed.finished_at ?? lastFailed.created_at} />

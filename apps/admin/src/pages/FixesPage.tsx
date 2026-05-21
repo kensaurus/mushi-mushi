@@ -29,7 +29,13 @@ import { FixRecommendation } from '../components/fixes/FixRecommendation'
 import { InflightDispatches } from '../components/fixes/InflightDispatches'
 import { FixCard } from '../components/fixes/FixCard'
 import type { FixAttempt, DispatchJob, FixSummary } from '../components/fixes/types'
+import { FixesStatusBanner } from '../components/fixes/FixesStatusBanner'
+import { FixesSnapshotStrip } from '../components/fixes/FixesSnapshotStrip'
+import { FixesFailedSummary } from '../components/fixes/FixesFailedSummary'
+import { EMPTY_FIXES_STATS, type FixesStats, type FixesTabId } from '../components/fixes/FixesStatsTypes'
 import { usePageCopy } from '../lib/copy'
+import { useFixesUx, resolveQuickFixesTab } from '../lib/fixesModeUx'
+import { usePageData } from '../lib/usePageData'
 import { useStaggeredAppear } from '../lib/useStaggeredAppear'
 
 interface InventoryActionNode {
@@ -55,6 +61,29 @@ const STATUS_BUCKETS: { id: StatusBucket; label: string }[] = [
   { id: 'failed', label: 'Failed' },
 ]
 
+const FIXES_TABS: Array<{ id: FixesTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Pipeline posture, summary KPIs, and the next recommended action.',
+  },
+  {
+    id: 'pipeline',
+    label: 'Pipeline',
+    description: 'In-flight dispatches and failure categories before PRs land.',
+  },
+  {
+    id: 'attempts',
+    label: 'Attempts',
+    description: 'Every draft PR — expand a card for rationale, CI status, and retry.',
+  },
+]
+
+function resolveFixesTab(value: string | null): FixesTabId {
+  if (value === 'pipeline' || value === 'attempts') return value
+  return 'overview'
+}
+
 function bucketize(fix: FixAttempt): StatusBucket {
   const status = fix.status?.toLowerCase()
   if (status === 'queued' || status === 'running') return 'inflight'
@@ -71,11 +100,43 @@ interface CodebaseStats {
 }
 
 export function FixesPage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/fixes')
+  const ux = useFixesUx()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveFixesTab(tabParam)
+  const activeTabMeta = FIXES_TABS.find((t) => t.id === activeTab) ?? FIXES_TABS[0]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<FixesStats>(
+    activeProjectId ? '/v1/admin/fixes/stats' : null,
+  )
+  const fixesStats = statsData ?? EMPTY_FIXES_STATS
+
+  const setActiveTab = useCallback(
+    (id: FixesTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
+    const quickTab = resolveQuickFixesTab(fixesStats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, activeProjectId, statsLoading, fixesStats, activeTab, setActiveTab])
   const [fixes, setFixes] = useState<FixAttempt[]>([])
   const [codebaseStats, setCodebaseStats] = useState<CodebaseStats | null>(null)
   const [dispatches, setDispatches] = useState<DispatchJob[]>([])
@@ -415,17 +476,53 @@ export function FixesPage() {
     return [...keptOptimistic, ...dispatches]
   }, [dispatches, optimisticDispatches])
 
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
+      {
+        id: 'pipeline' as const,
+        label: copy?.tabLabels?.pipeline ?? 'Pipeline',
+        count:
+          fixesStats.inflightDispatches + fixesStats.inProgress > 0
+            ? fixesStats.inflightDispatches + fixesStats.inProgress
+            : undefined,
+      },
+      {
+        id: 'attempts' as const,
+        label: copy?.tabLabels?.attempts ?? 'Attempts',
+        count: fixesStats.failed > 0 ? fixesStats.failed : fixes.length > 0 ? fixes.length : undefined,
+      },
+    ],
+    [copy?.tabLabels, fixesStats, fixes.length],
+  )
+
+  const reloadAll = useCallback(() => {
+    reloadStats()
+    void loadFixes()
+  }, [reloadStats, loadFixes])
+
   if (loading) return <TableSkeleton rows={6} columns={5} showFilters label="Loading fixes" />
   if (error) return <ErrorAlert message="Failed to load fix attempts." onRetry={loadFixes} />
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" data-testid="mushi-page-fixes">
+      <PageHelp
+        title={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
+        useCases={copy?.help?.useCases ?? [
+          'Track the full PDCA loop — Plan (LLM proposal), Do (PR), Check (CI), Act (review)',
+          'Audit cost: every attempt logs the model used, token spend, and a Langfuse trace',
+          'Spot patterns of failure so prompts and scope rules can be tightened',
+        ]}
+        howToUse={copy?.help?.howToUse ?? "Summary for posture. Pipeline shows dispatches in flight. Attempts lists every draft PR — expand a card for rationale and CI status."}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Auto-Fix Pipeline'}
         projectScope={projectName}
         description={copy?.description ?? 'Every auto-fix attempt and the PR it produced. Each card is one PDCA loop you can verify end-to-end.'}
       >
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} channel={channelState} />
+        <FreshnessPill at={lastFetchedAt ?? statsFetchedAt} isValidating={isValidating || statsValidating} channel={channelState} />
         <span className="text-2xs text-fg-faint font-mono">{pluralizeWithCount(fixes.length, 'attempt')}</span>
         {failedFixes.length > 0 && (
           <button
@@ -440,42 +537,77 @@ export function FixesPage() {
         )}
       </PageHeader>
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Auto-Fix Pipeline'}
-        whatIsIt={copy?.help?.whatIsIt ?? 'When a bug report is high-confidence and reproducible, the LLM fix agent uses your BYOK key to draft a fix on a feature branch and open a draft pull request. A human always reviews before merging.'}
-        useCases={copy?.help?.useCases ?? [
-          'Track the full PDCA loop — Plan (LLM proposal), Do (PR), Check (CI), Act (review)',
-          'Audit cost: every attempt logs the model used, token spend, and a Langfuse trace',
-          'Spot patterns of failure so prompts and scope rules can be tightened',
-        ]}
-        howToUse={copy?.help?.howToUse ?? "Dispatch a fix from any classified report. Each card shows the LLM model, token usage, branch, PR, and CI status. Expand a card to read the agent's rationale and see the live branch graph."}
+      <FixesStatusBanner
+        stats={fixesStats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={isValidating || statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
-      {codebaseStats && (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) && (
-        <div
-          role="status"
-          className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn-muted/30 px-3 py-2 text-2xs text-warn"
-          data-testid="fixes-codebase-unindexed-banner"
-        >
-          <span aria-hidden="true" className="mt-[1px]">⚠</span>
-          <div className="flex-1">
-            <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
-            {codebaseStats.codebase_index_enabled
-              ? 'your codebase index is empty, so the LLM has nothing to read.'
-              : 'codebase indexing is off, so the LLM has nothing to read.'}
-            {' '}
-            <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
-          </div>
-        </div>
+      {!ux.hideTabs && (
+      <SegmentedControl<FixesTabId>
+        ariaLabel="Fix sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+        size="sm"
+      />
       )}
 
-      {summary && <FixSummaryRow summary={summary} successRate={successRate} />}
+      {!ux.hideFixesSnapshot && (
+      <FixesSnapshotStrip
+        stats={fixesStats}
+        statsFetchedAt={statsFetchedAt}
+        statsValidating={statsValidating}
+        description={activeTabMeta.description}
+        sectionTitle={copy?.sections?.snapshot ?? 'FIXES SNAPSHOT'}
+        statLabels={copy?.statLabels}
+        hideLinks={ux.hideSnapshotLinks}
+        compact={ux.isQuickstart}
+      />
+      )}
 
-      <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
+      {activeTab === 'overview' && (
+        <>
+          {codebaseStats && (!codebaseStats.codebase_index_enabled || codebaseStats.indexed_files === 0) && (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-md border border-warn/40 bg-warn-muted/30 px-3 py-2 text-2xs text-warn"
+              data-testid="fixes-codebase-unindexed-banner"
+            >
+              <span aria-hidden="true" className="mt-[1px]">⚠</span>
+              <div className="flex-1">
+                <strong className="font-semibold">Auto-fix will produce stub PRs</strong> —{' '}
+                {codebaseStats.codebase_index_enabled
+                  ? 'your codebase index is empty, so the LLM has nothing to read.'
+                  : 'codebase indexing is off, so the LLM has nothing to read.'}
+                {' '}
+                <Link to="/integrations/config" className="underline hover:no-underline">Enable it now →</Link>
+              </div>
+            </div>
+          )}
 
-      <InflightDispatches dispatches={mergedDispatches} />
+          {summary && <FixSummaryRow summary={summary} successRate={successRate} />}
 
-      {fixes.length === 0 ? (
+          <FixRecommendation fixes={fixes} dispatches={mergedDispatches} />
+        </>
+      )}
+
+      {activeTab === 'pipeline' && (
+        <>
+          {!ux.hideFailureCategories && (
+            <FixesFailedSummary
+              fixes={fixes}
+              onReviewCategory={() => setStatusBucket('failed')}
+            />
+          )}
+          <InflightDispatches dispatches={mergedDispatches} />
+        </>
+      )}
+
+      {activeTab === 'attempts' && (
+        fixes.length === 0 ? (
         <SetupNudge
           requires={['github_connected', 'first_report_received', 'byok_anthropic']}
           emptyTitle="No fix attempts yet"
@@ -563,11 +695,12 @@ export function FixesPage() {
             </div>
           )}
         </>
+      )
       )}
 
       {retryAllConfirm && failedFixes.length > 0 ? (
         <ConfirmDialog
-          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix')}?`}
+          title={`Retry ${failedFixes.length} failed ${pluralize(failedFixes.length, 'fix', 'fixes')}?`}
           body="Each retry runs the auto-fix agent again and spends LLM tokens. Failed attempts stay in history — you can review them on this page."
           confirmLabel="Retry all"
           cancelLabel="Cancel"

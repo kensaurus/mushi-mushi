@@ -1,5 +1,26 @@
 # @mushi-mushi/vue
 
+## 0.9.0
+
+### Minor Changes
+
+- 0c66aa9: API-surface and SSR hardening.
+  - `MushiConfig` is now re-exported from `@mushi-mushi/core` instead of
+    redefined locally. The local definition was masking new fields
+    (`preFilter`, `redactionRules`, `transport`, `releaseChannel`, etc.)
+    that the core SDK has shipped since the original Vue plugin landed.
+  - `install` now skips entirely on the server (`isBrowser()` guard) so
+    Nuxt SSR doesn't crash trying to `Mushi.init(window)`.
+  - `app.config.errorHandler` is now **chained** with the existing handler
+    instead of replacing it. Apps wired to Sentry / Bugsnag /
+    custom logging keep their existing handler firing first.
+
+### Patch Changes
+
+- Updated dependencies
+  - @mushi-mushi/core@1.5.0
+  - @mushi-mushi/web@1.5.0
+
 ## 0.8.4
 
 ### Patch Changes

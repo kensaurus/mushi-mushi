@@ -1,42 +1,63 @@
 /**
  * FILE: packages/vue/src/index.ts
  * PURPOSE: Vue 3 plugin for Mushi Mushi — delegates entirely to @mushi-mushi/web
- *          so offline queue, PII scrubber, breadcrumb buffer, and rate limiter
- *          are all inherited automatically. Mirrors the React provider pattern.
+ *          so offline queue, PII scrubber, breadcrumb buffer, rate limiter,
+ *          INP capture, beforeSendFeedback, and onCrashedLastRun are all
+ *          inherited automatically. Mirrors the React provider pattern.
+ *
+ * Round 8 (2026-05-21):
+ *   - `MushiConfig` is now the canonical core type (no narrow re-shape) so
+ *     Nuxt / Vite users see the full Round 7 surface (theme, position,
+ *     beforeSendFeedback, onCrashedLastRun, …).
+ *   - SSR guard around `Mushi.init` so Nuxt 3's first server-render doesn't
+ *     reach for `window` / `localStorage`.
+ *   - `app.config.errorHandler` is chained, not replaced, so existing
+ *     reporters (Sentry, Bugsnag, Vue's own dev-tools) keep working.
  */
 
-import type { Plugin, InjectionKey, App } from 'vue'
+import type { Plugin, InjectionKey, App, ComponentPublicInstance } from 'vue'
 import { inject, ref } from 'vue'
 import { Mushi } from '@mushi-mushi/web'
-import type { MushiConfig as CoreMushiConfig, MushiSDKInstance, MushiReportCategory } from '@mushi-mushi/core'
+import type { MushiConfig, MushiSDKInstance, MushiReportCategory } from '@mushi-mushi/core'
 
-export interface MushiConfig {
-  projectId: string
-  apiKey: string
-  endpoint?: string
-  capture?: {
-    discoverInventory?: boolean
-  }
-}
+// Re-export the canonical config so consumers `import { MushiConfig } from
+// '@mushi-mushi/vue'` and get the full Round 7 surface, including
+// `beforeSendFeedback`, `onCrashedLastRun`, theme, position, locale, etc.
+export type { MushiConfig, MushiSDKInstance, MushiReportCategory } from '@mushi-mushi/core'
 
 const MUSHI_KEY: InjectionKey<MushiSDKInstance> = Symbol('mushi')
 
-function toCoreConfig(config: MushiConfig): CoreMushiConfig {
-  return {
-    projectId: config.projectId,
-    apiKey: config.apiKey,
-    ...(config.endpoint ? { apiEndpoint: config.endpoint } : {}),
-    ...(config.capture !== undefined ? { capture: config.capture } : {}),
-  }
-}
+const isBrowser = (): boolean =>
+  typeof globalThis !== 'undefined' &&
+  typeof (globalThis as { window?: unknown }).window !== 'undefined' &&
+  typeof (globalThis as { document?: unknown }).document !== 'undefined'
 
 export const MushiPlugin: Plugin = {
   install(app: App, config: MushiConfig) {
-    const sdk = Mushi.init(toCoreConfig(config))
+    // SSR guard: Nuxt 3 / Vite SSR call install() on the server. Skip
+    // SDK init there — the client-side runtime mounts a fresh app
+    // and re-runs install() with browser globals available.
+    if (!isBrowser()) {
+      return
+    }
 
+    const sdk = Mushi.init(config)
     app.provide(MUSHI_KEY, sdk)
 
-    app.config.errorHandler = (err, _vm, info) => {
+    // Chain — don't replace — the existing errorHandler so Sentry /
+    // Bugsnag / Datadog / Vue dev tools keep firing alongside us.
+    const previous = app.config.errorHandler
+    app.config.errorHandler = (
+      err: unknown,
+      vm: ComponentPublicInstance | null,
+      info: string,
+    ) => {
+      // Run upstream first so its own error path is unaffected by ours.
+      try {
+        previous?.(err, vm, info)
+      } catch {
+        // Never swallow our reporter on a buggy upstream handler.
+      }
       sdk.captureException(err, {
         source: 'vue-error-handler',
         metadata: { vueInfo: info },

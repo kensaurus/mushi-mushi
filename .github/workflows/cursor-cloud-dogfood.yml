@@ -1,0 +1,115 @@
+name: Cursor Cloud Agent Dogfood
+
+on:
+  # Nightly live test against real Cursor Cloud
+  schedule:
+    - cron: '0 6 * * *'  # 06:00 UTC daily
+  # Allow manual trigger from Actions UI
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Run live tier (true) or mocked only (false)'
+        required: false
+        default: 'true'
+
+jobs:
+  mocked-e2e:
+    name: Mocked E2E (every push via CI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MUSHI_ADMIN_URL: http://localhost:6464
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @mushi-mushi/e2e-dogfood exec playwright install --with-deps chromium
+
+      - name: Run Cursor Cloud Agent mocked tests
+        run: pnpm --filter @mushi-mushi/e2e-dogfood exec playwright test cursor-cloud-agent.spec.ts --reporter=list
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-cursor-mocked
+          path: examples/e2e-dogfood/playwright-report/
+          retention-days: 7
+
+  live-cursor-e2e:
+    name: Live Cursor Agent E2E (nightly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: >
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.live == 'true')
+    env:
+      MUSHI_ADMIN_URL: ${{ secrets.MUSHI_ADMIN_LIVE_URL }}
+      MUSHI_API_KEY: ${{ secrets.MUSHI_API_KEY_DOGFOOD }}
+      CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY_DOGFOOD }}
+      E2E_LIVE_CURSOR: '1'
+      MUSHI_DOGFOOD_REPO: kensaur/glot-it
+      GITHUB_TOKEN: ${{ secrets.GH_DOGFOOD_TOKEN }}
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+      TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter @mushi-mushi/e2e-dogfood exec playwright install --with-deps chromium
+
+      - name: Run Cursor Cloud Agent live tests
+        run: pnpm --filter @mushi-mushi/e2e-dogfood exec playwright test cursor-cloud-agent.spec.ts --reporter=list
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-cursor-live
+          path: examples/e2e-dogfood/playwright-report/
+          retention-days: 14
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Nightly] Cursor Cloud Agent dogfood failed — ${new Date().toISOString().slice(0,10)}`,
+              labels: ['type:bug', 'area:cursor-integration', 'priority:high'],
+              body: `The nightly Cursor Cloud Agent dogfood test failed.\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+            })

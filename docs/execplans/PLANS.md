@@ -141,6 +141,41 @@ environment variables manually.
 
 ---
 
+## Plan 007 — Cursor Cloud Agent Integration (2026-05-21) `COMPLETE`
+
+### Goal
+Integrate Cursor Cloud Agents as a first-class autofix agent and Marketplace plugin. When a critical report is classified, a Cursor Cloud Agent can automatically open a signed draft PR.
+
+### Architecture
+
+**Path A — Marketplace plugin** (`@mushi-mushi/plugin-cursor-cloud`):
+- Deno-compatible: calls Cursor's HTTP REST API directly (no `@cursor/sdk`).
+- Installs from Admin → Marketplace.
+- Subscribes to `report.classified`, `fix.requested`, `qa_story.failed`.
+
+**Path B — `autofix_agent='cursor_cloud'`** (Node orchestrator):
+- Uses `@cursor/sdk` (optional peer dep) in `packages/agents/`.
+- Activated by setting `autofix_agent=cursor_cloud` in project settings.
+- Edge `fix-worker` function delegates to the Node orchestrator via `MUSHI_DISPATCH_CURSOR_URL`.
+
+### Deliverables
+- [x] Migration `20260521000000_cursor_cloud_agent` — extends `autofix_agent` CHECK, adds `cursor_*` columns to `project_settings` and `fix_attempts`, seeds `plugin_registry`
+- [x] `packages/agents/src/cursor-cloud-types.ts` — typed wrappers + `loadCursorSdk()` dynamic import
+- [x] `packages/agents/src/adapters/cursor-cloud.ts` — `CursorCloudAgent` implementing `FixAgent`
+- [x] `packages/agents/src/orchestrator.ts` — `selectAgent` handles `cursor_cloud`, vault ref resolution
+- [x] `packages/server/supabase/functions/fix-worker/index.ts` — delegates `cursor_cloud` to Node orchestrator
+- [x] `packages/server/supabase/functions/_shared/plugins.ts` — `deliverCursorAgent` REST path for Path A
+- [x] `packages/plugin-cursor-cloud/` — new Marketplace plugin package
+- [x] `packages/plugin-sdk/src/types.ts` — added `fix.requested`, `qa_story.failed`, `qa_story.passed` to `MushiEventName`
+- [x] Admin UI: Integrations card, FixCard badge + artifact gallery, Reports row "Send to Cursor" action
+- [x] `packages/mcp/src/catalog.ts` + `server.ts` — `dispatch_fix` extended with `agent=cursor_cloud`
+- [x] `packages/cli/src/index.ts` — `mushi fix <reportId> --agent cursor_cloud [--wait]`
+- [x] `packages/web/src/mushi.ts` — `report:dispatched` event
+- [x] `examples/e2e-dogfood/tests/cursor-cloud-agent.spec.ts` — mocked + live Playwright tiers
+- [x] `.github/workflows/cursor-cloud-dogfood.yml` — nightly CI with auto-cleanup
+
+---
+
 ## Plan 006 — Code Review Fixes (2026-05-14) `COMPLETE`
 
 ### Goal

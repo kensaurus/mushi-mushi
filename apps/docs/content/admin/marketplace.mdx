@@ -86,6 +86,29 @@ function verify(body: string, signature: string, secret: string) {
 
 ---
 
+## First-party plugins
+
+### Cursor Cloud Agent
+
+The **Cursor Cloud Agent** plugin (`cursor-cloud-agent`) is a first-party Mushi plugin that dispatches a Cursor Cloud Agent when qualifying events fire. The agent opens a signed draft PR on your GitHub repo automatically — no manual triage needed.
+
+**Subscribes to:** `report.classified` · `fix.requested` · `qa_story.failed`
+
+**Configure after installing:**
+| Field | Description |
+|-------|-------------|
+| **API Key** | Your Cursor API key |
+| **Workspace ID** | Your Cursor workspace ID (`ws_…`) |
+| **Model** | `composer-2.5` (default) or `composer-latest` |
+| **Auto-create PRs** | Toggle — enabled by default |
+| **Max iterations** | Agent loop budget (default: 1) |
+
+Unlike standard webhook plugins, the Cursor Cloud Agent plugin dispatches **directly to the Cursor REST API** — there's no outbound webhook URL to configure. HMAC verification for inbound events is handled internally by the Mushi platform.
+
+The dispatch result (agent ID, run ID, PR URL) is visible in [Fixes](/admin/fixes) under the Cursor badge.
+
+---
+
 ## Building a plugin
 
 See [Plugins → Building a plugin](/plugins/building) for the full plugin schema,

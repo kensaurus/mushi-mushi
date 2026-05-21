@@ -25,6 +25,43 @@ export interface MushiConfig {
   offline?: MushiOfflineConfig;
   rewards?: MushiRewardsConfig;
 
+  /**
+   * Sentry-spec-1.0 hook fired AFTER preFilter / on-device classifier /
+   * rate-limit gates pass and BEFORE the report is sent or queued.
+   * Return:
+   *   - the report (possibly modified) → submit as-is
+   *   - a Promise<MushiReport> → await, then submit
+   *   - `null` → drop the report silently (no `report:sent`/`:failed` event)
+   *
+   * Use this for app-level redaction of sensitive metadata, hard-coded
+   * tag overrides, or last-mile category routing. Errors thrown inside
+   * the hook are caught and logged; the report still ships unchanged so
+   * a buggy hook never silently swallows feedback.
+   *
+   * Mirrors Sentry's [SDK feedback spec §4](https://develop.sentry.dev/sdk/telemetry/feedbacks/)
+   * `beforeSendFeedback` callback.
+   */
+  beforeSendFeedback?: (
+    report: MushiReport,
+  ) => MushiReport | Promise<MushiReport | null> | null;
+
+  /**
+   * Sentry-spec-1.0 callback fired exactly once on `init()` after the
+   * SDK detects that the previous browser session ended in a crash
+   * (uncaught exception, unhandled rejection, or hard navigate during
+   * unfinished submit). Use it to surface a "Tell us what went wrong?"
+   * prompt to the user — the SDK does NOT auto-open the widget so the
+   * host app can decide on copy and timing.
+   *
+   * The promise resolves with `true` when a crash was detected, `false`
+   * when the previous run ended cleanly, and `null` when the SDK can't
+   * tell (typically: localStorage unavailable, or first-ever load).
+   *
+   * Mirrors Sentry's [SDK feedback spec §6](https://develop.sentry.dev/sdk/telemetry/feedbacks/)
+   * `onCrashedLastRun` hook.
+   */
+  onCrashedLastRun?: (info: { crashed: boolean | null }) => void;
+
   debug?: boolean;
   enabled?: boolean;
 }
@@ -742,7 +779,30 @@ export interface MushiPerformanceMetrics {
   lcp?: number;
   cls?: number;
   fid?: number;
+  /**
+   * Interaction to Next Paint — the worst-observed user interaction
+   * latency (ms) since SDK init. Replaces FID as a Core Web Vital
+   * since March 2024. Captured via `PerformanceObserver({ type: 'event',
+   * durationThreshold: 40 })` per the [web-vitals INP spec](https://web.dev/articles/inp).
+   */
   inp?: number;
+  /**
+   * Optional INP attribution — captured from the worst-observed
+   * interaction. Lets the triage UI surface "the slow click was on
+   * <button.checkout>" rather than just "1200 ms INP".
+   */
+  inpAttribution?: {
+    /** PerformanceEventTiming.name (`pointerdown`, `keydown`, …). */
+    eventType?: string;
+    /** Tag + id + first class of the element that triggered the slow event. */
+    targetSelector?: string;
+    /** Time between the user input and the start of event processing. */
+    inputDelay?: number;
+    /** Time spent running the event handler. */
+    processingDuration?: number;
+    /** Time between handler end and the next paint. */
+    presentationDelay?: number;
+  };
   ttfb?: number;
   longTasks?: number;
 }
@@ -785,6 +845,13 @@ export type MushiEventType =
   | 'report:queued'
   | 'report:sent'
   | 'report:failed'
+  /**
+   * Fired when the submitted report has been picked up by a Cursor Cloud
+   * Agent and an automated fix is in progress. `data.agentId` is the
+   * Cursor agent run ID (bc-…); `data.fixId` is the mushi fix_attempt UUID.
+   * Useful for showing a toast: "A Cursor agent is working on your report".
+   */
+  | 'report:dispatched'
   | 'widget:opened'
   | 'widget:closed'
   | 'proactive:triggered'

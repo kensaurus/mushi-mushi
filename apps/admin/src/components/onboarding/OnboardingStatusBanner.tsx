@@ -12,9 +12,17 @@ interface Props {
   onTab?: (tab: OnboardingTabId) => void
   onRunTest?: () => void
   testing?: boolean
+  /** Quick/Beginner: plain-language titles and verb-led CTAs. */
+  plainLanguage?: boolean
 }
 
-export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Props) {
+export function OnboardingStatusBanner({
+  stats,
+  onTab,
+  onRunTest,
+  testing,
+  plainLanguage = false,
+}: Props) {
   const projectLabel = stats.projectName ?? 'your project'
 
   if (!stats.hasAnyProject) {
@@ -23,15 +31,23 @@ export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">Create your first project to begin</p>
+            <p className="text-xs font-medium text-info">
+              {plainLanguage ? 'Name your app first' : 'Create your first project to begin'}
+            </p>
             <p className="text-2xs text-fg-muted">
-              A project groups bug reports from one app — name it after your product, then mint an ingest key.
+              {plainLanguage
+                ? 'One project holds all bugs and fixes for a single app.'
+                : 'A project groups bug reports from one app — name it after your product, then mint an ingest key.'}
             </p>
           </div>
         </div>
-        {onTab ? (
+        {stats.nextStepTo ? (
+          <Link to={stats.nextStepTo}>
+            <Btn size="sm" variant="ghost">{plainLanguage ? 'Create app' : 'Create project'}</Btn>
+          </Link>
+        ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('steps')}>
-            Create project
+            {plainLanguage ? 'Create app' : 'Create project'}
           </Btn>
         ) : null}
       </div>
@@ -44,16 +60,20 @@ export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-ok">Required setup complete for {projectLabel}</p>
+            <p className="text-xs font-medium text-ok">
+              {plainLanguage
+                ? `${projectLabel} is ready`
+                : `Required setup complete for ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">
-              {stats.reportCount} report{stats.reportCount === 1 ? '' : 's'} ingested
-              {stats.fixCount > 0 ? ` · ${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched` : ''}
-              — SDK tab stays handy for new environments.
+              {plainLanguage
+                ? `${stats.reportCount} test bug${stats.reportCount === 1 ? '' : 's'} received — send real bugs from your app anytime.`
+                : `${stats.reportCount} report${stats.reportCount === 1 ? '' : 's'} ingested${stats.fixCount > 0 ? ` · ${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched` : ''} — SDK tab stays handy for new environments.`}
             </p>
           </div>
         </div>
-        <Link to="/dashboard">
-          <Btn size="sm" variant="ghost">Open dashboard</Btn>
+        <Link to="/reports">
+          <Btn size="sm" variant="ghost">{plainLanguage ? 'See bugs' : 'Open dashboard'}</Btn>
         </Link>
       </div>
     )
@@ -65,15 +85,21 @@ export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">SDK is talking to a different backend</p>
+            <p className="text-xs font-medium text-warn">
+              {plainLanguage ? 'Widget is pointing at the wrong server' : 'SDK is talking to a different backend'}
+            </p>
             <p className="text-2xs text-fg-muted break-words font-mono">
               Admin: {stats.adminEndpointHost ?? '—'} · SDK last seen: {stats.sdkEndpointHost ?? '—'}
             </p>
           </div>
         </div>
-        {onTab ? (
+        {stats.nextStepTo ? (
+          <Link to={stats.nextStepTo}>
+            <Btn size="sm" variant="ghost">{plainLanguage ? 'Fix widget URL' : 'Fix SDK URL'}</Btn>
+          </Link>
+        ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('sdk')}>
-            Fix SDK URL
+            {plainLanguage ? 'Fix widget URL' : 'Fix SDK URL'}
           </Btn>
         ) : null}
       </div>
@@ -86,19 +112,27 @@ export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">Key ready — prove the pipeline</p>
+            <p className="text-xs font-medium text-brand">
+              {plainLanguage ? 'Send one test bug' : 'Key ready — prove the pipeline'}
+            </p>
             <p className="text-2xs text-fg-muted">
-              Send a test report on {projectLabel} so Reports and the dashboard light up before you ship.
+              {plainLanguage
+                ? 'Confirms bugs from your app show up in Mushi before you ship.'
+                : `Send a test report on ${projectLabel} so Reports and the dashboard light up before you ship.`}
             </p>
           </div>
         </div>
         {onRunTest ? (
           <Btn size="sm" variant="ghost" onClick={onRunTest} loading={testing} disabled={testing}>
-            Send test report
+            {plainLanguage ? 'Send test bug' : 'Send test report'}
           </Btn>
+        ) : stats.nextStepTo ? (
+          <Link to={stats.nextStepTo}>
+            <Btn size="sm" variant="ghost">{plainLanguage ? 'Test connection' : 'Verify connection'}</Btn>
+          </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('verify')}>
-            Verify connection
+            {plainLanguage ? 'Test connection' : 'Verify connection'}
           </Btn>
         ) : null}
       </div>
@@ -111,15 +145,23 @@ export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">Install the SDK in your app</p>
+            <p className="text-xs font-medium text-info">
+              {plainLanguage ? 'Paste the widget in your app' : 'Install the SDK in your app'}
+            </p>
             <p className="text-2xs text-fg-muted">
-              Paste the snippet on the SDK tab — we&apos;ll detect heartbeat traffic on {projectLabel} automatically.
+              {plainLanguage
+                ? 'Copy the snippet — we detect when your app starts sending bugs.'
+                : `Paste the snippet on the SDK tab — we'll detect heartbeat traffic on ${projectLabel} automatically.`}
             </p>
           </div>
         </div>
-        {onTab ? (
+        {stats.nextStepTo ? (
+          <Link to={stats.nextStepTo}>
+            <Btn size="sm" variant="ghost">{plainLanguage ? 'Get snippet' : 'View SDK snippet'}</Btn>
+          </Link>
+        ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('sdk')}>
-            View SDK snippet
+            {plainLanguage ? 'Get snippet' : 'View SDK snippet'}
           </Btn>
         ) : null}
       </div>
@@ -132,20 +174,26 @@ export function OnboardingStatusBanner({ stats, onTab, onRunTest, testing }: Pro
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
         <div>
           <p className="text-xs font-medium text-warn">
-            Next: {stats.nextStepLabel ?? 'Continue setup'}
+            {plainLanguage
+              ? `Next: ${stats.nextStepLabel ?? 'finish setup'}`
+              : `Next: ${stats.nextStepLabel ?? 'Continue setup'}`}
           </p>
           <p className="text-2xs text-fg-muted">
-            {stats.requiredComplete}/{stats.requiredTotal} required steps done on {projectLabel}
-            {stats.optionalComplete > 0 ? ` · ${stats.optionalComplete} optional extras complete` : ''}
+            {plainLanguage
+              ? `${stats.requiredComplete} of ${stats.requiredTotal} steps done`
+              : `${stats.requiredComplete}/${stats.requiredTotal} required steps done on ${projectLabel}${stats.optionalComplete > 0 ? ` · ${stats.optionalComplete} optional extras complete` : ''}`}
           </p>
         </div>
       </div>
-      {onTab ? (
+      {stats.nextStepTo ? (
+        <Link to={stats.nextStepTo}>
+          <Btn size="sm" variant="ghost">{plainLanguage ? 'Continue' : 'Continue setup'}</Btn>
+        </Link>
+      ) : onTab ? (
         <Btn size="sm" variant="ghost" onClick={() => onTab('steps')}>
-          Continue setup
+          {plainLanguage ? 'Continue' : 'Continue setup'}
         </Btn>
       ) : null}
     </div>
   )
 }
-

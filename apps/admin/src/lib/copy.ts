@@ -27,6 +27,14 @@ interface PageCopy {
   description?: string
   /** Section header rewrites (sectionId → title). */
   sections?: Record<string, string>
+  /** StatCard label overrides for snapshot strips. */
+  statLabels?: Record<string, string>
+  /** Primary row action button labels. */
+  actionLabels?: Record<string, string>
+  /** Status bucket pill labels (Fixes page). */
+  bucketLabels?: Record<string, string>
+  /** Tab labels for simplified wizards. */
+  tabLabels?: Record<string, string>
   /** PageHelp body. Same shape as <PageHelp> props. */
   help?: {
     title: string
@@ -83,24 +91,61 @@ export const COPY: CopyRegistry = {
   // `usePageCopy`..
   quickstart: {
     '/dashboard': {
-      title: 'Bugs to fix',
-      description: "Your real users hit these. Click any to see the screenshot, console, and steps — then send to auto-fix.",
+      title: 'Home',
+      description: 'What needs your attention right now — waiting bugs, fixes in progress, and setup steps left.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        backlog: 'Waiting',
+        reports: 'Bugs this week',
+        fixes: 'Fixes running',
+        focus: 'Next step',
+      },
+      actionLabels: {
+        setup: 'Finish setup',
+        triage: 'Review bugs',
+        failed: 'Retry fixes',
+        health: 'Check connections',
+        verify: 'Send test bug',
+        healthy: 'View loop',
+        refresh: 'Refresh',
+      },
+      tabLabels: { overview: 'Home' },
       help: {
-        title: 'How Mushi helps',
+        title: 'About your home screen',
         whatIsIt:
-          'Mushi catches bugs your users hit, drafts a fix as a pull request, and sends it back to your repo. Three pages in Quickstart: bugs to fix, fixes ready to merge, setup.',
+          'A single place to see whether bugs are waiting, fixes are running, or setup still needs a step — before you dive into Reports or Fixes.',
         useCases: [
-          'See the bugs your real users felt today',
-          'Open the worst one, send it to the auto-fix agent',
-          'Review the draft pull request, merge if it looks right',
+          'Start every session here to see what actually needs you',
+          'Jump straight to the worst backlog or failed fix',
+          'Finish setup when charts are still empty',
         ],
         howToUse:
-          'Use the big "Resolve next bug" button at the top to jump to the highest-priority report. The auto-fix agent does the heavy lifting.',
+          'Read the colored banner at the top — yellow means unread help, green means you have opened it. Click the action button to go to the next step.',
       },
     },
     '/inbox': {
       title: 'Inbox',
       description: 'Everything waiting for your attention right now. Start here each session.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        open: 'Waiting',
+        clear: 'Done',
+        backlog: 'Old bugs',
+        critical: 'Urgent bugs',
+      },
+      actionLabels: {
+        setup: 'Finish setup',
+        queue: 'See queue',
+        takeAction: 'Fix now',
+        stages: 'See stages',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        actions: 'To-do',
+        stages: 'By type',
+        activity: 'Recent',
+      },
       help: {
         title: 'About the inbox',
         whatIsIt:
@@ -145,7 +190,19 @@ export const COPY: CopyRegistry = {
     },
     '/onboarding': {
       title: 'Setup',
-      description: 'Four guided tabs — create a project, verify the pipeline, install the SDK, and track live checklist progress.',
+      description: 'Three steps: create your app, send a test bug, paste the widget snippet.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        required: 'Progress',
+        sdk: 'Widget',
+        reports: 'Test bugs',
+        optional: 'Extras',
+      },
+      tabLabels: {
+        steps: 'Create app',
+        verify: 'Test it',
+        sdk: 'Install widget',
+      },
       help: {
         title: 'About setup',
         whatIsIt: 'DB-backed onboarding wizard — every step reads live project state so progress survives across devices.',
@@ -161,7 +218,27 @@ export const COPY: CopyRegistry = {
   beginner: {
     '/inbox': {
       title: 'Your to-do list',
-      description: 'Start here every session — banner and INBOX SNAPSHOT show open vs clear before you pick Overview, Actions, Stages, or Activity.',
+      description: 'Start here every session — banner shows what needs you before you open the queue.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        open: 'Open',
+        clear: 'Clear',
+        backlog: 'Backlog',
+        critical: 'Critical 14d',
+      },
+      actionLabels: {
+        setup: 'Continue setup',
+        queue: 'View queue',
+        takeAction: 'Take action',
+        stages: 'View stages',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Overview',
+        actions: 'Actions',
+        stages: 'Stages',
+        activity: 'Activity',
+      },
       help: {
         title: 'About the inbox',
         whatIsIt:
@@ -221,8 +298,35 @@ export const COPY: CopyRegistry = {
       },
     },
     '/inventory': {
-      title: 'App inventory',
-      description: 'Banner + INVENTORY SNAPSHOT — Overview for posture, then User stories, Gates, Discovery, or Yaml tabs.',
+      title: 'Map your app screens',
+      description:
+        'Banner + INVENTORY SNAPSHOT first — Summary for posture, User stories, Gates, Discovery, or Yaml tabs.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        verified: 'Verified',
+        regressed: 'Regressed',
+        findings: 'Findings',
+        discovery: 'Discovery',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        discovery: 'Open Discovery',
+        proposal: 'Review proposal',
+        stories: 'View stories',
+        gates: 'Open Gates',
+        tree: 'Open Tree',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        stories: 'User stories',
+        tree: 'Tree',
+        gates: 'Gates',
+        synthetic: 'Synthetic',
+        drift: 'Drift',
+        discovery: 'Discovery',
+        yaml: 'Yaml',
+      },
       help: {
         title: 'About app inventory',
         whatIsIt:
@@ -251,8 +355,33 @@ export const COPY: CopyRegistry = {
       },
     },
     '/research': {
-      title: 'Web research',
-      description: 'Banner + RESEARCH SNAPSHOT — Overview for posture, Search to query Firecrawl, History for sessions.',
+      title: 'Look up fixes online',
+      description:
+        'Banner + RESEARCH SNAPSHOT first — Summary for posture, Search to query Firecrawl, History for sessions.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        sessions: 'Sessions',
+        snippets: 'Snippets',
+        attached: 'Attached',
+        unattached: 'Unattached',
+        firecrawl: 'Firecrawl',
+        domains: 'Domains',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        configure: 'Configure Firecrawl',
+        fix: 'Fix in Settings',
+        test: 'Test connection',
+        search: 'Run first search',
+        attach: 'Attach evidence',
+        history: 'View history',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        search: 'Search',
+        history: 'History',
+      },
       help: {
         title: 'About web research',
         whatIsIt: 'BYOK Firecrawl-powered search you run while triaging a report. Look up release notes, Stack Overflow threads, or vendor changelogs and pin the result to a specific report.',
@@ -265,8 +394,33 @@ export const COPY: CopyRegistry = {
       },
     },
     '/repo': {
-      title: 'Code connection',
-      description: 'Link Mushi to your GitHub repository so auto-fixes can open pull requests directly on your codebase.',
+      title: 'Your GitHub branches',
+      description:
+        'Banner + REPO SNAPSHOT first — Summary for connection health, Branches for PR status, Activity for the live event log.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        branches: 'Branches',
+        prOpen: 'PRs open',
+        ciPassing: 'CI passing',
+        ciFailed: 'CI failing',
+        merged: 'Merged',
+        stuck: 'Stuck',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        connect: 'Connect repo',
+        install: 'Install app',
+        stuck: 'Review stuck',
+        ci: 'Open failing CI',
+        reports: 'Open Reports',
+        branches: 'View branches',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        branches: 'Branches',
+        activity: 'Activity',
+      },
       help: {
         title: 'About repo connection',
         whatIsIt: 'Link your GitHub repo here once, and every auto-fix Mushi drafts will appear as a pull request in the right branch.',
@@ -275,7 +429,8 @@ export const COPY: CopyRegistry = {
           'Check connection health if PRs stopped appearing',
           'Switch to a different repo or branch',
         ],
-        howToUse: 'Click "Connect GitHub" and follow the OAuth flow. Once connected, a green pill confirms auto-fixes will land in your repo.',
+        howToUse:
+          'Summary shows repo connection health. Branches lists every fix PR with CI status. Activity is a chronological log across all branches.',
       },
     },
     '/sso': {
@@ -321,8 +476,34 @@ export const COPY: CopyRegistry = {
       },
     },
     '/intelligence': {
-      title: 'Bug Intelligence',
-      description: 'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.',
+      title: 'Your weekly bug summary',
+      description:
+        'Banner + INTELLIGENCE SNAPSHOT first — Summary for posture, Reports for digests, Pipeline for jobs and findings.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        digests: 'Digests',
+        activeJobs: 'Active jobs',
+        failedJobs: 'Failed jobs',
+        findings: 'Findings',
+        fixAttempts: 'Fix attempts',
+        benchmarking: 'Benchmarking',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        upgrade: 'Upgrade plan',
+        pipeline: 'View pipeline',
+        generate: 'Generate this week',
+        retry: 'Retry generation',
+        settings: 'Check LLM keys',
+        triage: 'Triage findings',
+        reports: 'View reports',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        reports: 'Reports',
+        pipeline: 'Pipeline',
+      },
       help: {
         title: 'About Bug Intelligence',
         whatIsIt: 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations. Each report is persisted, versioned, and exportable as HTML/PDF.',
@@ -363,8 +544,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/marketplace': {
-      title: 'Marketplace',
-      description: 'Banner + MARKETPLACE SNAPSHOT — Overview for posture, Browse to install, Deliveries to debug webhooks.',
+      title: 'Add webhook plugins',
+      description:
+        'Banner + MARKETPLACE SNAPSHOT first — Summary for posture, Browse to install, Deliveries to debug webhooks.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        catalog: 'Catalog',
+        installed: 'Installed',
+        deliveries7d: 'Deliveries · 7d',
+        successRate: 'Success rate',
+        failing: 'Failing',
+        neverDelivered: 'Never delivered',
+      },
+      actionLabels: {
+        browse: 'Browse catalog',
+        installed: 'Open Installed',
+        deliveries: 'View deliveries',
+        resume: 'Resume plugins',
+        refresh: 'Refresh',
+        plans: 'View plans',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        browse: 'Browse',
+        installed: 'Installed',
+        deliveries: 'Deliveries',
+      },
       help: {
         title: 'About the marketplace',
         whatIsIt: 'Webhook plugins subscribe to Mushi lifecycle events. Every POST is signed so your receiver can verify authenticity before acting.',
@@ -377,8 +582,31 @@ export const COPY: CopyRegistry = {
       },
     },
     '/mcp': {
-      title: 'MCP — agent connection',
-      description: 'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools and resources.',
+      title: 'Connect your AI editor',
+      description:
+        'Banner + MCP SNAPSHOT first — Summary for posture, Setup for snippet, Catalog for tools and resources.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        activeKeys: 'Active keys',
+        mcpRead: 'MCP read',
+        connected: 'Connected',
+        sdkOnly: 'SDK-only keys',
+        tools: 'Tools',
+        endpoint: 'Endpoint',
+      },
+      actionLabels: {
+        setup: 'Fix snippet',
+        mint: 'Mint MCP key',
+        generate: 'Generate key',
+        catalog: 'View catalog',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        setup: 'Setup',
+        catalog: 'Catalog',
+        examples: 'Examples',
+      },
       help: {
         title: 'About MCP (AI agent connection)',
         whatIsIt: 'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.',
@@ -387,12 +615,37 @@ export const COPY: CopyRegistry = {
           'Have the agent draft a fix for a specific report in one command',
           'Query your bug data in plain English from inside your editor',
         ],
-        howToUse: 'Generate an mcp:read key on /projects, copy the snippet on this page, restart your IDE, then ask "list mushi tools".',
+        howToUse:
+          'Generate an mcp:read key on /projects, copy the snippet on Setup, restart your IDE, then ask "list mushi tools".',
       },
     },
     '/qa-coverage': {
-      title: 'Automated QA tests',
-      description: 'Write user-story tests in plain English, run them on a schedule, and catch regressions before your users do.',
+      title: 'Catch bugs before users do',
+      description:
+        'Banner + QA SNAPSHOT first — Summary for posture, Stories for all tests, Failing for sub-80% pass rate.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        stories: 'Stories',
+        passing: 'Passing',
+        failing: 'Failing',
+        avgPassRate: 'Avg pass rate',
+        runs24h: 'Runs (24h)',
+        noData: 'No data',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        create: 'Create story',
+        newStory: '+ New story',
+        failures: 'Review failures',
+        stories: 'View stories',
+        openStories: 'Open stories',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        stories: 'Stories',
+        failing: 'Failing',
+      },
       help: {
         title: 'About QA coverage',
         whatIsIt: 'Automated tests written in plain English that run on your live app on a schedule — like hiring a robot QA tester that never sleeps.',
@@ -433,8 +686,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/lessons': {
-      title: 'Learned rules',
-      description: 'Banner + LESSONS SNAPSHOT — Overview for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
+      title: 'Learn from past bugs',
+      description:
+        'Banner + LESSONS SNAPSHOT first — Summary for posture, Lessons for promoted rules, Clusters to promote, Query Sim to preview injection.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        activeLessons: 'Active lessons',
+        critical: 'Critical',
+        candidates: 'Candidates',
+        promoted: 'Promoted clusters',
+        reportsClustered: 'Reports clustered',
+        highCoherence: 'High coherence',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        reports: 'Open Reports',
+        clusters: 'Review clusters',
+        lessons: 'Review lessons',
+        query: 'Try query sim',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        lessons: 'Lessons',
+        clusters: 'Clusters',
+        query: 'Query Sim',
+      },
       help: {
         title: 'About lessons',
         whatIsIt: 'Rules automatically extracted from recurring bugs. Once a pattern appears enough times, Mushi names it and uses it to catch the next one early.',
@@ -447,8 +724,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/releases': {
-      title: 'Releases',
-      description: 'Banner + RELEASES SNAPSHOT — Overview for posture, Drafts/Published to manage, Draft to generate with AI.',
+      title: 'Tell users what shipped',
+      description:
+        'Banner + RELEASES SNAPSHOT first — Summary for posture, Drafts/Published to manage, Draft to generate with AI.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        drafts: 'Drafts',
+        published: 'Published',
+        fixesLinked: 'Fixes linked',
+        contributors: 'Contributors',
+        fixedReports: 'Fixed bugs',
+        feedback: 'Feedback shipped',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        drafts: 'Review drafts',
+        draft: 'Generate draft',
+        published: 'View published',
+        reports: 'View fixed reports',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        drafts: 'Drafts',
+        published: 'Published',
+        draft: 'New draft',
+      },
       help: {
         title: 'About Releases',
         whatIsIt: 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.',
@@ -457,12 +758,36 @@ export const COPY: CopyRegistry = {
           'Notify credited reporters in the feedback stamp when you publish',
           'Close the feedback loop: users see what their reports fixed',
         ],
-        howToUse: 'Select a date window and click Generate draft — AI writes the changelog. Review credited contributors, edit if needed, then publish to queue in-app toasts for each reporter.',
+        howToUse:
+          'Summary for posture. Drafts to review pending changelogs. Published for shipped releases. New draft to generate from fixed bugs.',
       },
     },
     '/iterate': {
-      title: 'PDCA iteration',
-      description: 'Banner + PDCA SNAPSHOT — Overview for posture, Runs to trigger loops, New Run to queue.',
+      title: 'Auto-improve pages',
+      description:
+        'Banner + PDCA SNAPSHOT first — Summary for posture, Runs to trigger loops, New Run to queue.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total: 'Total runs',
+        active: 'Active',
+        succeeded: 'Succeeded',
+        failed: 'Failed',
+        avgScore: 'Avg score',
+        iterations: 'Iterations',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        runs: 'View runs',
+        openRuns: 'Open runs',
+        newRun: 'New run',
+        queue: 'Queue new run',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        runs: 'Runs',
+        new: 'New Run',
+      },
       help: {
         title: 'About PDCA iteration',
         whatIsIt: 'Each run fetches a live page, generates improved markup (producer), then scores it with an LLM critic persona. The loop repeats until the target score or max iterations.',
@@ -475,8 +800,33 @@ export const COPY: CopyRegistry = {
       },
     },
     '/drift': {
-      title: 'Contract drift',
-      description: 'Banner + DRIFT SNAPSHOT — compare OpenAPI, inventory, and DB schema to catch gaps before users do.',
+      title: 'Catch contract drift',
+      description:
+        'Banner + DRIFT SNAPSHOT first — Summary for posture, Findings to triage, Snapshots for history, Scanner to run walker.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        openFindings: 'Open findings',
+        critical: 'Critical',
+        warnings: 'Warnings',
+        snapshots: 'Snapshots',
+        contractEdges: 'Contract edges',
+        surfaces: 'Surfaces',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        findings: 'Triage findings',
+        review: 'Review findings',
+        scan: 'Run scan',
+        firstScan: 'Run first scan',
+        snapshots: 'View snapshots',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        findings: 'Findings',
+        snapshots: 'Snapshots',
+        scanner: 'Scanner',
+      },
       help: {
         title: 'About contract drift',
         whatIsIt: 'The drift-walker builds a contract snapshot then walks every route — finding API endpoints, inventory nodes, or DB columns that diverged from each other.',
@@ -489,8 +839,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/experiments': {
-      title: 'A/B experiments',
-      description: 'Banner + EXPERIMENTS SNAPSHOT — create variants, launch tests, analyze with mSPRT significance.',
+      title: 'Run A/B tests',
+      description:
+        'Banner + EXPERIMENTS SNAPSHOT first — Summary for posture, Experiments to launch/monitor, New to create variants.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total: 'Total',
+        running: 'Running',
+        readyToLaunch: 'Ready to launch',
+        winners: 'Winners',
+        assignments: 'Assignments',
+        conversion: 'Conversion',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        monitor: 'Monitor runs',
+        drafts: 'Review drafts',
+        create: 'Create experiment',
+        winners: 'Review winners',
+        finish: 'Finish setup',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        experiments: 'Experiments',
+        new: 'New',
+      },
       help: {
         title: 'About experiments',
         whatIsIt: 'A/B testing with SDK assignment — compare UI variants with CUPED variance reduction, mSPRT always-valid p-values, and SRM checks.',
@@ -503,8 +877,32 @@ export const COPY: CopyRegistry = {
       },
     },
     '/anomalies': {
-      title: 'Metric anomalies',
-      description: 'Banner + ANOMALIES SNAPSHOT — ingest metrics, run detection, triage Page-Hinkley and release regressions.',
+      title: 'Catch metric spikes',
+      description:
+        'Banner + ANOMALIES SNAPSHOT first — Summary for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        open: 'Open',
+        releaseRegressions: 'Release regressions',
+        highScore: 'High score',
+        autoReported: 'Auto-reported',
+        metricPoints: 'Metric points',
+        dismissed: 'Dismissed',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        triage: 'Triage anomalies',
+        review: 'Review anomalies',
+        ingest: 'Ingest metrics',
+        detect: 'Run detection',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        anomalies: 'Anomalies',
+        metrics: 'Metrics',
+        detect: 'Detect',
+      },
       help: {
         title: 'About anomaly detection',
         whatIsIt: 'Ingest any numeric metric (error rate, latency, conversion) and run Page-Hinkley, Z-score, or release-regression detectors. Confirmed regressions can auto-open bug reports.',
@@ -517,8 +915,31 @@ export const COPY: CopyRegistry = {
       },
     },
     '/cost': {
-      title: 'LLM Cost',
-      description: 'Audit every AI call — spend by operation, model, and day with a searchable invocation log.',
+      title: 'What AI calls cost',
+      description:
+        'Banner + SPEND SNAPSHOT first — Summary for trend, Breakdown by model, Raw log to audit individual calls.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total: 'Total logged',
+        day24h: 'Last 24 hours',
+        month: 'This month',
+        topDriver: 'Top driver',
+        operations: 'Operations',
+        models: 'Models',
+        keySource: 'Key source · 24h',
+      },
+      actionLabels: {
+        health: 'Run health test',
+        log: 'Inspect log',
+        failures: 'View failures',
+        byok: 'Add BYOK',
+        breakdown: 'View breakdown',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        breakdown: 'Breakdown',
+        log: 'Raw log',
+      },
       help: {
         title: 'About AI cost tracking',
         whatIsIt: 'Every edge function writes to llm_invocations with token counts and cost_usd. This page rolls spend up by operation, model, and day — legacy llm_cost_usd rows are merged into totals.',
@@ -527,12 +948,35 @@ export const COPY: CopyRegistry = {
           'Spot a runaway cron from the 24h spend banner or daily chart',
           'Confirm BYOK vs platform key usage before your billing cycle',
         ],
-        howToUse: 'Overview shows health + trend. Breakdown groups by operation/model. Raw log searches individual calls. Add Anthropic BYOK in Settings → LLM keys to bill your own key.',
+        howToUse:
+          'Summary shows health + trend. Breakdown groups by operation/model. Raw log searches individual calls. Add Anthropic BYOK in Settings → LLM keys to bill your own key.',
       },
     },
     '/notifications': {
-      title: 'Notifications',
-      description: 'Banner + NOTIFICATIONS SNAPSHOT — Overview for posture, Inbox to debug payloads, Setup for pipeline checklist.',
+      title: 'Updates for bug reporters',
+      description:
+        'Banner + NOTIFICATIONS SNAPSHOT first — Summary for posture, Inbox to debug payloads, Setup for pipeline checklist.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total: 'Total',
+        unread: 'Unread',
+        last24h: 'Last 24h',
+        enabled: 'Enabled',
+        fixFailed: 'Fix failed',
+        lastMessage: 'Last message',
+      },
+      actionLabels: {
+        settings: 'Open Settings',
+        inbox: 'Review inbox',
+        setup: 'Open Setup',
+        viewInbox: 'View inbox',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        inbox: 'Inbox',
+        setup: 'Setup',
+      },
       help: {
         title: 'About reporter notifications',
         whatIsIt: 'Messages queued for end users who submitted bugs. The SDK polls this inbox so reporters see when their report was classified, fixed, or rewarded.',
@@ -545,8 +989,30 @@ export const COPY: CopyRegistry = {
       },
     },
     '/billing': {
-      title: 'Plan & billing',
-      description: 'Current plan, quota usage, Stripe invoices, and upgrade paths — scoped to the active project.',
+      title: 'Your plan & usage',
+      description:
+        'Banner + BILLING SNAPSHOT first — Summary for usage + invoices, Plans to compare tiers, Support for billing tickets.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        plan: 'Plan',
+        reports: 'Reports · period',
+        fixes: 'Fixes · period',
+        llmCogs: 'LLM COGS · month',
+      },
+      actionLabels: {
+        upgrade: 'Upgrade plan',
+        manage: 'Manage in Stripe',
+        plans: 'Compare plans',
+        payment: 'Update payment',
+        projects: 'Create project',
+        cost: 'View LLM cost',
+        health: 'Run Health test',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        plans: 'Plans',
+        support: 'Support',
+      },
       help: {
         title: 'About billing',
         whatIsIt: 'Per-project subscription and usage meters. Hobby includes a monthly report quota; paid plans unlock higher limits, BYOK, and Stripe-managed billing.',
@@ -573,8 +1039,31 @@ export const COPY: CopyRegistry = {
       },
     },
     '/explore': {
-      title: 'Codebase map',
-      description: 'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas, Index for debug.',
+      title: 'Map your codebase',
+      description:
+        'Banner + EXPLORE SNAPSHOT first — Summary for posture, Graph/Layers/Search for the atlas, Index for debug.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        files: 'Files',
+        uiLayer: 'UI layer',
+        backend: 'Backend',
+        embedded: 'Embedded',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        index: 'Open Index tab',
+        debug: 'Debug index',
+        settings: 'Open Settings',
+        graph: 'Open Graph',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        graph: 'Graph',
+        layers: 'Layers',
+        search: 'Search',
+        index: 'Index',
+      },
       help: {
         title: 'About the codebase explorer',
         whatIsIt: 'A visual map of your code that shows every file, how files connect, and lets you search with plain English.',
@@ -603,6 +1092,28 @@ export const COPY: CopyRegistry = {
     '/dashboard': {
       title: 'Your bug-fix loop',
       description: 'Live workspace snapshot — banner and KPI strip tell you what needs action before you drill into loop, metrics, or health.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        backlog: 'Backlog',
+        reports: 'Reports 14d',
+        fixes: 'Fixes',
+        focus: 'Focus',
+      },
+      actionLabels: {
+        setup: 'Continue setup',
+        triage: 'Open triage queue',
+        failed: 'View failed fixes',
+        health: 'View health',
+        verify: 'Send test report',
+        healthy: 'View loop',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Overview',
+        loop: 'Loop',
+        metrics: 'Metrics',
+        health: 'Health',
+      },
       help: {
         title: 'How to read this dashboard',
         whatIsIt:
@@ -619,9 +1130,28 @@ export const COPY: CopyRegistry = {
     },
     '/reports': {
       title: 'Bugs your users felt',
-      description: 'Banner + TRIAGE SNAPSHOT first — then Overview for posture, Queue to triage, Severity for 14d trends.',
-      sections: {
-        triage_queue: 'Waiting for review',
+      description:
+        'Banner + TRIAGE SNAPSHOT first — then Overview for posture, Queue to triage, Severity for 14d trends.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        total14d: 'Last 14 days',
+        untriaged: 'Needs review',
+        critical: 'Critical',
+        dismissed: 'Dismissed',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        verify: 'Send test report',
+        triage: 'Triage critical',
+        backlog: 'Open backlog',
+        queue: 'Open queue',
+        severity: 'Severity view',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Overview',
+        queue: 'Queue',
+        severity: 'Severity',
       },
       help: {
         title: 'About reports',
@@ -638,7 +1168,27 @@ export const COPY: CopyRegistry = {
     },
     '/graph': {
       title: 'How bugs connect',
-      description: 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map, Backend for AGE sync debug.',
+      description: 'See where bugs cluster — red banner means a hotspot needs attention.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        nodes: 'Spots',
+        edges: 'Links',
+        fragile: 'Hotspots',
+        inventory: 'Screens',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        verify: 'Send test bug',
+        reports: 'Open bugs',
+        explore: 'Open map',
+        regressions: 'See regressions',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        explore: 'Map',
+        backend: 'Sync debug',
+      },
       help: {
         title: 'About the bug map',
         whatIsIt:
@@ -653,8 +1203,33 @@ export const COPY: CopyRegistry = {
       },
     },
     '/fixes': {
-      title: 'Auto-drafted fixes',
-      description: 'Pull requests Mushi opened on your behalf. Review the diff, judge score, and screenshot proof — then merge.',
+      title: 'Fixes ready to review',
+      description:
+        'Banner + FIXES SNAPSHOT first — Summary for posture, Pipeline for in-flight dispatches, Attempts for draft PRs.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        totalAttempts: 'Fixes (30 days)',
+        completed: 'Completed',
+        failed: 'Failed',
+        inProgress: 'In flight',
+        prsOpen: 'PRs open',
+        prsCiPassing: 'CI passing',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        github: 'Connect repo',
+        index: 'Enable indexing',
+        failed: 'Review failed',
+        pipeline: 'Open pipeline',
+        reports: 'Open Reports',
+        attempts: 'View attempts',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Summary',
+        pipeline: 'Pipeline',
+        attempts: 'Attempts',
+      },
       help: {
         title: 'About auto-fixes',
         whatIsIt:
@@ -665,13 +1240,37 @@ export const COPY: CopyRegistry = {
           'Re-run the agent with a different prompt if the first attempt missed',
         ],
         howToUse:
-          'Click a fix to open the side-by-side diff. Click "Open PR" to land in GitHub. Click "Re-run" to try again with a fresh draft.',
+          'Summary for posture. Pipeline shows dispatches in flight. Attempts lists every draft PR — expand a card for rationale and CI status.',
       },
     },
     '/judge': {
       title: 'Is the classifier getting smarter?',
       description:
-        "An independent LLM grades every classification Mushi makes — accuracy, severity, component, repro. This page tracks whether scores are trending up or down.",
+        'Banner + JUDGE SNAPSHOT first — then Overview for posture, Trend for 12w chart, Evaluations for per-report grades.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        week: 'This week',
+        total: 'Total graded',
+        disagree: 'Disagreements',
+        drift: 'Week change',
+        classified: 'Ready to grade',
+        prompts: 'Prompt versions',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        run: 'Run judge now',
+        reports: 'Open Reports',
+        investigate: 'Investigate',
+        disagreements: 'See disagreements',
+        trend: 'View trend',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Overview',
+        trend: 'Trend',
+        evaluations: 'Grades',
+        prompts: 'Prompts',
+      },
       help: {
         title: 'About the AI judge',
         whatIsIt:
@@ -687,7 +1286,31 @@ export const COPY: CopyRegistry = {
     },
     '/health': {
       title: 'Is the AI brain healthy?',
-      description: 'Live latency, error rate, and cost for every LLM call Mushi makes. The vital signs of the auto-fix engine.',
+      description:
+        'Banner + HEALTH SNAPSHOT first — then Overview for posture, LLM for breakdowns, Cron for jobs, Activity for traces.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        calls: 'AI calls',
+        errors: 'Error rate',
+        fallbacks: 'Fallback rate',
+        latency: 'Speed p50 / p95',
+        cron: 'Jobs OK',
+        lastCall: 'Last call',
+      },
+      actionLabels: {
+        setup: 'Go to Setup',
+        verify: 'Send test report',
+        llm: 'Inspect LLM',
+        cron: 'Open cron',
+        activity: 'View activity',
+        refresh: 'Refresh',
+      },
+      tabLabels: {
+        overview: 'Overview',
+        llm: 'AI calls',
+        cron: 'Scheduled jobs',
+        activity: 'Recent traces',
+      },
       help: {
         title: 'About system health',
         whatIsIt:
@@ -722,12 +1345,26 @@ export const COPY: CopyRegistry = {
       },
     },
     '/integrations/config': {
-      title: 'Integrations',
-      description: 'Connect Sentry, Langfuse, GitHub, and routing destinations so Mushi closes the loop in tools your team already uses.',
-      sections: {
-        platforms: 'Platform wiring',
-        routing: 'Routing destinations',
-        repo: 'Repo & codebase index',
+      title: 'Where fixed bugs go',
+      description:
+        'Banner + INTEGRATIONS SNAPSHOT first — Platform for Sentry/Langfuse/GitHub, Routing for ticketing, Repo & index for auto-fix grounding.',
+      sections: { snapshot: 'At a glance', workspace: 'Integration workspace' },
+      statLabels: {
+        platform: 'Platform',
+        healthy: 'Healthy probes',
+        routing: 'Routing',
+        failing: 'Failing',
+      },
+      actionLabels: {
+        platform: 'Finish platform',
+        health: 'Open health',
+        repo: 'Check repo index',
+        routing: 'Add routing',
+      },
+      tabLabels: {
+        platform: 'Platform',
+        routing: 'Routing',
+        repo: 'Repo & index',
       },
       help: {
         title: 'About integrations',
@@ -743,8 +1380,30 @@ export const COPY: CopyRegistry = {
       },
     },
     '/settings': {
-      title: 'Project settings',
-      description: 'Per-project pipeline knobs — LLM keys, SDK widget, Slack/Sentry hooks, and dev flags for the active project.',
+      title: 'Tune your project',
+      description:
+        'Banner + SETTINGS SNAPSHOT first — General for classifier knobs, LLM keys for BYOK, Health for pipeline smoke test.',
+      sections: { snapshot: 'At a glance' },
+      statLabels: {
+        byok: 'API keys',
+        sdk: 'Reporter widget',
+        routing: 'Routing hooks',
+        classifier: 'Classifier',
+      },
+      actionLabels: {
+        byok: 'Fix LLM keys',
+        health: 'Open Health',
+        test: 'Test keys',
+        integrations: 'Integrations',
+        pipeline: 'Run pipeline test',
+      },
+      tabLabels: {
+        general: 'General',
+        byok: 'LLM keys',
+        firecrawl: 'Firecrawl',
+        health: 'Health',
+        dev: 'Dev tools',
+      },
       help: {
         title: 'About settings',
         whatIsIt:
@@ -761,6 +1420,19 @@ export const COPY: CopyRegistry = {
     '/onboarding': {
       title: 'Get Mushi running',
       description: 'Three short steps: create a project, install the widget, send a test bug to see the loop run.',
+      sections: { snapshot: 'Setup snapshot' },
+      statLabels: {
+        required: 'Required steps',
+        sdk: 'SDK status',
+        reports: 'Reports',
+        optional: 'Optional',
+      },
+      tabLabels: {
+        overview: 'Overview',
+        steps: 'Steps',
+        verify: 'Verify',
+        sdk: 'SDK',
+      },
       help: {
         title: 'About setup',
         whatIsIt:

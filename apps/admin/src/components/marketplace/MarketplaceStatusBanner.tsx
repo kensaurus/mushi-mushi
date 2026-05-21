@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { MarketplaceStats, MarketplaceTabId } from './types'
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   onTab?: (tab: MarketplaceTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
 function tabFromPath(path: string | null): MarketplaceTabId | null {
@@ -22,7 +24,16 @@ function tabFromPath(path: string | null): MarketplaceTabId | null {
   return null
 }
 
-export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefresh, refreshing }: Props) {
+export function MarketplaceStatusBanner({
+  stats,
+  pluginsUnlocked,
+  onTab,
+  onRefresh,
+  refreshing,
+  plainBanner = false,
+}: Props) {
+  const copy = usePageCopy('/marketplace')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
 
   if (!stats.hasAnyProject) {
@@ -31,7 +42,9 @@ export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefre
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No project selected</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Pick a project first' : 'No project selected'}
+            </p>
             <p className="text-2xs text-fg-muted">Plugin installs and delivery logs are scoped to the active project.</p>
           </div>
         </div>
@@ -45,12 +58,14 @@ export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefre
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">Plugins require a Pro plan or higher</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner ? 'Plugins need a Pro plan' : 'Plugins require a Pro plan or higher'}
+            </p>
             <p className="text-2xs text-fg-muted">Browse the catalog read-only — installing webhook plugins needs the plugins entitlement.</p>
           </div>
         </div>
         <Link to="/billing">
-          <Btn size="sm" variant="ghost">View plans</Btn>
+          <Btn size="sm" variant="ghost">{actions.plans ?? 'View plans'}</Btn>
         </Link>
       </div>
     )
@@ -67,16 +82,18 @@ export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefre
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.deliveriesFailed} failed deliver{stats.deliveriesFailed === 1 ? 'y' : 'ies'} (7d)
+              {plainBanner
+                ? `${stats.deliveriesFailed} webhook failure${stats.deliveriesFailed === 1 ? '' : 's'} (7d)`
+                : `${stats.deliveriesFailed} failed deliver${stats.deliveriesFailed === 1 ? 'y' : 'ies'} (7d)`}
             </p>
             <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
         {onTab && actionTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>View deliveries</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab(actionTab)}>{actions.deliveries ?? 'View deliveries'}</Btn>
         ) : (
           <Link to="/marketplace?tab=deliveries">
-            <Btn size="sm" variant="ghost">View deliveries</Btn>
+            <Btn size="sm" variant="ghost">{actions.deliveries ?? 'View deliveries'}</Btn>
           </Link>
         )}
       </div>
@@ -96,7 +113,7 @@ export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefre
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('installed')}>Resume plugins</Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab('installed')}>{actions.resume ?? 'Resume plugins'}</Btn>
         ) : null}
       </div>
     )
@@ -108,15 +125,17 @@ export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefre
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No plugins installed on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No plugins installed yet' : `No plugins installed on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{label}</p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="primary" onClick={() => onTab('browse')}>Browse catalog</Btn>
+          <Btn size="sm" variant="primary" onClick={() => onTab('browse')}>{actions.browse ?? 'Browse catalog'}</Btn>
         ) : (
           <Link to="/marketplace?tab=browse">
-            <Btn size="sm" variant="primary">Browse catalog</Btn>
+            <Btn size="sm" variant="primary">{actions.browse ?? 'Browse catalog'}</Btn>
           </Link>
         )}
       </div>
@@ -128,16 +147,18 @@ export function MarketplaceStatusBanner({ stats, pluginsUnlocked, onTab, onRefre
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Plugins delivering on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Plugins delivering' : `Plugins delivering on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{label}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : onTab ? (
-        <Btn size="sm" variant="ghost" onClick={() => onTab('deliveries')}>View log</Btn>
+        <Btn size="sm" variant="ghost" onClick={() => onTab('deliveries')}>{actions.deliveries ?? 'View log'}</Btn>
       ) : null}
     </div>
   )

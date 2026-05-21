@@ -70,6 +70,18 @@ import {
   type GraphStats,
   type GraphTabId,
 } from '../components/graph/GraphStatsTypes'
+import { useGraphUx, resolveQuickGraphTab } from '../lib/graphModeUx'
+import {
+  edgesDetail,
+  edgesTooltip,
+  fragileDetail,
+  fragileTooltip,
+  inventoryDetail,
+  inventoryTooltip,
+  nodesDetail,
+  nodesTooltip,
+} from '../lib/statTooltips/graph'
+import { graphLinks } from '../lib/statCardLinks'
 
 const GRAPH_TABS: Array<{ id: GraphTabId; label: string; description: string }> = [
   {
@@ -110,6 +122,7 @@ export function GraphPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/graph')
+  const ux = useGraphUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveGraphTab(tabParam)
@@ -134,6 +147,12 @@ export function GraphPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickGraphTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const nodesQuery = usePageData<{ nodes: GraphNode[] }>('/v1/admin/graph/nodes')
   const edgesQuery = usePageData<{ edges: GraphEdge[] }>('/v1/admin/graph/edges')
@@ -443,15 +462,15 @@ export function GraphPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'explore' as const,
-        label: 'Explore',
+        label: copy?.tabLabels?.explore ?? 'Explore',
         count: stats.nodeCount > 0 ? stats.nodeCount : undefined,
       },
-      { id: 'backend' as const, label: 'Backend' },
+      { id: 'backend' as const, label: copy?.tabLabels?.backend ?? 'Backend' },
     ],
-    [stats],
+    [stats, copy?.tabLabels],
   )
 
   usePublishPageContext({
@@ -620,6 +639,25 @@ export function GraphPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-graph">
+      <PageHelp
+        title={copy?.help?.title ?? 'About the Knowledge Graph'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'See blast radius: click any node to highlight everything it can affect',
+            'Find regressions: pick the Regressions quick view on Explore tab',
+            'Spot fragile components: red banner means ≥3 incoming affects edges',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Overview for posture. Explore for canvas/table/surface. Backend tab shows AGE sync and ontology debug info.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Knowledge Graph'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -672,48 +710,62 @@ export function GraphPage() {
         onTab={setActiveTab}
         onRefresh={reloadGraph}
         refreshing={statsValidating || loading}
+        plainBanner={ux.plainBanner}
       />
 
-      <SegmentedControl<GraphTabId>
-        size="sm"
-        ariaLabel="Graph sections"
-        value={activeTab}
-        options={tabOptions}
-        onChange={setActiveTab}
-      />
+      {!ux.hideTabs && (
+        <SegmentedControl<GraphTabId>
+          size="sm"
+          ariaLabel="Graph sections"
+          value={activeTab}
+          options={tabOptions}
+          onChange={setActiveTab}
+        />
+      )}
 
-      <Section title="GRAPH SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideGraphSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'GRAPH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="Nodes"
+            label={copy?.statLabels?.nodes ?? 'Nodes'}
             value={stats.nodeCount}
             accent={stats.nodeCount > 0 ? 'text-fg' : undefined}
-            hint={stats.reportNodes > 0 ? `${stats.reportNodes} report groups` : 'Seeds from reports'}
+            tooltip={nodesTooltip(stats)}
+            detail={nodesDetail(stats)}
+            to={graphLinks.nodes}
           />
           <StatCard
-            label="Edges"
+            label={copy?.statLabels?.edges ?? 'Edges'}
             value={stats.edgeCount}
             accent={stats.edgeCount > 0 ? 'text-brand' : undefined}
-            hint={stats.duplicateEdges > 0 ? `${stats.duplicateEdges} duplicates` : 'Relationship count'}
+            tooltip={edgesTooltip(stats)}
+            detail={edgesDetail(stats)}
+            to={graphLinks.edges}
           />
           <StatCard
-            label="Fragile"
+            label={copy?.statLabels?.fragile ?? 'Fragile'}
             value={stats.fragileComponents}
             accent={stats.fragileComponents > 0 ? 'text-danger' : 'text-ok'}
-            hint="Components with ≥3 affects"
+            tooltip={fragileTooltip(stats)}
+            detail={fragileDetail(ux.plainBanner)}
+            to={graphLinks.fragile}
           />
           <StatCard
-            label="Inventory"
+            label={copy?.statLabels?.inventory ?? 'Inventory'}
             value={stats.inventoryNodes}
             accent={stats.inventoryNodes > 0 ? 'text-info' : undefined}
-            hint={stats.inventoryNodes > 0 ? 'Surface overlay nodes' : 'Enable via User stories'}
+            tooltip={inventoryTooltip(stats)}
+            detail={inventoryDetail(stats)}
+            to={graphLinks.inventory}
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
+          {!ux.hideOverviewChrome && (
           <PageHero
             scope="graph"
             title="Knowledge Graph"
@@ -746,8 +798,9 @@ export function GraphPage() {
               detail: `${stats.graphBackend}${stats.unsyncedNodes > 0 ? ` · ${stats.unsyncedNodes} unsynced nodes` : ''}`,
             }}
           />
+          )}
 
-          {stats.topPriorityTo && stats.topPriority !== 'clear' ? (
+          {!ux.hideOverviewChrome && stats.topPriorityTo && stats.topPriority !== 'clear' ? (
             <Card
               className={`p-4 ${
                 stats.topPriority === 'fragile'
@@ -772,39 +825,22 @@ export function GraphPage() {
             </Card>
           ) : null}
 
-          <PageActionBar scope="graph" action={graphAction} />
+          {!ux.hideOverviewChrome && <PageActionBar scope="graph" action={graphAction} />}
 
-          <PageHelp
-            title={copy?.help?.title ?? 'About the Knowledge Graph'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'A live map of the relationships your bug reports create — components affected, pages broken, regressions, duplicates, and fix attempts.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'See blast radius: click any node to highlight everything it can affect',
-                'Find regressions: pick the Regressions quick view on Explore tab',
-                'Spot fragile components: red banner means ≥3 incoming affects edges',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Overview for posture. Explore for canvas/table/surface. Backend tab shows AGE sync and ontology debug info.'
-            }
-          />
-
+          {!ux.hideOverviewChrome && (
           <div className="flex flex-wrap gap-2">
             <Btn size="sm" variant="primary" onClick={() => setActiveTab('explore')}>
-              Open map →
+              {copy?.actionLabels?.explore ?? 'Open map'} →
             </Btn>
             {!stats.hasIngest ? (
               <Link to="/onboarding?tab=verify">
                 <Btn size="sm" variant="ghost">
-                  Send test report
+                  {copy?.actionLabels?.verify ?? 'Send test report'}
                 </Btn>
               </Link>
             ) : null}
           </div>
+          )}
         </>
       )}
 

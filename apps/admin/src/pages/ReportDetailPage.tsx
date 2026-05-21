@@ -33,6 +33,7 @@ import {
 } from '../components/icons'
 import { ReportDetailHeader } from '../components/report-detail/ReportDetailHeader'
 import { ReportTriageBar } from '../components/report-detail/ReportTriageBar'
+import { CursorAgentLaunch } from '../components/report-detail/CursorAgentLaunch'
 import { PdcaReceiptStrip } from '../components/report-detail/PdcaReceiptStrip'
 import { ReportPdcaStory } from '../components/report-detail/ReportPdcaStory'
 import { ReportBranchGraph } from '../components/report-detail/ReportBranchGraph'
@@ -281,6 +282,15 @@ function ReportDetailView({ report, onTriage, saving, savedAt }: ReportDetailVie
       />
 
       <FixProgressStream reportId={report.id} dispatchState={dispatchState} />
+
+      {/* Cursor agent handoff — gives operators a way to drive the fix
+          loop themselves with full visibility, vs. delegating to the
+          internal fix-worker. Only shown for reports that haven't been
+          dispatched yet, since after dispatch the fix-worker owns the
+          loop and a parallel Cursor agent would race. */}
+      {report.status !== 'fixed' && report.status !== 'dismissed' && dispatchState.status === 'idle' && (
+        <CursorAgentLaunch report={report} />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <Section title="User report" icon={<IconUser />}>

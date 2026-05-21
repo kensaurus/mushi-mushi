@@ -4,7 +4,7 @@
  *          Overview | Drafts | Published | Draft.
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { usePageData } from '../lib/usePageData'
@@ -15,7 +15,23 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { SetupNudge } from '../components/SetupNudge'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useReleasesUx, resolveQuickReleasesTab } from '../lib/releasesModeUx'
 import { pluralizeWithCount } from '../lib/format'
+import {
+  contributorsDetail,
+  contributorsTooltip,
+  draftsDetail,
+  draftsTooltip,
+  feedbackDetail,
+  feedbackTooltip,
+  fixedReportsDetail,
+  fixedReportsTooltip,
+  fixesLinkedDetail,
+  fixesLinkedTooltip,
+  publishedDetail,
+  publishedTooltip,
+} from '../lib/statTooltips/releases'
+import { releasesLinks } from '../lib/statCardLinks'
 import {
   PageHeader,
   PageHelp,
@@ -419,6 +435,7 @@ function ReleasesList({
 
 export function ReleasesPage() {
   const copy = usePageCopy('/releases')
+  const ux = useReleasesUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveReleasesTab(searchParams.get('tab'))
   const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
@@ -471,6 +488,12 @@ export function ReleasesPage() {
     [setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickReleasesTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
+
   const reloadAll = useCallback(() => {
     reloadStats()
     reloadList()
@@ -480,7 +503,14 @@ export function ReleasesPage() {
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label:
+          t.id === 'overview'
+            ? copy?.tabLabels?.overview ?? t.label
+            : t.id === 'drafts'
+              ? copy?.tabLabels?.drafts ?? t.label
+              : t.id === 'published'
+                ? copy?.tabLabels?.published ?? t.label
+                : copy?.tabLabels?.draft ?? t.label,
         count:
           t.id === 'drafts' && stats.draftCount > 0
             ? stats.draftCount
@@ -488,7 +518,7 @@ export function ReleasesPage() {
               ? stats.publishedCount
               : undefined,
       })),
-    [stats.draftCount, stats.publishedCount],
+    [stats.draftCount, stats.publishedCount, copy?.tabLabels],
   )
 
   usePublishPageContext({
@@ -533,6 +563,17 @@ export function ReleasesPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-releases">
+      <PageHelp
+        title={copy?.help?.title ?? 'About Releases'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.'}
+        useCases={copy?.help?.useCases ?? [
+          'Auto-generate changelogs linked to the users who reported each fix',
+          'Notify credited reporters in the feedback stamp when you publish',
+          'Close the feedback loop: users see what their reports fixed',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Summary for posture. Drafts to review pending changelogs. Published for shipped releases. New draft to generate from fixed bugs.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Releases'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -574,8 +615,10 @@ export function ReleasesPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<ReleasesTabId>
         size="sm"
         ariaLabel="Releases sections"
@@ -583,20 +626,23 @@ export function ReleasesPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="RELEASES SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideReleasesSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'RELEASES SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Drafts" value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} hint="Awaiting publish" />
-          <StatCard label="Published" value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} hint="Shipped changelogs" />
-          <StatCard label="Fixes linked" value={stats.totalFixesLinked} accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined} hint="Across all releases" />
-          <StatCard label="Contributors" value={stats.totalContributors} accent={stats.totalContributors > 0 ? 'text-brand' : undefined} hint={`${stats.totalCredits} credit rows`} />
-          <StatCard label="Fixed reports" value={stats.fixedReportsCount} accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined} hint="Ready to draft" />
-          <StatCard label="Feedback shipped" value={stats.fulfilledTicketsShipped} accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined} hint={`${stats.openFeedbackTickets} open tickets`} />
+          <StatCard label={copy?.statLabels?.drafts ?? 'Drafts'} value={stats.draftCount} accent={stats.draftCount > 0 ? 'text-warn' : undefined} tooltip={draftsTooltip(stats)} detail={draftsDetail()} to={releasesLinks.drafts} />
+          <StatCard label={copy?.statLabels?.published ?? 'Published'} value={stats.publishedCount} accent={stats.publishedCount > 0 ? 'text-ok' : undefined} tooltip={publishedTooltip(stats)} detail={publishedDetail()} to={releasesLinks.published} />
+          <StatCard label={copy?.statLabels?.fixesLinked ?? 'Fixes linked'} value={stats.totalFixesLinked} accent={stats.totalFixesLinked > 0 ? 'text-brand' : undefined} tooltip={fixesLinkedTooltip(stats)} detail={fixesLinkedDetail()} to={releasesLinks.fixesLinked} />
+          <StatCard label={copy?.statLabels?.contributors ?? 'Contributors'} value={stats.totalContributors} accent={stats.totalContributors > 0 ? 'text-brand' : undefined} tooltip={contributorsTooltip(stats)} detail={contributorsDetail(stats)} to={releasesLinks.contributors} />
+          <StatCard label={copy?.statLabels?.fixedReports ?? 'Fixed reports'} value={stats.fixedReportsCount} accent={stats.fixedReportsCount > 0 ? 'text-brand' : undefined} tooltip={fixedReportsTooltip(stats)} detail={fixedReportsDetail()} to={releasesLinks.fixedReports} />
+          <StatCard label={copy?.statLabels?.feedback ?? 'Feedback shipped'} value={stats.fulfilledTicketsShipped} accent={stats.fulfilledTicketsShipped > 0 ? 'text-ok' : undefined} tooltip={feedbackTooltip(stats)} detail={feedbackDetail(stats)} to={releasesLinks.feedback} />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'drafts_pending'
@@ -615,16 +661,8 @@ export function ReleasesPage() {
 
       {activeTab === 'overview' && (
         <>
-          <PageHelp
-            title={copy?.help?.title ?? 'About Releases'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'Release drafts scan fixed bug reports from a time window, attribute them to reporters, and write a plain-English changelog using AI.'}
-            useCases={copy?.help?.useCases ?? [
-              'Auto-generate changelogs linked to the users who reported each fix',
-              'Notify credited reporters in the feedback stamp when you publish',
-              'Close the feedback loop: users see what their reports fixed',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Select a date window and click Generate draft — AI writes the changelog. Review credited contributors, edit if needed, then publish to queue in-app toasts for each reporter.'}
-          />
+          {!ux.hideOverviewChrome && (
+          <>
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -655,6 +693,8 @@ export function ReleasesPage() {
               description="Mark bug reports as fixed in Reports before generating a release draft."
               cta={{ label: 'View fixed reports', to: '/reports?status=fixed' }}
             />
+          )}
+          </>
           )}
         </>
       )}

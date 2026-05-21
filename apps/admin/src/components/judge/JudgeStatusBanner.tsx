@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { JudgeStats, JudgeTabId } from './JudgeStatsTypes'
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   refreshing?: boolean
   onRunJudge?: () => void
   running?: boolean
+  plainBanner?: boolean
 }
 
 export function JudgeStatusBanner({
@@ -23,7 +25,10 @@ export function JudgeStatusBanner({
   refreshing,
   onRunJudge,
   running,
+  plainBanner = false,
 }: Props) {
+  const copy = usePageCopy('/judge')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -32,12 +37,18 @@ export function JudgeStatusBanner({
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No projects — judge idle</p>
-            <p className="text-2xs text-fg-muted">Create a project and classify reports before running judge.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Create a project before the judge can run' : 'No projects — judge idle'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'Classify a few bugs first — then the judge grades whether triage was right.'
+                : 'Create a project and classify reports before running judge.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -49,21 +60,25 @@ export function JudgeStatusBanner({
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No judge evaluations on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner
+                ? `No grades yet on ${projectLabel}`
+                : `No judge evaluations on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {onRunJudge ? (
           <Btn size="sm" variant="ghost" onClick={onRunJudge} loading={running} disabled={running}>
-            Run judge now
+            {actions.run ?? 'Run judge now'}
           </Btn>
         ) : stats.classifiedReports > 0 ? (
           <Link to="/judge?action=run">
-            <Btn size="sm" variant="ghost">Run judge now</Btn>
+            <Btn size="sm" variant="ghost">{actions.run ?? 'Run judge now'}</Btn>
           </Link>
         ) : (
           <Link to="/reports">
-            <Btn size="sm" variant="ghost">Open Reports</Btn>
+            <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
           </Link>
         )}
       </div>
@@ -77,18 +92,24 @@ export function JudgeStatusBanner({
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.topPriority === 'low_score' ? 'Classifier score below 60%' : 'Score drifting week-over-week'}
+              {plainBanner
+                ? stats.topPriority === 'low_score'
+                  ? 'Classifier scores below 60% — triage may be wrong'
+                  : 'Scores dropped week-over-week'
+                : stats.topPriority === 'low_score'
+                  ? 'Classifier score below 60%'
+                  : 'Score drifting week-over-week'}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Investigate</Btn>
+            <Btn size="sm" variant="ghost">{actions.investigate ?? 'Investigate'}</Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('evaluations')}>
-            Investigate
+            {actions.investigate ?? 'Investigate'}
           </Btn>
         ) : null}
       </div>
@@ -102,18 +123,20 @@ export function JudgeStatusBanner({
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.disagreementRatePct ?? 0}% disagreement rate
+              {plainBanner
+                ? `${stats.disagreementRatePct ?? 0}% of grades disagree with the classifier`
+                : `${stats.disagreementRatePct ?? 0}% disagreement rate`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">View disagreements</Btn>
+            <Btn size="sm" variant="ghost">{actions.disagreements ?? 'View disagreements'}</Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('evaluations')}>
-            View disagreements
+            {actions.disagreements ?? 'View disagreements'}
           </Btn>
         ) : null}
       </div>
@@ -126,17 +149,19 @@ export function JudgeStatusBanner({
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">Judge scores stale</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner ? 'Judge grades are out of date' : 'Judge scores stale'}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {onRunJudge ? (
           <Btn size="sm" variant="ghost" onClick={onRunJudge} loading={running} disabled={running}>
-            Run judge now
+            {actions.run ?? 'Run judge now'}
           </Btn>
         ) : (
           <Link to="/judge?action=run">
-            <Btn size="sm" variant="ghost">Run judge now</Btn>
+            <Btn size="sm" variant="ghost">{actions.run ?? 'Run judge now'}</Btn>
           </Link>
         )}
       </div>
@@ -148,18 +173,24 @@ export function JudgeStatusBanner({
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Judge healthy on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? `Classifier grades look healthy on ${projectLabel}` : `Judge healthy on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : stats.topPriorityTo ? (
         <Link to={stats.topPriorityTo}>
-          <Btn size="sm" variant="ghost">View trend</Btn>
+          <Btn size="sm" variant="ghost">{actions.trend ?? 'View trend'}</Btn>
         </Link>
+      ) : onTab ? (
+        <Btn size="sm" variant="ghost" onClick={() => onTab('trend')}>
+          {actions.trend ?? 'View trend'}
+        </Btn>
       ) : null}
     </div>
   )
