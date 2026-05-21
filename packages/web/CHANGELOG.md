@@ -1,5 +1,22 @@
 # @mushi-mushi/web
 
+## 1.4.0
+
+### Minor Changes
+
+- Web SDK: Core Web Vitals catch-up + Sentry-spec feedback hooks.
+  - **INP (Interaction to Next Paint) capture**: a Google Core Web Vital since March 2024, replacing First Input Delay. The SDK now installs a `PerformanceObserver({ type: 'event', durationThreshold: 40 })` and records the worst-observed user-interaction latency on every report, with **attribution** — `eventType`, `targetSelector` (e.g. `button#submit.primary`), and per-phase timings (input delay / processing / presentation) so the triage UI can render "1200 ms click on `<button.checkout>`" instead of a bare number. Falls back to a `first-input` observer for FID on Safari < 16.4. Adds ~700 B gzipped to the bundle (still under the 44 KB budget at 43.07 kB).
+  - **`beforeSendFeedback` hook** (Sentry SDK feedback spec §4): last-chance synchronous or async hook fired AFTER pre-filter / on-device classifier / rate-limit gates pass and BEFORE the report is sent or queued. Returning `null` drops the report silently; throwing or timing out (>2 s) ships the unmodified report so a buggy hook never swallows feedback.
+  - **`onCrashedLastRun` hook** (Sentry SDK feedback spec §6): fires once on `Mushi.init` after detecting that the previous tab session ended without a clean `pagehide`. The SDK never auto-opens the widget — copy and timing are the host's call. Implementation uses a `localStorage` sentinel that's set on init and cleared on `pagehide` (the only reliably-fired end-of-session event in 2026).
+
+  No breaking changes. New unit tests in `packages/web/src/capture/performance.test.ts` lock the INP attribution math against the official web-vitals algorithm.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @mushi-mushi/core@1.4.0
+
 ## 1.3.0
 
 ### Minor Changes

@@ -54,6 +54,12 @@ export interface FixAttempt {
    * operators can spot the dominant failure mode at a glance.
    */
   failure_category?: string | null;
+  /** Cursor Cloud Agent run identifier (bc-…). Present when agent='cursor_cloud'. */
+  cursor_agent_id?: string | null;
+  /** Cursor run ID for the specific dispatch. */
+  cursor_run_id?: string | null;
+  /** Artifacts produced by the Cursor agent: screenshots, videos, logs. */
+  cursor_artifacts?: Array<{ kind: 'screenshot' | 'video' | 'log' | 'file'; path: string; mime: string }> | null;
 }
 
 export interface DispatchJob {

@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-zapier
 
+## 0.2.5
+
+### Patch Changes
+
+- Updated dependencies
+  - @mushi-mushi/plugin-sdk@0.5.0
+
 ## 0.2.4
 
 ### Patch Changes

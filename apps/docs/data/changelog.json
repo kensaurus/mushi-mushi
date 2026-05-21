@@ -1,5 +1,43 @@
 [
   {
+    "majorMinor": "1.4",
+    "headline": "Cursor Cloud Agent integration — auto-fix classified reports with a single PR",
+    "pending": false,
+    "versions": [
+      "1.4.0"
+    ],
+    "highlights": [
+      {
+        "title": "`@mushi-mushi/plugin-cursor-cloud` v0.2.0",
+        "description": "New first-party Marketplace plugin. Install from Admin → Marketplace → Cursor Cloud Agent to dispatch a Cursor Cloud Agent run automatically when `report.classified`, `fix.requested`, or `qa_story.failed` fires. The agent opens a signed draft PR and posts the link back into the Fixes view."
+      },
+      {
+        "title": "`mushi fix` CLI command",
+        "description": "`mushi fix <reportId> --agent cursor_cloud --wait` dispatches a Cursor Cloud Agent from the terminal and streams structured events to stdout. Integrates with CI — exits non-zero on failure."
+      },
+      {
+        "title": "MCP `dispatch_fix` — `agent=cursor_cloud`",
+        "description": "Pass `agent: 'cursor_cloud'` to the `dispatch_fix` MCP tool (or via `--agent cursor_cloud` in the CLI) to route directly to a Cursor Cloud Agent. Returns typed `{ fixId, status, agentId, runId, prUrl }` via `outputSchema`."
+      },
+      {
+        "title": "Plugin SDK — new events: `fix.requested`, `qa_story.failed`, `qa_story.passed`",
+        "description": "Three new `MushiEventName` values. Subscribe to `fix.requested` to trigger an agent immediately after dispatch; subscribe to `qa_story.failed` for automated healing of broken QA stories."
+      },
+      {
+        "title": "Admin UI — Cursor badge and artifact gallery",
+        "description": "The Fixes view shows a ◆ Cursor badge on agent runs with a link to the run transcript. Artifacts (screenshots, logs) produced by the agent are displayed in an expandable gallery."
+      }
+    ],
+    "packages": [
+      { "name": "@mushi-mushi/plugin-cursor-cloud", "version": "0.2.0" },
+      { "name": "@mushi-mushi/plugin-sdk", "version": "0.5.0" },
+      { "name": "@mushi-mushi/cli", "version": "0.9.0" },
+      { "name": "@mushi-mushi/mcp", "version": "0.7.0" },
+      { "name": "@mushi-mushi/core", "version": "1.4.0" },
+      { "name": "@mushi-mushi/web", "version": "1.4.0" }
+    ]
+  },
+  {
     "majorMinor": "1.3",
     "headline": null,
     "pending": false,

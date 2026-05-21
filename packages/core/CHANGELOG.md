@@ -1,5 +1,55 @@
 # @mushi-mushi/core
 
+## 1.4.0
+
+### Minor Changes
+
+- Cursor Cloud Agent integration — dispatch a Cursor Cloud Agent to auto-fix classified reports.
+
+  ## New package: `@mushi-mushi/plugin-cursor-cloud`
+
+  First-party Mushi Marketplace plugin that dispatches a Cursor Cloud Agent run when qualifying events fire (`report.classified`, `fix.requested`, `qa_story.failed`). The agent opens a signed draft PR automatically — no manual triage required.
+
+  Install from Admin → Marketplace → Cursor Cloud Agent, supply your API key and workspace ID, and configure per-severity severity gating. The plugin calls the Cursor REST API directly (no `@cursor/sdk` peer dep needed at the call site — the SDK is node-only and used only in the Path B orchestrator).
+
+  ## `@mushi-mushi/plugin-sdk` — new events
+
+  Three new event names added to `MushiEventName`:
+  - `fix.requested` — fires when a fix dispatch has been requested, before the agent launches.
+  - `qa_story.failed` — fires when a QA story run fails all its assertions.
+  - `qa_story.passed` — fires when a QA story run passes.
+
+  Corresponding sample envelopes added to the `mushi-plugin simulate` CLI for local development.
+
+  ## `@mushi-mushi/cli` — `mushi fix` command
+
+  New `fix` verb for dispatching an agentic fix from the terminal:
+
+  ```bash
+  mushi fix <reportId> --agent cursor_cloud --model composer-latest --wait
+  ```
+
+  Options: `--agent`, `--model`, `--no-auto-pr`, `--wait` (polls until terminal state; exits non-zero on failure). Streams structured events to stdout — JSON when piped, human-readable in a TTY. Integrates cleanly with CI pipelines.
+
+  ## `@mushi-mushi/mcp` — `dispatch_fix` Cursor Cloud support
+
+  `dispatch_fix` tool extended with:
+  - `agent` enum: `claude_code | codex | rest_worker | mcp | cursor_cloud`
+  - `backend` alias (deprecated — prefer `agent`)
+  - `cursorModel` optional override when `agent = cursor_cloud`
+  - `outputSchema` returns `{ fixId, status, agentId?, runId?, prUrl? }` — typed output for modern MCP clients
+
+  ## `@mushi-mushi/core` — `report:dispatched` event
+
+  New `MushiEventType` value `'report:dispatched'` emitted by the Web SDK after a report is submitted if the backend auto-dispatched a Cursor Cloud Agent fix. Host pages can subscribe to show a toast or update the UI.
+
+- Web SDK: Core Web Vitals catch-up + Sentry-spec feedback hooks.
+  - **INP (Interaction to Next Paint) capture**: a Google Core Web Vital since March 2024, replacing First Input Delay. The SDK now installs a `PerformanceObserver({ type: 'event', durationThreshold: 40 })` and records the worst-observed user-interaction latency on every report, with **attribution** — `eventType`, `targetSelector` (e.g. `button#submit.primary`), and per-phase timings (input delay / processing / presentation) so the triage UI can render "1200 ms click on `<button.checkout>`" instead of a bare number. Falls back to a `first-input` observer for FID on Safari < 16.4. Adds ~700 B gzipped to the bundle (still under the 44 KB budget at 43.07 kB).
+  - **`beforeSendFeedback` hook** (Sentry SDK feedback spec §4): last-chance synchronous or async hook fired AFTER pre-filter / on-device classifier / rate-limit gates pass and BEFORE the report is sent or queued. Returning `null` drops the report silently; throwing or timing out (>2 s) ships the unmodified report so a buggy hook never swallows feedback.
+  - **`onCrashedLastRun` hook** (Sentry SDK feedback spec §6): fires once on `Mushi.init` after detecting that the previous tab session ended without a clean `pagehide`. The SDK never auto-opens the widget — copy and timing are the host's call. Implementation uses a `localStorage` sentinel that's set on init and cleared on `pagehide` (the only reliably-fired end-of-session event in 2026).
+
+  No breaking changes. New unit tests in `packages/web/src/capture/performance.test.ts` lock the INP attribution math against the official web-vitals algorithm.
+
 ## 1.2.0
 
 ### Minor Changes

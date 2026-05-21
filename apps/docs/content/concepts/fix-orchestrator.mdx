@@ -52,16 +52,25 @@ verify isolation guarantees.
 
 ## Agent contract
 
-We support two agent shapes:
+We support three agent shapes:
 
 - **`McpFixAgent`** — speaks JSON-RPC 2.0 with `tools/call`, plus the
   SEP-1686 Tasks envelope so long-running fixes can stream progress.
 - **`RestFixWorkerAgent`** — a simpler REST contract (`POST /fix`,
   `GET /status`) for teams that haven't adopted MCP yet.
+- **`CursorCloudAgent`** (new in May 2026) — delegates to a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent)
+  via `@cursor/sdk`. The agent runs in Cursor's managed cloud environment, opens a signed
+  draft PR via `autoCreatePR: true`, and returns the PR URL and agent artifacts.
+  Unlike the other adapters, it does **not** use an E2B/Modal sandbox — Cursor provides
+  its own isolated runtime. The fix-worker edge function delegates these runs to the Node-side
+  orchestrator since `@cursor/sdk` is Node-only.
 
-Both agents have the same set of tools available: `read_file`, `write_file`,
+Both `McpFixAgent` and `RestFixWorkerAgent` have the same tools: `read_file`, `write_file`,
 `run_tests`, `git_commit`, `open_pr`. Filesystem and network access are
 brokered through the sandbox — the agent itself never gets a raw shell.
+
+`CursorCloudAgent` receives the fix prompt (including spec context) and uses Cursor's
+own tool suite inside the managed cloud environment.
 
 ## Credential scoping
 

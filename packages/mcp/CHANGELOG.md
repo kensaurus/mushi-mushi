@@ -1,5 +1,61 @@
 # @mushi-mushi/mcp
 
+## 0.7.0
+
+### Minor Changes
+
+- Cursor Cloud Agent integration — dispatch a Cursor Cloud Agent to auto-fix classified reports.
+
+  ## New package: `@mushi-mushi/plugin-cursor-cloud`
+
+  First-party Mushi Marketplace plugin that dispatches a Cursor Cloud Agent run when qualifying events fire (`report.classified`, `fix.requested`, `qa_story.failed`). The agent opens a signed draft PR automatically — no manual triage required.
+
+  Install from Admin → Marketplace → Cursor Cloud Agent, supply your API key and workspace ID, and configure per-severity severity gating. The plugin calls the Cursor REST API directly (no `@cursor/sdk` peer dep needed at the call site — the SDK is node-only and used only in the Path B orchestrator).
+
+  ## `@mushi-mushi/plugin-sdk` — new events
+
+  Three new event names added to `MushiEventName`:
+  - `fix.requested` — fires when a fix dispatch has been requested, before the agent launches.
+  - `qa_story.failed` — fires when a QA story run fails all its assertions.
+  - `qa_story.passed` — fires when a QA story run passes.
+
+  Corresponding sample envelopes added to the `mushi-plugin simulate` CLI for local development.
+
+  ## `@mushi-mushi/cli` — `mushi fix` command
+
+  New `fix` verb for dispatching an agentic fix from the terminal:
+
+  ```bash
+  mushi fix <reportId> --agent cursor_cloud --model composer-latest --wait
+  ```
+
+  Options: `--agent`, `--model`, `--no-auto-pr`, `--wait` (polls until terminal state; exits non-zero on failure). Streams structured events to stdout — JSON when piped, human-readable in a TTY. Integrates cleanly with CI pipelines.
+
+  ## `@mushi-mushi/mcp` — `dispatch_fix` Cursor Cloud support
+
+  `dispatch_fix` tool extended with:
+  - `agent` enum: `claude_code | codex | rest_worker | mcp | cursor_cloud`
+  - `backend` alias (deprecated — prefer `agent`)
+  - `cursorModel` optional override when `agent = cursor_cloud`
+  - `outputSchema` returns `{ fixId, status, agentId?, runId?, prUrl? }` — typed output for modern MCP clients
+
+  ## `@mushi-mushi/core` — `report:dispatched` event
+
+  New `MushiEventType` value `'report:dispatched'` emitted by the Web SDK after a report is submitted if the backend auto-dispatched a Cursor Cloud Agent fix. Host pages can subscribe to show a toast or update the UI.
+
+- MCP server: spec catch-up — output schemas, structured content, per-scope tool filtering.
+  - **Per-scope tool filtering**: `createMushiServer({ scopes })` now restricts which tools appear in `tools/list`. A read-only API key (e.g. `MUSHI_SCOPES=mcp:read` env var on the stdio entry) hides every write tool, so the LLM never picks `dispatch_fix` only to receive an `INSUFFICIENT_SCOPE` 403 — round-trips and tokens saved on every interaction. Default behaviour (no `scopes` config) is unchanged: every tool is registered.
+  - **Output schemas + structuredContent (MCP 2025-06-18)**: `get_recent_reports`, `search_reports`, `get_similar_bugs`, and `dispatch_fix` now declare an `outputSchema` and emit `structuredContent` alongside the existing text payload. Modern clients (Claude Desktop, Cursor 0.54+) read the typed object directly and pipe it into downstream tools without re-parsing JSON; older clients still see the text content.
+  - **MCP Inspector**: `pnpm --filter @mushi-mushi/mcp inspector` now spawns the official `@modelcontextprotocol/inspector` against the local build for interactive tool exploration during development.
+
+  No breaking changes. 9 new contract tests in `__tests__/scopes.test.ts` lock in the filtering and structured-output behaviour.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @mushi-mushi/core@1.4.0
+
 ## 0.6.0
 
 ### Minor Changes

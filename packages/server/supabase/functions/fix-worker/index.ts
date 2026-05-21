@@ -226,7 +226,11 @@ Deno.serve(
     // explicit opt-in for this same path. Anything else is the Node-only
     // orchestrator territory and must be rejected rather than silently
     // falling through.
-    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm']);
+    // cursor_cloud is delegated to the Node-side orchestrator via the
+    // /v1/admin/fixes/dispatch-cursor endpoint — it is NOT run inline by
+    // the edge worker, but we accept it here so the fix_attempt row is
+    // created with the correct agent label before delegation.
+    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm', 'cursor_cloud']);
 
     // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
     // classify-report writes a `reports_against` graph edge from the report
@@ -316,6 +320,67 @@ Deno.serve(
 
       if (!report) throw new Error(`Report ${dispatch.report_id} not found`);
       if (!project) throw new Error(`Project ${dispatch.project_id} not found`);
+
+      // Cursor Cloud Agent: delegate to Node orchestrator by calling the
+      // dispatch-cursor internal endpoint. The fix_attempt row has already
+      // been created above; the Node side updates it with cursor_agent_id /
+      // cursor_run_id / cursor_artifacts once the Cursor run completes.
+      if (requestedAgent === 'cursor_cloud') {
+        const dispatchCursorUrl = Deno.env.get('MUSHI_DISPATCH_CURSOR_URL');
+        if (!dispatchCursorUrl) {
+          const reason =
+            'cursor_cloud agent requires the MUSHI_DISPATCH_CURSOR_URL environment variable ' +
+            'pointing to the Node orchestrator endpoint. Set it in Supabase edge-function secrets.';
+          log.warn('Fix delegation skipped: MUSHI_DISPATCH_CURSOR_URL not set', {
+            reportId: dispatch.report_id,
+          });
+          await completeAttempt(db, fixAttemptId, {
+            status: 'skipped_unsupported_agent',
+            error: reason,
+            files_changed: [],
+          });
+          await db
+            .from('fix_dispatch_jobs')
+            .update({ status: 'skipped', error: reason, finished_at: new Date().toISOString() })
+            .eq('id', dispatch.id);
+          await trace.end();
+          return new Response(JSON.stringify({ ok: true, skipped: true, reason, fixAttemptId }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
+        // Fire-and-forget: the Node orchestrator takes ownership from here.
+        // Mark the job as 'running' — the orchestrator will flip it to
+        // 'completed' or 'failed' when the Cursor run terminates.
+        await db
+          .from('fix_dispatch_jobs')
+          .update({ status: 'running', started_at: new Date().toISOString() })
+          .eq('id', dispatch.id);
+
+        // Best-effort delegation — tolerate network errors so the fix_attempt
+        // row stays in 'created' (not 'error') and the operator can retry.
+        const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+        fetch(dispatchCursorUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${serviceKey}`,
+          },
+          body: JSON.stringify({
+            dispatchId: dispatch.id,
+            fixAttemptId,
+            projectId: dispatch.project_id,
+            reportId: dispatch.report_id,
+          }),
+        }).catch(() => { /* tolerate — orchestrator has its own retry */ });
+
+        await trace.end();
+        return new Response(
+          JSON.stringify({ ok: true, delegated: true, agent: 'cursor_cloud', fixAttemptId }),
+          { status: 202, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
 
       // Agent pre-flight: fix-worker can only run the LLM path today. Any
       // other autofix_agent (mcp, generic_mcp, codex) needs the Node-side

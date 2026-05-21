@@ -71,8 +71,18 @@ async function shadowWaitFor(page: Page, sel: string, timeout = 8000) {
 /**
  * Open the widget, click through category (bug) → intent (first available)
  * to reach the details step with textarea + example chips.
+ *
+ * Adds a 2.5s wait after navigation so the SDK's async runtime config fetch
+ * completes before we try features that depend on it (elementSelector).
+ * Fresh browser contexts have no localStorage cache so the fetch always runs.
  */
 async function openToDetailsStep(page: Page) {
+  // Give the runtime config fetch time to complete and be applied.
+  // syncCaptureModules() must run with the server config before elementSelector
+  // button click — otherwise the click returns early (elementSelector still null
+  // from bootstrap defaults before the async fetch resolves).
+  await page.waitForTimeout(2500)
+
   // Step 1: open the panel
   await shadowClick(page, '.mushi-trigger')
   await shadowWaitFor(page, '.mushi-panel.open')
@@ -191,7 +201,7 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
 
     await shadowFill(page, '.mushi-textarea', 'Bug')
     await page.waitForTimeout(200)
-    await shadowClick(page, '[data-role="submit-btn"]')
+    await shadowClick(page, '[data-action="submit"]')
     await page.waitForTimeout(600)
 
     // Should show a message containing char counts (e.g. "3/12")
@@ -304,9 +314,11 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
     })
     expect(panelHidden, 'panel hidden during element selection').toBe(true)
 
-    // Bottom hint toast must exist outside shadow root
+    // Bottom hint toast must exist outside shadow root (appended with id="mushi-selector-hint")
     const hintVisible = await page.evaluate(() => {
-      const hint = document.querySelector('.mushi-selector-hint, [data-mushi-hint], [class*="mushi-hint"]')
+      // The hint uses id="mushi-selector-hint" appended to document.body
+      const hint = document.getElementById('mushi-selector-hint')
+        ?? document.querySelector('[data-mushi-hint], [class*="mushi-hint"]')
       if (!hint) return false
       return window.getComputedStyle(hint as HTMLElement).display !== 'none'
     })
@@ -327,7 +339,7 @@ test.describe('Mushi SDK widget — May 2026 Quality Pass', () => {
       { timeout: 20_000 },
     ).catch(() => null)
 
-    await shadowClick(page, '[data-role="submit-btn"]')
+    await shadowClick(page, '[data-action="submit"]')
 
     const response = await responsePromise
     let reportId: string | null = null

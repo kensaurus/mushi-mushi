@@ -1,5 +1,66 @@
 # @mushi-mushi/cli
 
+## 0.9.0
+
+### Minor Changes
+
+- CLI: XDG Base Directory + POSIX signals + trackable error codes.
+
+  Three Node-CLI best-practice hardenings (per Liran Tal's [nodejs-cli-apps-best-practices](https://github.com/lirantal/nodejs-cli-apps-best-practices)):
+  - **XDG Base Directory compliance**: config now lives at `$XDG_CONFIG_HOME/mushi/config.json` on Linux/macOS (defaulting to `~/.config/mushi/config.json`) and `%APPDATA%/mushi/config.json` on Windows. A pre-existing `~/.mushirc` is **automatically migrated on first load** — moved (not copied) into the new path so we never have two copies of the API key on disk simultaneously. Malformed legacy files are left in place for manual recovery rather than silently dropped. `loadConfig` now respects `MUSHI_API_KEY` / `MUSHI_PROJECT_ID` / `MUSHI_API_ENDPOINT` env vars even when no file exists, so CI pipelines work zero-config.
+  - **POSIX signal handling**: SIGINT (Ctrl-C) and SIGTERM (`docker stop`, `kill <pid>`) are wired into a process-wide `AbortController`. Long-running commands (`mushi index`, `mushi sourcemaps upload`) now abort their in-flight HTTP requests immediately instead of hanging on the 15 s `apiCall` timeout. Exit codes follow POSIX convention: `130` for SIGINT, `143` for SIGTERM. Uses `AbortSignal.any` on Node ≥ 20 to compose with the per-request timeout signal.
+  - **Trackable error codes**: every user-visible failure now flows through a structured `MushiCliError` carrying a stable `[E_*]` code (`E_AUTH_MISSING`, `E_NETWORK`, `E_RATE_LIMITED`, `E_INTERRUPTED`, etc.) and an actionable fix hint. Output format is grep-friendly:
+
+    ```
+    error [E_AUTH_MISSING]: No API key found
+      → fix: run `mushi init` or set MUSHI_API_KEY in your environment
+    $ echo $?
+    2
+    ```
+
+    `--json` mode renders the same payload as a JSON object so CI orchestrators can branch on `error.code` without parsing English.
+
+  No breaking changes. 32 new unit tests across `config.test.ts`, `errors.test.ts`, and `signals.test.ts` lock in the contracts. The 125 existing CLI tests still pass.
+
+- Cursor Cloud Agent integration — dispatch a Cursor Cloud Agent to auto-fix classified reports.
+
+  ## New package: `@mushi-mushi/plugin-cursor-cloud`
+
+  First-party Mushi Marketplace plugin that dispatches a Cursor Cloud Agent run when qualifying events fire (`report.classified`, `fix.requested`, `qa_story.failed`). The agent opens a signed draft PR automatically — no manual triage required.
+
+  Install from Admin → Marketplace → Cursor Cloud Agent, supply your API key and workspace ID, and configure per-severity severity gating. The plugin calls the Cursor REST API directly (no `@cursor/sdk` peer dep needed at the call site — the SDK is node-only and used only in the Path B orchestrator).
+
+  ## `@mushi-mushi/plugin-sdk` — new events
+
+  Three new event names added to `MushiEventName`:
+  - `fix.requested` — fires when a fix dispatch has been requested, before the agent launches.
+  - `qa_story.failed` — fires when a QA story run fails all its assertions.
+  - `qa_story.passed` — fires when a QA story run passes.
+
+  Corresponding sample envelopes added to the `mushi-plugin simulate` CLI for local development.
+
+  ## `@mushi-mushi/cli` — `mushi fix` command
+
+  New `fix` verb for dispatching an agentic fix from the terminal:
+
+  ```bash
+  mushi fix <reportId> --agent cursor_cloud --model composer-latest --wait
+  ```
+
+  Options: `--agent`, `--model`, `--no-auto-pr`, `--wait` (polls until terminal state; exits non-zero on failure). Streams structured events to stdout — JSON when piped, human-readable in a TTY. Integrates cleanly with CI pipelines.
+
+  ## `@mushi-mushi/mcp` — `dispatch_fix` Cursor Cloud support
+
+  `dispatch_fix` tool extended with:
+  - `agent` enum: `claude_code | codex | rest_worker | mcp | cursor_cloud`
+  - `backend` alias (deprecated — prefer `agent`)
+  - `cursorModel` optional override when `agent = cursor_cloud`
+  - `outputSchema` returns `{ fixId, status, agentId?, runId?, prUrl? }` — typed output for modern MCP clients
+
+  ## `@mushi-mushi/core` — `report:dispatched` event
+
+  New `MushiEventType` value `'report:dispatched'` emitted by the Web SDK after a report is submitted if the backend auto-dispatched a Cursor Cloud Agent fix. Host pages can subscribe to show a toast or update the UI.
+
 ## 0.8.0
 
 ### Minor Changes

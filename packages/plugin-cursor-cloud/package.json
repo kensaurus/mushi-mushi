@@ -1,0 +1,62 @@
+{
+  "name": "@mushi-mushi/plugin-cursor-cloud",
+  "version": "0.2.0",
+  "license": "MIT",
+  "description": "Mushi Mushi plugin: dispatch a Cursor Cloud Agent when a critical bug is classified or a QA story fails — opens a signed draft PR automatically.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mushi-mushi/plugin-sdk": "workspace:^"
+  },
+  "devDependencies": {
+    "@mushi-mushi/eslint-config": "workspace:*",
+    "@types/node": "^22.19.17",
+    "eslint": "^10.3.0",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kensaurus/mushi-mushi.git",
+    "directory": "packages/plugin-cursor-cloud"
+  },
+  "author": "Kenji Sakuramoto",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "sideEffects": false,
+  "keywords": [
+    "mushi-mushi",
+    "cursor",
+    "cursor-cloud",
+    "plugin",
+    "agent",
+    "autofix",
+    "ai-agent",
+    "integration"
+  ],
+  "engines": {
+    "node": ">=20"
+  }
+}

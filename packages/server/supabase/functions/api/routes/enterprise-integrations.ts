@@ -1426,7 +1426,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind') as IntegrationKind;
-    if (!INTEGRATION_KINDS.includes(kind)) {
+    if (!(kind in PLATFORM_KIND_FIELDS)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;

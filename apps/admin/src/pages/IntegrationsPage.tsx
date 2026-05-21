@@ -144,6 +144,7 @@ export function IntegrationsPage() {
     sentry: {},
     langfuse: {},
     github: {},
+    cursor_cloud: {},
   })
   const [saving, setSaving] = useState<Kind | null>(null)
   const [testing, setTesting] = useState<Kind | null>(null)
@@ -191,13 +192,13 @@ export function IntegrationsPage() {
     ...(platform?.github == null ||
     PLATFORM_DEFS.find((d) => d.kind === 'github')
       ?.fields.filter((f) => f.required)
-      .every((f) => platform.github[f.name] != null)
+      .every((f) => platform?.github?.[f.name] != null)
       ? []
       : ['integrations.github.repo_url', 'integrations.github.installation_token']),
     ...(platform?.sentry == null ||
     PLATFORM_DEFS.find((d) => d.kind === 'sentry')
       ?.fields.filter((f) => f.required)
-      .every((f) => platform.sentry[f.name] != null)
+      .every((f) => platform?.sentry?.[f.name] != null)
       ? []
       : ['integrations.sentry.auth_token']),
   ].slice(0, 3)

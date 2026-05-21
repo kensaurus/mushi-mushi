@@ -205,6 +205,7 @@ export function PlatformIntegrationCard({
                 value={draft[field.name] ?? ''}
                 onChange={(e) => onChangeField(field.name, e.target.value)}
                 validate={resolveValidator(field.validator)}
+                autoComplete={field.type === 'password' ? 'new-password' : 'off'}
               />
               <p className="text-2xs text-fg-faint mt-0.5">{field.help}</p>
             </div>

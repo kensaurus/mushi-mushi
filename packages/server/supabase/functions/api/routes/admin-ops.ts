@@ -2112,6 +2112,12 @@ export function registerAdminOpsRoutes(app: Hono): void {
     if (!ticketId) {
       return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
     }
+    // Guard against non-UUID path segments (e.g. "summary") bleeding in from
+    // a route-precedence mismatch between /summary and /:id in production.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(ticketId)) {
+      return c.json({ ok: false, error: { code: 'INVALID_TICKET_ID' } }, 400);
+    }
     const db = getServiceClient();
     const { data, error } = await db
       .from('support_tickets')
@@ -2141,6 +2147,10 @@ export function registerAdminOpsRoutes(app: Hono): void {
     const ticketId = c.req.param('id');
     if (!ticketId) {
       return c.json({ ok: false, error: { code: 'TICKET_ID_REQUIRED' } }, 400);
+    }
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!UUID_RE.test(ticketId)) {
+      return c.json({ ok: false, error: { code: 'INVALID_TICKET_ID' } }, 400);
     }
     const db = getServiceClient();
 

@@ -8,7 +8,7 @@
 /** Narrow union for *platform* integrations — the SDK-feeding services
  *  (Sentry / Langfuse / GitHub code-repo) that have first-class card slots
  *  on the page. Kept narrow so `Record<Kind, …>` literals stay exhaustive. */
-export type Kind = 'sentry' | 'langfuse' | 'github'
+export type Kind = 'sentry' | 'langfuse' | 'github' | 'cursor_cloud'
 
 /** Wider union accepted by the `/v1/admin/health/integration/:kind` probe
  *  route. Includes the four routing destinations (Jira / Linear /
@@ -17,7 +17,7 @@ export type Kind = 'sentry' | 'langfuse' | 'github'
 export type ProbeKind = Kind | 'jira' | 'linear' | 'github_issues' | 'pagerduty'
 
 export interface PlatformResponse {
-  platform: Record<Kind, Record<string, unknown>>
+  platform: Partial<Record<Kind, Record<string, unknown>>>
 }
 
 export interface HealthRow {
@@ -159,6 +159,23 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       { name: 'github_default_branch', label: 'Default branch', placeholder: 'main', help: 'Defaults to "main" if blank. Change for repos that branch from "master" or "develop".', helpId: 'integrations.github.default_branch' },
       { name: 'github_installation_token_ref', label: 'Installation token', placeholder: 'ghs_… or ghp_… (or vault://id)', type: 'password', help: 'GitHub App installation token (preferred) or fine-grained PAT. Needs Contents:write + Pull requests:write.', required: true, helpId: 'integrations.github.installation_token', validator: 'token' },
       { name: 'github_webhook_secret', label: 'Webhook secret', placeholder: 'shared-secret', type: 'password', help: 'HMAC secret. Set the same value in GitHub repo Settings → Webhooks (events: Check runs, Check suites).', helpId: 'integrations.github.webhook_secret', validator: 'token' },
+    ],
+  },
+  {
+    kind: 'cursor_cloud',
+    label: 'Cursor Cloud',
+    whyItMatters: 'When a critical report is classified, Mushi dispatches a Cursor Cloud Agent that opens a signed draft PR against your repo automatically. No manual triage required.',
+    capabilitiesOnceConnected: [
+      'Auto-dispatch a Cursor agent when severity ≥ critical',
+      'Cursor opens a signed draft PR — visible in the Fix card timeline',
+      'Agent screenshots, logs, and run artifacts surfaced directly in Mushi',
+      'Use "Send to Cursor" from any report to trigger on-demand',
+    ],
+    fields: [
+      { name: 'cursor_api_key_ref', label: 'API Key', placeholder: 'cur_… (or vault://id)', type: 'password', help: 'Cursor API key. Create at cursor.com/settings → API Keys.', required: true, helpId: 'cursor-api-key', validator: 'token' },
+      { name: 'cursor_workspace_id', label: 'Workspace ID', placeholder: 'ws_…', help: 'Your Cursor workspace ID. Found at cursor.com/settings → Workspace.', required: true, helpId: 'cursor-workspace-id', validator: 'token' },
+      { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Cursor model slug for agent runs. Leave blank for the default (composer-2.5).', helpId: 'cursor-default-model' },
+      { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'cursor-auto-create-pr' },
     ],
   },
 ]

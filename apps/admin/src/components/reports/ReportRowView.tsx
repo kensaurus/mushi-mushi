@@ -50,6 +50,10 @@ interface Props {
   onCopyLink: () => void
   onDismiss: () => void
   onDispatchFix: () => void
+  /** When set, shows a "Send to Cursor agent" menu item in the row kebab. */
+  onDispatchCursor?: () => void
+  /** Whether Cursor Cloud is configured for this project. */
+  cursorEnabled?: boolean
 }
 
 function ReportRowViewInner({
@@ -68,6 +72,8 @@ function ReportRowViewInner({
   onCopyLink,
   onDismiss,
   onDispatchFix,
+  onDispatchCursor,
+  cursorEnabled = false,
 }: Props) {
   const summary = row.summary ?? row.description
   const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
@@ -299,6 +305,7 @@ function ReportRowViewInner({
             row={row}
             onCopyLink={onCopyLink}
             onDismiss={onDismiss}
+            onDispatchCursor={cursorEnabled && canDispatch ? onDispatchCursor : undefined}
           />
         </div>
       </td>
@@ -310,9 +317,10 @@ interface KebabProps {
   row: ReportRow
   onCopyLink: () => void
   onDismiss: () => void
+  onDispatchCursor?: () => void
 }
 
-function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
+function RowKebab({ row, onCopyLink, onDismiss, onDispatchCursor }: KebabProps) {
   return (
     <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 motion-safe:transition-opacity">
       <Tooltip content="Copy share link">
@@ -340,6 +348,24 @@ function RowKebab({ row, onCopyLink, onDismiss }: KebabProps) {
           <IconExternalLink size={12} />
         </a>
       </Tooltip>
+      {onDispatchCursor && (
+        <Tooltip content="Send to Cursor agent — dispatches a Cursor Cloud Agent to open a draft PR fixing this report">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDispatchCursor()
+            }}
+            className="p-1 text-[#a78bfa] hover:text-[#c4b5fd] hover:bg-[#7c3aed]/10 rounded-sm"
+            aria-label="Send to Cursor agent"
+          >
+            {/* Cursor diamond icon */}
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+              <polygon points="6,1 11,6 6,11 1,6" />
+            </svg>
+          </button>
+        </Tooltip>
+      )}
       <Tooltip content="Dismiss">
         <button
           type="button"

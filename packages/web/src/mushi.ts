@@ -627,19 +627,54 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
       config.integrations.custom(builder);
     }
 
-    emit('report:submitted', { reportId: report.id });
+    // Sentry-spec-1.0 `beforeSendFeedback` hook (introduced in v1.4):
+    // last chance for the host app to mutate or drop the report.
+    // Errors and timeouts ship the *unmodified* report so a buggy hook
+    // never silently swallows user feedback. Returning `null` drops
+    // the report — emits no `report:sent` and no `report:failed`.
+    let finalReport: MushiReport = report;
+    if (config.beforeSendFeedback) {
+      try {
+        const hookResult = await Promise.race([
+          Promise.resolve(config.beforeSendFeedback(report)),
+          // 2s timeout — async hooks must not block the user's "submit"
+          // for longer than the network would. Falls back to original.
+          new Promise<MushiReport>((resolve) =>
+            setTimeout(() => resolve(report), 2000),
+          ),
+        ]);
+        if (hookResult === null) {
+          log.info('Report dropped by beforeSendFeedback hook', { reportId: report.id });
+          return;
+        }
+        finalReport = hookResult;
+      } catch (err) {
+        log.warn('beforeSendFeedback hook threw — sending unmodified report', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    emit('report:submitted', { reportId: finalReport.id });
 
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
-      await offlineQueue.enqueue(report);
-      log.info('Offline — report queued', { reportId: report.id });
-      emit('report:queued', { reportId: report.id });
+      await offlineQueue.enqueue(finalReport);
+      log.info('Offline — report queued', { reportId: finalReport.id });
+      emit('report:queued', { reportId: finalReport.id });
       return;
     }
 
-    const result = await apiClient.submitReport(report);
+    const result = await apiClient.submitReport(finalReport);
     if (result.ok) {
       log.info('Report sent', { reportId: result.data?.reportId });
       emit('report:sent', { reportId: result.data?.reportId });
+      // If the server response includes a Cursor agent dispatch (classify-report
+      // triggered a cursor_cloud fix via the autofix_agent setting), emit
+      // `report:dispatched` so the host page can show a toast notification.
+      if ((result.data as Record<string, unknown> | undefined)?.cursorAgentId) {
+        const d = result.data as { reportId?: string; cursorAgentId?: string; fixId?: string };
+        emit('report:dispatched', { reportId: d.reportId, agentId: d.cursorAgentId, fixId: d.fixId });
+      }
       breadcrumbs.add({
         category: 'lifecycle',
         level: 'info',
@@ -668,13 +703,13 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
         // scope API moved between point releases.
       }
     } else {
-      log.warn('Report failed, queuing for retry', { reportId: report.id, error: result.error });
-      await offlineQueue.enqueue(report);
-      emit('report:failed', { reportId: report.id, error: result.error });
+      log.warn('Report failed, queuing for retry', { reportId: finalReport.id, error: result.error });
+      await offlineQueue.enqueue(finalReport);
+      emit('report:failed', { reportId: finalReport.id, error: result.error });
       breadcrumbs.add({
         category: 'lifecycle',
         level: 'warning',
-        message: `Mushi report queued for retry (${report.id})`,
+        message: `Mushi report queued for retry (${finalReport.id})`,
       });
     }
 
@@ -1005,6 +1040,50 @@ function createInstance(config: MushiConfig): MushiSDKInstance {
 
   if (typeof globalThis !== 'undefined' && (bootstrapConfig.debug ?? false)) {
     exposeMarketingRecorder(widget);
+  }
+
+  // Sentry-spec-1.0 `onCrashedLastRun` (introduced in v1.4):
+  // detect whether the *previous* tab session ended cleanly. We mark a
+  // sentinel in localStorage on init and clear it on `pagehide`. If we
+  // see a stale sentinel on the next init, the previous session ended
+  // without a clean unload → host app may want to surface "Tell us
+  // what went wrong?". We never auto-open the widget; copy + timing
+  // are the host's call.
+  // Wrapped in try/catch because privacy-mode browsers throw on every
+  // localStorage access and we must not break SDK init.
+  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
+    const SENTINEL_KEY = 'mushi:last-run';
+    let crashed: boolean | null = null;
+    try {
+      const previous = localStorage.getItem(SENTINEL_KEY);
+      // First-ever load (or cleared storage): null. Otherwise, an
+      // `unfinished` value means the prior tab didn't reach pagehide.
+      crashed = previous === null ? null : previous === 'unfinished';
+      localStorage.setItem(SENTINEL_KEY, 'unfinished');
+    } catch {
+      // localStorage unavailable (Safari private mode, file://). Hook
+      // gets `null` so the host knows we couldn't determine state.
+      crashed = null;
+    }
+    try {
+      // pagehide fires on tab close, navigation, and bfcache freeze.
+      // It's the only reliably-fired end-of-session event in 2026 —
+      // browsers stopped guaranteeing `beforeunload`/`unload` years
+      // ago. Listener is `{ once: false }` because bfcache may resume
+      // the same page later and we want a fresh sentinel each time.
+      window.addEventListener('pagehide', () => {
+        try { localStorage.setItem(SENTINEL_KEY, 'clean'); } catch { /* noop */ }
+      });
+    } catch { /* noop — addEventListener never actually throws on Window */ }
+    if (typeof bootstrapConfig.onCrashedLastRun === 'function') {
+      try {
+        bootstrapConfig.onCrashedLastRun({ crashed });
+      } catch (err) {
+        log.warn('onCrashedLastRun hook threw', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
   }
 
   return sdk;

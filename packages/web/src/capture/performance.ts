@@ -5,6 +5,29 @@ export interface PerformanceCapture {
   destroy(): void;
 }
 
+/**
+ * INP `durationThreshold` recommended by the spec — interactions shorter
+ * than this are below human perception and inflate noise. 40 ms is the
+ * official web-vitals default.
+ */
+const INP_DURATION_THRESHOLD_MS = 40;
+
+/**
+ * Build a stable, short selector for an element so the triage UI can
+ * surface "the slow click was on <button.checkout>" rather than just
+ * "1200 ms INP". Mirrors the web-vitals attribution-build heuristic
+ * (tag + #id + .firstClass) and never reads attributes that could leak
+ * PII (no `value`, no `aria-label`, no text content).
+ */
+function describeElement(target: EventTarget | null | undefined): string | undefined {
+  if (!target || !(target as Element).tagName) return undefined;
+  const el = target as Element;
+  const tag = el.tagName.toLowerCase();
+  const id = el.id ? `#${el.id}` : '';
+  const cls = el.classList && el.classList.length > 0 ? `.${el.classList[0]}` : '';
+  return `${tag}${id}${cls}`;
+}
+
 export function createPerformanceCapture(): PerformanceCapture {
   const metrics: MushiPerformanceMetrics = {};
   const observers: PerformanceObserver[] = [];
@@ -63,6 +86,84 @@ export function createPerformanceCapture(): PerformanceCapture {
       observers.push(longTaskObserver);
     } catch {
       // longtask not supported
+    }
+
+    // ---------------------------------------------------------------
+    // Interaction to Next Paint (INP) — a Google Core Web Vital since
+    // March 2024 (replaced First Input Delay). We track the worst
+    // observed interaction since SDK init and attach lightweight
+    // attribution (event type, target selector, sub-phase timings) so
+    // the report reads "1200ms click on <button.checkout>" rather than
+    // a bare number. Implementation follows the official `web-vitals`
+    // library's onINP algorithm:
+    //   1. Group `event` entries by `interactionId`.
+    //   2. Take the max-duration entry per interaction.
+    //   3. Track the longest interaction overall.
+    // For sites with very few interactions (typical bug-report
+    // sessions: 1–10 clicks) the longest interaction IS the INP per
+    // the spec's 75th-percentile rule. Extending to a full P75 buffer
+    // would add ~2KB for negligible accuracy on this workload.
+    // SOURCE: https://web.dev/articles/inp
+    // ---------------------------------------------------------------
+    try {
+      const seenInteractions = new Map<number, number>();
+      const inpObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as PerformanceEventTiming[]) {
+          const interactionId = entry.interactionId;
+          if (!interactionId) continue;
+          const prev = seenInteractions.get(interactionId) ?? 0;
+          if (entry.duration > prev) {
+            seenInteractions.set(interactionId, entry.duration);
+          }
+          if (entry.duration > (metrics.inp ?? 0)) {
+            metrics.inp = entry.duration;
+            // Sub-phase timings let consumers pinpoint whether INP was
+            // dominated by input delay (e.g. a long task on the main
+            // thread blocking the input), processing (slow handler), or
+            // presentation (heavy paint). The web-vitals attribution
+            // build computes these the same way.
+            const inputDelay = entry.processingStart - entry.startTime;
+            const processingDuration = entry.processingEnd - entry.processingStart;
+            const presentationDelay =
+              entry.startTime + entry.duration - entry.processingEnd;
+            metrics.inpAttribution = {
+              eventType: entry.name,
+              targetSelector: describeElement(entry.target),
+              inputDelay: Math.max(0, inputDelay),
+              processingDuration: Math.max(0, processingDuration),
+              presentationDelay: Math.max(0, presentationDelay),
+            };
+          }
+        }
+      });
+      inpObserver.observe({
+        type: 'event',
+        // `durationThreshold` filters out fast (< 40 ms) interactions
+        // that sit below human perception. Spec-recommended floor.
+        durationThreshold: INP_DURATION_THRESHOLD_MS,
+        buffered: true,
+      } as PerformanceObserverInit);
+      observers.push(inpObserver);
+    } catch {
+      // event-timing not supported (Safari < 16.4 falls into this branch).
+      // Consumers fall back to FID via a separate first-input observer.
+    }
+
+    try {
+      const fidObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries() as PerformanceEventTiming[]) {
+          // first-input fires once. Use it as a fallback on browsers
+          // that don't support event-timing INP observation (Safari
+          // < 16.4). Always recorded — INP supersedes when present.
+          if (metrics.fid === undefined) {
+            metrics.fid = entry.processingStart - entry.startTime;
+          }
+        }
+      });
+      fidObserver.observe({ type: 'first-input', buffered: true });
+      observers.push(fidObserver);
+    } catch {
+      // first-input not supported either — caller will see no FID/INP.
     }
   }
 

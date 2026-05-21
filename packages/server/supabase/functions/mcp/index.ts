@@ -131,6 +131,14 @@ interface ToolDef {
   scope: 'mcp:read' | 'mcp:write'
   description: string
   inputSchema: Record<string, unknown>
+  /**
+   * MCP 2025-06-18 outputSchema. When present, the dispatcher also emits
+   * `structuredContent` alongside the text content so typed clients
+   * (Claude Desktop, Cursor 0.54+) can pipe results into downstream tools
+   * without re-parsing JSON. Kept in lock-step with the stdio MCP server
+   * (`packages/mcp/src/server.ts`) — please update both at once.
+   */
+  outputSchema?: Record<string, unknown>
   annotations?: Record<string, unknown>
   handler: ToolHandler
 }
@@ -148,6 +156,18 @@ const TOOLS: Record<string, ToolDef> = {
         severity: { type: 'string' },
         limit: { type: 'number' },
       },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        reports: {
+          type: 'array',
+          items: { type: 'object', additionalProperties: true },
+          description: 'Array of report rows',
+        },
+        total: { type: 'number', description: 'Total matching rows (before limit)' },
+      },
+      required: ['reports'],
     },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
@@ -188,6 +208,17 @@ const TOOLS: Record<string, ToolDef> = {
         limit: { type: 'number' },
         threshold: { type: 'number' },
       },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        results: {
+          type: 'array',
+          items: { type: 'object', additionalProperties: true },
+          description: 'Ranked report rows with similarity scores',
+        },
+      },
+      required: ['results'],
     },
     annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
     handler: async (args, ctx) => {
@@ -338,6 +369,19 @@ const TOOLS: Record<string, ToolDef> = {
         // Spec-traceability: callers that already know the inventory
         // Action they want repaired can pass it directly.
         inventoryActionNodeId: { type: 'string' },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        fixId: { type: 'string', description: 'Newly created fix_attempt UUID' },
+        status: { type: 'string', description: 'Initial status (queued, running, delegated, …)' },
+        agentId: { type: 'string', description: 'Cursor agent ID when agent=cursor_cloud' },
+        runId: { type: 'string', description: 'Cursor run ID when agent=cursor_cloud' },
+        prUrl: {
+          type: 'string',
+          description: 'Draft PR URL when agent=cursor_cloud and auto_create_pr=true',
+        },
       },
     },
     annotations: { readOnlyHint: false, openWorldHint: true },
@@ -501,7 +545,7 @@ async function dispatchRpc(req: JsonRpcRequest, ctx: CallContext): Promise<JsonR
         result = {}
         break
       case 'tools/list':
-        result = handleToolsList()
+        result = handleToolsList(ctx)
         break
       case 'tools/call':
         result = await handleToolsCall(req.params ?? {}, ctx)
@@ -563,15 +607,34 @@ function handleInitialize(params: Record<string, unknown>): unknown {
   }
 }
 
-function handleToolsList(): unknown {
+/**
+ * `tools/list` filters by the caller's scope so a read-only API key
+ * never sees `dispatch_fix` (etc.) in its catalog. This mirrors the
+ * stdio MCP server's `registerScopedTool` behaviour and saves an
+ * INSUFFICIENT_SCOPE round-trip for every LLM that picks the tool
+ * blind. Includes `outputSchema` when defined (MCP 2025-06-18).
+ */
+function handleToolsList(ctx: CallContext): unknown {
   return {
-    tools: Object.entries(TOOLS).map(([name, def]) => ({
-      name,
-      description: def.description,
-      inputSchema: def.inputSchema,
-      annotations: def.annotations,
-    })),
+    tools: Object.entries(TOOLS)
+      .filter(([, def]) => isToolGrantedToScope(def.scope, ctx.scope))
+      .map(([name, def]) => ({
+        name,
+        description: def.description,
+        inputSchema: def.inputSchema,
+        ...(def.outputSchema ? { outputSchema: def.outputSchema } : {}),
+        annotations: def.annotations,
+      })),
   }
+}
+
+function isToolGrantedToScope(
+  required: 'mcp:read' | 'mcp:write',
+  caller: 'mcp:read' | 'mcp:write' | null,
+): boolean {
+  if (!caller) return false
+  if (required === 'mcp:read') return true // both scopes can read
+  return caller === 'mcp:write' // only write scope can write
 }
 
 async function handleToolsCall(
@@ -585,17 +648,26 @@ async function handleToolsCall(
   // Scope gate. Anonymous clients (somehow past auth — shouldn't be
   // possible but defence in depth) get nothing. mcp:write implies read.
   if (!ctx.scope) throw new McpError(ERR_INVALID_REQUEST, 'caller has no scope')
-  if (def.scope === 'mcp:write' && ctx.scope !== 'mcp:write') {
+  if (!isToolGrantedToScope(def.scope, ctx.scope)) {
     throw new McpError(
       ERR_INVALID_REQUEST,
-      `tool "${name}" requires mcp:write scope; caller holds ${ctx.scope}`,
+      `tool "${name}" requires ${def.scope} scope; caller holds ${ctx.scope}`,
     )
   }
   const args = (params.arguments as Record<string, unknown> | undefined) ?? {}
   const data = await def.handler(args, { authHeaders: ctx.authHeaders, projectIdHint: ctx.projectIdHint })
-  return {
+  // Modern clients read structuredContent directly (no re-parse). Older
+  // clients fall back to the text content. Only emit structuredContent
+  // when the tool defines an outputSchema AND the data is an object —
+  // a bare array or scalar would fail downstream JSON-Schema validation.
+  const includeStructured = !!def.outputSchema && typeof data === 'object' && data !== null
+  const result: Record<string, unknown> = {
     content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
   }
+  if (includeStructured) {
+    result.structuredContent = data
+  }
+  return result
 }
 
 function handleResourcesList(): unknown {

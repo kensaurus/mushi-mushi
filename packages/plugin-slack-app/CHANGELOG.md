@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-slack-app
 
+## 0.2.3
+
+### Patch Changes
+
+- Updated dependencies
+  - @mushi-mushi/plugin-sdk@0.5.0
+
 ## 0.2.2
 
 ### Patch Changes

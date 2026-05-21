@@ -5,6 +5,8 @@ import { CodexAgent } from './adapters/codex.js'
 import { GenericMCPAgent } from './adapters/generic-mcp.js'
 import { RestFixWorkerAgent } from './adapters/rest-fix-worker.js'
 import { McpFixAgent } from './adapters/mcp.js'
+import { CursorCloudAgent } from './adapters/cursor-cloud.js'
+import type { CursorProjectSettings } from './cursor-cloud-types.js'
 import { createPR } from './github.js'
 import { validateAgainstSpec } from './review.js'
 import { resolveSandboxProvider, buildSandboxConfig, type SandboxProviderName } from './sandbox/index.js'
@@ -244,8 +246,18 @@ export class FixOrchestrator {
     }
   }
 
-  selectAgent(agentName: string, mcpServerUrl?: string, bearer?: string): FixAgent {
+  selectAgent(agentName: string, mcpServerUrl?: string, bearer?: string, cursorSettings?: Partial<CursorProjectSettings> & { resolvedApiKey?: string }): FixAgent {
     switch (agentName) {
+      case 'cursor_cloud': {
+        const apiKey = cursorSettings?.resolvedApiKey ?? ''
+        return new CursorCloudAgent({
+          apiKey,
+          model: cursorSettings?.cursor_default_model ?? 'composer-2.5',
+          workspaceId: cursorSettings?.cursor_workspace_id ?? '',
+          autoCreatePR: cursorSettings?.cursor_auto_create_pr ?? true,
+          maxIterations: cursorSettings?.cursor_max_iterations ?? 1,
+        })
+      }
       case 'codex': return new CodexAgent()
       case 'mcp': {
         if (!mcpServerUrl) {
@@ -317,11 +329,29 @@ export class FixOrchestrator {
     let sandbox: Awaited<ReturnType<ReturnType<typeof resolveSandboxProvider>['createSandbox']>> | undefined
 
     try {
-      const { data: settings } = await this.db
+      const { data: rawSettings } = await this.db
         .from('project_settings')
-        .select('autofix_agent, autofix_mcp_server_url, autofix_mcp_bearer, sandbox_provider, sandbox_image, sandbox_extra_allowed_hosts')
+        .select(
+          'autofix_agent, autofix_mcp_server_url, autofix_mcp_bearer, sandbox_provider, sandbox_image, sandbox_extra_allowed_hosts, ' +
+          'cursor_api_key_ref, cursor_workspace_id, cursor_default_model, cursor_auto_create_pr, cursor_max_iterations',
+        )
         .eq('project_id', context.projectId)
         .single()
+      // Cast through unknown to tolerate Supabase-generated types that pre-date
+      // the cursor_* columns migration (20260521000000_cursor_cloud_agent.sql).
+      const settings = rawSettings as {
+        autofix_agent?: string
+        autofix_mcp_server_url?: string
+        autofix_mcp_bearer?: string
+        sandbox_provider?: string
+        sandbox_image?: string
+        sandbox_extra_allowed_hosts?: string[]
+        cursor_api_key_ref?: string | null
+        cursor_workspace_id?: string | null
+        cursor_default_model?: string | null
+        cursor_auto_create_pr?: boolean | null
+        cursor_max_iterations?: number | null
+      } | null
 
       // V5.3 §2.10 (M6): provision managed sandbox if configured.
       // The agent does not directly receive the sandbox in this milestone —
@@ -350,10 +380,29 @@ export class FixOrchestrator {
         })
       }
 
+      const agentName = settings?.autofix_agent ?? 'claude_code'
+
+      // Resolve the Cursor API key from the vault reference if needed.
+      // Vault refs take the shape `vault://<uuid>` or are stored raw for
+      // local/test environments. We short-circuit on non-vault values so
+      // the dogfood path (raw key in env) works without a vault.
+      let resolvedCursorApiKey: string | undefined
+      if (agentName === 'cursor_cloud' && settings?.cursor_api_key_ref) {
+        resolvedCursorApiKey = await resolveVaultRef(settings.cursor_api_key_ref)
+      }
+
       const agent = this.selectAgent(
-        settings?.autofix_agent ?? 'claude_code',
+        agentName,
         settings?.autofix_mcp_server_url,
         settings?.autofix_mcp_bearer,
+        agentName === 'cursor_cloud' ? {
+          cursor_api_key_ref: settings?.cursor_api_key_ref,
+          cursor_workspace_id: settings?.cursor_workspace_id,
+          cursor_default_model: settings?.cursor_default_model,
+          cursor_auto_create_pr: settings?.cursor_auto_create_pr,
+          cursor_max_iterations: settings?.cursor_max_iterations,
+          resolvedApiKey: resolvedCursorApiKey,
+        } : undefined,
       )
       const result = await agent.generateFix(context)
 
@@ -398,7 +447,20 @@ export class FixOrchestrator {
       }
 
       let prUrl: string | undefined
-      if (result.success && this.config.githubToken && context.config.repoUrl) {
+
+      // Cursor Cloud Agent creates its own signed PR via autoCreatePR — skip the
+      // hand-rolled GitHub REST call. For all other agents, open the PR as before.
+      const isCursorRun = agentName === 'cursor_cloud'
+      const cursorResult = result as typeof result & {
+        cursorAgentId?: string
+        cursorRunId?: string
+        cursorArtifacts?: Array<{ kind: string; path: string; mime: string }>
+      }
+
+      if (result.success && isCursorRun) {
+        // The prUrl was already populated by the adapter from result.git.branches[0].prUrl
+        prUrl = result.prUrl
+      } else if (result.success && this.config.githubToken && context.config.repoUrl) {
         const [owner, repo] = context.config.repoUrl.replace(/\.git$/, '').split('/').slice(-2)
         if (owner && repo) {
           prUrl = await createPR(
@@ -419,6 +481,12 @@ export class FixOrchestrator {
         summary: result.summary,
         error: result.error,
         completed_at: new Date().toISOString(),
+        // Cursor-specific metadata — only populated for cursor_cloud runs
+        ...(cursorResult.cursorAgentId ? {
+          cursor_agent_id: cursorResult.cursorAgentId,
+          cursor_run_id: cursorResult.cursorRunId,
+          cursor_artifacts: cursorResult.cursorArtifacts ?? [],
+        } : {}),
       }).eq('id', fixId)
 
       if (result.success && prUrl) {
@@ -491,4 +559,32 @@ export class FixOrchestrator {
       }
     }
   }
+}
+
+/**
+ * Resolve a vault reference to the actual secret value.
+ *
+ * In production, vault refs take the shape `vault://<uuid>` and are resolved
+ * via the Supabase Vault API. For local/test environments, the raw key is
+ * passed through unchanged (so dogfood and CI can inject `CURSOR_API_KEY`
+ * directly).
+ *
+ * This is a best-effort implementation — if Vault is not configured or
+ * the ref is not in vault:// format, the raw value is returned and the
+ * caller is responsible for failing gracefully if it is empty.
+ */
+async function resolveVaultRef(ref: string): Promise<string> {
+  // Raw key (no vault:// prefix) — return as-is for local dev / tests.
+  if (!ref.startsWith('vault://')) return ref
+  // Explicit override only for the vault:// path — do NOT check env for
+  // non-vault refs since they are returned verbatim above. This prevents
+  // an env var from silently overriding a vault-stored key in production.
+  // Only MUSHI_CURSOR_API_KEY_OVERRIDE is accepted as an escape hatch for
+  // CI / dogfood environments where the vault is not accessible.
+  const override = process.env.MUSHI_CURSOR_API_KEY_OVERRIDE
+  if (override) return override
+  // Full vault resolution (pgsodium decrypt) is not yet implemented in the
+  // Node orchestrator — the edge function path uses Deno Vault bindings.
+  // Track: https://github.com/kensaurus/mushi-mushi/issues/vault-node-resolution
+  return ''
 }

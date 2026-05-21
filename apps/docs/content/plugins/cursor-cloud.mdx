@@ -1,0 +1,90 @@
+---
+title: Cursor Cloud Agent
+---
+
+import { Callout } from 'nextra/components'
+
+# Cursor Cloud Agent plugin
+
+Automatically dispatches a [Cursor Cloud Agent](https://cursor.com/docs/cloud-agent) run when a qualifying Mushi event fires. The agent investigates the issue in your codebase, drafts a fix, and opens a signed PR — posting the link back into the Mushi Fixes view without any human in the loop.
+
+<Callout type="info">
+The **Cursor Cloud Agent** plugin is a first-party Mushi plugin (slug: `cursor-cloud-agent`). Unlike standard webhook plugins, it calls the Cursor REST API directly — there is no outbound webhook URL to configure.
+</Callout>
+
+## Prerequisites
+
+- A [Cursor](https://cursor.com) account with an API key (Settings → API).
+- Your GitHub integration configured in [Admin → Integrations](/admin/integrations) — the Cursor agent needs repo access to open PRs.
+
+## Setup
+
+1. Go to **Admin → Marketplace**.
+2. Find **Cursor Cloud Agent** → click **Install**.
+3. Fill in the configuration fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **API Key** | ✓ | Your Cursor API key (`cur_…`) — stored in the Supabase Vault; never echoed to the UI |
+| **Workspace ID** | ✓ | Your Cursor workspace ID (`ws_…`) — find it at cursor.com/settings |
+| **Model** | — | `composer-2.5` (default) or `composer-latest` |
+| **Auto-create PRs** | — | When enabled, Cursor opens a signed draft PR automatically (default: enabled) |
+| **Max iterations** | — | Maximum agent loops per run (default: 1) |
+
+4. Click **Install**.
+5. Click **Test** to send a test event and confirm delivery.
+
+## Behaviour
+
+| Event | When the agent runs | What it does |
+|-------|---------------------|--------------|
+| `report.classified` | Immediately after classification | Investigates the report in your codebase; opens a draft PR if `autoCreatePR` is enabled |
+| `fix.requested` | When a fix is explicitly requested via the Fixes page, MCP, or CLI | Dispatches the agent for the specific report |
+| `qa_story.failed` | When a scheduled QA story fails all assertions | Attempts to heal the failing story by opening a PR |
+
+## Fixes view integration
+
+Once the agent run terminates, the [Fixes page](/admin/fixes) shows:
+
+- A **◆ Cursor badge** with the agent run ID — click to open the run transcript in Cursor's web interface.
+- An **Artifact gallery** with any screenshots, logs, or files the agent produced.
+- The **PR link** if `autoCreatePR` was enabled and the agent opened a PR.
+
+## Common tasks
+
+### Limiting dispatch to critical reports only
+
+The Cursor Cloud Agent plugin dispatches on every `report.classified` event. To restrict to `p0`/`p1` reports, use the severity gating in the plugin install form — select only the severities you want to trigger a dispatch.
+
+### Triggering manually
+
+You can also dispatch a Cursor Cloud Agent run outside of the Marketplace plugin:
+
+```bash
+# CLI
+mushi fix <reportId> --agent cursor_cloud --wait
+
+# MCP tool
+dispatch_fix reportId=<reportId> agent=cursor_cloud
+```
+
+See [`mushi fix`](/sdks/cli) and [`@mushi-mushi/mcp`](/sdks/mcp) for details.
+
+### Reviewing what the agent did
+
+Navigate to **Admin → Fixes** → find the `cursor_cloud` row → expand the fix detail. The artifact gallery shows any files the agent produced. Click the ◆ badge to open the full run transcript in Cursor.
+
+## Troubleshooting
+
+- **Plugin installed but no dispatches** — check **Marketplace → Cursor Cloud Agent → Deliveries**. A `401` means the API key is expired or incorrect. A `403` means your plan doesn't have the `plugins` entitlement.
+- **Agent runs but no PR** — verify **Auto-create PRs** is enabled in the plugin configuration, and that your GitHub integration is correctly configured with `contents:write` and `pull-requests:write` scopes.
+- **Run completes with empty `prUrl`** — Cursor returns a `prUrl` only after the agent has created a branch and opened the PR. If `autoCreatePR` was disabled or the agent didn't make any changes, `prUrl` will be `null`.
+- **`fix_dispatch_jobs` stuck in `running`** — the Cursor run may have timed out. Check the Cursor web interface for the agent run status. If the Node orchestrator was unreachable during delegation, the job may need manual status correction via Admin → Fixes → kebab menu → Cancel.
+- **API key not resolving from Vault** — if the Node orchestrator can't reach the Supabase Vault for `vault://` refs, set `MUSHI_CURSOR_API_KEY_OVERRIDE` as an environment variable in the orchestrator process as a fallback. This is intended for self-hosted deployments only — managed cloud uses the Vault automatically.
+
+## Related pages
+
+- [Admin → Integrations → Cursor Cloud](/admin/integrations) — configure the Cursor API key and workspace ID
+- [Admin → Fixes](/admin/fixes) — view Cursor agent runs, badges, and artifact galleries
+- [Concepts → Fix orchestrator](/concepts/fix-orchestrator) — how the orchestrator selects and dispatches agents
+- [Concepts → Connecting your orchestrator](/concepts/orchestrator-interop) — MCP, CLI, REST, and A2A dispatch surfaces
