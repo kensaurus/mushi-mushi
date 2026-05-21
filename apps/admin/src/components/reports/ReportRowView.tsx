@@ -16,6 +16,7 @@ import { memo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { Badge, Tooltip } from '../ui'
 import { SEVERITY } from '../../lib/tokens'
+import { ConfidenceMeter, SignalChip } from '../report-detail/ReportSurface'
 import { useRowFlash } from '../../lib/useRowFlash'
 import { StatusStepper } from './StatusStepper'
 import { BreadcrumbPeek } from './BreadcrumbPeek'
@@ -82,7 +83,6 @@ function ReportRowViewInner({
   claudeEnabled = false,
 }: Props) {
   const summary = row.summary ?? row.description
-  const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
   const dedupCount = row.dedup_count ?? 1
   // Real blast radius — distinct people who felt this. Falls back to the raw
   // dedup count when the BE is older than the migration so the column
@@ -199,12 +199,13 @@ function ReportRowViewInner({
             sentryEnvironment={row.sentry_environment}
           >
             <div
-              className="text-sm text-fg-secondary line-clamp-2 leading-snug min-w-0 flex-1"
+              className="min-w-0 flex-1 rounded-sm border border-edge-subtle/55 bg-surface-overlay/25 px-2 py-1 text-sm leading-snug text-fg-secondary line-clamp-2"
               title={typeof summary === 'string' ? summary : undefined}
             >
               {summary}
             </div>
           </BreadcrumbPeek>
+          <div className="flex shrink-0 flex-wrap items-center gap-1">
           {blastRadius > 1 && (
             <Tooltip
               content={
@@ -213,36 +214,34 @@ function ReportRowViewInner({
                   : `Felt by ${dedupCount} report${dedupCount === 1 ? '' : 's'} so far. One fix attempt closes the whole group — open to see siblings.`
               }
             >
-              <span
-                className={`shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border ${
-                  blastRadius >= 5
-                    ? 'bg-danger/15 text-danger border-danger/30'
-                    : blastRadius >= 3
-                      ? 'bg-warn/15 text-warn border-warn/30'
-                      : 'bg-info-muted text-info border-info/20'
-                }`}
+              <SignalChip
+                tone={blastRadius >= 5 ? 'danger' : blastRadius >= 3 ? 'warn' : 'info'}
+                className="cursor-help font-mono"
               >
                 ×{blastRadius} felt
-              </span>
+              </SignalChip>
             </Tooltip>
           )}
           {reporterReplied && (
             <Tooltip content="Reporter replied after the last developer response. Open the report thread.">
-              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full cursor-help border bg-accent/15 text-accent border-accent/30">
+              <SignalChip tone="accent" className="cursor-help">
                 reporter replied
-              </span>
+              </SignalChip>
             </Tooltip>
           )}
           {variantCount && variantCount > 1 && !isVariant && (
             <Tooltip content={`${variantCount - 1} sibling report${variantCount - 1 === 1 ? '' : 's'} on this page share the same fingerprint. Click the chevron to expand.`}>
-              <span className="shrink-0 text-2xs font-mono px-1.5 py-0.5 rounded-full border border-edge-subtle text-fg-muted cursor-help">
+              <SignalChip tone="neutral" className="cursor-help font-mono">
                 +{variantCount - 1} variant{variantCount - 1 === 1 ? '' : 's'}
-              </span>
+              </SignalChip>
             </Tooltip>
           )}
+          </div>
         </div>
         {row.component && (
-          <div className="text-2xs text-fg-faint mt-0.5 font-mono truncate">{row.component}</div>
+          <code className="mt-1 inline-flex max-w-full truncate rounded-sm border border-brand/20 bg-brand/8 px-1.5 py-0.5 font-mono text-2xs text-brand">
+            {row.component}
+          </code>
         )}
         {(hasObservability(row) || row.sentry_trace_id) && (
           <ObservabilityStrip row={row} />
@@ -268,15 +267,11 @@ function ReportRowViewInner({
         )}
       </td>
       <td className="px-2 py-2 text-right align-top">
-        {conf != null ? (
-          <span className="text-xs font-mono text-fg-muted">{conf}%</span>
-        ) : (
-          <span className="text-2xs text-fg-faint">—</span>
-        )}
+        <ConfidenceMeter confidence={row.confidence} />
       </td>
       <td className="px-2 py-2 text-right align-top">
         <Tooltip content={new Date(row.created_at).toLocaleString()}>
-          <span className="text-2xs text-fg-faint font-mono cursor-help">
+          <span className="inline-flex cursor-help items-center rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1.5 py-0.5 font-mono text-2xs tabular-nums text-fg-muted">
             {formatRelative(row.created_at)}
           </span>
         </Tooltip>
@@ -447,10 +442,10 @@ function ObservabilityStrip({ row }: { row: ReportRow }) {
     ? `${row.sentry_trace_id.slice(0, 7)}…`
     : null
   return (
-    <div className="mt-1 flex items-center gap-1 flex-wrap">
+    <div className="mt-1 flex flex-wrap items-center gap-1 rounded-sm border border-edge-subtle/45 bg-surface-overlay/20 px-1.5 py-1">
       {inlineTag && (
         <span
-          className="inline-flex items-center text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-surface-overlay border border-edge-subtle text-fg-secondary max-w-[14rem] truncate"
+          className="inline-flex max-w-[14rem] items-center truncate rounded-sm border border-edge-subtle bg-surface-overlay/50 px-1.5 py-0.5 font-mono text-2xs text-fg-secondary"
           title={`Tag — ${inlineTag[0]}: ${String(inlineTag[1])}`}
         >
           <span className="text-fg-muted">{inlineTag[0]}</span>
@@ -459,14 +454,16 @@ function ObservabilityStrip({ row }: { row: ReportRow }) {
         </span>
       )}
       {tagCount > 1 && (
-        <span className="text-2xs text-fg-faint">+{tagCount - 1}</span>
+        <SignalChip tone="neutral" className="font-mono">
+          +{tagCount - 1} tags
+        </SignalChip>
       )}
       {traceShort && (
         <Tooltip content={`Sentry trace: ${row.sentry_trace_id}`}>
-          <span className="inline-flex items-center gap-0.5 text-2xs font-mono px-1.5 py-0.5 rounded-sm bg-[#7553ff]/10 text-[#7553ff] border border-[#7553ff]/30 cursor-help">
+          <SignalChip tone="brand" className="cursor-help font-mono">
             <IconBolt className="size-2.5" />
             {traceShort}
-          </span>
+          </SignalChip>
         </Tooltip>
       )}
     </div>

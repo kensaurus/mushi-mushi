@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   type Edge,
   type Node,
@@ -65,6 +65,13 @@ import {
   type NodeType,
 } from '../components/graph/types'
 import { GraphStatusBanner } from '../components/graph/GraphStatusBanner'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import {
   EMPTY_GRAPH_STATS,
   type GraphStats,
@@ -507,13 +514,13 @@ export function GraphPage() {
     <>
       <div className="flex flex-wrap items-center gap-2">
         {view === 'surface' && (
-          <span className="rounded-sm bg-brand/12 text-brand text-2xs px-1.5 py-0.5 font-medium uppercase tracking-wide">
+          <SignalChip tone="brand" className="uppercase tracking-wide font-medium">
             Surface · inventory overlay
-          </span>
+          </SignalChip>
         )}
-        <span className="text-2xs text-fg-faint font-mono">
+        <InlineProof className="font-mono tabular-nums border-0 bg-transparent px-0 py-0">
           {filteredNodes.length}/{rawNodes.length} nodes · {filteredEdges.length}/{rawEdges.length} edges
-        </span>
+        </InlineProof>
         <SegmentedControl<ViewMode>
           size="sm"
           ariaLabel="Graph view mode"
@@ -606,14 +613,10 @@ export function GraphPage() {
           ) : (
             <>
               {view === 'graph' && forceCanvas && filteredNodes.length < STORYBOARD_THRESHOLD && (
-                <div className="flex items-center justify-end text-2xs text-fg-muted">
-                  <button
-                    type="button"
-                    onClick={() => setForceCanvas(false)}
-                    className="px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised/50 text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-                  >
+                <div className="flex items-center justify-end">
+                  <ActionPill tone="neutral" onClick={() => setForceCanvas(false)}>
                     ← Back to storyboard
-                  </button>
+                  </ActionPill>
                 </div>
               )}
               <GraphCanvas
@@ -661,12 +664,6 @@ export function GraphPage() {
       <PageHeader
         title={copy?.title ?? 'Knowledge Graph'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          (stats.nodeCount > 0
-            ? `${stats.nodeCount} nodes · Explore tab for blast radius`
-            : 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map.')
-        }
       >
         <Badge
           className={
@@ -705,6 +702,15 @@ export function GraphPage() {
         </Btn>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            (stats.nodeCount > 0
+              ? `${stats.nodeCount} nodes · Explore tab for blast radius`
+              : 'Banner + GRAPH SNAPSHOT — Overview for posture, Explore for the map.')}
+        </p>
+      </ContainedBlock>
+
       <GraphStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -725,7 +731,9 @@ export function GraphPage() {
 
       {!ux.hideGraphSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'GRAPH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.nodes ?? 'Nodes'}
@@ -802,7 +810,7 @@ export function GraphPage() {
 
           {!ux.hideOverviewChrome && stats.topPriorityTo && stats.topPriority !== 'clear' ? (
             <Card
-              className={`p-4 ${
+              className={`space-y-3 p-4 ${
                 stats.topPriority === 'fragile'
                   ? 'border-danger/30 bg-danger/5'
                   : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
@@ -810,36 +818,49 @@ export function GraphPage() {
                     : 'border-brand/30 bg-brand/5'
               }`}
             >
-              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
-              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityLabel}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={stats.topPriorityTo}>
-                  <Btn size="sm" variant="primary">
-                    Take action →
-                  </Btn>
-                </Link>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('explore')}>
+              <SignalChip
+                tone={
+                  stats.topPriority === 'fragile'
+                    ? 'danger'
+                    : stats.topPriority === 'regressions' || stats.topPriority === 'empty'
+                      ? 'warn'
+                      : 'brand'
+                }
+              >
+                Top priority
+              </SignalChip>
+              <ContainedBlock
+                tone={
+                  stats.topPriority === 'fragile' ? 'warn' : stats.topPriority === 'regressions' ? 'warn' : 'info'
+                }
+                label="Graph"
+              >
+                <p className="text-sm font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+              </ContainedBlock>
+              <ActionPillRow>
+                <ActionPill to={stats.topPriorityTo} tone="brand">
+                  Take action →
+                </ActionPill>
+                <ActionPill tone="neutral" onClick={() => setActiveTab('explore')}>
                   Open map
-                </Btn>
-              </div>
+                </ActionPill>
+              </ActionPillRow>
             </Card>
           ) : null}
 
           {!ux.hideOverviewChrome && <PageActionBar scope="graph" action={graphAction} />}
 
           {!ux.hideOverviewChrome && (
-          <div className="flex flex-wrap gap-2">
-            <Btn size="sm" variant="primary" onClick={() => setActiveTab('explore')}>
+          <ActionPillRow>
+            <ActionPill tone="brand" onClick={() => setActiveTab('explore')}>
               {copy?.actionLabels?.explore ?? 'Open map'} →
-            </Btn>
+            </ActionPill>
             {!stats.hasIngest ? (
-              <Link to="/onboarding?tab=verify">
-                <Btn size="sm" variant="ghost">
-                  {copy?.actionLabels?.verify ?? 'Send test report'}
-                </Btn>
-              </Link>
+              <ActionPill to="/onboarding?tab=verify" tone="neutral">
+                {copy?.actionLabels?.verify ?? 'Send test report'}
+              </ActionPill>
             ) : null}
-          </div>
+          </ActionPillRow>
           )}
         </>
       )}
@@ -848,16 +869,24 @@ export function GraphPage() {
 
       {activeTab === 'backend' && (
         <div className="space-y-3">
-          <Card className="border-info/20 bg-info/5 p-4">
-            <p className="text-sm font-medium text-fg">Graph backend debug</p>
-            <p className="mt-1 text-2xs text-fg-muted">
+          <ContainedBlock tone="info" label="Graph backend debug">
+            <p className="text-sm font-medium text-fg">Sync posture</p>
+            <InlineProof className="mt-2">
               Backend: <span className="font-mono text-fg-secondary">{stats.graphBackend}</span>
               {stats.ageAvailable ? ' · Apache AGE available' : ' · SQL-only mode'}
               {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0
                 ? ` · ${stats.unsyncedNodes} unsynced nodes · ${stats.unsyncedEdges} unsynced edges`
                 : ' · fully synced'}
-            </p>
-          </Card>
+            </InlineProof>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <SignalChip tone={stats.ageAvailable ? 'ok' : 'neutral'}>
+                {stats.ageAvailable ? 'AGE on' : 'SQL mode'}
+              </SignalChip>
+              <SignalChip tone={stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0 ? 'warn' : 'ok'}>
+                {stats.unsyncedNodes > 0 || stats.unsyncedEdges > 0 ? 'Sync pending' : 'Fully synced'}
+              </SignalChip>
+            </div>
+          </ContainedBlock>
           <div className="grid gap-3 md:grid-cols-2">
             <GraphBackendPanel />
             <OntologyPanel />
@@ -902,18 +931,16 @@ function StoryboardNarrative({ nodes, onSwitchToCanvas }: StoryboardNarrativePro
   }, [nodes])
 
   return (
-    <div className="flex items-start justify-between gap-3 px-3 py-2 rounded-md border border-edge-subtle bg-surface-raised/40">
-      <p className="text-xs text-fg-secondary leading-relaxed max-w-prose wrap-break-word text-pretty">
-        <span className="text-2xs uppercase tracking-wider text-fg-faint mr-1">Story</span>
+    <ContainedBlock tone="muted" className="flex items-start justify-between gap-3">
+      <p className="max-w-prose text-xs leading-relaxed text-fg-secondary wrap-break-word text-pretty">
+        <SignalChip tone="neutral" className="mr-1.5 align-middle">
+          Story
+        </SignalChip>
         {sentence}
       </p>
-      <button
-        type="button"
-        onClick={onSwitchToCanvas}
-        className="shrink-0 text-2xs px-2 py-0.5 rounded-sm border border-edge-subtle bg-surface-raised text-fg-secondary hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-      >
+      <ActionPill tone="neutral" onClick={onSwitchToCanvas} className="shrink-0">
         Spatial canvas
-      </button>
-    </div>
+      </ActionPill>
+    </ContainedBlock>
   )
 }

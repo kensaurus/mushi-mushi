@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom'
 import { PDCA_STAGES } from '../../lib/pdca'
 import { pluralize } from '../../lib/format'
 import type { PdcaStage, PdcaStageId } from './types'
+import { ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 
 interface Props {
   stages: PdcaStage[]
@@ -67,9 +68,9 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
           <h1 className="mt-2 text-xl font-semibold text-fg leading-tight">
             {subtle ? 'Loop is clean. Watch for the next inbound bug.' : focus.bottleneck ?? `${focus.count} ${focus.countLabel}`}
           </h1>
-          <p className="mt-1.5 text-xs text-fg-secondary leading-relaxed max-w-xl">
-            {meta.hint}
-          </p>
+          <ContainedBlock tone="muted" className="mt-1.5 max-w-xl">
+            <p className="text-xs text-fg-secondary leading-relaxed">{meta.hint}</p>
+          </ContainedBlock>
         </div>
 
         <div className="flex flex-col items-stretch gap-1.5 md:items-end shrink-0">
@@ -80,9 +81,9 @@ export function HeroIntro({ stages, focusStage, projectName, lastReportAt }: Pro
             {focus.cta.label}
             <span aria-hidden="true">→</span>
           </Link>
-          <span className="text-3xs text-fg-faint text-center md:text-right">
+          <InlineProof className="text-center md:text-right border-0 bg-transparent px-0 py-0">
             {countCopy(focus)}
-          </span>
+          </InlineProof>
         </div>
       </div>
     </section>

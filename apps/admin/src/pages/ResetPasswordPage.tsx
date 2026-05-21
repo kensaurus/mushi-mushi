@@ -8,6 +8,7 @@ import { useState, type FormEvent } from 'react'
 import { useAuth } from '../lib/auth'
 import { Navigate } from 'react-router-dom'
 import { Input, Btn, PageHelp, Loading } from '../components/ui'
+import { ContainedBlock, InlineProof, SignalChip } from '../components/report-detail/ReportSurface'
 import { detectRecoveryFromUrl } from '../lib/authRedirect'
 
 export function ResetPasswordPage() {
@@ -72,7 +73,7 @@ export function ResetPasswordPage() {
           <h1 className="text-xl font-bold">
             <span className="text-brand">mushi</span>mushi
           </h1>
-          <p className="text-2xs text-fg-muted mt-0.5">admin console</p>
+          <SignalChip tone="neutral" className="mt-1.5">admin console</SignalChip>
         </div>
 
         {!done && (
@@ -99,9 +100,11 @@ export function ResetPasswordPage() {
               </span>
             </div>
             <h2 className="text-sm font-semibold text-center">Password updated</h2>
-            <p className="text-xs text-fg-muted text-center">
-              Your password has been changed successfully. You're now signed in.
-            </p>
+            <ContainedBlock tone="muted">
+              <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs text-center">
+                Your password has been changed successfully. You're now signed in.
+              </InlineProof>
+            </ContainedBlock>
             <div className="pt-1">
               <Btn
                 type="button"
@@ -115,9 +118,11 @@ export function ResetPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-3 bg-surface border border-edge rounded-md p-5">
             <h2 className="text-sm font-semibold text-center">Set a new password</h2>
-            <p className="text-xs text-fg-muted text-center">
-              Choose a new password for your account.
-            </p>
+            <ContainedBlock tone="muted" className="mb-1">
+              <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs text-center">
+                Choose a new password for your account.
+              </InlineProof>
+            </ContainedBlock>
 
             <Input
               label="New password"
@@ -145,9 +150,9 @@ export function ResetPasswordPage() {
             />
 
             {error && (
-              <div className="rounded-sm border border-danger/30 bg-danger-muted/10 px-3 py-2">
+              <ContainedBlock tone="warn">
                 <p className="text-xs text-danger">{error}</p>
-              </div>
+              </ContainedBlock>
             )}
 
             <Btn type="submit" disabled={loading} className="w-full justify-center">

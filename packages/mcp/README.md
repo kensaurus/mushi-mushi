@@ -1,18 +1,44 @@
-# @mushi-mushi/mcp
+# mushi-mcp
 
-[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi Mushi's closed-loop bug intelligence into your AI coding agent — so Cursor, Claude Code, Copilot, and any other MCP-compatible client can read classified reports, query the lesson library, and dispatch AI-generated fixes directly from the editor.
+> **Sentry sees what code throws. Mushi sees what users feel — and closes the loop with AI.**
 
-**The evolutionary angle:** the lesson library (`lessons.query` tool) is the agent's institutional memory. Every bug cluster your team has ever named is available to the agent before it touches a single line of code — so it doesn't repeat the same class of mistake the last agent made. That's the "cumulative selection" loop the [main README](https://www.npmjs.com/package/mushi-mushi) describes, delivered to your IDE.
+[Model Context Protocol](https://spec.modelcontextprotocol.io/) server that wires Mushi's **evolution loop** into your AI coding agent. The loop is already running in your Mushi project:
+
+```
+User feels a bug → Mushi captures it → AI triages → AI opens a PR
+→ QA verifies → Judge scores → Lesson library remembers → next agent is smarter
+```
+
+Wire it into Cursor, Claude Code, or any MCP client in one command:
+
+```bash
+npx mushi-mushi setup --ide cursor
+# or: npx mushi-mushi setup --ide claude
+```
+
+That command reads `~/.mushirc`, writes `.cursor/mcp.json` with the `mushi` server block, and prints "Done — restart Cursor and ask: `list mushi tools`". No copy-pasting environment variables.
 
 > **What this is, and what it isn't**
 >
-> - **This package** is the MCP **server** — runs locally next to your editor, talks to the Mushi Mushi API, and presents bug reports as MCP tools/resources to your coding agent.
+> - **This package** (`mushi-mcp`) is the MCP **server** — runs locally next to your editor, talks to the Mushi API, and presents bug reports as MCP tools/resources to your coding agent. The npm package name is `mushi-mcp`; the scoped alias `@mushi-mushi/mcp` still works.
 > - **`@mushi-mushi/agents`** ships the MCP **client adapter** — used by the autofix orchestrator when your project's `autofix_agent = 'mcp'`. See `packages/agents/src/adapters/mcp.ts`.
 > - The `generic_mcp` adapter shipped before V5.3 was a misnomer (it spoke plain REST). It is now `RestFixWorkerAgent`; the old export is kept as a deprecated alias for one more minor.
 
 ## Quick start
 
-### 1. With Claude Desktop
+### 0. One-liner (recommended)
+
+```bash
+# First: make sure you've logged in
+npx mushi-mushi login --api-key mushi_xxx --endpoint https://<ref>.supabase.co/functions/v1/api
+
+# Then wire your IDE
+npx mushi-mushi setup --ide cursor          # Cursor
+npx mushi-mushi setup --ide claude          # Claude Code / Claude Desktop
+npx mushi-mushi setup --ide cursor --with-rules  # also write .cursorrules
+```
+
+### 1. With Claude Desktop (manual)
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 

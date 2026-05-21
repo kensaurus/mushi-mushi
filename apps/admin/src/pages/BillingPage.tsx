@@ -62,6 +62,14 @@ import {
   StatCard,
   SegmentedControl,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { PlanComparisonTable } from '../components/billing/PlanComparisonTable'
@@ -396,18 +404,21 @@ export function BillingPage() {
 
       <PageHeader
         title={copy?.title ?? 'Billing'}
-        description={
-          copy?.description ??
-          'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'
-        }
         projectScope={stats.projectName ?? activeProject?.project_name}
       >
         {!ux.hideOverviewChrome && (
-        <span className="text-2xs text-fg-faint font-mono">
-          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} reports / mo
-        </span>
+        <SignalChip tone="neutral" className="font-mono">
+          Free quota: {billing?.free_limit_reports_per_month?.toLocaleString() ?? stats.freeLimitReports.toLocaleString()} / mo
+        </SignalChip>
         )}
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Plan, usage, invoices, and quota — everything you need to keep the loop running on your terms.'}
+        </p>
+      </ContainedBlock>
 
       <BillingStatusBanner
         stats={stats}
@@ -432,7 +443,9 @@ export function BillingPage() {
         title={copy?.sections?.snapshot ?? 'Billing snapshot'}
         freshness={{ at: statsQuery.lastFetchedAt, isValidating: statsQuery.isValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.plan ?? 'Plan'}
@@ -472,6 +485,67 @@ export function BillingPage() {
           />
         </div>
       </Section>
+      )}
+
+      {!ux.hideOverviewChrome &&
+        (stats.overQuota ||
+          stats.approachingQuota ||
+          stats.pastDueProjects > 0 ||
+          stats.unpaidProjects > 0 ||
+          (stats.hasStripeCustomer && !stats.paymentOk) ||
+          stats.cancelAtPeriodEnd) && (
+        <Card
+          className={`space-y-3 p-4 ${
+            stats.overQuota || stats.pastDueProjects > 0 || stats.unpaidProjects > 0 || !stats.paymentOk
+              ? 'border-danger/30 bg-danger/5'
+              : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <SignalChip
+            tone={
+              stats.overQuota || stats.pastDueProjects > 0 || stats.unpaidProjects > 0
+                ? 'danger'
+                : 'warn'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="warn">
+            <p className="text-xs font-medium leading-snug text-fg">
+              {stats.overQuota
+                ? `Over quota — ${stats.reportsUsed.toLocaleString()} reports this period${stats.reportsLimit != null ? ` (limit ${stats.reportsLimit.toLocaleString()})` : ''}.`
+                : stats.pastDueProjects > 0
+                  ? `${stats.pastDueProjects} project${stats.pastDueProjects === 1 ? '' : 's'} past due — update payment method.`
+                  : stats.unpaidProjects > 0
+                    ? `${stats.unpaidProjects} unpaid invoice${stats.unpaidProjects === 1 ? '' : 's'} need settlement.`
+                    : stats.approachingQuota
+                      ? `Approaching quota — ${stats.usagePct ?? 0}% of monthly reports used.`
+                      : stats.cancelAtPeriodEnd
+                        ? 'Subscription cancels at period end — renew to keep Pro features.'
+                        : 'Payment method needs attention — open the billing portal.'}
+            </p>
+          </ContainedBlock>
+          <ActionPillRow>
+            {activeProject?.customer?.stripe_customer_id ? (
+              <ActionPill onClick={() => void triggerManage()} tone="brand">
+                Manage billing →
+              </ActionPill>
+            ) : (
+              <ActionPill onClick={() => activeProject && void triggerUpgrade()} tone="brand">
+                Upgrade plan →
+              </ActionPill>
+            )}
+            <ActionPill onClick={() => setActiveTab('plans')} tone="neutral">
+              Compare plans
+            </ActionPill>
+          </ActionPillRow>
+        </Card>
+      )}
+
+      {ux.hideBillingSnapshot && (
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
       )}
 
       <div
@@ -622,11 +696,13 @@ function ProjectBillingCard({
                   <span aria-hidden="true" className="mr-1 leading-none">◆</span>
                   Admin
                 </Badge>
-                <span className="text-2xs text-fg-muted">
-                  <span className="font-mono uppercase tracking-wider text-fg-faint">tier</span>{' '}
+                <InlineProof className="inline-flex flex-wrap items-center gap-1 border-0 bg-transparent px-0 py-0">
+                  <SignalChip tone="neutral" className="font-mono uppercase tracking-wider">
+                    tier
+                  </SignalChip>
                   <span className="font-medium text-fg-secondary">{planLabel}</span>
-                  <span className="ml-0.5 text-fg-faint"> entitlements</span>
-                </span>
+                  <SignalChip tone="neutral">entitlements</SignalChip>
+                </InlineProof>
                 <Badge
                   className="bg-surface-overlay text-fg-muted border border-edge-subtle"
                   title="No Stripe customer or invoice exists for this org. Entitlements are honoured at the platform level."
@@ -659,15 +735,15 @@ function ProjectBillingCard({
                 fold issue and gives the severity signal a proper home next to
                 the number it grades. */}
             {overageRate != null && !isComplimentary && (
-              <span className="text-2xs text-fg-faint">
+              <SignalChip tone="warn" className="font-mono">
                 Overage ${Number(overageRate).toFixed(4)} / report
-              </span>
+              </SignalChip>
             )}
           </div>
           {project.subscription?.current_period_end && (
-            <p className="text-2xs text-fg-faint mt-1">
+            <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0">
               Period ends <RelativeTime value={project.subscription.current_period_end} />
-            </p>
+            </InlineProof>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -742,12 +818,14 @@ interface PlanPickerProps {
 
 function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
   return (
-    <section className="border border-edge-subtle rounded-md p-3 bg-surface-raised/30">
-      <div className="flex items-baseline justify-between mb-2">
-        <h4 className="text-2xs uppercase tracking-wider text-fg-faint">
+    <ContainedBlock tone="muted" className="p-3 space-y-2">
+      <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+        <SignalChip tone="neutral" className="uppercase tracking-wider">
           {currentPlanId === 'hobby' ? 'Pick a plan' : 'Switch to'}
-        </h4>
-        <span className="text-2xs text-fg-faint">Billed monthly · cancel any time</span>
+        </SignalChip>
+        <InlineProof className="border-0 bg-transparent px-0 py-0">
+          Billed monthly · cancel any time
+        </InlineProof>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         {plans.map((p) => (
@@ -758,18 +836,22 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
                 ${p.monthly_price_usd}/mo
               </span>
             </header>
-            <p className="text-2xs text-fg-muted mt-1">
-              {p.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo included
-              {p.overage_unit_amount_decimal != null && (
-                <> · ${Number(p.overage_unit_amount_decimal).toFixed(4)}/report after</>
-              )}
-            </p>
-            <p className="text-2xs text-fg-faint mt-0.5">
-              {p.retention_days}-day retention
-              {p.feature_flags.sso ? ' · SSO' : ''}
-              {p.feature_flags.byok ? ' · BYOK' : ''}
-              {p.feature_flags.intelligence_reports ? ' · Intelligence reports' : ''}
-            </p>
+            <ContainedBlock tone="neutral" className="mt-1 space-y-1">
+              <InlineProof className="border-0 bg-transparent px-0 py-0">
+                {p.included_reports_per_month?.toLocaleString() ?? '∞'} reports/mo included
+                {p.overage_unit_amount_decimal != null && (
+                  <> · ${Number(p.overage_unit_amount_decimal).toFixed(4)}/report after</>
+                )}
+              </InlineProof>
+              <div className="flex flex-wrap gap-1">
+                <SignalChip tone="neutral">{p.retention_days}-day retention</SignalChip>
+                {p.feature_flags.sso ? <SignalChip tone="brand">SSO</SignalChip> : null}
+                {p.feature_flags.byok ? <SignalChip tone="brand">BYOK</SignalChip> : null}
+                {p.feature_flags.intelligence_reports ? (
+                  <SignalChip tone="brand">Intelligence</SignalChip>
+                ) : null}
+              </div>
+            </ContainedBlock>
             <Btn
               size="sm"
               className="mt-2 w-full"
@@ -782,14 +864,14 @@ function PlanPicker({ plans, currentPlanId, busy, onPick }: PlanPickerProps) {
           </article>
         ))}
       </div>
-      <p className="text-2xs text-fg-faint mt-2">
+      <InlineProof className="mt-2 border-0 bg-transparent px-0 py-0">
         Need an air-gapped install, custom DPA, or &gt; 500k reports/mo?{' '}
         <a href="mailto:kensaurus@gmail.com" className="text-brand hover:text-brand-hover">
           Email sales
         </a>{' '}
         for Enterprise.
-      </p>
-    </section>
+      </InlineProof>
+    </ContainedBlock>
   )
 }
 
@@ -849,12 +931,6 @@ function buildUsageForecast(
     ? `At current rate, you'll hit your limit today`
     : `At current rate, you'll hit your limit on ${dateStr} (${etaDays}d away)`
   return { etaDays, etaDate, tone, label }
-}
-
-const FORECAST_TONE: Record<UsageForecast['tone'], string> = {
-  danger: 'bg-danger-subtle text-danger',
-  warn: 'bg-warn/10 text-warn',
-  muted: 'text-fg-faint',
 }
 
 // Severity tone the whole UsageBar takes on — matches across chip, progress
@@ -1063,7 +1139,9 @@ function UsageBar({
             ) : (
               <span className="text-xs text-fg-faint">unlimited</span>
             )}
-            <span className="text-2xs text-fg-faint">reports this period</span>
+            <SignalChip tone="neutral" className="tabular-nums">
+              reports this period
+            </SignalChip>
           </div>
         </div>
         <Badge className={USAGE_CHIP_TONE[headline.tone]} title={headline.narrative ?? undefined}>
@@ -1106,22 +1184,18 @@ function UsageBar({
       )}
 
       {(headline.narrative || forecast) && (
-        <div className="flex items-center gap-2 flex-wrap">
+        <ContainedBlock tone={headline.tone === 'danger' ? 'warn' : headline.tone === 'warn' ? 'warn' : 'muted'} className="flex flex-wrap items-center gap-2">
           {headline.narrative && (
-            <p
-              className={`text-2xs ${headline.tone === 'danger' ? 'text-danger' : headline.tone === 'warn' ? 'text-warn' : 'text-fg-muted'}`}
-            >
+            <InlineProof className={`border-0 bg-transparent px-0 py-0 ${headline.tone === 'danger' ? 'text-danger' : headline.tone === 'warn' ? 'text-warn' : ''}`}>
               {headline.narrative}
-            </p>
+            </InlineProof>
           )}
           {forecast && (
-            <p
-              className={`text-2xs px-1.5 py-0.5 rounded-sm inline-block font-mono ${FORECAST_TONE[forecast.tone]}`}
-            >
+            <SignalChip tone={forecast.tone === 'danger' ? 'danger' : forecast.tone === 'warn' ? 'warn' : 'neutral'} className="font-mono">
               {forecast.label}
-            </p>
+            </SignalChip>
           )}
-        </div>
+        </ContainedBlock>
       )}
 
       {/* 30-day reports trend — sits between the period headline and the
@@ -1137,16 +1211,16 @@ function UsageBar({
           aria-label="Last 30 days of reports ingested"
         >
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <span className="text-2xs uppercase tracking-wider text-fg-faint">
+            <SignalChip tone="neutral" className="uppercase tracking-wider">
               Last 30 days
-            </span>
-            <span className="text-2xs text-fg-faint tabular-nums">
+            </SignalChip>
+            <InlineProof className="border-0 bg-transparent px-0 py-0 font-mono tabular-nums">
               {seriesSummary.total.toLocaleString()} report
               {seriesSummary.total === 1 ? '' : 's'}
               <span aria-hidden="true" className="mx-1">·</span>
               {seriesSummary.activeDays} active day
               {seriesSummary.activeDays === 1 ? '' : 's'}
-            </span>
+            </InlineProof>
           </div>
           {seriesSummary.total > 0 ? (
             <div className="flex items-center gap-3 flex-wrap">
@@ -1158,65 +1232,58 @@ function UsageBar({
                   ariaLabel={`Daily reports trend over the last 30 days. Total ${seriesSummary.total}, ${seriesSummary.activeDays} active days, peak ${seriesSummary.peakReports}${seriesSummary.peakDayLabel ? ` on ${seriesSummary.peakDayLabel}` : ''}.`}
                 />
               </div>
-              <p className="text-2xs text-fg-muted tabular-nums">
+              <InlineProof className="tabular-nums border-0 bg-transparent px-0 py-0">
                 {seriesSummary.avgPerActiveDay > 0 && (
                   <>
-                    <span className="font-mono text-fg-secondary">
-                      {seriesSummary.avgPerActiveDay}
-                    </span>
-                    <span className="ml-0.5">/ active day</span>
+                    <SignalChip tone="neutral" className="font-mono">
+                      {seriesSummary.avgPerActiveDay} / active day
+                    </SignalChip>
                   </>
                 )}
                 {seriesSummary.peakDayLabel && seriesSummary.peakReports > 0 && (
-                  <>
-                    <span aria-hidden="true" className="mx-1">·</span>
-                    peak <span className="font-mono text-fg-secondary">{seriesSummary.peakReports.toLocaleString()}</span>
-                    <span className="ml-0.5">on {seriesSummary.peakDayLabel}</span>
-                  </>
+                  <SignalChip tone="neutral" className="font-mono">
+                    peak {seriesSummary.peakReports.toLocaleString()} on {seriesSummary.peakDayLabel}
+                  </SignalChip>
                 )}
                 {seriesSummary.lastActiveDayLabel && seriesSummary.lastActiveDaysAgo != null && (
-                  <>
-                    <span aria-hidden="true" className="mx-1">·</span>
+                  <SignalChip tone="neutral">
                     last activity{' '}
                     {seriesSummary.lastActiveDaysAgo === 0
                       ? 'today'
                       : seriesSummary.lastActiveDaysAgo === 1
                         ? 'yesterday'
                         : `${seriesSummary.lastActiveDaysAgo}d ago`}
-                  </>
+                  </SignalChip>
                 )}
-              </p>
+              </InlineProof>
             </div>
           ) : (
-            <p className="text-2xs text-fg-faint">
-              No reports ingested in the last 30 days. Confirm the SDK is wired
-              up and sending events to this project.
-            </p>
+            <EmptySectionMessage
+              text="No reports ingested in the last 30 days."
+              hint="Confirm the SDK is wired up and sending events to this project."
+            />
           )}
         </section>
       )}
 
       {/* Secondary metrics — explicitly demoted below the quota block.
           They're useful but not what the user came here to read. */}
-      <div className="flex items-center gap-2 flex-wrap text-2xs text-fg-faint pt-1 border-t border-edge-subtle/60">
-        <span>
-          Fixes <span className="font-mono text-fg-secondary tabular-nums">{usage.fixes.toLocaleString()}</span>
-        </span>
-        <span aria-hidden="true">·</span>
-        <span>
-          Classifier tokens <span className="font-mono text-fg-secondary tabular-nums">{usage.tokens.toLocaleString()}</span>
-        </span>
-        {llmCostUsd != null && (
-          <>
-            <span aria-hidden="true">·</span>
-            <span
-              className="font-mono text-fg-secondary"
-              title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd"
-            >
-              LLM <span className="text-fg">{formatLlmCost(llmCostUsd)}</span>
+      <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-edge-subtle/60">
+        <ContainedBlock tone="muted" className="flex flex-wrap items-center gap-1.5 py-1.5">
+          <SignalChip tone="info">
+            Fixes <span className="font-mono tabular-nums">{usage.fixes.toLocaleString()}</span>
+          </SignalChip>
+          <SignalChip tone="neutral">
+            Classifier tokens <span className="font-mono tabular-nums">{usage.tokens.toLocaleString()}</span>
+          </SignalChip>
+          {llmCostUsd != null && (
+            <span title="Real $ spent on LLM calls this billing month, from llm_invocations.cost_usd">
+              <SignalChip tone="brand">
+                LLM {formatLlmCost(llmCostUsd)}
+              </SignalChip>
             </span>
-          </>
-        )}
+          )}
+        </ContainedBlock>
       </div>
     </section>
   )
@@ -1238,22 +1305,27 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
 
   if (isComplimentary) {
     return (
-      <p className="text-2xs text-fg-faint border-t border-edge-subtle pt-2">
-        Complimentary account — no Stripe invoices are issued for this organization.
-      </p>
+      <EmptySectionMessage
+        text="Complimentary account — no Stripe invoices are issued for this organization."
+      />
     )
   }
 
   if (!hasCustomer) {
     return (
-      <p className="text-2xs text-fg-faint border-t border-edge-subtle pt-2">
-        Invoices appear here after the first Stripe Checkout completes.
-      </p>
+      <EmptySectionMessage
+        text="Invoices appear here after the first Stripe Checkout completes."
+        hint="Upgrade from the overview tab to start a subscription."
+      />
     )
   }
 
   if (invoicesQuery.loading) {
-    return <p className="text-2xs text-fg-faint border-t border-edge-subtle pt-2">Loading invoices…</p>
+    return (
+      <div className="border-t border-edge-subtle pt-2">
+        <EmptySectionMessage text="Loading invoices…" />
+      </div>
+    )
   }
 
   if (invoicesQuery.error) {
@@ -1276,15 +1348,20 @@ function InvoicesSection({ projectId, hasCustomer, isComplimentary }: InvoicesSe
   const invoices = invoicesQuery.data?.invoices ?? []
   if (invoices.length === 0) {
     return (
-      <p className="text-2xs text-fg-faint border-t border-edge-subtle pt-2">
-        No invoices yet. Stripe issues the first one at the end of the billing period.
-      </p>
+      <div className="border-t border-edge-subtle pt-2">
+        <EmptySectionMessage
+          text="No invoices yet."
+          hint="Stripe issues the first one at the end of the billing period."
+        />
+      </div>
     )
   }
 
   return (
     <section className="border-t border-edge-subtle pt-2">
-      <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Recent invoices</h4>
+      <SignalChip tone="neutral" className="mb-1.5 uppercase tracking-wider">
+        Recent invoices
+      </SignalChip>
       <table className="w-full text-2xs">
         <thead className="text-fg-faint">
           <tr>
@@ -1406,9 +1483,11 @@ function SupportSection({ projects }: { projects: BillingProject[] }) {
       <header className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-fg">Need help?</h3>
-          <p className="text-2xs text-fg-muted mt-0.5">
-            Direct line to a human. We reply within one business day for paid plans, two for free.
-          </p>
+          <ContainedBlock tone="muted" className="mt-0.5">
+            <p className="text-2xs text-fg-muted">
+              Direct line to a human. We reply within one business day for paid plans, two for free.
+            </p>
+          </ContainedBlock>
         </div>
         <div className="flex items-center gap-1.5">
           <a
@@ -1549,9 +1628,9 @@ function SupportComposer({ projects, supportEmail, onSubmitted }: ComposerProps)
         maxLength={5000}
       />
       <div className="flex items-center justify-between">
-        <p className="text-2xs text-fg-faint">
+        <InlineProof className="border-0 bg-transparent px-0 py-0">
           Sent to <span className="font-mono">{supportEmail}</span>. Don't include passwords or API keys.
-        </p>
+        </InlineProof>
         <Btn
           type="submit"
           size="sm"
@@ -1587,7 +1666,9 @@ function TicketHistory({
 
   return (
     <section className="border-t border-edge-subtle pt-2">
-      <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Recent tickets</h4>
+      <SignalChip tone="neutral" className="mb-1.5 uppercase tracking-wider">
+        Recent tickets
+      </SignalChip>
       <ul className="divide-y divide-edge-subtle">
         {tickets.map((t) => {
           // Surface "you have a reply waiting" right on the row so users
@@ -1610,9 +1691,11 @@ function TicketHistory({
                       </Badge>
                     )}
                   </div>
-                  <p className="text-fg-faint truncate">
-                    {projectName(t.project_id)} · {t.category} · <RelativeTime value={t.created_at} />
-                  </p>
+                  <InlineProof className="mt-0.5 border-0 bg-transparent px-0 py-0 truncate">
+                    <SignalChip tone="neutral">{projectName(t.project_id)}</SignalChip>
+                    <SignalChip tone="neutral" className="capitalize">{t.category}</SignalChip>
+                    <RelativeTime value={t.created_at} />
+                  </InlineProof>
                 </div>
                 <Badge className={TICKET_STATUS_TONE[t.status]}>{TICKET_STATUS_LABEL[t.status]}</Badge>
               </button>
@@ -1741,38 +1824,38 @@ function TicketDetailModal({
         />
 
         <section>
-          <h4 className="text-2xs uppercase tracking-wider text-fg-faint mb-1.5">Your message</h4>
-          <p className="text-fg-secondary leading-relaxed whitespace-pre-wrap break-words border border-edge-subtle/60 rounded-md bg-surface-raised/30 p-2.5">
-            {ticket.body?.trim() || <span className="italic text-fg-faint">No message recorded.</span>}
-          </p>
+          <SignalChip tone="neutral" className="mb-1.5 uppercase tracking-wider">
+            Your message
+          </SignalChip>
+          <ContainedBlock tone="muted" className="text-fg-secondary leading-relaxed whitespace-pre-wrap break-words">
+            {ticket.body?.trim() || (
+              <EmptySectionMessage text="No message recorded." />
+            )}
+          </ContainedBlock>
         </section>
 
         {ticket.admin_response?.trim() ? (
           <section>
-            <h4 className="text-2xs uppercase tracking-wider text-brand mb-1.5 flex items-center gap-2">
-              <span aria-hidden>↩</span>
-              <span>Reply from support</span>
+            <div className="mb-1.5 flex flex-wrap items-center gap-2">
+              <SignalChip tone="brand" className="uppercase tracking-wider">
+                Reply from support
+              </SignalChip>
               {ticket.admin_responded_at && (
-                <span className="text-fg-faint normal-case tracking-normal">
-                  · <RelativeTime value={ticket.admin_responded_at} />
-                </span>
+                <SignalChip tone="neutral">
+                  <RelativeTime value={ticket.admin_responded_at} />
+                </SignalChip>
               )}
-            </h4>
-            <p className="text-fg leading-relaxed whitespace-pre-wrap break-words border border-brand/30 rounded-md bg-brand/5 p-2.5">
+            </div>
+            <ContainedBlock tone="info" className="text-fg leading-relaxed whitespace-pre-wrap break-words border-brand/30 bg-brand/5">
               {ticket.admin_response}
-            </p>
+            </ContainedBlock>
           </section>
         ) : ticket.status === 'open' || ticket.status === 'in_progress' ? (
-          <p className="text-2xs text-fg-faint italic">
-            No reply yet. We aim for one business day on paid plans, two on free. You'll see the
-            response here and in the original email thread.
-          </p>
+          <EmptySectionMessage text="No reply yet. We aim for one business day on paid plans, two on free. You'll see the response here and in the original email thread." />
         ) : null}
 
         {ticket.status === 'cancelled' && (
-          <p className="text-2xs text-fg-faint italic">
-            You cancelled this ticket. If the issue resurfaces, send a fresh ticket and link to this id.
-          </p>
+          <EmptySectionMessage text="You cancelled this ticket. If the issue resurfaces, send a fresh ticket and link to this id." />
         )}
       </div>
     </Modal>

@@ -1,0 +1,43 @@
+{
+  "_comment": "Mushi Mushi Claude Code hooks — drop into your project root as .claude/hooks.json",
+  "_docs": "https://kensaur.us/mushi-mushi/docs/integrations/claude",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[mushi] Pre-commit: checking active Mushi reports for this repo...\" >&2; mushi reports list --status new --severity critical --json 2>/dev/null | head -3 || true'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'echo \"[mushi] File changed — run mushi fix <reportId> to dispatch agentic fix\" >&2; true'"
+          }
+        ]
+      }
+    ]
+  },
+  "mcp_servers": {
+    "mushi": {
+      "command": "npx",
+      "args": ["-y", "mushi-mcp@latest"],
+      "env": {
+        "MUSHI_API_ENDPOINT": "${MUSHI_API_ENDPOINT}",
+        "MUSHI_PROJECT_ID": "${MUSHI_PROJECT_ID}",
+        "MUSHI_API_KEY": "${MUSHI_API_KEY}"
+      }
+    }
+  },
+  "rules_files": [
+    ".claude/rules/mushi.md"
+  ],
+  "_setup": "Run `mushi setup --ide claude --with-rules` to write this file + .claude/rules/mushi.md automatically"
+}

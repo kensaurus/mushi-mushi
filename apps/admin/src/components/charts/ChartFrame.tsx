@@ -5,6 +5,7 @@
 
 import type { ReactNode } from 'react'
 import { CHART_LOCALE, sparseXLabels } from './chartAxis'
+import { InlineProof } from '../report-detail/ReportSurface'
 
 export interface ChartFrameProps {
   children: ReactNode
@@ -96,7 +97,9 @@ export function ChartFrame({
           )}
 
           {xAxisCaption && (
-            <p className="mt-1 text-center text-3xs text-fg-faint">{xAxisCaption}</p>
+            <InlineProof className="mt-1 text-center border-0 bg-transparent px-0 py-0 text-3xs">
+              {xAxisCaption}
+            </InlineProof>
           )}
         </div>
       </div>

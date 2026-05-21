@@ -1,5 +1,5 @@
-import { Link } from 'react-router-dom'
 import { Badge, Breadcrumbs, CodeValue, RelativeTime } from '../ui'
+import { ContainedBlock, MetaChip } from './ReportSurface'
 import {
   STATUS,
   SEVERITY,
@@ -16,7 +16,9 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
   const title = (report.summary ?? report.description ?? 'Untitled report').trim() || 'Untitled report'
   const glow = severityGlowClass(report.severity)
   return (
-    <div className={`mb-3 rounded-sm ${glow} ${glow ? 'p-2.5 motion-safe:transition-all' : ''}`}>
+    <div
+      className={`mb-3 rounded-md border border-edge-subtle bg-surface-raised/35 p-3 ${glow} ${glow ? 'motion-safe:transition-all' : ''}`}
+    >
       <Breadcrumbs
         items={[
           { label: 'Reports', to: '/reports' },
@@ -40,33 +42,32 @@ export function ReportDetailHeader({ report, reporterShort }: { report: ReportDe
             </Badge>
           )}
         </div>
-        <h2 className="mt-1.5 text-lg font-semibold text-fg leading-snug text-balance max-w-4xl wrap-break-word">
-          {title}
-        </h2>
-        <div className="mt-1.5 flex items-center gap-2 text-xs text-fg-muted flex-wrap">
-          <span className="text-fg-secondary">
+        <ContainedBlock tone="info" className="mt-2">
+          <h2 className="text-lg font-semibold leading-snug text-balance text-fg wrap-break-word max-w-4xl">
+            {title}
+          </h2>
+        </ContainedBlock>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <MetaChip label="Reported">
             <RelativeTime value={report.created_at} />
-          </span>
-          <span aria-hidden="true" className="text-fg-faint">·</span>
-          <Link
+          </MetaChip>
+          <MetaChip
+            label="Project"
             to={`/projects?project=${encodeURIComponent(report.project_id)}`}
-            className="hover:text-fg-secondary inline-flex items-center gap-1"
+            title={report.project_id}
           >
-            <span className="font-mono text-2xs">{report.project_id.slice(0, 8)}</span>
-            <span className="text-fg-faint">project</span>
-          </Link>
-          <span aria-hidden="true" className="text-fg-faint">·</span>
-          <Link
+            <span className="font-mono">{report.project_id.slice(0, 8)}</span>
+          </MetaChip>
+          <MetaChip
+            label="Reporter"
             to={`/reports?reporter=${encodeURIComponent(report.reporter_token_hash)}`}
-            className="hover:text-fg-secondary inline-flex items-center gap-1"
           >
-            <span className="font-mono text-2xs">Reporter {reporterShort}</span>
-            <span className="text-fg-faint underline-offset-2 hover:underline">view all</span>
-          </Link>
-          <span aria-hidden="true" className="text-fg-faint">·</span>
-          <span className="inline-flex min-w-0 max-w-full items-center gap-1" title={report.id}>
-            <CodeValue value={report.id} inline tone="id" className="max-w-[min(100%,24rem)]" />
-          </span>
+            <span className="font-mono">{reporterShort}</span>
+            <span className="text-fg-faint">· view all</span>
+          </MetaChip>
+          <MetaChip label="Report ID" title={report.id}>
+            <CodeValue value={report.id} inline tone="id" className="max-w-[min(100%,20rem)]" />
+          </MetaChip>
         </div>
       </div>
       <PresenceBadges reportId={report.id} projectId={report.project_id} />

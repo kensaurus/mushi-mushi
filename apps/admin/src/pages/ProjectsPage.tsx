@@ -30,6 +30,13 @@ import { PageHeader,
   FreshnessPill,
   RecommendedAction,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
@@ -859,10 +866,6 @@ export function ProjectsPage() {
     <div className="space-y-4" data-testid="mushi-page-projects">
       <PageHeader
         title={copy?.title ?? 'Projects'}
-        description={
-          copy?.description ??
-          'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'
-        }
       >
         <Badge
           className={
@@ -885,6 +888,13 @@ export function ProjectsPage() {
         </Btn>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + PROJECTS SNAPSHOT — Overview for posture, Your projects to mint keys and verify ingest.'}
+        </p>
+      </ContainedBlock>
+
       <ProjectsStatusBanner
         stats={stats}
         onTab={setTab}
@@ -901,7 +911,9 @@ export function ProjectsPage() {
       />
 
       <Section title="PROJECTS SNAPSHOT" freshness={{ at: fetchedAt, isValidating: validating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
             label="Projects"
@@ -956,7 +968,7 @@ export function ProjectsPage() {
 
       {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
               ? 'border-warn/30 bg-warn/5'
               : stats.topPriority === 'no_projects'
@@ -964,12 +976,25 @@ export function ProjectsPage() {
                 : 'border-info/30 bg-info/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip
+            tone={
+              stats.topPriority === 'never_ingested' || stats.topPriority === 'no_sdk_heartbeat'
+                ? 'warn'
+                : stats.topPriority === 'no_projects'
+                  ? 'brand'
+                  : 'info'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="info">
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -1034,44 +1059,48 @@ export function ProjectsPage() {
             />
           )}
           <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Ingest coverage</p>
+            <ContainedBlock tone="muted" className="p-3">
+              <SignalChip tone="neutral" className="uppercase tracking-wide">Ingest coverage</SignalChip>
               <p className="mt-1 text-lg font-semibold tabular-nums text-ok">
                 {stats.projectCount > 0
                   ? `${Math.round((stats.projectsWithReports / stats.projectCount) * 100)}%`
                   : '—'}
               </p>
-              <p className="text-2xs text-fg-muted">
+              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
                 {stats.projectsWithReports}/{stats.projectCount} projects with reports
-              </p>
-            </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">SDK heartbeats</p>
+              </InlineProof>
+            </ContainedBlock>
+            <ContainedBlock tone="muted" className="p-3">
+              <SignalChip tone="neutral" className="uppercase tracking-wide">SDK heartbeats</SignalChip>
               <p className="mt-1 text-lg font-semibold tabular-nums text-info">{stats.sdkConnectedCount}</p>
-              <p className="text-2xs text-fg-muted">{stats.staleKeyCount} active keys never seen</p>
-            </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Active context</p>
+              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
+                {stats.staleKeyCount} active keys never seen
+              </InlineProof>
+            </ContainedBlock>
+            <ContainedBlock tone="muted" className="p-3">
+              <SignalChip tone="neutral" className="uppercase tracking-wide">Active context</SignalChip>
               <p className="mt-1 text-sm font-semibold text-fg-primary truncate">
                 {stats.activeProjectName ?? 'None selected'}
               </p>
-              <p className="text-2xs text-fg-muted">
+              <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-2xs">
                 {stats.activeProjectId
                   ? stats.activeProjectHasReports
                     ? 'Receiving reports'
                     : 'No reports yet'
                   : 'Switch on list tab'}
-              </p>
-            </Card>
+              </InlineProof>
+            </ContainedBlock>
           </div>
         </div>
       )}
 
       {activeTab === 'create' ? (
         <Section title="Create a project">
-          <p className="mb-3 text-2xs text-fg-muted">
-            One project per app or environment — you&apos;ll get API keys and a scoped inbox on the next screen.
-          </p>
+          <ContainedBlock tone="muted" className="mb-3">
+            <p className="text-2xs leading-relaxed text-fg-muted">
+              One project per app or environment — you&apos;ll get API keys and a scoped inbox on the next screen.
+            </p>
+          </ContainedBlock>
           {createForm}
           <PageHelp
             title={copy?.help?.title ?? 'About projects'}
@@ -1179,28 +1208,27 @@ export function ProjectsPage() {
                           Viewing
                         </Badge>
                       )}
-                      <code className="text-2xs font-mono text-fg-faint">{project.slug}</code>
+                      <SignalChip tone="neutral" className="font-mono text-2xs">
+                        {project.slug}
+                      </SignalChip>
                     </div>
-                    <p className="text-2xs text-fg-faint mt-0.5">
+                    <InlineProof className="mt-0.5 border-0 bg-transparent px-0 py-0 text-2xs">
                       Created {new Date(project.created_at).toLocaleDateString()} · last report{' '}
                       {relativeTime(project.last_report_at)}
-                    </p>
+                    </InlineProof>
                     {/* Project ID chip — MUSHI_PROJECT_ID value, copyable in one click.
                         Answers the #1 support question: "where do I find my project ID?" */}
                     <ProjectIdChip projectId={project.id} />
-                    <div className="flex items-center gap-3 mt-2 text-2xs text-fg-secondary flex-wrap">
-                      <span>
-                        <span className="font-mono text-fg">{project.report_count}</span>{' '}
-                        {pluralize(project.report_count, 'report')}
-                      </span>
-                      <span>
-                        <span className="font-mono text-fg">{project.active_key_count}</span> active{' '}
-                        {pluralize(project.active_key_count, 'key')}
-                      </span>
-                      <span>
-                        <span className="font-mono text-fg">{project.member_count}</span>{' '}
-                        {pluralize(project.member_count, 'member')}
-                      </span>
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      <SignalChip tone="neutral" className="font-mono tabular-nums">
+                        {project.report_count} {pluralize(project.report_count, 'report')}
+                      </SignalChip>
+                      <SignalChip tone="neutral" className="font-mono tabular-nums">
+                        {project.active_key_count} active {pluralize(project.active_key_count, 'key')}
+                      </SignalChip>
+                      <SignalChip tone="neutral" className="font-mono tabular-nums">
+                        {project.member_count} {pluralize(project.member_count, 'member')}
+                      </SignalChip>
                       {/* SDK freshness — silently absent when the project
                           has never ingested a report (status === 'unknown'),
                           so quiet projects don't pick up cosmetic chrome
@@ -1412,9 +1440,11 @@ export function ProjectsPage() {
                   ).length
                   return (
                     <details className="mt-3 pt-2 border-t border-edge-subtle">
-                      <summary className="text-2xs text-fg-muted cursor-pointer select-none hover:text-fg">
-                        Manage keys ({pluralizeWithCount(visibleKeys.length, 'key')},{' '}
-                        {visibleActiveCount} active)
+                      <summary className="cursor-pointer select-none list-none">
+                        <SignalChip tone="neutral" className="hover:text-fg">
+                          Manage keys ({pluralizeWithCount(visibleKeys.length, 'key')},{' '}
+                          {visibleActiveCount} active)
+                        </SignalChip>
                       </summary>
                       <div className="mt-2 space-y-1">
                         {visibleKeys.map((key) => (
@@ -1423,19 +1453,20 @@ export function ProjectsPage() {
                             className="flex items-center justify-between text-2xs gap-2"
                           >
                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                              <code
-                                className={`font-mono ${key.revoked ? 'text-fg-faint line-through' : 'text-fg-secondary'}`}
+                              <SignalChip
+                                tone={key.revoked ? 'neutral' : 'brand'}
+                                className={`font-mono ${key.revoked ? 'line-through opacity-60' : ''}`}
                               >
                                 {key.key_prefix}…
-                              </code>
+                              </SignalChip>
                               {(key.scopes ?? []).map((s) => (
                                 <Badge key={s} className={scopeBadgeTone(s)}>
                                   {s}
                                 </Badge>
                               ))}
-                              <span className="text-fg-faint">
+                              <InlineProof className="border-0 bg-transparent px-0 py-0 text-2xs">
                                 created {relativeTime(key.created_at)}
-                              </span>
+                              </InlineProof>
                               {key.revoked && (
                                 <Badge className="bg-surface-overlay text-fg-faint">revoked</Badge>
                               )}
@@ -1498,9 +1529,10 @@ export function ProjectsPage() {
                         <div className="text-xs font-medium text-fg">
                           Preview, configure & install the SDK widget
                         </div>
-                        <div className="text-2xs text-fg-faint">
-                          Live mock preview · 4-corner position picker · theme · capture flags ·
-                          auto-updating snippet
+                        <div className="text-2xs">
+                          <InlineProof className="border-0 bg-transparent px-0 py-0">
+                            Live mock preview · 4-corner position picker · theme · capture flags · auto-updating snippet
+                          </InlineProof>
                         </div>
                       </div>
                     </div>
@@ -1655,12 +1687,9 @@ function ProjectContextStrip({ project }: { project: Project }) {
             <span className="font-mono text-fg">{repoLabel}</span>
           )}
           {repo.default_branch && (
-            <code
-              className="font-mono text-fg-faint px-1 rounded-sm bg-surface-overlay"
-              title="Default branch"
-            >
+            <SignalChip tone="neutral" className="font-mono uppercase">
               {repo.default_branch}
-            </code>
+            </SignalChip>
           )}
           {health && (
             <span
@@ -1831,10 +1860,10 @@ function ProjectIdChip({ projectId }: { projectId: string }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 mt-1.5">
-      <span className="text-3xs text-fg-faint uppercase tracking-wider font-medium select-none">
+    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+      <SignalChip tone="neutral" className="uppercase tracking-wider select-none">
         Project ID
-      </span>
+      </SignalChip>
       <button
         type="button"
         onClick={copy}
@@ -1851,9 +1880,9 @@ function ProjectIdChip({ projectId }: { projectId: string }) {
           }
         </span>
       </button>
-      <span className="text-3xs text-fg-faint hidden sm:inline">
+      <InlineProof className="hidden sm:inline border-0 bg-transparent px-0 py-0 text-3xs">
         = <code className="font-mono">MUSHI_PROJECT_ID</code>
-      </span>
+      </InlineProof>
     </div>
   )
 }

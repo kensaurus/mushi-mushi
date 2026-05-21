@@ -15,6 +15,7 @@ import {
   PageHeader,
   PageHelp,
   ErrorAlert,
+  Card,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { KpiRow, KpiTile, formatPct } from '../components/charts'
@@ -33,6 +34,13 @@ import { SyntheticReportsCard } from '../components/prompt-lab/SyntheticReportsC
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PromptLabStatusBanner } from '../components/prompt-lab/PromptLabStatusBanner'
 import { EMPTY_PROMPT_LAB_STATS, type PromptLabStats } from '../components/prompt-lab/PromptLabStatsTypes'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 
 export function PromptLabPage() {
   const { data, loading, error, reload } = usePageData<PromptLabData>('/v1/admin/prompt-lab')
@@ -230,16 +238,57 @@ export function PromptLabPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Prompt Lab"
-        description="Test prompt versions live before promoting them to production. Diff outputs side-by-side."
-      >
-        <span className="text-2xs text-fg-faint font-mono">
-          {data.prompts.length} prompts · {totalEvals} evals
-        </span>
+      <PageHeader title="Prompt Lab">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SignalChip tone="neutral">{data.prompts.length} prompts</SignalChip>
+          <SignalChip tone="brand">{totalEvals.toLocaleString()} evals</SignalChip>
+        </div>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          Test prompt versions live before promoting them to production. Diff outputs side-by-side.
+        </p>
+      </ContainedBlock>
+
       <PromptLabStatusBanner stats={promptLabStats} />
+
+      {promptLabStats.topPriority &&
+        promptLabStats.topPriority !== 'healthy' &&
+        promptLabStats.topPriority !== 'no_project' &&
+        promptLabStats.topPriorityTo && (
+        <Card
+          className={`space-y-3 p-4 ${
+            promptLabStats.topPriority === 'promote_ready'
+              ? 'border-ok/30 bg-ok/5'
+              : promptLabStats.topPriority === 'no_dataset' || promptLabStats.topPriority === 'untested_ab'
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <SignalChip
+            tone={
+              promptLabStats.topPriority === 'promote_ready'
+                ? 'ok'
+                : promptLabStats.topPriority === 'no_dataset' || promptLabStats.topPriority === 'untested_ab'
+                  ? 'warn'
+                  : 'brand'
+            }
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={promptLabStats.topPriority === 'promote_ready' ? 'info' : 'warn'}>
+            <p className="text-xs font-medium leading-snug text-fg">
+              {promptLabStats.topPriorityLabel ?? 'Review prompt candidates before promoting.'}
+            </p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={promptLabStats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
+        </Card>
+      )}
 
       <PageHelp
         title="About Prompt Lab"
@@ -506,7 +555,7 @@ function PromptLabWorkflow({ candidates, active }: PromptLabWorkflowProps) {
                   </span>
                 )}
               </div>
-              <p className="text-2xs text-fg-muted leading-relaxed mt-0.5">{step.copy}</p>
+              <InlineProof className="mt-1">{step.copy}</InlineProof>
             </div>
           </div>
           {i < steps.length - 1 && (

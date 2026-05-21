@@ -42,6 +42,15 @@ import {
   openTooltip,
 } from '../lib/statTooltips/inbox'
 import { inboxLinks, statLink } from '../lib/statCardLinks'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  MetaChip,
+  SignalChip,
+  InlineProof,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 
 type Group = InboxCardGroup
 
@@ -271,12 +280,6 @@ export function InboxPage() {
       <PageHeader
         title={copy?.title ?? 'Action inbox'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          (stats.openActions > 0
-            ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — work top to bottom on Actions tab`
-            : 'No open actions — cleared stages stay one click away on Stages tab')
-        }
       >
         <Badge
           className={
@@ -306,6 +309,15 @@ export function InboxPage() {
         </Btn>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            (stats.openActions > 0
+              ? `${stats.openActions} open action${stats.openActions === 1 ? '' : 's'} — work top to bottom on Actions tab`
+              : 'No open actions — cleared stages stay one click away on Stages tab')}
+        </p>
+      </ContainedBlock>
+
       <InboxStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -326,7 +338,9 @@ export function InboxPage() {
 
       {!ux.hideInboxSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.open ?? 'Open'}
@@ -392,21 +406,27 @@ export function InboxPage() {
 
           {!ux.hideOverviewChrome && stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
             <Card className="border-danger/30 bg-danger/5 p-4">
-              <p className="text-3xs font-semibold uppercase tracking-wider text-danger">Top priority</p>
-              <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityTitle}</p>
-              <p className="mt-1 text-2xs text-fg-muted">
-                {stats.topPriorityStage ? `${GROUP_LABEL[stats.topPriorityStage as Group] ?? stats.topPriorityStage} stage` : 'Highest-severity open action'}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Link to={stats.topPriorityTo}>
-                  <Btn size="sm" variant="primary">
-                    {copy?.actionLabels?.takeAction ?? 'Take action'} →
-                  </Btn>
-                </Link>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab('actions')}>
-                  {copy?.actionLabels?.queue ?? 'View full queue'}
-                </Btn>
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <SignalChip tone="danger">Top priority</SignalChip>
+                {stats.topPriorityStage ? (
+                  <SignalChip tone="info">
+                    {GROUP_LABEL[stats.topPriorityStage as Group] ?? stats.topPriorityStage} stage
+                  </SignalChip>
+                ) : (
+                  <SignalChip tone="neutral">Highest-severity open action</SignalChip>
+                )}
               </div>
+              <ContainedBlock tone="warn" label="Next action">
+                <p className="text-sm font-medium leading-snug text-fg">{stats.topPriorityTitle}</p>
+              </ContainedBlock>
+              <ActionPillRow className="mt-3">
+                <ActionPill to={stats.topPriorityTo} tone="brand">
+                  {copy?.actionLabels?.takeAction ?? 'Take action'} →
+                </ActionPill>
+                <ActionPill tone="neutral" onClick={() => setActiveTab('actions')}>
+                  {copy?.actionLabels?.queue ?? 'View full queue'}
+                </ActionPill>
+              </ActionPillRow>
             </Card>
           ) : null}
 
@@ -435,12 +455,13 @@ export function InboxPage() {
                 <h2 id="inbox-open" className="text-sm font-semibold text-fg">
                   Awaiting action
                 </h2>
-                <span className="text-2xs text-fg-faint">·</span>
-                <span className="text-2xs text-fg-muted">
+                <SignalChip tone="neutral" className="tabular-nums">
                   {visibleOpen.length} card{visibleOpen.length === 1 ? '' : 's'}
-                </span>
+                </SignalChip>
                 {visibleOpen.length > 1 ? (
-                  <span className="ml-auto text-2xs text-fg-faint">Work top-to-bottom</span>
+                  <InlineProof className="ml-auto border-0 bg-transparent px-0 py-0">
+                    Work top-to-bottom
+                  </InlineProof>
                 ) : null}
               </header>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -456,15 +477,17 @@ export function InboxPage() {
               </div>
             </section>
           ) : (
-            <Card className="border-dashed p-6 text-center">
-              <p className="text-sm font-medium text-ok">Inbox zero</p>
-              <p className="mt-1 text-xs text-fg-muted">
-                No open actions — switch to Stages to confirm cleared surfaces or Activity for recent events.
-              </p>
-              <Btn size="sm" variant="ghost" className="mt-3" onClick={() => setActiveTab('stages')}>
-                View stages
-              </Btn>
-            </Card>
+            <div className="space-y-3">
+              <EmptySectionMessage
+                text="Inbox zero"
+                hint="No open actions — switch to Stages to confirm cleared surfaces or Activity for recent events."
+              />
+              <ActionPillRow>
+                <ActionPill tone="neutral" onClick={() => setActiveTab('stages')}>
+                  View stages
+                </ActionPill>
+              </ActionPillRow>
+            </div>
           )}
         </>
       )}
@@ -533,9 +556,9 @@ export function InboxPage() {
                 <h2 id="inbox-clear" className="text-sm font-semibold text-fg-secondary">
                   Clear stages
                 </h2>
-                <span className="text-2xs text-fg-muted">
+                <SignalChip tone="ok" className="tabular-nums">
                   {visibleClear.length} settled
-                </span>
+                </SignalChip>
               </header>
               <ul className="flex flex-wrap gap-1.5">
                 {visibleClear.map((card) => (
@@ -548,23 +571,23 @@ export function InboxPage() {
           ) : null}
 
           {visibleOpen.length === 0 && visibleClear.length === 0 ? (
-            <Card className="border-dashed p-6 text-center">
-              <p className="text-sm font-medium text-fg">{filter === 'all' ? 'All clear' : 'Nothing here'}</p>
-              <p className="mt-1 text-xs text-fg-muted">
-                {filter === 'all'
-                  ? 'The loop is clear — new reports will appear here automatically.'
-                  : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now.`}
-              </p>
+            <div className="space-y-3">
+              <EmptySectionMessage
+                text={filter === 'all' ? 'All clear' : 'Nothing here'}
+                hint={
+                  filter === 'all'
+                    ? 'The loop is clear — new reports will appear here automatically.'
+                    : `No ${filter === 'open' ? 'open' : filter === 'clear' ? 'cleared' : GROUP_LONG_LABEL[filter as Group]} cards right now.`
+                }
+              />
               {filter !== 'all' ? (
-                <button
-                  type="button"
-                  onClick={() => setFilter('all')}
-                  className="mt-3 text-xs text-brand hover:text-brand-hover"
-                >
-                  Show all →
-                </button>
+                <ActionPillRow>
+                  <ActionPill tone="brand" onClick={() => setFilter('all')}>
+                    Show all →
+                  </ActionPill>
+                </ActionPillRow>
               ) : null}
-            </Card>
+            </div>
           ) : null}
         </>
       )}
@@ -577,7 +600,9 @@ export function InboxPage() {
                 <h2 id="inbox-activity" className="text-sm font-semibold text-fg-secondary">
                   Recent activity
                 </h2>
-                <span className="text-2xs text-fg-muted">Last {activity.length} events</span>
+                <SignalChip tone="neutral" className="tabular-nums">
+                  Last {activity.length} events
+                </SignalChip>
               </header>
               <ul className="divide-y divide-edge-subtle/60 rounded-md border border-edge-subtle bg-surface-raised/30">
                 {activity.map((item) => (
@@ -586,17 +611,17 @@ export function InboxPage() {
               </ul>
             </section>
           ) : (
-            <Card className="p-6 text-center">
-              <p className="text-sm font-medium text-info">No recent activity</p>
-              <p className="mt-1 text-xs text-fg-muted">
-                Reports and fix dispatches appear here once ingest is live on {stats.projectName ?? 'your project'}.
-              </p>
-              <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
-                <Btn size="sm" variant="ghost">
+            <div className="space-y-3">
+              <EmptySectionMessage
+                text="No recent activity"
+                hint={`Reports and fix dispatches appear here once ingest is live on ${stats.projectName ?? 'your project'}.`}
+              />
+              <ActionPillRow>
+                <ActionPill to="/onboarding?tab=verify" tone="brand">
                   Send test report
-                </Btn>
-              </Link>
-            </Card>
+                </ActionPill>
+              </ActionPillRow>
+            </div>
           )}
         </>
       )}
@@ -638,18 +663,19 @@ function FilterChip({
 }
 
 function ClearChip({ card }: { card: InboxCard }) {
+  const groupTone = GROUP_TONE[card.group]
   return (
     <Link
       data-inbox-card={card.id}
       data-inbox-state="clear"
       to={card.pageTo}
-      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs font-medium text-fg-muted hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
+      className="group inline-flex items-center gap-1.5 rounded-sm border border-edge-subtle bg-surface-raised/40 px-2 py-1 text-2xs font-medium text-fg-muted hover:border-ok/30 hover:bg-ok-muted/15 hover:text-fg motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
       title={`${card.pageLabel} — all clear. Click to open.`}
     >
-      <span aria-hidden className="text-ok">
-        ✓
-      </span>
-      <span className={`text-3xs uppercase tracking-wider ${GROUP_TONE[card.group].chipText}`}>
+      <SignalChip tone="ok">✓</SignalChip>
+      <span
+        className={`rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
+      >
         {GROUP_LABEL[card.group]}
       </span>
       <span className="text-fg-secondary group-hover:text-fg">{card.pageLabel}</span>
@@ -663,18 +689,14 @@ function ActivityFeedRow({ item }: { item: ActivityItem }) {
     <li>
       <Link
         to={to}
-        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay motion-safe:transition-colors"
+        className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-overlay/60 motion-safe:transition-colors"
       >
-        <span
-          className={`shrink-0 rounded-sm px-1 py-0.5 text-3xs font-semibold uppercase tracking-wider ${
-            item.kind === 'report' ? 'bg-info-muted text-info' : 'bg-brand/15 text-brand'
-          }`}
-        >
-          {item.kind}
-        </span>
-        <span className="min-w-0 flex-1 truncate text-fg-secondary">{item.label}</span>
+        <SignalChip tone={item.kind === 'report' ? 'info' : 'brand'}>{item.kind}</SignalChip>
+        <ContainedBlock tone="neutral" className="min-w-0 flex-1 px-2 py-1">
+          <span className="block truncate text-fg-secondary">{item.label}</span>
+        </ContainedBlock>
         {item.meta ? (
-          <span className="max-w-[8rem] shrink-0 truncate text-2xs text-fg-faint">{item.meta}</span>
+          <MetaChip label="Meta">{item.meta}</MetaChip>
         ) : null}
         <AgeChip at={item.at} />
       </Link>
@@ -702,30 +724,32 @@ function OpenInboxCard({
       data-inbox-state="open"
       className={`rounded-lg border p-4 ${TONE_RING[action.tone]}${isFirst ? ' md:col-span-2' : ''}`}
     >
-      <header className="mb-1.5 flex items-center gap-2">
-        <span className="shrink-0 font-mono text-2xs tabular-nums text-fg-faint">#{priority}</span>
+      <header className="mb-2 flex flex-wrap items-center gap-1.5">
+        <SignalChip tone="neutral">#{priority}</SignalChip>
         <span
           className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-wider ${groupTone.chip} ${groupTone.chipText}`}
         >
           {GROUP_LABEL[card.group]}
         </span>
-        <span className="flex-1 truncate text-2xs text-fg-faint">{card.pageLabel}</span>
+        <MetaChip label="Page">{card.pageLabel}</MetaChip>
         {isFirst && !activityAt ? (
-          <span className="shrink-0 text-2xs font-medium text-brand">Start here ↑</span>
+          <SignalChip tone="brand">Start here ↑</SignalChip>
         ) : null}
         {activityAt ? <AgeChip at={activityAt} title="Last activity in this stage" /> : null}
       </header>
-      <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>
-      {action.reason ? <p className="mt-1 text-xs leading-snug text-fg-muted">{action.reason}</p> : null}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <ContainedBlock tone="info" label="Action">
+        <p className="text-sm font-medium leading-snug text-fg">{action.title}</p>
+      </ContainedBlock>
+      {action.reason ? (
+        <ContainedBlock tone="muted" className="mt-2">
+          <p className="text-xs leading-snug text-fg-muted">{action.reason}</p>
+        </ContainedBlock>
+      ) : null}
+      <ActionPillRow className="mt-3">
         {action.primary && action.primary.kind === 'link' ? (
-          <Link
-            data-inbox-primary
-            to={action.primary.to}
-            className="inline-flex items-center gap-1 rounded-sm bg-brand px-3 py-1.5 text-xs font-medium text-brand-fg hover:bg-brand-hover motion-safe:transition-colors"
-          >
-            {action.primary.label} <span aria-hidden="true">→</span>
-          </Link>
+          <ActionPill to={action.primary.to} tone="brand" className="px-3 py-1.5 text-xs">
+            {action.primary.label} →
+          </ActionPill>
         ) : null}
         {action.primary && action.primary.kind === 'button' ? (
           <Btn size="sm" variant="primary" onClick={action.primary.onClick} data-inbox-primary>
@@ -734,17 +758,12 @@ function OpenInboxCard({
         ) : null}
         {action.secondary?.slice(0, 1).map((s, i) =>
           s.kind === 'link' ? (
-            <Link
-              key={i}
-              data-inbox-secondary
-              to={s.to}
-              className="inline-flex items-center gap-1 rounded-sm px-2.5 py-1 text-xs font-medium text-fg-muted hover:bg-surface-overlay hover:text-fg motion-safe:transition-colors"
-            >
+            <ActionPill key={i} to={s.to} tone="neutral">
               {s.label}
-            </Link>
+            </ActionPill>
           ) : null,
         )}
-      </div>
+      </ActionPillRow>
     </article>
   )
 }

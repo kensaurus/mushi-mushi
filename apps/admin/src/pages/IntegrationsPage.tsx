@@ -28,6 +28,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { PlatformIntegrationCard } from '../components/integrations/PlatformIntegrationCard'
 import { RoutingProviderCard } from '../components/integrations/RoutingProviderCard'
 import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
+import { ContainedBlock } from '../components/report-detail/ReportSurface'
 import { RepoReadinessStrip } from '../components/integrations/RepoReadinessStrip'
 import { IntegrationStatusBanner } from '../components/integrations/IntegrationStatusBanner'
 import { ConfirmDialog } from '../components/ConfirmDialog'
@@ -381,13 +382,13 @@ export function IntegrationsPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Integrations'}
-          description={
-            copy?.description ??
-            'Wire Sentry, Langfuse, GitHub, and routing destinations for the active project.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'Integrations'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Wire Sentry, Langfuse, GitHub, and routing destinations for the active project.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -429,13 +430,14 @@ export function IntegrationsPage() {
         }
       />
 
-      <PageHeader
-        title={copy?.title ?? 'Integrations'}
-        description={
-          copy?.description ??
-          'Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust.'
-        }
-      />
+      <PageHeader title={copy?.title ?? 'Integrations'} />
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Wire Sentry, Langfuse, GitHub, and your routing destinations so the loop closes against tools you already trust.'}
+        </p>
+      </ContainedBlock>
 
       {!setup.hasAnyProject && (
         <SetupNudge
@@ -534,7 +536,9 @@ export function IntegrationsPage() {
 
       {!ux.hideIntegrationsSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'INTEGRATIONS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating: statsQuery.isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
             label={copy?.statLabels?.platform ?? 'Platform'}
@@ -582,31 +586,54 @@ export function IntegrationsPage() {
         )}
 
         {!ux.hideIntegrationsSnapshot && (
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-4">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         )}
 
         {activeTab === 'platform' && (
           <div className="space-y-2" data-dav-anchor="integrations:decide">
-            {PLATFORM_DEFS.map((def) => (
-              <PlatformIntegrationCard
-                key={def.kind}
-                def={def}
-                config={platform?.[def.kind] ?? {}}
-                latestProbe={latestByKind[def.kind]}
-                sparkline={sparklineByKind[def.kind] ?? []}
-                isEditing={editing === def.kind}
-                draft={drafts[def.kind] ?? {}}
-                saving={saving === def.kind}
-                testing={testing === def.kind}
-                onStartEdit={() => startEdit(def.kind)}
-                onCancelEdit={cancelEdit}
-                onChangeField={(name, value) =>
-                  setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
-                }
-                onSave={() => void saveKind(def.kind)}
-                onTest={() => void testKind(def.kind)}
-              />
-            ))}
+            {PLATFORM_DEFS.map((def) => {
+              // Resolve dependency status for fix-agent cards (Cursor Cloud, Claude Code).
+              // A dependency is "ok" when all required fields of the dependency platform
+              // are configured. This drives the blocking banner in PlatformIntegrationCard.
+              let dependencyOk = true
+              let dependencyLabel: string | undefined
+              let dependencyAnchorId: string | undefined
+              if (def.dependsOn) {
+                const depDef = PLATFORM_DEFS.find((d) => d.kind === def.dependsOn)
+                const depCfg = platform?.[def.dependsOn] ?? {}
+                dependencyOk = depDef
+                  ? depDef.fields.filter((f) => f.required).every((f) => depCfg[f.name] != null)
+                  : false
+                dependencyLabel = depDef?.label
+                dependencyAnchorId = `platform-card-${def.dependsOn}`
+              }
+              return (
+                <div key={def.kind} id={`platform-card-${def.kind}`}>
+                  <PlatformIntegrationCard
+                    def={def}
+                    config={platform?.[def.kind] ?? {}}
+                    latestProbe={latestByKind[def.kind]}
+                    sparkline={sparklineByKind[def.kind] ?? []}
+                    isEditing={editing === def.kind}
+                    draft={drafts[def.kind] ?? {}}
+                    saving={saving === def.kind}
+                    testing={testing === def.kind}
+                    onStartEdit={() => startEdit(def.kind)}
+                    onCancelEdit={cancelEdit}
+                    onChangeField={(name, value) =>
+                      setDrafts((d) => ({ ...d, [def.kind]: { ...d[def.kind], [name]: value } }))
+                    }
+                    onSave={() => void saveKind(def.kind)}
+                    onTest={() => void testKind(def.kind)}
+                    dependencyOk={dependencyOk}
+                    dependencyLabel={dependencyLabel}
+                    dependencyAnchorId={dependencyAnchorId}
+                  />
+                </div>
+              )
+            })}
             <SuggestIntegrationButton
               context="platform"
               onSuggest={() => setShowSuggestModal(true)}
@@ -616,19 +643,20 @@ export function IntegrationsPage() {
 
         {activeTab === 'routing' && (
           <div className="space-y-2" data-dav-anchor="integrations:act">
-            <p className="mb-2 border-l-2 border-brand/30 pl-2 text-2xs leading-snug text-fg-secondary">
-              Forward triaged reports to your ticketing or paging system. Severity + category routing
-              lives in Settings → Routing.
-            </p>
+            <ContainedBlock tone="info" className="mb-3">
+              <p className="text-2xs leading-snug text-fg-secondary">
+                Forward triaged reports to your ticketing or paging system. Severity + category routing
+                lives in Settings → Routing.
+              </p>
+            </ContainedBlock>
             {routing.length === 0 && (
-              <div className="mb-3 flex items-start gap-2 rounded-md border border-info/30 bg-info/5 px-3 py-2">
-                <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
-                <p className="text-2xs text-fg-muted">
+              <ContainedBlock tone="info" className="mb-3">
+                <p className="text-2xs leading-relaxed text-fg-muted">
                   {projectName
                     ? `No routing destinations connected for ${projectName} yet — pick a provider below to forward triaged reports.`
                     : 'No routing destinations connected yet — pick a provider below to forward triaged reports.'}
                 </p>
-              </div>
+              </ContainedBlock>
             )}
             {ROUTING_PROVIDERS.map((provider) => {
               const existing = routing.find((r) => r.integration_type === provider.type)

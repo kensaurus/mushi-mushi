@@ -25,6 +25,14 @@ import {
 import { FeedbackModal } from '../components/FeedbackModal'
 import { SupportTicketDetailModal } from '../components/support/SupportTicketDetailModal'
 import { FeedbackStatusBanner } from '../components/feedback/FeedbackStatusBanner'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+  InlineProof,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { EMPTY_FEEDBACK_STATS, type FeedbackStats, type FeedbackTabId } from '../components/feedback/types'
 import {
   activeTicketsDetail,
@@ -232,10 +240,6 @@ export function FeedbackPage() {
       <PageHeader
         title={copy?.title ?? 'My feedback'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app.'
-        }
       >
         <Badge
           className={
@@ -265,6 +269,13 @@ export function FeedbackPage() {
         </Btn>
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Bugs and feature requests you file to the Mushi team — not the same as user bug Reports from your app.'}
+        </p>
+      </ContainedBlock>
+
       <FeedbackStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -283,7 +294,9 @@ export function FeedbackPage() {
       />
 
       <Section title="FEEDBACK SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Total"
@@ -354,18 +367,27 @@ export function FeedbackPage() {
           />
 
           {stats.topTicketId && stats.topPriority !== 'first_submit' ? (
-            <Card className={`p-4 ${stats.topPriority === 'reply' ? 'border-brand/30 bg-brand/5' : 'border-warn/30 bg-warn/5'}`}>
-              <p className="text-3xs font-semibold uppercase tracking-wider text-fg-muted">Top priority</p>
-              <p className="mt-1 text-sm font-medium text-fg">{stats.topTicketSubject}</p>
-              <p className="mt-1 text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Btn size="sm" variant="primary" onClick={() => setOpenTicketId(stats.topTicketId)}>
-                  Open ticket →
-                </Btn>
-                <Btn size="sm" variant="ghost" onClick={() => setActiveTab(stats.topPriority === 'reply' ? 'active' : 'active')}>
-                  View active list
-                </Btn>
+            <Card className={`space-y-3 p-4 ${stats.topPriority === 'reply' ? 'border-brand/30 bg-brand/5' : 'border-warn/30 bg-warn/5'}`}>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <SignalChip tone={stats.topPriority === 'reply' ? 'brand' : 'warn'}>Top priority</SignalChip>
+                {stats.topPriority === 'reply' ? (
+                  <SignalChip tone="info">Team replied</SignalChip>
+                ) : (
+                  <SignalChip tone="warn">Needs review</SignalChip>
+                )}
               </div>
+              <ContainedBlock tone={stats.topPriority === 'reply' ? 'info' : 'warn'} label="Ticket">
+                <p className="text-sm font-medium leading-snug text-fg">{stats.topTicketSubject}</p>
+                <p className="mt-1 text-2xs leading-relaxed text-fg-muted">{stats.topPriorityLabel}</p>
+              </ContainedBlock>
+              <ActionPillRow>
+                <ActionPill tone="brand" onClick={() => setOpenTicketId(stats.topTicketId)}>
+                  Open ticket →
+                </ActionPill>
+                <ActionPill tone="neutral" onClick={() => setActiveTab('active')}>
+                  View active list
+                </ActionPill>
+              </ActionPillRow>
             </Card>
           ) : null}
 
@@ -439,28 +461,30 @@ export function FeedbackPage() {
           )}
 
           {!ticketsQuery.loading && displayTickets.length === 0 && (
-            <div className="space-y-2 py-8 text-center">
-              <p className="text-sm text-fg-secondary">
-                {activeTab === 'active'
-                  ? 'No active submissions'
-                  : activeTab === 'shipped'
-                    ? 'Nothing shipped yet'
-                    : 'No submissions in this view'}
-              </p>
-              <p className="mx-auto max-w-sm text-2xs text-fg-muted">
-                {activeTab === 'shipped'
-                  ? 'When we credit your idea in a release, it appears here with a version chip.'
-                  : 'Found something broken or have an idea? We read every ticket.'}
-              </p>
+            <div className="space-y-3 py-4">
+              <EmptySectionMessage
+                text={
+                  activeTab === 'active'
+                    ? 'No active submissions'
+                    : activeTab === 'shipped'
+                      ? 'Nothing shipped yet'
+                      : 'No submissions in this view'
+                }
+                hint={
+                  activeTab === 'shipped'
+                    ? 'When we credit your idea in a release, it appears here with a version chip.'
+                    : 'Found something broken or have an idea? We read every ticket.'
+                }
+              />
               {activeTab !== 'shipped' && (
-                <div className="flex justify-center gap-2 pt-2">
-                  <Btn size="sm" onClick={() => openFeedback('bug')}>
+                <ActionPillRow className="justify-center">
+                  <ActionPill tone="brand" onClick={() => openFeedback('bug')}>
                     Report a bug
-                  </Btn>
-                  <Btn size="sm" variant="ghost" onClick={() => openFeedback('feature')}>
+                  </ActionPill>
+                  <ActionPill tone="neutral" onClick={() => openFeedback('feature')}>
                     Request a feature
-                  </Btn>
-                </div>
+                  </ActionPill>
+                </ActionPillRow>
               )}
             </div>
           )}
@@ -482,7 +506,7 @@ export function FeedbackPage() {
       )}
 
       {isSuperAdmin && activeTab === 'overview' && (
-        <Card className="border-dashed border-edge-subtle bg-surface-raised/20 p-3">
+        <ContainedBlock tone="muted" className="border-dashed">
           <p className="text-2xs text-fg-muted">
             Operators can link tickets to releases when publishing on{' '}
             <Link to="/releases" className="font-medium text-brand hover:text-brand-hover">
@@ -490,7 +514,7 @@ export function FeedbackPage() {
             </Link>
             .
           </p>
-        </Card>
+        </ContainedBlock>
       )}
 
       <SupportTicketDetailModal
@@ -551,16 +575,18 @@ function TicketRow({
               <Badge className="shrink-0 bg-ok-muted font-mono text-[0.6rem] text-ok">v{release.version}</Badge>
             )}
           </div>
-          <p className="truncate text-2xs text-fg-faint">
+          <InlineProof className="truncate border-0 bg-transparent px-0 py-0">
             {CATEGORY_LABEL[t.category] ?? t.category}
             {' · '}
             {projectLabel}
             {isCurrentProject && t.project_id ? ' · current project' : ''}
             {' · '}
             <RelativeTime value={t.created_at} />
-          </p>
+          </InlineProof>
           {shipped && release && (
-            <p className="truncate text-2xs text-ok">Shipped in {release.title}</p>
+            <SignalChip tone="ok" className="truncate max-w-full">
+              Shipped in {release.title}
+            </SignalChip>
           )}
         </div>
         <Badge className={`${TICKET_STATUS_TONE[t.status]} shrink-0`}>{TICKET_STATUS_LABEL[t.status]}</Badge>

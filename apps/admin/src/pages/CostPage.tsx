@@ -42,8 +42,17 @@ import {
   Btn,
   ErrorAlert,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { buildDailySpendSeries, formatShortDay } from '../components/cost/dailySpendSeries'
 import { DailySpendChart } from '../components/cost/DailySpendChart'
+import { BudgetForecastCard } from '../components/cost/BudgetForecastCard'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { CostRawLogTable } from '../components/cost/CostRawLogTable'
@@ -225,13 +234,14 @@ export function CostPage() {
             'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
           }
         />
-        <PageHeader
-          title={copy?.title ?? 'LLM Cost'}
-          description={
-            copy?.description ??
-            'Track and audit every LLM call across classify, fix, judge, and inventory agents.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'LLM Cost'} />
+
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -269,14 +279,7 @@ export function CostPage() {
         }
       />
 
-      <PageHeader
-        title={copy?.title ?? 'LLM Cost'}
-        description={
-          copy?.description ??
-          'Track and audit every LLM call across classify, fix, judge, and inventory agents.'
-        }
-        projectScope={stats.projectName ?? undefined}
-      >
+      <PageHeader title={copy?.title ?? 'LLM Cost'} projectScope={stats.projectName ?? undefined}>
         {!ux.hideOverviewChrome && (
           <>
             {stats.totalCalls > 0 ? (
@@ -287,6 +290,13 @@ export function CostPage() {
           </>
         )}
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Track and audit every LLM call across classify, fix, judge, and inventory agents.'}
+        </p>
+      </ContainedBlock>
 
       <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
 
@@ -302,7 +312,9 @@ export function CostPage() {
 
       {!ux.hideCostSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'Spend snapshot'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard
@@ -375,8 +387,10 @@ export function CostPage() {
           <div className="space-y-4">
             {dailySeries.activeDays > 0 ? (
               <Card className="p-4">
-                <div className="mb-4 flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Daily spend</p>
+                <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+                  <SignalChip tone="neutral" className="uppercase tracking-wide font-medium">
+                    Daily spend
+                  </SignalChip>
                   <Link to="/billing">
                     <Btn size="sm" variant="ghost">Compare to plan usage</Btn>
                   </Link>
@@ -387,30 +401,47 @@ export function CostPage() {
                   fmtSpend={fmtSpend}
                 />
               </Card>
-            ) : (
-              <Card className="p-4">
-                <p className="text-xs font-medium text-fg-muted uppercase tracking-wide">Daily spend</p>
-                <p className="mt-2 text-2xs text-fg-muted">
-                  No daily rollups yet — ingest a report or run a Health smoke test to generate llm_invocations rows.
-                </p>
-                <Link to="/health" className="mt-3 inline-block">
-                  <Btn size="sm" variant="ghost">Open Health</Btn>
-                </Link>
-              </Card>
+            ) : null}
+            {dailySeries.activeDays > 0 && (
+              <BudgetForecastCard
+                projectId={activeProjectId}
+                series={dailySeries}
+                monthToDateUsd={stats.spendMonthUsd}
+                fmtSpend={fmtSpend}
+              />
             )}
+            {dailySeries.activeDays === 0 ? (
+              <ContainedBlock tone="muted" className="p-4 space-y-3">
+                <SignalChip tone="neutral" className="uppercase tracking-wide font-medium">
+                  Daily spend
+                </SignalChip>
+                <EmptySectionMessage
+                  text="No daily rollups yet."
+                  hint="Ingest a report or run a Health smoke test to generate llm_invocations rows."
+                />
+                <ActionPillRow>
+                  <ActionPill to="/health" tone="brand">
+                    Open Health
+                  </ActionPill>
+                </ActionPillRow>
+              </ContainedBlock>
+            ) : null}
           </div>
         )}
 
         {active === 'breakdown' && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <Card className="p-4">
-              <p className="mb-3 text-xs font-medium text-fg-muted uppercase tracking-wide">By operation</p>
+              <SignalChip tone="neutral" className="mb-3 uppercase tracking-wide font-medium">
+                By operation
+              </SignalChip>
               {summaryLoading ? (
                 <TableSkeleton rows={3} />
               ) : Object.keys(byOp).length === 0 ? (
-                <p className="py-2 text-xs italic text-fg-muted">
-                  No LLM calls yet — operations appear here once edge functions run.
-                </p>
+                <EmptySectionMessage
+                  text="No LLM calls yet."
+                  hint="Operations appear here once edge functions run."
+                />
               ) : (
                 <table className="w-full text-sm">
                   <tbody>
@@ -432,13 +463,16 @@ export function CostPage() {
             </Card>
 
             <Card className="p-4">
-              <p className="mb-3 text-xs font-medium text-fg-muted uppercase tracking-wide">By model</p>
+              <SignalChip tone="neutral" className="mb-3 uppercase tracking-wide font-medium">
+                By model
+              </SignalChip>
               {summaryLoading ? (
                 <TableSkeleton rows={3} />
               ) : Object.keys(byModel).length === 0 ? (
-                <p className="py-2 text-xs italic text-fg-muted">
-                  No model usage yet — models appear here once edge functions run.
-                </p>
+                <EmptySectionMessage
+                  text="No model usage yet."
+                  hint="Models appear here once edge functions run."
+                />
               ) : (
                 <table className="w-full text-sm">
                   <tbody>
@@ -463,9 +497,15 @@ export function CostPage() {
 
         {active === 'log' && activeProjectId && (
           <Section title="Invocation log">
-            <p className="mb-3 text-2xs text-fg-muted">
-              Primary source: llm_invocations · merged with legacy llm_cost_usd when searching
-            </p>
+            <ContainedBlock tone="muted" className="mb-3">
+              <InlineProof className="border-0 bg-transparent px-0 py-0">
+                Primary source:{' '}
+                <SignalChip tone="brand" className="font-mono">llm_invocations</SignalChip>
+                · merged with legacy{' '}
+                <SignalChip tone="neutral" className="font-mono">llm_cost_usd</SignalChip>
+                {' '}when searching
+              </InlineProof>
+            </ContainedBlock>
             <CostRawLogTable projectId={activeProjectId} />
           </Section>
         )}

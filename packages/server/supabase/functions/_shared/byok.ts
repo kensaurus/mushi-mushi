@@ -90,16 +90,40 @@ export async function resolveLlmKey(
   }
 
   const env = Deno.env.get(ENV_VAR[provider])
-  if (env) return { key: env, source: 'env', hint: hint(env), baseUrl }
+  if (env) {
+    // SEC (Wave 5 Gap-D): the platform-default key sees every tenant's prompts
+    // when BYOK is not configured. Log this so the operator can surface the
+    // "Platform key in use" warning chip in the admin UI (/onboarding, /settings).
+    // project_settings.require_byok = true (Enterprise/Cloud-paid) makes this
+    // a hard error rather than a fallback.
+    log.warn('LLM call using platform env key — BYOK not configured for this project', {
+      projectId,
+      provider,
+      // hint is the last-4 indicator, never the full key
+      hint: hint(env),
+    })
+    return { key: env, source: 'env', hint: hint(env), baseUrl }
+  }
   return null
 }
 
 async function dereferenceKey(db: SupabaseClient, ref: string): Promise<string | null> {
   if (!ref.startsWith('vault://')) {
-    // Raw key in DB — flag once per process so we don't spam logs.
+    const env = Deno.env.get('SUPABASE_ENV') ?? Deno.env.get('NODE_ENV') ?? ''
+    const isProd = env === 'production' || env === 'prod'
+
+    // SEC (Wave 5 Gap-E): in production, raw keys in the DB are a security
+    // risk (they bypass Vault encryption and any future key-rotation policy).
+    // Hard-reject in production so misconfigured tenancies can't silently use
+    // unencrypted keys. In dev/staging, emit a warning per process.
+    if (isProd) {
+      log.error('BYOK raw key rejected in production environment — use vault://<id>', {})
+      return null
+    }
+
     if (!warnedRaw) {
       warnedRaw = true
-      log.warn('BYOK is using raw key in DB; switch to vault://<id> for production', {})
+      log.warn('BYOK is using raw key in DB; this is only allowed in dev/staging. Switch to vault://<id> for production.', {})
     }
     return ref
   }

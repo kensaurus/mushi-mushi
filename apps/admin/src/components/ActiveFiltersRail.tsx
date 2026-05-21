@@ -23,6 +23,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { ActionPill, ActionPillRow } from './report-detail/ReportSurface'
 
 export interface ActiveFilter {
   /** Stable identifier — used for React `key` and for the chip's
@@ -86,14 +87,11 @@ export function ActiveFiltersRail({
         <FilterChipRemovable key={f.key} filter={f} />
       ))}
       {showClearAll && (
-        <button
-          type="button"
-          onClick={onClearAll}
-          className="inline-flex items-center rounded-full border border-edge-subtle px-2 py-0.5 text-2xs text-fg-faint hover:text-fg-secondary hover:border-edge motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-          aria-label="Clear all filters"
-        >
-          Clear all
-        </button>
+        <ActionPillRow>
+          <ActionPill onClick={onClearAll} tone="neutral" className="rounded-full">
+            Clear all
+          </ActionPill>
+        </ActionPillRow>
       )}
     </div>
   )

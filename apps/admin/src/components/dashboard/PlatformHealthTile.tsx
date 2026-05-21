@@ -29,6 +29,8 @@
 import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { Card } from '../ui'
+import { ContainedBlock, SignalChip } from '../report-detail/ReportSurface'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
 
 interface PlatformRow {
   platform: string
@@ -41,14 +43,6 @@ interface PlatformRow {
 
 interface PlatformRollupData {
   platforms: PlatformRow[]
-}
-
-const PLATFORM_BADGE: Record<string, string> = {
-  ios:     'bg-info-muted text-info',
-  android: 'bg-ok-muted text-ok',
-  web:     'bg-brand/15 text-brand',
-  macos:   'bg-surface-overlay text-fg-secondary',
-  windows: 'bg-surface-overlay text-fg-secondary',
 }
 
 function sdkShortName(pkg: string | null): string {
@@ -86,13 +80,15 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
       )}
 
       {error && (
-        <p className="text-2xs text-fg-faint italic">Platform rollup not available.</p>
+        <EmptySectionMessage text="Platform rollup not available." />
       )}
 
       {!loading && !error && rows.length === 0 && (
-        <p className="text-2xs text-fg-faint italic">
-          No multi-platform data yet. Reports from iOS, Android, and Web will appear here once your app sends them.
-        </p>
+        <ContainedBlock tone="muted">
+          <p className="text-2xs text-fg-muted italic">
+            No multi-platform data yet. Reports from iOS, Android, and Web will appear here once your app sends them.
+          </p>
+        </ContainedBlock>
       )}
 
       {!loading && !error && rows.length > 0 && (
@@ -106,28 +102,26 @@ export function PlatformHealthTile({ projectId }: { projectId: string }) {
                 to={`/reports?platform=${row.platform}`}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-surface-overlay transition-colors group"
               >
-                <span
-                  className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded-sm text-3xs font-semibold uppercase tracking-wider w-14 text-center shrink-0 ${PLATFORM_BADGE[row.platform] ?? 'bg-surface-overlay text-fg-secondary'}`}
-                >
+                <SignalChip tone="neutral" className="shrink-0 w-14 justify-center uppercase text-3xs">
                   {row.platform}
-                </span>
+                </SignalChip>
 
-                <span className="text-2xs text-fg-muted shrink-0 w-12">
+                <SignalChip tone="neutral" className="shrink-0 font-mono text-3xs">
                   {sdkShortName(row.sdk_package)}
-                </span>
+                </SignalChip>
 
                 <span className="flex-1 flex items-center gap-1.5 min-w-0">
                   <span className="text-2xs font-mono text-fg">{row.reports_24h}</span>
                   <span className="text-3xs text-fg-faint">reports</span>
                   {hasCritical && (
-                    <span className="text-3xs font-mono bg-danger-muted text-danger px-1 rounded-sm">
+                    <SignalChip tone="danger" className="text-3xs font-mono">
                       {row.critical_24h} crit
-                    </span>
+                    </SignalChip>
                   )}
                   {!hasCritical && hasHigh && (
-                    <span className="text-3xs font-mono bg-warn-muted text-warn px-1 rounded-sm">
+                    <SignalChip tone="warn" className="text-3xs font-mono">
                       {row.high_24h} high
-                    </span>
+                    </SignalChip>
                   )}
                 </span>
 

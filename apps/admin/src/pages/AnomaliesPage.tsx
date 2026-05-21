@@ -30,6 +30,14 @@ import {
   FreshnessPill,
   RecommendedAction,
 } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 import { AnomaliesStatusBanner } from '../components/anomalies/AnomaliesStatusBanner'
 import {
   EMPTY_ANOMALIES_STATS,
@@ -269,10 +277,6 @@ export function AnomaliesPage() {
       <PageHeader
         title={copy?.title ?? 'Anomalies'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.'
-        }
         contextChip={<PdcaContextHint stage="check" />}
       >
         {!ux.hideOverviewChrome && (
@@ -309,6 +313,13 @@ export function AnomaliesPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + ANOMALIES SNAPSHOT — Overview for posture, Anomalies to triage, Metrics to ingest, Detect to run analysis.'}
+        </p>
+      </ContainedBlock>
+
       <AnomaliesStatusBanner
         stats={stats}
         onTab={setActiveTab}
@@ -332,7 +343,9 @@ export function AnomaliesPage() {
         title={copy?.sections?.snapshot ?? 'ANOMALIES SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.open ?? 'Open'} value={stats.openAnomalies} accent={stats.openAnomalies > 0 ? 'text-warn' : 'text-ok'} tooltip={openAnomaliesTooltip(stats)} detail={openAnomaliesDetail(stats)} to={anomaliesLinks.open} />
           <StatCard label={copy?.statLabels?.releaseRegressions ?? 'Release regressions'} value={stats.releaseRegressionOpen} accent={stats.releaseRegressionOpen > 0 ? 'text-danger' : undefined} tooltip={releaseRegressionTooltip(stats)} detail={releaseRegressionDetail()} to={anomaliesLinks.releaseRegressions} />
@@ -354,7 +367,11 @@ export function AnomaliesPage() {
                 : 'border-warn/30 bg-warn/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
+          <ContainedBlock tone={stats.topPriority === 'open_critical' ? 'warn' : stats.topPriority === 'no_metrics' ? 'info' : 'warn'}>
+            <InlineProof className="border-0 bg-transparent px-0 py-0 text-xs font-medium">
+              {stats.topPriorityLabel}
+            </InlineProof>
+          </ContainedBlock>
           <div className="mt-2 flex flex-wrap gap-2">
             <Link to={stats.topPriorityTo}>
               <Btn size="sm" variant="ghost">Take action →</Btn>
@@ -434,19 +451,27 @@ function AnomaliesTab({
   if (error) return <ErrorAlert message={error} />
   if (!anomalies.length) {
     return (
-      <EmptyState
-        title={noMetrics ? 'No metric data yet' : 'No open anomalies'}
-        description={
-          noMetrics
-            ? 'Ingest metric data points before running Page-Hinkley or Z-score detection.'
-            : 'Run the detector or wait for the hourly cron — no open findings is good news.'
-        }
-        action={
-          noMetrics
-            ? <Btn size="sm" variant="primary" onClick={onIngestMetrics}>Ingest metrics</Btn>
-            : <Btn size="sm" variant="primary" onClick={onRunDetect}>Run detection</Btn>
-        }
-      />
+      <div className="space-y-3">
+        <EmptySectionMessage
+          text={noMetrics ? 'No metric data yet' : 'No open anomalies'}
+          hint={
+            noMetrics
+              ? 'Ingest metric data points before running Page-Hinkley or Z-score detection.'
+              : 'Run the detector or wait for the hourly cron — no open findings is good news.'
+          }
+        />
+        <ActionPillRow>
+          {noMetrics ? (
+            <ActionPill tone="brand" onClick={onIngestMetrics}>
+              Ingest metrics
+            </ActionPill>
+          ) : (
+            <ActionPill tone="brand" onClick={onRunDetect}>
+              Run detection
+            </ActionPill>
+          )}
+        </ActionPillRow>
+      </div>
     )
   }
 
@@ -469,12 +494,26 @@ function AnomaliesTab({
             <tr key={a.id} className="border-b border-edge-subtle last:border-0 hover:bg-surface-overlay/50 transition-colors">
               <td className="px-3 py-2 font-mono text-xs">{a.metric_name}</td>
               <td className="px-3 py-2">{methodBadge(a.method)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-xs">{a.score.toFixed(2)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-xs">{a.value.toFixed(3)}</td>
-              <td className="px-3 py-2 text-right tabular-nums text-xs text-fg-muted">
-                {a.baseline_mean != null ? `μ=${a.baseline_mean.toFixed(3)}` : '—'}
+              <td className="px-3 py-2 text-right">
+                <SignalChip tone={a.score >= 3 ? 'danger' : a.score >= 2 ? 'warn' : 'info'}>
+                  {a.score.toFixed(2)}
+                </SignalChip>
               </td>
-              <td className="px-3 py-2 text-xs text-fg-muted"><RelativeTime value={a.detected_at} /></td>
+              <td className="px-3 py-2 text-right tabular-nums text-xs">{a.value.toFixed(3)}</td>
+              <td className="px-3 py-2 text-right tabular-nums text-xs">
+                {a.baseline_mean != null ? (
+                  <SignalChip tone="neutral" className="font-mono">
+                    μ={a.baseline_mean.toFixed(3)}
+                  </SignalChip>
+                ) : (
+                  '—'
+                )}
+              </td>
+              <td className="px-3 py-2 text-xs">
+                <SignalChip tone="neutral">
+                  <RelativeTime value={a.detected_at} />
+                </SignalChip>
+              </td>
               <td className="px-3 py-2">
                 <div className="flex gap-1 justify-end flex-wrap">
                   {a.status === 'open' && (
@@ -538,18 +577,20 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
       {projectId && (
         <>
           <Card className="p-5 space-y-4 max-w-lg">
-            <h3 className="text-sm font-semibold text-fg-primary">Ingest a data point</h3>
+            <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+              Ingest a data point
+            </SignalChip>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-fg-muted">Metric name</span>
+                <SignalChip tone="neutral" className="text-xs">Metric name</SignalChip>
                 <Input value={form.metric_name} onChange={(e) => setForm((f) => ({ ...f, metric_name: e.target.value }))} placeholder="error_rate" />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs font-medium text-fg-muted">Value</span>
+                <SignalChip tone="neutral" className="text-xs">Value</SignalChip>
                 <Input type="number" step="any" value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} placeholder="0.042" />
               </label>
               <label className="block space-y-1 col-span-2">
-                <span className="text-xs font-medium text-fg-muted">Timestamp (UTC)</span>
+                <SignalChip tone="neutral" className="text-xs">Timestamp (UTC)</SignalChip>
                 <Input type="datetime-local" value={form.ts} onChange={(e) => setForm((f) => ({ ...f, ts: e.target.value }))} />
               </label>
             </div>
@@ -567,7 +608,9 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
                 const min = Math.min(...vals)
                 return (
                   <Card key={name} className="p-4">
-                    <h4 className="text-sm font-medium font-mono mb-2 text-fg-primary">{name}</h4>
+                    <SignalChip tone="brand" className="font-mono mb-2">
+                      {name}
+                    </SignalChip>
                     <BarSparkline
                       values={vals}
                       xLabels={pts.map((p) =>
@@ -584,9 +627,11 @@ function MetricsTab({ metrics, loading, projectId, onIngest }: {
                       showPeakLabel
                       ariaLabel={`${name} metric samples`}
                     />
-                    <div className="flex justify-between mt-2 text-2xs text-fg-muted tabular-nums">
-                      <span>{pts.length} samples</span>
-                      <span>min {min.toFixed(3)} · max {max.toFixed(3)}</span>
+                    <div className="flex justify-between gap-2">
+                      <InlineProof className="flex-1">{pts.length} samples</InlineProof>
+                      <InlineProof className="flex-1 text-right">
+                        min {min.toFixed(3)} · max {max.toFixed(3)}
+                      </InlineProof>
                     </div>
                   </Card>
                 )
@@ -624,33 +669,43 @@ function DetectTab({ projectId, onDone, hasMetrics }: { projectId: string; onDon
   }
 
   return (
-    <Card className="max-w-lg p-6 space-y-4">
-      <h2 className="text-base font-semibold text-fg-primary">Manual detection run</h2>
-      <p className="text-sm text-fg-muted">
-        Analyzes metric_series data using Page-Hinkley, Z-score, and release-boundary regression.
-        Leaves all findings in the Anomalies tab.
-      </p>
+    <Card className="max-w-lg space-y-4 p-6">
+      <SignalChip tone="neutral" className="uppercase tracking-wider font-semibold">
+        Manual detection run
+      </SignalChip>
+      <ContainedBlock tone="muted">
+        <InlineProof className="border-0 bg-transparent px-0 py-0 text-sm leading-relaxed">
+          Analyzes metric_series data using Page-Hinkley, Z-score, and release-boundary regression.
+          Leaves all findings in the Anomalies tab.
+        </InlineProof>
+      </ContainedBlock>
       {!projectId && (
-        <p className="text-xs text-warn">Select a project from the switcher before running detection.</p>
+        <ContainedBlock tone="warn">
+          <p className="text-xs text-warn">Select a project from the switcher before running detection.</p>
+        </ContainedBlock>
       )}
       {!hasMetrics && projectId && (
-        <p className="text-xs text-warn">No metric data yet — ingest points on the Metrics tab first.</p>
+        <ContainedBlock tone="warn">
+          <p className="text-xs text-warn">No metric data yet — ingest points on the Metrics tab first.</p>
+        </ContainedBlock>
       )}
       <div className="grid grid-cols-2 gap-4">
         <label className="block space-y-1">
-          <span className="text-sm font-medium text-fg-primary">Metric name (optional)</span>
+          <SignalChip tone="neutral">Metric name (optional)</SignalChip>
           <Input value={form.metric_name} onChange={(e) => setForm((f) => ({ ...f, metric_name: e.target.value }))} placeholder="all metrics" />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium text-fg-primary">Lookback (hours)</span>
+          <SignalChip tone="neutral">Lookback (hours)</SignalChip>
           <Input type="number" min={1} max={720} value={form.lookback_hours} onChange={(e) => setForm((f) => ({ ...f, lookback_hours: parseInt(e.target.value, 10) }))} />
         </label>
       </div>
       <Btn variant="primary" onClick={run} loading={loading} disabled={!projectId}>Run detection</Btn>
       {result && (
-        <div className="rounded-md border border-ok/30 bg-ok/5 px-4 py-3 text-sm">
-          <p className="font-medium text-ok">{result.anomalies} anomalies detected</p>
-        </div>
+        <ContainedBlock tone="info">
+          <SignalChip tone="ok" className="font-medium">
+            {result.anomalies} anomalies detected
+          </SignalChip>
+        </ContainedBlock>
       )}
     </Card>
   )

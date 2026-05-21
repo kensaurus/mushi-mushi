@@ -18,6 +18,7 @@ import { UpgradePrompt } from '../billing/UpgradePrompt'
 import { SettingsChangeHint } from './SettingsChangeHint'
 import { SettingsCard, SettingsPanelLayout } from './SettingsPanelLayout'
 import { ConfiguredSecretField } from './ConfiguredSecretField'
+import { ContainedBlock } from '../report-detail/ReportSurface'
 
 interface ByokKey {
   provider: 'anthropic' | 'openai'
@@ -273,16 +274,16 @@ export function ByokPanel() {
   if (error) return <ErrorAlert message={`Failed to load BYOK status: ${error}`} onRetry={reload} />
 
   return (
-    <SettingsPanelLayout>
+    <SettingsPanelLayout
+      fullWidth={
+        <ContainedBlock tone="muted">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the LLM keys, you pay your own provider, and you keep full control over which models touch your bug data. Keys live in Supabase Vault; only a <span className="font-mono">vault://&lt;id&gt;</span> reference is stored in project settings.
+          </p>
+        </ContainedBlock>
+      }
+    >
       <Section title="LLM Keys (BYOK)" className="lg:col-span-2 space-y-3">
-      <div className="text-2xs text-fg-muted space-y-1">
-        <p>
-          <strong className="text-fg-secondary">Mushi Mushi is BYOK-first.</strong> You bring the LLM keys, you pay your own provider, you keep full control over which models touch your bug data. Mushi never proxies, caches, or fine-tunes on your traffic.
-        </p>
-        <p>
-          Keys are stored in <span className="font-mono">Supabase Vault</span> — only a <span className="font-mono">vault://&lt;id&gt;</span> reference lives in <span className="font-mono">project_settings</span>. When a key is unset, the pipeline transparently falls back to the platform default (if your plan includes one).
-        </p>
-      </div>
 
       {/* Provider cards — 2-up on xl; each card uses SettingsCard for aligned chrome */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">

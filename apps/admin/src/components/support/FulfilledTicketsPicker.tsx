@@ -6,6 +6,8 @@ import { useMemo, useState } from 'react'
 import { usePageData } from '../../lib/usePageData'
 import { CATEGORY_EMOJI, CATEGORY_LABEL } from '../../lib/supportTickets'
 import { Badge, Btn, RelativeTime } from '../ui'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
+import { ContainedBlock, InlineProof, SignalChip } from '../report-detail/ReportSurface'
 
 export interface LinkableTicket {
   id: string
@@ -48,15 +50,21 @@ export function FulfilledTicketsPicker({
   }
 
   if (query.loading) {
-    return <p className="text-2xs text-fg-muted">Loading linkable feedback…</p>
+    return (
+      <div className="py-3">
+        <EmptySectionMessage text="Loading linkable feedback…" />
+      </div>
+    )
   }
 
   if (tickets.length === 0) {
     return (
-      <p className="text-2xs text-fg-muted leading-relaxed">
-        No open bug reports or feature requests for this project that are not already linked to a release.
-        Users file these from <span className="font-medium text-fg-secondary">My feedback</span> or the beta banner.
-      </p>
+      <div className="py-3">
+        <EmptySectionMessage
+          text="No open bug reports or feature requests for this project that are not already linked to a release."
+          hint="Users file these from My feedback or the beta banner."
+        />
+      </div>
     )
   }
 
@@ -65,15 +73,17 @@ export function FulfilledTicketsPicker({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-xs font-semibold text-fg">Credit admin feedback</h3>
-          <p className="text-2xs text-fg-muted mt-0.5">
-            On publish, selected submitters see <span className="font-mono text-fg-secondary">Shipped in v…</span> on My feedback.
-          </p>
+          <ContainedBlock tone="muted" className="mt-0.5">
+            <p className="text-2xs text-fg-muted">
+              On publish, selected submitters see <span className="font-mono text-fg-secondary">Shipped in v…</span> on My feedback.
+            </p>
+          </ContainedBlock>
         </div>
         <div className="flex items-center gap-1.5">
           {selectedIds.length > 0 && (
-            <Badge className="bg-ok-muted text-ok font-mono tabular-nums">
+            <SignalChip tone="ok" className="font-mono tabular-nums">
               {selectedIds.length} selected
-            </Badge>
+            </SignalChip>
           )}
           <Btn size="sm" variant="ghost" onClick={() => setExpanded((v) => !v)}>
             {expanded ? 'Collapse' : 'Choose tickets'}
@@ -100,10 +110,10 @@ export function FulfilledTicketsPicker({
                       <span className="text-xs" aria-hidden>{CATEGORY_EMOJI[t.category] ?? '💬'}</span>
                       <span className="text-xs font-medium text-fg truncate">{t.subject}</span>
                     </span>
-                    <span className="text-2xs text-fg-faint block truncate">
+                    <InlineProof className="truncate border-0 bg-transparent px-0 py-0 mt-0.5">
                       {CATEGORY_LABEL[t.category] ?? t.category} · {t.user_email} ·{' '}
                       <RelativeTime value={t.created_at} />
-                    </span>
+                    </InlineProof>
                   </span>
                   <Badge className="shrink-0 text-[0.6rem] capitalize">{t.status.replace('_', ' ')}</Badge>
                 </label>

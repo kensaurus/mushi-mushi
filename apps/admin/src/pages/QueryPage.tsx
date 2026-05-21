@@ -37,6 +37,12 @@ import {
   StatCard,
 } from '../components/ui'
 import {
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
+import {
   IconClock,
   IconReports,
   IconUser,
@@ -627,9 +633,9 @@ function ResultsTable({ rows }: { rows: unknown[] }) {
         </tbody>
       </table>
       {table.data.length > 50 && (
-        <p className="text-2xs text-fg-faint mt-1.5 px-3">
+        <InlineProof className="mt-1.5 mx-3">
           Showing first 50 of {table.data.length} rows.
-        </p>
+        </InlineProof>
       )}
     </div>
   )
@@ -977,10 +983,12 @@ export function QueryPage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Ask Your Data'}
-          description={copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
-        />
+        <PageHeader title={copy?.title ?? 'Ask Your Data'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ?? 'Natural-language or raw SQL analytics against approved tables.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -1002,15 +1010,18 @@ export function QueryPage() {
       <PageHeader
         title={copy?.title ?? 'Ask Your Data'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited.'
-        }
       >
         <Badge className={stats.errors24h > 0 ? 'bg-danger-subtle text-danger' : stats.runs24h > 0 ? 'bg-ok-muted text-ok' : 'bg-info/10 text-info'}>
           {stats.errors24h > 0 ? `${stats.errors24h} FAIL 24H` : stats.runs24h > 0 ? `${stats.runs24h} RUNS 24H` : 'READY'}
         </Badge>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Ad-hoc natural-language questions against your bug data. Read-only, sandboxed, and cited.'}
+        </p>
+      </ContainedBlock>
 
       <QueryStatusBanner
         stats={stats}
@@ -1030,7 +1041,9 @@ export function QueryPage() {
       />
 
       <Section title="Query snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Runs 24h"
@@ -1140,10 +1153,12 @@ export function QueryPage() {
 
       {activeTab === 'schema' && (
         <Card className="p-3">
-          <div className="text-xs font-medium uppercase tracking-wider mb-2">Approved tables</div>
-          <p className="text-2xs text-fg-muted mb-3">
-            Raw SQL mode accepts SELECT-only statements. Bind your project with <code className="text-brand">$1</code> — max 100 rows returned.
-          </p>
+          <div className="mb-2 text-xs font-medium uppercase tracking-wider">Approved tables</div>
+          <ContainedBlock tone="muted" className="mb-3">
+            <p className="text-2xs leading-relaxed text-fg-muted">
+              Raw SQL mode accepts SELECT-only statements. Bind your project with <code className="text-brand">$1</code> — max 100 rows returned.
+            </p>
+          </ContainedBlock>
           <div className="divide-y divide-edge-subtle/30 rounded-sm border border-edge-subtle overflow-hidden">
             {SCHEMA_REFERENCE.map((t) => (
               <div key={t.table} className="px-3 py-2 grid grid-cols-[7rem_1fr] gap-2 items-start bg-surface-raised/30">
@@ -1391,9 +1406,11 @@ export function QueryPage() {
 
                     {/* Error */}
                     {run.error && (
-                      <div className="px-2.5 py-1.5 rounded-sm border border-danger/30 bg-danger-muted/15 text-xs text-danger">
-                        <strong>Error.</strong> {run.error}
-                      </div>
+                      <ContainedBlock tone="warn">
+                        <p className="text-xs text-danger">
+                          <strong>Error.</strong> {run.error}
+                        </p>
+                      </ContainedBlock>
                     )}
 
                     {/* Success */}
@@ -1404,27 +1421,25 @@ export function QueryPage() {
                           <p className="text-sm text-fg leading-relaxed font-medium">{run.result.summary}</p>
                         )}
                         {run.result.explanation && (
-                          <p className="text-2xs text-fg-faint italic -mt-1">{run.result.explanation}</p>
+                          <InlineProof className="italic -mt-1">{run.result.explanation}</InlineProof>
                         )}
 
                         {/* Results table (shown before SQL so users see data first) */}
                         {rowCount > 0 && (
                           <div className="rounded-sm border border-edge-subtle overflow-hidden">
                             <ResultsTable rows={run.result.results} />
-                            <div className="px-3 py-1.5 border-t border-edge-subtle/50 bg-surface-raised/30 flex items-center justify-between gap-2">
-                              <span className="text-3xs text-fg-faint tabular-nums">
+                            <div className="flex items-center justify-between gap-2 border-t border-edge-subtle/50 bg-surface-raised/30 px-3 py-1.5">
+                              <SignalChip tone="neutral">
                                 {rowCount} row{rowCount === 1 ? '' : 's'}
-                              </span>
+                              </SignalChip>
                             </div>
                           </div>
                         )}
                         {rowCount === 0 && !run.error && (
-                          <div className="px-3 py-2.5 rounded-sm border border-edge-subtle/50 bg-surface-raised/30 text-center">
-                            <p className="text-2xs text-fg-faint">
-                              Query ran successfully but returned 0 rows.
-                            </p>
-                            <p className="text-3xs text-fg-faint mt-0.5 opacity-70">Check your filters or date range.</p>
-                          </div>
+                          <EmptySectionMessage
+                            text="Query ran successfully but returned 0 rows."
+                            hint="Check your filters or date range."
+                          />
                         )}
 
                         {/* SQL block — collapsible, open by default in raw mode */}
@@ -1454,9 +1469,11 @@ export function QueryPage() {
                 onRun={(p) => { setQuestion(p); handleSubmit(p, 'nl') }}
               />
             ) : (
-              <div className="text-2xs text-fg-faint italic px-1 py-4 text-center border border-dashed border-edge-subtle rounded-sm">
-                Write a SQL query above and press <Kbd>⌘↵</Kbd> or click Run.
-              </div>
+              <ContainedBlock tone="muted" className="py-4 text-center">
+                <p className="text-2xs italic text-fg-muted">
+                  Write a SQL query above and press <Kbd>⌘↵</Kbd> or click Run.
+                </p>
+              </ContainedBlock>
             )
           )}
         </div>
@@ -1489,7 +1506,10 @@ export function QueryPage() {
                       ))}
                     </ul>
                   ) : saved.length === 0 ? (
-                    <p className="text-2xs text-fg-faint">Pin a query (☆) and it shows up here for quick rerun.</p>
+                    <EmptySectionMessage
+                      text="No saved queries yet"
+                      hint="Pin a query (☆) and it shows up here for quick rerun."
+                    />
                   ) : (
                     <ul className="space-y-1.5" data-dav-anchor="query:decide">
                       {saved.map((h) => (
@@ -1513,7 +1533,10 @@ export function QueryPage() {
                   ) : historyError ? (
                     <ErrorAlert message={`Could not load history: ${historyError}`} onRetry={loadHistory} />
                   ) : recent.length === 0 ? (
-                    <p className="text-2xs text-fg-faint">Ask a question — the prompt + row count land here.</p>
+                    <EmptySectionMessage
+                      text="No recent queries"
+                      hint="Ask a question — the prompt + row count land here."
+                    />
                   ) : (
                     <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1" data-dav-anchor="query:verify">
                       {recent.map((h) => (
@@ -1537,7 +1560,10 @@ export function QueryPage() {
                   ) : teamError ? (
                     <ErrorAlert message={`Could not load team queries: ${teamError}`} onRetry={loadTeam} />
                   ) : team.length === 0 ? (
-                    <p className="text-2xs text-fg-faint">Nothing yet — when a teammate pins a query in their console it shows up here.</p>
+                    <EmptySectionMessage
+                      text="No team queries shared"
+                      hint="When a teammate pins a query in their console it shows up here."
+                    />
                   ) : (
                     <ul className="space-y-1.5 max-h-[28rem] overflow-y-auto -mr-1 pr-1">
                       {team.map((row) => (

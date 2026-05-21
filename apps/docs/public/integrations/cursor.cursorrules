@@ -1,0 +1,45 @@
+# Mushi Mushi — evolution-loop coding rules for Cursor
+#
+# These rules integrate Mushi's closed-loop bug intelligence into your
+# AI-assisted development workflow. The evolution loop:
+#
+#   User feels a bug → Mushi captures it → AI triages it → AI opens a PR
+#   → QA verifies → Judge scores → Lesson library remembers
+#
+# Run `mushi sync-lessons` to pull the latest project-specific rules into
+# .mushi/lessons.json. The MCP server also injects them dynamically.
+
+## Before writing a fix
+
+1. Call the `get_fix_context` MCP tool for the report — get root cause,
+   blast radius, and relevant files before touching any code.
+2. Call `lessons.query` or read `.mushi/lessons.json` — apply every rule
+   whose pattern matches the file area you're changing.
+3. Prefer the **smallest change** that makes the test pass. Do not
+   refactor unrelated code in the same commit.
+4. Check `get_blast_radius` when the report touches a shared component —
+   one component touching many reports means your change has higher stakes.
+
+## After writing a fix
+
+1. Call `submit_fix_result` with the branch, PR URL, files changed, and
+   lines changed. The judge batch scores the fix overnight.
+2. High-frequency lessons surface in /admin/lessons. If the same class of
+   bug recurs with `iterations > 2`, the lesson is escalated to P0.
+
+## MCP tools available (ask Cursor to call them)
+
+| Tool                | When to use |
+|---------------------|-------------|
+| `get_recent_reports`| Start of a session — see what users are hitting right now |
+| `get_fix_context`   | Before writing a fix — root cause + blast radius brief |
+| `search_reports`    | "Are there other reports like this?" |
+| `get_similar_bugs`  | Nearest-neighbour search for pattern recurrence |
+| `dispatch_fix`      | Hand off a triaged report to the fix orchestrator |
+| `triage_next_steps` | "What should I fix next?" — 5-item plan from the dashboard |
+| `run_nl_query`      | Natural-language questions about your project data |
+
+## Mushi lesson library
+
+<!-- Lessons are synced from .mushi/lessons.json by `mushi sync-lessons` -->
+<!-- Run that command after each deploy to keep these rules current -->

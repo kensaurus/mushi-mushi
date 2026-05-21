@@ -35,6 +35,13 @@ import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { detectFromPackageJson } from '../lib/frameworkDetect'
 import { McpStatusBanner } from '../components/mcp/McpStatusBanner'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { EMPTY_MCP_STATS } from '../components/mcp/types'
 import type { CatalogTabId, McpProjectsResponse, McpStats, McpTabId } from '../components/mcp/types'
 import {
@@ -241,7 +248,9 @@ function ToolCard({ tool }: { tool: ToolSpec }) {
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-fg">{tool.title}</div>
-          <code className="text-2xs text-fg-muted font-mono wrap-anywhere">{tool.name}</code>
+          <SignalChip tone="neutral" className="font-mono wrap-anywhere max-w-full">
+            {tool.name}
+          </SignalChip>
         </div>
         <Badge className={scopeBadgeTone(tool.scope)}>{tool.scope}</Badge>
       </div>
@@ -250,7 +259,9 @@ function ToolCard({ tool }: { tool: ToolSpec }) {
         {tool.useCase}
         <span className="text-accent">”</span>
       </div>
-      <div className="text-xs text-fg-muted mb-2 leading-snug">{tool.description}</div>
+      <ContainedBlock tone="muted" className="mb-2">
+        <p className="text-xs leading-snug text-fg-muted">{tool.description}</p>
+      </ContainedBlock>
       <div className="flex items-center gap-1 flex-wrap">
         {hintBadges(tool).map((chip) => (
           <Badge key={chip.label} className={chip.tone} title={chip.title}>
@@ -409,13 +420,14 @@ export function McpPage() {
             '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
           }
         />
-        <PageHeader
-          title={copy?.title ?? 'MCP'}
-          description={
-            copy?.description ??
-            'Connect Cursor, Claude Desktop, or any MCP-aware agent to this project\'s live triage queue.'
-          }
-        />
+        <PageHeader title={copy?.title ?? 'MCP'} />
+
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              "Connect Cursor, Claude Desktop, or any MCP-aware agent to this project's live triage queue."}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -475,14 +487,7 @@ export function McpPage() {
         }
       />
 
-      <PageHeader
-        title={copy?.title ?? 'MCP'}
-        description={
-          copy?.description ??
-          'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools.'
-        }
-        projectScope={displayName}
-      >
+      <PageHeader title={copy?.title ?? 'MCP'} projectScope={displayName}>
         {!ux.hideOverviewChrome && (
           <>
             <Badge
@@ -511,6 +516,13 @@ export function McpPage() {
         )}
       </PageHeader>
 
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Banner + MCP SNAPSHOT — Overview for posture, Setup for snippet, Catalog for tools.'}
+        </p>
+      </ContainedBlock>
+
       <McpStatusBanner
         stats={stats}
         onTab={setTab}
@@ -531,7 +543,9 @@ export function McpPage() {
 
       {!ux.hideMcpSnapshot && (
       <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} tooltip={activeKeysTooltip(stats)} detail={activeKeysDetail()} to={mcpLinks.activeKeys} />
           <StatCard
@@ -573,18 +587,23 @@ export function McpPage() {
 
       {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
-          className={`p-4 ${
+          className={`space-y-3 p-4 ${
             stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
               ? 'border-warn/30 bg-warn/5'
               : 'border-brand/30 bg-brand/5'
           }`}
         >
-          <p className="text-xs font-medium text-fg-primary">{stats.topPriorityLabel}</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <Link to={stats.topPriorityTo}>
-              <Btn size="sm" variant="ghost">Take action →</Btn>
-            </Link>
-          </div>
+          <SignalChip tone={stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected' ? 'warn' : 'brand'}>
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="info">
+            <p className="text-xs font-medium leading-snug text-fg">{stats.topPriorityLabel}</p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill to={stats.topPriorityTo} tone="brand">
+              Take action →
+            </ActionPill>
+          </ActionPillRow>
         </Card>
       ) : null}
 
@@ -633,24 +652,41 @@ export function McpPage() {
             />
           )}
           <div className="grid gap-3 sm:grid-cols-3">
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Read scope</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-fg-primary">{stats.mcpReadKeyCount}</p>
-              <p className="text-2xs text-fg-muted">Required to list tools + read triage</p>
+            <Card className="space-y-2 border-edge p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Read scope</p>
+                <SignalChip tone={stats.mcpReadKeyCount > 0 ? 'ok' : 'warn'}>
+                  {stats.mcpReadKeyCount > 0 ? 'Ready' : 'Missing'}
+                </SignalChip>
+              </div>
+              <p className="text-lg font-semibold tabular-nums text-fg-primary">{stats.mcpReadKeyCount}</p>
+              <InlineProof>Required to list tools + read triage</InlineProof>
             </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Write scope</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums text-warn">{stats.mcpWriteKeyCount}</p>
-              <p className="text-2xs text-fg-muted">Optional — dispatch fixes from agents</p>
+            <Card className="space-y-2 border-edge p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Write scope</p>
+                <SignalChip tone={stats.mcpWriteKeyCount > 0 ? 'ok' : 'neutral'}>
+                  {stats.mcpWriteKeyCount > 0 ? 'Enabled' : 'Optional'}
+                </SignalChip>
+              </div>
+              <p className="text-lg font-semibold tabular-nums text-warn">{stats.mcpWriteKeyCount}</p>
+              <InlineProof>Optional — dispatch fixes from agents</InlineProof>
             </Card>
-            <Card className="p-3 border-edge">
-              <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last heartbeat</p>
-              <p className="mt-1 text-sm font-semibold text-fg-primary">
+            <Card className="space-y-2 border-edge p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-3xs font-medium uppercase tracking-wide text-fg-faint">Last heartbeat</p>
+                <SignalChip tone={stats.lastSeenAt ? 'brand' : 'neutral'}>
+                  {stats.lastSeenAt ? 'Live' : 'Silent'}
+                </SignalChip>
+              </div>
+              <p className="text-sm font-semibold text-fg-primary">
                 {stats.lastSeenAt ? <RelativeTime value={stats.lastSeenAt} /> : 'Never'}
               </p>
-              <p className="text-2xs text-fg-muted font-mono truncate" title={stats.lastSeenEndpointHost ?? undefined}>
-                {stats.lastSeenEndpointHost ?? 'No MCP traffic yet'}
-              </p>
+              <InlineProof className="truncate font-mono">
+                <span title={stats.lastSeenEndpointHost ?? undefined}>
+                  {stats.lastSeenEndpointHost ?? 'No MCP traffic yet'}
+                </span>
+              </InlineProof>
             </Card>
           </div>
           </>
@@ -660,7 +696,9 @@ export function McpPage() {
 
       {activeTab !== 'overview' && (
       <Section title={activeTab === 'setup' ? 'Agent setup' : activeTab === 'catalog' ? 'Tool catalog' : 'Agent examples'}>
-        <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-4">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeMeta.description}</p>
+        </ContainedBlock>
 
         {activeTab === 'setup' && (
           <div className="space-y-4" data-dav-anchor="mcp:decide">
@@ -750,9 +788,11 @@ export function McpPage() {
             <Card className="p-5 space-y-4" data-testid="mcp-install">
               <div>
                 <h3 className="text-sm font-semibold text-fg">Configuration values</h3>
-                <p className="text-xs text-fg-muted mt-1">
-                  Three env vars wire the MCP binary to <span className="font-mono text-fg-secondary">{displayName}</span>.
-                </p>
+                <ContainedBlock tone="muted" className="mt-2">
+                  <p className="text-xs text-fg-muted">
+                    Three env vars wire the MCP binary to <span className="font-mono text-fg-secondary">{displayName}</span>.
+                  </p>
+                </ContainedBlock>
               </div>
 
               <div className="rounded-md border border-edge-subtle bg-surface-raised/40">
@@ -766,13 +806,17 @@ export function McpPage() {
                   aria-expanded={detectOpen}
                 >
                   <span className="font-medium text-fg">Detect monorepo / workspace (optional)</span>
-                  <span className="text-fg-faint text-2xs" aria-hidden>{detectOpen ? '▲ hide' : '▼ paste package.json'}</span>
+                  <SignalChip tone="neutral" className="text-2xs" aria-hidden>
+                    {detectOpen ? '▲ hide' : '▼ paste package.json'}
+                  </SignalChip>
                 </button>
                 {detectOpen && (
                   <div className="px-3 pb-3 pt-1 space-y-2">
-                    <p className="text-2xs text-fg-muted leading-snug">
-                      Paste your <code className="font-mono">package.json</code> for monorepo install guidance.
-                    </p>
+                    <ContainedBlock tone="muted">
+                      <InlineProof className="border-0 bg-transparent px-0 py-0 text-2xs leading-snug">
+                        Paste your <SignalChip tone="neutral" className="font-mono">package.json</SignalChip> for monorepo install guidance.
+                      </InlineProof>
+                    </ContainedBlock>
                     <textarea
                       ref={detectTaRef}
                       value={detectText}
@@ -827,16 +871,14 @@ export function McpPage() {
                         <span>{w}</span>
                       </p>
                     ))}
-                    <button
-                      type="button"
+                    <ActionPill
                       onClick={() => {
                         setMonorepoNote(null)
                         setMonoWarnings([])
                       }}
-                      className="text-3xs text-fg-faint hover:text-fg-muted"
                     >
                       Dismiss
-                    </button>
+                    </ActionPill>
                   </div>
                 )}
               </div>
@@ -861,10 +903,10 @@ export function McpPage() {
               </div>
 
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-2xs text-fg-muted uppercase tracking-wider font-medium">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
                     {snippetMode === 'cursor' ? 'Drop into your IDE settings' : 'Drop into your repo root'}
-                  </span>
+                  </SignalChip>
                   <CopyButton
                     onCopy={() =>
                       copySnippet(
@@ -891,9 +933,11 @@ export function McpPage() {
               <Card className="p-5 space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold text-fg">Or wire end users to this project</h3>
-                  <p className="text-xs text-fg-muted mt-1">
-                    MCP connects coding agents. The bug-capture SDK connects real users in your app.
-                  </p>
+                  <ContainedBlock tone="muted" className="mt-2">
+                    <p className="text-xs text-fg-muted">
+                      MCP connects coding agents. The bug-capture SDK connects real users in your app.
+                    </p>
+                  </ContainedBlock>
                 </div>
                 <SdkInstallCard projectId={activeProjectId} compact />
               </Card>
@@ -913,9 +957,9 @@ export function McpPage() {
             {catalogTab === 'tools' && (
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-2">
+                  <SignalChip tone="info" className="mb-2 uppercase tracking-wider font-medium">
                     Read — always safe to loop on ({readTools.length})
-                  </h4>
+                  </SignalChip>
                   <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-read">
                     {readTools.map((tool) => (
                       <ToolCard key={tool.name} tool={tool} />
@@ -923,9 +967,9 @@ export function McpPage() {
                   </div>
                 </div>
                 <div>
-                  <h4 className="text-2xs text-fg-muted uppercase tracking-wider font-medium mb-2">
+                  <SignalChip tone="warn" className="mb-2 uppercase tracking-wider font-medium">
                     Write — mutate project state ({writeTools.length})
-                  </h4>
+                  </SignalChip>
                   <div className="grid gap-2 md:grid-cols-2" data-testid="mcp-tool-catalog-write">
                     {writeTools.map((tool) => (
                       <ToolCard key={tool.name} tool={tool} />
@@ -942,11 +986,15 @@ export function McpPage() {
                     key={r.name}
                     className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:transition-colors hover:border-edge"
                   >
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <code className="text-xs font-mono text-fg wrap-anywhere">{r.uri}</code>
+                    <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                      <SignalChip tone="neutral" className="font-mono text-xs wrap-anywhere max-w-full">
+                        {r.uri}
+                      </SignalChip>
                       <Badge className={scopeBadgeTone(r.scope)}>{r.scope}</Badge>
                     </div>
-                    <div className="text-xs text-fg-muted leading-snug">{r.description}</div>
+                    <ContainedBlock tone="muted" className="text-xs leading-snug">
+                      {r.description}
+                    </ContainedBlock>
                   </div>
                 ))}
               </div>
@@ -960,8 +1008,12 @@ export function McpPage() {
                     className="rounded-md border border-edge-subtle bg-surface-raised/30 p-3 motion-safe:transition-colors hover:border-edge"
                   >
                     <div className="text-sm font-semibold text-fg">{p.title}</div>
-                    <code className="text-2xs text-fg-muted font-mono block mt-0.5 mb-1">/{p.name}</code>
-                    <div className="text-xs text-fg-muted leading-snug">{p.description}</div>
+                    <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5 mb-1">
+                      /{p.name}
+                    </SignalChip>
+                    <ContainedBlock tone="muted" className="text-xs leading-snug">
+                      {p.description}
+                    </ContainedBlock>
                   </div>
                 ))}
               </div>
@@ -984,12 +1036,9 @@ export function McpPage() {
                 </div>
                 <div className="flex flex-wrap gap-1 pt-1">
                   {uc.calls.map((c) => (
-                    <code
-                      key={c}
-                      className="font-mono text-2xs text-fg-muted bg-surface-overlay border border-edge-subtle rounded-sm px-1.5 py-0.5"
-                    >
+                    <SignalChip key={c} tone="neutral" className="font-mono text-2xs">
                       {c}
-                    </code>
+                    </SignalChip>
                   ))}
                 </div>
               </div>

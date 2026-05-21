@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { LAYER_COLORS, LAYER_LABELS, LAYER_ORDER } from './exploreLayers'
 import type { ExploreLayer, ExploreSearchHit } from './exploreTypes'
+import { ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
+import { EmptySectionMessage } from '../report-detail/ReportClassification'
 
 interface Props {
   projectId: string
@@ -223,10 +225,10 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
             </div>
           )}
 
-          <div className="text-2xs text-fg-faint">
+          <InlineProof>
             {filteredResults.length} result{filteredResults.length !== 1 ? 's' : ''}
             {activeLayer ? ` in ${LAYER_LABELS[activeLayer]}` : ''} — most relevant first
-          </div>
+          </InlineProof>
 
           <div className="space-y-1.5">
             {filteredResults.map((hit) => (
@@ -272,19 +274,14 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
       )}
 
       {!searching && !error && query.trim() && results.length === 0 && (
-        <div className="text-2xs text-fg-muted text-center py-6 border border-edge-subtle rounded-md bg-surface-raised">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 text-fg-faint" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M21 21l-4.5-4.5" strokeLinecap="round" />
-            <path d="M8.5 11h5M11 8.5v5" strokeLinecap="round" opacity="0.4" />
-          </svg>
-          No matching files found — try rephrasing your query.
+        <div className="py-6">
+          <EmptySectionMessage text="No matching files found — try rephrasing your query." />
         </div>
       )}
 
       {/* Empty state with examples */}
       {!query && (
-        <div className="rounded-md border border-edge-subtle bg-surface-raised p-4 space-y-3">
+        <ContainedBlock tone="muted" className="space-y-3">
           <div>
             <div className="text-2xs font-semibold text-fg mb-0.5">Semantic search</div>
             <p className="text-2xs text-fg-muted leading-relaxed">
@@ -306,7 +303,7 @@ export function ExploreSearchBar({ projectId, onHighlight, onSelectHit, seedQuer
               ))}
             </div>
           </div>
-        </div>
+        </ContainedBlock>
       )}
     </div>
   )

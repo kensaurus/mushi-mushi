@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { usePageData } from '../../lib/usePageData'
 import { useRealtimeReload } from '../../lib/realtime'
 import { Card, Btn, Badge } from '../ui'
+import { ContainedBlock, InlineProof } from '../report-detail/ReportSurface'
 
 interface Summary {
   total: number
@@ -30,9 +31,11 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
             <p className="text-xs font-medium text-fg">Help shape Mushi</p>
-            <p className="text-2xs text-fg-muted mt-0.5">
-              Report bugs or request features — we link shipped work to release versions so you can see what landed.
-            </p>
+            <ContainedBlock tone="muted" className="mt-1">
+              <p className="text-2xs text-fg-muted">
+                Report bugs or request features — we link shipped work to release versions so you can see what landed.
+              </p>
+            </ContainedBlock>
           </div>
           <div className="flex gap-1.5 shrink-0">
             <Link to="/feedback">
@@ -61,11 +64,11 @@ export function FeedbackHubStrip({ className = '' }: { className?: string }) {
               </Badge>
             )}
           </div>
-          <p className="text-2xs text-fg-muted mt-0.5 tabular-nums">
+          <InlineProof className="mt-1 tabular-nums">
             {s.total} submission{s.total === 1 ? '' : 's'}
             {s.active > 0 ? ` · ${s.active} active` : ''}
             {s.shipped > 0 ? ` · ${s.shipped} in a release` : ''}
-          </p>
+          </InlineProof>
         </div>
         <Link to="/feedback" className="shrink-0">
           <Btn size="sm" variant={hasNews ? 'primary' : 'ghost'}>

@@ -1,22 +1,20 @@
 /**
  * FILE: apps/admin/src/components/report-detail/ReportBranchGraph.tsx
- * PURPOSE: Surface the per-fix GitHub branch / PR / CI timeline directly on
- *          the report-detail page, so triagers can see the full PDCA loop
- *          (branch created → commit → PR opened → CI passed) without
- *          navigating to /fixes and expanding a card.
- *
- *          Reuses the existing `FixGitGraph` SVG component verbatim and
- *          wraps it with branch/PR/CI metadata rendered via our primitives
- *          (`CodeValue`, `Badge`, `DefinitionChips`). Collapsible with a
- *          localStorage-backed open/closed memory, polls `/timeline` while
- *          the fix is in flight so live fixes animate in.
  */
 
 import { useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { apiFetch } from '../../lib/supabase'
 import { FixGitGraph, type FixTimelineEvent } from '../FixGitGraph'
-import { Badge, CodeValue, DefinitionChips, type DefinitionChipItem } from '../ui'
+import { Badge, DetailRows } from '../ui'
 import { IconGit } from '../icons'
+import { EmptySectionMessage } from './ReportClassification'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+} from './ReportSurface'
 import type { ReportFixAttempt } from './types'
 
 interface Props {
@@ -64,10 +62,10 @@ function ciTone(conclusion?: string | null, status?: string | null):
 
 function ciLabel(fix: ReportFixAttempt): string {
   const c = fix.check_run_conclusion?.toLowerCase()
-  if (c) return `CI: ${c.replace(/_/g, ' ')}`
+  if (c) return c.replace(/_/g, ' ')
   const s = fix.check_run_status?.toLowerCase()
-  if (s) return `CI: ${s.replace(/_/g, ' ')}`
-  return 'CI: not started'
+  if (s) return s.replace(/_/g, ' ')
+  return 'not started'
 }
 
 function badgeToneClass(
@@ -96,11 +94,6 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
   const [secondsToNextPoll, setSecondsToNextPoll] = useState<number>(POLL_INTERVAL_MS / 1000)
   const cancelledRef = useRef(false)
 
-  // Parent (ReportDetailPage) renders this without a `key={fix.id}` and can
-  // swap `fix` when a newer attempt lands for the same report. `useState`
-  // initializers only run once, so without this effect `open` and the cached
-  // `events` would bleed across attempts. Reset here instead of forcing every
-  // caller to remember the key.
   const lastFixIdRef = useRef(fix.id)
   if (lastFixIdRef.current !== fix.id) {
     lastFixIdRef.current = fix.id
@@ -110,8 +103,6 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
   }
 
   const isLive = fix.status === 'queued' || fix.status === 'running'
-  // Poll while CI is still running too — so the "CI pending" → "CI success"
-  // transition animates in without a manual refresh.
   const isCiPending = (() => {
     const c = fix.check_run_conclusion?.toLowerCase()
     if (c) return false
@@ -166,145 +157,172 @@ export function ReportBranchGraph({ fix, traceUrl, className = '' }: Props) {
   }
 
   const tone = ciTone(fix.check_run_conclusion, fix.check_run_status)
-  const metaItems: DefinitionChipItem[] = []
-  if (fix.branch) {
-    metaItems.push({
-      label: 'Branch',
-      value: <CodeValue value={fix.branch} tone="hash" />,
-    })
+  const ciSignalTone =
+    tone === 'ok' ? 'info' : tone === 'danger' ? 'danger' : tone === 'warn' ? 'warn' : 'neutral'
+
+  const prStateTone: Record<string, string> = {
+    merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
+    open: 'bg-ok-subtle text-ok',
+    closed: 'bg-danger-subtle text-danger',
+    draft: 'bg-surface-overlay text-fg-muted',
   }
-  metaItems.push({
-    label: 'CI status',
-    value: <Badge className={badgeToneClass(tone)}>{ciLabel(fix)}</Badge>,
-  })
-  if (fix.pr_url) {
-    metaItems.push({
-      label: 'Pull request',
-      value: (
-        <a
-          href={fix.pr_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono text-xs"
-        >
-          #{fix.pr_number ?? '—'} ↗
-        </a>
-      ),
-    })
-  }
-  if (fix.pr_state) {
-    const prStateTone: Record<string, string> = {
-      merged: 'bg-[oklch(0.30_0.10_300)] text-[oklch(0.92_0.08_300)]',
-      open: 'bg-ok-subtle text-ok',
-      closed: 'bg-danger-subtle text-danger',
-      draft: 'bg-surface-overlay text-fg-muted',
-    }
-    metaItems.push({
-      label: 'PR state',
-      value: (
-        <Badge className={prStateTone[fix.pr_state] ?? 'bg-surface-overlay text-fg-muted'}>
-          {fix.pr_state}
-        </Badge>
-      ),
-    })
-  }
-  if (fix.commit_sha) {
-    metaItems.push({
-      label: 'Commit',
-      value: <CodeValue value={fix.commit_sha.slice(0, 7)} tone="hash" />,
-    })
-  }
-  if (fix.files_changed && fix.files_changed.length > 0) {
-    metaItems.push({
-      label: 'Files',
-      value: (
-        <span className="text-xs text-fg-secondary">
-          {fix.files_changed.length} file{fix.files_changed.length === 1 ? '' : 's'}
-        </span>
-      ),
-    })
-  }
-  if (traceUrl) {
-    metaItems.push({
-      label: 'Trace',
-      value: (
-        <a
-          href={traceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-brand hover:text-brand-hover underline-offset-2 hover:underline font-mono text-xs"
-        >
-          Langfuse ↗
-        </a>
-      ),
-    })
-  }
+
+  const metaRows = [
+    fix.branch
+      ? {
+          label: 'Branch',
+          value: (
+            <code className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-2xs text-fg-secondary">
+              {fix.branch}
+            </code>
+          ),
+          wrap: true,
+        }
+      : null,
+    {
+      label: 'CI status',
+      value: <Badge className={badgeToneClass(tone)}>{ciLabel(fix)}</Badge>,
+    },
+    fix.pr_state
+      ? {
+          label: 'PR state',
+          value: (
+            <Badge className={prStateTone[fix.pr_state] ?? 'bg-surface-overlay text-fg-muted'}>
+              {fix.pr_state}
+            </Badge>
+          ),
+        }
+      : null,
+    fix.commit_sha
+      ? {
+          label: 'Commit',
+          value: (
+            <code className="rounded-sm border border-edge-subtle bg-surface-overlay/45 px-1.5 py-0.5 font-mono text-2xs tabular-nums text-fg">
+              {fix.commit_sha.slice(0, 7)}
+            </code>
+          ),
+        }
+      : null,
+    fix.files_changed && fix.files_changed.length > 0
+      ? {
+          label: 'Diff size',
+          value: (
+            <span className="inline-flex items-center gap-1">
+              <SignalChip tone="neutral" className="font-mono">
+                {fix.files_changed.length} file{fix.files_changed.length === 1 ? '' : 's'}
+              </SignalChip>
+              {fix.lines_changed != null && (
+                <SignalChip tone="brand" className="font-mono tabular-nums">
+                  {fix.lines_changed} lines
+                </SignalChip>
+              )}
+            </span>
+          ),
+        }
+      : null,
+    fix.agent || fix.llm_model
+      ? {
+          label: 'Agent',
+          value: (
+            <code className="font-mono text-2xs text-fg-secondary">
+              {fix.llm_model ?? fix.agent}
+            </code>
+          ),
+        }
+      : null,
+  ].filter(Boolean) as Array<{ label: string; value: ReactNode; wrap?: boolean }>
 
   return (
     <section
-      className={`rounded-md border border-edge-subtle bg-surface-overlay/25 ${className}`}
+      className={`overflow-hidden rounded-md border border-edge-subtle bg-surface-overlay/25 ${className}`}
       aria-label="Branch & PR timeline"
     >
       <button
         type="button"
         onClick={toggle}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-surface-overlay/40 rounded-t-md motion-safe:transition-colors"
+        className="flex w-full items-center justify-between gap-2 rounded-t-md px-3 py-2.5 text-left hover:bg-surface-overlay/40 motion-safe:transition-colors"
       >
-        <span className="flex items-center gap-2 min-w-0">
+        <span className="flex min-w-0 flex-wrap items-center gap-2">
           <IconGit />
           <span className="text-xs font-semibold tracking-wide text-fg-secondary">
             Branch & PR timeline
           </span>
+          {fix.pr_number && (
+            <SignalChip tone="brand" className="font-mono">
+              PR #{fix.pr_number}
+            </SignalChip>
+          )}
+          <SignalChip tone={ciSignalTone as 'info' | 'danger' | 'warn' | 'neutral'} className="uppercase tracking-wide">
+            CI · {ciLabel(fix)}
+          </SignalChip>
           {shouldPoll && (
-            <span className="flex items-center gap-1 text-3xs uppercase tracking-wider text-info font-medium">
-              <span
-                className="inline-block h-1.5 w-1.5 rounded-full bg-info motion-safe:animate-pulse"
-                aria-hidden="true"
-              />
-              <span>live</span>
-              <span
-                className="text-fg-faint font-mono normal-case tracking-normal"
-                aria-live="polite"
-              >
-                · refreshes in {secondsToNextPoll}s
-              </span>
-            </span>
+            <SignalChip tone="info" className="gap-1">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-info motion-safe:animate-pulse" aria-hidden />
+              live · {secondsToNextPoll}s
+            </SignalChip>
           )}
         </span>
-        <span className="text-2xs text-fg-faint font-mono shrink-0" aria-hidden="true">
+        <span className="shrink-0 rounded-sm border border-edge-subtle bg-surface-overlay/40 px-1.5 py-0.5 font-mono text-2xs text-fg-faint" aria-hidden>
           {open ? '▾' : '▸'}
         </span>
       </button>
       {open && (
-        <div className="px-3 pb-3 space-y-2.5 border-t border-edge-subtle pt-2.5">
-          {metaItems.length > 0 && <DefinitionChips items={metaItems} columns="auto" dense />}
-          {events ? (
-            events.length === 0 ? (
-              <p className="text-2xs text-fg-faint">
-                No timeline events yet — the fix worker will post updates here as
-                it runs.
-              </p>
-            ) : (
-              <FixGitGraph
-                events={events}
-                prUrl={fix.pr_url}
-                prNumber={fix.pr_number}
-                prState={fix.pr_state}
-                branchName={fix.branch}
-                commitSha={fix.commit_sha}
-                agentModel={fix.llm_model ?? fix.agent}
-                filesChanged={fix.files_changed}
-                linesChanged={fix.lines_changed}
+        <div className="space-y-2.5 border-t border-edge-subtle px-3 pb-3 pt-2.5">
+          {metaRows.length > 0 && <DetailRows dense items={metaRows} />}
+
+          <ActionPillRow>
+            {fix.pr_url && (
+              <ActionPill href={fix.pr_url} tone="brand">
+                View PR{fix.pr_number ? ` #${fix.pr_number}` : ''} ↗
+              </ActionPill>
+            )}
+            {traceUrl && (
+              <ActionPill href={traceUrl} tone="neutral">
+                Langfuse trace ↗
+              </ActionPill>
+            )}
+            {fix.branch && fix.pr_url && (
+              <ActionPill
+                href={`${fix.pr_url.replace(/\/pull\/\d+.*/, '')}/tree/${encodeURIComponent(fix.branch)}`}
+                tone="neutral"
+              >
+                Branch on GitHub ↗
+              </ActionPill>
+            )}
+          </ActionPillRow>
+
+          <ContainedBlock label="Pipeline events" tone="muted">
+            {events ? (
+              events.length === 0 ? (
+                <EmptySectionMessage
+                  text="No timeline events yet."
+                  hint="The fix worker will post branch, commit, and PR updates here as it runs."
+                />
+              ) : (
+                <FixGitGraph
+                  events={events}
+                  prUrl={fix.pr_url}
+                  prNumber={fix.pr_number}
+                  prState={fix.pr_state}
+                  branchName={fix.branch}
+                  commitSha={fix.commit_sha}
+                  agentModel={fix.llm_model ?? fix.agent}
+                  filesChanged={fix.files_changed}
+                  linesChanged={fix.lines_changed}
+                />
+              )
+            ) : loadError ? (
+              <EmptySectionMessage
+                text="Could not load timeline."
+                hint="It will retry on the next refresh."
               />
-            )
-          ) : loadError ? (
-            <p className="text-2xs text-danger">
-              Could not load timeline. It'll retry on the next refresh.
-            </p>
-          ) : (
-            <p className="text-2xs text-fg-faint">Loading timeline…</p>
-          )}
+            ) : (
+              <p className="rounded-sm border border-edge-subtle/50 bg-surface-overlay/30 px-2 py-1 text-2xs text-fg-faint">
+                Loading timeline…
+              </p>
+            )}
+          </ContainedBlock>
         </div>
       )}
     </section>

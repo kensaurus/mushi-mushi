@@ -31,6 +31,8 @@ import { langfuseTraceUrl, RESOLVED_API_URL, RESOLVED_SUPABASE_ANON_KEY } from '
 import { debugLog } from '../lib/debug'
 import { AskMushiComposer } from './AskMushiComposer'
 import { ClarifyChips } from './ClarifyChips'
+import { ContainedBlock, InlineProof, SignalChip } from './report-detail/ReportSurface'
+import { EmptySectionMessage } from './report-detail/ReportClassification'
 import {
   isAskMushiStreamingEnabled,
   openAskMushiStream,
@@ -509,14 +511,12 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
             </div>
           )}
           {messages.length > 0 && (
-            <div className="px-3 py-1 text-3xs text-fg-faint flex items-center gap-2 border-t border-edge/40 bg-surface-overlay/20">
-              <span>This thread:</span>
-              <span className="font-mono">{(threadTotals.latency / 1000).toFixed(1)}s</span>
-              <span className="text-fg-faint">·</span>
-              <span className="font-mono">{threadTotals.tokens.toLocaleString()} tok</span>
-              <span className="text-fg-faint">·</span>
-              <span className="font-mono">{formatLlmCost(threadTotals.cost)}</span>
-            </div>
+            <InlineProof className="px-3 py-1 flex items-center gap-2 border-t border-edge/40 bg-surface-overlay/20 font-mono tabular-nums">
+              <span className="text-fg-secondary">This thread:</span>
+              <SignalChip tone="neutral">{(threadTotals.latency / 1000).toFixed(1)}s</SignalChip>
+              <SignalChip tone="neutral">{threadTotals.tokens.toLocaleString()} tok</SignalChip>
+              <SignalChip tone="brand">{formatLlmCost(threadTotals.cost)}</SignalChip>
+            </InlineProof>
           )}
           <form
             onSubmit={(e) => {
@@ -603,33 +603,29 @@ export function AskMushiSidebar({ open, onClose, route }: Props) {
 function ContextStrip({ ctx }: { ctx: PageContext }) {
   const chips = contextFilterChips(ctx.filters)
   return (
-    <section
-      className="rounded-sm border border-edge/50 bg-surface-overlay/40 px-3 py-2 text-2xs space-y-1.5"
-      aria-label="Page context sent with each message"
-    >
-      {ctx.summary && <div className="text-fg-secondary">{ctx.summary}</div>}
-      {chips.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {chips.map((c) => (
-            <span
-              key={`${c.key}:${c.value}`}
-              className="rounded-sm border border-edge-subtle bg-surface-raised/60 px-1.5 py-0.5 font-mono text-fg-muted"
-              title={`Filter: ${c.key} = ${c.value}`}
-            >
-              <span className="text-fg-faint">{c.key}:</span>{' '}
-              <span className="text-fg-secondary">{c.value}</span>
-            </span>
-          ))}
-        </div>
-      )}
-      {ctx.selection && (
-        <div className="text-fg-muted">
-          <span className="text-fg-faint">Focus:</span>{' '}
-          <span className="text-fg-secondary">{ctx.selection.kind}</span>
-          <span className="text-fg-faint"> · </span>
-          <span className="font-mono text-fg-secondary">{ctx.selection.label}</span>
-        </div>
-      )}
+    <section aria-label="Page context sent with each message">
+      <ContainedBlock tone="muted" label="Page context" className="space-y-1.5">
+        {ctx.summary && <div className="text-fg-secondary">{ctx.summary}</div>}
+        {chips.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {chips.map((c) => (
+              <span key={`${c.key}:${c.value}`} title={`Filter: ${c.key} = ${c.value}`}>
+                <SignalChip tone="neutral" className="font-mono">
+                  {c.key}: {c.value}
+                </SignalChip>
+              </span>
+            ))}
+          </div>
+        )}
+        {ctx.selection && (
+          <InlineProof className="border-0 bg-transparent px-0 py-0">
+            <span className="text-fg-faint">Focus:</span>{' '}
+            <span className="text-fg-secondary">{ctx.selection.kind}</span>
+            <span className="text-fg-faint"> · </span>
+            <span className="font-mono text-fg-secondary">{ctx.selection.label}</span>
+          </InlineProof>
+        )}
+      </ContainedBlock>
     </section>
   )
 }
@@ -698,12 +694,14 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
             )}
             .
           </p>
-          <p className="mt-0.5 text-2xs text-fg-muted leading-snug">
-            The assistant sees your filters, focus, and the page's quick
-            actions. Use <code className="font-mono text-fg-secondary">/commands</code>{' '}
-            and <code className="font-mono text-fg-secondary">@mentions</code> in the
-            composer to steer the answer.
-          </p>
+          <ContainedBlock tone="muted" className="mt-0.5">
+            <p className="text-2xs text-fg-muted leading-snug">
+              The assistant sees your filters, focus, and the page's quick
+              actions. Use <code className="font-mono text-fg-secondary">/commands</code>{' '}
+              and <code className="font-mono text-fg-secondary">@mentions</code> in the
+              composer to steer the answer.
+            </p>
+          </ContainedBlock>
         </div>
       </div>
 
@@ -797,24 +795,22 @@ function EmptyPrompt({ route, ctx, onSuggest, onSend }: EmptyPromptProps) {
                   <div className="text-2xs text-fg-secondary truncate">
                     {t.title || '(empty thread)'}
                   </div>
-                  <div className="text-3xs text-fg-faint flex items-center gap-1.5 font-mono">
-                    <span>{new Date(t.lastAt).toLocaleString()}</span>
-                    <span aria-hidden>·</span>
-                    <span>{t.messageCount} msg</span>
-                    {t.totalCostUsd > 0 && (
-                      <>
-                        <span aria-hidden>·</span>
-                        <span>{formatLlmCost(t.totalCostUsd)}</span>
-                      </>
-                    )}
+                  <div className="text-3xs flex items-center gap-1.5 font-mono mt-0.5">
+                    <InlineProof className="border-0 bg-transparent px-0 py-0 inline-flex flex-wrap gap-1.5">
+                      <SignalChip tone="neutral">{new Date(t.lastAt).toLocaleString()}</SignalChip>
+                      <SignalChip tone="neutral">{t.messageCount} msg</SignalChip>
+                      {t.totalCostUsd > 0 && (
+                        <SignalChip tone="brand">{formatLlmCost(t.totalCostUsd)}</SignalChip>
+                      )}
+                    </InlineProof>
                   </div>
                 </button>
               </li>
             ))}
           </ul>
-          <p className="mt-1 text-3xs text-fg-faint">
+          <InlineProof className="mt-1 border-0 bg-transparent px-0 py-0 text-3xs">
             Use the History menu in the header to reload one in full.
-          </p>
+          </InlineProof>
         </section>
       )}
     </div>
@@ -833,7 +829,9 @@ function MessageRow({ message, onCopy, onClarifyPick, disabled }: MessageRowProp
   const isSystem = message.role === 'system'
   if (isSystem) {
     return (
-      <div className="text-3xs text-fg-faint italic text-center">{message.content}</div>
+      <ContainedBlock tone="muted" className="text-center italic text-3xs">
+        {message.content}
+      </ContainedBlock>
     )
   }
   return (
@@ -897,7 +895,7 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
   if (message.costUsd != null) parts.push(formatLlmCost(message.costUsd))
   if (message.fallbackUsed) parts.push('fallback')
   return (
-    <div className="text-3xs text-fg-faint font-mono flex items-center gap-1.5">
+    <InlineProof className="font-mono tabular-nums flex items-center gap-1.5 border-0 bg-transparent px-0 py-0">
       <span>{parts.join(' · ')}</span>
       {traceUrl && (
         <Tooltip content={`Open Langfuse trace ${message.langfuseTraceId}`}>
@@ -911,7 +909,7 @@ function MessageMetaStrip({ message }: { message: AskMushiMessage }) {
           </a>
         </Tooltip>
       )}
-    </div>
+    </InlineProof>
   )
 }
 
@@ -985,7 +983,7 @@ function HistoryPopover({
         </button>
       </div>
       {loading ? (
-        <div className="text-2xs text-fg-muted px-1 py-1">Loading…</div>
+        <EmptySectionMessage text="Loading…" />
       ) : threads && threads.length > 0 ? (
         <ul className="space-y-0.5">
           {threads.map((t) => (
@@ -998,23 +996,19 @@ function HistoryPopover({
                 }`}
               >
                 <div className="text-xs text-fg-secondary truncate">{t.title || '(empty)'}</div>
-                <div className="text-3xs text-fg-faint flex items-center gap-1.5 font-mono">
-                  <span>{new Date(t.lastAt).toLocaleString()}</span>
-                  <span>·</span>
-                  <span>{t.messageCount} msg</span>
+                <InlineProof className="border-0 bg-transparent px-0 py-0 mt-0.5 inline-flex flex-wrap gap-1 font-mono">
+                  <SignalChip tone="neutral">{new Date(t.lastAt).toLocaleString()}</SignalChip>
+                  <SignalChip tone="neutral">{t.messageCount} msg</SignalChip>
                   {t.totalCostUsd > 0 && (
-                    <>
-                      <span>·</span>
-                      <span>{formatLlmCost(t.totalCostUsd)}</span>
-                    </>
+                    <SignalChip tone="brand">{formatLlmCost(t.totalCostUsd)}</SignalChip>
                   )}
-                </div>
+                </InlineProof>
               </button>
             </li>
           ))}
         </ul>
       ) : (
-        <div className="text-2xs text-fg-muted px-1 py-1">No recent threads on this page.</div>
+        <EmptySectionMessage text="No recent threads on this page." />
       )}
     </section>
   )

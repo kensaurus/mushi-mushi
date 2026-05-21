@@ -11,18 +11,22 @@ import { LoopComparison } from '../components/LoopComparison'
     breadcrumb chip so "Welcome / Mushi Mushi / hero" don't stack. */}
 
 <EditorialHero
-  eyebrow="Mushi · cumulative selection for software"
-  title={<>Sentry sees what code throws. Mushi sees what users feel — <em>and encodes every fix into the codebase genome.</em></>}
-  lead={<>When something&rsquo;s off &mdash; a dead button, a 12-second screen, a layout that breaks on one device &mdash; your user wants to tell you. Mushi gives them a way, clusters the report with every similar mutation, names the pattern, and writes it into <code>.mushi/lessons.json</code> &mdash; the evolving ruleset every subsequent developer and AI agent inherits automatically.</>}
+  eyebrow="Mushi · the evolution loop for AI-assisted software"
+  title={<>Sentry sees what code throws. Mushi sees what users feel &mdash; <em>and closes the loop with AI.</em></>}
+  lead={<>When your users hit a dead button or a 12-second screen, Mushi captures it, triages it with AI, and opens a draft PR &mdash; automatically. Every fix feeds a lesson library your agents inherit. The loop runs without Jira, QA teams, or PM bottlenecks.</>}
 />
 
-## Software evolves by selection, not random walk
+## The evolution loop for AI-assisted software
 
-For 50 years, software development has followed a **random walk**: PM defines spec → dev implements → QA tests happy paths → ships → user hits a bug → support ticket → maybe fixed two sprints later. The cycle resets. Mistakes repeat because **the genome never updates**.
+The vibe-coding era solved the creation bottleneck. AI agents build and ship in hours. The new bottleneck is **selection pressure**: out of everything you could fix next, which changes actually make the app better for real users?
 
-Mushi turns the random walk into **cumulative selection**. Every user report is a selection event — embedded, clustered with similar patterns, and promoted to a named learning rule when the cluster crosses the coherence threshold. That rule is encoded into `.mushi/lessons.json` (the codebase genome) and injected into the next PR review and the next AI agent fix run. The user who triggered the selection event gets credited in the changelog.
+Without a closed loop: users churn silently, agents write code without knowing which bugs keep reappearing, every sprint starts where the last one ended.
 
-This is **selection with memory** — [Dawkins&rsquo; phrase](https://en.wikipedia.org/wiki/Climbing_Mount_Improbable) for why cumulative selection beats random search by orders of magnitude. Every iteration starts from a fitter baseline than the last.
+With the evolution loop: every user friction event becomes structured signal, every merged fix promotes a lesson rule into the codebase, every future agent run starts with accumulated knowledge.
+
+Mushi turns the random walk into **cumulative selection**. Every user report is a selection event — captured with context, triaged by AI, fixed by an agent, scored by a judge, and encoded as a permanent lesson. Every iteration starts from a fitter baseline than the last. [Read the five-stage walkthrough &rarr;](/concepts/evolution-loop)
+
+This is **selection with memory** — [Dawkins&rsquo; phrase](https://en.wikipedia.org/wiki/Climbing_Mount_Improbable) for why cumulative selection beats random search by orders of magnitude.
 
 <LoopComparison />
 

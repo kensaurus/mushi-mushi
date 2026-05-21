@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { auditResourcePath, resolveAuditResource } from '../lib/auditResources'
 import { Tooltip } from './ui'
+import { ContainedBlock } from './report-detail/ReportSurface'
 
 export function AuditResourceChip({
   resourceType,
@@ -19,7 +20,9 @@ export function AuditResourceChip({
       content={
         <div className="max-w-[14rem] space-y-1 text-left">
           <p className="text-xs font-medium text-fg">{info.label}</p>
-          <p className="text-2xs text-fg-muted leading-snug">{info.description}</p>
+          <ContainedBlock tone="muted" className="px-2 py-1">
+            <p className="text-2xs text-fg-muted leading-snug">{info.description}</p>
+          </ContainedBlock>
         </div>
       }
     >

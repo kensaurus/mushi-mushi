@@ -31,6 +31,13 @@ import {
 } from '../lib/statTooltips/storage'
 import { storageLinks } from '../lib/statCardLinks'
 import { PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  InlineProof,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
@@ -345,10 +352,12 @@ export function StoragePage() {
       <div className="text-xs font-medium uppercase tracking-wider mb-2" data-dav-anchor="storage:verify">
         Per-project usage
       </div>
-      <p className="text-2xs text-fg-muted mb-2">
-        Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project burning through
-        storage or to confirm a quiet project before changing its provider.
-      </p>
+      <ContainedBlock tone="muted" className="mb-2">
+        <p className="text-2xs leading-relaxed text-fg-muted">
+          Counts uploaded screenshots and the most recent write timestamp. Helpful to spot a project burning through
+          storage or to confirm a quiet project before changing its provider.
+        </p>
+      </ContainedBlock>
       {usageRows.length === 0 ? (
         <p className="text-2xs text-fg-muted">No screenshot uploads recorded yet.</p>
       ) : (
@@ -373,12 +382,16 @@ export function StoragePage() {
                     <td className="py-1.5">
                       {p.name}
                       {isActive ? (
-                        <span className="ml-1.5 text-3xs text-brand uppercase">Active</span>
+                        <SignalChip tone="brand" className="ml-1.5 uppercase text-3xs">Active</SignalChip>
                       ) : null}
                     </td>
                     <td className="text-right font-mono">{(u?.object_count ?? 0).toLocaleString()}</td>
-                    <td className="pl-3 text-fg-muted">
-                      {u?.last_write_at ? new Date(u.last_write_at).toLocaleString() : '—'}
+                    <td className="pl-3">
+                      {u?.last_write_at ? (
+                        <InlineProof className="inline-block">{new Date(u.last_write_at).toLocaleString()}</InlineProof>
+                      ) : (
+                        <span className="text-fg-muted">—</span>
+                      )}
                     </td>
                   </tr>
                 )
@@ -624,10 +637,12 @@ export function StoragePage() {
   if (!activeProjectId) {
     return (
       <div className="space-y-4">
-        <PageHeader
-          title={copy?.title ?? 'Storage'}
-          description={copy?.description ?? 'Per-project BYO bucket configuration for screenshots and attachments.'}
-        />
+        <PageHeader title={copy?.title ?? 'Storage'} />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ?? 'Per-project BYO bucket configuration for screenshots and attachments.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -652,15 +667,18 @@ export function StoragePage() {
       <PageHeader
         title={copy?.title ?? 'Storage'}
         projectScope={stats.projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Per-project BYO bucket configuration for screenshots, intelligence PDFs, and fix attachments.'
-        }
       >
         <Badge className={stats.activeProjectHealthStatus === 'healthy' ? 'bg-ok-muted text-ok' : stats.activeProjectHealthStatus === 'failing' ? 'bg-danger-subtle text-danger' : 'bg-warn/10 text-warn'}>
           {stats.activeProjectHealthStatus.toUpperCase()}
         </Badge>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Per-project BYO bucket configuration for screenshots, intelligence PDFs, and fix attachments.'}
+        </p>
+      </ContainedBlock>
 
       <StorageStatusBanner
         stats={stats}
@@ -678,7 +696,9 @@ export function StoragePage() {
       />
 
       <Section title="Storage snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Healthy"
@@ -714,6 +734,50 @@ export function StoragePage() {
           />
         </div>
       </Section>
+
+      {(stats.failingCount > 0 || stats.degradedCount > 0 || !stats.activeProjectConfigured) && activeTab === 'overview' && (
+        <Card
+          className={`space-y-3 p-4 ${
+            stats.failingCount > 0
+              ? 'border-danger/30 bg-danger/5'
+              : stats.degradedCount > 0
+                ? 'border-warn/30 bg-warn/5'
+                : 'border-brand/30 bg-brand/5'
+          }`}
+        >
+          <SignalChip
+            tone={stats.failingCount > 0 ? 'danger' : stats.degradedCount > 0 ? 'warn' : 'brand'}
+          >
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone={stats.failingCount > 0 ? 'warn' : 'info'}>
+            <p className="text-xs font-medium leading-snug text-fg">
+              {stats.failingCount > 0
+                ? `${stats.failingCount} bucket${stats.failingCount === 1 ? '' : 's'} failing uploads${stats.latestFailureError ? ` — ${stats.latestFailureError}` : ''}.`
+                : stats.degradedCount > 0
+                  ? `${stats.degradedCount} bucket${stats.degradedCount === 1 ? '' : 's'} degraded — probe before users hit errors.`
+                  : 'Active project uses cluster defaults — save a BYO override on Configure.'}
+            </p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill
+              onClick={() => {
+                const next = new URLSearchParams(searchParams)
+                next.set('tab', 'configure')
+                setSearchParams(next, { replace: true })
+              }}
+              tone="brand"
+            >
+              Open Configure →
+            </ActionPill>
+            {stats.failingCount > 0 && (
+              <ActionPill to="/health?fn=storage-probe" tone="neutral">
+                Run health probe
+              </ActionPill>
+            )}
+          </ActionPillRow>
+        </Card>
+      )}
 
       {activeTab === 'overview' && (
         <>

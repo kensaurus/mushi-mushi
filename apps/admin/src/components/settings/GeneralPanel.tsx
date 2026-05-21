@@ -17,6 +17,7 @@ import { SettingsChangeHint } from './SettingsChangeHint'
 import { SettingsFormFooter } from './SettingsFormFooter'
 import { SettingsPanelLayout } from './SettingsPanelLayout'
 import { countChangedFields } from './settingsDiff'
+import { ContainedBlock } from '../report-detail/ReportSurface'
 
 interface ProjectSettings {
   slack_webhook_url?: string
@@ -75,6 +76,13 @@ export function GeneralPanel() {
 
   return (
     <SettingsPanelLayout
+      fullWidth={
+        <ContainedBlock tone="muted">
+          <p className="text-2xs leading-relaxed text-fg-muted">
+            Slack webhooks, Sentry forwarding, and classifier model knobs — saved per project on Save.
+          </p>
+        </ContainedBlock>
+      }
       footer={
         <SettingsFormFooter
           dirty={dirty}
@@ -225,12 +233,14 @@ interface SliderProps {
 function Slider({ label, value, onChange, helpId }: SliderProps) {
   return (
     <label className="block">
-      <span className="text-xs text-fg-muted mb-1 flex items-center gap-1">
-        <span>
-          {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
+      <ContainedBlock tone="muted" className="mb-1">
+        <span className="text-xs text-fg-muted flex items-center gap-1">
+          <span>
+            {label}: <span className="font-mono text-fg-secondary">{value.toFixed(2)}</span>
+          </span>
+          {helpId && <ConfigHelp helpId={helpId} />}
         </span>
-        {helpId && <ConfigHelp helpId={helpId} />}
-      </span>
+      </ContainedBlock>
       <input
         type="range"
         min="0.5"

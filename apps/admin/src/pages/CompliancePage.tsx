@@ -22,6 +22,7 @@ import {
   SegmentedControl,
   type FilterChipTone,
 } from '../components/ui'
+import { ContainedBlock, SignalChip, InlineProof, ActionPill } from '../components/report-detail/ReportSurface'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { PanelSkeleton } from '../components/skeletons/PanelSkeleton'
 import { ResponsiveTable, TableDensityToggle } from '../components/ResponsiveTable'
@@ -555,11 +556,13 @@ export function CompliancePage() {
       <div className="space-y-4">
         <PageHeader
           title={copy?.title ?? 'Compliance'}
-          description={
-            copy?.description ??
-            'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'
-          }
         />
+        <ContainedBlock tone="muted" className="mb-1">
+          <p className="text-xs leading-relaxed text-fg-muted">
+            {copy?.description ??
+              'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
+          </p>
+        </ContainedBlock>
         <SetupNudge
           requires={['project']}
           emptyTitle="Select a project"
@@ -581,10 +584,6 @@ export function CompliancePage() {
       <PageHeader
         title={copy?.title ?? 'Compliance'}
         projectScope={stats.projectName ?? projectName ?? undefined}
-        description={
-          copy?.description ??
-          'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'
-        }
       >
         {stats.soc2Entitlement ? (
           <Badge className="bg-ok-muted text-ok">SOC 2 enabled</Badge>
@@ -599,6 +598,13 @@ export function CompliancePage() {
         </Btn>
         <TableDensityToggle />
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          {copy?.description ??
+            'Track GDPR, SOC 2, retention, residency, and DSAR obligations for the active project.'}
+        </p>
+      </ContainedBlock>
 
       <ComplianceStatusBanner
         stats={stats}
@@ -617,7 +623,9 @@ export function CompliancePage() {
       />
 
       <Section title="Compliance snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        <ContainedBlock tone="muted" className="mb-3">
+          <p className="text-2xs leading-relaxed text-fg-muted">{activeTabMeta.description}</p>
+        </ContainedBlock>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
             label="Controls"
@@ -807,18 +815,20 @@ export function CompliancePage() {
           {showEvidenceSection && (
             <Card className="p-5">
               <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
-                <div className="text-xs font-medium uppercase tracking-wider">
-                  Latest control evidence
+                <div className="flex flex-wrap items-center gap-2">
+                  <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+                    Latest control evidence
+                  </SignalChip>
                   {filter !== 'all' && (
-                    <span className="ml-2 text-2xs font-normal opacity-60">
+                    <SignalChip tone="warn">
                       filtered to {FILTER_LABELS[filter].toLowerCase()}
-                    </span>
+                    </SignalChip>
                   )}
                 </div>
                 {visibleEvidence.length > 0 && (
-                  <span className="text-2xs opacity-70">
+                  <SignalChip tone="neutral" className="font-mono tabular-nums">
                     {visibleEvidence.length} of {latestEvidenceByControl.length}
-                  </span>
+                  </SignalChip>
                 )}
               </div>
               {visibleEvidence.length === 0 ? (
@@ -890,18 +900,27 @@ export function CompliancePage() {
 
           {showResidencyCard && (
             <Card className="p-5">
-              <div className="flex items-baseline justify-between mb-2">
-                <div className="text-xs font-medium uppercase tracking-wider inline-flex items-center gap-1">
-                  Data residency
+              <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
+                <div className="inline-flex items-center gap-1">
+                  <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+                    Data residency
+                  </SignalChip>
                   <ConfigHelp helpId="compliance.residency.region" />
                 </div>
-                <span className="text-2xs opacity-70">This cluster: <code className="font-mono uppercase">{currentRegion}</code></span>
+                <InlineProof className="border-0 bg-transparent px-0 py-0">
+                  This cluster:{' '}
+                  <SignalChip tone="brand" className="font-mono uppercase">
+                    {currentRegion}
+                  </SignalChip>
+                </InlineProof>
               </div>
-              <p className="text-2xs text-fg-muted mb-3 max-w-2xl leading-relaxed">
-                Pin a project to a specific regional cluster (US / EU / JP). Once set, the gateway transparently
-                307-redirects cross-region calls. Changing the region of a project that already has data requires
-                an export+restore migration — contact support.
-              </p>
+              <ContainedBlock tone="muted" className="mb-3 max-w-2xl">
+                <p className="text-2xs leading-relaxed text-fg-muted">
+                  Pin a project to a specific regional cluster (US / EU / JP). Once set, the gateway transparently
+                  307-redirects cross-region calls. Changing the region of a project that already has data requires
+                  an export+restore migration — contact support.
+                </p>
+              </ContainedBlock>
               {residency.length === 0 ? (
                 <EmptyState title="No projects" />
               ) : (
@@ -912,40 +931,41 @@ export function CompliancePage() {
                       <div key={p.id} className="flex items-center justify-between gap-3 rounded border border-edge-subtle p-2">
                         <div className="min-w-0">
                           <div className="text-xs font-medium truncate">{p.name}</div>
-                          <code className="text-2xs opacity-70 font-mono">{p.id}</code>
+                          <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5">
+                            {p.id}
+                          </SignalChip>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
                           {pinned ? (
                             <>
-                              {/* Show the active region as a locked chip */}
-                              <span className="inline-flex items-center rounded px-2 py-1 text-3xs uppercase font-mono bg-brand text-brand-fg border border-brand">
+                              <SignalChip tone="brand" className="uppercase font-mono">
                                 {pinned}
-                              </span>
-                              {/* Disabled buttons for the other regions with a tooltip */}
+                              </SignalChip>
                               {(['us', 'eu', 'jp', 'self'] as const)
                                 .filter((r) => r !== pinned)
                                 .map((r) => (
-                                  <button
+                                  <span
                                     key={r}
-                                    disabled
                                     title="Region is locked — contact support to migrate data between regions."
-                                    className="px-2 py-1 text-3xs uppercase font-mono rounded border border-edge-subtle text-fg-faint cursor-not-allowed opacity-40"
                                   >
-                                    {r}
-                                  </button>
+                                    <SignalChip tone="neutral" className="uppercase font-mono opacity-40 cursor-not-allowed">
+                                      {r}
+                                    </SignalChip>
+                                  </span>
                                 ))}
-                              <span className="text-2xs text-fg-muted ml-1">Locked</span>
+                              <SignalChip tone="warn" className="ml-1">
+                                Locked
+                              </SignalChip>
                             </>
                           ) : (
-                            /* No region pinned yet — all four buttons are active */
                             (['us', 'eu', 'jp', 'self'] as const).map((r) => (
-                              <button
+                              <ActionPill
                                 key={r}
                                 onClick={() => setProjectRegion(p.id, r)}
-                                className="px-2 py-1 text-3xs uppercase font-mono rounded border border-edge-subtle text-fg-muted hover:text-fg hover:border-edge"
+                                className="uppercase font-mono text-3xs"
                               >
                                 {r}
-                              </button>
+                              </ActionPill>
                             ))
                           )}
                         </div>
@@ -959,12 +979,12 @@ export function CompliancePage() {
 
           {showRetentionSection && (
             <Card className="p-5">
-              <div className="text-xs font-medium uppercase tracking-wider mb-2">
-                Retention policies
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
+                  Retention policies
+                </SignalChip>
                 {filter === 'legal_hold' && (
-                  <span className="ml-2 text-2xs font-normal opacity-60">
-                    showing legal-hold projects only
-                  </span>
+                  <SignalChip tone="info">showing legal-hold projects only</SignalChip>
                 )}
               </div>
               {visiblePolicies.length === 0 ? (
@@ -989,13 +1009,15 @@ export function CompliancePage() {
                           <div className="text-xs font-medium truncate">
                             {projectNameById.get(p.project_id) ?? 'Project'}
                           </div>
-                          <code className="text-2xs opacity-60 font-mono">{p.project_id}</code>
+                          <SignalChip tone="neutral" className="font-mono text-2xs mt-0.5">
+                            {p.project_id}
+                          </SignalChip>
                         </div>
                         <div className="inline-flex items-center gap-1">
                           {p.legal_hold && (
-                            <span className="inline-flex rounded px-2 py-0.5 text-3xs bg-info/15 text-info border border-info/30">
-                              LEGAL HOLD
-                            </span>
+                            <SignalChip tone="info" className="uppercase">
+                              Legal hold
+                            </SignalChip>
                           )}
                           <Btn
                             size="sm"
@@ -1042,20 +1064,22 @@ export function CompliancePage() {
 
           {showDsarsSection && (
             <Card className="p-5">
-              <div className="flex items-baseline justify-between mb-2 gap-2 flex-wrap">
-                <div className="text-xs font-medium uppercase tracking-wider">
+              <div className="mb-2 flex flex-wrap items-baseline gap-2">
+                <SignalChip tone="neutral" className="uppercase tracking-wider font-medium">
                   Data subject requests
-                  {filter !== 'all' && (
-                    <span className="ml-2 text-2xs font-normal opacity-60">
-                      filtered to {FILTER_LABELS[filter].toLowerCase()}
-                    </span>
-                  )}
-                </div>
-                <p className="text-2xs text-fg-muted max-w-md">
+                </SignalChip>
+                {filter !== 'all' && (
+                  <SignalChip tone="warn">
+                    filtered to {FILTER_LABELS[filter].toLowerCase()}
+                  </SignalChip>
+                )}
+              </div>
+              <ContainedBlock tone="muted" className="mb-3">
+                <p className="max-w-prose text-2xs leading-relaxed text-fg-muted">
                   File a request when a user invokes their GDPR/CCPA right to access, export, deletion, or rectification.
                   Mark it complete within {GDPR_SLA_DAYS} days to stay compliant.
                 </p>
-              </div>
+              </ContainedBlock>
 
               {/* Filing form is hidden on focused views — the user clicked
                   "Open" because they want to clear work, not file new

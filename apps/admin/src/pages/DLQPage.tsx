@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorAlert,
   RecommendedAction,
+  Card,
 } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { useToast } from '../lib/toast'
@@ -34,6 +35,13 @@ import {
   type StatusFilter,
   type ThroughputDay,
 } from '../components/dlq/types'
+import {
+  ActionPill,
+  ActionPillRow,
+  ContainedBlock,
+  SignalChip,
+} from '../components/report-detail/ReportSurface'
+import { EmptySectionMessage } from '../components/report-detail/ReportClassification'
 
 export function DLQPage() {
   const [items, setItems] = useState<QueueItem[]>([])
@@ -228,10 +236,7 @@ export function DLQPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="Processing Queue"
-        description="Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here."
-      >
+      <PageHeader title="Processing Queue">
         <FilterSelect
           label="Status"
           value={filter}
@@ -274,6 +279,12 @@ export function DLQPage() {
           Recover stranded
         </Btn>
       </PageHeader>
+
+      <ContainedBlock tone="muted" className="mb-1">
+        <p className="text-xs leading-relaxed text-fg-muted">
+          Inflight, failed, and dead-letter jobs from the worker pipeline. Retry or quarantine here.
+        </p>
+      </ContainedBlock>
 
       <PageHero
         scope="dlq"
@@ -337,6 +348,39 @@ export function DLQPage() {
 
       <PageActionBar scope="queue" action={queueAction} />
 
+      {(deadLetter > 0 || failedCount > 0) && (
+        <Card
+          className={`space-y-3 p-4 ${
+            deadLetter > 0 ? 'border-danger/30 bg-danger/5' : 'border-warn/30 bg-warn/5'
+          }`}
+        >
+          <SignalChip tone={deadLetter > 0 ? 'danger' : 'warn'}>
+            Needs attention
+          </SignalChip>
+          <ContainedBlock tone="warn">
+            <p className="text-xs font-medium leading-snug text-fg">
+              {deadLetter > 0
+                ? `${deadLetter} job${deadLetter === 1 ? '' : 's'} in dead-letter — manual retry after fixing the root cause.`
+                : `${failedCount} job${failedCount === 1 ? '' : 's'} failing — investigate before retries exhaust.`}
+            </p>
+          </ContainedBlock>
+          <ActionPillRow>
+            <ActionPill
+              onClick={() => {
+                setFilter(deadLetter > 0 ? 'dead_letter' : 'failed')
+                setPage(1)
+              }}
+              tone="brand"
+            >
+              Open {deadLetter > 0 ? 'dead-letter' : 'failed'} lane →
+            </ActionPill>
+            <ActionPill onClick={() => void recoverStranded()} tone="neutral">
+              Recover stranded
+            </ActionPill>
+          </ActionPillRow>
+        </Card>
+      )}
+
       <PageHelp
         title="About the Processing Queue"
         whatIsIt="Every report passes through fast-filter, classify, and (optionally) judge + fix stages. This page is the operator view of that pipeline — backlog by status, throughput trend, and any item stuck in dead letter."
@@ -360,12 +404,14 @@ export function DLQPage() {
               up-front: lanes flow left→right, the sparkline mirrors the
               same lane in the 14d throughput chart below, and dead-letter
               is the only lane that needs human action. */}
-          <p className="text-2xs text-fg-muted leading-relaxed max-w-prose">
-            <span className="font-semibold text-fg-secondary">How to read this row:</span>{' '}
-            jobs move <span className="font-medium text-fg-secondary">left → right</span> through the worker
-            (waiting → running → completed). Failed jobs are still inside the retry budget; <span className="font-medium text-warn">dead-letter</span> jobs gave up and need a manual look.
-            Each sparkline shows the last 14 days for that lane — hover any tile for the full meaning.
-          </p>
+          <ContainedBlock tone="muted" label="How to read this row">
+            <p className="text-2xs leading-relaxed text-fg-muted">
+              Jobs move <span className="font-medium text-fg-secondary">left → right</span> through the worker
+              (waiting → running → completed). Failed jobs are still inside the retry budget;{' '}
+              <span className="font-medium text-warn">dead-letter</span> jobs gave up and need a manual look.
+              Each sparkline shows the last 14 days for that lane — hover any tile for the full meaning.
+            </p>
+          </ContainedBlock>
           <div data-dav-anchor="dlq:decide">
             <QueueKpiRow summary={summary} throughput={throughput} />
           </div>
@@ -407,14 +453,20 @@ export function DLQPage() {
       ) : error ? (
         <ErrorAlert message="Failed to load queue items." onRetry={loadAll} />
       ) : items.length === 0 ? (
-        <EmptyState
-          title={`No items in ${filter.replace(/_/g, ' ')} queue`}
-          description={
-            filter === 'completed'
-              ? 'Once jobs finish they move out of view; pick another status to see backlog.'
-              : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes.'
-          }
-        />
+        <div className="space-y-2">
+          <EmptyState
+            title={`No items in ${filter.replace(/_/g, ' ')} queue`}
+            description={
+              filter === 'completed'
+                ? 'Once jobs finish they move out of view; pick another status to see backlog.'
+                : 'Nothing here means the pipeline is healthy — change the status filter to inspect other lanes.'
+            }
+          />
+          <EmptySectionMessage
+            text="Switch status or stage filters to inspect other pipeline lanes."
+            hint="Dead-letter is the only lane that requires operator action after retries exhaust."
+          />
+        </div>
       ) : (
         <>
           <div className="space-y-1.5">
@@ -429,29 +481,27 @@ export function DLQPage() {
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-2 text-2xs text-fg-muted">
-              <span className="font-mono">
+            <ContainedBlock tone="muted" className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <SignalChip tone="neutral" className="font-mono">
                 Page {page} of {totalPages} · {total} total
-              </span>
-              <div className="flex gap-1">
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  disabled={page <= 1}
+              </SignalChip>
+              <ActionPillRow>
+                <ActionPill
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  tone="neutral"
+                  className={page <= 1 ? 'opacity-50 pointer-events-none' : ''}
                 >
                   ← Prev
-                </Btn>
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  disabled={page >= totalPages}
+                </ActionPill>
+                <ActionPill
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  tone="neutral"
+                  className={page >= totalPages ? 'opacity-50 pointer-events-none' : ''}
                 >
                   Next →
-                </Btn>
-              </div>
-            </div>
+                </ActionPill>
+              </ActionPillRow>
+            </ContainedBlock>
           )}
         </>
       )}
