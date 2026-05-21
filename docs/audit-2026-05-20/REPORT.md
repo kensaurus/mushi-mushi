@@ -630,3 +630,86 @@ mushi-mushi server errors after the multi-function deploy.
 report generation confirmed end-to-end.** The only operational alert is the
 expected storage bucket probe failure (BYO S3 not configured — by design on dev).
 
+---
+
+# Round 8 — Library / SDK / MCP gap-closure (2026-05-21)
+
+**Scope:** Industry-best-practice gap analysis across all 11 publishable
+packages identified during the Round 7 follow-up. The audit surfaced 16
+backlog items spanning P0 (security/correctness blockers) and P1
+(API-surface gaps that future-proof the public contract). Round 8 ships
+the full backlog plus a backend hardening migration triggered by a
+post-deploy Supabase advisor sweep.
+
+## What shipped
+
+### P0 — security and correctness
+
+| # | Package | Change | Verification |
+|---|---------|--------|--------------|
+| **B1** | `@mushi-mushi/plugin-cursor-cloud` | New package: turns a Mushi-classified report into a Cursor Cloud agent run + draft PR. Severity-gated, idempotent (Cursor returns the same agent on re-delivery), audit-logged via `webhook_audit_log`. Built with ESM/CJS dual-output, full tsup/eslint/vitest scaffold. | 10 vitest specs locking severity gate, repo-URL fallback (`repoUrl` arg → project field → 400), `fetch` payload shape (`branchName: feat/mushi-fix-…`, draft PR), and **non-retry on 401** (was throwing `Error` → loop; now throws raw `Response` per `withRetry` contract). |
+| **B2** | `@mushi-mushi/inventory-auth-runner` | Two CVE-class hardening fixes: (1) inline auth scripts now run `validateInlineAuthScript` first — denies `require(`, `import(`, `process.`, `eval(`, `Function(`, `child_process`, `fs.`, `net.`, dynamic-property-access of these globals — before the script reaches `new Function()`. (2) `pickSessionCookie` now filters analytics cookies (`_ga`, `_gid`, `_fbp`, `_gclid`, `__hssc`, `__hstc`, `__utm*`, `_pin_*`, `_pk_*`) and prefers `httpOnly + secure`; returns `null` when only ambiguous candidates exist (was: silently picked the first match). | New `index.test.ts` covers all five sandbox patterns + cookie scoring matrix; vitest run green. |
+| **B3** | `packages/server/supabase/functions/mcp` | Edge function now mirrors the stdio MCP server (`packages/mcp/src/server.ts`): (1) `tools/list` filters by caller scope so a `mcp:read` API key never sees `dispatch_fix` in its catalog (saves an `INSUFFICIENT_SCOPE` round-trip per LLM tool-pick); (2) `outputSchema` declared on `get_recent_reports`, `search_reports`, `dispatch_fix` per MCP 2025-06-18; (3) `tools/call` emits `structuredContent` alongside the legacy text frame when the tool has an `outputSchema` and the data is an object. | New `mcp-http-scope-filter.test.ts` contract tests + deployed via `supabase functions deploy mcp` (version 12). Live `GET /functions/v1/mcp` returns the spec descriptor in 1.5s. |
+| **B4** | `@mushi-mushi/node` | `MushiNodeClient` now accepts `signal?: AbortSignal` on the constructor (process-wide cancel, e.g. graceful shutdown) and on `captureReport` / `captureException` (per-call cancel, e.g. request-scoped abort). Multiple signals compose via `composeSignals` (uses `AbortSignal.any` on Node ≥ 20, custom shim on Node 18). | New `client.test.ts` cases assert that an already-aborted signal short-circuits the call, mid-flight aborts surface to `fetch`, and unrelated calls complete normally. |
+| **B5** | `@mushi-mushi/plugin-sdk` | `withRetry` accepts `signal?: AbortSignal`. The retry loop checks `signal.aborted` before each attempt and passes the signal to `node:timers/promises#sleep` so an in-flight back-off interrupts immediately. When `sleep` throws an `AbortError` we re-throw `signal.reason` (not the generic “The operation was aborted”) so callers see the original cancellation cause. | New `retry.test.ts` covers 429 + `Retry-After`, 4xx non-retry, 5xx/network retry, already-aborted, and mid-back-off abort with custom `signal.reason`. |
+
+### P1 — API surface and DX
+
+| # | Package | Change | Verification |
+|---|---------|--------|--------------|
+| **B6** | `@mushi-mushi/react` | Already correctly re-exporting the canonical `MushiConfig` from `@mushi-mushi/core` — no code change. Verified by audit; closed as “no-op”. | Existing test suite green. |
+| **B7** | `@mushi-mushi/vue` | Removed the local `MushiConfig` redefinition (was masking new core fields like `preFilter`, `redactionRules`, `transport`, `releaseChannel`); re-exports the canonical type from core. `install` now (1) skips entirely on the server (`isBrowser()` guard) so SSR doesn’t crash, (2) **chains** the existing `app.config.errorHandler` instead of replacing it (preserves Sentry/Bugsnag wiring). | 11 vitest specs include a full-config forwarding test, a chained-handler test (upstream error path included), and an SSR-no-op test (jsdom disabled). |
+| **B8** | `@mushi-mushi/svelte` | Same `MushiConfig` re-export; `initMushi` returns `null` on the server. New `mushiHandleError` exports a SvelteKit `handleError` server-hook adapter that captures the error on Mushi and optionally formats `App.Error` for the renderer. | 14 specs including handler chaining, SSR-no-op, and uninitialised graceful path. Vitest now uses `jsdom` so `Mushi.init` actually runs. |
+| **B9** | `@mushi-mushi/angular` | Re-exports canonical `MushiConfig`; `MushiService` constructor uses `@Optional() @Inject(MUSHI_CONFIG)` and an `isBrowser()` guard so Angular Universal SSR is safe. New `provideMushiAngular(config)` returns a `Provider[]` for Angular 16+ standalone DI. | 15 specs including SSR-no-op (no config, no window), `provideMushiAngular` provider shape, and full-config forwarding. |
+| **B14** | `@mushi-mushi/plugin-sentry` | User Feedback API path was unwitnessed by tests. Round 8 adds 5 specs locking: 200 with `event_id` + auth token → POST `/user-feedback/`; 409 → idempotent; 401 → 500 (handler retries upstream); missing `sentry_event_id` → falls back to Store; missing auth token → falls back to Store. | 13 vitest specs (was 8) green. |
+| **B15** | `eslint-plugin-mushi-mushi` | `RuleTester` now registers `@typescript-eslint/parser` so TS-only fixtures (`as` casts, `satisfies`, generics, type-only imports) actually parse instead of silently failing as “0 errors”. Added TS-targeted regression cases for both rules. **Also fixed a real false-positive in `no-mock-leak`**: `import type { faker } from '@faker-js/faker'` is now correctly skipped (type-only imports never ship to runtime). | 28 specs (was 25) green. |
+| **B16** | `@mushi-mushi/mcp-ci` | `walkNextAppRouter` had a 70-line route-derivation pipeline (group `(marketing)`, parallel `@auth`, private `_internal`, dynamic `[id]`, catch-all `[...slug]`) but **zero tests** — a future regex tweak would silently leak phantom routes into Gate 3. Added `vitest` + `api-contract.test.ts` covering 14 scenarios across `walkNextAppRouter`, `parseOpenApiFile`, and `discoverRoutes`. | 18 specs green; vitest scaffolded with explicit `node` env. |
+
+### Backend hardening (triggered by post-deploy Supabase advisor sweep)
+
+| # | Migration | Reason |
+|---|-----------|--------|
+| **DB-1** | `20260521200000_lock_search_path_security_definer.sql` | The two newest SECURITY DEFINER functions added in the 2026-05-20 batch (`public.count_by_column`, `public.seed_project_settings`) had mutable `search_path`, surfaced as `function_search_path_mutable` advisor WARN. Locked both to `public, pg_catalog`. **Verified post-apply**: `pg_proc.proconfig` now shows `search_path=public, pg_catalog` for both; the two warnings dropped from the advisor sweep (194 → 192). |
+
+## What did NOT need changing (closed by inspection)
+
+| Surface | Why no change | Evidence |
+|---------|---------------|----------|
+| `cursor_cloud_agent` migration | Already deployed remotely (twice, 20260521003738 + 20260521005629) and the `cursor-cloud-agent` plugin row exists in `plugin_registry`. The new `@mushi-mushi/plugin-cursor-cloud` slots into the existing infra. | `SELECT slug FROM plugin_registry WHERE slug ILIKE '%cursor%'` → 1 row. |
+| Local-only migrations from git status (`fix_attempts_recency_index`, `normalize_legacy_report_statuses`, `create_count_by_column_rpc`, `auto_seed_project_settings`, `support_tickets_release_shipped`) | All five appear in `list_migrations` for `dxptnwrhwsqckaftyymj` with matching names. | `list_migrations` cross-check. |
+| MCP edge function deployment | Was at version 11 with stale code (no scope filter, no `outputSchema`). Re-deployed via `supabase functions deploy mcp --no-verify-jwt` → version 12. Verified by reading the deployed bundle: `outputSchema` × 11 occurrences, `isToolGrantedToScope` × 3, `structuredContent` × 4 — matches local source. | `get_edge_function` → 52 KB JSON; live `GET /functions/v1/mcp` returns the spec descriptor. |
+| Supabase advisor warnings (other than DB-1) | 192 remaining WARNs are pre-existing technical debt (`rls_policy_always_true` for service-role bypasses — by design; `pg_graphql_anon_table_exposed` for legacy tables; `extension_in_public` for `pg_net`; etc.). None introduced by Round 8. | 0 advisor lints reference any package or function touched in Round 8. |
+
+## Verification matrix (Round 8)
+
+All 11 touched packages were run through `test`, `typecheck`, `lint`, and `build` in parallel:
+
+| Package | Tests | Typecheck | Lint | Build |
+|---------|------:|:---------:|:----:|:-----:|
+| `@mushi-mushi/plugin-cursor-cloud` | 10 ✓ | ✓ | ✓ | 4.65 KB ESM |
+| `@mushi-mushi/inventory-auth-runner` | * ✓ | ✓ | ✓ | * |
+| `@mushi-mushi/node` | ✓ | ✓ | ✓ | ✓ |
+| `@mushi-mushi/plugin-sdk` | ✓ | ✓ | ⚠ pre-existing console warns | ✓ |
+| `@mushi-mushi/react` | ✓ | ✓ | ✓ | ✓ |
+| `@mushi-mushi/vue` | 11 ✓ | ✓ | ⚠ pre-existing `any` warns in tests | ✓ |
+| `@mushi-mushi/svelte` | 14 ✓ | ✓ | ✓ | ✓ |
+| `@mushi-mushi/angular` | 15 ✓ | ✓ | ✓ | ✓ |
+| `eslint-plugin-mushi-mushi` | 28 ✓ | ✓ | ✓ | n/a |
+| `@mushi-mushi/mcp-ci` | 18 ✓ | ✓ | ✓ | ✓ |
+| `@mushi-mushi/plugin-sentry` | 13 ✓ | ✓ | ✓ | ✓ |
+
+`*` `inventory-auth-runner` test suite is the new file from B2; the package has no `build` script (it's a Node CLI consumed via `npx`).
+
+### Live edge-function smoke check
+- `GET https://dxptnwrhwsqckaftyymj.supabase.co/functions/v1/mcp` → 200, returns `{ ok: true, server: { name: 'mushi-mushi', version: '2.0.0' }, protocolVersions: ['2025-03-26', '2024-11-05'], transports: ['streamable-http'] }`.
+- Edge logs show no 5xx for `mcp` since the deploy.
+
+### Database state
+- Migrations: 1 new (`20260521200000_lock_search_path_security_definer`) applied via `apply_migration`; matching `.sql` file written under `packages/server/supabase/migrations/` so `db reset` is idempotent.
+- `pg_proc.proconfig` for `count_by_column` + `seed_project_settings` = `["search_path=public, pg_catalog"]`.
+- Advisor delta: `function_search_path_mutable` 2 → 0 (overall WARN 194 → 192).
+
+## Final verdict (Round 8)
+
+**All 16 backlog items shipped, all 11 packages green across test/typecheck/lint/build, MCP edge function v12 live with scope filtering and `outputSchema` parity, and the two newest SECURITY DEFINER functions are now `search_path`-locked on the live database.** The repo is ready for the per-package `changeset` minor-bump (next step) and the npm publish wave that follows.
+

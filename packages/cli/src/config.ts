@@ -18,7 +18,7 @@
  * proactively chmod it down. The containing directory inherits 0o700.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 
@@ -155,7 +155,7 @@ export function migrateLegacyConfig(
     renameSync(legacyPath, destPath)
   } catch {
     writeFileSync(destPath, JSON.stringify(parsed, null, 2), { mode: SECURE_FILE_MODE })
-    try { require('fs').unlinkSync(legacyPath) } catch { /* best-effort */ }
+    try { unlinkSync(legacyPath) } catch { /* best-effort */ }
   }
   tightenPermissions(destPath)
   tightenDirPermissions(dir)

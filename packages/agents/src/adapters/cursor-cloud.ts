@@ -1,24 +1,24 @@
 /**
  * FILE: packages/agents/src/adapters/cursor-cloud.ts
  * PURPOSE: CursorCloudAgent — Path B adapter that dispatches a Cursor Cloud
- *          Agent run via @cursor/sdk for autofix_agent='cursor_cloud'.
+ *          Agent run via Cursor's HTTP REST API for autofix_agent='cursor_cloud'.
  *
- * RUNTIME CONSTRAINT: @cursor/sdk is Node-only. This adapter is invoked
- * exclusively from the Node-side FixOrchestrator in packages/agents/.
- * It MUST NOT be imported inside any Deno edge function — the Marketplace
- * plugin (Path A) talks to Cursor's HTTP REST API directly instead.
+ * RUNTIME CONSTRAINT: Node-only. This adapter is invoked exclusively from the
+ * Node-side FixOrchestrator in packages/agents/. It MUST NOT be imported inside
+ * any Deno edge function — the Marketplace plugin (Path A) uses the same REST
+ * surface from Deno via @mushi-mushi/plugin-cursor-cloud.
  *
- * When @cursor/sdk is not installed (optional peer dep), generateFix returns
- * a deterministic "not configured" failure — same shape as ClaudeCodeAgent
- * when MUSHI_ENABLE_CLAUDE_CODE_AGENT is unset.
+ * Uses POST https://api.cursor.com/v0/agents (not @cursor/sdk Agent.create)
+ * so workspaceId and maxIterations from project_settings are forwarded to
+ * Cursor — the SDK v1 create path does not expose those fields.
+ *
+ * Override the base URL via CURSOR_API_BASE_URL for staging / tests.
  */
 
-import type { RunResult, SDKArtifact } from '@cursor/sdk'
 import type { FixAgent, FixContext, FixResult } from '../types.js'
-import { loadCursorSdk } from '../cursor-cloud-types.js'
 
 /** DB-serialisable artifact shape stored in fix_attempts.cursor_artifacts. */
-interface StoredArtifact {
+export interface StoredArtifact {
   kind: 'screenshot' | 'video' | 'log' | 'file'
   path: string
   mime: string
@@ -32,19 +32,34 @@ export interface CursorCloudAgentConfig {
   maxIterations: number
 }
 
+const CURSOR_API_BASE = process.env.CURSOR_API_BASE_URL ?? 'https://api.cursor.com/v0'
+
+const TERMINAL_AGENT_STATUSES = new Set(['FINISHED', 'ERROR', 'FAILED', 'CANCELLED', 'STOPPED'])
+
+interface V0AgentRecord {
+  id?: string
+  agentId?: string
+  status: string
+  summary?: string
+  target?: {
+    branchName?: string
+    prUrl?: string
+  }
+}
+
+interface V0ArtifactRecord {
+  absolutePath: string
+  sizeBytes?: number
+  updatedAt?: string
+}
+
 /**
  * CursorCloudAgent
  * ==============================================================
  *
- * Wraps @cursor/sdk's Agent.create() to generate a fix via a Cursor
- * Cloud Agent run. The agent is given a structured prompt built from
- * the FixContext, instructed to open a draft PR (when autoCreatePR is
- * true), and the run is awaited synchronously via run.wait().
- *
- * Artifacts (screenshots, videos, logs) are fetched via agent.listArtifacts()
- * and returned in the FixResult.cursorArtifacts field for the FixCard gallery.
- *
- * Override the base URL via CURSOR_API_BASE_URL for staging / tests.
+ * Creates a Cursor Cloud Agent run via the REST API (same contract as
+ * @mushi-mushi/plugin-cursor-cloud), polls until the run reaches a terminal
+ * status, and returns artifacts for the FixCard gallery.
  */
 export class CursorCloudAgent implements FixAgent {
   readonly name = 'cursor_cloud' as const
@@ -54,47 +69,131 @@ export class CursorCloudAgent implements FixAgent {
   async generateFix(context: FixContext): Promise<FixResult> {
     const branch = `mushi/cursor-cloud-${context.reportId.slice(0, 8)}`
 
-    const sdk = await loadCursorSdk()
-    if (!sdk) {
+    if (!this.cfg.apiKey) {
       return failedResult(
         branch,
-        '@cursor/sdk is not installed. Add it as a dependency in packages/agents/ ' +
-          'or set CURSOR_API_KEY and use the REST-based Marketplace plugin path instead.',
+        'cursor_api_key_ref resolved to empty — set the API key in project Settings → Integrations → Cursor Cloud.',
       )
     }
 
-    if (!this.cfg.apiKey) {
-      return failedResult(branch, 'cursor_api_key_ref resolved to empty — set the API key in project Settings → Integrations → Cursor Cloud.')
+    if (!this.cfg.workspaceId) {
+      return failedResult(
+        branch,
+        'cursor_workspace_id is not set — configure it in project Settings → Integrations → Cursor Cloud.',
+      )
     }
 
     const prompt = buildPromptFromReport(context)
     const repoUrl = context.config.repoUrl
 
     try {
-      const agent = await sdk.Agent.create({
+      const created = await createCursorAgentRun({
         apiKey: this.cfg.apiKey,
-        model: { id: this.cfg.model },
-        cloud: {
-          repos: [{ url: repoUrl, startingRef: 'main' }],
-          autoCreatePR: this.cfg.autoCreatePR,
-          envVars: {
-            MUSHI_REPORT_ID: context.reportId,
-            MUSHI_PROJECT_ID: context.projectId,
-          },
+        workspaceId: this.cfg.workspaceId,
+        model: this.cfg.model,
+        autoCreatePR: this.cfg.autoCreatePR,
+        maxIterations: this.cfg.maxIterations,
+        repoUrl,
+        prompt,
+        envVars: {
+          MUSHI_REPORT_ID: context.reportId,
+          MUSHI_PROJECT_ID: context.projectId,
         },
       })
 
-      const run = await agent.send(prompt)
-      const result = await run.wait()
+      const agentId = created.agentId ?? created.id
+      if (!agentId) {
+        return failedResult(branch, 'Cursor API returned no agent id.')
+      }
 
-      const sdkArtifacts = await agent.listArtifacts().catch(() => [] as SDKArtifact[])
-      const artifacts = sdkArtifacts.map(mapArtifact)
+      const agent = await pollCursorAgent(this.cfg.apiKey, agentId)
+      const artifacts = await fetchCursorArtifacts(this.cfg.apiKey, agentId)
 
-      return buildFixResult(result, branch, agent.agentId, run.id, artifacts)
+      return buildFixResultFromV0(agent, branch, agentId, artifacts)
     } catch (err) {
       return failedResult(branch, `Cursor Cloud Agent run failed: ${String(err)}`)
     }
   }
+}
+
+async function cursorFetch<T>(
+  apiKey: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(`${CURSOR_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+      ...init?.headers,
+    },
+  })
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(
+      `Cursor API ${init?.method ?? 'GET'} ${path} failed (${res.status}): ${text.slice(0, 200)}`,
+    )
+  }
+
+  return res.json() as Promise<T>
+}
+
+async function createCursorAgentRun(opts: {
+  apiKey: string
+  workspaceId: string
+  model: string
+  autoCreatePR: boolean
+  maxIterations: number
+  repoUrl: string
+  prompt: string
+  envVars: Record<string, string>
+}): Promise<V0AgentRecord> {
+  return cursorFetch<V0AgentRecord>(opts.apiKey, '/agents', {
+    method: 'POST',
+    body: JSON.stringify({
+      model: { id: opts.model },
+      cloud: {
+        workspaceId: opts.workspaceId,
+        repos: [{ url: opts.repoUrl, startingRef: 'main' }],
+        autoCreatePR: opts.autoCreatePR,
+        maxIterations: opts.maxIterations,
+        envVars: opts.envVars,
+      },
+      prompt: opts.prompt,
+    }),
+  })
+}
+
+async function pollCursorAgent(
+  apiKey: string,
+  agentId: string,
+  timeoutMs = 30 * 60 * 1000,
+  intervalMs = 5_000,
+): Promise<V0AgentRecord> {
+  const started = Date.now()
+
+  while (Date.now() - started < timeoutMs) {
+    const agent = await cursorFetch<V0AgentRecord>(apiKey, `/agents/${agentId}`)
+    if (TERMINAL_AGENT_STATUSES.has(agent.status.toUpperCase())) {
+      return agent
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+
+  throw new Error(`Cursor agent ${agentId} did not finish within ${timeoutMs}ms`)
+}
+
+async function fetchCursorArtifacts(apiKey: string, agentId: string): Promise<StoredArtifact[]> {
+  const payload = await cursorFetch<{ artifacts?: V0ArtifactRecord[] }>(
+    apiKey,
+    `/agents/${agentId}/artifacts`,
+  ).catch(() => ({ artifacts: [] as V0ArtifactRecord[] }))
+
+  return (payload.artifacts ?? []).map((artifact) =>
+    classifyArtifactPath(artifact.absolutePath),
+  )
 }
 
 /** Build a structured prompt from the FixContext report + reproduction steps. */
@@ -153,27 +252,26 @@ function buildPromptFromReport(ctx: FixContext): string {
   return lines.join('\n')
 }
 
-function buildFixResult(
-  result: RunResult,
+function buildFixResultFromV0(
+  agent: V0AgentRecord,
   branch: string,
   agentId: string,
-  runId: string,
   artifacts: StoredArtifact[],
 ): FixResult & { cursorAgentId: string; cursorRunId: string; cursorArtifacts: StoredArtifact[] } {
-  const prUrl = result.git?.branches?.[0]?.prUrl
-  const success = result.status === 'finished'
+  const status = agent.status.toUpperCase()
+  const success = status === 'FINISHED'
 
   return {
     success,
-    branch: result.git?.branches?.[0]?.branch ?? branch,
-    prUrl,
-    filesChanged: [], // Cursor doesn't surface individual file diffs; mark unknown
+    branch: agent.target?.branchName ?? branch,
+    prUrl: agent.target?.prUrl,
+    filesChanged: [],
     linesChanged: 0,
-    summary: result.result ?? (success ? 'Cursor Cloud Agent run finished.' : `Cursor agent ended with status: ${result.status}.`),
-    error: success ? undefined : `Cursor agent ended with status: ${result.status}`,
-    // Cursor-specific fields persisted to fix_attempts by the orchestrator
+    summary: agent.summary ?? (success ? 'Cursor Cloud Agent run finished.' : `Cursor agent ended with status: ${agent.status}.`),
+    error: success ? undefined : `Cursor agent ended with status: ${agent.status}`,
     cursorAgentId: agentId,
-    cursorRunId: runId,
+    // v0 agents are single-run; reuse agent id so FixCard can link to the run.
+    cursorRunId: agentId,
     cursorArtifacts: artifacts,
   }
 }
@@ -195,15 +293,44 @@ function failedResult(
   }
 }
 
-/** Map an SDKArtifact (path/sizeBytes/updatedAt) to the DB-serialisable shape. */
-function mapArtifact(a: SDKArtifact): StoredArtifact {
-  const lower = a.path.toLowerCase()
-  let kind: StoredArtifact['kind'] = 'file'
-  let mime = 'application/octet-stream'
+const IMAGE_MIME_BY_EXT = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+} as const
 
-  if (/\.(png|jpe?g|webp|gif)$/.test(lower)) { kind = 'screenshot'; mime = `image/${lower.split('.').pop()}` }
-  else if (/\.(mp4|webm|mov)$/.test(lower)) { kind = 'video'; mime = `video/${lower.split('.').pop()}` }
-  else if (/\.(log|txt)$/.test(lower)) { kind = 'log'; mime = 'text/plain' }
+const VIDEO_MIME_BY_EXT = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+} as const
 
-  return { kind, path: a.path, mime }
+/** Map a filesystem path to the DB-serialisable artifact shape with IANA MIME types. */
+export function classifyArtifactPath(filePath: string): StoredArtifact {
+  const lower = filePath.toLowerCase()
+  const ext = lower.split('.').pop() ?? ''
+
+  if (ext in IMAGE_MIME_BY_EXT) {
+    return {
+      kind: 'screenshot',
+      path: filePath,
+      mime: IMAGE_MIME_BY_EXT[ext as keyof typeof IMAGE_MIME_BY_EXT],
+    }
+  }
+
+  if (ext in VIDEO_MIME_BY_EXT) {
+    return {
+      kind: 'video',
+      path: filePath,
+      mime: VIDEO_MIME_BY_EXT[ext as keyof typeof VIDEO_MIME_BY_EXT],
+    }
+  }
+
+  if (/\.(log|txt)$/.test(lower)) {
+    return { kind: 'log', path: filePath, mime: 'text/plain' }
+  }
+
+  return { kind: 'file', path: filePath, mime: 'application/octet-stream' }
 }

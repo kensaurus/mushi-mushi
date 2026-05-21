@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { FixContext, FixResult, FixAgent, ExpectedOutcome } from './types.js'
 import { ClaudeCodeAgent } from './adapters/claude-code.js'
 import { CodexAgent } from './adapters/codex.js'
@@ -391,7 +391,12 @@ export class FixOrchestrator {
       // the dogfood path (raw key in env) works without a vault.
       let resolvedCursorApiKey: string | undefined
       if (agentName === 'cursor_cloud' && settings?.cursor_api_key_ref) {
-        resolvedCursorApiKey = await resolveVaultRef(settings.cursor_api_key_ref)
+        resolvedCursorApiKey = await resolveVaultRef(settings.cursor_api_key_ref, this.db)
+        if (!resolvedCursorApiKey) {
+          throw new Error(
+            'cursor_api_key_ref could not be resolved — configure a valid API key or vault secret in Settings → Integrations → Cursor Cloud.',
+          )
+        }
       }
 
       const agent = this.selectAgent(
@@ -576,7 +581,7 @@ export class FixOrchestrator {
  * the ref is not in vault:// format, the raw value is returned and the
  * caller is responsible for failing gracefully if it is empty.
  */
-async function resolveVaultRef(ref: string): Promise<string> {
+async function resolveVaultRef(ref: string, db: SupabaseClient): Promise<string> {
   // Raw key (no vault:// prefix) — return as-is for local dev / tests.
   if (!ref.startsWith('vault://')) return ref
   // Explicit override only for the vault:// path — do NOT check env for
@@ -586,8 +591,8 @@ async function resolveVaultRef(ref: string): Promise<string> {
   // CI / dogfood environments where the vault is not accessible.
   const override = process.env.MUSHI_CURSOR_API_KEY_OVERRIDE
   if (override) return override
-  // Full vault resolution (pgsodium decrypt) is not yet implemented in the
-  // Node orchestrator — the edge function path uses Deno Vault bindings.
-  // Track: https://github.com/kensaurus/mushi-mushi/issues/vault-node-resolution
-  return ''
+
+  const vaultName = ref.slice('vault://'.length)
+  const { data: vaultData } = await db.rpc('vault_lookup', { secret_name: vaultName })
+  return typeof vaultData === 'string' ? vaultData : ''
 }

@@ -50,6 +50,11 @@ export interface CursorCloudPluginConfig {
    * If not set, the plugin will attempt to read it from the event payload.
    */
   repoUrl?: string
+  /**
+   * Standard Webhooks secret for inbound Mushi events. Required for
+   * self-hosted installs — never derive this from workspaceId.
+   */
+  webhookSecret?: string
   /** Override `fetch` for tests. */
   fetchImpl?: typeof fetch
 }
@@ -105,7 +110,12 @@ async function createCursorAgentRun(
       // This is the contract documented in @mushi-mushi/plugin-sdk/retry.ts.
       throw res
     }
-    return res.json() as Promise<CursorAgentRunResponse>
+    const body = (await res.json()) as { agentId?: string; id?: string; status?: string; prUrl?: string }
+    return {
+      agentId: body.agentId ?? body.id ?? '',
+      status: body.status ?? 'queued',
+      prUrl: body.prUrl,
+    }
   })
 }
 
@@ -148,6 +158,22 @@ function buildPromptFromFixRequested(envelope: MushiEventEnvelope, fixData: Mush
   ].join('\n')
 }
 
+function buildPromptFromQaStoryFailed(
+  envelope: MushiEventEnvelope,
+  data: { storyId?: string; title?: string; failureReason?: string },
+): string {
+  return [
+    `A QA story failed in project ${envelope.projectId}.`,
+    ``,
+    `Story ID: ${data.storyId ?? 'unknown'}`,
+    `Title: ${data.title ?? '(untitled)'}`,
+    data.failureReason ? `Failure: ${data.failureReason}` : '',
+    ``,
+    `Please investigate the failing assertion, identify the root cause in the codebase, ` +
+      `and open a draft PR with a minimal fix. Do not refactor unrelated code.`,
+  ].filter((line) => line !== '').join('\n')
+}
+
 /** Build the plugin handler and return a callable function. */
 export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
   const minRank = SEVERITY_RANK[cfg.severityThreshold ?? 'critical']!
@@ -158,11 +184,17 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
 
   const resolvedCfg = { apiKey: cfg.apiKey, workspaceId: cfg.workspaceId, model, autoCreatePR, maxIterations }
 
+  const webhookSecret =
+    cfg.webhookSecret ??
+    (typeof process !== 'undefined' ? process.env.MUSHI_PLUGIN_WEBHOOK_SECRET : undefined)
+  if (!webhookSecret) {
+    throw new Error(
+      'Cursor Cloud plugin requires webhookSecret (or MUSHI_PLUGIN_WEBHOOK_SECRET) for inbound event verification.',
+    )
+  }
+
   return createPluginHandler({
-    // The Cursor plugin is invoked by the Mushi platform's dispatchPluginEvent
-    // fan-out. The platform verifies the inbound HMAC before calling this handler,
-    // so we supply a dummy secret here — the outbound auth is the Cursor API key.
-    secret: `cursor-plugin-secret-${cfg.workspaceId}`,
+    secret: webhookSecret,
     on: {
       'report.classified': async (e) => {
         const data = e.data as MushiReportClassifiedEvent
@@ -222,6 +254,37 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
         // Emit audit log — handler return type is void.
         const result: CursorDispatchResult = { agentId: run.agentId, reportId: data.report.id, model }
         console.warn('[cursor-cloud] fix.requested dispatched', JSON.stringify(result))
+      },
+
+      'qa_story.failed': async (e) => {
+        const data = e.data as { storyId?: string; title?: string; failureReason?: string }
+
+        const repoUrl = cfg.repoUrl ?? ''
+        if (!repoUrl) {
+          console.warn('[cursor-cloud] qa_story.failed skipped: repoUrl not configured.')
+          return
+        }
+
+        const run = await createCursorAgentRun(
+          resolvedCfg,
+          {
+            repoUrl,
+            prompt: buildPromptFromQaStoryFailed(e, data),
+            envVars: {
+              MUSHI_PROJECT_ID: e.projectId,
+              MUSHI_QA_STORY_ID: data.storyId ?? 'unknown',
+              MUSHI_EVENT: 'qa_story.failed',
+            },
+          },
+          f,
+        )
+
+        const result: CursorDispatchResult = {
+          agentId: run.agentId,
+          reportId: data.storyId ?? 'unknown',
+          model,
+        }
+        console.warn('[cursor-cloud] qa_story.failed dispatched', JSON.stringify(result))
       },
     },
   })

@@ -53,6 +53,7 @@ import { createCursorCloudPlugin } from '@mushi-mushi/plugin-cursor-cloud'
 const handler = createCursorCloudPlugin({
   apiKey: process.env.CURSOR_API_KEY!,
   workspaceId: process.env.CURSOR_WORKSPACE_ID!,
+  webhookSecret: process.env.MUSHI_PLUGIN_WEBHOOK_SECRET!,
   repoUrl: 'https://github.com/your-org/your-repo',
   severityThreshold: 'critical',
   // Optional — default is composer-2.5.
@@ -74,6 +75,7 @@ export default handler
 |---|---|---|---|---|
 | `apiKey` | string | yes | — | Your Cursor API key (`cur_…`). |
 | `workspaceId` | string | yes | — | Your Cursor workspace ID (`ws_…`). |
+| `webhookSecret` | string | yes* | `MUSHI_PLUGIN_WEBHOOK_SECRET` | Standard Webhooks HMAC secret for inbound Mushi events. *Required for self-hosted installs. |
 | `repoUrl` | string | recommended | — | Target repo URL. If omitted, the plugin silently no-ops. |
 | `severityThreshold` | `'low' \| 'medium' \| 'high' \| 'critical'` | no | `'critical'` | Minimum severity that triggers a run. |
 | `model` | string | no | `'composer-2.5'` | Cursor model slug. |
@@ -87,8 +89,27 @@ export default handler
 |---|---|
 | `report.classified` | Dispatch a run when `data.classification.severity` ≥ `severityThreshold`. |
 | `fix.requested` | Always dispatch a run (the user explicitly asked for a fix). |
+| `qa_story.failed` | Dispatch a run when a QA story run fails all its assertions. Requires `repoUrl`. |
 
 Other events are ignored.
+
+## ⚠️ Breaking change in v0.3.0 — `webhookSecret` required
+
+Previous versions derived the HMAC secret from `workspaceId` internally,
+which was trivially forgeable. From v0.3.0 onward you **must** supply
+`webhookSecret` (or `MUSHI_PLUGIN_WEBHOOK_SECRET`):
+
+```diff
+ const handler = createCursorCloudPlugin({
+   apiKey: process.env.CURSOR_API_KEY!,
+   workspaceId: process.env.CURSOR_WORKSPACE_ID!,
++  webhookSecret: process.env.MUSHI_PLUGIN_WEBHOOK_SECRET!,
+   repoUrl: 'https://github.com/your-org/your-repo',
+ })
+```
+
+The secret is the same Standard Webhooks HMAC key Mushi signs outbound
+events with. Find it in Admin → Integrations → Cursor Cloud → Webhook secret.
 
 ## Audit log
 

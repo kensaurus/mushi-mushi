@@ -176,6 +176,7 @@ export const PLATFORM_DEFS: PlatformDef[] = [
       { name: 'cursor_workspace_id', label: 'Workspace ID', placeholder: 'ws_…', help: 'Your Cursor workspace ID. Found at cursor.com/settings → Workspace.', required: true, helpId: 'cursor-workspace-id', validator: 'token' },
       { name: 'cursor_default_model', label: 'Default model', placeholder: 'composer-2.5', help: 'Cursor model slug for agent runs. Leave blank for the default (composer-2.5).', helpId: 'cursor-default-model' },
       { name: 'cursor_auto_create_pr', label: 'Auto-create PRs', placeholder: 'true', help: 'When enabled (default), Cursor automatically opens a signed draft PR when the agent finishes. Disable to review the branch first.', helpId: 'cursor-auto-create-pr' },
+      { name: 'cursor_max_iterations', label: 'Max iterations', placeholder: '1', help: 'How many agent iterations Cursor runs per dispatch (1–10). Higher values cost more API credit but can recover from a first-pass miss.', helpId: 'cursor-max-iterations' },
     ],
   },
 ]

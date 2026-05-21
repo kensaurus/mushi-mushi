@@ -1,5 +1,24 @@
 # @mushi-mushi/plugin-cursor-cloud
 
+## 0.3.0
+
+### Minor Changes
+
+- **Breaking: mandatory `webhookSecret`** — `createCursorCloudPlugin` now requires
+  `webhookSecret` (or `MUSHI_PLUGIN_WEBHOOK_SECRET` env var). The previous scheme
+  derived the HMAC secret from `workspaceId`, making it trivially forgeable.
+  Self-hosted installs must set `MUSHI_PLUGIN_WEBHOOK_SECRET` before upgrading.
+
+- **New `qa_story.failed` event handler** — dispatches a Cursor Cloud Agent run
+  when a QA story fails all assertions. Requires `repoUrl` in plugin options.
+  The agent opens a draft PR with a targeted fix.
+
+### Patch Changes
+
+- Fix `createCursorAgentRun` response parsing to accept both `id` and `agentId`
+  fields from Cursor's API response, preventing an empty agent ID on some endpoint
+  versions.
+
 ## 0.2.0
 
 ### Minor Changes

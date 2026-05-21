@@ -66,7 +66,7 @@ function buildCursorPrompt(report: ReportDetail): string {
     `5. Call \`submit_fix_result\` with reportId="${report.id}", branch, prUrl, filesChanged, linesChanged, and a one-line summary so Mushi can mark the report fixed and award rewards points.`,
     '',
     'If at any step a Mushi tool returns INSUFFICIENT_SCOPE, stop and tell the human — the API key is read-only.',
-  ].filter(Boolean)
+  ].filter((line) => line != null)
   return lines.join('\n')
 }
 

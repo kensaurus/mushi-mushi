@@ -1362,6 +1362,13 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       'github_webhook_secret',
       'github_deploy_key',
     ],
+    cursor_cloud: [
+      'cursor_api_key_ref',
+      'cursor_workspace_id',
+      'cursor_default_model',
+      'cursor_auto_create_pr',
+      'cursor_max_iterations',
+    ],
   };
 
   app.get('/v1/admin/integrations/platform', jwtAuth, async (c) => {
@@ -1421,6 +1428,7 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     sentry: ['sentry_auth_token_ref', 'sentry_webhook_secret'],
     langfuse: ['langfuse_public_key_ref', 'langfuse_secret_key_ref'],
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
+    cursor_cloud: ['cursor_api_key_ref'],
   };
 
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {

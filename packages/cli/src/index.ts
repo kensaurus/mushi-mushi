@@ -1104,7 +1104,7 @@ Examples:
         continue
       }
       const s = pollResult.data.status
-      emitEvent('poll.status', { status: s, pr_url: pollResult.data.pr_url, cursor_agent_id: pollResult.data.cursor_agent_id })
+      emitEvent('fix.status', { status: s, pr_url: pollResult.data.pr_url, cursor_agent_id: pollResult.data.cursor_agent_id })
 
       if (s && TERMINAL.has(s)) {
         const success = s === 'completed'

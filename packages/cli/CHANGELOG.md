@@ -1,5 +1,16 @@
 # @mushi-mushi/cli
 
+## 0.9.1
+
+### Patch Changes
+
+- Fix `fix.status` event name: `fix poll` loop was emitting `poll.status`
+  instead of the documented `fix.status`. Fixes `--json` consumers and
+  automations that subscribe to fix lifecycle events.
+
+- Fix ESM-safe `unlinkSync` in `migrateLegacyConfig`: was using
+  `require('fs').unlinkSync` inside an ESM module; now uses a named import.
+
 ## 0.9.0
 
 ### Minor Changes

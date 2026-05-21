@@ -1,4 +1,4 @@
--- Migration: 20260521000000_cursor_cloud_agent
+-- Migration: 20260521003738_cursor_cloud_agent
 -- Purpose: Extend mushi-mushi to support Cursor Cloud Agents as a first-class
 --          autofix agent and Marketplace plugin.
 --
@@ -100,7 +100,7 @@ VALUES (
     "docsUrl": "https://cursor.com/docs/cloud-agent",
     "version": "1.0.0"
   }'::jsonb,
-  ARRAY['mcp:write'],
+  ARRAY['reports.read'],
   'integration',
   true,
   true
@@ -110,5 +110,6 @@ ON CONFLICT (slug) DO UPDATE
     name              = EXCLUDED.name,
     short_description = EXCLUDED.short_description,
     manifest          = EXCLUDED.manifest,
+    required_scopes   = EXCLUDED.required_scopes,
     is_official       = true,
     is_listed         = true;

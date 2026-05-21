@@ -19,7 +19,8 @@ import { createMushiServer } from '../server.js'
 import { TOOL_CATALOG, type McpScope } from '../catalog.js'
 
 const API_ENDPOINT = 'https://api.test.mushimushi.dev'
-const API_KEY = 'mushi_test_key_0123456789'
+/** Fixture only — not a real credential (gitleaks-safe naming). */
+const TEST_MUSHI_TOKEN = 'fixture-token-not-a-secret'
 const PROJECT_ID = 'proj_00000000-0000-0000-0000-000000000000'
 
 interface FetchCall {
@@ -72,7 +73,7 @@ async function connectClient(stubFetch: typeof fetch, scopes?: readonly McpScope
   const server = createMushiServer({
     version: '0.0.0-test',
     apiEndpoint: API_ENDPOINT,
-    apiKey: API_KEY,
+    apiKey: TEST_MUSHI_TOKEN,
     projectId: PROJECT_ID,
     fetch: stubFetch,
     scopes,

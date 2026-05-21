@@ -34,12 +34,14 @@ const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
  *   MUSHI_SCOPES=mcp:read,mcp:write    # equivalent to leaving unset (default)
  */
 const SCOPES_RAW = process.env.MUSHI_SCOPES ?? ''
-const SCOPES: readonly McpScope[] = SCOPES_RAW
+const parsedScopes = SCOPES_RAW
   ? SCOPES_RAW
       .split(',')
       .map((s) => s.trim())
       .filter((s): s is McpScope => s === 'mcp:read' || s === 'mcp:write')
   : ALL_SCOPES
+const SCOPES: readonly McpScope[] =
+  SCOPES_RAW && parsedScopes.length === 0 ? ALL_SCOPES : parsedScopes
 
 async function main() {
   if (!API_KEY) {

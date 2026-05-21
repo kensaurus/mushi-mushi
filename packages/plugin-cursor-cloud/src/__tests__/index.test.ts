@@ -13,7 +13,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { signPayload } from '@mushi-mushi/plugin-sdk'
 import { createCursorCloudPlugin, type CursorCloudPluginConfig } from '../index.js'
 
-const SECRET_FOR = (workspaceId: string) => `cursor-plugin-secret-${workspaceId}`
+const WEBHOOK_SECRET = 'test-webhook-secret'
 const WORKSPACE = 'ws_test'
 
 function makePlugin(overrides: Partial<CursorCloudPluginConfig> = {}) {
@@ -26,6 +26,7 @@ function makePlugin(overrides: Partial<CursorCloudPluginConfig> = {}) {
   const plugin = createCursorCloudPlugin({
     apiKey: 'cur_test_key',
     workspaceId: WORKSPACE,
+    webhookSecret: WEBHOOK_SECRET,
     repoUrl: 'https://github.com/example/repo',
     severityThreshold: 'critical',
     fetchImpl: fetchMock as unknown as typeof fetch,
@@ -41,7 +42,7 @@ function deliver(
   const raw = JSON.stringify(body)
   return plugin({
     rawBody: raw,
-    headers: { 'x-mushi-signature': signPayload(SECRET_FOR(WORKSPACE), raw) },
+    headers: { 'x-mushi-signature': signPayload(WEBHOOK_SECRET, raw) },
   })
 }
 
@@ -195,6 +196,7 @@ describe('createCursorCloudPlugin — error handling', () => {
     const plugin = createCursorCloudPlugin({
       apiKey: 'cur_bad_key',
       workspaceId: WORKSPACE,
+      webhookSecret: WEBHOOK_SECRET,
       repoUrl: 'https://github.com/example/repo',
       fetchImpl: fetchMock as unknown as typeof fetch,
     })

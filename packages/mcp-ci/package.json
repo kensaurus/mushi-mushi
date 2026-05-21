@@ -44,7 +44,8 @@
   "scripts": {
     "build": "tsup",
     "lint": "eslint src/",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@actions/core": "^1.11.1"
@@ -55,7 +56,8 @@
     "@types/node": "^22.19.17",
     "eslint": "^10.3.0",
     "tsup": "^8.5.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   },
   "author": "Kenji Sakuramoto",
   "engines": {

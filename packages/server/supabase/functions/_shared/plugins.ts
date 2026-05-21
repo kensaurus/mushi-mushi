@@ -200,11 +200,17 @@ async function deliverCursorAgent(
     return
   }
 
+  const severityThreshold =
+    typeof cfg.severity_threshold === 'string' &&
+    cfg.severity_threshold in CURSOR_SEVERITY_RANK
+      ? cfg.severity_threshold
+      : 'critical'
+
   // Severity gate for report.classified
   if (event === 'report.classified') {
     const d = data as { classification?: { severity?: string } } | null
     const rank = CURSOR_SEVERITY_RANK[d?.classification?.severity ?? ''] ?? 0
-    const minRank = CURSOR_SEVERITY_RANK[typeof cfg.severity_threshold === 'string' ? cfg.severity_threshold : 'critical']!
+    const minRank = CURSOR_SEVERITY_RANK[severityThreshold]!
     if (rank < minRank) return
   }
 
@@ -232,6 +238,7 @@ async function deliverCursorAgent(
   const deliveryId = crypto.randomUUID()
   const start = Date.now()
   let dispatchStatus: 'ok' | 'error' = 'error'
+  let httpStatus: number | null = null
   let agentId: string | null = null
   let excerpt = ''
 
@@ -261,11 +268,12 @@ async function deliverCursorAgent(
         prompt,
       }),
     })
+    httpStatus = res.status
     const text = await res.text().catch(() => '')
     excerpt = text.slice(0, 512)
     if (res.ok) {
-      const body = JSON.parse(text) as { agentId?: string }
-      agentId = body.agentId ?? null
+      const body = JSON.parse(text) as { agentId?: string; id?: string }
+      agentId = body.agentId ?? body.id ?? null
       dispatchStatus = 'ok'
     }
   } catch (err) {
@@ -282,7 +290,7 @@ async function deliverCursorAgent(
       event,
       attempt: 1,
       status: dispatchStatus,
-      http_status: dispatchStatus === 'ok' ? 200 : null,
+      http_status: httpStatus,
       response_excerpt: agentId ? `agentId=${agentId}` : (excerpt || null),
       duration_ms: durationMs,
       next_retry_at: null,

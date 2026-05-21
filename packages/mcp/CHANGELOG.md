@@ -1,5 +1,13 @@
 # @mushi-mushi/mcp
 
+## 0.7.1
+
+### Patch Changes
+
+- Fix scope fallback on typo: if `MUSHI_SCOPES` is set but contains only
+  unrecognised values (e.g. `mcp:writes`), the MCP server now falls back to
+  `ALL_SCOPES` instead of silently deregistering all tools.
+
 ## 0.7.0
 
 ### Minor Changes
