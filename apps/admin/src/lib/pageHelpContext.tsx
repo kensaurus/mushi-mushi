@@ -41,6 +41,9 @@ export function PageHelpProvider({ children }: { children: ReactNode }) {
 export function usePageHelpRegister(): (props: PageHelpRegistration | null) => void {
   const ctx = useContext(PageHelpContext)
   if (!ctx) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.warn('[PageHelp] usePageHelpRegister called outside PageHelpProvider')
+    }
     return () => {}
   }
   return ctx.register

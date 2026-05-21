@@ -69,7 +69,7 @@ export function FixesTable({
         </div>
       )}
       <ResponsiveTable stickyFirstColumn ariaLabel="Fix attempts">
-        <table className="w-full text-sm" aria-label="Fix attempts">
+        <table className="w-full text-sm">
           <thead className="bg-surface-raised text-2xs uppercase tracking-wider text-fg-faint sticky top-0 z-10">
             <tr>
               <th scope="col" className="w-1 p-0" aria-label="Status stripe" />

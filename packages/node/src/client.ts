@@ -178,10 +178,10 @@ export class MushiNodeClient {
   }
 }
 
-let warnedOnce = false
+const warnedMessages = new Set<string>()
 function warnOnce(msg: string): void {
-  if (warnedOnce) return
-  warnedOnce = true
+  if (warnedMessages.has(msg)) return
+  warnedMessages.add(msg)
   console.warn(msg)
 }
 

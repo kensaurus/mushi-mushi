@@ -136,6 +136,13 @@ export type OwnedProjectResolution =
 
 export interface ResolveOwnedProjectOptions {
   noProjectResponse?: () => Response;
+  /**
+   * When set, use this project ID instead of reading from request
+   * headers/query-params. Useful for named-resource routes like
+   * `GET /v1/admin/projects/:id/…` where the project is identified
+   * by the URL segment rather than the conventional headers.
+   */
+  overrideProjectId?: string;
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -173,7 +180,9 @@ export async function resolveOwnedProject(
   userId: string,
   options: ResolveOwnedProjectOptions = {},
 ): Promise<OwnedProjectResolution> {
-  const requested = requestedProjectId(c);
+  // Named-resource routes (e.g. GET /projects/:id/…) pass the URL segment
+  // directly rather than relying on headers/query-params.
+  const requested = options.overrideProjectId ?? requestedProjectId(c);
   const requestedOrg = requestedOrganizationId(c);
   if (requested && !UUID_RE.test(requested)) {
     return {
