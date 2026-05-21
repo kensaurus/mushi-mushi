@@ -43,6 +43,23 @@ export interface NodeClientOptions extends ApiClientOptions {
   environment?: string
   /** Release identifier (git sha, semver). Used by the judge to regression-scope fixes. */
   release?: string
+  /**
+   * Process-wide AbortSignal. When set, all in-flight `captureReport`
+   * calls cancel as soon as the signal aborts. Compose with per-call
+   * signals via `AbortSignal.any` (Node ≥ 20). Typical use: wire to a
+   * SIGTERM handler so a long-running report never blocks graceful
+   * shutdown.
+   */
+  signal?: AbortSignal
+}
+
+export interface CaptureReportOptions {
+  /**
+   * Per-call AbortSignal. Composes with `NodeClientOptions.signal` and
+   * the internal timeout via `AbortSignal.any` so `captureReport` stops
+   * the moment any of the three triggers fire.
+   */
+  signal?: AbortSignal
 }
 
 export class MushiNodeClient {
@@ -62,15 +79,19 @@ export class MushiNodeClient {
   async captureException(
     error: Error | string,
     extra?: Omit<NodeReportPayload, 'description' | 'error'>,
+    options?: CaptureReportOptions,
   ): Promise<{ ok: boolean; reportId?: string }> {
     const e = error instanceof Error ? error : new Error(String(error))
-    return this.captureReport({
-      description: e.message,
-      userCategory: 'bug',
-      severity: 'critical',
-      error: { name: e.name, message: e.message, stack: e.stack },
-      ...extra,
-    })
+    return this.captureReport(
+      {
+        description: e.message,
+        userCategory: 'bug',
+        severity: 'critical',
+        error: { name: e.name, message: e.message, stack: e.stack },
+        ...extra,
+      },
+      options,
+    )
   }
 
   /**
@@ -82,10 +103,24 @@ export class MushiNodeClient {
    * `createApiClient` because `MushiReport` is shaped for the browser
    * (screenshots, rrweb replay, reporter tokens). Server reports have a
    * flatter shape the `/v1/reports` ingest route already accepts.
+   *
+   * AbortSignal composition (Round 8 — B4): the timeout signal is
+   * combined with `options.signal` (per-call) and `this.opts.signal`
+   * (process-wide) via `AbortSignal.any` so any of the three can
+   * cancel the in-flight fetch. Falls back to a manual race on
+   * Node 18 where `AbortSignal.any` is missing.
    */
-  async captureReport(payload: NodeReportPayload): Promise<{ ok: boolean; reportId?: string }> {
+  async captureReport(
+    payload: NodeReportPayload,
+    options?: CaptureReportOptions,
+  ): Promise<{ ok: boolean; reportId?: string }> {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), this.opts.timeout ?? 10_000)
+    const signal = composeSignals([
+      controller.signal,
+      options?.signal,
+      this.opts.signal,
+    ])
     try {
       // If the caller stashed a W3C traceparent (e.g. from a middleware), pass
       // it both as the standard HTTP header and inside `metadata` so the server
@@ -100,7 +135,7 @@ export class MushiNodeClient {
 
       const res = await fetch(`${this.endpoint}/v1/reports`, {
         method: 'POST',
-        signal: controller.signal,
+        signal,
         headers: {
           'Content-Type': 'application/json',
           'X-Mushi-Api-Key': this.opts.apiKey,
@@ -149,4 +184,42 @@ function warnOnce(msg: string): void {
   if (warnedOnce) return
   warnedOnce = true
   console.warn(msg)
+}
+
+/**
+ * Compose multiple AbortSignals into one. Aborts as soon as any input
+ * aborts, mirroring `AbortSignal.any` (Node ≥ 20). Falls back to a
+ * manual implementation on Node 18 where `AbortSignal.any` is missing.
+ *
+ * Exported for tests; not part of the package's public API.
+ */
+export function composeSignals(signals: Array<AbortSignal | undefined>): AbortSignal {
+  const live = signals.filter((s): s is AbortSignal => s !== undefined)
+  if (live.length === 0) {
+    // Should be unreachable — captureReport always passes its timeout
+    // signal — but return a never-aborting signal so the type stays
+    // simple at the call site.
+    return new AbortController().signal
+  }
+  if (live.length === 1) return live[0]!
+  // Prefer the platform implementation on Node ≥ 20.
+  const anyImpl = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any
+  if (typeof anyImpl === 'function') return anyImpl(live)
+  // Manual fallback for Node 18.
+  const controller = new AbortController()
+  const onAbort = (e: AbortSignal) => {
+    if (controller.signal.aborted) return
+    // Forward the upstream reason to preserve the cancellation cause
+    // through the chain — essential when the user wired SIGTERM with
+    // a structured Error reason.
+    controller.abort(e.reason)
+  }
+  for (const s of live) {
+    if (s.aborted) {
+      controller.abort(s.reason)
+      break
+    }
+    s.addEventListener('abort', () => onAbort(s), { once: true })
+  }
+  return controller.signal
 }
