@@ -5,13 +5,14 @@
  * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
-import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
 import { usePageData } from '../lib/usePageData'
 import { usePageCopy } from '../lib/copy'
+import { useExploreUx, resolveQuickExploreTab } from '../lib/exploreModeUx'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
@@ -138,6 +139,7 @@ function buildIndexRows(stats: ExploreStats): DetailRowItem[] {
 
 export function ExplorePage() {
   const copy = usePageCopy('/explore')
+  const ux = useExploreUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const urlProjectId = searchParams.get('project')
   const activeProjectId = useActiveProjectId()
@@ -200,6 +202,12 @@ export function ExplorePage() {
     },
     [setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickExploreTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const allNodes: ExploreNode[] = payload?.nodes ?? []
   const allEdges: ExploreEdge[] = payload?.edges ?? []
@@ -367,7 +375,7 @@ export function ExplorePage() {
     () =>
       EXPLORE_TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'graph' && stats.indexedFiles > 0
             ? stats.indexedFiles
@@ -375,7 +383,7 @@ export function ExplorePage() {
               ? stats.withEmbeddings
               : undefined,
       })),
-    [stats.indexedFiles, stats.withEmbeddings],
+    [copy?.tabLabels, stats.indexedFiles, stats.withEmbeddings],
   )
 
   usePublishPageContext({
@@ -580,6 +588,25 @@ export function ExplorePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-explore">
+      <PageHelp
+        title={copy?.help?.title ?? 'Codebase Atlas'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Visual map of indexed source files grouped by architectural layer.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'See which layer a bug report file lives in',
+            'Trace import dependencies between files',
+            'Search "where is login?" and jump to the right symbol',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Overview for posture. Graph/Layers for the map. Search for plain-English lookup. Index tab when debugging sweeper errors.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Explore'}
         projectScope={stats.projectName ?? undefined}
@@ -588,38 +615,42 @@ export function ExplorePage() {
           'Banner + EXPLORE SNAPSHOT — Overview for posture, Graph/Layers/Search for the atlas.'
         }
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
-                : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.topPriority === 'error'
-              ? 'ERROR'
-              : stats.topPriority === 'indexing'
-                ? 'INDEXING'
-                : stats.topPriority === 'empty' || stats.topPriority === 'not_enabled'
-                  ? 'EMPTY'
-                  : stats.topPriority === 'stale'
-                    ? 'STALE'
-                    : 'READY'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
-          isValidating={statsValidating || exploreQuery.isValidating}
-        />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || loading}>
-          Refresh
-        </Btn>
+        {!ux.hideOverviewChrome && (
+          <>
+            <Badge
+              className={
+                bannerSeverity === 'ok'
+                  ? 'bg-ok-muted text-ok'
+                  : bannerSeverity === 'danger'
+                    ? 'bg-danger/10 text-danger'
+                    : bannerSeverity === 'warn'
+                      ? 'bg-warn/10 text-warn'
+                      : bannerSeverity === 'brand'
+                        ? 'bg-brand/15 text-brand'
+                        : 'bg-surface-overlay text-fg-muted'
+              }
+            >
+              {!stats.hasAnyProject
+                ? 'NO PROJECT'
+                : stats.topPriority === 'error'
+                  ? 'ERROR'
+                  : stats.topPriority === 'indexing'
+                    ? 'INDEXING'
+                    : stats.topPriority === 'empty' || stats.topPriority === 'not_enabled'
+                      ? 'EMPTY'
+                      : stats.topPriority === 'stale'
+                        ? 'STALE'
+                        : 'READY'}
+            </Badge>
+            <FreshnessPill
+              at={statsFetchedAt ?? exploreQuery.lastFetchedAt}
+              isValidating={statsValidating || exploreQuery.isValidating}
+            />
+            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || loading}>
+              Refresh
+            </Btn>
+          </>
+        )}
       </PageHeader>
 
       <ExploreStatusBanner
@@ -627,8 +658,10 @@ export function ExplorePage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating || loading}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<ExploreTabId>
         size="sm"
         ariaLabel="Explore sections"
@@ -636,42 +669,47 @@ export function ExplorePage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
+      {!ux.hideExploreSnapshot && (
       <Section
-        title="EXPLORE SNAPSHOT"
+        title={copy?.sections?.snapshot ?? 'EXPLORE SNAPSHOT'}
         freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
       >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="Files"
+            label={copy?.statLabels?.files ?? 'Files'}
             value={stats.indexedFiles}
             accent={stats.indexedFiles > 0 ? 'text-fg' : undefined}
             hint={stats.repoUrl ? 'Indexed file rows' : 'Connect a repo'}
           />
           <StatCard
-            label="UI layer"
+            label={copy?.statLabels?.uiLayer ?? 'UI layer'}
             value={stats.layers?.ui ?? 0}
             accent={stats.layers.ui > 0 ? 'text-brand' : undefined}
             hint="Components, pages, screens"
           />
           <StatCard
-            label="Backend"
+            label={copy?.statLabels?.backend ?? 'Backend'}
             value={stats.layers?.backend ?? 0}
             accent={stats.layers.backend > 0 ? 'text-info' : undefined}
             hint="API routes, edge functions"
           />
           <StatCard
-            label="Embedded"
+            label={copy?.statLabels?.embedded ?? 'Embedded'}
             value={stats.withEmbeddings}
             accent={stats.withEmbeddings > 0 ? 'text-ok' : 'text-warn'}
             hint="Vectors for semantic search"
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
+          {!ux.hideOverviewChrome && (
+          <>
           <PageHero
             scope="explore"
             title="Codebase Atlas"
@@ -703,25 +741,6 @@ export function ExplorePage() {
               label: 'Embeddings',
               detail: `${stats.withEmbeddings}/${stats.indexedFiles} files embedded for search`,
             }}
-          />
-
-          <PageHelp
-            title={copy?.help?.title ?? 'Codebase Atlas'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'Visual map of indexed source files grouped by architectural layer.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'See which layer a bug report file lives in',
-                'Trace import dependencies between files',
-                'Search "where is login?" and jump to the right symbol',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Overview for posture. Graph/Layers for the map. Search for semantic lookup. Index for debug.'
-            }
           />
 
           {stats.topPriorityTo && stats.topPriority !== 'ready' ? (
@@ -758,6 +777,8 @@ export function ExplorePage() {
                 ))}
               </div>
             </Card>
+          )}
+          </>
           )}
         </>
       )}
