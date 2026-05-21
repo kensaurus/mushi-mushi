@@ -53,6 +53,8 @@ import { useDocumentTitle } from '../lib/useDocumentTitle'
 import { useFaviconBadge } from '../lib/favicon'
 import { useFocusMode } from '../lib/focusMode'
 import { useSidebarCollapsed } from '../lib/sidebarCollapsed'
+import { PageHelpProvider } from '../lib/pageHelpContext'
+import { RoutePageHelp } from './RoutePageHelp'
 
 interface NavItem {
   label: string
@@ -1584,25 +1586,28 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </header>}
 
-        <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
-          <div className="w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base">
-            {!focusMode && <QuickstartMegaCta />}
-            {!focusMode && <PipelineStatusRibbon />}
-            {!focusMode && <NextBestAction />}
-            <ScrollToHashAnchor />
-            {fallbackHero && (
-              <PageHero
-                scope={fallbackHero.scope}
-                title={fallbackHero.title}
-                kicker={fallbackHero.kicker}
-                decide={fallbackHero.decide}
-                act={null}
-                verify={fallbackHero.verify}
-              />
-            )}
-            {children}
-          </div>
-        </main>
+        <PageHelpProvider>
+          <main id="main-content" className="flex-1 overflow-y-auto bg-surface">
+            <div className="w-full max-w-[min(100%,92rem)] mx-auto px-4 sm:px-5 py-4 motion-safe:transition-[max-width] motion-safe:duration-base">
+              {!focusMode && <QuickstartMegaCta />}
+              {!focusMode && <PipelineStatusRibbon />}
+              {!focusMode && <NextBestAction />}
+              <ScrollToHashAnchor />
+              {!focusMode && <RoutePageHelp />}
+              {fallbackHero && (
+                <PageHero
+                  scope={fallbackHero.scope}
+                  title={fallbackHero.title}
+                  kicker={fallbackHero.kicker}
+                  decide={fallbackHero.decide}
+                  act={null}
+                  verify={fallbackHero.verify}
+                />
+              )}
+              {children}
+            </div>
+          </main>
+        </PageHelpProvider>
       </div>
       <FirstRunTour />
       <CommandPalette />

@@ -4,7 +4,7 @@
  *          Compact, dark-themed, data-dense design system components.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactNode, ReactEventHandler, SelectHTMLAttributes, ButtonHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Link, useLocation } from 'react-router-dom'
@@ -16,6 +16,18 @@ import { HelpBulletList, HelpRichText } from './HelpRichText'
 import { HelpSection } from './HelpSection'
 import { ConfigHelp } from './ConfigHelp'
 import { CopyViewLinkButton } from './CopyViewLinkButton'
+import {
+  IconAlertTriangle,
+  IconBell,
+  IconCheck,
+  IconEye,
+  IconSparkle,
+  IconTerminal,
+  IconArrowRight,
+} from './icons'
+import { statDestinationLabel } from '../lib/statCardLinks'
+import { usePageHelpRegister } from '../lib/pageHelpContext'
+import { isPageHelpRead, markPageHelpRead, PAGEHELP_READ_EVENT } from '../lib/pageHelpRead'
 
 /* ── LabelHelp ──────────────────────────────────────────────────────────────
  *
@@ -559,7 +571,7 @@ export function DetailRows({ items, className = '', dense }: DetailRowsProps) {
 
 export function InfoHint({ content }: { content: string }) {
   return (
-    <Tooltip content={content}>
+    <Tooltip content={content} side="auto" portal nowrap={content.length > 48}>
       <button
         type="button"
         aria-label={content}
@@ -1281,6 +1293,103 @@ export function Sparkline({
   )
 }
 
+/* ── MetricTooltip (structured StatCard help) ──────────────────────────── */
+
+export type MetricTooltipCalloutTone = 'info' | 'warn' | 'ok'
+
+export type MetricTooltipSectionKind = 'shows' | 'counted' | 'takeaway'
+
+export interface MetricTooltipSection {
+  label: string
+  body: string
+  /** Visual grouping — defaults from label when omitted. */
+  kind?: MetricTooltipSectionKind
+}
+
+export interface MetricTooltipData {
+  sections: MetricTooltipSection[]
+  callout?: { tone?: MetricTooltipCalloutTone; text: string }
+}
+
+const METRIC_CALLOUT_CLASS: Record<MetricTooltipCalloutTone, string> = {
+  info: 'border-info/30 bg-info/5 text-fg',
+  warn: 'border-warn/30 bg-warn/5 text-fg',
+  ok: 'border-ok/30 bg-ok/5 text-fg',
+}
+
+type MetricIcon = (props: { size?: number; className?: string }) => ReactNode
+
+const METRIC_SECTION_META: Record<
+  MetricTooltipSectionKind,
+  { Icon: MetricIcon; chipClass: string }
+> = {
+  shows: {
+    Icon: IconEye,
+    chipClass: 'border-info/35 bg-info/10 text-info',
+  },
+  counted: {
+    Icon: IconTerminal,
+    chipClass: 'border-brand/35 bg-brand/10 text-brand',
+  },
+  takeaway: {
+    Icon: IconSparkle,
+    chipClass: 'border-ok/35 bg-ok/10 text-ok',
+  },
+}
+
+const METRIC_CALLOUT_ICON: Record<MetricTooltipCalloutTone, MetricIcon> = {
+  info: IconBell,
+  warn: IconAlertTriangle,
+  ok: IconCheck,
+}
+
+function resolveMetricSectionKind(section: MetricTooltipSection): MetricTooltipSectionKind {
+  if (section.kind) return section.kind
+  const label = section.label.toLowerCase()
+  if (label.includes('count')) return 'counted'
+  if (label.includes('take')) return 'takeaway'
+  return 'shows'
+}
+
+function MetricSectionHeader({ section }: { section: MetricTooltipSection }) {
+  const kind = resolveMetricSectionKind(section)
+  const { Icon, chipClass } = METRIC_SECTION_META[kind]
+  return (
+    <div
+      className={`mb-1.5 inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 font-mono text-3xs font-semibold uppercase tracking-wider ${chipClass}`}
+    >
+      <Icon size={11} className="shrink-0 opacity-90" />
+      <span>{section.label}</span>
+    </div>
+  )
+}
+
+export function MetricTooltipContent({ data }: { data: MetricTooltipData }) {
+  const calloutTone = data.callout?.tone ?? 'info'
+  const CalloutIcon = METRIC_CALLOUT_ICON[calloutTone]
+  return (
+    <div className="space-y-0 text-left font-normal py-0.5">
+      {data.sections.map((section, index) => (
+        <div
+          key={`${section.kind ?? section.label}-${index}`}
+          className={index > 0 ? 'mt-2.5 border-t border-edge-subtle pt-2.5' : undefined}
+        >
+          <MetricSectionHeader section={section} />
+          <p className="text-2xs font-normal leading-relaxed text-fg-secondary">{section.body}</p>
+        </div>
+      ))}
+      {data.callout ? (
+        <div
+          className={`mt-2.5 flex items-start gap-2 rounded-sm border px-2 py-1.5 ${METRIC_CALLOUT_CLASS[calloutTone]}`}
+        >
+          <CalloutIcon size={12} className={`mt-0.5 shrink-0 ${calloutTone === 'warn' ? 'text-warn' : calloutTone === 'ok' ? 'text-ok' : 'text-info'}`} />
+          <p className="text-2xs font-normal leading-relaxed">{data.callout.text}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 /* ── StatCard ───────────────────────────────────────────────────────────── */
 
 interface StatCardProps {
@@ -1292,20 +1401,96 @@ interface StatCardProps {
    *  inherits the card's accent color. Pass a short, evenly-sampled
    *  series (e.g. 14 daily points). Omit to render the legacy card. */
   trend?: number[]
+  /** Short context line under the value (counts, ranges, status). */
+  detail?: string
   /** Hover tooltip for the metric. Appears on the label pill so a user
    *  can learn "what does p95 mean in this context?" without leaving. */
   hint?: string
+  /** Long-form explanation for the (i) icon — structured sections or plain text. */
+  tooltip?: string | MetricTooltipData
+  /** When set, the whole card links to this route (info icon still opens tooltip). */
+  to?: string
+  /** Override hover CTA copy (defaults to "Go to {destination}"). */
+  linkLabel?: string
 }
 
-export function StatCard({ label, value, accent, delta, trend, hint }: StatCardProps) {
+function StatCardSwapLine({
+  primary,
+  secondary,
+  primaryClassName = '',
+  secondaryClassName = 'text-brand',
+  variant = 'label',
+}: {
+  primary: ReactNode
+  secondary: ReactNode
+  primaryClassName?: string
+  secondaryClassName?: string
+  /** Detail line swaps slightly later so the label leads. */
+  variant?: 'label' | 'detail'
+}) {
+  const lineClass = variant === 'detail' ? 'stat-card-swap-line stat-card-swap-line--detail' : 'stat-card-swap-line'
   return (
-    <Card elevated className="px-3 py-2.5">
-      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1" title={hint}>
-        <span>{label}</span>
-        {hint && <InfoHint content={hint} />}
+    <span className={`${lineClass} ${primaryClassName}`}>
+      <span className="stat-card-swap-primary truncate">{primary}</span>
+      <span className={`stat-card-swap-secondary truncate ${secondaryClassName}`}>{secondary}</span>
+    </span>
+  )
+}
+
+function StatCardHelp({ tooltip, hint }: { tooltip?: string | MetricTooltipData; hint?: string }) {
+  const stopNav = (e: React.MouseEvent | React.FocusEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+  if (tooltip) {
+    const content =
+      typeof tooltip === 'string' ? (
+        <span className="whitespace-pre-wrap font-normal leading-relaxed">{tooltip}</span>
+      ) : (
+        <MetricTooltipContent data={tooltip} />
+      )
+    return (
+      <Tooltip content={content} side="auto" nowrap={false} portal>
+        <button
+          type="button"
+          aria-label="About this metric"
+          onClick={stopNav}
+          onMouseDown={stopNav}
+          className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-3xs text-fg-faint hover:text-fg-muted hover:border-fg-faint focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand/40 cursor-help"
+        >
+          <span aria-hidden="true" className="leading-none italic font-serif">i</span>
+        </button>
+      </Tooltip>
+    )
+  }
+  if (hint) return <InfoHint content={hint} />
+  return null
+}
+
+export function StatCard({ label, value, accent, delta, trend, detail, hint, tooltip, to, linkLabel }: StatCardProps) {
+  const help = tooltip ?? hint
+  const destination = to ? (linkLabel ?? statDestinationLabel(to)) : null
+  const inner = (
+    <>
+      <div className="text-2xs text-fg-muted mb-1 flex items-center gap-1 min-w-0">
+        {to && destination ? (
+          <span className="flex-1 min-w-0 font-medium uppercase tracking-wide">
+            <StatCardSwapLine
+              primary={label}
+              secondary={`Go to ${destination}`}
+              secondaryClassName="text-brand font-semibold normal-case tracking-normal"
+            />
+          </span>
+        ) : (
+          <span className="truncate">{label}</span>
+        )}
+        {help ? <StatCardHelp tooltip={tooltip} hint={hint} /> : null}
+        {to ? (
+          <IconArrowRight size={12} className="stat-card-arrow ml-auto shrink-0 text-brand" />
+        ) : null}
       </div>
       <div className="flex items-baseline gap-2">
-        <div className={`text-xl font-semibold font-mono stat-value ${accent ?? 'text-fg'}`}>
+        <div className={`text-xl font-semibold font-mono stat-value stat-card-value ${accent ?? 'text-fg'}`}>
           {value}
         </div>
         {delta && (
@@ -1319,6 +1504,45 @@ export function StatCard({ label, value, accent, delta, trend, hint }: StatCardP
           </span>
         )}
       </div>
+      {detail ? (
+        to ? (
+          <div className="mt-1 text-3xs leading-snug">
+            <StatCardSwapLine
+              variant="detail"
+              primary={detail}
+              secondary="Open page →"
+              primaryClassName="text-fg-faint"
+              secondaryClassName="text-brand/80 font-medium"
+            />
+          </div>
+        ) : (
+          <p className="mt-1 text-3xs text-fg-faint leading-snug">{detail}</p>
+        )
+      ) : to ? (
+        <p className="stat-card-cta-hint mt-1 text-3xs leading-snug">
+          <span className="text-brand/70 font-medium">Open page →</span>
+        </p>
+      ) : null}
+    </>
+  )
+
+  if (to) {
+    return (
+      <Card elevated className="stat-card-link px-3 py-2.5">
+        <Link
+          to={to}
+          aria-label={`${label} — go to ${destination}`}
+          className="group/stat relative z-[1] block rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/60"
+        >
+          {inner}
+        </Link>
+      </Card>
+    )
+  }
+
+  return (
+    <Card elevated className="px-3 py-2.5">
+      {inner}
     </Card>
   )
 }
@@ -1413,7 +1637,7 @@ function AutoPdcaChip() {
 
 /* ── PageHelp (collapsible "About this page") ──────────────────────────── */
 
-interface PageHelpProps {
+export interface PageHelpBannerProps {
   title: string
   whatIsIt: string
   useCases?: string[]
@@ -1426,6 +1650,9 @@ interface PageHelpProps {
   /** When set, loads defaults from `PAGE_FLOW_LINKS` unless `relatedLinks` is provided. */
   flowPath?: string
 }
+
+/** @deprecated Use PageHelpBannerProps — kept for call-site ergonomics. */
+type PageHelpProps = PageHelpBannerProps
 
 /* ── PageRelatedLinks — "where to go next" chips ───────────────────────── */
 
@@ -1517,7 +1744,8 @@ function markVisited() {
   }
 }
 
-export function PageHelp({
+/** Top-of-page "About this page" banner — yellow until read, green after. */
+export function PageHelpBanner({
   title,
   whatIsIt,
   useCases,
@@ -1525,16 +1753,26 @@ export function PageHelp({
   defaultOpen,
   relatedLinks,
   flowPath,
-}: PageHelpProps) {
+}: PageHelpBannerProps) {
   const { pathname } = useLocation()
-  const routeKey = flowPath ?? resolveFlowPath(pathname)
+  const routeKey = resolveFlowPath(flowPath ?? pathname)
   const resolvedLinks = relatedLinks ?? PAGE_FLOW_LINKS[routeKey] ?? []
-  // Default-open only for first-ever visits (a single global flag, not per
-  // page) — the audit found existing per-title-only logic hammered returning
-  // users with re-opened help on every new page they navigated to.
+  const [isRead, setIsRead] = useState(() => isPageHelpRead(routeKey))
+
+  useEffect(() => {
+    setIsRead(isPageHelpRead(routeKey))
+    const onRead = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail
+      if (detail === routeKey) setIsRead(true)
+    }
+    window.addEventListener(PAGEHELP_READ_EVENT, onRead)
+    return () => window.removeEventListener(PAGEHELP_READ_EVENT, onRead)
+  }, [routeKey])
+
   const [open, setOpen] = useState<boolean>(() => {
     if (defaultOpen !== undefined) return defaultOpen
     if (readPageHelpDismissed(title)) return false
+    if (!isPageHelpRead(routeKey)) return true
     return !isReturningUser()
   })
 
@@ -1546,15 +1784,28 @@ export function PageHelp({
     const next = e.currentTarget.open
     setOpen(next)
     writePageHelpDismissed(title, !next)
+    // Auto-open unread panels: mark read when the user collapses after skimming.
+    if (!next && !isPageHelpRead(routeKey)) {
+      markPageHelpRead(routeKey)
+      setIsRead(true)
+    }
   }
+
+  const surfaceClass = isRead
+    ? 'border-ok/40 bg-ok/5 open:border-ok/50 open:bg-ok/10'
+    : 'border-warn/40 bg-warn/10 open:border-warn/50 open:bg-warn/15'
+  const iconClass = isRead
+    ? 'bg-ok-muted/30 text-ok'
+    : 'bg-warn-muted/30 text-warn'
+  const statusLabel = isRead ? 'Read' : 'New'
 
   return (
     <details
       open={open}
       onToggle={handleToggle}
-      className="group mb-4 w-full min-w-0 rounded-lg border border-edge-subtle bg-surface-raised/30 open:border-edge open:bg-surface-raised/50 motion-safe:transition-colors motion-safe:duration-150"
+      className={`group mb-4 w-full min-w-0 rounded-lg border motion-safe:transition-colors motion-safe:duration-150 ${surfaceClass}`}
     >
-      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted hover:bg-surface-overlay/40 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
+      <summary className="flex w-full cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-fg-muted hover:bg-surface-overlay/30 hover:text-fg motion-safe:transition-all motion-safe:duration-150 motion-safe:active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40">
         <svg
           className="h-3 w-3 shrink-0 text-fg-faint motion-safe:transition-transform group-open:rotate-90"
           viewBox="0 0 24 24"
@@ -1566,7 +1817,7 @@ export function PageHelp({
           <path d="M9 18l6-6-6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <span
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-muted/30 text-brand"
+          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${iconClass}`}
           aria-hidden="true"
         >
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -1576,9 +1827,14 @@ export function PageHelp({
           </svg>
         </span>
         <span className="font-medium text-fg-secondary group-open:text-fg">{title}</span>
+        <span
+          className={`rounded-full px-1.5 py-0.5 text-3xs font-medium ${isRead ? 'bg-ok-muted/30 text-ok' : 'bg-warn-muted/30 text-warn'}`}
+        >
+          {statusLabel}
+        </span>
         <span className="ml-auto hidden text-3xs text-fg-faint sm:inline">{open ? 'Click to collapse' : 'Click to expand'}</span>
       </summary>
-      <div className="w-full min-w-0 border-t border-edge-subtle px-3 py-3 sm:px-4">
+      <div className={`w-full min-w-0 border-t px-3 py-3 sm:px-4 ${isRead ? 'border-ok/20' : 'border-warn/20'}`}>
         <div className="grid w-full min-w-0 grid-cols-1 gap-2.5 md:grid-cols-2">
           <HelpSection tone="info" title="What it is" className="md:col-span-2">
             <HelpRichText text={whatIsIt} />
@@ -1602,6 +1858,19 @@ export function PageHelp({
       </div>
     </details>
   )
+}
+
+/** Registers page help with Layout; banner renders at the top via `<RoutePageHelp />`. */
+export function PageHelp(props: PageHelpProps) {
+  const register = usePageHelpRegister()
+  const { title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath } = props
+
+  useEffect(() => {
+    register({ title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath })
+    return () => register(null)
+  }, [register, title, whatIsIt, useCases, howToUse, defaultOpen, relatedLinks, flowPath])
+
+  return null
 }
 
 /* ── FilterSelect ───────────────────────────────────────────────────────── */
@@ -2497,10 +2766,12 @@ export function Abbr({ children, title, className = '' }: AbbrProps) {
 
 /* ── Tooltip ───────────────────────────────────────────────────────────── */
 
+type TooltipSide = 'top' | 'bottom' | 'left' | 'right' | 'auto'
+
 interface TooltipProps {
   content: ReactNode
   children: ReactNode
-  side?: 'top' | 'bottom' | 'left' | 'right'
+  side?: TooltipSide
   /** When false, wraps are allowed — use under narrow headers where long tips would clip. */
   nowrap?: boolean
   /** Render in document.body so tips escape overflow:hidden ancestors (e.g. React Flow). */
@@ -2508,7 +2779,100 @@ interface TooltipProps {
 }
 
 const TOOLTIP_SURFACE =
-  'px-2.5 py-1.5 text-2xs font-medium text-fg bg-surface-overlay border border-edge-subtle rounded-md shadow-raised pointer-events-none tooltip-enter'
+  'px-3 py-2 text-2xs text-fg bg-surface-overlay border border-edge-subtle rounded-md shadow-raised pointer-events-none tooltip-enter'
+
+const TOOLTIP_VIEWPORT_PAD = 12
+const TOOLTIP_GAP = 8
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(Math.max(n, min), max)
+}
+
+function resolveTooltipSide(
+  preferred: TooltipSide,
+  anchor: DOMRect,
+  tipW: number,
+  tipH: number,
+): 'top' | 'bottom' | 'left' | 'right' {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const space = {
+    top: anchor.top - TOOLTIP_VIEWPORT_PAD,
+    bottom: vh - anchor.bottom - TOOLTIP_VIEWPORT_PAD,
+    left: anchor.left - TOOLTIP_VIEWPORT_PAD,
+    right: vw - anchor.right - TOOLTIP_VIEWPORT_PAD,
+  }
+
+  const fits = (side: 'top' | 'bottom' | 'left' | 'right') => {
+    if (side === 'top') return space.top >= tipH + TOOLTIP_GAP
+    if (side === 'bottom') return space.bottom >= tipH + TOOLTIP_GAP
+    if (side === 'left') return space.left >= tipW + TOOLTIP_GAP
+    return space.right >= tipW + TOOLTIP_GAP
+  }
+
+  if (preferred === 'auto') {
+    const ranked: Array<{ side: 'top' | 'bottom' | 'left' | 'right'; score: number }> = [
+      { side: 'top', score: space.top },
+      { side: 'bottom', score: space.bottom },
+      { side: 'right', score: space.right },
+      { side: 'left', score: space.left },
+    ]
+    const viable = ranked.filter((c) => fits(c.side)).sort((a, b) => b.score - a.score)
+    if (viable[0]) return viable[0].side
+    return ranked.sort((a, b) => b.score - a.score)[0]?.side ?? 'top'
+  }
+
+  if (preferred === 'top' && !fits('top') && fits('bottom')) return 'bottom'
+  if (preferred === 'bottom' && !fits('bottom') && fits('top')) return 'top'
+  if (preferred === 'left' && !fits('left') && fits('right')) return 'right'
+  if (preferred === 'right' && !fits('right') && fits('left')) return 'left'
+
+  if (preferred === 'top' || preferred === 'bottom') return preferred
+  return preferred
+}
+
+function computeTooltipPortalPosition(
+  anchor: DOMRect,
+  tipW: number,
+  tipH: number,
+  preferred: TooltipSide,
+): { left: number; top: number; resolvedSide: 'top' | 'bottom' | 'left' | 'right' } {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const resolvedSide = resolveTooltipSide(preferred, anchor, tipW, tipH)
+
+  let left = 0
+  let top = 0
+
+  switch (resolvedSide) {
+    case 'top':
+      top = anchor.top - TOOLTIP_GAP - tipH
+      left = anchor.left + anchor.width / 2 - tipW / 2
+      break
+    case 'bottom':
+      top = anchor.bottom + TOOLTIP_GAP
+      left = anchor.left + anchor.width / 2 - tipW / 2
+      break
+    case 'left':
+      left = anchor.left - TOOLTIP_GAP - tipW
+      top = anchor.top + anchor.height / 2 - tipH / 2
+      break
+    case 'right':
+      left = anchor.right + TOOLTIP_GAP
+      top = anchor.top + anchor.height / 2 - tipH / 2
+      break
+  }
+
+  if (resolvedSide === 'top' || resolvedSide === 'bottom') {
+    left = clamp(left, TOOLTIP_VIEWPORT_PAD, vw - tipW - TOOLTIP_VIEWPORT_PAD)
+    top = clamp(top, TOOLTIP_VIEWPORT_PAD, vh - tipH - TOOLTIP_VIEWPORT_PAD)
+  } else {
+    top = clamp(top, TOOLTIP_VIEWPORT_PAD, vh - tipH - TOOLTIP_VIEWPORT_PAD)
+    left = clamp(left, TOOLTIP_VIEWPORT_PAD, vw - tipW - TOOLTIP_VIEWPORT_PAD)
+  }
+
+  return { left, top, resolvedSide }
+}
 
 export function Tooltip({
   content,
@@ -2520,56 +2884,28 @@ export function Tooltip({
   const [visible, setVisible] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const anchorRef = useRef<HTMLSpanElement>(null)
+  const tooltipRef = useRef<HTMLSpanElement>(null)
   const [portalStyle, setPortalStyle] = useState<React.CSSProperties>({})
 
   const updatePortalPosition = useCallback(() => {
     const el = anchorRef.current
+    const tip = tooltipRef.current
     if (!el) return
-    const r = el.getBoundingClientRect()
-    const gap = 8
-    switch (side) {
-      case 'bottom':
-        setPortalStyle({
-          position: 'fixed',
-          left: r.left + r.width / 2,
-          top: r.bottom + gap,
-          transform: 'translate(-50%, 0)',
-          zIndex: 10_000,
-        })
-        break
-      case 'left':
-        setPortalStyle({
-          position: 'fixed',
-          left: r.left - gap,
-          top: r.top + r.height / 2,
-          transform: 'translate(-100%, -50%)',
-          zIndex: 10_000,
-        })
-        break
-      case 'right':
-        setPortalStyle({
-          position: 'fixed',
-          left: r.right + gap,
-          top: r.top + r.height / 2,
-          transform: 'translate(0, -50%)',
-          zIndex: 10_000,
-        })
-        break
-      default:
-        setPortalStyle({
-          position: 'fixed',
-          left: r.left + r.width / 2,
-          top: r.top - gap,
-          transform: 'translate(-50%, -100%)',
-          zIndex: 10_000,
-        })
-    }
+    const anchor = el.getBoundingClientRect()
+    const tipW = tip?.offsetWidth ?? 288
+    const tipH = tip?.offsetHeight ?? 96
+    const { left, top } = computeTooltipPortalPosition(anchor, tipW, tipH, side)
+    setPortalStyle({
+      position: 'fixed',
+      left,
+      top,
+      zIndex: 10_000,
+    })
   }, [side])
 
   const show = () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current)
     timeoutRef.current = setTimeout(() => {
-      if (portal) updatePortalPosition()
       setVisible(true)
     }, 400)
   }
@@ -2583,16 +2919,19 @@ export function Tooltip({
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current) }
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!visible || !portal) return
+    updatePortalPosition()
+    const raf = requestAnimationFrame(() => updatePortalPosition())
     const reposition = () => updatePortalPosition()
     window.addEventListener('scroll', reposition, true)
     window.addEventListener('resize', reposition)
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener('scroll', reposition, true)
       window.removeEventListener('resize', reposition)
     }
-  }, [visible, portal, updatePortalPosition])
+  }, [visible, portal, content, updatePortalPosition])
 
   const positions = {
     top: 'bottom-full left-1/2 -translate-x-1/2 mb-1.5',
@@ -2602,14 +2941,18 @@ export function Tooltip({
   }
 
   const wrapClass = nowrap ? 'whitespace-nowrap' : 'whitespace-normal text-left leading-snug'
+  const widthClass = nowrap
+    ? 'max-w-[min(20rem,calc(100vw-2rem))]'
+    : 'min-w-[13rem] w-max max-w-[min(26rem,calc(100vw-1.5rem))]'
   const tooltipNode = visible ? (
     <span
+      ref={portal ? tooltipRef : undefined}
       role="tooltip"
       style={portal ? portalStyle : undefined}
       className={
         portal
-          ? `${TOOLTIP_SURFACE} max-w-[min(22rem,calc(100vw-1.5rem))] ${wrapClass}`
-          : `absolute ${positions[side]} z-[100] max-w-[min(18rem,calc(100vw-2rem))] ${TOOLTIP_SURFACE} ${wrapClass}`
+          ? `${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
+          : `absolute ${positions[side === 'auto' ? 'top' : side]} z-[100] ${TOOLTIP_SURFACE} ${widthClass} ${wrapClass}`
       }
     >
       {content}

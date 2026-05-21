@@ -705,3 +705,79 @@ export function IconQaCoverage(p: IconProps) {
   </>)
 }
 
+// ── Service brand glyphs ─────────────────────────────────────────────────────
+// Geometric, stroke-based representations of third-party service brands.
+// Designed to be recognizable at 16 px and 20 px; not trademark replicas.
+
+// Sentry: concentric rings with a center dot — "target / radar" motif matching
+// Sentry's circular logo language.
+export function IconSentry(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="8" cy="8" r="5.5" />
+    <circle cx="8" cy="8" r="2.5" />
+    <circle cx="8" cy="8" r="0.8" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Langfuse: a flowing S-curve trace line over a magnifying lens — "LLM
+// observability / prompt tracing" motif.
+export function IconLangfuse(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M5.5 10 C 5.5 7, 7 7, 8 8 C 9 9, 10.5 9, 10.5 6" strokeLinecap="round" />
+  </>)
+}
+
+// GitHub: classic Octocat silhouette — rounded head, ear nubs, tentacle fork
+// at the base. Recognizable at small sizes.
+export function IconGithub(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 2C4.7 2 2 4.7 2 8c0 2.65 1.72 4.9 4.1 5.69.3.05.41-.13.41-.29v-1.02c-1.67.36-2.02-.8-2.02-.8-.27-.7-.67-.88-.67-.88-.55-.37.04-.36.04-.36.6.04.93.62.93.62.54.92 1.41.65 1.76.5.05-.39.21-.65.38-.8-1.33-.15-2.73-.67-2.73-2.97 0-.65.24-1.19.62-1.61-.06-.15-.27-.76.06-1.59 0 0 .5-.16 1.65.62A5.75 5.75 0 0 1 8 5.8c.51 0 1.02.07 1.5.2 1.14-.78 1.64-.62 1.64-.62.33.83.12 1.44.06 1.59.39.42.62.96.62 1.61 0 2.31-1.4 2.82-2.74 2.97.22.19.41.55.41 1.11v1.65c0 .16.11.35.41.29C12.28 12.9 14 10.65 14 8c0-3.3-2.7-6-6-6z" strokeWidth="0" fill="currentColor" />
+  </>)
+}
+
+// Cursor Cloud: arrow cursor with a small cloud arc above it — evokes the
+// "cloud agent" dispatch concept.
+export function IconCursorCloud(p: IconProps) {
+  return wrap(p, <>
+    <path d="M4 13.5 L4 3 L12 9.5 L8 9.5 L6 13.5 Z" />
+    <path d="M9.5 5.5 C 9.5 3.5, 13 3.5, 13 5.5" strokeLinecap="round" />
+  </>)
+}
+
+/** Claude Code Agent — orange diamond mark (distinct from Cursor). */
+export function IconClaudeCode(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 1.5L14.5 8L8 14.5L1.5 8L8 1.5Z" />
+  </>)
+}
+
+// Jira: diamond-within-diamond shape echoing the Jira logo's nested rhombus.
+export function IconJira(p: IconProps) {
+  return wrap(p, <>
+    <path d="M8 2L14 8L8 14L2 8Z" />
+    <path d="M8 5L11 8L8 11L5 8Z" fill="currentColor" stroke="none" />
+  </>)
+}
+
+// Linear: three stacked horizontal bars with decreasing left indentation —
+// evokes the Linear wordmark's "L" and the issue-list metaphor.
+export function IconLinear(p: IconProps) {
+  return wrap(p, <>
+    <circle cx="8" cy="8" r="5.5" />
+    <path d="M5.5 10.5 L10.5 5.5" strokeLinecap="round" />
+    <path d="M5.5 10.5 L8.5 10.5" strokeLinecap="round" />
+  </>)
+}
+
+// PagerDuty: a pager/radio tower — three arcing signal lines above a base,
+// evoking on-call alerting.
+export function IconPagerDuty(p: IconProps) {
+  return wrap(p, <>
+    <line x1="8" y1="10" x2="8" y2="14" />
+    <path d="M5 11 C 5 7 11 7 11 11" />
+    <path d="M3.5 13 C 3.5 6.5 12.5 6.5 12.5 13" />
+    <circle cx="8" cy="10" r="1" fill="currentColor" stroke="none" />
+  </>)
+}
+

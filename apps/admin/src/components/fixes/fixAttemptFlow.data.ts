@@ -101,7 +101,7 @@ export function buildFixAttemptEdges(fix: FixAttempt): Edge<FixEdgeData>[] {
   })
 }
 
-function deriveStatuses(fix: FixAttempt): Record<string, FixStageStatus> {
+export function deriveStatuses(fix: FixAttempt): Record<string, FixStageStatus> {
   const status = fix.status?.toLowerCase()
   const ci = fix.check_run_conclusion?.toLowerCase()
   const reviewPassed = fix.review_passed

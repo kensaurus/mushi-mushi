@@ -12,6 +12,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { createRequire } from 'node:module'
 import { createLogger } from '@mushi-mushi/core'
+import { ALL_SCOPES, type McpScope } from './catalog.js'
 import { createMushiServer } from './server.js'
 
 const require = createRequire(import.meta.url)
@@ -22,6 +23,25 @@ const log = createLogger({ scope: 'mushi:mcp', level: 'info' })
 const API_ENDPOINT = process.env.MUSHI_API_ENDPOINT ?? ''
 const API_KEY = process.env.MUSHI_API_KEY ?? ''
 const PROJECT_ID = process.env.MUSHI_PROJECT_ID ?? ''
+/**
+ * Optional CSV list of granted scopes. When set, the server only registers
+ * tools whose catalog scope is in the list — `tools/list` will hide write
+ * tools entirely for read-only keys, instead of letting the LLM call them
+ * and burn round-trips on `INSUFFICIENT_SCOPE` errors.
+ *
+ * Examples:
+ *   MUSHI_SCOPES=mcp:read              # read-only key
+ *   MUSHI_SCOPES=mcp:read,mcp:write    # equivalent to leaving unset (default)
+ */
+const SCOPES_RAW = process.env.MUSHI_SCOPES ?? ''
+const parsedScopes = SCOPES_RAW
+  ? SCOPES_RAW
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s): s is McpScope => s === 'mcp:read' || s === 'mcp:write')
+  : ALL_SCOPES
+const SCOPES: readonly McpScope[] =
+  SCOPES_RAW && parsedScopes.length === 0 ? ALL_SCOPES : parsedScopes
 
 async function main() {
   if (!API_KEY) {
@@ -52,13 +72,19 @@ async function main() {
         'Or visit Admin → MCP for a pre-filled config snippet with your actual UUID.',
     )
   }
-  log.info('Starting Mushi MCP server', { version: VERSION, endpoint: API_ENDPOINT || '(unset)', hasProjectId: !!PROJECT_ID })
+  log.info('Starting Mushi MCP server', {
+    version: VERSION,
+    endpoint: API_ENDPOINT || '(unset)',
+    hasProjectId: !!PROJECT_ID,
+    scopes: SCOPES.join(','),
+  })
 
   const server = createMushiServer({
     version: VERSION,
     apiEndpoint: API_ENDPOINT,
     apiKey: API_KEY,
     projectId: PROJECT_ID || undefined,
+    scopes: SCOPES,
   })
 
   const transport = new StdioServerTransport()

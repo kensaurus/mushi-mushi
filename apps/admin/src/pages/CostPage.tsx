@@ -4,10 +4,28 @@
  *          URL-driven tabs (Overview / Breakdown / Raw log).
  */
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useSearchParams } from 'react-router-dom'
 import { usePageCopy } from '../lib/copy'
+import { useCostUx, resolveQuickCostTab } from '../lib/costModeUx'
+import {
+  totalLoggedDetail,
+  totalLoggedTooltip,
+  spend24hDetail,
+  spend24hTooltip,
+  spendMonthDetail,
+  spendMonthTooltip,
+  topDriverDetail,
+  topDriverTooltip,
+  operationsDetail,
+  operationsTooltip,
+  modelsDetail,
+  modelsTooltip,
+  keySourceDetail,
+  keySourceTooltip,
+} from '../lib/costStatTooltips'
+import { costLinks } from '../lib/statCardLinks'
 import { usePageData } from '../lib/usePageData'
 import { usePublishPageContext } from '../lib/pageContext'
 import { useRealtimeReload } from '../lib/realtime'
@@ -73,6 +91,7 @@ function fmtSpend(n: number): string {
 
 export function CostPage() {
   const copy = usePageCopy('/cost')
+  const ux = useCostUx()
   const activeProjectId = useActiveProjectId()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -117,6 +136,12 @@ export function CostPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
+    const quickTab = resolveQuickCostTab(stats)
+    if (active !== quickTab) setActive(quickTab)
+  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, setActive])
 
   const { byOp, byModel, dailySeries } = useMemo(() => {
     const op: Record<string, number> = {}
@@ -164,24 +189,42 @@ export function CostPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'breakdown' as const,
-        label: 'Breakdown',
+        label: copy?.tabLabels?.breakdown ?? 'Breakdown',
         count: stats.operationsCount > 0 ? stats.operationsCount : undefined,
       },
       {
         id: 'log' as const,
-        label: 'Raw log',
+        label: copy?.tabLabels?.log ?? 'Raw log',
         count: stats.totalCalls > 0 ? stats.totalCalls : undefined,
       },
     ],
-    [stats.operationsCount, stats.totalCalls],
+    [copy?.tabLabels, stats.operationsCount, stats.totalCalls],
   )
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="mushi-page-cost">
+        <PageHelp
+          title={copy?.help?.title ?? 'About AI cost tracking'}
+          whatIsIt={
+            copy?.help?.whatIsIt ??
+            'Every LLM call is logged in llm_invocations with token counts and cost_usd. Legacy llm_cost_usd rows are merged into totals.'
+          }
+          useCases={
+            copy?.help?.useCases ?? [
+              'Audit which edge function is spending the most',
+              'Compare costs across models',
+              'Spot a runaway cron from the daily trend',
+            ]
+          }
+          howToUse={
+            copy?.help?.howToUse ??
+            'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
+          }
+        />
         <PageHeader
           title={copy?.title ?? 'LLM Cost'}
           description={
@@ -206,66 +249,7 @@ export function CostPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={copy?.title ?? 'LLM Cost'}
-        description={
-          copy?.description ??
-          'Track and audit every LLM call across classify, fix, judge, and inventory agents.'
-        }
-        projectScope={stats.projectName ?? undefined}
-      >
-        {stats.totalCalls > 0 ? (
-          <Badge className="bg-ok-muted text-ok">Telemetry on</Badge>
-        ) : (
-          <Badge className="bg-warn/10 text-warn">No calls yet</Badge>
-        )}
-      </PageHeader>
-
-      <CostStatusBanner stats={stats} onTab={setActive} />
-
-      <SegmentedControl
-        value={active}
-        onChange={setActive}
-        options={tabOptions}
-        ariaLabel="LLM cost sections"
-        size="sm"
-      />
-
-      <Section title="Spend snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <StatCard
-            label="Total logged"
-            value={fmtSpend(stats.totalSpendUsd)}
-            accent={stats.totalSpendUsd > 0 ? 'text-brand' : undefined}
-            hint={`${stats.invocationCount} invocations${stats.ledgerCount > 0 ? ` + ${stats.ledgerCount} legacy` : ''}`}
-          />
-          <StatCard
-            label="24h spend"
-            value={fmtSpend(stats.spend24hUsd)}
-            accent={stats.spendSpike24h ? 'text-warn' : stats.spend24hUsd > 0 ? 'text-ok' : undefined}
-            hint={`${stats.calls24h} calls · avg ${fmtSpend(stats.avgCostPerCall24h)}/call`}
-          />
-          <StatCard
-            label="This month"
-            value={fmtSpend(stats.spendMonthUsd)}
-            accent="text-brand"
-            hint={`7d: ${fmtSpend(stats.spend7dUsd)} · 30d: ${fmtSpend(stats.spend30dUsd)}`}
-          />
-          <StatCard
-            label="Top driver"
-            value={stats.topOperation ? stats.topOperation.split(':')[0] : '—'}
-            accent={stats.topOperation ? 'text-info' : undefined}
-            hint={
-              stats.topOperation
-                ? `${fmtSpend(stats.topOperationUsd)} · ${stats.topModel ?? 'no model'}`
-                : 'Runs classify or fix to populate'
-            }
-          />
-        </div>
-      </Section>
-
+    <div className="space-y-4" data-testid="mushi-page-cost">
       <PageHelp
         title={copy?.help?.title ?? 'About AI cost tracking'}
         whatIsIt={
@@ -284,6 +268,103 @@ export function CostPage() {
           'Overview shows trend + health. Breakdown groups by operation/model. Raw log lets you search individual calls. Add BYOK in Settings to bill your own Anthropic key.'
         }
       />
+
+      <PageHeader
+        title={copy?.title ?? 'LLM Cost'}
+        description={
+          copy?.description ??
+          'Track and audit every LLM call across classify, fix, judge, and inventory agents.'
+        }
+        projectScope={stats.projectName ?? undefined}
+      >
+        {!ux.hideOverviewChrome && (
+          <>
+            {stats.totalCalls > 0 ? (
+              <Badge className="bg-ok-muted text-ok">Telemetry on</Badge>
+            ) : (
+              <Badge className="bg-warn/10 text-warn">No calls yet</Badge>
+            )}
+          </>
+        )}
+      </PageHeader>
+
+      <CostStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
+
+      {!ux.hideTabs && (
+      <SegmentedControl
+        value={active}
+        onChange={setActive}
+        options={tabOptions}
+        ariaLabel="LLM cost sections"
+        size="sm"
+      />
+      )}
+
+      {!ux.hideCostSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'Spend snapshot'} freshness={{ at: lastFetchedAt, isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <StatCard
+              label={copy?.statLabels?.total ?? 'Total logged'}
+              value={fmtSpend(stats.totalSpendUsd)}
+              accent={stats.totalSpendUsd > 0 ? 'text-brand' : undefined}
+              tooltip={totalLoggedTooltip(stats)}
+              detail={totalLoggedDetail(stats)}
+              to={costLinks.totalLogged}
+            />
+            <StatCard
+              label={copy?.statLabels?.day24h ?? '24h spend'}
+              value={fmtSpend(stats.spend24hUsd)}
+              accent={stats.spendSpike24h ? 'text-warn' : stats.spend24hUsd > 0 ? 'text-ok' : undefined}
+              tooltip={spend24hTooltip(stats)}
+              detail={spend24hDetail(stats)}
+              to={costLinks.spend24h}
+            />
+            <StatCard
+              label={copy?.statLabels?.month ?? 'This month'}
+              value={fmtSpend(stats.spendMonthUsd)}
+              accent="text-brand"
+              tooltip={spendMonthTooltip(stats)}
+              detail={spendMonthDetail(stats)}
+              to={costLinks.spendMonth}
+            />
+            <StatCard
+              label={copy?.statLabels?.topDriver ?? 'Top driver'}
+              value={stats.topOperation ? stats.topOperation.split(':')[0] : '—'}
+              accent={stats.topOperation ? 'text-info' : undefined}
+              tooltip={topDriverTooltip(stats)}
+              detail={topDriverDetail(stats)}
+              to={costLinks.topDriver}
+            />
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <StatCard
+              label={copy?.statLabels?.operations ?? 'Operations'}
+              value={stats.operationsCount}
+              tooltip={operationsTooltip(stats)}
+              detail={operationsDetail()}
+              to={costLinks.operations}
+            />
+            <StatCard
+              label={copy?.statLabels?.models ?? 'Models'}
+              value={stats.modelsCount}
+              tooltip={modelsTooltip(stats)}
+              detail={modelsDetail(stats)}
+              to={costLinks.models}
+            />
+            <StatCard
+              label={copy?.statLabels?.keySource ?? 'Key source · 24h'}
+              value={stats.byokCalls24h > 0 ? `${stats.byokCalls24h} BYOK` : `${stats.platformKeyCalls24h} platform`}
+              accent={stats.byokAnthropicConfigured ? 'text-ok' : 'text-warn'}
+              tooltip={keySourceTooltip(stats)}
+              detail={keySourceDetail(stats)}
+              to={costLinks.keySource}
+            />
+          </div>
+        </div>
+      </Section>
+      )}
 
       <div
         role="tabpanel"
@@ -317,25 +398,6 @@ export function CostPage() {
                 </Link>
               </Card>
             )}
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <StatCard
-                label="Operations"
-                value={stats.operationsCount}
-                hint="Distinct function:stage pairs in 30d window"
-              />
-              <StatCard
-                label="Models"
-                value={stats.modelsCount}
-                hint={stats.topModel ? `Top: ${stats.topModel}` : 'Models appear after first call'}
-              />
-              <StatCard
-                label="Key source · 24h"
-                value={stats.byokCalls24h > 0 ? `${stats.byokCalls24h} BYOK` : `${stats.platformKeyCalls24h} platform`}
-                accent={stats.byokAnthropicConfigured ? 'text-ok' : 'text-warn'}
-                hint={stats.byokAnthropicConfigured ? 'Anthropic BYOK configured' : 'Add BYOK in Settings → LLM keys'}
-              />
-            </div>
           </div>
         )}
 

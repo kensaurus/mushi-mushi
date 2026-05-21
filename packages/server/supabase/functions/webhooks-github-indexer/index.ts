@@ -237,6 +237,7 @@ async function handlePullRequestState(
       draft?: boolean;
       state?: string;
       delivery_id?: string;
+      body?: string | null;
     };
     repository?: { full_name?: string };
   },
@@ -247,11 +248,42 @@ async function handlePullRequestState(
     return new Response(JSON.stringify({ ok: true, ignored: 'no_pr_url' }), { status: 202 });
 
   const db = getDb();
-  const { data: attempt } = await db
+
+  // Primary lookup: by pr_url (covers Cursor Cloud and previously-opened Mushi PRs).
+  let { data: attempt } = await db
     .from('fix_attempts')
     .select('id, project_id, pr_state')
     .eq('pr_url', prUrl)
     .maybeSingle();
+
+  // Fallback: Claude Code Agent PRs include <!-- mushi-fix-id: <dispatch_event_id> -->
+  // in the PR body. On first open (pr_url not yet persisted) use this to correlate.
+  if (!attempt && payload.pull_request?.body) {
+    const fixIdMatch = payload.pull_request.body.match(
+      /<!--\s*mushi-fix-id:\s*([0-9a-f-]{36})\s*-->/i,
+    );
+    if (fixIdMatch) {
+      const dispatchEventId = fixIdMatch[1];
+      const { data: claudeAttempt } = await db
+        .from('fix_attempts')
+        .select('id, project_id, pr_state')
+        .eq('claude_dispatch_event_id', dispatchEventId)
+        .maybeSingle();
+      if (claudeAttempt) {
+        // Record the PR URL on the fix_attempt so future lookups use the primary path.
+        await db
+          .from('fix_attempts')
+          .update({
+            pr_url: prUrl,
+            pr_number: payload.pull_request?.number ?? null,
+            status: 'pr_opened',
+          })
+          .eq('id', claudeAttempt.id);
+        attempt = claudeAttempt;
+      }
+    }
+  }
+
   if (!attempt) {
     return new Response(
       JSON.stringify({ ok: true, ignored: 'pr_not_a_mushi_fix', pr_url: prUrl }),
@@ -1070,6 +1102,7 @@ app.post('/webhooks-github-indexer', async (c) => {
         number?: number;
         draft?: boolean;
         state?: string;
+        body?: string | null;
       };
       repository?: { full_name?: string };
     };
@@ -1084,6 +1117,109 @@ app.post('/webhooks-github-indexer', async (c) => {
       return c.json({ ok: true, ignored: `pull_request.${prPayload.action ?? 'unknown'}` }, 202);
     }
     return await handlePullRequestState(prPayload, deliveryId);
+  }
+
+  // workflow_run.*: tracks GitHub Actions workflow runs triggered by Mushi's
+  // repository_dispatch (Claude Code Agent). Maps the run back to a
+  // fix_attempt via the project's repo URL, then updates status columns.
+  if (event === 'workflow_run') {
+    const wrPayload = JSON.parse(raw) as {
+      action?: string;
+      workflow_run?: {
+        id?: number;
+        name?: string;
+        html_url?: string;
+        status?: string;
+        conclusion?: string | null;
+        head_branch?: string;
+        run_number?: number;
+      };
+      repository?: { full_name?: string };
+    };
+
+    const wr = wrPayload.workflow_run;
+    const action = wrPayload.action ?? '';
+    const repoFullName = wrPayload.repository?.full_name ?? '';
+
+    // Only handle our Mushi Claude Code Fix workflow.
+    if (wr?.name !== 'Mushi Claude Code Fix') {
+      return c.json({ ok: true, ignored: 'workflow_run.not_mushi' }, 202);
+    }
+    if (!['in_progress', 'completed'].includes(action)) {
+      return c.json({ ok: true, ignored: `workflow_run.${action}` }, 202);
+    }
+
+    const db = getDb();
+
+    // Find the project whose github repo matches this workflow_run's repo.
+    const possibleRepoUrls = [
+      `https://github.com/${repoFullName}`,
+      `https://github.com/${repoFullName}.git`,
+      `git@github.com:${repoFullName}.git`,
+    ];
+    const { data: settingsRows } = await db
+      .from('project_settings')
+      .select('project_id')
+      .in('github_repo_url', possibleRepoUrls);
+
+    const projectId = settingsRows?.[0]?.project_id ?? null;
+    if (!projectId) {
+      log.warn('workflow_run: no project found for repo', { repoFullName });
+      return c.json({ ok: true, ignored: 'workflow_run.no_project' }, 202);
+    }
+
+    // Find the most recent running claude_code_agent fix_attempt without a
+    // workflow run ID (time-correlation heuristic for repository_dispatch).
+    const { data: attempt } = await db
+      .from('fix_attempts')
+      .select('id, status, claude_workflow_run_id')
+      .eq('project_id', projectId)
+      .eq('agent', 'claude_code_agent')
+      .in('status', ['running'])
+      .is('claude_workflow_run_id', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!attempt) {
+      log.warn('workflow_run: no matching fix_attempt found', {
+        projectId,
+        action,
+        runId: wr?.id,
+      });
+      return c.json({ ok: true, ignored: 'workflow_run.no_attempt' }, 202);
+    }
+
+    const updateFields: Record<string, unknown> = {
+      claude_workflow_run_id: wr?.id ?? null,
+      claude_workflow_run_url: wr?.html_url ?? null,
+    };
+
+    if (action === 'completed') {
+      const conclusion = wr?.conclusion ?? 'failure';
+      if (conclusion === 'success') {
+        // PR was created; the pull_request.opened webhook will set pr_url.
+        // Don't flip to completed yet — wait for the PR merge.
+        updateFields['status'] = 'pr_opened';
+      } else {
+        updateFields['status'] = 'failed';
+        updateFields['completed_at'] = new Date().toISOString();
+        updateFields['failure_category'] = 'claude_api_error';
+        updateFields['error'] =
+          `GitHub Actions workflow concluded with: ${conclusion}. ` +
+          `Check the workflow run at ${wr?.html_url ?? 'GitHub Actions'} for details.`;
+      }
+    }
+
+    await db.from('fix_attempts').update(updateFields).eq('id', attempt.id);
+
+    log.info('workflow_run: updated fix_attempt', {
+      fixAttemptId: attempt.id,
+      action,
+      conclusion: wr?.conclusion,
+      runId: wr?.id,
+    });
+    return c.json({ ok: true, fixAttemptId: attempt.id, action, runId: wr?.id }, 200);
   }
 
   // check_run.*: emits ci_started / ci_resolved fix_events and keeps the

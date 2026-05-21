@@ -4,7 +4,7 @@
  *          with stats banner, KPI strip, and PDCA action cards from dashboard data.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   ErrorAlert,
@@ -30,6 +30,18 @@ import { EMPTY_INBOX_STATS, type InboxStats, type InboxTabId } from '../componen
 import type { PageAction } from '../components/PageActionBar'
 import type { ActivityItem, DashboardData } from '../components/dashboard/types'
 import { buildInboxCards, type InboxCard, type InboxCardGroup } from '../lib/actionInboxFromDashboard'
+import { useInboxUx, resolveQuickInboxTab } from '../lib/inboxModeUx'
+import {
+  backlogDetail,
+  backlogTooltip,
+  clearDetail,
+  clearTooltip,
+  criticalDetail,
+  criticalTooltip,
+  openDetail,
+  openTooltip,
+} from '../lib/statTooltips/inbox'
+import { inboxLinks, statLink } from '../lib/statCardLinks'
 
 type Group = InboxCardGroup
 
@@ -96,6 +108,7 @@ function isInboxTab(value: string | null): value is InboxTabId {
 
 export function InboxPage() {
   const copy = usePageCopy('/inbox')
+  const ux = useInboxUx()
   const activeProjectId = useActiveProjectId()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -136,6 +149,12 @@ export function InboxPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickInboxTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats.openActions, activeTab, setActiveTab, stats])
 
   const openCards = cards.filter((c) => c.action !== null)
   const clearCards = cards.filter((c) => c.action === null)
@@ -196,20 +215,20 @@ export function InboxPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'actions' as const,
-        label: 'Actions',
+        label: copy?.tabLabels?.actions ?? 'Actions',
         count: stats.openActions > 0 ? stats.openActions : undefined,
       },
       {
         id: 'stages' as const,
-        label: 'Stages',
+        label: copy?.tabLabels?.stages ?? 'Stages',
         count: stats.clearStages > 0 ? stats.clearStages : undefined,
       },
-      { id: 'activity' as const, label: 'Activity' },
+      { id: 'activity' as const, label: copy?.tabLabels?.activity ?? 'Activity' },
     ],
-    [stats],
+    [stats, copy?.tabLabels],
   )
 
   if ((loading && !data) || (statsLoading && !statsData)) {
@@ -230,6 +249,25 @@ export function InboxPage() {
 
   return (
     <div data-inbox-root className="space-y-4">
+      <PageHelp
+        title={copy?.help?.title ?? 'About the inbox'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Start every morning on Overview — read the banner, then switch to Actions',
+            'Use Stages tab to filter by Plan / Do / Check / Act / Ops',
+            'Activity tab shows the events that triggered open cards',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Red banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Action inbox'}
         projectScope={stats.projectName ?? undefined}
@@ -268,48 +306,67 @@ export function InboxPage() {
         </Btn>
       </PageHeader>
 
-      <InboxStatusBanner stats={stats} onTab={setActiveTab} onRefresh={reloadAll} refreshing={statsValidating || isValidating} />
-
-      <SegmentedControl
-        value={activeTab}
-        onChange={setActiveTab}
-        options={tabOptions}
-        ariaLabel="Inbox sections"
-        size="sm"
+      <InboxStatusBanner
+        stats={stats}
+        onTab={setActiveTab}
+        onRefresh={reloadAll}
+        refreshing={statsValidating || isValidating}
+        plainBanner={ux.plainBanner}
       />
 
-      <Section title="INBOX SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideTabs && (
+        <SegmentedControl
+          value={activeTab}
+          onChange={setActiveTab}
+          options={tabOptions}
+          ariaLabel="Inbox sections"
+          size="sm"
+        />
+      )}
+
+      {!ux.hideInboxSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'INBOX SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="Open"
+            label={copy?.statLabels?.open ?? 'Open'}
             value={stats.openActions}
             accent={stats.openActions > 0 ? 'text-danger' : 'text-ok'}
-            hint={stats.openActions > 0 ? 'Needs your decision' : 'Inbox zero'}
+            tooltip={openTooltip(stats)}
+            detail={openDetail(stats)}
+            to={statLink(inboxLinks.open, stats)}
           />
           <StatCard
-            label="Clear"
+            label={copy?.statLabels?.clear ?? 'Clear'}
             value={stats.clearStages}
             accent="text-ok"
-            hint={`of ${stats.totalSurfaces} PDCA surfaces`}
+            tooltip={clearTooltip(stats, ux.plainStageLabels)}
+            detail={clearDetail(stats, ux.plainStageLabels)}
+            to={inboxLinks.clear}
           />
           <StatCard
-            label="Backlog"
+            label={copy?.statLabels?.backlog ?? 'Backlog'}
             value={stats.openBacklog}
             accent={stats.openBacklog > 0 ? 'text-warn' : undefined}
-            hint={stats.openBacklog > 0 ? 'Reports > 1h untriaged' : 'Queue current'}
+            tooltip={backlogTooltip(stats)}
+            detail={backlogDetail(stats)}
+            to={inboxLinks.backlog}
           />
           <StatCard
-            label="Critical 14d"
+            label={copy?.statLabels?.critical ?? 'Critical 14d'}
             value={stats.criticalReports14d}
             accent={stats.criticalReports14d > 0 ? 'text-brand' : undefined}
-            hint={stats.failedFixes14d > 0 ? `${stats.failedFixes14d} failed fixes` : 'Severity rollup'}
+            tooltip={criticalTooltip(stats)}
+            detail={criticalDetail(stats)}
+            to={inboxLinks.critical}
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
+          {!ux.hideOverviewChrome && (
           <PageHero
             scope="inbox"
             title="Action inbox"
@@ -331,8 +388,9 @@ export function InboxPage() {
               detail: 'Cards derive from the same dashboard aggregate as the sidebar badge.',
             }}
           />
+          )}
 
-          {stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
+          {!ux.hideOverviewChrome && stats.topPriorityTitle && stats.topPriorityTo && stats.openActions > 0 ? (
             <Card className="border-danger/30 bg-danger/5 p-4">
               <p className="text-3xs font-semibold uppercase tracking-wider text-danger">Top priority</p>
               <p className="mt-1 text-sm font-medium text-fg">{stats.topPriorityTitle}</p>
@@ -342,34 +400,15 @@ export function InboxPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <Link to={stats.topPriorityTo}>
                   <Btn size="sm" variant="primary">
-                    Take action →
+                    {copy?.actionLabels?.takeAction ?? 'Take action'} →
                   </Btn>
                 </Link>
                 <Btn size="sm" variant="ghost" onClick={() => setActiveTab('actions')}>
-                  View full queue
+                  {copy?.actionLabels?.queue ?? 'View full queue'}
                 </Btn>
               </div>
             </Card>
           ) : null}
-
-          <PageHelp
-            title={copy?.help?.title ?? 'About the inbox'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'A single view that surfaces every action waiting for you — bugs to triage, fixes to review, and connections to set up.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Start every morning on Overview — read the banner, then switch to Actions',
-                'Use Stages tab to filter by Plan / Do / Check / Act / Ops',
-                'Activity tab shows the events that triggered open cards',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              'Red banner = open work. Green banner = inbox zero. Every card has a primary CTA — no dead buttons.'
-            }
-          />
 
           {openCards.length === 0 && clearCards.length > 0 ? (
             <section aria-label="Cleared stages preview">

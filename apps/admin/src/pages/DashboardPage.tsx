@@ -5,7 +5,7 @@
  *          (Overview | Loop | Metrics | Health) + stats banner/KPI strip.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import type { ChartEvent } from '../lib/apiSchemas'
@@ -52,6 +52,18 @@ import {
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
+import { useDashboardUx, resolveQuickDashboardTab } from '../lib/dashboardModeUx'
+import {
+  backlogDetail,
+  backlogTooltip,
+  fixesDetail,
+  fixesTooltip,
+  focusDetail,
+  focusTooltip,
+  reports14dDetail,
+  reports14dTooltip,
+} from '../lib/statTooltips/dashboard'
+import { dashboardLinks, statLink } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
 
 const DASHBOARD_TABS: Array<{ id: DashboardTabId; label: string; description: string }> = [
@@ -118,8 +130,11 @@ export function DashboardPage() {
   const setup = useSetupStatus(activeProjectId)
   const toast = useToast()
   const navigate = useNavigate()
-  const [showFullDashboard, setShowFullDashboard] = useState(false)
+  const [showFullDashboard, setShowFullDashboard] = useState(
+    () => searchParams.get('tab') === 'metrics',
+  )
   const copy = usePageCopy('/dashboard')
+  const ux = useDashboardUx()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
@@ -151,6 +166,17 @@ export function DashboardPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  const peekMetrics = useCallback(() => {
+    setShowFullDashboard(true)
+    setActiveTab('metrics')
+  }, [setActiveTab])
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading || showFullDashboard) return
+    const quickTab = resolveQuickDashboardTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab, showFullDashboard])
 
   const isEmpty = !data || data.empty
   const realtimeEnabled = !loading && !error && !!stats.hasAnyProject
@@ -219,24 +245,24 @@ export function DashboardPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'loop' as const,
-        label: 'Loop',
+        label: copy?.tabLabels?.loop ?? 'Loop',
         count: stats.focusStage ? 1 : undefined,
       },
       {
         id: 'metrics' as const,
-        label: 'Metrics',
+        label: copy?.tabLabels?.metrics ?? 'Metrics',
         count: stats.openBacklog > 0 ? stats.openBacklog : stats.reports14d > 0 ? stats.reports14d : undefined,
       },
       {
         id: 'health' as const,
-        label: 'Health',
+        label: copy?.tabLabels?.health ?? 'Health',
         count: stats.integrationIssues > 0 ? stats.integrationIssues : undefined,
       },
     ],
-    [stats],
+    [stats, copy?.tabLabels],
   )
 
   if ((loading && !data) || (statsLoading && !statsData)) return <DashboardSkeleton />
@@ -266,6 +292,24 @@ export function DashboardPage() {
     !setup.selectors.done &&
     setup.selectors.required_complete < setup.selectors.required_total
   const renderFullDashboard = !setupIncomplete || showFullDashboard
+  const metricsCounts =
+    counts ?? {
+      reports14d: stats.reports14d,
+      openBacklog: stats.openBacklog,
+      fixesTotal: stats.fixesInProgress + stats.fixesFailed,
+      openPrs: stats.openPrs,
+      llmCalls14d: stats.llmCalls14d,
+      llmTokens14d: 0,
+      llmFailures14d: stats.llmFailures14d,
+    }
+  const metricsFixSummary =
+    fixSummary ?? {
+      total: stats.fixesInProgress + stats.fixesFailed,
+      completed: 0,
+      failed: stats.fixesFailed,
+      inProgress: stats.fixesInProgress,
+      openPrs: stats.openPrs,
+    }
   const bannerSeverity: 'ok' | 'warn' | 'danger' | 'info' | 'neutral' =
     !stats.hasAnyProject
       ? 'neutral'
@@ -282,6 +326,25 @@ export function DashboardPage() {
   return (
     <div className="space-y-4">
       <Confetti triggerKey={confettiKey} />
+
+      <PageHelp
+        title={copy?.help?.title ?? 'About the Dashboard'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Tabbed workspace view: Overview for next actions, Loop for PDCA canvas, Metrics for 14-day charts, Health for probes.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Read the status banner first — it surfaces backlog, failures, and integration issues',
+            'Jump to Loop when you need the interactive stage canvas',
+            'Use Metrics when comparing intake vs fix throughput week over week',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Click KPI tiles or tab badges to drill in. Green banner means nothing urgent is blocking the loop.'
+        }
+      />
 
       <PageHeader title={copy?.title ?? 'Dashboard'} projectScope={projectName ?? undefined} description={dashDescription}>
         <Badge
@@ -323,51 +386,58 @@ export function DashboardPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating || isValidating}
+        plainBanner={ux.plainBanner}
       />
 
-      <SegmentedControl
-        value={activeTab}
-        onChange={setActiveTab}
-        options={tabOptions}
-        ariaLabel="Dashboard sections"
-        size="sm"
-      />
+      {!ux.hideTabs && (
+        <SegmentedControl
+          value={activeTab}
+          onChange={setActiveTab}
+          options={tabOptions}
+          ariaLabel="Dashboard sections"
+          size="sm"
+        />
+      )}
 
-        <Section title="LOOP SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideLoopSnapshot && (
+        <Section title={copy?.sections?.snapshot ?? 'LOOP SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="Backlog"
+            label={copy?.statLabels?.backlog ?? 'Backlog'}
             value={stats.openBacklog}
             accent={stats.openBacklog > 0 ? 'text-danger' : 'text-ok'}
-            hint={stats.openBacklog > 0 ? 'Needs triage > 1h' : 'Queue clear'}
+            tooltip={backlogTooltip(stats)}
+            detail={backlogDetail(stats)}
+            to={dashboardLinks.backlog}
           />
           <StatCard
-            label="Reports 14d"
+            label={copy?.statLabels?.reports ?? 'Reports 14d'}
             value={stats.reports14d}
             accent={stats.reports14d > 0 ? 'text-brand' : undefined}
-            hint={stats.hasData ? 'Intake active' : 'Waiting for ingest'}
+            tooltip={reports14dTooltip(stats)}
+            detail={reports14dDetail(stats)}
+            to={dashboardLinks.reports14d}
           />
           <StatCard
-            label="Fixes"
+            label={copy?.statLabels?.fixes ?? 'Fixes'}
             value={stats.fixesInProgress}
             accent={stats.fixesFailed > 0 ? 'text-danger' : stats.fixesInProgress > 0 ? 'text-warn' : undefined}
-            hint={
-              stats.fixesFailed > 0
-                ? `${stats.fixesFailed} failed`
-                : stats.openPrs > 0
-                  ? `${stats.openPrs} PR${stats.openPrs === 1 ? '' : 's'} open`
-                  : 'None in flight'
-            }
+            tooltip={fixesTooltip(stats)}
+            detail={fixesDetail(stats)}
+            to={dashboardLinks.fixes}
           />
           <StatCard
-            label="Focus"
+            label={copy?.statLabels?.focus ?? 'Focus'}
             value={stats.focusLabel ?? '—'}
             accent={focusAccent(stats.focusStage)}
-            hint={stats.bottleneck ?? (stats.setupDone ? 'Loop balanced' : `${stats.requiredComplete}/${stats.requiredTotal} setup`)}
+            tooltip={focusTooltip(stats)}
+            detail={focusDetail(stats)}
+            to={statLink(dashboardLinks.focus, stats)}
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
@@ -389,7 +459,7 @@ export function DashboardPage() {
                 />
               )}
 
-              {!showFirstReportHero && data!.pdcaStages && data!.pdcaStages.length > 0 && (
+              {!showFirstReportHero && data!.pdcaStages && data!.pdcaStages.length > 0 && !ux.hideOverviewChrome && (
                 <HeroIntro
                   stages={data!.pdcaStages}
                   focusStage={data!.focusStage}
@@ -398,6 +468,7 @@ export function DashboardPage() {
                 />
               )}
 
+              {!ux.hideOverviewChrome && (
               <PageHero
                 scope="dashboard"
                 title="Bug-fix loop"
@@ -417,6 +488,7 @@ export function DashboardPage() {
                   detail: 'Dashboard stats refresh when reports or fixes change via webhook.',
                 }}
               />
+              )}
             </>
           )}
 
@@ -434,32 +506,12 @@ export function DashboardPage() {
               <p className="text-xs text-fg-muted">
                 Finish setup above to unlock Metrics tab. You can peek now if you like.
               </p>
-              <Btn size="sm" variant="ghost" onClick={() => setShowFullDashboard(true)}>
+              <Btn size="sm" variant="ghost" onClick={peekMetrics}>
                 Show full metrics
               </Btn>
             </div>
           )}
 
-          {!isEmpty && (
-            <PageHelp
-              title={copy?.help?.title ?? 'About the Dashboard'}
-              whatIsIt={
-                copy?.help?.whatIsIt ??
-                'Tabbed workspace view: Overview for next actions, Loop for PDCA canvas, Metrics for 14-day charts, Health for probes.'
-              }
-              useCases={
-                copy?.help?.useCases ?? [
-                  'Read the status banner first — it surfaces backlog, failures, and integration issues',
-                  'Jump to Loop when you need the interactive stage canvas',
-                  'Use Metrics when comparing intake vs fix throughput week over week',
-                ]
-              }
-              howToUse={
-                copy?.help?.howToUse ??
-                'Click KPI tiles or tab badges to drill in. Green banner means nothing urgent is blocking the loop.'
-              }
-            />
-          )}
         </>
       )}
 
@@ -515,42 +567,79 @@ export function DashboardPage() {
               <p className="mt-1 text-2xs text-fg-muted">
                 Finish required setup steps on Overview, or peek metrics now.
               </p>
-              <Btn size="sm" variant="ghost" className="mt-3" onClick={() => setShowFullDashboard(true)}>
+              <Btn size="sm" variant="ghost" className="mt-3" onClick={peekMetrics}>
                 Show metrics anyway
               </Btn>
             </Card>
-          ) : isEmpty ? (
-            <Card className="p-4">
-              <p className="text-xs font-medium text-info">No metrics yet</p>
-              <p className="mt-1 text-2xs text-fg-muted">
-                Charts populate after the first report lands — usually within seconds of SDK ingest.
-              </p>
-            </Card>
           ) : (
             <>
-              <QuotaBanner />
-              {counts && fixSummary && (
-                <KpiRow
-                  counts={counts}
-                  fixSummary={fixSummary}
-                  reportsByDay={reportsByDay}
-                  llmByDay={llmByDay}
-                />
+              {ux.hideTabs && (
+                <div className="flex items-center justify-between gap-3 rounded-md border border-edge-subtle bg-surface-raised/30 px-3 py-2.5">
+                  <div>
+                    <p className="text-xs font-medium text-fg">Metrics preview</p>
+                    <p className="text-2xs text-fg-muted">
+                      {setupIncomplete
+                        ? 'Preview while setup finishes — charts fill in after first ingest.'
+                        : stats.hasData
+                          ? '14-day intake, auto-fix throughput, and LLM activity.'
+                          : 'Waiting for first report — tiles update as soon as ingest is live.'}
+                    </p>
+                  </div>
+                  <Btn size="sm" variant="ghost" onClick={() => setActiveTab('overview')}>
+                    Back to overview
+                  </Btn>
+                </div>
               )}
+
+              {setupIncomplete && (
+                <Card className="p-4 border-warn/30 bg-warn/5">
+                  <p className="text-xs font-medium text-warn">
+                    Setup {stats.requiredComplete}/{stats.requiredTotal} — metrics preview
+                  </p>
+                  <p className="mt-1 text-2xs text-fg-muted">
+                    Finish the checklist on Overview to unlock live charts. These tiles use workspace stats until ingest lands.
+                  </p>
+                  <Link to="/onboarding?tab=steps" className="mt-3 inline-block">
+                    <Btn size="sm" variant="ghost">Continue setup</Btn>
+                  </Link>
+                </Card>
+              )}
+
+              {!stats.hasData && isEmpty && !setupIncomplete && (
+                <Card className="p-4">
+                  <p className="text-xs font-medium text-info">No metrics yet</p>
+                  <p className="mt-1 text-2xs text-fg-muted">
+                    Charts populate after the first report lands — usually within seconds of SDK ingest.
+                  </p>
+                  <Link to="/onboarding?tab=verify" className="mt-3 inline-block">
+                    <Btn size="sm" variant="ghost">Send test report</Btn>
+                  </Link>
+                </Card>
+              )}
+
+              <QuotaBanner />
+              <KpiRow
+                counts={metricsCounts}
+                fixSummary={metricsFixSummary}
+                reportsByDay={reportsByDay}
+                llmByDay={llmByDay}
+              />
               <ChartsRow
                 reportsByDay={reportsByDay}
                 llmByDay={llmByDay}
-                totalLlmCalls={counts?.llmCalls14d ?? stats.llmCalls14d}
+                totalLlmCalls={metricsCounts.llmCalls14d}
                 chartEvents={chartEvents}
               />
-              {fixSummary && (
+              {!isEmpty && fixSummary && (
                 <TriageAndFixRow triageQueue={data!.triageQueue ?? []} fixSummary={fixSummary} />
               )}
-              <InsightsRow
-                topComponents={data!.topComponents ?? []}
-                integrations={data!.integrations ?? []}
-                activity={activity}
-              />
+              {!isEmpty && (
+                <InsightsRow
+                  topComponents={data!.topComponents ?? []}
+                  integrations={data!.integrations ?? []}
+                  activity={activity}
+                />
+              )}
             </>
           )}
         </>

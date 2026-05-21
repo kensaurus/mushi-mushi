@@ -1,5 +1,8 @@
 import { RuleTester } from 'eslint'
 import { describe, it } from 'vitest'
+// @ts-expect-error — parser ships its own loose typings; we only need
+// the default-export factory function at runtime.
+import tsParser from '@typescript-eslint/parser'
 
 ;(RuleTester as unknown as { describe: typeof describe }).describe = describe
 ;(RuleTester as unknown as { it: typeof it }).it = it
@@ -7,8 +10,12 @@ import { describe, it } from 'vitest'
 
 import rule from './no-mock-leak.js'
 
+// Round 8 (B15): wired the TypeScript parser so the test fixtures exercise
+// real-world TS-flavoured user code (interfaces, satisfies, type imports)
+// instead of being silent parse errors.
 const tester = new RuleTester({
   languageOptions: {
+    parser: tsParser,
     parserOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -37,6 +44,16 @@ describe('no-mock-leak', () => {
         // Single John Doe, not 2+ entries → not flagged.
         filename: '/proj/src/users.ts',
         code: `const sample = [{ name: 'John Doe' }]`,
+      },
+      {
+        // TS: type-only import — we shouldn't trip the mock-import detector.
+        filename: '/proj/src/users.ts',
+        code: `import type { faker } from '@faker-js/faker'`,
+      },
+      {
+        // TS: interface declaration with placeholder-y field name (no value).
+        filename: '/proj/src/types.ts',
+        code: `interface User { name: string }`,
       },
     ],
     invalid: [

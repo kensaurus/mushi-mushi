@@ -601,6 +601,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       reportCount: 0,
       fixCount: 0,
       mergedFixCount: 0,
+      nextStepTo: '/onboarding?tab=steps' as string | null,
     };
 
     const accessibleIds = await ownedProjectIds(db, userId);
@@ -705,6 +706,20 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const setupDone = requiredComplete === requiredSteps.length;
     const nextRequired = requiredSteps.find((s) => !s.complete) ?? null;
 
+    const nextStepTo = (() => {
+      if (!nextRequired) return '/onboarding?tab=sdk';
+      switch (nextRequired.id) {
+        case 'api_key_generated':
+        case 'first_report_received':
+          return '/onboarding?tab=verify';
+        case 'sdk_installed':
+          return '/onboarding?tab=sdk';
+        case 'project_created':
+        default:
+          return '/onboarding?tab=steps';
+      }
+    })();
+
     return c.json({
       ok: true,
       data: {
@@ -728,6 +743,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         reportCount,
         fixCount,
         mergedFixCount,
+        nextStepTo,
       },
     });
   });
@@ -3210,6 +3226,141 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
   })
 
   // DLQ admin endpoints
+
+  // GET /v1/admin/queue/stats — QueueStatusBanner posture data.
+  app.get('/v1/admin/queue/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      pending: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+      deadLetter: 0,
+      reportsQueued: 0,
+      strandedReports: 0,
+      oldestPendingMinutes: null as number | null,
+      topStage: null as string | null,
+      topStageDeadLetter: 0,
+      todayCreated: 0,
+      todayCompleted: 0,
+      todayFailed: 0,
+      topPriority: 'no_project' as
+        | 'no_project' | 'dead_letter' | 'failed' | 'circuit_breaker' | 'stalled' | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) return c.json({ ok: true, data: empty })
+
+    const projectRes = await db
+      .from('projects')
+      .select('id, project_name')
+      .in('id', projectIds)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const pid = projectRes.data?.id ?? projectIds[0]
+    const projectName = projectRes.data?.project_name ?? null
+
+    const todayStart = new Date()
+    todayStart.setUTCHours(0, 0, 0, 0)
+
+    const [queueRes, reportsQueuedRes] = await Promise.all([
+      db.from('process_queue')
+        .select('id, status, stage, created_at, started_at')
+        .in('project_id', projectIds)
+        .order('created_at', { ascending: false })
+        .limit(500),
+      db.from('reports')
+        .select('id', { count: 'exact', head: true })
+        .in('project_id', projectIds)
+        .eq('status', 'queued'),
+    ])
+
+    const items = queueRes.data ?? []
+    const pending = items.filter((i) => i.status === 'pending').length
+    const running = items.filter((i) => i.status === 'running').length
+    const completed = items.filter((i) => i.status === 'completed').length
+    const failed = items.filter((i) => i.status === 'failed').length
+    const deadLetter = items.filter((i) => i.status === 'dead_letter').length
+    const reportsQueued = reportsQueuedRes.count ?? 0
+
+    const todayItems = items.filter((i) => i.created_at >= todayStart.toISOString())
+    const todayCreated = todayItems.length
+    const todayCompleted = todayItems.filter((i) => i.status === 'completed').length
+    const todayFailed = todayItems.filter((i) => i.status === 'failed').length
+
+    const oldestPendingItem = items.filter((i) => i.status === 'pending').at(-1)
+    const oldestPendingMinutes = oldestPendingItem
+      ? Math.floor((Date.now() - new Date(oldestPendingItem.created_at).getTime()) / 60000)
+      : null
+
+    const stageCounts = new Map<string, number>()
+    for (const i of items.filter((it) => it.status === 'dead_letter')) {
+      const s = i.stage ?? 'unknown'
+      stageCounts.set(s, (stageCounts.get(s) ?? 0) + 1)
+    }
+    const topEntry = [...stageCounts.entries()].sort((a, b) => b[1] - a[1])[0]
+
+    let topPriority: typeof empty.topPriority = 'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (deadLetter > 0) {
+      topPriority = 'dead_letter'
+      topPriorityLabel = `${deadLetter} dead-letter job${deadLetter === 1 ? '' : 's'} — inspect and republish.`
+      topPriorityTo = '/queue?status=dead_letter'
+    } else if (failed > 0) {
+      topPriority = 'failed'
+      topPriorityLabel = `${failed} job${failed === 1 ? '' : 's'} failed — retry or quarantine.`
+      topPriorityTo = '/queue?status=failed'
+    } else if (reportsQueued > 0) {
+      topPriority = 'circuit_breaker'
+      topPriorityLabel = `${reportsQueued} report${reportsQueued === 1 ? '' : 's'} queued behind circuit breaker — flush when ready.`
+      topPriorityTo = '/queue'
+    } else if (oldestPendingMinutes !== null && oldestPendingMinutes > 15) {
+      topPriority = 'stalled'
+      topPriorityLabel = `Oldest pending job is ${oldestPendingMinutes}m old — possible stall.`
+      topPriorityTo = '/queue?status=pending'
+    } else {
+      topPriorityLabel = `${running} running · ${pending} pending — pipeline nominal.`
+      topPriorityTo = '/queue'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName,
+        projectCount: projectIds.length,
+        pending,
+        running,
+        completed,
+        failed,
+        deadLetter,
+        reportsQueued,
+        strandedReports: 0,
+        oldestPendingMinutes,
+        topStage: topEntry?.[0] ?? null,
+        topStageDeadLetter: topEntry?.[1] ?? 0,
+        todayCreated,
+        todayCompleted,
+        todayFailed,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
+
   app.get('/v1/admin/queue', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();

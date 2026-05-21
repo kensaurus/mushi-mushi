@@ -1,5 +1,21 @@
 # create-mushi-mushi
 
+## 0.5.7
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies [0c66aa9]
+  - @mushi-mushi/cli@0.10.0
+
+## 0.5.6
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @mushi-mushi/cli@0.9.0
+
 ## 0.5.5
 
 ### Patch Changes

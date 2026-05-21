@@ -1093,6 +1093,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       topPriorityTitle: null as string | null,
       topPriorityStage: null as string | null,
       topPriorityTo: null as string | null,
+      topPriority: 'no_project' as 'no_project' | 'setup' | 'actions' | 'clear',
+      topPriorityLabel: null as string | null,
+      nextStepTo: null as string | null,
       openPlan: false,
       openDo: false,
       openCheck: false,
@@ -1228,7 +1231,14 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         ? {
             stage: 'plan',
             title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} in 14d`,
-            to: '/reports?severity=critical',
+            to: '/reports?tab=queue&status=new&severity=critical',
+          }
+        : null,
+      !openPlan && openBacklog > 0
+        ? {
+            stage: 'plan',
+            title: `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting > 1h to triage`,
+            to: '/reports?tab=queue&status=new',
           }
         : null,
       openDo
@@ -1300,6 +1310,32 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       lastActivityKind = 'fix';
     }
 
+    let topPriority: typeof empty.topPriority = 'clear';
+    let topPriorityLabel: string | null = null;
+    let nextStepTo: string | null = null;
+
+    if (!setupDone) {
+      topPriority = 'setup';
+      topPriorityLabel = `${requiredComplete}/${empty.requiredTotal} setup steps done — finish ingest to unlock the inbox`;
+      if (!hasKey) {
+        nextStepTo = '/onboarding?tab=steps';
+      } else if (!hasSdk) {
+        nextStepTo = '/onboarding?tab=sdk';
+      } else if (reportCount === 0) {
+        nextStepTo = '/onboarding?tab=verify';
+      } else {
+        nextStepTo = '/onboarding?tab=steps';
+      }
+    } else if (openActions > 0 && top) {
+      topPriority = 'actions';
+      topPriorityLabel = top.title;
+    } else if (openActions > 0) {
+      topPriority = 'actions';
+      topPriorityLabel = `${openActions} open action${openActions === 1 ? '' : 's'} waiting`;
+    } else {
+      topPriorityLabel = `${clearStages}/${empty.totalSurfaces} stages clear — inbox zero`;
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -1323,6 +1359,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         topPriorityTitle: top?.title ?? null,
         topPriorityStage: top?.stage ?? null,
         topPriorityTo: top?.to ?? null,
+        topPriority,
+        topPriorityLabel,
+        nextStepTo,
         openPlan,
         openDo,
         openCheck,
@@ -1361,6 +1400,16 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       integrationIssues: 0,
       lastActivityAt: null as string | null,
       lastActivityKind: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'setup'
+        | 'backlog'
+        | 'fixes_failed'
+        | 'integrations'
+        | 'waiting_data'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const projectIds = await ownedProjectIds(db, userId);
@@ -1526,6 +1575,43 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       lastActivityKind = 'fix';
     }
 
+    let topPriority: typeof empty.topPriority = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!setupDone) {
+      topPriority = 'setup';
+      topPriorityLabel = `${requiredComplete}/${empty.requiredTotal} setup steps done — finish ingest to unlock metrics`;
+      if (!hasKey) {
+        topPriorityTo = '/onboarding?tab=steps';
+      } else if (!hasSdk) {
+        topPriorityTo = '/onboarding?tab=sdk';
+      } else if (reportCount === 0) {
+        topPriorityTo = '/onboarding?tab=verify';
+      } else {
+        topPriorityTo = '/onboarding?tab=steps';
+      }
+    } else if (openBacklog > 0) {
+      topPriority = 'backlog';
+      topPriorityLabel = bottleneck;
+      topPriorityTo = '/reports?tab=queue&status=new';
+    } else if (fixesFailed > 0) {
+      topPriority = 'fixes_failed';
+      topPriorityLabel = `${fixesFailed} auto-fix${fixesFailed === 1 ? '' : 'es'} failed in 14d — retry or inspect logs`;
+      topPriorityTo = '/fixes?status=failed';
+    } else if (integrationIssues > 0) {
+      topPriority = 'integrations';
+      topPriorityLabel = `${integrationIssues} integration${integrationIssues === 1 ? '' : 's'} failing health checks`;
+      topPriorityTo = '/dashboard?tab=health';
+    } else if (recentReports.length === 0 && recentFixes.length === 0) {
+      topPriority = 'waiting_data';
+      topPriorityLabel = 'Pipeline wired — send a test report to populate charts';
+      topPriorityTo = '/onboarding?tab=verify';
+    } else {
+      topPriorityLabel = `${recentReports.length} report${recentReports.length === 1 ? '' : 's'} in 14d · ${fixesInProgress} fix${fixesInProgress === 1 ? '' : 'es'} in flight`;
+      topPriorityTo = '/dashboard?tab=loop';
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -1550,6 +1636,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         integrationIssues,
         lastActivityAt,
         lastActivityKind,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });
@@ -2359,6 +2448,133 @@ export function registerReportsDashboardRoutes(app: Hono): void {
   // PROMPT LAB — manage prompt versions + view eval dataset.
   // Replaces the old "Fine-Tuning" page that nobody could complete.
   // ============================================================
+
+  // GET /v1/admin/prompt-lab/stats — PromptLabStatusBanner posture data.
+  app.get('/v1/admin/prompt-lab/stats', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string
+    const db = getServiceClient()
+
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      projectCount: 0,
+      totalPrompts: 0,
+      activePrompts: 0,
+      candidatePrompts: 0,
+      abTestingCount: 0,
+      untestedAbCount: 0,
+      promoteReadyCount: 0,
+      bestScore: null as number | null,
+      bestStage: null as string | null,
+      bestVersion: null as string | null,
+      datasetTotal: 0,
+      datasetLabelled: 0,
+      datasetLabelPct: null as number | null,
+      fineTuningPending: 0,
+      topPriority: 'no_project' as
+        | 'no_project' | 'no_dataset' | 'untested_ab' | 'promote_ready'
+        | 'candidates_idle' | 'ab_running' | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    }
+
+    const projectIds = await ownedProjectIds(db, userId)
+    if (projectIds.length === 0) return c.json({ ok: true, data: empty })
+
+    const projectRes = await db
+      .from('projects')
+      .select('id, project_name')
+      .in('id', projectIds)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    const pid = projectRes.data?.id ?? projectIds[0]
+    const projectName = projectRes.data?.project_name ?? null
+
+    const [promptsRes, evalRes] = await Promise.all([
+      db.from('prompt_versions')
+        .select('id, stage, is_active, is_candidate, traffic_percentage, avg_judge_score')
+        .or(`project_id.is.null,project_id.in.(${projectIds.join(',')})`)
+        .limit(200),
+      db.from('judge_results')
+        .select('id, labelled_by', { count: 'exact', head: false })
+        .in('project_id', projectIds)
+        .limit(1000),
+    ])
+
+    const prompts = promptsRes.data ?? []
+    const totalPrompts = prompts.length
+    const activePrompts = prompts.filter((p) => p.is_active).length
+    const candidatePrompts = prompts.filter((p) => p.is_candidate).length
+    const abTestingCount = prompts.filter((p) => p.traffic_percentage !== null && p.traffic_percentage > 0 && p.traffic_percentage < 100).length
+    const untestedAbCount = prompts.filter((p) => p.is_candidate && (p.avg_judge_score === null || p.avg_judge_score === 0)).length
+    const promoteReadyCount = prompts.filter((p) => p.is_candidate && p.avg_judge_score !== null && p.avg_judge_score > 0.8).length
+
+    const bestPrompt = prompts
+      .filter((p) => p.avg_judge_score !== null)
+      .sort((a, b) => (b.avg_judge_score ?? 0) - (a.avg_judge_score ?? 0))[0]
+
+    const evalRows = evalRes.data ?? []
+    const datasetTotal = evalRes.count ?? evalRows.length
+    const datasetLabelled = evalRows.filter((r) => r.labelled_by).length
+    const datasetLabelPct = datasetTotal > 0 ? Math.round((datasetLabelled / datasetTotal) * 100) : null
+
+    let topPriority: typeof empty.topPriority = 'healthy'
+    let topPriorityLabel: string | null = null
+    let topPriorityTo: string | null = null
+
+    if (datasetTotal === 0) {
+      topPriority = 'no_dataset'
+      topPriorityLabel = 'No evaluation dataset — run Judge to build scored examples.'
+      topPriorityTo = '/judge'
+    } else if (untestedAbCount > 0) {
+      topPriority = 'untested_ab'
+      topPriorityLabel = `${untestedAbCount} candidate prompt${untestedAbCount === 1 ? '' : 's'} haven't been evaluated yet.`
+      topPriorityTo = '/prompt-lab?tab=prompts'
+    } else if (promoteReadyCount > 0) {
+      topPriority = 'promote_ready'
+      topPriorityLabel = `${promoteReadyCount} candidate prompt${promoteReadyCount === 1 ? '' : 's'} ready to promote — score ≥ 80%.`
+      topPriorityTo = '/prompt-lab?tab=prompts'
+    } else if (abTestingCount > 0) {
+      topPriority = 'ab_running'
+      topPriorityLabel = `${abTestingCount} prompt${abTestingCount === 1 ? '' : 's'} running A/B — awaiting evaluation data.`
+      topPriorityTo = '/prompt-lab?tab=prompts'
+    } else if (candidatePrompts > 0) {
+      topPriority = 'candidates_idle'
+      topPriorityLabel = `${candidatePrompts} candidate prompt${candidatePrompts === 1 ? '' : 's'} idle — start an A/B test to compare.`
+      topPriorityTo = '/prompt-lab?tab=prompts'
+    } else {
+      topPriorityLabel = `${activePrompts} active prompt${activePrompts === 1 ? '' : 's'} — add a candidate to start iterating.`
+      topPriorityTo = '/prompt-lab'
+    }
+
+    return c.json({
+      ok: true,
+      data: {
+        hasAnyProject: true,
+        projectId: pid,
+        projectName,
+        projectCount: projectIds.length,
+        totalPrompts,
+        activePrompts,
+        candidatePrompts,
+        abTestingCount,
+        untestedAbCount,
+        promoteReadyCount,
+        bestScore: bestPrompt?.avg_judge_score ?? null,
+        bestStage: bestPrompt?.stage ?? null,
+        bestVersion: null,
+        datasetTotal,
+        datasetLabelled,
+        datasetLabelPct,
+        fineTuningPending: 0,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
+      },
+    })
+  })
 
   app.get('/v1/admin/prompt-lab', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;

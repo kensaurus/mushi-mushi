@@ -1,10 +1,12 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useEntitlements } from '../lib/useEntitlements'
 import { usePageData } from '../lib/usePageData'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
+import { useInventoryUx, resolveQuickInventoryTab } from '../lib/inventoryModeUx'
+import { inventoryLinks } from '../lib/statCardLinks'
 import { usePublishPageContext } from '../lib/pageContext'
 import { apiFetch } from '../lib/supabase'
 import { useRealtimeReload } from '../lib/realtime'
@@ -186,6 +188,7 @@ export function InventoryPage() {
   const projectId = useActiveProjectId()
   const { has, loading: entLoading, planName } = useEntitlements()
   const copy = usePageCopy('/inventory')
+  const ux = useInventoryUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveInventoryTab(tabParam)
@@ -210,6 +213,12 @@ export function InventoryPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || !projectId || statsLoading) return
+    const quickTab = resolveQuickInventoryTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, projectId, statsLoading, stats, activeTab, setActiveTab])
 
   const [yamlDraft, setYamlDraft] = useState<string | null>(null)
   const [drawer, setDrawer] = useState<{
@@ -420,24 +429,32 @@ export function InventoryPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'stories' as const,
-        label: 'User stories',
+        label: copy?.tabLabels?.stories ?? 'User stories',
         count: stats.userStories > 0 ? stats.userStories : undefined,
       },
-      { id: 'tree' as const, label: 'Tree', count: stats.total > 0 ? stats.total : undefined },
+      {
+        id: 'tree' as const,
+        label: copy?.tabLabels?.tree ?? 'Tree',
+        count: stats.total > 0 ? stats.total : undefined,
+      },
       {
         id: 'gates' as const,
-        label: 'Gates',
+        label: copy?.tabLabels?.gates ?? 'Gates',
         count: stats.openFindings > 0 ? stats.openFindings : undefined,
       },
-      { id: 'synthetic' as const, label: 'Synthetic' },
-      { id: 'drift' as const, label: 'Drift' },
-      { id: 'discovery' as const, label: 'Discovery', count: stats.draftProposals > 0 ? stats.draftProposals : undefined },
-      { id: 'yaml' as const, label: 'Yaml' },
+      { id: 'synthetic' as const, label: copy?.tabLabels?.synthetic ?? 'Synthetic' },
+      { id: 'drift' as const, label: copy?.tabLabels?.drift ?? 'Drift' },
+      {
+        id: 'discovery' as const,
+        label: copy?.tabLabels?.discovery ?? 'Discovery',
+        count: stats.draftProposals > 0 ? stats.draftProposals : undefined,
+      },
+      { id: 'yaml' as const, label: copy?.tabLabels?.yaml ?? 'Yaml' },
     ],
-    [stats],
+    [copy?.tabLabels, stats],
   )
 
   usePublishPageContext({
@@ -490,6 +507,8 @@ export function InventoryPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-inventory">
+      <PageHelp {...INVENTORY_HELP} />
+
       <PageHeader
         title={copy?.title ?? 'User stories · Inventory'}
         projectScope={stats.projectName ?? undefined}
@@ -500,6 +519,8 @@ export function InventoryPage() {
             : 'Banner + INVENTORY SNAPSHOT — start on Overview, then Discovery or Yaml to ingest.')
         }
       >
+        {!ux.hideOverviewChrome && (
+          <>
         <Badge
           className={
             bannerSeverity === 'ok'
@@ -532,6 +553,8 @@ export function InventoryPage() {
         <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || mainQuery.isValidating}>
           Refresh
         </Btn>
+          </>
+        )}
       </PageHeader>
 
       <InventoryStatusBanner
@@ -539,8 +562,10 @@ export function InventoryPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating || mainQuery.isValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<InventoryTabId>
         size="sm"
         ariaLabel="Inventory sections"
@@ -548,30 +573,38 @@ export function InventoryPage() {
         onChange={setActiveTab}
         options={tabOptions}
       />
+      )}
 
-      <Section title="INVENTORY SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideInventorySnapshot && (
+      <Section
+        title={copy?.sections?.snapshot ?? 'INVENTORY SNAPSHOT'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="Verified"
+            label={copy?.statLabels?.verified ?? 'Verified'}
             value={stats.hasInventory ? `${stats.verified}/${stats.total}` : '—'}
             accent={stats.regressed > 0 ? 'text-warn' : stats.verified > 0 ? 'text-ok' : undefined}
             hint={stats.hasInventory ? `${stats.userStories} stories` : 'Not ingested'}
+            to={inventoryLinks.verified}
           />
           <StatCard
-            label="Regressed"
+            label={copy?.statLabels?.regressed ?? 'Regressed'}
             value={stats.regressed}
             accent={stats.regressed > 0 ? 'text-danger' : 'text-ok'}
             hint={stats.regressed > 0 ? 'Fix before release' : 'None flagged'}
+            to={inventoryLinks.regressed}
           />
           <StatCard
-            label="Findings"
+            label={copy?.statLabels?.findings ?? 'Findings'}
             value={stats.openFindings}
             accent={stats.openFindings > 0 ? 'text-warn' : undefined}
             hint={stats.lastGateRunAt ? 'From latest gate runs' : 'No runs yet'}
+            to={inventoryLinks.findings}
           />
           <StatCard
-            label="Discovery"
+            label={copy?.statLabels?.discovery ?? 'Discovery'}
             value={stats.discoveryEvents}
             accent={stats.draftProposals > 0 ? 'text-brand' : undefined}
             hint={
@@ -579,12 +612,16 @@ export function InventoryPage() {
                 ? `${stats.draftProposals} draft proposal${stats.draftProposals === 1 ? '' : 's'}`
                 : 'SDK events observed'
             }
+            to={inventoryLinks.discovery}
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
+          {!ux.hideOverviewChrome && (
+          <>
           <PageHero
             scope="inventory"
             title="User stories"
@@ -655,8 +692,6 @@ export function InventoryPage() {
             }
           />
 
-          <PageHelp {...INVENTORY_HELP} />
-
           {!snapshot && (
             <SetupNudge
               requires={['github_connected']}
@@ -692,6 +727,8 @@ export function InventoryPage() {
               </Btn>
             ) : null}
           </div>
+          </>
+          )}
         </>
       )}
 

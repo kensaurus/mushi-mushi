@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { BillingStats, BillingTabId } from './types'
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   onManage?: () => void
   onUpgrade?: () => void
   onTab?: (tab: BillingTabId) => void
+  plainBanner?: boolean
 }
 
 function fmtLimit(used: number, limit: number | null): string {
@@ -19,7 +21,9 @@ function fmtLimit(used: number, limit: number | null): string {
   return `${used.toLocaleString()} / ${limit.toLocaleString()} reports`
 }
 
-export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props) {
+export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab, plainBanner = false }: Props) {
+  const copy = usePageCopy('/billing')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'active project'
 
   if (stats.projectCount === 0) {
@@ -28,14 +32,18 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">No projects yet</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner ? 'Create a project first' : 'No projects yet'}
+            </p>
             <p className="text-2xs text-fg-muted">
-              Billing is per-project — create an app first, then usage and invoices appear here.
+              {plainBanner
+                ? 'Billing is per app — set one up on Projects first.'
+                : 'Billing is per-project — create an app first, then usage and invoices appear here.'}
             </p>
           </div>
         </div>
         <Link to="/projects">
-          <Btn size="sm" variant="ghost">Create project</Btn>
+          <Btn size="sm" variant="ghost">{actions.projects ?? 'Create project'}</Btn>
         </Link>
       </div>
     )
@@ -47,7 +55,9 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-danger">Payment past due for {projectLabel}</p>
+            <p className="text-xs font-medium text-danger">
+              {plainBanner ? 'Payment failed — update your card' : `Payment past due for ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">
               Stripe couldn&apos;t charge the card on file — update payment method or ingest may stop.
             </p>
@@ -55,7 +65,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         </div>
         {onManage ? (
           <Btn size="sm" variant="ghost" onClick={onManage}>
-            Update payment
+            {actions.payment ?? 'Update payment'}
           </Btn>
         ) : null}
       </div>
@@ -68,7 +78,9 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-danger">Over quota — new reports may be rejected</p>
+            <p className="text-xs font-medium text-danger">
+              {plainBanner ? 'Over quota — upgrade to keep ingesting' : 'Over quota — new reports may be rejected'}
+            </p>
             <p className="text-2xs text-fg-muted">
               {fmtLimit(stats.reportsUsed, stats.reportsLimit)} this period on {stats.planDisplayName}. Upgrade to keep ingesting.
             </p>
@@ -76,11 +88,11 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         </div>
         {onUpgrade ? (
           <Btn size="sm" variant="ghost" onClick={onUpgrade}>
-            Upgrade plan
+            {actions.upgrade ?? 'Upgrade plan'}
           </Btn>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('plans')}>
-            Compare plans
+            {actions.plans ?? 'Compare plans'}
           </Btn>
         ) : null}
       </div>
@@ -103,7 +115,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         </div>
         {onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('plans')}>
-            View plans
+            {actions.plans ?? 'View plans'}
           </Btn>
         ) : null}
       </div>
@@ -128,7 +140,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         </div>
         {onManage ? (
           <Btn size="sm" variant="ghost" onClick={onManage}>
-            Manage in Stripe
+            {actions.manage ?? 'Manage in Stripe'}
           </Btn>
         ) : null}
       </div>
@@ -141,14 +153,16 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">Admin account — complimentary billing</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'Admin account — no charges' : 'Admin account — complimentary billing'}
+            </p>
             <p className="text-2xs text-fg-muted">
               {stats.planDisplayName} entitlements for {projectLabel} · no Stripe charges · {fmtLimit(stats.reportsUsed, stats.reportsLimit)} this period
             </p>
           </div>
         </div>
         <Link to="/cost">
-          <Btn size="sm" variant="ghost">View LLM cost</Btn>
+          <Btn size="sm" variant="ghost">{actions.cost ?? 'View LLM cost'}</Btn>
         </Link>
       </div>
     )
@@ -168,7 +182,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         </div>
         {onManage ? (
           <Btn size="sm" variant="ghost" onClick={onManage}>
-            Open portal
+            {actions.manage ?? 'Open portal'}
           </Btn>
         ) : null}
       </div>
@@ -181,14 +195,16 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">Hobby plan — no usage this period yet</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Hobby plan — no usage yet' : 'Hobby plan — no usage this period yet'}
+            </p>
             <p className="text-2xs text-fg-muted">
               {stats.freeLimitReports.toLocaleString()} free reports/mo included. Send a test report from Health or wire the SDK widget.
             </p>
           </div>
         </div>
         <Link to="/health">
-          <Btn size="sm" variant="ghost">Run Health test</Btn>
+          <Btn size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
         </Link>
       </div>
     )
@@ -200,7 +216,9 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
           <p className="text-xs font-medium text-ok">
-            {stats.planDisplayName} active for {projectLabel}
+            {plainBanner
+              ? `${stats.planDisplayName} active`
+              : `${stats.planDisplayName} active for ${projectLabel}`}
           </p>
           <p className="text-2xs text-fg-muted">
             {fmtLimit(stats.reportsUsed, stats.reportsLimit)} this period
@@ -211,7 +229,7 @@ export function BillingStatusBanner({ stats, onManage, onUpgrade, onTab }: Props
       </div>
       {onTab ? (
         <Btn size="sm" variant="ghost" onClick={() => onTab('plans')}>
-          Compare plans
+          {actions.plans ?? 'Compare plans'}
         </Btn>
       ) : null}
     </div>

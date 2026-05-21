@@ -96,7 +96,7 @@ export function KpiTile({
       <div className="flex items-center gap-1 truncate">
         <div className="text-2xs text-fg-muted uppercase tracking-wider truncate">{label}</div>
         {meaning && (
-          <Tooltip content={meaning}>
+          <Tooltip content={meaning} side="auto" portal nowrap={false}>
             <span
               aria-label={meaning}
               className="inline-flex h-3 w-3 items-center justify-center rounded-full border border-edge text-3xs text-fg-faint hover:text-fg-muted hover:border-fg-faint cursor-help"

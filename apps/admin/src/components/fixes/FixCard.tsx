@@ -16,6 +16,9 @@ import { PdcaReceipt } from './PdcaReceipt';
 import { pluralizeWithCount } from '../../lib/format';
 import { ciBadge, type FixAttempt } from './types';
 import { FixAttemptFlow } from './FixAttemptFlow';
+import { CursorAgentBadge } from './CursorAgentBadge';
+import { CursorArtifactsGallery } from './CursorArtifactsGallery';
+import { ClaudeAgentBadge } from './ClaudeAgentBadge';
 
 interface InventoryActionSummary {
   actionNodeId: string;
@@ -84,6 +87,15 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
               {pipelineStatusLabel(fix.status)}
             </Badge>
             <span className="text-2xs text-fg-muted">via {fix.agent}</span>
+            {fix.agent === 'cursor_cloud' && fix.cursor_agent_id && (
+              <CursorAgentBadge agentId={fix.cursor_agent_id} />
+            )}
+            {fix.agent === 'claude_code_agent' && (
+              <ClaudeAgentBadge
+                workflowRunUrl={fix.claude_workflow_run_url}
+                isRunning={fix.status === 'running'}
+              />
+            )}
             {fix.llm_model && (
               <span className="text-2xs font-mono text-fg-faint" title="LLM model used">
                 {fix.llm_model}
@@ -257,6 +269,9 @@ export function FixCard({ fix, isOpen, timeline, traceUrl, onToggle, onRetry, in
                   ))}
                 </ul>
               </div>
+            )}
+            {fix.agent === 'cursor_cloud' && fix.cursor_artifacts && fix.cursor_artifacts.length > 0 && (
+              <CursorArtifactsGallery artifacts={fix.cursor_artifacts} />
             )}
             {inventoryAction && (
               <div>

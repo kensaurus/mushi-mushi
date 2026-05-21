@@ -73,6 +73,7 @@
       "msw",
       "protobufjs",
       "sharp",
+      "sqlite3",
       "supabase"
     ],
     "overrides": {
@@ -85,7 +86,8 @@
       "hono@<4.12.16": ">=4.12.16",
       "ip-address@<=10.1.0": ">=10.1.1",
       "fast-uri@<3.1.2": ">=3.1.2",
-      "protobufjs@<=7.5.5": ">=7.5.6"
+      "protobufjs@<=7.5.5": ">=7.5.6",
+      "tar@<7": ">=7.4.3"
     }
   },
   "devDependencies": {

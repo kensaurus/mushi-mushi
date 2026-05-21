@@ -26,6 +26,17 @@ import { FeedbackModal } from '../components/FeedbackModal'
 import { SupportTicketDetailModal } from '../components/support/SupportTicketDetailModal'
 import { FeedbackStatusBanner } from '../components/feedback/FeedbackStatusBanner'
 import { EMPTY_FEEDBACK_STATS, type FeedbackStats, type FeedbackTabId } from '../components/feedback/types'
+import {
+  activeTicketsDetail,
+  activeTicketsTooltip,
+  shippedTicketsDetail,
+  shippedTicketsTooltip,
+  ticketMixDetail,
+  ticketMixTooltip,
+  totalTicketsDetail,
+  totalTicketsTooltip,
+} from '../lib/statTooltips/feedback'
+import { feedbackLinks } from '../lib/statCardLinks'
 import { PageHero } from '../components/PageHero'
 import {
   Badge,
@@ -278,25 +289,33 @@ export function FeedbackPage() {
             label="Total"
             value={stats.totalTickets}
             accent={stats.totalTickets > 0 ? 'text-fg' : undefined}
-            hint={stats.totalTickets === 0 ? 'Nothing filed yet' : 'All-time submissions'}
+            tooltip={totalTicketsTooltip(stats)}
+            detail={totalTicketsDetail(stats)}
+            to={feedbackLinks.total}
           />
           <StatCard
             label="Active"
             value={stats.activeTickets}
             accent={stats.activeTickets > 0 ? 'text-warn' : 'text-ok'}
-            hint={stats.awaitingReply > 0 ? `${stats.awaitingReply} with reply` : 'Open + in progress'}
+            tooltip={activeTicketsTooltip(stats)}
+            detail={activeTicketsDetail(stats)}
+            to={feedbackLinks.active}
           />
           <StatCard
             label="Shipped"
             value={stats.shippedTickets}
             accent={stats.shippedTickets > 0 ? 'text-ok' : undefined}
-            hint={stats.shippedTickets > 0 ? 'Linked to releases' : 'None credited yet'}
+            tooltip={shippedTicketsTooltip(stats)}
+            detail={shippedTicketsDetail(stats)}
+            to={feedbackLinks.shipped}
           />
           <StatCard
             label="Mix"
             value={`${stats.bugTickets}/${stats.featureTickets}`}
             accent="text-brand"
-            hint="Bugs / features"
+            tooltip={ticketMixTooltip(stats)}
+            detail={ticketMixDetail()}
+            to={feedbackLinks.mix}
           />
         </div>
       </Section>

@@ -169,13 +169,20 @@ export function useDispatchFix(reportId: string, projectId: string) {
     }
   }, [poll])
 
-  const dispatch = useCallback(async () => {
+  const dispatch = useCallback(async (options?: { agentOverride?: string }) => {
     cancelled.current = false
     reachedTerminal.current = false
     setState({ status: 'queueing' })
     const res = await apiFetch<{ dispatchId: string; status: string; createdAt: string }>(
       '/v1/admin/fixes/dispatch',
-      { method: 'POST', body: JSON.stringify({ reportId, projectId }) },
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          reportId,
+          projectId,
+          ...(options?.agentOverride ? { agentOverride: options.agentOverride } : {}),
+        }),
+      },
     )
     if (!res.ok || !res.data) {
       const code = (res as { error?: { code?: string; message?: string } }).error?.code ?? 'DISPATCH_FAILED'

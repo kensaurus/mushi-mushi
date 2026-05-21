@@ -48,12 +48,12 @@ vi.mock('@mushi-mushi/web', () => ({
   },
 }))
 
-import { MushiService, MushiErrorHandler, provideMushi } from '../index'
+import { MushiService, MushiErrorHandler, provideMushi, provideMushiAngular, MUSHI_CONFIG } from '../index'
 
 const testConfig = {
   projectId: 'proj_test',
   apiKey: 'key_test',
-  endpoint: 'https://test.api',
+  apiEndpoint: 'https://test.api',
 }
 
 beforeEach(() => {
@@ -63,15 +63,24 @@ beforeEach(() => {
 })
 
 describe('MushiService', () => {
-  it('constructor delegates to Mushi.init with correct config', async () => {
+  it('constructor delegates to Mushi.init with the canonical config (forwarded as-is)', async () => {
     const { Mushi } = await import('@mushi-mushi/web')
     new MushiService(testConfig)
+    expect(Mushi.init).toHaveBeenCalledWith(testConfig)
+  })
 
-    expect(Mushi.init).toHaveBeenCalledWith({
-      projectId: 'proj_test',
-      apiKey: 'key_test',
-      apiEndpoint: 'https://test.api',
-    })
+  it('forwards Round 7 fields (beforeSendFeedback, theme, …) to Mushi.init', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    const beforeSend = vi.fn(async (r: unknown) => r)
+    new MushiService({
+      ...testConfig,
+      beforeSendFeedback: beforeSend,
+      theme: 'dark',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const initArg = (Mushi.init as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]
+    expect((initArg as Record<string, unknown>).beforeSendFeedback).toBe(beforeSend)
+    expect((initArg as Record<string, unknown>).theme).toBe('dark')
   })
 
   it('after init, Mushi.getInstance() returns the instance (parity check)', async () => {
@@ -87,6 +96,31 @@ describe('MushiService', () => {
 
     const call = (Mushi.init as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]
     expect(call?.[0]).not.toHaveProperty('apiEndpoint')
+  })
+
+  it('skips Mushi.init on the server (Angular Universal SSR)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    const originalWindow = globalThis.window
+    const originalDocument = globalThis.document
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).window
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).document
+    try {
+      new MushiService(testConfig)
+      expect(Mushi.init).not.toHaveBeenCalled()
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = originalWindow
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).document = originalDocument
+    }
+  })
+
+  it('skips Mushi.init when no config is provided (DI optional path)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    new MushiService(undefined)
+    expect(Mushi.init).not.toHaveBeenCalled()
   })
 
   it('report() calls captureEvent on the SDK instance', async () => {
@@ -161,5 +195,30 @@ describe('provideMushi', () => {
 
     result.errorHandler.handleError(new Error('test'))
     expect(spy).toHaveBeenCalled()
+  })
+})
+
+describe('provideMushiAngular (Angular 16+ DI providers)', () => {
+  it('returns a Provider[] including MUSHI_CONFIG and MushiService', () => {
+    const providers = provideMushiAngular(testConfig)
+    // Three entries: MUSHI_CONFIG value, MushiService class, and MushiErrorHandler factory.
+    expect(providers).toHaveLength(3)
+    const configProvider = providers[0] as { provide: unknown; useValue: unknown }
+    expect(configProvider.provide).toBe(MUSHI_CONFIG)
+    expect(configProvider.useValue).toEqual(testConfig)
+  })
+
+  it('errorHandler factory wires through to the constructed service', () => {
+    const providers = provideMushiAngular(testConfig)
+    const errorHandlerProvider = providers[2] as {
+      provide: typeof MushiErrorHandler
+      useFactory: (s: MushiService) => MushiErrorHandler
+      deps: unknown[]
+    }
+    expect(errorHandlerProvider.provide).toBe(MushiErrorHandler)
+    expect(errorHandlerProvider.deps).toEqual([MushiService])
+    const service = new MushiService(testConfig)
+    const handler = errorHandlerProvider.useFactory(service)
+    expect(handler).toBeInstanceOf(MushiErrorHandler)
   })
 })

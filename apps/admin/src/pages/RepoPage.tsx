@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
@@ -30,12 +30,19 @@ import {
   LogBlock,
   RelativeTime,
   SegmentedControl,
+  FreshnessPill,
   type DefinitionChipItem,
 } from '../components/ui'
+import { usePageCopy } from '../lib/copy'
+import { useRepoUx, resolveQuickRepoTab } from '../lib/repoModeUx'
 import { FixGitGraph, type FixTimelineEvent } from '../components/FixGitGraph'
 import { useRealtimeReload } from '../lib/realtime'
 import { IconGit, IconIntegrations } from '../components/icons'
 import { pluralize, pluralizeWithCount } from '../lib/format'
+import { RepoStatusBanner } from '../components/repo/RepoStatusBanner'
+import { RepoSnapshotStrip } from '../components/repo/RepoSnapshotStrip'
+import { EMPTY_REPO_STATS, type RepoStats, type RepoTabId } from '../components/repo/RepoStatsTypes'
+import { usePageData } from '../lib/usePageData'
 
 interface RepoBranch {
   id: string
@@ -101,6 +108,29 @@ const BUCKETS: { id: Bucket; label: string }[] = [
   { id: 'ci_failed', label: 'CI failing' },
   { id: 'failed', label: 'Failed' },
 ]
+
+const REPO_TABS: Array<{ id: RepoTabId; label: string; description: string }> = [
+  {
+    id: 'overview',
+    label: 'Overview',
+    description: 'Repo connection health, default branch, and GitHub App status.',
+  },
+  {
+    id: 'branches',
+    label: 'Branches',
+    description: 'Every auto-fix branch grouped by CI status — click through to the source report.',
+  },
+  {
+    id: 'activity',
+    label: 'Activity',
+    description: 'Chronological log of branch, PR, and CI events across all fixes.',
+  },
+]
+
+function resolveRepoTab(value: string | null): RepoTabId {
+  if (value === 'branches' || value === 'activity') return value
+  return 'overview'
+}
 
 function bucketize(b: RepoBranch): Bucket {
   const concl = b.check_run_conclusion?.toLowerCase()
@@ -209,9 +239,44 @@ function formatActivityLog(events: RepoActivityEvent[]): string {
 }
 
 export function RepoPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
+  const copy = usePageCopy('/repo')
+  const ux = useRepoUx()
+
+  const tabParam = searchParams.get('tab')
+  const activeTab = resolveRepoTab(tabParam)
+  const activeTabMeta = REPO_TABS.find((t) => t.id === activeTab) ?? REPO_TABS[0]
+
+  const {
+    data: statsData,
+    loading: statsLoading,
+    reload: reloadStats,
+    lastFetchedAt: statsFetchedAt,
+    isValidating: statsValidating,
+  } = usePageData<RepoStats>(
+    activeProjectId ? '/v1/admin/repo/stats' : null,
+  )
+  const repoStats = statsData ?? EMPTY_REPO_STATS
+
+  const setActiveTab = useCallback(
+    (id: RepoTabId) => {
+      const next = new URLSearchParams(searchParams)
+      if (id === 'overview') next.delete('tab')
+      else next.set('tab', id)
+      setSearchParams(next, { replace: true, preventScrollReset: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
+    const quickTab = resolveQuickRepoTab(repoStats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, activeProjectId, statsLoading, repoStats, activeTab, setActiveTab])
+
   const [overview, setOverview] = useState<RepoOverview | null>(null)
   const [activity, setActivity] = useState<RepoActivityEvent[] | null>(null)
   const [activityError, setActivityError] = useState<string | null>(null)
@@ -268,8 +333,9 @@ export function RepoPage() {
   }, [load])
 
   const reload = useCallback(() => {
+    reloadStats()
     void load()
-  }, [load])
+  }, [load, reloadStats])
 
   // Realtime: repo view changes whenever a fix_attempt lands, a fix_event
   // fires (PR opened / CI result), or a new project_repo is linked. One
@@ -299,6 +365,23 @@ export function RepoPage() {
     return counts
   }, [overview])
 
+  const tabOptions = useMemo(
+    () => [
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
+      {
+        id: 'branches' as const,
+        label: copy?.tabLabels?.branches ?? 'Branches',
+        count: repoStats.totalBranches > 0 ? repoStats.totalBranches : undefined,
+      },
+      {
+        id: 'activity' as const,
+        label: copy?.tabLabels?.activity ?? 'Activity',
+        count: activity && activity.length > 0 ? activity.length : undefined,
+      },
+    ],
+    [copy?.tabLabels, repoStats.totalBranches, activity],
+  )
+
   if (loading) return <TableSkeleton rows={6} columns={4} showFilters label="Loading repo view" />
   if (error) return <ErrorAlert message={error} onRetry={reload} />
   if (!overview) return <TableSkeleton rows={6} columns={4} label="Loading repo view" />
@@ -321,199 +404,219 @@ export function RepoPage() {
     })
   }
 
-  return (
-    <div className="space-y-3">
-      <PageHeader
-        title="Repo graph"
-        projectScope={projectName}
-        description="Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log so you can see the PDCA loop at a glance."
-      >
-        <span className="text-2xs text-fg-faint font-mono">
-          {pluralizeWithCount(counts.total, 'branch', 'branches')}
-        </span>
-      </PageHeader>
+  const activityPanel = (
+    <Card className="p-3">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Repo activity</h3>
+        {activity && (
+          <span className="text-3xs text-fg-faint font-mono">
+            {pluralizeWithCount(activity.length, 'event')}
+          </span>
+        )}
+      </div>
+      {activity ? (
+        activity.length === 0 && activityError ? (
+          <div className="space-y-2">
+            <p className="text-2xs text-danger">{activityError}</p>
+            <button
+              type="button"
+              onClick={reload}
+              className="text-2xs text-brand hover:text-brand-hover underline-offset-2 hover:underline"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <LogBlock
+            value={formatActivityLog(activity)}
+            tone="neutral"
+            maxHeightClass="max-h-[40rem]"
+            copyable={false}
+          />
+        )
+      ) : (
+        <p className="text-2xs text-fg-faint">Loading activity…</p>
+      )}
+    </Card>
+  )
 
+  const branchList = (
+    <div className="space-y-2 min-w-0">
+      <SegmentedControl<Bucket>
+        ariaLabel="Filter branches by CI status"
+        value={bucket}
+        options={BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
+        onChange={setBucket}
+      />
+      {filteredBranches.length === 0 ? (
+        <p className="text-2xs text-fg-muted px-2 py-3">
+          No branches in this state right now.{' '}
+          <button type="button" onClick={() => setBucket('all')} className="text-brand hover:underline">
+            Show all
+          </button>
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {filteredBranches.map((b) => (
+            <BranchRow key={b.id} branch={b} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const repoHeaderCard = (
+    <Card className="p-3">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 text-3xs uppercase tracking-wider text-fg-muted font-semibold shrink-0">
+            <IconGit />
+            Repository
+          </span>
+          {hasRepo ? (
+            <div className="min-w-0 flex-1">
+              <CodeValue value={repo.repo_url!} tone="url" />
+            </div>
+          ) : (
+            <p className="text-sm text-fg-faint italic">No GitHub repo is connected yet.</p>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 justify-between">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
+            {repo.default_branch && (
+              <span className="inline-flex items-center gap-1">
+                <span className="text-fg-faint">default:</span>
+                <CodeValue value={repo.default_branch} tone="hash" inline copyable={false} />
+              </span>
+            )}
+            {repo.github_app_installation_id ? (
+              <Badge className="bg-ok-subtle text-ok">GitHub App installed</Badge>
+            ) : hasRepo ? (
+              <Badge className="bg-warn-subtle text-warn">No GitHub App installation</Badge>
+            ) : null}
+            {repo.last_indexed_at && (
+              <span className="whitespace-nowrap">
+                Indexed <RelativeTime value={repo.last_indexed_at} />
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            {hasRepo && (
+              <a
+                href={repo.repo_url!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors"
+              >
+                Open on GitHub ↗
+              </a>
+            )}
+            <Link
+              to="/integrations/config"
+              className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors inline-flex items-center gap-1"
+            >
+              <IconIntegrations />
+              Manage
+            </Link>
+          </div>
+        </div>
+        <div className="pt-2 border-t border-edge-subtle/60">
+          <DefinitionChips items={headerChips} columns="auto" dense />
+        </div>
+      </div>
+    </Card>
+  )
+
+  const emptyBranches = (
+    <EmptyState
+      title={hasRepo ? 'No fix branches yet' : 'Connect your repo'}
+      description={
+        hasRepo
+          ? "Dispatch a fix on a classified report and its branch will land here the moment the agent pushes."
+          : "Install the Mushi GitHub App on the repo you want auto-fix PRs opened against."
+      }
+      action={
+        <Link to={hasRepo ? '/reports' : '/integrations/config'}>
+          <Btn variant="primary" size="sm">
+            {hasRepo ? 'Open Reports' : 'Connect GitHub'}
+          </Btn>
+        </Link>
+      }
+    />
+  )
+
+  return (
+    <div className="space-y-3" data-testid="mushi-page-repo">
       <PageHelp
-        title="About the Repo graph"
-        whatIsIt="A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place."
-        useCases={[
+        title={copy?.help?.title ?? 'About the Repo graph'}
+        whatIsIt={copy?.help?.whatIsIt ?? "A repo-level view of Mushi's fix pipeline: every draft PR, its branch, and its CI conclusion in one place."}
+        useCases={copy?.help?.useCases ?? [
           'Spot stuck PRs (dispatched but never opened) so auth or agent issues surface fast',
           'Verify that CI is green across the board before scaling dispatch volume',
           'See rollups of activity across every branch without clicking into each fix',
         ]}
-        howToUse="Filter by CI bucket to focus on what matters. Each card is one fix attempt — click through to the report to see the full PDCA story. The right column is a chronological log of branch, PR and CI events across all fixes."
+        howToUse={copy?.help?.howToUse ?? 'Summary shows repo connection health. Branches lists every fix PR with CI status. Activity is a chronological log across all branches.'}
       />
 
-      {/* Repo header.
-          Earlier revision used `flex flex-wrap items-start justify-between`
-          which left a huge horizontal void between the repo URL (anchored
-          left) and the action buttons (anchored right) — at 1024 / 1440
-          there were 600+ px of empty space in the middle, which the user
-          read as "stuck at the corners". The new layout reads as one
-          coherent identity block: icon + URL + meta flow inline-left, then
-          a thin rule + the count chips below, with action buttons pinned
-          on the right of the *meta* row only (Linear "structure should be
-          felt, not seen" — chrome that frames content rather than fighting
-          it).
+      <PageHeader
+        title={copy?.title ?? 'Repo graph'}
+        projectScope={projectName}
+        description={
+          copy?.description ??
+          'Every auto-fix branch the worker has opened on this repo — grouped by CI status, with a live activity log.'
+        }
+      >
+        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+        <span className="text-2xs text-fg-faint font-mono">
+          {pluralizeWithCount(counts.total, 'branch', 'branches')}
+        </span>
+        <Btn size="sm" variant="ghost" onClick={reload} loading={statsValidating}>
+          Refresh
+        </Btn>
+      </PageHeader>
 
-          2026-05-07: explicit p-3 because the base <Card> primitive is
-          padding-less by design (so consumers can compose dense tables
-          inside without a double inset). Without this, the repo header
-          rendered flush to the card border — content kissed the edge,
-          which read as "no padding on /repo" in the field bug. Same fix
-          applied to the BranchRow and Activity cards below. */}
-      <Card className="p-3">
-        <div className="space-y-2">
-          {/* Identity row — kicker + URL flow left-to-right with no
-              right-anchored sibling, so the eye reads them as a single
-              piece of metadata, not as left/right tension. */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 text-3xs uppercase tracking-wider text-fg-muted font-semibold shrink-0">
-              <IconGit />
-              Repository
-            </span>
-            {hasRepo ? (
-              <div className="min-w-0 flex-1">
-                <CodeValue value={repo.repo_url!} tone="url" />
-              </div>
-            ) : (
-              <p className="text-sm text-fg-faint italic">No GitHub repo is connected yet.</p>
-            )}
-          </div>
+      <RepoStatusBanner
+        stats={repoStats}
+        onTab={setActiveTab}
+        onRefresh={reload}
+        refreshing={statsValidating}
+        plainBanner={ux.plainBanner}
+      />
 
-          {/* Meta + actions row — meta chips left, actions right, with
-              a tight gap so the buttons feel attached to the meta they
-              command (default branch / app status / last indexed) rather
-              than floating in space. */}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 justify-between">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-fg-muted">
-              {repo.default_branch && (
-                <span className="inline-flex items-center gap-1">
-                  <span className="text-fg-faint">default:</span>
-                  <CodeValue value={repo.default_branch} tone="hash" inline copyable={false} />
-                </span>
-              )}
-              {repo.github_app_installation_id ? (
-                <Badge className="bg-ok-subtle text-ok">GitHub App installed</Badge>
-              ) : hasRepo ? (
-                <Badge className="bg-warn-subtle text-warn">No GitHub App installation</Badge>
-              ) : null}
-              {repo.last_indexed_at && (
-                <span className="whitespace-nowrap">
-                  Indexed <RelativeTime value={repo.last_indexed_at} />
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-              {hasRepo && (
-                <a
-                  href={repo.repo_url!}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors"
-                >
-                  Open on GitHub ↗
-                </a>
-              )}
-              <Link
-                to="/integrations/config"
-                className="text-xs px-2.5 py-1 rounded-md border border-edge-subtle bg-surface-overlay hover:bg-surface-raised text-fg-secondary motion-safe:transition-colors inline-flex items-center gap-1"
-              >
-                <IconIntegrations />
-                Manage
-              </Link>
-            </div>
-          </div>
-
-          {/* Counts band — dense, left-aligned, separated from identity
-              row by a hairline so the chips read as a *summary stripe*
-              attached to the repo, not a third floating row. */}
-          <div className="pt-2 border-t border-edge-subtle/60">
-            <DefinitionChips items={headerChips} columns="auto" dense />
-          </div>
-        </div>
-      </Card>
-
-      {branches.length === 0 ? (
-        <EmptyState
-          title={hasRepo ? 'No fix branches yet' : 'Connect your repo'}
-          description={
-            hasRepo
-              ? "Dispatch a fix on a classified report and its branch will land here the moment the agent pushes."
-              : "Install the Mushi GitHub App on the repo you want auto-fix PRs opened against."
-          }
-          action={
-            <Link to={hasRepo ? '/reports' : '/integrations'}>
-              <Btn variant="primary" size="sm">
-                {hasRepo ? 'Open Reports' : 'Connect GitHub'}
-              </Btn>
-            </Link>
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-1 xl:grid-cols-[2fr_1fr] gap-3">
-          {/* Branch list */}
-          <div className="space-y-2 min-w-0">
-            <SegmentedControl<Bucket>
-              ariaLabel="Filter branches by CI status"
-              value={bucket}
-              options={BUCKETS.map((b) => ({ id: b.id, label: b.label, count: bucketCounts[b.id] }))}
-              onChange={setBucket}
-            />
-            {filteredBranches.length === 0 ? (
-              <p className="text-2xs text-fg-muted px-2 py-3">
-                No branches in this state right now.{' '}
-                <button type="button" onClick={() => setBucket('all')} className="text-brand hover:underline">
-                  Show all
-                </button>
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {filteredBranches.map((b) => (
-                  <BranchRow key={b.id} branch={b} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Activity log */}
-          <div className="min-w-0">
-            <Card className="p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Repo activity</h3>
-                {activity && (
-                  <span className="text-3xs text-fg-faint font-mono">
-                    {pluralizeWithCount(activity.length, 'event')}
-                  </span>
-                )}
-              </div>
-              {activity ? (
-                activity.length === 0 && activityError ? (
-                  <div className="space-y-2">
-                    <p className="text-2xs text-danger">{activityError}</p>
-                    <button
-                      type="button"
-                      onClick={reload}
-                      className="text-2xs text-brand hover:text-brand-hover underline-offset-2 hover:underline"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : (
-                  <LogBlock
-                    value={formatActivityLog(activity)}
-                    tone="neutral"
-                    maxHeightClass="max-h-[40rem]"
-                    copyable={false}
-                  />
-                )
-              ) : (
-                <p className="text-2xs text-fg-faint">Loading activity…</p>
-              )}
-            </Card>
-          </div>
-        </div>
+      {!ux.hideTabs && (
+      <SegmentedControl<RepoTabId>
+        ariaLabel="Repo sections"
+        value={activeTab}
+        options={tabOptions}
+        onChange={setActiveTab}
+        size="sm"
+      />
       )}
+
+      {!ux.hideRepoSnapshot && (
+      <RepoSnapshotStrip
+        stats={repoStats}
+        statsFetchedAt={statsFetchedAt}
+        statsValidating={statsValidating}
+        description={activeTabMeta.description}
+        sectionTitle={copy?.sections?.snapshot ?? 'REPO SNAPSHOT'}
+        statLabels={copy?.statLabels}
+        compact={ux.isQuickstart}
+      />
+      )}
+
+      {activeTab === 'overview' && (
+        <>
+          {repoHeaderCard}
+          {branches.length === 0 ? emptyBranches : null}
+        </>
+      )}
+
+      {activeTab === 'branches' && (
+        branches.length === 0 ? emptyBranches : branchList
+      )}
+
+      {activeTab === 'activity' && activityPanel}
     </div>
   )
 }

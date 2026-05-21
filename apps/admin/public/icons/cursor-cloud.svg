@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <!-- Cursor logo: stylized diamond / cursor shape -->
+  <rect width="24" height="24" rx="4" fill="#1a1a2e"/>
+  <!-- Diamond shape representing Cursor's logo -->
+  <polygon points="12,3 21,12 12,21 3,12" fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Inner highlight -->
+  <polygon points="12,6 18,12 12,18 6,12" fill="#7c3aed" opacity="0.4"/>
+  <!-- Center dot -->
+  <circle cx="12" cy="12" r="1.5" fill="#c4b5fd"/>
+</svg>

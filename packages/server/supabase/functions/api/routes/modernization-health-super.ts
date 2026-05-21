@@ -37,7 +37,7 @@ import { executeNaturalLanguageQuery } from '../../_shared/nl-query.ts';
 import { getPlan, listPlans } from '../../_shared/plans.ts';
 import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
-import { dbError, scopedOwnedProjectIds, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
+import { dbError, ownedProjectIds, scopedOwnedProjectIds, userCanAccessProject, resolveOwnedProject } from '../shared.ts';
 import {
   canManageProjectSdkConfig,
   coerceSdkConfigUpdate,
@@ -252,7 +252,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref',
       )
       .eq('project_id', projectId)
       .single();

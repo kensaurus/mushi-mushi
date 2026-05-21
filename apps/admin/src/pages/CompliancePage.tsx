@@ -41,6 +41,17 @@ import {
   type ComplianceStats,
   type ComplianceTabId,
 } from '../components/compliance/types'
+import {
+  clusterRegionDetail,
+  clusterRegionTooltip,
+  controlsDetail,
+  controlsTooltip,
+  legalHoldsDetail,
+  legalHoldsTooltip,
+  openDsarsDetail,
+  openDsarsTooltip,
+} from '../lib/statTooltips/compliance'
+import { complianceLinks } from '../lib/statCardLinks'
 
 interface RetentionPolicy {
   project_id: string
@@ -612,25 +623,33 @@ export function CompliancePage() {
             label="Controls"
             value={`${stats.controlsPass}/${stats.controlsTotal}`}
             accent={stats.controlsFail > 0 ? 'text-danger' : stats.controlsWarn > 0 ? 'text-warn' : stats.controlsTotal > 0 ? 'text-ok' : undefined}
-            hint={`${stats.controlsFail} fail · ${stats.controlsWarn} warn`}
+            tooltip={controlsTooltip(stats)}
+            detail={controlsDetail(stats)}
+            to={complianceLinks.controls}
           />
           <StatCard
             label="Open DSARs"
             value={stats.openDsars}
             accent={stats.overdueDsars > 0 ? 'text-danger' : stats.atRiskDsars > 0 ? 'text-warn' : undefined}
-            hint={`${stats.overdueDsars} overdue · ${stats.atRiskDsars} at risk`}
+            tooltip={openDsarsTooltip(stats)}
+            detail={openDsarsDetail(stats)}
+            to={complianceLinks.openDsars}
           />
           <StatCard
             label="Legal holds"
             value={stats.legalHoldCount}
             accent={stats.legalHoldCount > 0 ? 'text-info' : undefined}
-            hint={`${stats.policiesCount} retention polic${stats.policiesCount === 1 ? 'y' : 'ies'}`}
+            tooltip={legalHoldsTooltip(stats)}
+            detail={legalHoldsDetail(stats)}
+            to={complianceLinks.legalHolds}
           />
           <StatCard
             label="Cluster"
             value={(stats.activeProjectRegion ?? stats.currentRegion).toUpperCase()}
             accent="text-brand"
-            hint={stats.activeProjectRegion ? 'Project pinned region' : 'Default deployment region'}
+            tooltip={clusterRegionTooltip(stats)}
+            detail={clusterRegionDetail(stats)}
+            to={complianceLinks.cluster}
           />
         </div>
       </Section>

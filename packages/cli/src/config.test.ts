@@ -1,6 +1,12 @@
 import { describe, it, expect, afterEach, afterAll, beforeEach } from 'vitest'
-import { loadConfig, saveConfig } from './config.js'
-import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, unlinkSync, writeFileSync } from 'fs'
+import {
+  loadConfig,
+  saveConfig,
+  resolveXdgConfigPath,
+  migrateLegacyConfig,
+  LEGACY_CONFIG_PATH,
+} from './config.js'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 
@@ -102,5 +108,113 @@ describe('saveConfig', () => {
     saveConfig({ apiKey: 'secret' }, TEST_PATH)
     const mode = statSync(TEST_PATH).mode & 0o777
     expect(mode).toBe(0o600)
+  })
+
+  it('mkdir -p the parent directory on first save', () => {
+    const nested = join(TEST_DIR, 'a', 'b', 'c', 'config.json')
+    saveConfig({ apiKey: 'nested' }, nested)
+    expect(existsSync(nested)).toBe(true)
+    expect(loadConfig(nested).apiKey).toBe('nested')
+    rmSync(join(TEST_DIR, 'a'), { recursive: true, force: true })
+  })
+})
+
+describe('resolveXdgConfigPath', () => {
+  // Save and restore env so each test is hermetic.
+  let savedXdg: string | undefined
+  let savedAppdata: string | undefined
+
+  beforeEach(() => {
+    savedXdg = process.env['XDG_CONFIG_HOME']
+    savedAppdata = process.env['APPDATA']
+  })
+
+  afterEach(() => {
+    if (savedXdg === undefined) delete process.env['XDG_CONFIG_HOME']
+    else process.env['XDG_CONFIG_HOME'] = savedXdg
+    if (savedAppdata === undefined) delete process.env['APPDATA']
+    else process.env['APPDATA'] = savedAppdata
+  })
+
+  it('honours XDG_CONFIG_HOME when set', () => {
+    process.env['XDG_CONFIG_HOME'] = '/tmp/xdg-test'
+    expect(resolveXdgConfigPath()).toBe(join('/tmp/xdg-test', 'mushi', 'config.json'))
+  })
+
+  it('treats an empty XDG_CONFIG_HOME as unset (per spec)', () => {
+    process.env['XDG_CONFIG_HOME'] = ''
+    delete process.env['APPDATA']
+    const resolved = resolveXdgConfigPath()
+    if (process.platform !== 'win32') {
+      // Linux/macOS: ~/.config/mushi/config.json
+      expect(resolved.endsWith(join('.config', 'mushi', 'config.json'))).toBe(true)
+    }
+  })
+})
+
+describe('migrateLegacyConfig', () => {
+  let legacyPath: string
+  let xdgPath: string
+
+  beforeEach(() => {
+    legacyPath = join(TEST_DIR, 'legacy-mushirc')
+    xdgPath = join(TEST_DIR, 'xdg', 'mushi', 'config.json')
+  })
+
+  afterEach(() => {
+    if (existsSync(legacyPath)) unlinkSync(legacyPath)
+    rmSync(join(TEST_DIR, 'xdg'), { recursive: true, force: true })
+  })
+
+  it('moves a legacy ~/.mushirc into the XDG path on first call', () => {
+    writeFileSync(legacyPath, JSON.stringify({ apiKey: 'legacy_key', projectId: 'legacy_proj' }))
+    const migrated = migrateLegacyConfig(legacyPath, xdgPath)
+    expect(migrated).toEqual({ apiKey: 'legacy_key', projectId: 'legacy_proj' })
+    expect(existsSync(legacyPath)).toBe(false)
+    expect(existsSync(xdgPath)).toBe(true)
+    expect(JSON.parse(readFileSync(xdgPath, 'utf-8'))).toEqual({
+      apiKey: 'legacy_key',
+      projectId: 'legacy_proj',
+    })
+  })
+
+  it('returns null when no legacy file exists', () => {
+    expect(migrateLegacyConfig('/tmp/definitely-not-here', xdgPath)).toBeNull()
+  })
+
+  it('leaves a malformed legacy file in place rather than dropping it', () => {
+    writeFileSync(legacyPath, 'not-json{{{')
+    const migrated = migrateLegacyConfig(legacyPath, xdgPath)
+    expect(migrated).toBeNull()
+    // CRITICAL: the malformed file is preserved so the user can recover.
+    expect(existsSync(legacyPath)).toBe(true)
+    expect(existsSync(xdgPath)).toBe(false)
+  })
+
+  it('exports LEGACY_CONFIG_PATH so callers can reference it', () => {
+    expect(typeof LEGACY_CONFIG_PATH).toBe('string')
+    expect(LEGACY_CONFIG_PATH.endsWith('.mushirc')).toBe(true)
+  })
+})
+
+describe('loadConfig — legacy migration path', () => {
+  let legacyPath: string
+
+  beforeEach(() => {
+    legacyPath = join(TEST_DIR, 'auto-legacy')
+  })
+
+  afterEach(() => {
+    if (existsSync(legacyPath)) unlinkSync(legacyPath)
+    rmSync(join(TEST_DIR, 'auto-xdg'), { recursive: true, force: true })
+  })
+
+  it('does NOT migrate when an explicit non-default path is passed', () => {
+    // A test/CI caller passing an explicit path should never trigger
+    // migration of the user's real ~/.mushirc.
+    writeFileSync(legacyPath, JSON.stringify({ apiKey: 'should-not-migrate' }))
+    const result = loadConfig('/tmp/non-existent-explicit-path')
+    expect(result).toEqual({})
+    expect(existsSync(legacyPath)).toBe(true)
   })
 })

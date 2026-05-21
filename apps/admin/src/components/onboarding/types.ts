@@ -25,6 +25,8 @@ export interface OnboardingStats {
   reportCount: number
   fixCount: number
   mergedFixCount: number
+  /** Deep link to the tab/action for the next incomplete step. */
+  nextStepTo: string | null
 }
 
 export const EMPTY_ONBOARDING_STATS: OnboardingStats = {
@@ -48,5 +50,6 @@ export const EMPTY_ONBOARDING_STATS: OnboardingStats = {
   reportCount: 0,
   fixCount: 0,
   mergedFixCount: 0,
+  nextStepTo: '/onboarding?tab=steps',
 }
 

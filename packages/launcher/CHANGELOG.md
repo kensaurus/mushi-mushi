@@ -1,5 +1,21 @@
 # mushi-mushi
 
+## 0.7.2
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies [0c66aa9]
+  - @mushi-mushi/cli@0.10.0
+
+## 0.7.1
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+  - @mushi-mushi/cli@0.9.0
+
 ## 0.7.0
 
 ### Minor Changes

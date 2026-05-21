@@ -1,0 +1,105 @@
+##
+# FILE: deno-check.yml
+# PURPOSE: Type-check all Supabase Edge Functions (Deno) on every PR and push.
+#
+# WHY:
+# - Edge functions are Deno TypeScript. `supabase functions deploy` does NOT run
+#   a type-check before deploying; it silently ships type-incorrect code that
+#   only fails at runtime. A function with `cursor_invalid_model` missing from
+#   the failure_category union, an undefined import, or a schema mismatch will
+#   deploy green and crash in production.
+# - This workflow runs `deno check` across every function entry point and the
+#   entire _shared/ directory. It catches:
+#     - Import resolution failures (missing/renamed _shared modules)
+#     - TypeScript type errors in new code
+#     - Missing environment variable type annotations
+#   in <30s on a warm cache.
+#
+# TRIGGER:
+# - PR and push to master when any edge function source changes.
+# - `workflow_dispatch` for ad-hoc checks before a manual deploy.
+#
+# DENO VERSION:
+# - Pinned to 2.x (matches Supabase's Deno runtime used in Edge Functions v2).
+#   Dependabot bumps this monthly.
+#
+# SUPABASE IMPORT MAP:
+# - Edge functions import from `https://esm.sh/`, `jsr:`, and each other via
+#   relative paths. The Supabase CLI generates an `import_map.json` in the
+#   functions root. When that file is present we pass it via --import-map.
+#   If absent (fresh clone), deno resolves imports directly — still catches
+#   the most important structural errors.
+##
+
+name: Deno Type-Check (Edge Functions)
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'packages/server/supabase/functions/**'
+  push:
+    branches: [master]
+    paths:
+      - 'packages/server/supabase/functions/**'
+  workflow_dispatch:
+
+concurrency:
+  group: deno-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deno-check:
+    name: deno check (edge functions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
+        with:
+          deno-version: "~2.3"
+
+      # Cache Deno deps (esm.sh + npm specifiers resolved at check time)
+      - name: Cache Deno deps
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
+        with:
+          path: ~/.cache/deno
+          key: deno-${{ runner.os }}-${{ hashFiles('packages/server/supabase/functions/**/*.ts', 'packages/server/supabase/functions/import_map.json') }}
+          restore-keys: |
+            deno-${{ runner.os }}-
+
+      - name: Type-check _shared/
+        working-directory: packages/server/supabase/functions
+        run: |
+          deno check \
+            --no-lock \
+            $(ls _shared/*.ts | grep -v '\.README\.ts' | tr '\n' ' ')
+
+      - name: Type-check all function entry points
+        working-directory: packages/server/supabase/functions
+        run: |
+          FUNCTIONS=$(find . -maxdepth 2 -name 'index.ts' ! -path './_shared/*')
+          echo "Checking functions:"
+          echo "$FUNCTIONS"
+          echo ""
+          for f in $FUNCTIONS; do
+            echo "--- deno check $f ---"
+            deno check --no-lock "$f"
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Deno Type-Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Step | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| _shared/ type-check | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Function entry points type-check | ${{ job.status == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY

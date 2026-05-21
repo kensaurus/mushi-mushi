@@ -42,6 +42,22 @@ import { HeroPulseHealth, HeroSearch } from '../components/illustrations/HeroIll
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useHealthUx, resolveQuickHealthTab } from '../lib/healthModeUx'
+import {
+  cronDetail,
+  cronTooltip,
+  errorRateDetail,
+  errorRateTooltip,
+  fallbackRateDetail,
+  fallbackRateTooltip,
+  lastCallDetail,
+  lastCallTooltip,
+  latencyDetail,
+  latencyTooltip,
+  totalCallsDetail,
+  totalCallsTooltip,
+} from '../lib/statTooltips/health'
+import { healthLinks } from '../lib/statCardLinks'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
 import type { OperatorTraceLine } from '../components/hero-flow/operatorTrace'
@@ -152,6 +168,7 @@ export function HealthPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/health')
+  const ux = useHealthUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const activeTab = resolveHealthTab(tabParam)
@@ -181,6 +198,12 @@ export function HealthPage() {
     },
     [setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickHealthTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const llmQuery = usePageData<LlmHealth>(`/v1/admin/health/llm?window=${window}`, { deps: [window] })
   const cronQuery = usePageData<CronHealth>('/v1/admin/health/cron')
@@ -322,7 +345,7 @@ export function HealthPage() {
     () =>
       HEALTH_TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'cron' && stats.cronErrorCount > 0
             ? stats.cronErrorCount
@@ -330,7 +353,7 @@ export function HealthPage() {
               ? 1
               : undefined,
       })),
-    [stats.cronErrorCount, stats.errorRatePct],
+    [stats.cronErrorCount, stats.errorRatePct, copy?.tabLabels],
   )
 
   if (statsLoading && !statsData) {
@@ -363,6 +386,16 @@ export function HealthPage() {
 
   const fallbackPct = ((llm.fallbackRate ?? 0) * 100).toFixed(1)
   const errorPct = ((llm.errorRate ?? 0) * 100).toFixed(1)
+  const llmTabStats: HealthStats = {
+    ...EMPTY_HEALTH_STATS,
+    hasAnyProject: stats.hasAnyProject,
+    window,
+    totalCalls: llm.totalCalls,
+    errorRatePct: Math.round((llm.errorRate ?? 0) * 1000) / 10,
+    fallbackRatePct: Math.round((llm.fallbackRate ?? 0) * 1000) / 10,
+    avgLatencyMs: llm.avgLatencyMs ?? 0,
+    p95LatencyMs: llm.p95LatencyMs ?? 0,
+  }
   const byFunction = llm.byFunction ?? {}
   const byModel = llm.byModel ?? {}
   const fnNames = Object.keys(byFunction).sort()
@@ -444,6 +477,17 @@ export function HealthPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-health">
+      <PageHelp
+        title={copy?.help?.title ?? 'About System Health'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
+        useCases={copy?.help?.useCases ?? [
+          'Catch when Anthropic rate-limits cause a fallback storm',
+          'See if scheduled jobs (cron) are actually running, succeeding, and on time',
+          'Spot model-level latency regressions before they impact users',
+        ]}
+        howToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
+      />
+
       <PageHeader
         title={copy?.title ?? 'System Health'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -504,8 +548,10 @@ export function HealthPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating || llmQuery.isValidating || cronQuery.isValidating}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<HealthTabId>
         size="sm"
         ariaLabel="Health sections"
@@ -513,49 +559,64 @@ export function HealthPage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="HEALTH SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideHealthSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'HEALTH SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
-            label="LLM calls"
+            label={copy?.statLabels?.calls ?? 'LLM calls'}
             value={stats.totalCalls}
             accent={stats.totalCalls > 0 ? 'text-brand' : undefined}
-            hint={`Last ${stats.window}`}
+            tooltip={totalCallsTooltip(stats)}
+            detail={totalCallsDetail(stats)}
+            to={healthLinks.totalCalls}
           />
           <StatCard
-            label="Error rate"
+            label={copy?.statLabels?.errors ?? 'Error rate'}
             value={`${stats.errorRatePct}%`}
             accent={stats.errorRatePct > 5 ? 'text-danger' : stats.errorRatePct > 0 ? 'text-warn' : 'text-ok'}
-            hint="Above 5% is critical"
+            tooltip={errorRateTooltip(stats)}
+            detail={errorRateDetail()}
+            to={healthLinks.errorRate}
           />
           <StatCard
-            label="Fallback rate"
+            label={copy?.statLabels?.fallbacks ?? 'Fallback rate'}
             value={`${stats.fallbackRatePct}%`}
             accent={stats.fallbackRatePct > 10 ? 'text-danger' : stats.fallbackRatePct > 0 ? 'text-warn' : 'text-ok'}
-            hint="Above 10% is degraded"
+            tooltip={fallbackRateTooltip(stats)}
+            detail={fallbackRateDetail()}
+            to={healthLinks.fallbackRate}
           />
           <StatCard
-            label="Latency p50 / p95"
+            label={copy?.statLabels?.latency ?? 'Latency p50 / p95'}
             value={`${stats.avgLatencyMs} / ${stats.p95LatencyMs}ms`}
-            hint="Median / 95th percentile"
+            tooltip={latencyTooltip(stats)}
+            detail={latencyDetail()}
+            to={healthLinks.latency}
           />
           <StatCard
-            label="Cron OK"
+            label={copy?.statLabels?.cron ?? 'Cron OK'}
             value={`${stats.cronHealthyCount}/${stats.cronJobCount}`}
             accent={stats.cronErrorCount > 0 ? 'text-danger' : stats.cronStaleCount > 0 ? 'text-warn' : 'text-ok'}
-            hint={`${stats.cronErrorCount} failing · ${stats.cronStaleCount} stale`}
+            tooltip={cronTooltip(stats)}
+            detail={cronDetail(stats)}
+            to={healthLinks.cron}
           />
           <StatCard
-            label="Last LLM call"
+            label={copy?.statLabels?.lastCall ?? 'Last LLM call'}
             value={stats.lastLlmCallAt ? 'Recent' : '—'}
             accent={stats.lastLlmCallAt ? 'text-ok' : stats.hasAnyProject ? 'text-brand' : undefined}
-            hint={stats.lastLlmCallAt ? undefined : 'No activity yet'}
+            tooltip={lastCallTooltip(stats)}
+            detail={lastCallDetail(stats)}
+            to={healthLinks.lastCall}
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' && !ux.hideOverviewChrome ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'llm_errors' || stats.topPriority === 'cron_error'
@@ -574,7 +635,7 @@ export function HealthPage() {
         </Card>
       ) : null}
 
-      {activeTab === 'overview' && (
+      {activeTab === 'overview' && !ux.hideOverviewChrome && (
         <>
           <PageHero
             scope="health"
@@ -632,17 +693,6 @@ export function HealthPage() {
 
           <PageActionBar scope="health" action={healthAction} />
 
-          <PageHelp
-            title={copy?.help?.title ?? 'About System Health'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'Live operational dashboard showing every LLM call routed by Mushi Mushi (Anthropic primary, OpenAI fallback) and every scheduled job (judge, intelligence, retention). Each event is written to a telemetry table and streamed here via Supabase Realtime.'}
-            useCases={copy?.help?.useCases ?? [
-              'Catch when Anthropic rate-limits cause a fallback storm',
-              'See if scheduled jobs (cron) are actually running, succeeding, and on time',
-              'Spot model-level latency regressions before they impact users',
-            ]}
-            howToUse={copy?.help?.howToUse ?? "No action needed for healthy state. If fallback rate spikes, check Anthropic status. If a cron job hasn't run in its expected window, trigger it manually with the buttons below. Click any LLM call to open its Langfuse trace."}
-          />
-
           {recommendedAction}
         </>
       )}
@@ -654,20 +704,29 @@ export function HealthPage() {
             freshness={{ at: llmQuery.lastFetchedAt, isValidating: llmQuery.isValidating }}
           >
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4" data-dav-anchor="health:decide">
-              <StatCard label="Total calls" value={llm.totalCalls.toString()} hint={`Last ${window}`} />
+              <StatCard label="Total calls" value={llm.totalCalls.toString()} tooltip={totalCallsTooltip(llmTabStats)} detail={totalCallsDetail(llmTabStats)} to={healthLinks.totalCalls} />
               <StatCard
                 label="Fallback rate"
                 value={`${fallbackPct}%`}
                 accent={llm.fallbackRate > 0.1 ? 'text-danger' : llm.fallbackRate > 0 ? 'text-warn' : 'text-ok'}
+                tooltip={fallbackRateTooltip(llmTabStats)}
+                detail={fallbackRateDetail()}
+                to={healthLinks.fallbackRate}
               />
               <StatCard
                 label="Error rate"
                 value={`${errorPct}%`}
                 accent={llm.errorRate > 0.05 ? 'text-danger' : llm.errorRate > 0 ? 'text-warn' : 'text-ok'}
+                tooltip={errorRateTooltip(llmTabStats)}
+                detail={errorRateDetail()}
+                to={healthLinks.errorRate}
               />
               <StatCard
                 label="Latency p50 / p95"
                 value={`${llm.avgLatencyMs}ms / ${llm.p95LatencyMs ?? 0}ms`}
+                tooltip={latencyTooltip(llmTabStats)}
+                detail={latencyDetail()}
+                to={healthLinks.latency}
               />
             </div>
           </Section>

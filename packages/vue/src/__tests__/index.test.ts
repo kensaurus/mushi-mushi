@@ -68,7 +68,7 @@ import { MushiPlugin, useMushi, useMushiReport, useMushiWidget } from '../index'
 const testConfig = {
   projectId: 'proj_test',
   apiKey: 'key_test',
-  endpoint: 'https://test.api',
+  apiEndpoint: 'https://test.api',
 }
 
 beforeEach(() => {
@@ -84,11 +84,59 @@ describe('MushiPlugin', () => {
     const app = createApp(defineComponent({ render: () => h('div') }))
     app.use(MushiPlugin, testConfig)
 
-    expect(Mushi.init).toHaveBeenCalledWith({
-      projectId: 'proj_test',
-      apiKey: 'key_test',
-      apiEndpoint: 'https://test.api',
+    expect(Mushi.init).toHaveBeenCalledWith(testConfig)
+  })
+
+  it('forwards the full canonical MushiConfig (Round 7 surface — beforeSendFeedback, theme, …)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    const app = createApp(defineComponent({ render: () => h('div') }))
+    const beforeSend = vi.fn(async (r: unknown) => r)
+    app.use(MushiPlugin, {
+      ...testConfig,
+      // These are core MushiConfig fields the old plugin would have
+      // silently dropped via toCoreConfig — we now forward them as-is.
+      // Cast to unknown first because the plugin's install signature
+      // is generically typed; the assertion below confirms forwarding.
+      beforeSendFeedback: beforeSend,
+      theme: 'dark',
+      position: 'bottom-right',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+
+    const initArg = (Mushi.init as unknown as { mock: { calls: unknown[][] } }).mock.calls[0][0]
+    expect((initArg as Record<string, unknown>).beforeSendFeedback).toBe(beforeSend)
+    expect((initArg as Record<string, unknown>).theme).toBe('dark')
+    expect((initArg as Record<string, unknown>).position).toBe('bottom-right')
+  })
+
+  it('chains app.config.errorHandler — does NOT replace an upstream handler (Sentry, Bugsnag, …)', () => {
+    const upstream = vi.fn()
+    const app = createApp(defineComponent({ render: () => h('div') }))
+    app.config.errorHandler = upstream
+
+    app.use(MushiPlugin, testConfig)
+
+    const handler = app.config.errorHandler!
+    const err = new Error('boom')
+    handler(err, null as any, 'mounted hook')
+
+    expect(upstream).toHaveBeenCalledWith(err, null, 'mounted hook')
+    expect(mockCaptureException).toHaveBeenCalled()
+  })
+
+  it('does not crash if the upstream errorHandler throws', () => {
+    const upstream = vi.fn(() => {
+      throw new Error('upstream is broken')
     })
+    const app = createApp(defineComponent({ render: () => h('div') }))
+    app.config.errorHandler = upstream
+
+    app.use(MushiPlugin, testConfig)
+
+    expect(() => {
+      app.config.errorHandler!(new Error('boom'), null as any, 'info')
+    }).not.toThrow()
+    expect(mockCaptureException).toHaveBeenCalled()
   })
 
   it('after Mushi.init(), getInstance() returns the SDK instance (parity check)', async () => {
@@ -186,5 +234,32 @@ describe('useMushiWidget', () => {
     expect(widget!.isOpen.value).toBe(false)
 
     app.unmount()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SSR safety (Nuxt 3 / Vite SSR) — Round 8 backlog item B7
+// ---------------------------------------------------------------------------
+
+describe('MushiPlugin — SSR safety', () => {
+  it('skips Mushi.init when window is not available (server render)', async () => {
+    const { Mushi } = await import('@mushi-mushi/web')
+    // Simulate an SSR environment by hiding `window` from the global.
+    const originalWindow = globalThis.window
+    const originalDocument = globalThis.document
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).window
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (globalThis as any).document
+    try {
+      const app = createApp(defineComponent({ render: () => h('div') }))
+      app.use(MushiPlugin, testConfig)
+      expect(Mushi.init).not.toHaveBeenCalled()
+    } finally {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).window = originalWindow
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(globalThis as any).document = originalDocument
+    }
   })
 })

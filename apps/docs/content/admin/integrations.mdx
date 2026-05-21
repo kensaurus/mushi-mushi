@@ -67,6 +67,24 @@ The **Codebase index** card shows the indexing status for the active project's r
 `ok`, `stale`, `failed`, `off`, or `never`. The index powers the [Repo page](/admin/repo)
 branch graph and the fix-worker's code context.
 
+### Cursor Cloud
+
+| Field | Description |
+|-------|-------------|
+| **API Key** | Your Cursor API key — stored encrypted in the Supabase Vault; never exposed in the UI |
+| **Default model** | Agent model (`composer-2.5` or your account default) |
+| **Auto-create PRs** | When enabled, Cursor opens a signed draft PR automatically after the fix run |
+| **Max iterations** | Maximum agent loops per dispatch (default: 1) |
+
+When configured, Mushi can dispatch a Cursor Cloud Agent to fix classified reports — the agent opens a signed draft PR and posts the link back to the [Fixes page](/admin/fixes). Activate via:
+
+- **Marketplace** — install the _Cursor Cloud Agent_ plugin for event-driven dispatch (recommended for per-severity gating).
+- **Settings → Autofix** — set `autofix_agent = cursor_cloud` to make Cursor the project-wide default.
+
+<Callout type="info">
+The API Key is stored via Supabase Vault. The raw key is never written to any database column. For self-hosted deployments where Supabase Vault is not accessible from the Node orchestrator, set `MUSHI_CURSOR_API_KEY_OVERRIDE` in your Node orchestrator environment as an escape hatch.
+</Callout>
+
 Each platform card shows:
 - **Connection status pill** — connected / disconnected / error
 - **Latest probe latency**
@@ -144,8 +162,18 @@ DELETE /v1/admin/integrations/:type
 
 ---
 
+## Common tasks
+
+### Setting up Cursor Cloud auto-fix
+1. Create a Cursor API key at [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations) → API Keys.
+2. Connect **GitHub (code repo)** first — Cursor agents need your repo URL and token.
+3. On the **Cursor Cloud** card, click **Edit**, paste the `crsr_…` key, then **Save** → **Test connection**.
+4. Install the **Cursor Cloud Agent** plugin from [Marketplace](/admin/marketplace) (subscribe to `report.classified`) — or set `autofix_agent = cursor_cloud` in Settings if you want every fix dispatched via Cursor.
+5. Triage a `critical` report → trigger dispatch → the [Fixes page](/admin/fixes) will show the Cursor agent badge and PR link once the run completes.
+
 ## Related pages
 
 - [Repo graph](/admin/repo) — powered by the GitHub integration
 - [Integration health](/admin/health) — LLM and cron health (not integration probes)
 - [Plugin marketplace](/admin/marketplace) — advanced routing and custom webhooks
+- [Fix orchestrator](/admin/fixes) — Cursor agent badge, artifact gallery, and live streaming view

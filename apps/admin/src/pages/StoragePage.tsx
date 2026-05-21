@@ -19,6 +19,17 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { StorageStatusBanner } from '../components/storage/StorageStatusBanner'
 import { EMPTY_STORAGE_STATS, type StorageStats, type StorageTabId } from '../components/storage/types'
+import {
+  healthyCountDetail,
+  healthyCountTooltip,
+  providerDetail,
+  providerTooltip,
+  screenshotsDetail,
+  screenshotsTooltip,
+  unconfiguredCountDetail,
+  unconfiguredCountTooltip,
+} from '../lib/statTooltips/storage'
+import { storageLinks } from '../lib/statCardLinks'
 import { PageHeader, PageHelp, Card, Btn, Badge, ErrorAlert, Input, SelectField, Section, StatCard, SegmentedControl } from '../components/ui'
 import { TableSkeleton } from '../components/skeletons/TableSkeleton'
 import { SetupNudge } from '../components/SetupNudge'
@@ -673,25 +684,33 @@ export function StoragePage() {
             label="Healthy"
             value={`${stats.healthyCount}/${stats.configuredCount}`}
             accent={stats.failingCount > 0 ? 'text-danger' : stats.healthyCount > 0 ? 'text-ok' : undefined}
-            hint={`${stats.failingCount} failing · ${stats.degradedCount} degraded`}
+            tooltip={healthyCountTooltip(stats)}
+            detail={healthyCountDetail(stats)}
+            to={storageLinks.healthy}
           />
           <StatCard
             label="Screenshots"
             value={stats.activeProjectObjects.toLocaleString()}
             accent={stats.activeProjectObjects > 0 ? 'text-brand' : undefined}
-            hint={`${stats.totalObjects.toLocaleString()} total across projects`}
+            tooltip={screenshotsTooltip(stats)}
+            detail={screenshotsDetail(stats)}
+            to={storageLinks.screenshots}
           />
           <StatCard
             label="Provider"
             value={stats.activeProjectProvider}
             accent="text-info"
-            hint={stats.activeProjectConfigured ? 'Custom override saved' : 'Cluster Supabase default'}
+            tooltip={providerTooltip(stats)}
+            detail={providerDetail(stats)}
+            to={storageLinks.provider}
           />
           <StatCard
             label="Unconfigured"
             value={stats.unconfiguredCount}
             accent={stats.unconfiguredCount > 0 ? 'text-warn' : 'text-ok'}
-            hint={`${stats.neverProbedCount} never probed`}
+            tooltip={unconfiguredCountTooltip(stats)}
+            detail={unconfiguredCountDetail(stats)}
+            to={storageLinks.unconfigured}
           />
         </div>
       </Section>
