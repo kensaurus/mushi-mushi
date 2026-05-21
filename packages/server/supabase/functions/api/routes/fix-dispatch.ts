@@ -19,6 +19,10 @@ import { checkIngestQuota } from '../../_shared/quota.ts';
 import { currentRegion, lookupProjectRegion, regionEndpoint } from '../../_shared/region.ts';
 import { getStorageAdapter, invalidateStorageCache } from '../../_shared/storage.ts';
 import { reportSubmissionSchema } from '../../_shared/schemas.ts';
+import {
+  ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+  isAdminPipelineTestReport,
+} from '../../_shared/report-kind.ts';
 import { checkAntiGaming } from '../../_shared/anti-gaming.ts';
 import { logAntiGamingEvent } from '../../_shared/telemetry.ts';
 import { awardPoints, getReputation } from '../../_shared/reputation.ts';
@@ -110,6 +114,32 @@ export function registerFixDispatchRoutes(app: Hono): void {
         return c.json(
           { ok: false, error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
           403,
+        );
+      }
+
+      const { data: report, error: reportErr } = await db
+        .from('reports')
+        .select('id, custom_metadata, environment')
+        .eq('id', body.reportId)
+        .eq('project_id', body.projectId)
+        .maybeSingle();
+      if (reportErr) return dbError(c, reportErr);
+      if (!report) {
+        return c.json(
+          { ok: false, error: { code: 'NOT_FOUND', message: 'Report not found' } },
+          404,
+        );
+      }
+      if (isAdminPipelineTestReport(report)) {
+        return c.json(
+          {
+            ok: false,
+            error: {
+              code: 'NON_ACTIONABLE_REPORT',
+              message: ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+            },
+          },
+          400,
         );
       }
 

@@ -83,6 +83,10 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts';
 import { FIX_MODEL, FIX_FALLBACK } from '../_shared/models.ts';
 import { getPromptForStage } from '../_shared/prompt-ab.ts';
 import { dispatchPluginEvent } from '../_shared/plugins.ts';
+import {
+  ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+  isAdminPipelineTestReport,
+} from '../_shared/report-kind.ts';
 
 // ----------------------------------------------------------------------------
 // Structured fix output lives in `_shared/fix-schema.ts` so the regression
@@ -205,6 +209,42 @@ Deno.serve(
       projectId: dispatch.project_id,
       reportId: dispatch.report_id,
     });
+
+    const { data: dispatchReport, error: dispatchReportErr } = await db
+      .from('reports')
+      .select('id, custom_metadata, environment')
+      .eq('id', dispatch.report_id)
+      .eq('project_id', dispatch.project_id)
+      .single();
+
+    if (dispatchReportErr || !dispatchReport) {
+      await failDispatch(db, dispatch.id, dispatchReportErr?.message ?? 'Report not found');
+      return new Response(JSON.stringify({ ok: false, error: 'Report not found' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (isAdminPipelineTestReport(dispatchReport)) {
+      await db
+        .from('fix_dispatch_jobs')
+        .update({
+          status: 'cancelled',
+          finished_at: new Date().toISOString(),
+          error: ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+        })
+        .eq('id', dispatch.id);
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: 'NON_ACTIONABLE_REPORT',
+            message: ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+          },
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
 
     // ---- 2. Resolve requested agent + insert fix_attempts row ----------------
     // V5.3 §2.10: the fix-worker is the REST/LLM dispatch path (one of the

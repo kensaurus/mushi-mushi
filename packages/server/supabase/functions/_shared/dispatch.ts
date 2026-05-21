@@ -16,13 +16,22 @@
  */
 
 import { getServiceClient } from './db.ts'
+import {
+  ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+  isAdminPipelineTestReport,
+} from './report-kind.ts'
 
 export interface DispatchResult {
   ok: boolean
   dispatchId?: string
   status?: string
   createdAt?: string
-  code?: 'AUTOFIX_DISABLED' | 'ALREADY_DISPATCHED' | 'DISPATCH_FAILED' | 'FORBIDDEN'
+  code?:
+    | 'AUTOFIX_DISABLED'
+    | 'ALREADY_DISPATCHED'
+    | 'DISPATCH_FAILED'
+    | 'FORBIDDEN'
+    | 'NON_ACTIONABLE_REPORT'
   message?: string
 }
 
@@ -71,6 +80,27 @@ export async function dispatchFixForReport(input: DispatchInput): Promise<Dispat
     }
     if (!allowed) {
       return { ok: false, code: 'FORBIDDEN', message: 'Not a member of this project' }
+    }
+  }
+
+  const { data: report, error: reportErr } = await db
+    .from('reports')
+    .select('id, custom_metadata, environment')
+    .eq('id', input.reportId)
+    .eq('project_id', input.projectId)
+    .maybeSingle()
+  if (reportErr || !report) {
+    return {
+      ok: false,
+      code: 'DISPATCH_FAILED',
+      message: reportErr?.message ?? 'Report not found',
+    }
+  }
+  if (isAdminPipelineTestReport(report)) {
+    return {
+      ok: false,
+      code: 'NON_ACTIONABLE_REPORT',
+      message: ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
     }
   }
 

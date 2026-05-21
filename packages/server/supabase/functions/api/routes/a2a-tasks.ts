@@ -69,6 +69,10 @@ import { userCanAccessProject } from '../shared.ts';
 import { sanitizeSseString, toSseEvent, sseHeartbeat } from '../../_shared/sse.ts';
 import { withIdempotency } from '../../_shared/idempotency.ts';
 import { childTraceparent, extractInboundTraceparent } from '../../_shared/trace.ts';
+import {
+  ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+  isAdminPipelineTestReport,
+} from '../../_shared/report-kind.ts';
 
 interface FixDispatchRow {
   id: string;
@@ -265,6 +269,32 @@ export function registerA2ATaskRoutes(app: Hono): void {
           { error: { code: 'FORBIDDEN', message: 'Not a member of this project' } },
           403,
         );
+      }
+
+      if (skill === 'dispatch_fix') {
+        const { data: report } = await db
+          .from('reports')
+          .select('id, custom_metadata, environment')
+          .eq('id', reportId)
+          .eq('project_id', projectId)
+          .single();
+        if (!report) {
+          return c.json(
+            { error: { code: 'NOT_FOUND', message: 'Report not found in this project' } },
+            404,
+          );
+        }
+        if (isAdminPipelineTestReport(report)) {
+          return c.json(
+            {
+              error: {
+                code: 'NON_ACTIONABLE_REPORT',
+                message: ADMIN_PIPELINE_TEST_DISPATCH_ERROR,
+              },
+            },
+            400,
+          );
+        }
       }
 
       // For classify_report and judge_fix: verify the report exists and belongs to the project.
