@@ -62,13 +62,13 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Deno
-        uses: denoland/setup-deno@e95548d08d2c6566abf61eb8a21be60b7fcf4e3e # v2.0.3
+        uses: denoland/setup-deno@e95548e56dfa95d4e1a28d6f422fafe75c4c26fb # v2.0.3
         with:
           deno-version: "~2.3"
 
       # Cache Deno deps (esm.sh + npm specifiers resolved at check time)
       - name: Cache Deno deps
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.2
+        uses: actions/cache@d4323d4df104b026a6aa633fdb11d772146be0bf # v4.2.2
         with:
           path: ~/.cache/deno
           key: deno-${{ runner.os }}-${{ hashFiles('packages/server/supabase/functions/**/*.ts', 'packages/server/supabase/functions/import_map.json') }}
