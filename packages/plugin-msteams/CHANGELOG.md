@@ -1,5 +1,12 @@
 # @mushi-mushi/plugin-msteams
 
+## 0.1.3
+
+### Patch Changes
+
+- Updated dependencies [0c66aa9]
+  - @mushi-mushi/plugin-sdk@0.6.0
+
 ## 0.1.2
 
 ### Patch Changes

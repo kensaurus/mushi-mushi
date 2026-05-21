@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { ReportsStats, ReportsTabId } from './ReportsStatsTypes'
 
 interface Props {
@@ -12,9 +13,18 @@ interface Props {
   onTab?: (tab: ReportsTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
-export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function ReportsStatusBanner({
+  stats,
+  onTab,
+  onRefresh,
+  refreshing,
+  plainBanner = false,
+}: Props) {
+  const copy = usePageCopy('/reports')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -23,12 +33,18 @@ export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No projects — reports inbox empty</p>
-            <p className="text-2xs text-fg-muted">Create a project and install the SDK before user-felt bugs can land here.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Create a project first' : 'No projects — reports inbox empty'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'Install the widget after you create an app — bugs land here automatically.'
+                : 'Create a project and install the SDK before user-felt bugs can land here.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -40,14 +56,21 @@ export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">Waiting for first report on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner
+                ? 'Waiting for your first bug report'
+                : `Waiting for first report on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">
-              SDK ingest must be live — send a test report from Setup to populate the triage queue.
+              {stats.topPriorityLabel ??
+                (plainBanner
+                  ? 'Send a test bug from Setup to confirm the widget is working.'
+                  : 'SDK ingest must be live — send a test report from Setup to populate the triage queue.')}
             </p>
           </div>
         </div>
-        <Link to="/onboarding?tab=verify">
-          <Btn size="sm" variant="ghost">Send test report</Btn>
+        <Link to={stats.topPriorityTo ?? '/onboarding?tab=verify'}>
+          <Btn size="sm" variant="ghost">{actions.verify ?? 'Send test report'}</Btn>
         </Link>
       </div>
     )
@@ -60,18 +83,20 @@ export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.critical14d} critical report{stats.critical14d === 1 ? '' : 's'} in 14d
+              {plainBanner
+                ? `${stats.critical14d} critical bug${stats.critical14d === 1 ? '' : 's'} need review`
+                : `${stats.critical14d} critical report${stats.critical14d === 1 ? '' : 's'} in 14d`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Triage critical</Btn>
+            <Btn size="sm" variant="ghost">{actions.triage ?? 'Triage critical'}</Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('queue')}>
-            Open queue
+            {actions.queue ?? 'Open queue'}
           </Btn>
         ) : null}
       </div>
@@ -85,14 +110,16 @@ export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.openBacklog} report{stats.openBacklog === 1 ? '' : 's'} stale &gt; 1h untriaged
+              {plainBanner
+                ? `${stats.openBacklog} bug${stats.openBacklog === 1 ? '' : 's'} waiting over an hour`
+                : `${stats.openBacklog} report${stats.openBacklog === 1 ? '' : 's'} stale > 1h untriaged`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Open backlog</Btn>
+            <Btn size="sm" variant="ghost">{actions.backlog ?? 'Open backlog'}</Btn>
           </Link>
         ) : null}
       </div>
@@ -106,21 +133,32 @@ export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
             <p className="text-xs font-medium text-info">
-              {stats.newUntriaged} new report{stats.newUntriaged === 1 ? '' : 's'} awaiting triage
+              {plainBanner
+                ? `${stats.newUntriaged} new bug${stats.newUntriaged === 1 ? '' : 's'} to review`
+                : `${stats.newUntriaged} new report${stats.newUntriaged === 1 ? '' : 's'} awaiting triage`}
             </p>
             <p className="text-2xs text-fg-muted">
               {stats.lastReportAt ? (
-                <>Last ingest <RelativeTime value={stats.lastReportAt} /></>
+                <>
+                  Last ingest <RelativeTime value={stats.lastReportAt} />
+                </>
               ) : (
-                'Classifier scored severity — confirm before dispatching fixes.'
+                stats.topPriorityLabel ??
+                  (plainBanner
+                    ? 'Confirm severity before sending to auto-fix.'
+                    : 'Classifier scored severity — confirm before dispatching fixes.')
               )}
             </p>
           </div>
         </div>
         {onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('queue')}>
-            Open queue
+            {actions.queue ?? 'Open queue'}
           </Btn>
+        ) : stats.topPriorityTo ? (
+          <Link to={stats.topPriorityTo}>
+            <Btn size="sm" variant="ghost">{actions.queue ?? 'Open queue'}</Btn>
+          </Link>
         ) : null}
       </div>
     )
@@ -131,22 +169,32 @@ export function ReportsStatusBanner({ stats, onTab, onRefresh, refreshing }: Pro
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Triage queue current on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner
+              ? 'Bug queue is up to date'
+              : `Triage queue current on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">
-            {stats.total14d} reports in 14d
+            {stats.topPriorityLabel ??
+              `${stats.total14d} reports in 14d${
+                stats.lastReportAt ? '' : ''
+              }`}
             {stats.lastReportAt ? (
-              <> · last <RelativeTime value={stats.lastReportAt} /></>
+              <>
+                {' '}
+                · last <RelativeTime value={stats.lastReportAt} />
+              </>
             ) : null}
           </p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : onTab ? (
         <Btn size="sm" variant="ghost" onClick={() => onTab('severity')}>
-          Severity view
+          {actions.severity ?? 'Severity view'}
         </Btn>
       ) : null}
     </div>

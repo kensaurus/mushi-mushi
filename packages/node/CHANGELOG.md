@@ -1,5 +1,25 @@
 # @mushi-mushi/node
 
+## 0.5.0
+
+### Minor Changes
+
+- 0c66aa9: `AbortSignal` propagation.
+
+  `MushiNodeClient` now accepts `signal?: AbortSignal` on the constructor
+  (process-wide cancel — wire it to your shutdown hook so in-flight
+  captures abort cleanly during graceful shutdown) and on
+  `captureReport` / `captureException` (per-call cancel — wire it to your
+  request signal so a cancelled request doesn't hold up the timeout).
+
+  Multiple signals compose via a new `composeSignals` utility that delegates
+  to the platform `AbortSignal.any` (Node ≥ 20, the minimum supported runtime).
+
+### Patch Changes
+
+- Updated dependencies
+  - @mushi-mushi/core@1.5.0
+
 ## 0.4.0
 
 ### Minor Changes

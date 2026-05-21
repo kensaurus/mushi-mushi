@@ -3,7 +3,7 @@
 > Auto-generated from [`apps/admin/src/lib/configDocs.ts`](../apps/admin/src/lib/configDocs.ts).
 > Do not edit by hand — run `pnpm gen:config-docs` instead.
 
-_91 configuration knobs across 18 sections · last regenerated 2026-05-21._
+_99 configuration knobs across 18 sections · last regenerated 2026-05-21._
 
 Every knob in the admin console has an in-app `i` icon next to it that opens a longer-form explanation. The same content is mirrored here so you can search, link, and review configuration choices outside the app.
 
@@ -14,7 +14,7 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 - [Settings → Firecrawl (web research)](#settings-firecrawl-web-research-) (3)
 - [Settings → Dev tools](#settings-dev-tools) (1)
 - [Projects](#projects) (6)
-- [Integrations](#integrations) (20)
+- [Integrations](#integrations) (28)
 - [Storage (BYO)](#storage-byo-) (9)
 - [Compliance](#compliance) (7)
 - [SSO](#sso) (4)
@@ -535,6 +535,134 @@ Every knob in the admin console has an in-app `i` icon next to it that opens a l
 **Where it lives** — table `platform_integrations.config.github_webhook_secret` · endpoint `PUT /v1/admin/integrations/github` · read by `github-webhook edge function`
 
 **When to change** — Set this once you want PR check-run conclusions (CI passing/failing) reflected in the Auto-Fix Pipeline UI.
+
+### Cursor API key
+
+<a id="cursor-api-key"></a>
+
+`cursor-api-key`
+
+**Summary** — API key from cursor.com/dashboard/integrations — authorizes Cloud Agent dispatches from Mushi.
+
+**How it works** — Stored as a vault reference (`vault://id`). The health probe calls `GET api.cursor.com/v0/me`; fix-worker and the Node orchestrator use the same key to `POST /v0/agents` with your GitHub repo URL. No workspace ID is required by the official Cursor API.
+
+**Default** — `unset (Cursor dispatch disabled)`
+
+**Where it lives** — table `project_settings.cursor_api_key_ref` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `integration-health-probe`, `fix-worker`, `Node orchestrator`
+
+**When to change** — Rotate when the key is revoked in Cursor dashboard or you switch Cursor accounts.
+
+### Cursor default model
+
+<a id="cursor-default-model"></a>
+
+`cursor-default-model`
+
+**Summary** — Model slug sent to Cursor Cloud Agents API on each dispatch.
+
+**How it works** — Passed as `model` in the v0 agents payload. Leave blank to use your Cursor account default (typically composer-2.5).
+
+**Default** — `composer-2.5 (account default when blank)`
+
+**Where it lives** — table `project_settings.cursor_default_model` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `fix-worker`, `Node orchestrator`
+
+**When to change** — Change when you want a different default model for auto-dispatched agent runs.
+
+### Cursor auto-create PRs
+
+<a id="cursor-auto-create-pr"></a>
+
+`cursor-auto-create-pr`
+
+**Summary** — When enabled, Cursor opens a signed draft PR when the agent finishes.
+
+**How it works** — Maps to `target.autoCreatePr` in the v0 agents API. Disable if you prefer to review the branch before opening a PR.
+
+**Default** — `true`
+
+**Where it lives** — table `project_settings.cursor_auto_create_pr` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `fix-worker`, `Node orchestrator`
+
+**When to change** — Disable for repos with strict PR review gates where branches must be vetted first.
+
+### Cursor max iterations
+
+<a id="cursor-max-iterations"></a>
+
+`cursor-max-iterations`
+
+**Summary** — How many agent loops Cursor runs per dispatch (1–10).
+
+**How it works** — Higher values can recover from a first-pass miss but consume more Cursor API credit. Stored in project_settings; the v0 API may cap iterations server-side.
+
+**Default** — `1` · range `1–10`
+
+**Where it lives** — table `project_settings.cursor_max_iterations` · endpoint `PUT /v1/admin/integrations/platform/cursor_cloud` · read by `fix-worker`, `Node orchestrator`
+
+**When to change** — Raise for complex bugs that often need a second pass; lower to control cost.
+
+### Anthropic API key
+
+<a id="claude-api-key"></a>
+
+`claude-api-key`
+
+**Summary** — Vault-stored Anthropic key used for Mushi health probes only — the actual fix run uses ANTHROPIC_API_KEY in your GitHub repo secrets.
+
+**How it works** — Mushi never embeds this key in repository_dispatch payloads or public workflow YAML. After you save it here, copy the mushi-claude-fix workflow into your repo and add ANTHROPIC_API_KEY as a GitHub Actions secret.
+
+**Default** — `unset`
+
+**Where it lives** — table `project_settings.claude_api_key_ref` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `integration-health-probe edge function`
+
+**When to change** — Rotate when your Anthropic key is revoked or you switch workspaces.
+
+### Claude default model
+
+<a id="claude-default-model"></a>
+
+`claude-default-model`
+
+**Summary** — Model slug included in the repository_dispatch client_payload for your workflow.
+
+**How it works** — Passed as `model` in the dispatch payload. Your workflow may pass it to Claude Code CLI or ignore it if you pin a model in the workflow file.
+
+**Default** — `claude-opus-4-1`
+
+**Where it lives** — table `project_settings.claude_default_model` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `fix-worker edge function`
+
+**When to change** — Change when you want a different default model for Claude Code Agent dispatches.
+
+### Claude workflow event
+
+<a id="claude-workflow-event"></a>
+
+`claude-workflow-event`
+
+**Summary** — GitHub repository_dispatch event type that triggers mushi-claude-fix.yml.
+
+**How it works** — Must match `on.repository_dispatch.types` in your workflow. Mushi sends this event type when dispatching a fix; a mismatch means GitHub accepts the POST but no workflow runs.
+
+**Default** — `mushi_claude_fix`
+
+**Where it lives** — table `project_settings.claude_workflow_event` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `fix-worker edge function`
+
+**When to change** — Only if you renamed the event type in your workflow YAML.
+
+### Claude base branch
+
+<a id="claude-default-branch"></a>
+
+`claude-default-branch`
+
+**Summary** — Branch your GitHub Actions workflow checks out before Claude applies the fix.
+
+**How it works** — Sent as `target_branch` in the dispatch payload. Override when your default branch is not `main`.
+
+**Default** — `main`
+
+**Where it lives** — table `project_settings.claude_default_branch` · endpoint `PUT /v1/admin/integrations/platform/claude_code_agent` · read by `fix-worker edge function`
+
+**When to change** — Change when your repo's default branch isn't `main`.
 
 ### Jira base URL
 

@@ -14,7 +14,6 @@ import { signPayload } from '@mushi-mushi/plugin-sdk'
 import { createCursorCloudPlugin, type CursorCloudPluginConfig } from '../index.js'
 
 const WEBHOOK_SECRET = 'test-webhook-secret'
-const WORKSPACE = 'ws_test'
 
 function makePlugin(overrides: Partial<CursorCloudPluginConfig> = {}) {
   const fetchMock = vi.fn(async () =>
@@ -24,8 +23,7 @@ function makePlugin(overrides: Partial<CursorCloudPluginConfig> = {}) {
     ),
   )
   const plugin = createCursorCloudPlugin({
-    apiKey: 'cur_test_key',
-    workspaceId: WORKSPACE,
+    apiKey: 'crsr_test_key',
     webhookSecret: WEBHOOK_SECRET,
     repoUrl: 'https://github.com/example/repo',
     severityThreshold: 'critical',
@@ -99,13 +97,16 @@ describe('createCursorCloudPlugin — severity gate', () => {
     expect(url).toBe('https://api.cursor.com/v0/agents')
     expect(init.method).toBe('POST')
     const headers = init.headers as Record<string, string>
-    expect(headers.Authorization).toBe('Bearer cur_test_key')
+    expect(headers.Authorization).toBe('Bearer crsr_test_key')
     expect(headers['Content-Type']).toBe('application/json')
     const body = JSON.parse(init.body as string) as Record<string, unknown>
-    expect((body.cloud as Record<string, unknown>).workspaceId).toBe(WORKSPACE)
-    expect((body.cloud as Record<string, unknown>).autoCreatePR).toBe(true)
-    expect(body.prompt).toContain('r-hi')
-    expect(body.prompt).toContain('auth')
+    expect(body.prompt).toEqual({ text: expect.stringContaining('r-hi') })
+    expect((body.prompt as { text: string }).text).toContain('auth')
+    expect(body.source).toEqual({
+      repository: 'https://github.com/example/repo',
+      ref: 'main',
+    })
+    expect((body.target as Record<string, unknown>).autoCreatePr).toBe(true)
   })
 
   it('dispatches critical severity when threshold defaults to critical', async () => {
@@ -160,31 +161,9 @@ describe('createCursorCloudPlugin — fix.requested', () => {
     })
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]
-    const body = JSON.parse(init.body as string) as Record<string, unknown>
-    expect(body.prompt).toContain('f-1')
-    expect(body.prompt).toContain('r-low-fix')
-  })
-
-  it('passes MUSHI_* env vars through to the agent run', async () => {
-    const { plugin, fetchMock } = makePlugin()
-    await deliver(plugin, {
-      event: 'fix.requested',
-      deliveryId: 'd-fix-2',
-      occurredAt: '2026-05-21T00:00:00Z',
-      projectId: 'p-42',
-      pluginSlug: 'cursor-cloud',
-      data: {
-        report: { id: 'r-fix-2', status: 'classified' },
-        fix: { id: 'f-42', status: 'requested' },
-      },
-    })
-    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]
-    const body = JSON.parse(init.body as string) as Record<string, unknown>
-    const envVars = (body.cloud as Record<string, unknown>).envVars as Record<string, string>
-    expect(envVars.MUSHI_REPORT_ID).toBe('r-fix-2')
-    expect(envVars.MUSHI_FIX_ID).toBe('f-42')
-    expect(envVars.MUSHI_PROJECT_ID).toBe('p-42')
-    expect(envVars.MUSHI_EVENT).toBe('fix.requested')
+    const body = JSON.parse(init.body as string) as { prompt: { text: string } }
+    expect(body.prompt.text).toContain('f-1')
+    expect(body.prompt.text).toContain('r-low-fix')
   })
 })
 
@@ -194,8 +173,7 @@ describe('createCursorCloudPlugin — error handling', () => {
       new Response(JSON.stringify({ error: 'invalid api key' }), { status: 401 }),
     )
     const plugin = createCursorCloudPlugin({
-      apiKey: 'cur_bad_key',
-      workspaceId: WORKSPACE,
+      apiKey: 'crsr_bad_key',
       webhookSecret: WEBHOOK_SECRET,
       repoUrl: 'https://github.com/example/repo',
       fetchImpl: fetchMock as unknown as typeof fetch,
@@ -211,10 +189,7 @@ describe('createCursorCloudPlugin — error handling', () => {
         fix: { id: 'f-401', status: 'requested' },
       },
     })
-    // Handler threw because plugin-sdk withRetry surfaces the error,
-    // and the createPluginHandler returns 500 on uncaught handler failures.
     expect(res.status).toBe(500)
-    // Critical: only one attempt — non-2xx 4xx other than 429 is non-retryable.
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
@@ -233,9 +208,8 @@ describe('createCursorCloudPlugin — error handling', () => {
     })
     const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1]
     const body = JSON.parse(init.body as string) as Record<string, unknown>
-    expect((body.model as Record<string, unknown>).id).toBe('composer-2.5')
-    expect((body.cloud as Record<string, unknown>).autoCreatePR).toBe(true)
-    expect((body.cloud as Record<string, unknown>).maxIterations).toBe(1)
+    expect(body.model).toBe('composer-2.5')
+    expect((body.target as Record<string, unknown>).autoCreatePr).toBe(true)
   })
 })
 

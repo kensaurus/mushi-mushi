@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-bugsnag",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Mushi Mushi plugin for Bugsnag — mirrors classified reports as Bugsnag errors and marks them fixed when Mushi applies a fix.",
   "license": "MIT",
   "type": "module",

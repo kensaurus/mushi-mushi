@@ -41,6 +41,7 @@ import { useToast } from '../lib/toast'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { usePageCopy } from '../lib/copy'
+import { useJudgeUx, resolveQuickJudgeTab } from '../lib/judgeModeUx'
 import { HeroJudgeScale } from '../components/illustrations/HeroIllustrations'
 import { PageActionBar } from '../components/PageActionBar'
 import { PageHero } from '../components/PageHero'
@@ -288,6 +289,13 @@ export function JudgePage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/judge')
+  const ux = useJudgeUx()
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickJudgeTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
   const [sort, setSort] = useState<'recent' | 'score_asc'>('recent')
   const [running, setRunning] = useState(false)
   // Sticky inline receipt for "Run judge now" — toast disappears, this stays
@@ -420,7 +428,7 @@ export function JudgePage() {
     () =>
       JUDGE_TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'evaluations' && stats.disagreementCount > 0
             ? stats.disagreementCount
@@ -428,7 +436,7 @@ export function JudgePage() {
               ? stats.promptVersionCount
               : undefined,
       })),
-    [stats.disagreementCount, stats.promptVersionCount],
+    [stats.disagreementCount, stats.promptVersionCount, copy?.tabLabels],
   )
 
   if (statsLoading && !statsData) {
@@ -632,6 +640,17 @@ export function JudgePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-judge">
+      <PageHelp
+        title={copy?.help?.title ?? 'About the Judge'}
+        whatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
+        useCases={copy?.help?.useCases ?? [
+          'Detect when the classifier silently degrades after a model or prompt change',
+          'Compare prompt versions head-to-head on real reports',
+          'Decide whether to roll back, fork, or promote a prompt',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Judge'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -697,8 +716,10 @@ export function JudgePage() {
         refreshing={statsValidating || evalsQuery.isValidating || weeksQuery.isValidating}
         onRunJudge={runNow}
         running={running}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<JudgeTabId>
         size="sm"
         ariaLabel="Judge sections"
@@ -706,12 +727,14 @@ export function JudgePage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="JUDGE SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideJudgeSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'JUDGE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
-            label="This week"
+            label={copy?.statLabels?.week ?? 'This week'}
             value={stats.latestWeekScore != null ? `${Math.round(stats.latestWeekScore * 100)}%` : '—'}
             accent={
               stats.latestWeekScore != null && stats.latestWeekScore >= 0.8
@@ -725,19 +748,19 @@ export function JudgePage() {
             hint={`${stats.latestWeekEvalCount} evals`}
           />
           <StatCard
-            label="Total evals"
+            label={copy?.statLabels?.total ?? 'Total evals'}
             value={stats.totalEvaluations}
             accent={stats.totalEvaluations > 0 ? 'text-brand' : undefined}
             hint="All time on project"
           />
           <StatCard
-            label="Disagreements"
+            label={copy?.statLabels?.disagree ?? 'Disagreements'}
             value={stats.disagreementCount}
             accent={stats.disagreementCount > 0 ? 'text-warn' : 'text-ok'}
             hint={stats.disagreementRatePct != null ? `${stats.disagreementRatePct}% rate` : 'classifier vs user'}
           />
           <StatCard
-            label="WoW drift"
+            label={copy?.statLabels?.drift ?? 'WoW drift'}
             value={stats.weekOverWeekDriftPct != null ? `${stats.weekOverWeekDriftPct}%` : '—'}
             accent={
               stats.weekOverWeekDriftPct != null && stats.weekOverWeekDriftPct >= 5
@@ -747,21 +770,22 @@ export function JudgePage() {
             hint="Week-over-week score change"
           />
           <StatCard
-            label="Classified"
+            label={copy?.statLabels?.classified ?? 'Classified'}
             value={stats.classifiedReports}
             accent={stats.classifiedReports > 0 && stats.totalEvaluations === 0 ? 'text-brand' : undefined}
             hint="Ready for judge"
           />
           <StatCard
-            label="Prompts"
+            label={copy?.statLabels?.prompts ?? 'Prompts'}
             value={stats.promptVersionCount}
             accent={stats.activePromptCount > 0 ? 'text-ok' : undefined}
             hint={`${stats.activePromptCount} active`}
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriorityTo && stats.topPriority !== 'healthy' && activeTab === 'overview' ? (
+      {stats.topPriorityTo && stats.topPriority !== 'healthy' && activeTab === 'overview' && !ux.hideOverviewChrome ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'low_score' || stats.topPriority === 'drifting'
@@ -786,7 +810,7 @@ export function JudgePage() {
         </Card>
       ) : null}
 
-      {activeTab === 'overview' && (
+      {activeTab === 'overview' && !ux.hideOverviewChrome && (
         <>
       <PageHero
         scope="judge"
@@ -840,17 +864,6 @@ export function JudgePage() {
         actions in beginner mode (hero collapses to a pill there).
       */}
       <PageActionBar scope="judge" action={heroAction} />
-
-      <PageHelp
-        title={copy?.help?.title ?? 'About the Judge'}
-        whatIsIt={copy?.help?.whatIsIt ?? "A second LLM that grades the classifier's output on every report — accuracy, severity, component, and reproduction quality. Scores feed both the weekly aggregate and the per-prompt leaderboard."}
-        useCases={copy?.help?.useCases ?? [
-          'Detect when the classifier silently degrades after a model or prompt change',
-          'Compare prompt versions head-to-head on real reports',
-          'Decide whether to roll back, fork, or promote a prompt',
-        ]}
-        howToUse={copy?.help?.howToUse ?? 'Click "Run judge now" to score recent unjudged reports immediately. The leaderboard ranks prompt versions by mean judge score; click a row to see the evaluations that drove it.'}
-      />
 
       <div data-dav-anchor="judge:decide">
       <KpiRow cols={4}>

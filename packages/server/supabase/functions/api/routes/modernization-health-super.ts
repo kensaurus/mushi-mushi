@@ -252,7 +252,7 @@ export function registerModernizationHealthSuperRoutes(app: Hono): void {
     const { data: settings } = await db
       .from('project_settings')
       .select(
-        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref',
+        'sentry_org_slug, sentry_auth_token_ref, langfuse_host, langfuse_public_key_ref, langfuse_secret_key_ref, github_repo_url, github_installation_token_ref, claude_api_key_ref, cursor_api_key_ref',
       )
       .eq('project_id', projectId)
       .single();

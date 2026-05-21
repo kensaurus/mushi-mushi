@@ -12,6 +12,7 @@ import { useRealtimeReload } from '../lib/realtime'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useIntelligenceUx, resolveQuickIntelligenceTab } from '../lib/intelligenceModeUx'
 import { SetupNudge } from '../components/SetupNudge'
 import {
   PageHeader,
@@ -79,6 +80,7 @@ function resolveIntelligenceTab(value: string | null): IntelligenceTabId {
 
 export function IntelligencePage() {
   const copy = usePageCopy('/intelligence')
+  const ux = useIntelligenceUx()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeTab = resolveIntelligenceTab(searchParams.get('tab'))
   const activeTabMeta = TABS.find((t) => t.id === activeTab) ?? TABS[0]
@@ -175,6 +177,12 @@ export function IntelligencePage() {
     },
     [setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickIntelligenceTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   useEffect(() => {
     if (!activeJob) return
@@ -300,7 +308,7 @@ export function IntelligencePage() {
     () =>
       TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'reports' && stats.reportCount > 0
             ? stats.reportCount
@@ -308,7 +316,7 @@ export function IntelligencePage() {
               ? stats.pendingFindings + stats.activeJobCount
               : undefined,
       })),
-    [stats.reportCount, stats.pendingFindings, stats.activeJobCount],
+    [copy?.tabLabels, stats.reportCount, stats.pendingFindings, stats.activeJobCount],
   )
 
   usePublishPageContext({
@@ -359,6 +367,17 @@ export function IntelligencePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-intelligence">
+      <PageHelp
+        title={copy?.help?.title ?? 'About Bug Intelligence'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations.'}
+        useCases={copy?.help?.useCases ?? [
+          'Share a one-page status with stakeholders every Monday',
+          'Spot regressions early — week-over-week category and severity drift',
+          'Compare fix velocity against anonymised industry benchmarks (opt-in)',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Reports generate automatically every Monday by cron. Click Generate to run for the current project — Pipeline shows live status.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'Bug Intelligence'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -367,55 +386,59 @@ export function IntelligencePage() {
           'Banner + INTELLIGENCE SNAPSHOT — Overview for posture, Reports for digests, Pipeline for jobs and findings.'
         }
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
-                : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.activeJobCount > 0
-              ? 'RUNNING'
-              : stats.topPriority === 'job_failed'
-                ? 'FAILED'
-                : stats.reportCount === 0
-                  ? 'EMPTY'
-                  : `${stats.reportCount} DIGEST${stats.reportCount === 1 ? '' : 'S'}`}
-        </Badge>
-        <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || reportsValidating || jobsValidating}>
-          Refresh
-        </Btn>
-        <Btn
-          size="sm"
-          variant="primary"
-          onClick={() => void generateNow()}
-          disabled={
-            !activeProjectId ||
-            generating ||
-            stats.activeJobCount > 0 ||
-            (!intelligenceUnlocked && !entitlements.loading)
-          }
-          loading={generating || stats.activeJobCount > 0}
-          leadingIcon={<IconSparkle className="h-3.5 w-3.5" aria-hidden="true" />}
-          title={
-            !activeProjectId
-              ? 'Select a project first'
-              : !intelligenceUnlocked && !entitlements.loading
-                ? 'Locked on your current plan'
-                : undefined
-          }
-        >
-          {stats.activeJobCount > 0 ? 'Generating…' : 'Generate this week'}
-        </Btn>
+        {!ux.hideOverviewChrome && (
+          <>
+            <Badge
+              className={
+                bannerSeverity === 'ok'
+                  ? 'bg-ok-muted text-ok'
+                  : bannerSeverity === 'danger'
+                    ? 'bg-danger/10 text-danger'
+                    : bannerSeverity === 'warn'
+                      ? 'bg-warn/10 text-warn'
+                      : bannerSeverity === 'brand'
+                        ? 'bg-brand/15 text-brand'
+                        : 'bg-surface-overlay text-fg-muted'
+              }
+            >
+              {!stats.hasAnyProject
+                ? 'NO PROJECT'
+                : stats.activeJobCount > 0
+                  ? 'RUNNING'
+                  : stats.topPriority === 'job_failed'
+                    ? 'FAILED'
+                    : stats.reportCount === 0
+                      ? 'EMPTY'
+                      : `${stats.reportCount} DIGEST${stats.reportCount === 1 ? '' : 'S'}`}
+            </Badge>
+            <FreshnessPill at={statsFetchedAt} isValidating={statsValidating} />
+            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || reportsValidating || jobsValidating}>
+              Refresh
+            </Btn>
+            <Btn
+              size="sm"
+              variant="primary"
+              onClick={() => void generateNow()}
+              disabled={
+                !activeProjectId ||
+                generating ||
+                stats.activeJobCount > 0 ||
+                (!intelligenceUnlocked && !entitlements.loading)
+              }
+              loading={generating || stats.activeJobCount > 0}
+              leadingIcon={<IconSparkle className="h-3.5 w-3.5" aria-hidden="true" />}
+              title={
+                !activeProjectId
+                  ? 'Select a project first'
+                  : !intelligenceUnlocked && !entitlements.loading
+                    ? 'Locked on your current plan'
+                    : undefined
+              }
+            >
+              {stats.activeJobCount > 0 ? 'Generating…' : 'Generate this week'}
+            </Btn>
+          </>
+        )}
       </PageHeader>
 
       <IntelligenceStatusBanner
@@ -425,12 +448,14 @@ export function IntelligencePage() {
         refreshing={statsValidating}
         onGenerate={() => void generateNow()}
         generating={generating}
+        plainBanner={ux.plainBanner}
       />
 
       {!intelligenceUnlocked && !entitlements.loading && (
         <UpgradePrompt flag="intelligence_reports" currentPlan={entitlements.planName} />
       )}
 
+      {!ux.hideTabs && (
       <SegmentedControl<IntelligenceTabId>
         size="sm"
         ariaLabel="Intelligence sections"
@@ -438,20 +463,23 @@ export function IntelligencePage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="INTELLIGENCE SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideIntelligenceSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'INTELLIGENCE SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Digests" value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} hint={stats.latestWeekStart ? `Week ${stats.latestWeekStart}` : 'None archived'} />
-          <StatCard label="Active jobs" value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} hint={`${stats.completedJobCount} completed`} />
-          <StatCard label="Failed jobs" value={stats.failedJobCount} accent={stats.failedJobCount > 0 ? 'text-danger' : undefined} hint={stats.lastJobStatus ?? 'No runs'} />
-          <StatCard label="Findings" value={stats.pendingFindings} accent={stats.pendingFindings > 0 ? 'text-warn' : undefined} hint={`${stats.securityFindings} security`} />
-          <StatCard label="Fix attempts" value={stats.totalFixAttempts} accent={stats.totalFixAttempts > 0 ? 'text-brand' : undefined} hint={`${stats.fixCompletionRatePct}% completion`} />
-          <StatCard label="Benchmarking" value={stats.benchmarkOptIn ? 'On' : 'Off'} accent={stats.benchmarkOptIn ? 'text-ok' : undefined} hint={stats.featureUnlocked ? 'Cross-customer compare' : 'Plan locked'} />
+          <StatCard label={copy?.statLabels?.digests ?? 'Digests'} value={stats.reportCount} accent={stats.reportCount > 0 ? 'text-ok' : undefined} hint={stats.latestWeekStart ? `Week ${stats.latestWeekStart}` : 'None archived'} />
+          <StatCard label={copy?.statLabels?.activeJobs ?? 'Active jobs'} value={stats.activeJobCount} accent={stats.activeJobCount > 0 ? 'text-brand' : undefined} hint={`${stats.completedJobCount} completed`} />
+          <StatCard label={copy?.statLabels?.failedJobs ?? 'Failed jobs'} value={stats.failedJobCount} accent={stats.failedJobCount > 0 ? 'text-danger' : undefined} hint={stats.lastJobStatus ?? 'No runs'} />
+          <StatCard label={copy?.statLabels?.findings ?? 'Findings'} value={stats.pendingFindings} accent={stats.pendingFindings > 0 ? 'text-warn' : undefined} hint={`${stats.securityFindings} security`} />
+          <StatCard label={copy?.statLabels?.fixAttempts ?? 'Fix attempts'} value={stats.totalFixAttempts} accent={stats.totalFixAttempts > 0 ? 'text-brand' : undefined} hint={`${stats.fixCompletionRatePct}% completion`} />
+          <StatCard label={copy?.statLabels?.benchmarking ?? 'Benchmarking'} value={stats.benchmarkOptIn ? 'On' : 'Off'} accent={stats.benchmarkOptIn ? 'text-ok' : undefined} hint={stats.featureUnlocked ? 'Cross-customer compare' : 'Plan locked'} />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'job_failed'
@@ -485,17 +513,8 @@ export function IntelligencePage() {
         <>
           {activeTab === 'overview' && (
             <div className="space-y-4">
-              <PageHelp
-                title={copy?.help?.title ?? 'About Bug Intelligence'}
-                whatIsIt={copy?.help?.whatIsIt ?? 'Weekly LLM-authored digest of your bug pipeline — trends, fix velocity, hotspots, and recommendations.'}
-                useCases={copy?.help?.useCases ?? [
-                  'Share a one-page status with stakeholders every Monday',
-                  'Spot regressions early — week-over-week category and severity drift',
-                  'Compare fix velocity against anonymised industry benchmarks (opt-in)',
-                ]}
-                howToUse={copy?.help?.howToUse ?? 'Reports generate automatically every Monday by cron. Click Generate to run for the current project — Pipeline shows live status.'}
-              />
-
+              {!ux.hideOverviewChrome && (
+              <>
               {stats.topPriority === 'healthy' && (
                 <RecommendedAction
                   tone="success"
@@ -526,6 +545,8 @@ export function IntelligencePage() {
                   description={stats.topPriorityLabel ?? 'Dispatch dependency upgrades or dismiss false positives.'}
                   cta={{ label: 'Open Pipeline', to: '/intelligence?tab=pipeline' }}
                 />
+              )}
+              </>
               )}
 
               <ThisWeekNarrative latest={latestForOverview} projectName={projectName} stats={stats} />

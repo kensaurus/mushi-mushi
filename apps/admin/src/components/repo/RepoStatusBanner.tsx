@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { RepoStats, RepoTabId } from './RepoStatsTypes'
 
 interface Props {
@@ -12,9 +13,18 @@ interface Props {
   onTab?: (tab: RepoTabId) => void
   onRefresh?: () => void
   refreshing?: boolean
+  plainBanner?: boolean
 }
 
-export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props) {
+export function RepoStatusBanner({
+  stats,
+  onTab,
+  onRefresh,
+  refreshing,
+  plainBanner = false,
+}: Props) {
+  const copy = usePageCopy('/repo')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -23,12 +33,18 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No projects — repo graph idle</p>
-            <p className="text-2xs text-fg-muted">Create a project and connect GitHub before branches appear here.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Create a project first' : 'No projects — repo graph idle'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'Connect GitHub after setup so auto-fix branches appear here.'
+                : 'Create a project and connect GitHub before branches appear here.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -40,13 +56,15 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No GitHub repo on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'Connect your GitHub repo' : `No GitHub repo on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Connect repo</Btn>
+            <Btn size="sm" variant="ghost">{actions.connect ?? 'Connect repo'}</Btn>
           </Link>
         ) : null}
       </div>
@@ -59,13 +77,15 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">GitHub App not installed</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner ? 'Install the GitHub App' : 'GitHub App not installed'}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Install app</Btn>
+            <Btn size="sm" variant="ghost">{actions.install ?? 'Install app'}</Btn>
           </Link>
         ) : null}
       </div>
@@ -79,18 +99,20 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.failedToOpen} stuck dispatch{stats.failedToOpen === 1 ? '' : 'es'} on {projectLabel}
+              {plainBanner
+                ? `${stats.failedToOpen} fix${stats.failedToOpen === 1 ? '' : 'es'} stuck without a PR`
+                : `${stats.failedToOpen} stuck dispatch${stats.failedToOpen === 1 ? '' : 'es'} on ${projectLabel}`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Review stuck</Btn>
+            <Btn size="sm" variant="ghost">{actions.stuck ?? 'Review stuck'}</Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>
-            Review stuck
+            {actions.stuck ?? 'Review stuck'}
           </Btn>
         ) : null}
       </div>
@@ -104,18 +126,20 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.ciFailed} branch{stats.ciFailed === 1 ? '' : 'es'} with failing CI
+              {plainBanner
+                ? `${stats.ciFailed} branch${stats.ciFailed === 1 ? '' : 'es'} failing CI`
+                : `${stats.ciFailed} branch${stats.ciFailed === 1 ? '' : 'es'} with failing CI`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Open failing CI</Btn>
+            <Btn size="sm" variant="ghost">{actions.ci ?? 'Open failing CI'}</Btn>
           </Link>
         ) : onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>
-            Open failing CI
+            {actions.ci ?? 'Open failing CI'}
           </Btn>
         ) : null}
       </div>
@@ -128,12 +152,14 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No fix branches yet</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No fix branches yet' : 'No fix branches yet'}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         <Link to="/reports">
-          <Btn size="sm" variant="ghost">Open Reports</Btn>
+          <Btn size="sm" variant="ghost">{actions.reports ?? 'Open Reports'}</Btn>
         </Link>
       </div>
     )
@@ -144,18 +170,24 @@ export function RepoStatusBanner({ stats, onTab, onRefresh, refreshing }: Props)
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Repo healthy on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Repo looks healthy' : `Repo healthy on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : stats.topPriorityTo ? (
         <Link to={stats.topPriorityTo}>
-          <Btn size="sm" variant="ghost">View branches</Btn>
+          <Btn size="sm" variant="ghost">{actions.branches ?? 'View branches'}</Btn>
         </Link>
+      ) : onTab ? (
+        <Btn size="sm" variant="ghost" onClick={() => onTab('branches')}>
+          {actions.branches ?? 'View branches'}
+        </Btn>
       ) : null}
     </div>
   )

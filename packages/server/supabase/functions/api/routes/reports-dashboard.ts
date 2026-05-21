@@ -1093,6 +1093,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       topPriorityTitle: null as string | null,
       topPriorityStage: null as string | null,
       topPriorityTo: null as string | null,
+      topPriority: 'no_project' as 'no_project' | 'setup' | 'actions' | 'clear',
+      topPriorityLabel: null as string | null,
+      nextStepTo: null as string | null,
       openPlan: false,
       openDo: false,
       openCheck: false,
@@ -1228,7 +1231,14 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         ? {
             stage: 'plan',
             title: `${criticalReports14d} critical report${criticalReports14d === 1 ? '' : 's'} in 14d`,
-            to: '/reports?severity=critical',
+            to: '/reports?tab=queue&status=new&severity=critical',
+          }
+        : null,
+      !openPlan && openBacklog > 0
+        ? {
+            stage: 'plan',
+            title: `${openBacklog} report${openBacklog === 1 ? '' : 's'} waiting > 1h to triage`,
+            to: '/reports?tab=queue&status=new',
           }
         : null,
       openDo
@@ -1300,6 +1310,32 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       lastActivityKind = 'fix';
     }
 
+    let topPriority: typeof empty.topPriority = 'clear';
+    let topPriorityLabel: string | null = null;
+    let nextStepTo: string | null = null;
+
+    if (!setupDone) {
+      topPriority = 'setup';
+      topPriorityLabel = `${requiredComplete}/${empty.requiredTotal} setup steps done — finish ingest to unlock the inbox`;
+      if (!hasKey) {
+        nextStepTo = '/onboarding?tab=steps';
+      } else if (!hasSdk) {
+        nextStepTo = '/onboarding?tab=sdk';
+      } else if (reportCount === 0) {
+        nextStepTo = '/onboarding?tab=verify';
+      } else {
+        nextStepTo = '/onboarding?tab=steps';
+      }
+    } else if (openActions > 0 && top) {
+      topPriority = 'actions';
+      topPriorityLabel = top.title;
+    } else if (openActions > 0) {
+      topPriority = 'actions';
+      topPriorityLabel = `${openActions} open action${openActions === 1 ? '' : 's'} waiting`;
+    } else {
+      topPriorityLabel = `${clearStages}/${empty.totalSurfaces} stages clear — inbox zero`;
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -1323,6 +1359,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         topPriorityTitle: top?.title ?? null,
         topPriorityStage: top?.stage ?? null,
         topPriorityTo: top?.to ?? null,
+        topPriority,
+        topPriorityLabel,
+        nextStepTo,
         openPlan,
         openDo,
         openCheck,
@@ -1361,6 +1400,16 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       integrationIssues: 0,
       lastActivityAt: null as string | null,
       lastActivityKind: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'setup'
+        | 'backlog'
+        | 'fixes_failed'
+        | 'integrations'
+        | 'waiting_data'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const projectIds = await ownedProjectIds(db, userId);
@@ -1526,6 +1575,43 @@ export function registerReportsDashboardRoutes(app: Hono): void {
       lastActivityKind = 'fix';
     }
 
+    let topPriority: typeof empty.topPriority = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (!setupDone) {
+      topPriority = 'setup';
+      topPriorityLabel = `${requiredComplete}/${empty.requiredTotal} setup steps done — finish ingest to unlock metrics`;
+      if (!hasKey) {
+        topPriorityTo = '/onboarding?tab=steps';
+      } else if (!hasSdk) {
+        topPriorityTo = '/onboarding?tab=sdk';
+      } else if (reportCount === 0) {
+        topPriorityTo = '/onboarding?tab=verify';
+      } else {
+        topPriorityTo = '/onboarding?tab=steps';
+      }
+    } else if (openBacklog > 0) {
+      topPriority = 'backlog';
+      topPriorityLabel = bottleneck;
+      topPriorityTo = '/reports?tab=queue&status=new';
+    } else if (fixesFailed > 0) {
+      topPriority = 'fixes_failed';
+      topPriorityLabel = `${fixesFailed} auto-fix${fixesFailed === 1 ? '' : 'es'} failed in 14d — retry or inspect logs`;
+      topPriorityTo = '/fixes?status=failed';
+    } else if (integrationIssues > 0) {
+      topPriority = 'integrations';
+      topPriorityLabel = `${integrationIssues} integration${integrationIssues === 1 ? '' : 's'} failing health checks`;
+      topPriorityTo = '/dashboard?tab=health';
+    } else if (recentReports.length === 0 && recentFixes.length === 0) {
+      topPriority = 'waiting_data';
+      topPriorityLabel = 'Pipeline wired — send a test report to populate charts';
+      topPriorityTo = '/onboarding?tab=verify';
+    } else {
+      topPriorityLabel = `${recentReports.length} report${recentReports.length === 1 ? '' : 's'} in 14d · ${fixesInProgress} fix${fixesInProgress === 1 ? '' : 'es'} in flight`;
+      topPriorityTo = '/dashboard?tab=loop';
+    }
+
     return c.json({
       ok: true,
       data: {
@@ -1550,6 +1636,9 @@ export function registerReportsDashboardRoutes(app: Hono): void {
         integrationIssues,
         lastActivityAt,
         lastActivityKind,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });

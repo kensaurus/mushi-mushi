@@ -5,12 +5,14 @@
 
 import { Link } from 'react-router-dom'
 import { Btn, RelativeTime } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import { OperationChip } from '../OperationChip'
 import type { CostStats, CostTabId } from './types'
 
 interface Props {
   stats: CostStats
   onTab?: (tab: CostTabId) => void
+  plainBanner?: boolean
 }
 
 function fmtUsd(n: number): string {
@@ -19,7 +21,9 @@ function fmtUsd(n: number): string {
   return `$${n.toFixed(6)}`
 }
 
-export function CostStatusBanner({ stats, onTab }: Props) {
+export function CostStatusBanner({ stats, onTab, plainBanner = false }: Props) {
+  const copy = usePageCopy('/cost')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'this project'
 
   if (!stats.projectId) {
@@ -28,9 +32,13 @@ export function CostStatusBanner({ stats, onTab }: Props) {
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">No project selected</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner ? 'Pick a project first' : 'No project selected'}
+            </p>
             <p className="text-2xs text-fg-muted">
-              LLM cost is per-project — pick an app from the header project switcher before auditing spend.
+              {plainBanner
+                ? 'AI spend is tracked per app — choose one in the header.'
+                : 'LLM cost is per-project — pick an app from the header project switcher before auditing spend.'}
             </p>
           </div>
         </div>
@@ -44,14 +52,18 @@ export function CostStatusBanner({ stats, onTab }: Props) {
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No LLM calls logged yet for {projectLabel}</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'No AI calls logged yet' : `No LLM calls logged yet for ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">
-              Ingest a report or run classify/fix — each edge function writes to llm_invocations with token counts and cost_usd.
+              {plainBanner
+                ? 'Send a test bug or run classify — each step logs tokens and cost here.'
+                : 'Ingest a report or run classify/fix — each edge function writes to llm_invocations with token counts and cost_usd.'}
             </p>
           </div>
         </div>
         <Link to="/health">
-          <Btn size="sm" variant="ghost">Run Health test</Btn>
+          <Btn size="sm" variant="ghost">{actions.health ?? 'Run Health test'}</Btn>
         </Link>
       </div>
     )
@@ -64,20 +76,22 @@ export function CostStatusBanner({ stats, onTab }: Props) {
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              Spend spike — {fmtUsd(stats.spend24hUsd)} in 24h vs {fmtUsd(stats.prior24hSpendUsd)} prior day
+              {plainBanner
+                ? `Spend jumped to ${fmtUsd(stats.spend24hUsd)} in 24h`
+                : `Spend spike — ${fmtUsd(stats.spend24hUsd)} in 24h vs ${fmtUsd(stats.prior24hSpendUsd)} prior day`}
             </p>
             <p className="text-2xs text-fg-muted">
               {stats.calls24h} calls in 24h
               {stats.topOperation ? (
                 <> · top driver: <OperationChip operation={stats.topOperation} maxWidthClass="max-w-[8rem]" /></>
               ) : null}
-              — check Raw log for runaway crons.
+              {plainBanner ? ' — check the raw log.' : ' — check Raw log for runaway crons.'}
             </p>
           </div>
         </div>
         {onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('log')}>
-            Inspect log
+            {actions.log ?? 'Inspect log'}
           </Btn>
         ) : null}
       </div>
@@ -91,16 +105,20 @@ export function CostStatusBanner({ stats, onTab }: Props) {
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.failedCalls24h} failed LLM call{stats.failedCalls24h === 1 ? '' : 's'} in 24h
+              {plainBanner
+                ? `${stats.failedCalls24h} AI call${stats.failedCalls24h === 1 ? '' : 's'} failed in 24h`
+                : `${stats.failedCalls24h} failed LLM call${stats.failedCalls24h === 1 ? '' : 's'} in 24h`}
             </p>
             <p className="text-2xs text-fg-muted">
-              Failed invocations may still incur partial token cost — filter Raw log by operation and check Langfuse traces.
+              {plainBanner
+                ? 'Failed calls may still cost tokens — open the raw log to investigate.'
+                : 'Failed invocations may still incur partial token cost — filter Raw log by operation and check Langfuse traces.'}
             </p>
           </div>
         </div>
         {onTab ? (
           <Btn size="sm" variant="ghost" onClick={() => onTab('log')}>
-            View failures
+            {actions.failures ?? 'View failures'}
           </Btn>
         ) : null}
       </div>
@@ -113,14 +131,18 @@ export function CostStatusBanner({ stats, onTab }: Props) {
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-warn">Using platform keys — {stats.platformKeyCalls24h} call{stats.platformKeyCalls24h === 1 ? '' : 's'} in 24h</p>
+            <p className="text-xs font-medium text-warn">
+              {plainBanner
+                ? 'Using Mushi platform keys'
+                : `Using platform keys — ${stats.platformKeyCalls24h} call${stats.platformKeyCalls24h === 1 ? '' : 's'} in 24h`}
+            </p>
             <p className="text-2xs text-fg-muted">
-              {fmtUsd(stats.spend24hUsd)} billed to Mushi platform keys for {projectLabel}. Add Anthropic BYOK in Settings to control spend directly.
+              {fmtUsd(stats.spend24hUsd)} in 24h on platform keys — add your own Anthropic key in Settings to control billing.
             </p>
           </div>
         </div>
         <Link to="/settings?tab=byok">
-          <Btn size="sm" variant="ghost">Add BYOK</Btn>
+          <Btn size="sm" variant="ghost">{actions.byok ?? 'Add BYOK'}</Btn>
         </Link>
       </div>
     )
@@ -132,7 +154,9 @@ export function CostStatusBanner({ stats, onTab }: Props) {
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">Legacy ledger only — {stats.ledgerCount} llm_cost_usd rows</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Legacy cost rows only' : `Legacy ledger only — ${stats.ledgerCount} llm_cost_usd rows`}
+            </p>
             <p className="text-2xs text-fg-muted">
               New telemetry writes to llm_invocations. Legacy rows are merged into totals until fully migrated.
             </p>
@@ -147,7 +171,9 @@ export function CostStatusBanner({ stats, onTab }: Props) {
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">Telemetry active for {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'AI spend tracking is active' : `Telemetry active for ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">
             {fmtUsd(stats.spend24hUsd)} in 24h · {stats.calls24h} calls
             {stats.lastCallAt ? (
@@ -159,7 +185,7 @@ export function CostStatusBanner({ stats, onTab }: Props) {
       </div>
       {onTab ? (
         <Btn size="sm" variant="ghost" onClick={() => onTab('breakdown')}>
-          View breakdown
+          {actions.breakdown ?? 'View breakdown'}
         </Btn>
       ) : null}
     </div>

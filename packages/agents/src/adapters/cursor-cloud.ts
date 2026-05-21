@@ -8,9 +8,9 @@
  * any Deno edge function — the Marketplace plugin (Path A) uses the same REST
  * surface from Deno via @mushi-mushi/plugin-cursor-cloud.
  *
- * Uses POST https://api.cursor.com/v0/agents (not @cursor/sdk Agent.create)
- * so workspaceId and maxIterations from project_settings are forwarded to
- * Cursor — the SDK v1 create path does not expose those fields.
+ * Uses POST https://api.cursor.com/v0/agents with the official v0 payload
+ * (prompt + source.repository + target.autoCreatePr). See:
+ * https://cursor.com/docs/cloud-agent/api/v0
  *
  * Override the base URL via CURSOR_API_BASE_URL for staging / tests.
  */
@@ -27,9 +27,10 @@ export interface StoredArtifact {
 export interface CursorCloudAgentConfig {
   apiKey: string
   model: string
-  workspaceId: string
   autoCreatePR: boolean
   maxIterations: number
+  /** @deprecated Cursor Cloud Agents API no longer requires workspaceId. Kept for back-compat reads. */
+  workspaceId?: string
 }
 
 const CURSOR_API_BASE = process.env.CURSOR_API_BASE_URL ?? 'https://api.cursor.com/v0'
@@ -76,29 +77,17 @@ export class CursorCloudAgent implements FixAgent {
       )
     }
 
-    if (!this.cfg.workspaceId) {
-      return failedResult(
-        branch,
-        'cursor_workspace_id is not set — configure it in project Settings → Integrations → Cursor Cloud.',
-      )
-    }
-
     const prompt = buildPromptFromReport(context)
     const repoUrl = context.config.repoUrl
 
     try {
       const created = await createCursorAgentRun({
         apiKey: this.cfg.apiKey,
-        workspaceId: this.cfg.workspaceId,
         model: this.cfg.model,
         autoCreatePR: this.cfg.autoCreatePR,
-        maxIterations: this.cfg.maxIterations,
         repoUrl,
+        branchName: branch,
         prompt,
-        envVars: {
-          MUSHI_REPORT_ID: context.reportId,
-          MUSHI_PROJECT_ID: context.projectId,
-        },
       })
 
       const agentId = created.agentId ?? created.id
@@ -142,26 +131,26 @@ async function cursorFetch<T>(
 
 async function createCursorAgentRun(opts: {
   apiKey: string
-  workspaceId: string
   model: string
   autoCreatePR: boolean
-  maxIterations: number
   repoUrl: string
+  branchName: string
   prompt: string
-  envVars: Record<string, string>
 }): Promise<V0AgentRecord> {
   return cursorFetch<V0AgentRecord>(opts.apiKey, '/agents', {
     method: 'POST',
     body: JSON.stringify({
-      model: { id: opts.model },
-      cloud: {
-        workspaceId: opts.workspaceId,
-        repos: [{ url: opts.repoUrl, startingRef: 'main' }],
-        autoCreatePR: opts.autoCreatePR,
-        maxIterations: opts.maxIterations,
-        envVars: opts.envVars,
+      prompt: { text: opts.prompt },
+      model: opts.model || 'default',
+      source: {
+        repository: opts.repoUrl,
+        ref: 'main',
       },
-      prompt: opts.prompt,
+      target: {
+        autoCreatePr: opts.autoCreatePR,
+        branchName: opts.branchName,
+        skipReviewerRequest: true,
+      },
     }),
   })
 }

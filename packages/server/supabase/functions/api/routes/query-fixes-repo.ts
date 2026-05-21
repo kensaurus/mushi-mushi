@@ -593,7 +593,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     let query = db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, error, spec_validation_warnings, inventory_action_node_id, failure_category',
+        'id, report_id, project_id, agent, branch, pr_url, pr_number, commit_sha, status, files_changed, lines_changed, summary, rationale, review_passed, started_at, completed_at, created_at, langfuse_trace_id, llm_model, llm_input_tokens, llm_output_tokens, check_run_status, check_run_conclusion, pr_state, error, spec_validation_warnings, inventory_action_node_id, failure_category, claude_workflow_run_id, claude_workflow_run_url, claude_dispatch_event_id, claude_artifacts',
       )
       .in('project_id', projectIds)
       .order('started_at', { ascending: false })
@@ -764,7 +764,7 @@ export function registerQueryFixesRepoRoutes(app: Hono): void {
     const { data } = await db
       .from('fix_attempts')
       .select(
-        'id, report_id, project_id, agent, branch, pr_url, commit_sha, status, files_changed, lines_changed, summary, review_passed, review_reasoning, error, started_at, completed_at, created_at',
+        'id, report_id, project_id, agent, branch, pr_url, commit_sha, status, files_changed, lines_changed, summary, review_passed, review_reasoning, error, started_at, completed_at, created_at, failure_category, claude_workflow_run_id, claude_workflow_run_url, claude_dispatch_event_id, claude_artifacts',
       )
       .eq('id', fixId)
       .in('project_id', projectIds)

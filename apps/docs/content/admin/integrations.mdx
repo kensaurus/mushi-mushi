@@ -70,12 +70,11 @@ branch graph and the fix-worker's code context.
 ### Cursor Cloud
 
 | Field | Description |
-||-------|-------------|
-|| **API Key** | Your Cursor API key — stored encrypted in the Supabase Vault; never exposed in the UI |
-|| **Workspace ID** | Your Cursor workspace ID (`ws_…`) — scopes agent runs to your workspace |
-|| **Default model** | Agent model (`composer-2.5` or `composer-latest`) |
-|| **Auto-create PRs** | When enabled, Cursor opens a signed draft PR automatically after the fix run |
-|| **Max iterations** | Maximum agent loops per dispatch (default: 1) |
+|-------|-------------|
+| **API Key** | Your Cursor API key — stored encrypted in the Supabase Vault; never exposed in the UI |
+| **Default model** | Agent model (`composer-2.5` or your account default) |
+| **Auto-create PRs** | When enabled, Cursor opens a signed draft PR automatically after the fix run |
+| **Max iterations** | Maximum agent loops per dispatch (default: 1) |
 
 When configured, Mushi can dispatch a Cursor Cloud Agent to fix classified reports — the agent opens a signed draft PR and posts the link back to the [Fixes page](/admin/fixes). Activate via:
 
@@ -166,12 +165,11 @@ DELETE /v1/admin/integrations/:type
 ## Common tasks
 
 ### Setting up Cursor Cloud auto-fix
-1. Obtain a Cursor API key from [cursor.com](https://cursor.com/settings) → API.
-2. On the **Cursor Cloud** card, click **Edit**.
-3. Enter your API key and workspace ID.
-4. Click **Save**.
-5. Install the **Cursor Cloud Agent** plugin from [Marketplace](/admin/marketplace) (subscribe to `report.classified`) — or set `autofix_agent = cursor_cloud` in Settings if you want every fix dispatched via Cursor.
-6. Triage a `critical` report → trigger dispatch → the [Fixes page](/admin/fixes) will show the Cursor agent badge and PR link once the run completes.
+1. Create a Cursor API key at [cursor.com/dashboard/integrations](https://cursor.com/dashboard/integrations) → API Keys.
+2. Connect **GitHub (code repo)** first — Cursor agents need your repo URL and token.
+3. On the **Cursor Cloud** card, click **Edit**, paste the `crsr_…` key, then **Save** → **Test connection**.
+4. Install the **Cursor Cloud Agent** plugin from [Marketplace](/admin/marketplace) (subscribe to `report.classified`) — or set `autofix_agent = cursor_cloud` in Settings if you want every fix dispatched via Cursor.
+5. Triage a `critical` report → trigger dispatch → the [Fixes page](/admin/fixes) will show the Cursor agent badge and PR link once the run completes.
 
 ## Related pages
 

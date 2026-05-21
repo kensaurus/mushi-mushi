@@ -16,8 +16,10 @@ const INP_DURATION_THRESHOLD_MS = 40;
  * Build a stable, short selector for an element so the triage UI can
  * surface "the slow click was on <button.checkout>" rather than just
  * "1200 ms INP". Mirrors the web-vitals attribution-build heuristic
- * (tag + #id + .firstClass) and never reads attributes that could leak
- * PII (no `value`, no `aria-label`, no text content).
+ * (tag + #id + .firstClass). Does not read `value`, `aria-label`, or
+ * text content; however `el.id` and `el.classList` can contain
+ * application-defined identifiers (e.g. `user-123`, `order-456`).
+ * Keep this in mind when reviewing collected reports for PII exposure.
  */
 function describeElement(target: EventTarget | null | undefined): string | undefined {
   if (!target || !(target as Element).tagName) return undefined;

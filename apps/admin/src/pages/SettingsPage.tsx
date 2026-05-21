@@ -5,9 +5,9 @@
  *          ?tab=… so deep links and the back-button behave correctly.
  */
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { PageHeader, Section, SegmentedControl, StatCard, ErrorAlert } from '../components/ui'
+import { PageHeader, PageHelp, Section, SegmentedControl, StatCard, ErrorAlert } from '../components/ui'
 import { GeneralPanel } from '../components/settings/GeneralPanel'
 import { ByokPanel } from '../components/settings/ByokPanel'
 import { FirecrawlPanel } from '../components/settings/FirecrawlPanel'
@@ -23,6 +23,7 @@ import { SetupNudge } from '../components/SetupNudge'
 import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useSetupStatus } from '../lib/useSetupStatus'
 import { usePageCopy } from '../lib/copy'
+import { useSettingsUx, resolveQuickSettingsTab } from '../lib/settingsModeUx'
 import { usePublishPageContext } from '../lib/pageContext'
 import { usePageData } from '../lib/usePageData'
 import { useRealtimeReload } from '../lib/realtime'
@@ -51,6 +52,7 @@ function isTabId(value: string | null): value is SettingsTabId {
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const copy = usePageCopy('/settings')
+  const ux = useSettingsUx()
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -68,7 +70,7 @@ export function SettingsPage() {
     lastFetchedAt,
     isValidating,
   } = usePageData<SettingsStats>(statsPath)
-  const stats = statsData ?? EMPTY_SETTINGS_STATS
+  const stats = { ...EMPTY_SETTINGS_STATS, ...statsData }
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -86,6 +88,12 @@ export function SettingsPage() {
     [searchParams, setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId || statsLoading) return
+    const quickTab = resolveQuickSettingsTab(stats)
+    if (active !== quickTab) setActive(quickTab)
+  }, [ux.isQuickstart, activeProjectId, statsLoading, stats, active, setActive])
+
   const criticalCount =
     (stats.byokKeysFailing > 0 ? stats.byokKeysFailing : 0) +
     (!stats.byokAnthropicConfigured ? 1 : 0) +
@@ -102,10 +110,10 @@ export function SettingsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'general' as const, label: 'General' },
+      { id: 'general' as const, label: copy?.tabLabels?.general ?? 'General' },
       {
         id: 'byok' as const,
-        label: 'LLM keys',
+        label: copy?.tabLabels?.byok ?? 'LLM keys',
         count:
           stats.byokKeysFailing > 0
             ? stats.byokKeysFailing
@@ -113,11 +121,11 @@ export function SettingsPage() {
               ? stats.byokKeysUntested
               : undefined,
       },
-      { id: 'firecrawl' as const, label: 'Firecrawl' },
-      { id: 'health' as const, label: 'Health' },
-      { id: 'dev' as const, label: 'Dev' },
+      { id: 'firecrawl' as const, label: copy?.tabLabels?.firecrawl ?? 'Firecrawl' },
+      { id: 'health' as const, label: copy?.tabLabels?.health ?? 'Health' },
+      { id: 'dev' as const, label: copy?.tabLabels?.dev ?? 'Dev' },
     ],
-    [stats.byokKeysFailing, stats.byokKeysUntested],
+    [stats.byokKeysFailing, stats.byokKeysUntested, copy?.tabLabels],
   )
 
   if (!activeProjectId) {
@@ -147,7 +155,26 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-settings">
+      <PageHelp
+        title={copy?.help?.title ?? 'About Settings'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Project-level configuration scoped to the header project: BYOK LLM keys, classifier model, dedup threshold, SDK widget, and developer toggles.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Bring your own Anthropic / OpenAI keys so cost stays on your bill',
+            'Run Health → Send test report before wiring production SDK traffic',
+            'Tune Stage-2 model and dedup threshold after you see false positives in triage',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'General saves Slack/Sentry + classifier fields. LLM keys tab tests BYOK. Health runs a pipeline smoke test. Changes write to project_settings immediately on Save.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Project settings'}
         description={
@@ -157,20 +184,23 @@ export function SettingsPage() {
         projectScope={projectName ?? stats.projectName}
       />
 
-      <SettingsStatusBanner stats={stats} onTab={setActive} />
+      <SettingsStatusBanner stats={stats} onTab={setActive} plainBanner={ux.plainBanner} />
 
+      {!ux.hideTabs && (
       <SegmentedControl
         value={active}
         onChange={setActive}
         options={tabOptions}
         ariaLabel="Settings sections"
       />
+      )}
 
-      <Section title="Config snapshot" freshness={{ at: lastFetchedAt, isValidating }}>
+      {!ux.hideSettingsSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'SETTINGS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
-            label="BYOK keys"
+            label={copy?.statLabels?.byok ?? 'BYOK keys'}
             value={stats.byokKeysConfigured}
             accent={
               stats.byokKeysFailing > 0
@@ -182,7 +212,7 @@ export function SettingsPage() {
             hint={`${stats.byokKeysPassing} passing · ${stats.byokKeysFailing} failing · ${stats.byokKeysUntested} untested`}
           />
           <StatCard
-            label="SDK widget"
+            label={copy?.statLabels?.sdk ?? 'SDK widget'}
             value={stats.sdkConfigEnabled ? 'On' : 'Off'}
             accent={stats.sdkConfigEnabled ? 'text-ok' : 'text-warn'}
             hint={
@@ -192,7 +222,7 @@ export function SettingsPage() {
             }
           />
           <StatCard
-            label="Routing"
+            label={copy?.statLabels?.routing ?? 'Routing'}
             value={[stats.slackConfigured && 'Slack', stats.sentryConfigured && 'Sentry']
               .filter(Boolean)
               .join(' · ') || 'None'}
@@ -200,12 +230,13 @@ export function SettingsPage() {
             hint="General tab — full integrations live under Act → Integrations"
           />
           <StatCard
-            label="Classifier"
+            label={copy?.statLabels?.classifier ?? 'Classifier'}
             value={stats.stage2Model?.replace('claude-', '') ?? 'default'}
             hint={stats.autofixEnabled ? 'Autofix enabled' : 'Autofix off · repo optional'}
           />
         </div>
       </Section>
+      )}
 
       <div
         role="tabpanel"

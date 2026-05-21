@@ -5,7 +5,7 @@
  *          (Overview | Loop | Metrics | Health) + stats banner/KPI strip.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { usePageData } from '../lib/usePageData'
 import type { ChartEvent } from '../lib/apiSchemas'
@@ -52,6 +52,7 @@ import {
 import type { DashboardData } from '../components/dashboard/types'
 import type { PdcaStageId } from '../lib/pdca'
 import { usePageCopy } from '../lib/copy'
+import { useDashboardUx, resolveQuickDashboardTab } from '../lib/dashboardModeUx'
 import { PageHero } from '../components/PageHero'
 
 const DASHBOARD_TABS: Array<{ id: DashboardTabId; label: string; description: string }> = [
@@ -120,6 +121,7 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const [showFullDashboard, setShowFullDashboard] = useState(false)
   const copy = usePageCopy('/dashboard')
+  const ux = useDashboardUx()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
@@ -151,6 +153,12 @@ export function DashboardPage() {
     },
     [searchParams, setSearchParams],
   )
+
+  useEffect(() => {
+    if (!ux.isQuickstart || statsLoading) return
+    const quickTab = resolveQuickDashboardTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, statsLoading, stats, activeTab, setActiveTab])
 
   const isEmpty = !data || data.empty
   const realtimeEnabled = !loading && !error && !!stats.hasAnyProject
@@ -219,24 +227,24 @@ export function DashboardPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
       {
         id: 'loop' as const,
-        label: 'Loop',
+        label: copy?.tabLabels?.loop ?? 'Loop',
         count: stats.focusStage ? 1 : undefined,
       },
       {
         id: 'metrics' as const,
-        label: 'Metrics',
+        label: copy?.tabLabels?.metrics ?? 'Metrics',
         count: stats.openBacklog > 0 ? stats.openBacklog : stats.reports14d > 0 ? stats.reports14d : undefined,
       },
       {
         id: 'health' as const,
-        label: 'Health',
+        label: copy?.tabLabels?.health ?? 'Health',
         count: stats.integrationIssues > 0 ? stats.integrationIssues : undefined,
       },
     ],
-    [stats],
+    [stats, copy?.tabLabels],
   )
 
   if ((loading && !data) || (statsLoading && !statsData)) return <DashboardSkeleton />
@@ -283,6 +291,25 @@ export function DashboardPage() {
     <div className="space-y-4">
       <Confetti triggerKey={confettiKey} />
 
+      <PageHelp
+        title={copy?.help?.title ?? 'About the Dashboard'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Tabbed workspace view: Overview for next actions, Loop for PDCA canvas, Metrics for 14-day charts, Health for probes.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Read the status banner first — it surfaces backlog, failures, and integration issues',
+            'Jump to Loop when you need the interactive stage canvas',
+            'Use Metrics when comparing intake vs fix throughput week over week',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'Click KPI tiles or tab badges to drill in. Green banner means nothing urgent is blocking the loop.'
+        }
+      />
+
       <PageHeader title={copy?.title ?? 'Dashboard'} projectScope={projectName ?? undefined} description={dashDescription}>
         <Badge
           className={
@@ -323,33 +350,37 @@ export function DashboardPage() {
         onTab={setActiveTab}
         onRefresh={reloadAll}
         refreshing={statsValidating || isValidating}
+        plainBanner={ux.plainBanner}
       />
 
-      <SegmentedControl
-        value={activeTab}
-        onChange={setActiveTab}
-        options={tabOptions}
-        ariaLabel="Dashboard sections"
-        size="sm"
-      />
+      {!ux.hideTabs && (
+        <SegmentedControl
+          value={activeTab}
+          onChange={setActiveTab}
+          options={tabOptions}
+          ariaLabel="Dashboard sections"
+          size="sm"
+        />
+      )}
 
-        <Section title="LOOP SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideLoopSnapshot && (
+        <Section title={copy?.sections?.snapshot ?? 'LOOP SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <StatCard
-            label="Backlog"
+            label={copy?.statLabels?.backlog ?? 'Backlog'}
             value={stats.openBacklog}
             accent={stats.openBacklog > 0 ? 'text-danger' : 'text-ok'}
             hint={stats.openBacklog > 0 ? 'Needs triage > 1h' : 'Queue clear'}
           />
           <StatCard
-            label="Reports 14d"
+            label={copy?.statLabels?.reports ?? 'Reports 14d'}
             value={stats.reports14d}
             accent={stats.reports14d > 0 ? 'text-brand' : undefined}
             hint={stats.hasData ? 'Intake active' : 'Waiting for ingest'}
           />
           <StatCard
-            label="Fixes"
+            label={copy?.statLabels?.fixes ?? 'Fixes'}
             value={stats.fixesInProgress}
             accent={stats.fixesFailed > 0 ? 'text-danger' : stats.fixesInProgress > 0 ? 'text-warn' : undefined}
             hint={
@@ -361,13 +392,14 @@ export function DashboardPage() {
             }
           />
           <StatCard
-            label="Focus"
+            label={copy?.statLabels?.focus ?? 'Focus'}
             value={stats.focusLabel ?? '—'}
             accent={focusAccent(stats.focusStage)}
             hint={stats.bottleneck ?? (stats.setupDone ? 'Loop balanced' : `${stats.requiredComplete}/${stats.requiredTotal} setup`)}
           />
         </div>
       </Section>
+      )}
 
       {activeTab === 'overview' && (
         <>
@@ -389,7 +421,7 @@ export function DashboardPage() {
                 />
               )}
 
-              {!showFirstReportHero && data!.pdcaStages && data!.pdcaStages.length > 0 && (
+              {!showFirstReportHero && data!.pdcaStages && data!.pdcaStages.length > 0 && !ux.hideOverviewChrome && (
                 <HeroIntro
                   stages={data!.pdcaStages}
                   focusStage={data!.focusStage}
@@ -398,6 +430,7 @@ export function DashboardPage() {
                 />
               )}
 
+              {!ux.hideOverviewChrome && (
               <PageHero
                 scope="dashboard"
                 title="Bug-fix loop"
@@ -417,6 +450,7 @@ export function DashboardPage() {
                   detail: 'Dashboard stats refresh when reports or fixes change via webhook.',
                 }}
               />
+              )}
             </>
           )}
 
@@ -440,26 +474,6 @@ export function DashboardPage() {
             </div>
           )}
 
-          {!isEmpty && (
-            <PageHelp
-              title={copy?.help?.title ?? 'About the Dashboard'}
-              whatIsIt={
-                copy?.help?.whatIsIt ??
-                'Tabbed workspace view: Overview for next actions, Loop for PDCA canvas, Metrics for 14-day charts, Health for probes.'
-              }
-              useCases={
-                copy?.help?.useCases ?? [
-                  'Read the status banner first — it surfaces backlog, failures, and integration issues',
-                  'Jump to Loop when you need the interactive stage canvas',
-                  'Use Metrics when comparing intake vs fix throughput week over week',
-                ]
-              }
-              howToUse={
-                copy?.help?.howToUse ??
-                'Click KPI tiles or tab badges to drill in. Green banner means nothing urgent is blocking the loop.'
-              }
-            />
-          )}
         </>
       )}
 

@@ -601,6 +601,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
       reportCount: 0,
       fixCount: 0,
       mergedFixCount: 0,
+      nextStepTo: '/onboarding?tab=steps' as string | null,
     };
 
     const accessibleIds = await ownedProjectIds(db, userId);
@@ -705,6 +706,20 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
     const setupDone = requiredComplete === requiredSteps.length;
     const nextRequired = requiredSteps.find((s) => !s.complete) ?? null;
 
+    const nextStepTo = (() => {
+      if (!nextRequired) return '/onboarding?tab=sdk';
+      switch (nextRequired.id) {
+        case 'api_key_generated':
+        case 'first_report_received':
+          return '/onboarding?tab=verify';
+        case 'sdk_installed':
+          return '/onboarding?tab=sdk';
+        case 'project_created':
+        default:
+          return '/onboarding?tab=steps';
+      }
+    })();
+
     return c.json({
       ok: true,
       data: {
@@ -728,6 +743,7 @@ export function registerBillingProjectsQueueGraphRoutes(app: Hono): void {
         reportCount,
         fixCount,
         mergedFixCount,
+        nextStepTo,
       },
     });
   });

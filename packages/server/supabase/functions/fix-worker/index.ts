@@ -186,7 +186,7 @@ Deno.serve(
       .eq('id', body.dispatchId)
       .eq('status', 'queued')
       .select(
-        'id, project_id, report_id, requested_by, inventory_action_node_id, coordination_id, dispatch_metadata',
+        'id, project_id, report_id, requested_by, inventory_action_node_id, coordination_id, dispatch_metadata, agent_override',
       )
       .single();
 
@@ -214,23 +214,28 @@ Deno.serve(
     // Thread settings.autofix_agent through so the receipt is honest.
     const { data: requestedSettings } = await db
       .from('project_settings')
-      .select('autofix_agent')
+      .select(
+        'autofix_agent, claude_api_key_ref, claude_default_model, claude_workflow_event, claude_default_branch',
+      )
       .eq('project_id', dispatch.project_id)
       .single();
-    const requestedAgent = (requestedSettings?.autofix_agent as string | null) ?? 'claude_code';
+    // agent_override on the dispatch row wins over project_settings.autofix_agent
+    // (used by "Send to Claude Code Agent" one-off override from the Reports UI).
+    const requestedAgent =
+      (dispatch as { agent_override?: string | null }).agent_override ??
+      (requestedSettings?.autofix_agent as string | null) ??
+      'claude_code';
 
     // Agents the fix-worker can actually execute today. 'claude_code' is the
     // migration default and maps to the LLM path (Anthropic primary, OpenAI
-    // fallback) — the MCP-hosted Claude Code shell lives in @mushi-mushi/agents
-    // and isn't reachable from Deno edge yet. 'rest_fix_worker' is the
-    // explicit opt-in for this same path. Anything else is the Node-only
-    // orchestrator territory and must be rejected rather than silently
-    // falling through.
-    // cursor_cloud is delegated to the Node-side orchestrator via the
-    // /v1/admin/fixes/dispatch-cursor endpoint — it is NOT run inline by
-    // the edge worker, but we accept it here so the fix_attempt row is
-    // created with the correct agent label before delegation.
-    const SUPPORTED_AGENTS = new Set(['claude_code', 'rest_fix_worker', 'llm', 'cursor_cloud']);
+    // fallback). 'cursor_cloud' and 'claude_code_agent' delegate externally.
+    const SUPPORTED_AGENTS = new Set([
+      'claude_code',
+      'rest_fix_worker',
+      'llm',
+      'cursor_cloud',
+      'claude_code_agent',
+    ]);
 
     // Spec-traceability (whitepaper §2.10): recover the inventory anchor.
     // classify-report writes a `reports_against` graph edge from the report
@@ -412,6 +417,180 @@ Deno.serve(
         await trace.end();
         return new Response(
           JSON.stringify({ ok: true, delegated: true, agent: 'cursor_cloud', fixAttemptId }),
+          { status: 202, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      // ── Claude Code Agent ────────────────────────────────────────────────────
+      // Dispatches a GitHub repository_dispatch event to trigger the
+      // mushi-claude-fix.yml workflow in the user's repo. The workflow runs
+      // @anthropic-ai/claude-code CLI, commits the fix to a branch, and opens
+      // a draft PR. We fire-and-forget and track progress via GitHub webhooks.
+      if (requestedAgent === 'claude_code_agent') {
+        // BYOK: Anthropic key runs in the customer's GitHub Actions (secrets.ANTHROPIC_API_KEY).
+        // Mushi never embeds keys in repository_dispatch payload or the public workflow YAML.
+
+        // 1. Resolve GitHub token for dispatching the repository_dispatch.
+        const githubToken = await resolveGithubToken(db, dispatch.project_id, project.owner_id);
+        if (!githubToken) {
+          const reason =
+            'No GitHub token found. Connect your GitHub repo in Settings → Integrations → GitHub.';
+          await completeAttempt(db, fixAttemptId, {
+            status: 'failed',
+            error: reason,
+            files_changed: [],
+            failure_category: 'github_403',
+          });
+          await db
+            .from('fix_dispatch_jobs')
+            .update({ status: 'failed', error: reason, finished_at: new Date().toISOString() })
+            .eq('id', dispatch.id);
+          await trace.end();
+          return new Response(
+            JSON.stringify({ ok: false, error: reason, fixAttemptId }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        // 3. Resolve GitHub repo owner/name from project_settings.
+        const repoUrl = settings?.github_repo_url ?? settings?.codebase_repo_url ?? '';
+        const repoMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:\/|$)/);
+        if (!repoMatch) {
+          const reason =
+            'Cannot resolve GitHub repo from project settings. ' +
+            'Set github_repo_url in Settings → Integrations → GitHub.';
+          await completeAttempt(db, fixAttemptId, {
+            status: 'failed',
+            error: reason,
+            files_changed: [],
+            failure_category: 'github_404',
+          });
+          await db
+            .from('fix_dispatch_jobs')
+            .update({ status: 'failed', error: reason, finished_at: new Date().toISOString() })
+            .eq('id', dispatch.id);
+          await trace.end();
+          return new Response(
+            JSON.stringify({ ok: false, error: reason, fixAttemptId }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        const [, repoOwner, repoName] = repoMatch;
+
+        // 4. Build the fix prompt for Claude Code CLI.
+        const claudePrompt = [
+          `You are fixing a bug in the ${project.name ?? repoName} codebase.`,
+          ``,
+          `Bug report: ${report.summary ?? report.description ?? '(no summary)'}`,
+          report.description ? `Description: ${report.description}` : '',
+          report.category ? `Category: ${report.category}` : '',
+          report.severity ? `Severity: ${report.severity}` : '',
+          report.reproduction_steps ? `Steps to reproduce: ${report.reproduction_steps}` : '',
+          ``,
+          `Instructions:`,
+          `1. Find the root cause of this bug in the codebase.`,
+          `2. Make the smallest change that fixes it.`,
+          `3. Preserve existing code style and patterns.`,
+          `4. Do not modify unrelated code.`,
+          `5. If you change behavior, add or update a test.`,
+          ``,
+          `Fix attempt ID: ${fixAttemptId}`,
+        ]
+          .filter(Boolean)
+          .join('\n');
+
+        // 5. Generate branch name + dispatch event ID.
+        const shortId = fixAttemptId.slice(0, 8);
+        const branchName = `mushi/claude-fix-${shortId}`;
+        const dispatchEventId = crypto.randomUUID();
+        const eventType = (requestedSettings?.claude_workflow_event as string | null) ?? 'mushi_claude_fix';
+        const targetBranch = (requestedSettings?.claude_default_branch as string | null) ?? 'main';
+        const claudeModel = (requestedSettings?.claude_default_model as string | null) ?? 'claude-opus-4-1';
+        const mushiSupabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/$/, '');
+
+        // 6. Update fix_attempts with branch + dispatch metadata.
+        await db
+          .from('fix_attempts')
+          .update({
+            branch: branchName,
+            claude_dispatch_event_id: dispatchEventId,
+            claude_workflow_run_url: `https://github.com/${repoOwner}/${repoName}/actions`,
+          })
+          .eq('id', fixAttemptId);
+
+        // 7. Dispatch repository_dispatch event to the user's GitHub repo.
+        const dispatchRes = await fetch(
+          `https://api.github.com/repos/${repoOwner}/${repoName}/dispatches`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${githubToken}`,
+              'Content-Type': 'application/json',
+              Accept: 'application/vnd.github.v3+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+            body: JSON.stringify({
+              event_type: eventType,
+              client_payload: {
+                prompt: claudePrompt,
+                report_id: dispatch.report_id,
+                fix_attempt_id: fixAttemptId,
+                dispatch_event_id: dispatchEventId,
+                branch_name: branchName,
+                target_branch: targetBranch,
+                model: claudeModel,
+                // Public project URL — workflow PATCHes fix_attempts via BYOK secret
+                // MUSHI_SERVICE_ROLE_KEY (never passed in this payload).
+                mushi_supabase_url: mushiSupabaseUrl,
+              },
+            }),
+          },
+        );
+
+        if (!dispatchRes.ok) {
+          const errText = await dispatchRes.text().catch(() => '');
+          const reason =
+            `GitHub repository_dispatch returned ${dispatchRes.status}: ${errText.slice(0, 200)}`;
+          log.error('Claude dispatch failed', { reportId: dispatch.report_id, status: dispatchRes.status });
+          await completeAttempt(db, fixAttemptId, {
+            status: 'failed',
+            error: reason,
+            files_changed: [],
+            failure_category: 'claude_repo_dispatch_failed',
+          });
+          await db
+            .from('fix_dispatch_jobs')
+            .update({ status: 'failed', error: reason, finished_at: new Date().toISOString() })
+            .eq('id', dispatch.id);
+          await trace.end();
+          return new Response(
+            JSON.stringify({ ok: false, error: reason, fixAttemptId }),
+            { status: 502, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+
+        // 8. Mark dispatch as running; the webhook indexer flips to
+        //    completed/failed when the workflow_run event arrives.
+        await db
+          .from('fix_dispatch_jobs')
+          .update({ status: 'running', started_at: new Date().toISOString() })
+          .eq('id', dispatch.id);
+
+        log.info('Claude Code Agent dispatch succeeded', {
+          reportId: dispatch.report_id,
+          fixAttemptId,
+          branch: branchName,
+          eventType,
+        });
+        await trace.end();
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            delegated: true,
+            agent: 'claude_code_agent',
+            fixAttemptId,
+            branch: branchName,
+          }),
           { status: 202, headers: { 'Content-Type': 'application/json' } },
         );
       }

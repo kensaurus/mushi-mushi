@@ -26,6 +26,13 @@ export interface InboxStats {
   topPriorityTitle: string | null
   topPriorityStage: string | null
   topPriorityTo: string | null
+  topPriority:
+    | 'no_project'
+    | 'setup'
+    | 'actions'
+    | 'clear'
+  topPriorityLabel: string | null
+  nextStepTo: string | null
   openPlan: boolean
   openDo: boolean
   openCheck: boolean
@@ -56,6 +63,9 @@ export const EMPTY_INBOX_STATS: InboxStats = {
   topPriorityTitle: null,
   topPriorityStage: null,
   topPriorityTo: null,
+  topPriority: 'no_project',
+  topPriorityLabel: null,
+  nextStepTo: '/onboarding',
   openPlan: false,
   openDo: false,
   openCheck: false,

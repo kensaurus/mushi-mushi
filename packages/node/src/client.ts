@@ -107,8 +107,7 @@ export class MushiNodeClient {
    * AbortSignal composition (Round 8 — B4): the timeout signal is
    * combined with `options.signal` (per-call) and `this.opts.signal`
    * (process-wide) via `AbortSignal.any` so any of the three can
-   * cancel the in-flight fetch. Falls back to a manual race on
-   * Node 18 where `AbortSignal.any` is missing.
+   * cancel the in-flight fetch.
    */
   async captureReport(
     payload: NodeReportPayload,
@@ -188,8 +187,8 @@ function warnOnce(msg: string): void {
 
 /**
  * Compose multiple AbortSignals into one. Aborts as soon as any input
- * aborts, mirroring `AbortSignal.any` (Node ≥ 20). Falls back to a
- * manual implementation on Node 18 where `AbortSignal.any` is missing.
+ * aborts, delegating to the platform `AbortSignal.any` which is available
+ * on all runtimes this package supports (Node ≥ 20, Deno, modern browsers).
  *
  * Exported for tests; not part of the package's public API.
  */
@@ -202,24 +201,5 @@ export function composeSignals(signals: Array<AbortSignal | undefined>): AbortSi
     return new AbortController().signal
   }
   if (live.length === 1) return live[0]!
-  // Prefer the platform implementation on Node ≥ 20.
-  const anyImpl = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any
-  if (typeof anyImpl === 'function') return anyImpl(live)
-  // Manual fallback for Node 18.
-  const controller = new AbortController()
-  const onAbort = (e: AbortSignal) => {
-    if (controller.signal.aborted) return
-    // Forward the upstream reason to preserve the cancellation cause
-    // through the chain — essential when the user wired SIGTERM with
-    // a structured Error reason.
-    controller.abort(e.reason)
-  }
-  for (const s of live) {
-    if (s.aborted) {
-      controller.abort(s.reason)
-      break
-    }
-    s.addEventListener('abort', () => onAbort(s), { once: true })
-  }
-  return controller.signal
+  return AbortSignal.any(live)
 }

@@ -25,12 +25,16 @@ function loadEnvFile(relPath: string): Record<string, string> {
   return out
 }
 
-const rootEnv = loadEnvFile('.env.local')
+const rootEnv = { ...loadEnvFile('.env'), ...loadEnvFile('.env.local') }
 const adminEnv = loadEnvFile('apps/admin/.env')
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? adminEnv.VITE_SUPABASE_URL ?? ''
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? adminEnv.VITE_SUPABASE_ANON_KEY ?? ''
-const TEST_USER_EMAIL = process.env.TEST_USER_EMAIL ?? rootEnv.TEST_USER_EMAIL ?? ''
-const TEST_USER_PASSWORD = process.env.TEST_USER_PASSWORD ?? rootEnv.TEST_USER_PASSWORD ?? ''
+const SUPABASE_URL =
+  process.env.VITE_SUPABASE_URL ?? adminEnv.VITE_SUPABASE_URL ?? rootEnv.VITE_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY =
+  process.env.VITE_SUPABASE_ANON_KEY ?? adminEnv.VITE_SUPABASE_ANON_KEY ?? rootEnv.VITE_SUPABASE_ANON_KEY ?? ''
+const TEST_USER_EMAIL =
+  process.env.TEST_USER_EMAIL ?? adminEnv.TEST_USER_EMAIL ?? rootEnv.TEST_USER_EMAIL ?? ''
+const TEST_USER_PASSWORD =
+  process.env.TEST_USER_PASSWORD ?? adminEnv.TEST_USER_PASSWORD ?? rootEnv.TEST_USER_PASSWORD ?? ''
 
 const ref = SUPABASE_URL.match(/https:\/\/([^.]+)\./)?.[1] ?? 'dxptnwrhwsqckaftyymj'
 const storageKey = `sb-${ref}-auth-token`

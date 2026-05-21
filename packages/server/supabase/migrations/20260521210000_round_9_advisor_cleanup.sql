@@ -5,67 +5,69 @@
 -- ============================================================================
 -- PART 1: Unindexed foreign keys (15 missing covering indexes)
 -- Advisor: unindexed_foreign_keys
--- Each CREATE INDEX CONCURRENTLY ensures the migration is safe to run on a
--- live production database. IF NOT EXISTS makes it idempotent.
+-- CREATE INDEX (without CONCURRENTLY) runs inside the migration transaction.
+-- CONCURRENTLY cannot run inside a transaction block — Supabase migrations are
+-- always wrapped in BEGIN/COMMIT, so CONCURRENTLY would error at deploy time.
+-- IF NOT EXISTS makes each statement idempotent.
 -- ============================================================================
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_anomaly_detections_release_id
   ON public.anomaly_detections (release_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_drift_findings_snapshot_id
   ON public.drift_findings (snapshot_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_end_user_activity_project_id
   ON public.end_user_activity (project_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_end_user_activity_rule_id
   ON public.end_user_activity (rule_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_end_user_points_current_tier_id
   ON public.end_user_points (current_tier_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_experiment_assignments_variant_id
   ON public.experiment_assignments (variant_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_lessons_cluster_id
   ON public.lessons (cluster_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_metric_series_release_id
   ON public.metric_series (release_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_qa_stories_owner
   ON public.qa_stories (owner);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_quest_progress_completing_activity_id
   ON public.quest_progress (completing_activity_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_quest_progress_organization_id
   ON public.quest_progress (organization_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_release_credits_report_id
   ON public.release_credits (report_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_reward_disputes_activity_id
   ON public.reward_disputes (activity_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_reward_disputes_payout_id
   ON public.reward_disputes (payout_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
+CREATE INDEX IF NOT EXISTS
   idx_reward_disputes_resolved_by
   ON public.reward_disputes (resolved_by);
 
@@ -94,8 +96,10 @@ ALTER POLICY qa_story_evidence_select ON public.qa_story_evidence
   );
 
 -- qa_story_runs.qa_story_runs_insert
+-- INSERT policies use WITH CHECK (not USING) — USING only affects row
+-- visibility for SELECT/UPDATE/DELETE, not INSERT permission.
 ALTER POLICY qa_story_runs_insert ON public.qa_story_runs
-  USING (
+  WITH CHECK (
     (SELECT auth.uid()) IN (
       SELECT qs.owner FROM public.qa_stories qs WHERE qs.id = qa_story_runs.story_id
     )
@@ -135,3 +139,8 @@ COMMENT ON COLUMN public.fix_attempts.repair_attempts IS
 
 COMMENT ON COLUMN public.fix_attempts.failure_diagnostic IS
   'Human-readable diagnostic string built from Zod issues + raw LLM output slice when the fix-worker hits AI_NoObjectGeneratedError. Shown in the admin "Do bottleneck" UI card.';
+
+-- Flush PostgREST schema/config cache so the new columns on fix_attempts are
+-- immediately visible via the auto-generated REST API without a pod restart.
+NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload config';

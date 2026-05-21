@@ -51,6 +51,7 @@ import {
   type QaCoverageTabId,
 } from '../components/qa-coverage/QaCoverageStatsTypes'
 import { usePageCopy } from '../lib/copy'
+import { useQaCoverageUx, resolveQuickQaCoverageTab } from '../lib/qaCoverageModeUx'
 import { IconPlay, IconHealth, IconExternalLink, IconClock, IconChevronDown, IconChevronUp } from '../components/icons'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 
@@ -810,6 +811,7 @@ function CreateStoryModal({
 
 export function QaCoveragePage() {
   const copy = usePageCopy('/qa-coverage')
+  const ux = useQaCoverageUx()
   const projectId = useActiveProjectId()
   const setup = useSetupStatus(projectId)
   const projectName = setup.activeProject?.project_name ?? null
@@ -850,6 +852,12 @@ export function QaCoveragePage() {
     [setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || !projectId || statsLoading) return
+    const quickTab = resolveQuickQaCoverageTab(stats)
+    if (activeTab !== quickTab) setActiveTab(quickTab)
+  }, [ux.isQuickstart, projectId, statsLoading, stats, activeTab, setActiveTab])
+
   const { data, loading, error, reload, isValidating, lastFetchedAt } = usePageData<{ coverage: QaStoryCoverage[] }>(
     projectId ? `/v1/admin/projects/${projectId}/qa-coverage` : null,
     { deps: [projectId] },
@@ -866,7 +874,7 @@ export function QaCoveragePage() {
     () =>
       QA_COVERAGE_TABS.map((t) => ({
         id: t.id,
-        label: t.label,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
         count:
           t.id === 'failing' && stats.failingStories > 0
             ? stats.failingStories
@@ -874,7 +882,7 @@ export function QaCoveragePage() {
               ? stats.pendingRuns
               : undefined,
       })),
-    [stats.failingStories, stats.pendingRuns],
+    [copy?.tabLabels, stats.failingStories, stats.pendingRuns],
   )
 
   usePublishPageContext({
@@ -1033,6 +1041,17 @@ export function QaCoveragePage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-qa-coverage">
+      <PageHelp
+        title={copy?.help?.title ?? 'About QA coverage'}
+        whatIsIt={copy?.help?.whatIsIt ?? 'Automated tests written in plain English that run on your live app on a schedule — like a robot QA tester that never sleeps.'}
+        useCases={copy?.help?.useCases ?? [
+          'Write a test like "A user can log in and see their dashboard" and run it hourly',
+          'Catch a broken flow before your users report it',
+          'See a screenshot of exactly what the test saw when it failed',
+        ]}
+        howToUse={copy?.help?.howToUse ?? 'Click "+ New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.'}
+      />
+
       <PageHeader
         title={copy?.title ?? 'QA Coverage'}
         projectScope={stats.projectName ?? projectName ?? undefined}
@@ -1041,41 +1060,45 @@ export function QaCoveragePage() {
           'Banner + QA SNAPSHOT — Overview for posture, Stories for all tests, Failing for sub-80% pass rate.'
         }
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'danger'
-                ? 'bg-danger/10 text-danger'
-                : bannerSeverity === 'warn'
-                  ? 'bg-warn/10 text-warn'
-                  : bannerSeverity === 'brand'
-                    ? 'bg-brand/15 text-brand'
-                    : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {!stats.hasAnyProject
-            ? 'NO PROJECT'
-            : stats.failingStories > 0
-              ? `${stats.failingStories} FAIL`
-              : stats.pendingRuns > 0
-                ? `${stats.pendingRuns} QUEUED`
-                : stats.totalStories === 0
-                  ? 'NO STORIES'
-                  : stats.totalRuns24h === 0
-                    ? 'IDLE'
-                    : 'OK'}
-        </Badge>
-        <FreshnessPill
-          at={statsFetchedAt ?? lastFetchedAt}
-          isValidating={statsValidating || isValidating}
-        />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
-          Refresh
-        </Btn>
-        <Btn size="sm" onClick={() => setShowCreate(true)} disabled={!projectId}>
-          + New story
-        </Btn>
+        {!ux.hideOverviewChrome && (
+          <>
+            <Badge
+              className={
+                bannerSeverity === 'ok'
+                  ? 'bg-ok-muted text-ok'
+                  : bannerSeverity === 'danger'
+                    ? 'bg-danger/10 text-danger'
+                    : bannerSeverity === 'warn'
+                      ? 'bg-warn/10 text-warn'
+                      : bannerSeverity === 'brand'
+                        ? 'bg-brand/15 text-brand'
+                        : 'bg-surface-overlay text-fg-muted'
+              }
+            >
+              {!stats.hasAnyProject
+                ? 'NO PROJECT'
+                : stats.failingStories > 0
+                  ? `${stats.failingStories} FAIL`
+                  : stats.pendingRuns > 0
+                    ? `${stats.pendingRuns} QUEUED`
+                    : stats.totalStories === 0
+                      ? 'NO STORIES'
+                      : stats.totalRuns24h === 0
+                        ? 'IDLE'
+                        : 'OK'}
+            </Badge>
+            <FreshnessPill
+              at={statsFetchedAt ?? lastFetchedAt}
+              isValidating={statsValidating || isValidating}
+            />
+            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={statsValidating || isValidating}>
+              Refresh
+            </Btn>
+            <Btn size="sm" onClick={() => setShowCreate(true)} disabled={!projectId}>
+              + New story
+            </Btn>
+          </>
+        )}
       </PageHeader>
 
       <QaCoverageStatusBanner
@@ -1084,8 +1107,10 @@ export function QaCoveragePage() {
         onRefresh={reloadAll}
         refreshing={statsValidating || isValidating}
         onCreateStory={() => setShowCreate(true)}
+        plainBanner={ux.plainBanner}
       />
 
+      {!ux.hideTabs && (
       <SegmentedControl<QaCoverageTabId>
         size="sm"
         ariaLabel="QA coverage sections"
@@ -1093,30 +1118,32 @@ export function QaCoveragePage() {
         options={tabOptions}
         onChange={setActiveTab}
       />
+      )}
 
-      <Section title="QA SNAPSHOT" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
+      {!ux.hideQaSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'QA SNAPSHOT'} freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           <StatCard
-            label="Stories"
+            label={copy?.statLabels?.stories ?? 'Stories'}
             value={stats.totalStories}
             accent={stats.totalStories > 0 ? 'text-brand' : undefined}
             hint={`${stats.enabledStories} enabled`}
           />
           <StatCard
-            label="Passing"
+            label={copy?.statLabels?.passing ?? 'Passing'}
             value={stats.passingStories}
             accent="text-ok"
             hint="≥80% in 24h"
           />
           <StatCard
-            label="Failing"
+            label={copy?.statLabels?.failing ?? 'Failing'}
             value={stats.failingStories}
             accent={stats.failingStories > 0 ? 'text-danger' : 'text-ok'}
             hint="<80% in 24h"
           />
           <StatCard
-            label="Avg pass rate"
+            label={copy?.statLabels?.avgPassRate ?? 'Avg pass rate'}
             value={stats.avgPassRatePct != null ? `${stats.avgPassRatePct}%` : '—'}
             accent={
               stats.avgPassRatePct != null && stats.avgPassRatePct >= 80
@@ -1128,21 +1155,22 @@ export function QaCoveragePage() {
             hint="24h window"
           />
           <StatCard
-            label="Runs (24h)"
+            label={copy?.statLabels?.runs24h ?? 'Runs (24h)'}
             value={stats.totalRuns24h}
             accent={stats.totalRuns24h > 0 ? 'text-brand' : undefined}
             hint={`${stats.pendingRuns} in flight`}
           />
           <StatCard
-            label="No data"
+            label={copy?.statLabels?.noData ?? 'No data'}
             value={stats.noDataStories}
             accent={stats.noDataStories > 0 ? 'text-warn' : undefined}
             hint="Never run / 24h"
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'failing'
@@ -1169,17 +1197,8 @@ export function QaCoveragePage() {
 
       {activeTab === 'overview' && (
         <>
-          <PageHelp
-            title={copy?.help?.title ?? 'About QA coverage'}
-            whatIsIt={copy?.help?.whatIsIt ?? 'Automated tests written in plain English that run on your live app on a schedule — like a robot QA tester that never sleeps.'}
-            useCases={copy?.help?.useCases ?? [
-              'Write a test like "A user can log in and see their dashboard" and run it hourly',
-              'Catch a broken flow before your users report it',
-              'See a screenshot of exactly what the test saw when it failed',
-            ]}
-            howToUse={copy?.help?.howToUse ?? 'Click "+ New story" to write a test in plain English. Set a schedule. Click "Run now" to test immediately. Red = something broke.'}
-          />
-
+          {!ux.hideOverviewChrome && (
+          <>
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -1210,6 +1229,8 @@ export function QaCoveragePage() {
               title={stats.topPriority === 'pending' ? 'Runs in progress' : 'No runs in the last 24h'}
               description={stats.topPriorityLabel ?? 'Trigger a manual run from the Stories tab.'}
             />
+          )}
+          </>
           )}
         </>
       )}

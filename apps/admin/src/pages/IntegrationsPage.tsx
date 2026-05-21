@@ -4,7 +4,7 @@
  *          routing destinations, and repo/index readiness for the active project.
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../lib/supabase'
 import {
@@ -31,6 +31,8 @@ import { CodebaseIndexCard } from '../components/integrations/CodebaseIndexCard'
 import { RepoReadinessStrip } from '../components/integrations/RepoReadinessStrip'
 import { IntegrationStatusBanner } from '../components/integrations/IntegrationStatusBanner'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { FeedbackModal } from '../components/FeedbackModal'
+import { SuggestIntegrationButton } from '../components/integrations/SuggestIntegrationButton'
 import {
   PLATFORM_DEFS,
   ROUTING_PROVIDERS,
@@ -40,8 +42,10 @@ import {
   type PlatformResponse,
   type RoutingIntegration,
   type RoutingProviderDef,
+  EMPTY_INTEGRATION_STATS,
 } from '../components/integrations/types'
 import { usePageCopy } from '../lib/copy'
+import { useIntegrationsUx, resolveQuickIntegrationsTab } from '../lib/integrationsModeUx'
 import { PageHero } from '../components/PageHero'
 import { useNextBestAction } from '../lib/useNextBestAction'
 
@@ -80,6 +84,7 @@ export function IntegrationsPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/integrations/config')
+  const ux = useIntegrationsUx()
 
   const platformPath = activeProjectId ? '/v1/admin/integrations/platform' : null
   const historyPath = activeProjectId ? '/v1/admin/health/history' : null
@@ -96,16 +101,7 @@ export function IntegrationsPage() {
   const platform = platformQuery.data?.platform ?? null
   const history = historyQuery.data?.history ?? []
   const routing = routingQuery.data?.integrations ?? []
-  const stats = statsQuery.data ?? {
-    platformTotal: 3,
-    platformConnected: 0,
-    platformHealthy: 0,
-    platformDown: 0,
-    routingActive: 0,
-    routingPaused: 0,
-    routingTotal: 0,
-    lastProbeAt: null,
-  }
+  const stats = { ...EMPTY_INTEGRATION_STATS, ...statsQuery.data }
 
   const merged = useMergedErrors([
     { ...platformQuery, label: 'platform integrations' },
@@ -139,12 +135,21 @@ export function IntegrationsPage() {
     [searchParams, setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId || statsQuery.loading) return
+    const quickTab = resolveQuickIntegrationsTab(stats)
+    if (activeTab !== quickTab) setTab(quickTab)
+  }, [ux.isQuickstart, activeProjectId, statsQuery.loading, stats, activeTab, setTab])
+
+  const [showSuggestModal, setShowSuggestModal] = useState(false)
+
   const [editing, setEditing] = useState<Kind | null>(null)
   const [drafts, setDrafts] = useState<Record<Kind, Record<string, string>>>({
     sentry: {},
     langfuse: {},
     github: {},
     cursor_cloud: {},
+    claude_code_agent: {},
   })
   const [saving, setSaving] = useState<Kind | null>(null)
   const [testing, setTesting] = useState<Kind | null>(null)
@@ -213,11 +218,19 @@ export function IntegrationsPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'platform' as const, label: 'Platform', count: stats.platformConnected },
-      { id: 'routing' as const, label: 'Routing', count: stats.routingActive },
-      { id: 'repo' as const, label: 'Repo & index' },
+      {
+        id: 'platform' as const,
+        label: copy?.tabLabels?.platform ?? 'Platform',
+        count: stats.platformConnected > 0 ? stats.platformConnected : undefined,
+      },
+      {
+        id: 'routing' as const,
+        label: copy?.tabLabels?.routing ?? 'Routing',
+        count: stats.routingActive > 0 ? stats.routingActive : undefined,
+      },
+      { id: 'repo' as const, label: copy?.tabLabels?.repo ?? 'Repo & index' },
     ],
-    [stats.platformConnected, stats.routingActive],
+    [stats.platformConnected, stats.routingActive, copy?.tabLabels],
   )
 
   const startEdit = (kind: Kind) => {
@@ -385,7 +398,26 @@ export function IntegrationsPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="mushi-page-integrations">
+      <PageHelp
+        title={copy?.help?.title ?? 'About Integrations'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
+            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
+            'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          'For each card, click Edit to add credentials, then Test to probe live. Status pills, latency, and a 7-day sparkline live-update with each probe.'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'Integrations'}
         description={
@@ -407,9 +439,11 @@ export function IntegrationsPage() {
       <IntegrationStatusBanner
         stats={stats}
         projectName={projectName}
-        disconnectedPlatformCount={disconnectedCount}
+        plainBanner={ux.plainBanner}
+        onTab={setTab}
       />
 
+      {!ux.hideOverviewChrome && (
       <PageHero
         scope="integrations"
         title={copy?.title ?? 'Integrations'}
@@ -485,36 +519,25 @@ export function IntegrationsPage() {
             : undefined,
         }}
       />
+      )}
 
-      <PageHelp
-        title={copy?.help?.title ?? 'About Integrations'}
-        whatIsIt={
-          copy?.help?.whatIsIt ??
-          'Mushi uses your existing observability + code tools instead of replacing them. Wire Sentry for error context, Langfuse for LLM traces, and GitHub for PRs — then add Jira/Linear/PagerDuty to fan out triaged reports.'
-        }
-        useCases={
-          copy?.help?.useCases ?? [
-            'Give the LLM Sentry context so it cross-references real production errors when classifying user reports',
-            'Let auto-fix attempts open draft PRs against your repo and report CI status back into Mushi',
-            'Mirror Langfuse traces onto every report and fix attempt so cost + prompt are auditable',
-          ]
-        }
-        howToUse={
-          copy?.help?.howToUse ??
-          'For each card, click Edit to add credentials, then Test to probe live. Status pills, latency, and a 7-day sparkline live-update with each probe.'
-        }
-      />
-
-      <Section title="Integration workspace" freshness={{ at: lastFetchedAt, isValidating }}>
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {!ux.hideIntegrationsSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'INTEGRATIONS SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating: statsQuery.isValidating }}>
+        <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
-            label="Platform"
+            label={copy?.statLabels?.platform ?? 'Platform'}
             value={`${stats.platformConnected}/${stats.platformTotal}`}
             hint="Required credentials set"
           />
-          <StatCard label="Healthy probes" value={stats.platformHealthy} hint="Latest probe status ok" />
           <StatCard
-            label="Routing"
+            label={copy?.statLabels?.healthy ?? 'Healthy probes'}
+            value={stats.platformHealthy}
+            accent={stats.platformHealthy > 0 ? 'text-ok' : undefined}
+            hint="Latest probe status ok"
+          />
+          <StatCard
+            label={copy?.statLabels?.routing ?? 'Routing'}
             value={stats.routingActive}
             hint={
               stats.routingPaused > 0
@@ -523,12 +546,17 @@ export function IntegrationsPage() {
             }
           />
           <StatCard
-            label="Failing"
+            label={copy?.statLabels?.failing ?? 'Failing'}
             value={stats.platformDown}
+            accent={stats.platformDown > 0 ? 'text-danger' : undefined}
             hint={stats.platformDown > 0 ? 'Fix credentials or re-test' : 'No down probes'}
           />
         </div>
+      </Section>
+      )}
 
+      <Section title={copy?.sections?.workspace ?? 'Integration workspace'} freshness={{ at: lastFetchedAt, isValidating }}>
+        {!ux.hideTabs && (
         <SegmentedControl
           value={activeTab}
           onChange={setTab}
@@ -536,8 +564,11 @@ export function IntegrationsPage() {
           ariaLabel="Integration sections"
           className="mb-4"
         />
+        )}
 
+        {!ux.hideIntegrationsSnapshot && (
         <p className="mb-4 text-2xs text-fg-muted">{activeMeta.description}</p>
+        )}
 
         {activeTab === 'platform' && (
           <div className="space-y-2" data-dav-anchor="integrations:decide">
@@ -561,6 +592,10 @@ export function IntegrationsPage() {
                 onTest={() => void testKind(def.kind)}
               />
             ))}
+            <SuggestIntegrationButton
+              context="platform"
+              onSuggest={() => setShowSuggestModal(true)}
+            />
           </div>
         )}
 
@@ -608,6 +643,10 @@ export function IntegrationsPage() {
                 />
               )
             })}
+            <SuggestIntegrationButton
+              context="routing"
+              onSuggest={() => setShowSuggestModal(true)}
+            />
           </div>
         )}
 
@@ -636,6 +675,13 @@ export function IntegrationsPage() {
           onCancel={() => {
             if (!deletingRouting) setPendingDeleteRouting(null)
           }}
+        />
+      )}
+
+      {showSuggestModal && (
+        <FeedbackModal
+          initialType="feature"
+          onClose={() => setShowSuggestModal(false)}
         />
       )}
     </div>

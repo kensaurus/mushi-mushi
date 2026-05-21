@@ -60,6 +60,14 @@ export interface FixAttempt {
   cursor_run_id?: string | null;
   /** Artifacts produced by the Cursor agent: screenshots, videos, logs. */
   cursor_artifacts?: Array<{ kind: 'screenshot' | 'video' | 'log' | 'file'; path: string; mime: string }> | null;
+  /** GitHub Actions run ID for the mushi-claude-fix workflow. Present when agent='claude_code_agent'. */
+  claude_workflow_run_id?: number | null;
+  /** GitHub Actions run HTML URL. Shown while PR is pending. */
+  claude_workflow_run_url?: string | null;
+  /** Dispatch event UUID — echoed in the PR body for webhook correlation. */
+  claude_dispatch_event_id?: string | null;
+  /** Artifacts from the claude-code-action run. */
+  claude_artifacts?: Array<{ kind: string; path: string; mime: string }> | null;
 }
 
 export interface DispatchJob {

@@ -5,6 +5,7 @@
 
 import { Link } from 'react-router-dom'
 import { Btn } from '../ui'
+import { usePageCopy } from '../../lib/copy'
 import type { QaCoverageStats, QaCoverageTabId } from './QaCoverageStatsTypes'
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
   onRefresh?: () => void
   refreshing?: boolean
   onCreateStory?: () => void
+  plainBanner?: boolean
 }
 
 export function QaCoverageStatusBanner({
@@ -21,7 +23,10 @@ export function QaCoverageStatusBanner({
   onRefresh,
   refreshing,
   onCreateStory,
+  plainBanner = false,
 }: Props) {
+  const copy = usePageCopy('/qa-coverage')
+  const actions = copy?.actionLabels ?? {}
   const projectLabel = stats.projectName ?? 'workspace'
 
   if (!stats.hasAnyProject) {
@@ -30,12 +35,18 @@ export function QaCoverageStatusBanner({
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-info" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-info">No project selected</p>
-            <p className="text-2xs text-fg-muted">Pick a project to manage QA stories and scheduled runs.</p>
+            <p className="text-xs font-medium text-info">
+              {plainBanner ? 'Pick a project first' : 'No project selected'}
+            </p>
+            <p className="text-2xs text-fg-muted">
+              {plainBanner
+                ? 'QA tests run per app — choose one in the header.'
+                : 'Pick a project to manage QA stories and scheduled runs.'}
+            </p>
           </div>
         </div>
         <Link to="/onboarding">
-          <Btn size="sm" variant="ghost">Go to Setup</Btn>
+          <Btn size="sm" variant="ghost">{actions.setup ?? 'Go to Setup'}</Btn>
         </Link>
       </div>
     )
@@ -47,15 +58,17 @@ export function QaCoverageStatusBanner({
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">No QA stories on {projectLabel}</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner ? 'No automated tests yet' : `No QA stories on ${projectLabel}`}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {onCreateStory ? (
-          <Btn size="sm" variant="ghost" onClick={onCreateStory}>+ New story</Btn>
+          <Btn size="sm" variant="ghost" onClick={onCreateStory}>{actions.newStory ?? '+ New story'}</Btn>
         ) : (
           <Link to="/qa-coverage?tab=overview">
-            <Btn size="sm" variant="ghost">Create story</Btn>
+            <Btn size="sm" variant="ghost">{actions.create ?? 'Create story'}</Btn>
           </Link>
         )}
       </div>
@@ -69,17 +82,19 @@ export function QaCoverageStatusBanner({
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-danger" aria-hidden />
           <div>
             <p className="text-xs font-medium text-danger">
-              {stats.failingStories} failing stor{stats.failingStories === 1 ? 'y' : 'ies'} (24h)
+              {plainBanner
+                ? `${stats.failingStories} test${stats.failingStories === 1 ? '' : 's'} failing`
+                : `${stats.failingStories} failing stor${stats.failingStories === 1 ? 'y' : 'ies'} (24h)`}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Review failures</Btn>
+            <Btn size="sm" variant="ghost">{actions.failures ?? 'Review failures'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('failing')}>Review failures</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('failing')}>{actions.failures ?? 'Review failures'}</Btn>
         ) : null}
       </div>
     )
@@ -91,12 +106,16 @@ export function QaCoverageStatusBanner({
         <div className="flex items-start gap-2 min-w-0">
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-brand motion-safe:animate-pulse" aria-hidden />
           <div>
-            <p className="text-xs font-medium text-brand">{stats.pendingRuns} run{stats.pendingRuns === 1 ? '' : 's'} in flight</p>
+            <p className="text-xs font-medium text-brand">
+              {plainBanner
+                ? `${stats.pendingRuns} test run${stats.pendingRuns === 1 ? '' : 's'} in progress`
+                : `${stats.pendingRuns} run${stats.pendingRuns === 1 ? '' : 's'} in flight`}
+            </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>View stories</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>{actions.stories ?? 'View stories'}</Btn>
         ) : null}
       </div>
     )
@@ -109,17 +128,23 @@ export function QaCoverageStatusBanner({
           <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warn" aria-hidden />
           <div>
             <p className="text-xs font-medium text-warn">
-              {stats.topPriority === 'disabled_all' ? 'All stories disabled' : 'No runs in the last 24h'}
+              {plainBanner
+                ? stats.topPriority === 'disabled_all'
+                  ? 'All tests are turned off'
+                  : 'No test runs in the last 24 hours'
+                : stats.topPriority === 'disabled_all'
+                  ? 'All stories disabled'
+                  : 'No runs in the last 24h'}
             </p>
             <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
           </div>
         </div>
         {stats.topPriorityTo ? (
           <Link to={stats.topPriorityTo}>
-            <Btn size="sm" variant="ghost">Open stories</Btn>
+            <Btn size="sm" variant="ghost">{actions.openStories ?? 'Open stories'}</Btn>
           </Link>
         ) : onTab ? (
-          <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>Open stories</Btn>
+          <Btn size="sm" variant="ghost" onClick={() => onTab('stories')}>{actions.openStories ?? 'Open stories'}</Btn>
         ) : null}
       </div>
     )
@@ -130,17 +155,19 @@ export function QaCoverageStatusBanner({
       <div className="flex items-start gap-2 min-w-0">
         <span className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden />
         <div>
-          <p className="text-xs font-medium text-ok">QA coverage healthy on {projectLabel}</p>
+          <p className="text-xs font-medium text-ok">
+            {plainBanner ? 'Automated QA is healthy' : `QA coverage healthy on ${projectLabel}`}
+          </p>
           <p className="text-2xs text-fg-muted">{stats.topPriorityLabel}</p>
         </div>
       </div>
       {onRefresh ? (
         <Btn size="sm" variant="ghost" onClick={onRefresh} loading={refreshing} disabled={refreshing}>
-          Refresh
+          {actions.refresh ?? 'Refresh'}
         </Btn>
       ) : stats.topPriorityTo ? (
         <Link to={stats.topPriorityTo}>
-          <Btn size="sm" variant="ghost">View stories</Btn>
+          <Btn size="sm" variant="ghost">{actions.stories ?? 'View stories'}</Btn>
         </Link>
       ) : null}
     </div>

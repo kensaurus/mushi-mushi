@@ -11,6 +11,11 @@ import { estimateCallCostUsd } from '../../_shared/pricing.ts';
 import { ANTHROPIC_SONNET } from '../../_shared/models.ts';
 import { dbError, ownedProjectIds, resolveOwnedProject, scopedOwnedProjectIds, userCanAccessProject } from '../shared.ts';
 import { extractInboundTraceparent } from '../../_shared/trace.ts';
+import type { IntegrationKind } from '../../_shared/integration-probes.ts';
+import {
+  getMushiClaudeFixWorkflowYaml,
+  MUSHI_CLAUDE_GITHUB_SECRETS,
+} from '../../_shared/mushi-claude-workflow.ts';
 
 export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   // ============================================================
@@ -1244,20 +1249,32 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
   app.get('/v1/admin/integrations/stats', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const db = getServiceClient();
+    const empty = {
+      hasAnyProject: false,
+      projectId: null as string | null,
+      projectName: null as string | null,
+      platformTotal: 5,
+      platformConnected: 0,
+      platformHealthy: 0,
+      platformDown: 0,
+      routingActive: 0,
+      routingPaused: 0,
+      routingTotal: 0,
+      lastProbeAt: null as string | null,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'platform_down'
+        | 'incomplete'
+        | 'empty'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
+    };
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
       noProjectResponse: () =>
         c.json({
           ok: true,
-          data: {
-            platformTotal: 3,
-            platformConnected: 0,
-            platformHealthy: 0,
-            platformDown: 0,
-            routingActive: 0,
-            routingPaused: 0,
-            routingTotal: 0,
-            lastProbeAt: null,
-          },
+          data: empty,
         }),
     });
     if ('response' in resolvedProject) return resolvedProject.response;
@@ -1267,6 +1284,8 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       sentry: ['sentry_org_slug', 'sentry_auth_token_ref'],
       langfuse: ['langfuse_host', 'langfuse_public_key_ref', 'langfuse_secret_key_ref'],
       github: ['github_repo_url', 'github_installation_token_ref'],
+      cursor_cloud: ['cursor_api_key_ref'],
+      claude_code_agent: ['claude_api_key_ref'],
     };
     const platformKinds = Object.keys(requiredByKind);
     const allFields = [
@@ -1277,6 +1296,8 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       'langfuse_secret_key_ref',
       'github_repo_url',
       'github_installation_token_ref',
+      'cursor_api_key_ref',
+      'claude_api_key_ref',
     ].join(', ');
 
     const [{ data: settings }, { data: routingRows }, { data: probes }] = await Promise.all([
@@ -1322,9 +1343,35 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     const routingActive = routing.filter((r) => r.is_active).length;
     const routingPaused = routing.filter((r) => !r.is_active).length;
 
+    let topPriority: typeof empty.topPriority = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (platformDown > 0) {
+      topPriority = 'platform_down';
+      topPriorityLabel = `${platformDown} platform probe${platformDown === 1 ? '' : 's'} failing — re-test credentials or open Health.`;
+      topPriorityTo = '/integrations/config?tab=platform';
+    } else if (platformConnected < platformKinds.length) {
+      topPriority = 'incomplete';
+      const missing = platformKinds.length - platformConnected;
+      topPriorityLabel = `${missing} platform integration${missing === 1 ? '' : 's'} missing credentials — GitHub unlocks auto-fix PRs.`;
+      topPriorityTo = '/integrations/config?tab=platform';
+    } else if (platformConnected === 0 && routingActive === 0) {
+      topPriority = 'empty';
+      topPriorityLabel = 'No integrations wired — start with GitHub for auto-fix PRs, Langfuse for traces.';
+      topPriorityTo = '/integrations/config?tab=platform';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${platformConnected}/${platformKinds.length} platform connected · ${routingActive} routing destination${routingActive === 1 ? '' : 's'} active.`;
+      topPriorityTo = '/integrations/config?tab=repo';
+    }
+
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
+        projectId: project.id,
+        projectName: project.project_name ?? project.name ?? null,
         platformTotal: platformKinds.length,
         platformConnected,
         platformHealthy,
@@ -1333,6 +1380,9 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
         routingPaused,
         routingTotal: routing.length,
         lastProbeAt: (probes?.[0]?.checked_at as string | null) ?? null,
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });
@@ -1368,6 +1418,13 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
       'cursor_default_model',
       'cursor_auto_create_pr',
       'cursor_max_iterations',
+    ],
+    claude_code_agent: [
+      'claude_api_key_ref',
+      'claude_default_model',
+      'claude_workflow_event',
+      'claude_default_branch',
+      'claude_auto_create_pr',
     ],
   };
 
@@ -1429,12 +1486,37 @@ export function registerEnterpriseIntegrationsRoutes(app: Hono): void {
     langfuse: ['langfuse_public_key_ref', 'langfuse_secret_key_ref'],
     github: ['github_installation_token_ref', 'github_webhook_secret', 'github_deploy_key'],
     cursor_cloud: ['cursor_api_key_ref'],
+    claude_code_agent: ['claude_api_key_ref'],
   };
+
+  app.get('/v1/admin/integrations/claude-code-agent/setup', jwtAuth, async (c) => {
+    const userId = c.get('userId') as string;
+    const db = getServiceClient();
+    const resolvedProject = await resolveOwnedProject(c, db, userId, {
+      noProjectResponse: () =>
+        c.json({ ok: false, error: { code: 'NO_PROJECT', message: 'No project' } }, 404),
+    });
+    if ('response' in resolvedProject) return resolvedProject.response;
+
+    const supabaseUrl = (Deno.env.get('SUPABASE_URL') ?? '').replace(/\/$/, '');
+    return c.json({
+      ok: true,
+      data: {
+        workflowYaml: getMushiClaudeFixWorkflowYaml(),
+        workflowPath: '.github/workflows/mushi-claude-fix.yml',
+        githubSecrets: MUSHI_CLAUDE_GITHUB_SECRETS,
+        mushiSupabaseUrl: supabaseUrl,
+        serviceRoleHint:
+          'Copy your Mushi project service_role key from Supabase → Project Settings → API. ' +
+          'Add it as the GitHub repo secret MUSHI_SERVICE_ROLE_KEY (never commit it to git).',
+      },
+    });
+  });
 
   app.put('/v1/admin/integrations/platform/:kind', jwtAuth, async (c) => {
     const userId = c.get('userId') as string;
     const kind = c.req.param('kind') as IntegrationKind;
-    if (!(kind in PLATFORM_KIND_FIELDS)) {
+    if (!Object.hasOwn(PLATFORM_KIND_FIELDS, kind)) {
       return c.json({ ok: false, error: { code: 'BAD_KIND' } }, 400);
     }
     const body = (await c.req.json().catch(() => ({}))) as Record<string, unknown>;

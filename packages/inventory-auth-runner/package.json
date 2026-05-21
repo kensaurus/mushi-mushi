@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/inventory-auth-runner",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "description": "Runs the inventory.yaml auth.scripted block via Playwright and seeds the resulting cookies into project_settings so the Mushi crawler + synthetic monitor can hit auth-gated routes.",
   "type": "module",

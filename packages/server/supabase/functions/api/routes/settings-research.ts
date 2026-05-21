@@ -39,6 +39,7 @@ export function registerSettingsResearchRoutes(app: Hono): void {
     const db = getServiceClient();
 
     const empty = {
+      hasAnyProject: false,
       projectId: null as string | null,
       projectName: null as string | null,
       updatedAt: null as string | null,
@@ -57,6 +58,16 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       byokKeysUntested: 0,
       githubRepoConfigured: false,
       autofixEnabled: false,
+      topPriority: 'no_project' as
+        | 'no_project'
+        | 'byok_failing'
+        | 'no_anthropic'
+        | 'sdk_off'
+        | 'untested'
+        | 'routing_optional'
+        | 'healthy',
+      topPriorityLabel: null as string | null,
+      topPriorityTo: null as string | null,
     };
 
     const resolvedProject = await resolveOwnedProject(c, db, userId, {
@@ -98,19 +109,55 @@ export function registerSettingsResearchRoutes(app: Hono): void {
       else byokKeysUntested += 1;
     }
 
+    const slackConfigured = Boolean(row.slack_webhook_url);
+    const sentryConfigured = Boolean(row.sentry_dsn);
+    const byokAnthropicConfigured = Boolean(row.byok_anthropic_key_ref);
+    const sdkConfigEnabled = Boolean(row.sdk_config_enabled);
+
+    let topPriority: typeof empty.topPriority = 'healthy';
+    let topPriorityLabel: string | null = null;
+    let topPriorityTo: string | null = null;
+
+    if (byokKeysFailing > 0) {
+      topPriority = 'byok_failing';
+      topPriorityLabel = `${byokKeysFailing} BYOK key${byokKeysFailing === 1 ? '' : 's'} failing last test — re-run Test on LLM keys tab.`;
+      topPriorityTo = '/settings?tab=byok';
+    } else if (!byokAnthropicConfigured) {
+      topPriority = 'no_anthropic';
+      topPriorityLabel = 'No Anthropic BYOK — classify and autofix prefer your own Claude key.';
+      topPriorityTo = '/settings?tab=byok';
+    } else if (!sdkConfigEnabled) {
+      topPriority = 'sdk_off';
+      topPriorityLabel = 'SDK widget disabled — reporter capture and widget config are off.';
+      topPriorityTo = '/settings?tab=health';
+    } else if (byokKeysUntested > 0) {
+      topPriority = 'untested';
+      topPriorityLabel = `${byokKeysUntested} BYOK key${byokKeysUntested === 1 ? '' : 's'} never tested — run Test after saving.`;
+      topPriorityTo = '/settings?tab=byok';
+    } else if (!slackConfigured && !sentryConfigured) {
+      topPriority = 'routing_optional';
+      topPriorityLabel = 'BYOK passing and SDK on — Slack/Sentry hooks on General are optional; full integrations live under Act.';
+      topPriorityTo = '/integrations/config';
+    } else {
+      topPriority = 'healthy';
+      topPriorityLabel = `${byokKeysPassing} BYOK passing · SDK on${row.stage2_model ? ` · ${row.stage2_model}` : ''}.`;
+      topPriorityTo = '/settings?tab=health';
+    }
+
     return c.json({
       ok: true,
       data: {
+        hasAnyProject: true,
         projectId: project.id,
         projectName: project.name,
         updatedAt: (row.updated_at as string | null) ?? null,
-        slackConfigured: Boolean(row.slack_webhook_url),
-        sentryConfigured: Boolean(row.sentry_dsn),
+        slackConfigured,
+        sentryConfigured,
         reporterNotificationsEnabled: Boolean(row.reporter_notifications_enabled),
         stage2Model: (row.stage2_model as string | null) ?? null,
-        sdkConfigEnabled: Boolean(row.sdk_config_enabled),
+        sdkConfigEnabled,
         sdkConfigUpdatedAt: (row.sdk_config_updated_at as string | null) ?? null,
-        byokAnthropicConfigured: Boolean(row.byok_anthropic_key_ref),
+        byokAnthropicConfigured,
         byokOpenaiConfigured: Boolean(row.byok_openai_key_ref),
         byokFirecrawlConfigured: Boolean(row.byok_firecrawl_key_ref),
         byokKeysConfigured,
@@ -119,6 +166,9 @@ export function registerSettingsResearchRoutes(app: Hono): void {
         byokKeysUntested,
         githubRepoConfigured: Boolean(row.github_repo_url),
         autofixEnabled: Boolean(row.autofix_enabled),
+        topPriority,
+        topPriorityLabel,
+        topPriorityTo,
       },
     });
   });

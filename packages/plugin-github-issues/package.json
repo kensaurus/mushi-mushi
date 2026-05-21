@@ -1,6 +1,6 @@
 {
   "name": "@mushi-mushi/plugin-github-issues",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Mushi Mushi plugin for GitHub Issues — creates issues for classified reports and closes them when Mushi applies a fix.",
   "license": "MIT",
   "type": "module",

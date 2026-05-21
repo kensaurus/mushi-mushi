@@ -16,6 +16,7 @@ import { requireServiceRoleAuth } from '../_shared/auth.ts'
 import { mapWithConcurrency } from '../_shared/concurrency.ts'
 import { INTELLIGENCE_MODEL } from '../_shared/models.ts'
 import { getPromptForStage } from '../_shared/prompt-ab.ts'
+import { resolveLlmKey } from '../_shared/byok.ts'
 
 const intelLog = log.child('intelligence-report')
 
@@ -47,6 +48,17 @@ Deno.serve(withSentry('intelligence-report', async (req) => {
   // cached / indexed. Weekly digests for 50 projects dropped from ~12 min
   // to ~2.5 min (measured during the 2026-04-21 audit).
   await mapWithConcurrency(projects ?? [], 5, async (project) => {
+    const anthropicResolved = await resolveLlmKey(db, project.id, 'anthropic')
+    if (!anthropicResolved) {
+      const msg =
+        `No Anthropic API key configured for project ${project.name}. ` +
+        'Add one in Settings → LLM Keys (BYOK) or set ANTHROPIC_API_KEY on the host.'
+      intelLog.error('No Anthropic API key for intelligence digest', { projectId: project.id })
+      // Single-project manual runs should surface a clear error to the job row.
+      if (projectId) throw new Error(msg)
+      return
+    }
+
     const stats = await computeWeeklyStats(db, project.id, weekStart)
     const benchmarks = await fetchBenchmarks(db, project.id)
 
@@ -60,7 +72,7 @@ Fix attempts: ${stats.fixes.total} (${stats.fixes.completed} completed, completi
 Judge scores: ${JSON.stringify(stats.judgeScores.slice(0, 2))}
 Cross-customer benchmarks available: ${benchmarks.optedIn ? 'yes' : 'no (project not opted in or k-anonymity unmet)'}`
 
-    const anthropic = createAnthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY') })
+    const anthropic = createAnthropic({ apiKey: anthropicResolved.key })
     const span = trace.span(`digest.${project.name}`)
     const digestStart = Date.now()
     const intelSelection = await getPromptForStage(db, project.id, 'intelligence')

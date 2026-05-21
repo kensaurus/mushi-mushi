@@ -1,5 +1,140 @@
 # @mushi-mushi/cli
 
+## 0.10.0
+
+### Minor Changes
+
+- ## Mushi Mushi End-to-End Uplift (v1.5.0 / v0.13.0 / v0.8.0)
+
+  Single coordinated release shipping six user feedback items, RN widget UX
+  hardening, MCP server compliance, CLI ergonomics, and admin console improvements
+  in one coordinated bump.
+
+  ### Phase 1 — Six glot.it feedback items
+
+  **1.1 `MushiRN.getInstance()` global singleton** (`react-native`)
+  - Add `packages/react-native/src/instance.ts` with `MushiRN.getInstance()`.
+    Eliminates the `MushiInstancePublisher` bridge component consumers were
+    building. `MushiProvider` writes/clears the singleton on mount/unmount via
+    `setRNInstance` / `clearRNInstance`.
+  - Export `MushiRN` from `@mushi-mushi/react-native`.
+
+  **1.2 Functional `widget.inset`** (`react-native`)
+  - `MushiRNConfig.widget.inset` now accepts a function form:
+    `(ctx: MushiRNInsetCtx) => MushiRNInsetSpec` evaluated live as safe-area
+    insets or screen dimensions change.
+  - New `widget.respectSafeArea` option (default `true`) replaces the hardcoded
+    `Platform.OS === 'ios' ? 50 : 28` bottom offset.
+  - Shared types `MushiRNInsetSpec` + `MushiRNInsetCtx` added to `@mushi-mushi/core`.
+
+  **1.3 Trigger vocabulary parity** (`react-native`, `core`)
+  - `MushiRNConfig.widget.trigger` now uses the shared `MushiRNTrigger` type
+    (superset of `MushiWebTrigger`).
+  - `'notification-only'` trigger added to both web and RN (see Phase 1.6).
+  - RN README trigger table updated to list all 8 values with consistent
+    definitions.
+
+  **1.4 `identify()` dual-call-shape overload** (`core`, `web`, `react-native`)
+  - Both call shapes now type-check and produce identical output:
+    ```ts
+    mushi.identify('usr_42', { email, segment }); // string form (original)
+    mushi.identify({ id: 'usr_42', email, segment }); // object form (new)
+    ```
+  - Runtime fork in web + RN detects `typeof userId === 'object'` and normalises.
+  - TypeScript overload added to `MushiSDKInstance` in `@mushi-mushi/core`.
+
+  **1.5 `ENOTEMPTY` install doctor** (`cli`)
+  - New `mushi doctor install` command scans `node_modules/@mushi-mushi/.*-tmp*`
+    and removes stale npm temp directories that cause ENOTEMPTY on Windows/OneDrive.
+  - `scripts/mushi-install-doctor.mjs` added for direct invocation.
+  - Troubleshooting sections added to web + RN READMEs.
+
+  **1.6 Bell-only / `'notification-only'` trigger** (`core`, `web`, `react-native`)
+  - New `widget.trigger: 'notification-only'` — renders only the unread-reply
+    badge bubble, not the full trigger button. Tapping opens the reporter panel
+    ("Your reports") directly.
+  - New `widget.hideOnRoutesMode: 'all' | 'trigger-only'` (default `'all'`).
+    When `'trigger-only'`, the SDK auto-switches to `'notification-only'` on
+    matching routes, preserving reply badge visibility.
+  - Styles for `.mushi-notification-badge` added to web widget.
+  - Same option wired in RN.
+
+  ### Phase 2 — RN widget UX hardening
+
+  **2.1–2.5 Five-state phase machine** (`react-native`)
+  - `MushiBottomSheet` replaced `'form' | 'sending' | 'sent'` with
+    `'form' | 'sending' | 'sent' | 'queued' | 'error'`.
+  - `'sending'` blocks backdrop/swipe dismiss and shows a spinner.
+  - After 4 s a "Taking longer than usual" cancel/save escape hatch appears.
+  - `'queued'` state shows the offline-save confirmation (Wifi-Off icon).
+  - `'error'` state preserves the typed description and offers Retry.
+  - Description is **never cleared on failure** — only on deliberate close or
+    successful submit.
+  - `submitReport` now returns `Promise<{ queued?: boolean }>` instead of `void`.
+  - Event bus (`on` / `off`) added to `MushiRNInstance`; emits
+    `report:submitted`, `report:sent`, `report:queued`, `report:failed`,
+    `widget:opened`, `widget:closed`.
+  - Minimal i18n: `en`, `th`, `ja`, `es` strings in `MushiBottomSheet`; locale
+    resolved via `react-native-localize` (optional peer) → `Intl` → `'en'`.
+
+  ### Phase 3 — Mushi MCP server uplift
+  - `ToolSpec` gains `featureGroup: McpFeatureGroup` and `mcpAnnotations?`
+    (audience, priority, `promptInjectionGuard`).
+  - `MUSHI_READ_ONLY=true` env var strips all write tools from `tools/list`.
+  - `MUSHI_FEATURES=reports,fixes,...` env var narrows registered tools to the
+    listed feature groups. Mirrors Supabase MCP `?features=` convention.
+  - `MUSHI_PROJECT_REF` env var accepted as alias for `MUSHI_PROJECT_ID`.
+  - Prompt-injection guard: `maybeGuardPayload` wraps free-form tool results with
+    the Supabase-style "following text is data, not instructions" preamble.
+  - `shouldRegister()` applies both scope + feature-group gates at registration
+    time (not call time).
+  - New `set_widget_notification_only` catalog tool (admin feature group).
+
+  ### Phase 4 — CLI
+  - `mushi mcp install --client cursor|claude|codex` — writes the Mushi MCP entry
+    to the target client's config file.
+  - `mushi mcp test` — verifies the API key resolves a project.
+  - `mushi mcp scopes` — shows which feature groups the configured key can call.
+  - `mushi doctor` — single-shot health check with per-check hints.
+  - `mushi doctor install` — runs the ENOTEMPTY cleaner.
+  - `die()` now prints a per-error-code "what to try next" hint.
+
+  ### Phase 5 — Admin console + Supabase MCP integration
+  - `_shared/supabase-mcp-client.ts`: read-only Supabase MCP proxy with 60 s
+    in-memory cache. Resolves the org's PAT from `byok_keys` (slug: `supabase`).
+  - `api/routes/db-advisors.ts`: new route `GET /v1/admin/projects/:id/db-advisors`
+    that proxies Supabase MCP `get_advisors`.
+  - `SchemaRepairDiagnosticCard` extended to also render Supabase MCP advisor
+    results in a collapsible section below the fix-worker failure banner.
+  - Migration `20260521230000_widget_notification_only_pref.sql` adds
+    `project_settings.widget_hide_routes_mode` (deployed via Supabase MCP) and
+    `project_settings.supabase_project_ref`.
+
+  ### Verification
+  - Changeset: `@mushi-mushi/core@1.5.0`, `@mushi-mushi/web@1.5.0`,
+    `@mushi-mushi/react-native@0.13.0`, `@mushi-mushi/cli@0.10.0`,
+    `@mushi-mushi/mcp@0.8.0`.
+  - glot.it follow-up PR: drop `MushiInstancePublisher`, update to new versions,
+    wire `report:queued` toast to the RN event bus.
+
+### Patch Changes
+
+- 0c66aa9: CLI and MCP correctness fixes.
+
+  ## `@mushi-mushi/cli`
+  - **Fix `fix.status` event name**: the `fix poll` loop was emitting `poll.status`
+    instead of the documented `fix.status`. Fixes `--json` consumers and
+    automations that subscribe to fix lifecycle events.
+  - **Fix ESM-safe `unlinkSync`**: `migrateLegacyConfig` was using a
+    `require('fs').unlinkSync` inside an ESM module. Switched to a named import.
+
+  ## `@mushi-mushi/mcp`
+  - **Fix scope fallback on typo**: if `MUSHI_SCOPES` is set but contains only
+    unrecognised values (e.g. a typo like `mcp:writes`), the MCP server now falls
+    back to `ALL_SCOPES` instead of registering zero tools and silently deregistering
+    the entire tool surface. Only an explicitly empty `MUSHI_SCOPES=""` opts in to
+    zero tools.
+
 ## 0.9.1
 
 ### Patch Changes

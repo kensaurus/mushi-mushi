@@ -253,7 +253,6 @@ export class FixOrchestrator {
         return new CursorCloudAgent({
           apiKey,
           model: cursorSettings?.cursor_default_model ?? 'composer-2.5',
-          workspaceId: cursorSettings?.cursor_workspace_id ?? '',
           autoCreatePR: cursorSettings?.cursor_auto_create_pr ?? true,
           maxIterations: cursorSettings?.cursor_max_iterations ?? 1,
         })

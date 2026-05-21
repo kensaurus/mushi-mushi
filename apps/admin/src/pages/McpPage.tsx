@@ -5,7 +5,7 @@
  */
 
 import { Link, useSearchParams } from 'react-router-dom'
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   PageHeader,
   PageHelp,
@@ -30,6 +30,7 @@ import { useSetupStatus } from '../lib/useSetupStatus'
 import { SetupNudge } from '../components/SetupNudge'
 import { useToast } from '../lib/toast'
 import { usePageCopy } from '../lib/copy'
+import { useMcpUx, resolveQuickMcpTab } from '../lib/mcpModeUx'
 import { SdkInstallCard } from '../components/SdkInstallCard'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { detectFromPackageJson } from '../lib/frameworkDetect'
@@ -251,6 +252,7 @@ export function McpPage() {
   const setup = useSetupStatus(activeProjectId)
   const projectName = setup.activeProject?.project_name ?? null
   const copy = usePageCopy('/mcp')
+  const ux = useMcpUx()
   const toast = useToast()
 
   const [searchParams, setSearchParams] = useSearchParams()
@@ -303,6 +305,12 @@ export function McpPage() {
     [searchParams, setSearchParams],
   )
 
+  useEffect(() => {
+    if (!ux.isQuickstart || !activeProjectId || loading) return
+    const quickTab = resolveQuickMcpTab(stats)
+    if (activeTab !== quickTab) setTab(quickTab)
+  }, [ux.isQuickstart, activeProjectId, loading, stats, activeTab, setTab])
+
   const setCatalogTab = useCallback(
     (tab: CatalogTabId) => {
       const next = new URLSearchParams(searchParams)
@@ -348,12 +356,12 @@ export function McpPage() {
 
   const tabOptions = useMemo(
     () => [
-      { id: 'overview' as const, label: 'Overview' },
-      { id: 'setup' as const, label: 'Setup' },
-      { id: 'catalog' as const, label: 'Catalog', count: stats.toolCount },
-      { id: 'examples' as const, label: 'Examples' },
+      { id: 'overview' as const, label: copy?.tabLabels?.overview ?? 'Overview' },
+      { id: 'setup' as const, label: copy?.tabLabels?.setup ?? 'Setup' },
+      { id: 'catalog' as const, label: copy?.tabLabels?.catalog ?? 'Catalog', count: stats.toolCount },
+      { id: 'examples' as const, label: copy?.tabLabels?.examples ?? 'Examples' },
     ],
-    [stats.toolCount],
+    [copy?.tabLabels, stats.toolCount],
   )
 
   const catalogOptions = useMemo(
@@ -367,7 +375,25 @@ export function McpPage() {
 
   if (!activeProjectId) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4" data-testid="mushi-page-mcp">
+        <PageHelp
+          title={copy?.help?.title ?? 'About MCP'}
+          whatIsIt={
+            copy?.help?.whatIsIt ??
+            'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+          }
+          useCases={
+            copy?.help?.useCases ?? [
+              'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
+              'Have the agent draft a fix for a specific report in one command',
+              'Query your bug data in plain English from inside your editor',
+            ]
+          }
+          howToUse={
+            copy?.help?.howToUse ??
+            '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
+          }
+        />
         <PageHeader
           title={copy?.title ?? 'MCP'}
           description={
@@ -415,6 +441,25 @@ export function McpPage() {
 
   return (
     <div className="space-y-4" data-testid="mushi-page-mcp">
+      <PageHelp
+        title={copy?.help?.title ?? 'About MCP'}
+        whatIsIt={
+          copy?.help?.whatIsIt ??
+          'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
+        }
+        useCases={
+          copy?.help?.useCases ?? [
+            'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
+            'Have the agent draft a fix for a specific report in one command',
+            'Query your bug data in plain English from inside your editor',
+          ]
+        }
+        howToUse={
+          copy?.help?.howToUse ??
+          '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
+        }
+      />
+
       <PageHeader
         title={copy?.title ?? 'MCP'}
         description={
@@ -423,32 +468,43 @@ export function McpPage() {
         }
         projectScope={displayName}
       >
-        <Badge
-          className={
-            bannerSeverity === 'ok'
-              ? 'bg-ok-muted text-ok'
-              : bannerSeverity === 'warn'
-                ? 'bg-warn/10 text-warn'
-                : bannerSeverity === 'brand'
-                  ? 'bg-brand/15 text-brand'
-                  : 'bg-surface-overlay text-fg-muted'
-          }
-        >
-          {headerBadge}
-        </Badge>
-        <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
-        <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
-          Refresh
-        </Btn>
-        <Link to="/projects">
-          <Btn variant="ghost" size="sm" data-testid="mcp-mint-key-link">
-            Generate an API key
-          </Btn>
-        </Link>
+        {!ux.hideOverviewChrome && (
+          <>
+            <Badge
+              className={
+                bannerSeverity === 'ok'
+                  ? 'bg-ok-muted text-ok'
+                  : bannerSeverity === 'warn'
+                    ? 'bg-warn/10 text-warn'
+                    : bannerSeverity === 'brand'
+                      ? 'bg-brand/15 text-brand'
+                      : 'bg-surface-overlay text-fg-muted'
+              }
+            >
+              {headerBadge}
+            </Badge>
+            <FreshnessPill at={lastFetchedAt} isValidating={isValidating} />
+            <Btn size="sm" variant="ghost" onClick={reloadAll} loading={isValidating}>
+              Refresh
+            </Btn>
+            <Link to="/projects">
+              <Btn variant="ghost" size="sm" data-testid="mcp-mint-key-link">
+                Generate an API key
+              </Btn>
+            </Link>
+          </>
+        )}
       </PageHeader>
 
-      <McpStatusBanner stats={stats} onTab={setTab} onRefresh={reloadAll} refreshing={isValidating} />
+      <McpStatusBanner
+        stats={stats}
+        onTab={setTab}
+        onRefresh={reloadAll}
+        refreshing={isValidating}
+        plainBanner={ux.plainBanner}
+      />
 
+      {!ux.hideTabs && (
       <SegmentedControl
         value={activeTab}
         onChange={setTab}
@@ -456,40 +512,43 @@ export function McpPage() {
         ariaLabel="MCP sections"
         size="sm"
       />
+      )}
 
-      <Section title="MCP SNAPSHOT" freshness={{ at: lastFetchedAt, isValidating }}>
+      {!ux.hideMcpSnapshot && (
+      <Section title={copy?.sections?.snapshot ?? 'MCP SNAPSHOT'} freshness={{ at: lastFetchedAt, isValidating }}>
         <p className="mb-3 text-2xs text-fg-muted">{activeMeta.description}</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard label="Active keys" value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} hint="All scopes on this project" />
+          <StatCard label={copy?.statLabels?.activeKeys ?? 'Active keys'} value={stats.activeKeyCount} accent={stats.activeKeyCount > 0 ? 'text-brand' : undefined} hint="All scopes on this project" />
           <StatCard
-            label="mcp:read"
+            label={copy?.statLabels?.mcpRead ?? 'mcp:read'}
             value={stats.mcpReadKeyCount}
             accent={stats.mcpReadKeyCount > 0 ? 'text-ok' : 'text-warn'}
             hint={stats.mcpWriteKeyCount > 0 ? `${stats.mcpWriteKeyCount} write` : 'Mint on /projects'}
           />
           <StatCard
-            label="Connected"
+            label={copy?.statLabels?.connected ?? 'Connected'}
             value={stats.connectedKeyCount}
             accent={stats.connectedKeyCount > 0 ? 'text-ok' : stats.mcpReadKeyCount > 0 ? 'text-warn' : undefined}
             hint={stats.neverConnectedCount > 0 ? `${stats.neverConnectedCount} never used` : 'Keys with heartbeat'}
           />
           <StatCard
-            label="SDK-only keys"
+            label={copy?.statLabels?.sdkOnly ?? 'SDK-only keys'}
             value={stats.reportOnlyKeyCount}
             accent={stats.reportOnlyKeyCount > 0 && stats.mcpReadKeyCount === 0 ? 'text-warn' : undefined}
             hint="report:write without MCP scope"
           />
-          <StatCard label="Tools" value={stats.toolCount} accent="text-info" hint={`${stats.resourceCount} resources · ${stats.promptCount} prompts`} />
+          <StatCard label={copy?.statLabels?.tools ?? 'Tools'} value={stats.toolCount} accent="text-info" hint={`${stats.resourceCount} resources · ${stats.promptCount} prompts`} />
           <StatCard
-            label="Endpoint"
+            label={copy?.statLabels?.endpoint ?? 'Endpoint'}
             value={stats.endpointMismatch ? 'Mismatch' : stats.lastSeenAt ? 'OK' : '—'}
             accent={stats.endpointMismatch ? 'text-danger' : stats.lastSeenAt ? 'text-ok' : undefined}
             hint={stats.expectedEndpointHost ?? 'Cloud API host'}
           />
         </div>
       </Section>
+      )}
 
-      {stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
+      {!ux.hideOverviewChrome && stats.topPriority !== 'healthy' && stats.topPriorityTo && activeTab === 'overview' ? (
         <Card
           className={`p-4 ${
             stats.topPriority === 'endpoint_mismatch' || stats.topPriority === 'never_connected'
@@ -508,24 +567,8 @@ export function McpPage() {
 
       {activeTab === 'overview' && (
         <div className="space-y-4">
-          <PageHelp
-            title={copy?.help?.title ?? 'About MCP'}
-            whatIsIt={
-              copy?.help?.whatIsIt ??
-              'MCP lets your coding assistant call Mushi tools during a chat — read reports, dispatch fixes, and query production data without copy-pasting IDs.'
-            }
-            useCases={
-              copy?.help?.useCases ?? [
-                'Ask Cursor "what should I fix next?" and get an answer from your real bugs',
-                'Have the agent draft a fix for a specific report in one command',
-                'Query your bug data in plain English from inside your editor',
-              ]
-            }
-            howToUse={
-              copy?.help?.howToUse ??
-              '1. On /projects, pick MCP read-only or read + write scope. 2. Copy the snippet on Setup. 3. Restart your IDE. 4. Ask "list mushi tools".'
-            }
-          />
+          {!ux.hideOverviewChrome && (
+          <>
           {stats.topPriority === 'healthy' && (
             <RecommendedAction
               tone="success"
@@ -587,6 +630,8 @@ export function McpPage() {
               </p>
             </Card>
           </div>
+          </>
+          )}
         </div>
       )}
 

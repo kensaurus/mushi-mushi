@@ -5,7 +5,7 @@
  * Graph/Layers/Search reuse the ReactFlow canvas, Sankey lane, and semantic search.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { type Edge, type Node } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'

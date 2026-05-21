@@ -52,8 +52,12 @@ interface Props {
   onDispatchFix: () => void
   /** When set, shows a "Send to Cursor agent" menu item in the row kebab. */
   onDispatchCursor?: () => void
+  /** When set, shows "Send to Claude Code Agent" in the row kebab. */
+  onDispatchClaude?: () => void
   /** Whether Cursor Cloud is configured for this project. */
   cursorEnabled?: boolean
+  /** Whether Claude Code Agent is configured for this project. */
+  claudeEnabled?: boolean
 }
 
 function ReportRowViewInner({
@@ -73,7 +77,9 @@ function ReportRowViewInner({
   onDismiss,
   onDispatchFix,
   onDispatchCursor,
+  onDispatchClaude,
   cursorEnabled = false,
+  claudeEnabled = false,
 }: Props) {
   const summary = row.summary ?? row.description
   const conf = row.confidence != null ? Math.round(row.confidence * 100) : null
@@ -306,6 +312,7 @@ function ReportRowViewInner({
             onCopyLink={onCopyLink}
             onDismiss={onDismiss}
             onDispatchCursor={cursorEnabled && canDispatch ? onDispatchCursor : undefined}
+            onDispatchClaude={claudeEnabled && canDispatch ? onDispatchClaude : undefined}
           />
         </div>
       </td>
@@ -318,9 +325,10 @@ interface KebabProps {
   onCopyLink: () => void
   onDismiss: () => void
   onDispatchCursor?: () => void
+  onDispatchClaude?: () => void
 }
 
-function RowKebab({ row, onCopyLink, onDismiss, onDispatchCursor }: KebabProps) {
+function RowKebab({ row, onCopyLink, onDismiss, onDispatchCursor, onDispatchClaude }: KebabProps) {
   return (
     <div className="inline-flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 motion-safe:transition-opacity">
       <Tooltip content="Copy share link">
@@ -362,6 +370,23 @@ function RowKebab({ row, onCopyLink, onDismiss, onDispatchCursor }: KebabProps) 
             {/* Cursor diamond icon */}
             <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
               <polygon points="6,1 11,6 6,11 1,6" />
+            </svg>
+          </button>
+        </Tooltip>
+      )}
+      {onDispatchClaude && (
+        <Tooltip content="Send to Claude Code Agent — triggers your repo's mushi-claude-fix workflow (BYOK)">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDispatchClaude()
+            }}
+            className="p-1 text-[#d97706] hover:text-[#f59e0b] hover:bg-[#d97706]/10 rounded-sm"
+            aria-label="Send to Claude Code Agent"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+              <circle cx="6" cy="6" r="4.5" />
             </svg>
           </button>
         </Tooltip>

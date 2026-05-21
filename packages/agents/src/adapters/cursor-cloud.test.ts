@@ -50,15 +50,19 @@ describe('classifyArtifactPath', () => {
 })
 
 describe('CursorCloudAgent.generateFix', () => {
-  it('forwards workspaceId and maxIterations in the REST create payload', async () => {
+  it('uses official v0 payload (source.repository + target.autoCreatePr)', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith('/agents') && init?.method === 'POST') {
         const body = JSON.parse(init.body as string) as {
-          cloud: { workspaceId: string; maxIterations: number; autoCreatePR: boolean }
+          prompt: { text: string }
+          source: { repository: string; ref: string }
+          target: { autoCreatePr: boolean; branchName: string }
         }
-        expect(body.cloud.workspaceId).toBe('ws_test')
-        expect(body.cloud.maxIterations).toBe(3)
-        expect(body.cloud.autoCreatePR).toBe(false)
+        expect(body.source.repository).toBe('https://github.com/example/repo')
+        expect(body.source.ref).toBe('main')
+        expect(body.target.autoCreatePr).toBe(false)
+        expect(body.target.branchName).toContain('mushi/cursor-cloud-')
+        expect(body.prompt.text).toContain('Broken login')
         return new Response(JSON.stringify({ id: 'bc_test', status: 'FINISHED', target: {} }), {
           status: 201,
         })
@@ -77,9 +81,8 @@ describe('CursorCloudAgent.generateFix', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const agent = new CursorCloudAgent({
-      apiKey: 'cur_test',
+      apiKey: 'crsr_test',
       model: 'composer-2.5',
-      workspaceId: 'ws_test',
       autoCreatePR: false,
       maxIterations: 3,
     })
@@ -91,11 +94,10 @@ describe('CursorCloudAgent.generateFix', () => {
     vi.unstubAllGlobals()
   })
 
-  it('fails fast when workspaceId is missing', async () => {
+  it('fails fast when apiKey is missing', async () => {
     const agent = new CursorCloudAgent({
-      apiKey: 'cur_test',
+      apiKey: '',
       model: 'composer-2.5',
-      workspaceId: '',
       autoCreatePR: true,
       maxIterations: 1,
     })
@@ -103,6 +105,6 @@ describe('CursorCloudAgent.generateFix', () => {
     const result = await agent.generateFix(makeFixContext())
 
     expect(result.success).toBe(false)
-    expect(result.error).toContain('cursor_workspace_id')
+    expect(result.error).toContain('cursor_api_key_ref')
   })
 })

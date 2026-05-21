@@ -31,6 +31,7 @@ import { useActiveProjectId } from '../components/ProjectSwitcher'
 import { useToast } from '../lib/toast'
 import { useCreateProject } from '../lib/useCreateProject'
 import { usePageCopy } from '../lib/copy'
+import { useOnboardingUx, resolveQuickOnboardingTab } from '../lib/onboardingModeUx'
 import { restartFirstRunTour } from '../components/FirstRunTour'
 import { ConfigHelp } from '../components/ConfigHelp'
 import { MigrationsInProgressCard } from '../components/migrations/MigrationsInProgressCard'
@@ -73,11 +74,11 @@ export function OnboardingPage() {
   const activeProjectId = useActiveProjectId()
   const setup = useSetupStatus(activeProjectId)
   const copy = usePageCopy('/onboarding')
+  const ux = useOnboardingUx()
   const [searchParams, setSearchParams] = useSearchParams()
 
   const tabParam = searchParams.get('tab')
   const activeTab: OnboardingTabId = isOnboardingTab(tabParam) ? tabParam : 'overview'
-  const activeTabMeta = ONBOARDING_TABS.find((t) => t.id === activeTab) ?? ONBOARDING_TABS[0]
 
   const {
     data: statsData,
@@ -88,6 +89,11 @@ export function OnboardingPage() {
     isValidating: statsValidating,
   } = usePageData<OnboardingStats>('/v1/admin/onboarding/stats')
   const stats = statsData ?? EMPTY_ONBOARDING_STATS
+
+  const effectiveTab: OnboardingTabId = ux.hideOverviewTab
+    ? resolveQuickOnboardingTab(stats)
+    : activeTab
+  const activeTabMeta = ONBOARDING_TABS.find((t) => t.id === effectiveTab) ?? ONBOARDING_TABS[1]
 
   const reloadAll = useCallback(() => {
     reloadStats()
@@ -288,28 +294,29 @@ export function OnboardingPage() {
     criticalCount: stats.setupDone ? 0 : stats.requiredTotal - stats.requiredComplete,
   })
 
-  const tabOptions = useMemo(
-    () => [
-      { id: 'overview' as const, label: 'Overview' },
-      {
-        id: 'steps' as const,
-        label: 'Steps',
-        count:
+  const tabOptions = useMemo(() => {
+    const visibleTabs = ux.hideOverviewTab
+      ? ONBOARDING_TABS.filter((t) => t.id !== 'overview')
+      : ONBOARDING_TABS
+    return visibleTabs.map((t) => {
+      let count: number | undefined
+      if (t.id === 'steps') {
+        count =
           stats.requiredTotal - stats.requiredComplete > 0
             ? stats.requiredTotal - stats.requiredComplete
             : stats.stepsComplete > 0
               ? stats.stepsComplete
-              : undefined,
-      },
-      {
-        id: 'verify' as const,
-        label: 'Verify',
-        count: stats.hasApiKey && stats.reportCount === 0 ? 1 : undefined,
-      },
-      { id: 'sdk' as const, label: 'SDK' },
-    ],
-    [stats],
-  )
+              : undefined
+      } else if (t.id === 'verify') {
+        count = stats.hasApiKey && stats.reportCount === 0 ? 1 : undefined
+      }
+      return {
+        id: t.id,
+        label: copy?.tabLabels?.[t.id] ?? t.label,
+        count,
+      }
+    })
+  }, [ux.hideOverviewTab, copy?.tabLabels, stats])
 
   if (setup.loading || (statsLoading && !statsData)) return <OnboardingSkeleton />
   if (setup.error) return <ErrorAlert message={setup.error} onRetry={reloadAll} />
@@ -335,48 +342,59 @@ export function OnboardingPage() {
         onTab={setActiveTab}
         onRunTest={project ? () => void submitTestReport() : undefined}
         testing={testStatus === 'running'}
+        plainLanguage={ux.plainBanner}
       />
 
-      <SegmentedControl
-        value={activeTab}
-        onChange={setActiveTab}
-        options={tabOptions}
-        ariaLabel="Setup sections"
-        size="sm"
-      />
+      {!ux.hideOverviewTab || tabOptions.length > 1 ? (
+        <SegmentedControl
+          value={effectiveTab}
+          onChange={setActiveTab}
+          options={tabOptions}
+          ariaLabel="Setup sections"
+          size="sm"
+        />
+      ) : null}
 
-      <Section title="Setup snapshot" freshness={{ at: statsFetchedAt, isValidating: statsValidating }}>
-        <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <Section
+        title={copy?.sections?.snapshot ?? 'Setup snapshot'}
+        freshness={{ at: statsFetchedAt, isValidating: statsValidating }}
+      >
+        {!ux.hideOverviewTab ? (
+          <p className="mb-3 text-2xs text-fg-muted">{activeTabMeta.description}</p>
+        ) : null}
+        <div className={`grid grid-cols-2 gap-2 ${ux.hideOptionalStat ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
           <StatCard
-            label="Required"
+            label={copy?.statLabels?.required ?? 'Required'}
             value={`${stats.requiredComplete}/${stats.requiredTotal}`}
             accent={stats.setupDone ? 'text-ok' : 'text-warn'}
             hint={stats.nextStepLabel ?? 'All required steps done'}
           />
           <StatCard
-            label="SDK"
+            label={copy?.statLabels?.sdk ?? 'SDK'}
             value={stats.sdkInstalled ? 'Live' : stats.hasApiKey ? 'Pending' : '—'}
             accent={stats.sdkInstalled ? 'text-ok' : stats.sdkHostMismatch ? 'text-danger' : 'text-info'}
             hint={stats.sdkHostMismatch ? 'Backend mismatch' : stats.sdkInstalled ? 'Heartbeat seen' : 'Install snippet'}
           />
           <StatCard
-            label="Reports"
+            label={copy?.statLabels?.reports ?? 'Reports'}
             value={stats.reportCount}
             accent={stats.reportCount > 0 ? 'text-brand' : undefined}
             hint={stats.reportCount > 0 ? 'Pipeline proven' : 'Send test report'}
           />
-          <StatCard
-            label="Optional"
-            value={`${stats.optionalComplete}/${stats.optionalTotal}`}
-            accent="text-fg-secondary"
-            hint={`${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched`}
-          />
+          {!ux.hideOptionalStat ? (
+            <StatCard
+              label={copy?.statLabels?.optional ?? 'Optional'}
+              value={`${stats.optionalComplete}/${stats.optionalTotal}`}
+              accent="text-fg-secondary"
+              hint={`${stats.fixCount} fix${stats.fixCount === 1 ? '' : 'es'} dispatched`}
+            />
+          ) : null}
         </div>
       </Section>
 
-      {activeTab === 'overview' && (
+      {effectiveTab === 'overview' && (
         <>
+      {!ux.hideOverviewChrome ? (
       <div className="overflow-hidden rounded-xl border border-edge bg-surface-raised p-5">
         <p className="font-mono text-2xs uppercase tracking-[0.24em] text-brand">Mushi / setup</p>
         <h2 className="mt-2 font-serif text-3xl leading-none tracking-[-0.04em] text-fg">
@@ -388,7 +406,9 @@ export function OnboardingPage() {
           install the SDK once, then let every report enter the repair loop.
         </p>
       </div>
+      ) : null}
 
+      {!ux.hideOverviewChrome ? (
       <PageHero
         scope="onboarding"
         title="Get started"
@@ -424,6 +444,7 @@ export function OnboardingPage() {
           anchor: 'onboarding:verify',
         }}
       />
+      ) : null}
 
       {setupComplete && (
         <>
@@ -483,6 +504,7 @@ export function OnboardingPage() {
           loop they're about to enter, with outcome copy instead of empty
           zero-counts. Wrapped in a section so the FirstRunTour's "plan"
           stop can anchor on the Plan node via `data-tour-id="pdca-flow"`. */}
+      {!ux.hideOverviewChrome ? (
       <section aria-label="What the loop does" className="space-y-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-sm font-semibold text-fg">How Mushi closes the loop</h3>
@@ -492,10 +514,11 @@ export function OnboardingPage() {
         </div>
         <PdcaFlow variant="onboarding" ariaLabel="Plan-Do-Check-Act loop explainer" />
       </section>
+      ) : null}
         </>
       )}
 
-      {activeTab === 'steps' && (
+      {effectiveTab === 'steps' && (
         <>
       {project && (
         <SetupChecklist
@@ -549,7 +572,7 @@ export function OnboardingPage() {
         </>
       )}
 
-      {activeTab === 'verify' && (
+      {effectiveTab === 'verify' && (
         <>
       {project && nextRequired?.id === 'api_key_generated' && (
         <Card className="p-5 space-y-4">
@@ -619,7 +642,7 @@ export function OnboardingPage() {
         </>
       )}
 
-      {activeTab === 'sdk' && (
+      {effectiveTab === 'sdk' && (
         <>
       {project && !setup.isStepIncomplete('api_key_generated') ? (
         <div className="space-y-3">
@@ -637,6 +660,7 @@ export function OnboardingPage() {
         </>
       )}
 
+      {!ux.hideFooterLinks ? (
       <p className="text-center flex items-center justify-center gap-3">
         <button
           onClick={() => navigate('/dashboard')}
@@ -655,6 +679,7 @@ export function OnboardingPage() {
           Restart tour
         </button>
       </p>
+      ) : null}
     </div>
   )
 }

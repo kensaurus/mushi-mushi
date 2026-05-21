@@ -33,10 +33,10 @@ const SEVERITY_RANK: Record<string, number> = {
 }
 
 export interface CursorCloudPluginConfig {
-  /** Cursor API key (cur_…). */
+  /** Cursor API key (crsr_…). */
   apiKey: string
-  /** Cursor workspace ID (ws_…). */
-  workspaceId: string
+  /** @deprecated No longer required by Cursor Cloud Agents API. */
+  workspaceId?: string
   /** Cursor model slug. Defaults to `composer-2.5`. */
   model?: string
   /** Whether the agent should automatically open a draft PR. Defaults to true. */
@@ -82,8 +82,8 @@ export interface CursorDispatchResult {
  *   - network error    → retry
  */
 async function createCursorAgentRun(
-  cfg: Required<Pick<CursorCloudPluginConfig, 'apiKey' | 'workspaceId' | 'model' | 'autoCreatePR' | 'maxIterations'>>,
-  opts: { repoUrl: string; prompt: string; envVars?: Record<string, string> },
+  cfg: Required<Pick<CursorCloudPluginConfig, 'apiKey' | 'model' | 'autoCreatePR' | 'maxIterations'>>,
+  opts: { repoUrl: string; prompt: string; branchName?: string },
   f: typeof fetch,
 ): Promise<CursorAgentRunResponse> {
   return withRetry(async () => {
@@ -94,15 +94,17 @@ async function createCursorAgentRun(
         Authorization: `Bearer ${cfg.apiKey}`,
       },
       body: JSON.stringify({
-        model: { id: cfg.model },
-        cloud: {
-          workspaceId: cfg.workspaceId,
-          repos: [{ url: opts.repoUrl }],
-          autoCreatePR: cfg.autoCreatePR,
-          maxIterations: cfg.maxIterations,
-          envVars: opts.envVars ?? {},
+        prompt: { text: opts.prompt },
+        model: cfg.model || 'default',
+        source: {
+          repository: opts.repoUrl,
+          ref: 'main',
         },
-        prompt: opts.prompt,
+        target: {
+          autoCreatePr: cfg.autoCreatePR,
+          branchName: opts.branchName ?? `mushi/cursor-${Date.now()}`,
+          skipReviewerRequest: true,
+        },
       }),
     })
     if (!res.ok) {
@@ -182,7 +184,7 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
   const maxIterations = cfg.maxIterations ?? 1
   const f = cfg.fetchImpl ?? fetch
 
-  const resolvedCfg = { apiKey: cfg.apiKey, workspaceId: cfg.workspaceId, model, autoCreatePR, maxIterations }
+  const resolvedCfg = { apiKey: cfg.apiKey, model, autoCreatePR, maxIterations }
 
   const webhookSecret =
     cfg.webhookSecret ??
@@ -213,11 +215,6 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
           {
             repoUrl,
             prompt: buildPromptFromClassifiedReport(e, data),
-            envVars: {
-              MUSHI_REPORT_ID: data.report.id,
-              MUSHI_PROJECT_ID: e.projectId,
-              MUSHI_EVENT: 'report.classified',
-            },
           },
           f,
         )
@@ -241,12 +238,6 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
           {
             repoUrl,
             prompt: buildPromptFromFixRequested(e, data),
-            envVars: {
-              MUSHI_REPORT_ID: data.report.id,
-              MUSHI_FIX_ID: data.fix.id,
-              MUSHI_PROJECT_ID: e.projectId,
-              MUSHI_EVENT: 'fix.requested',
-            },
           },
           f,
         )
@@ -270,11 +261,6 @@ export function createCursorCloudPlugin(cfg: CursorCloudPluginConfig) {
           {
             repoUrl,
             prompt: buildPromptFromQaStoryFailed(e, data),
-            envVars: {
-              MUSHI_PROJECT_ID: e.projectId,
-              MUSHI_QA_STORY_ID: data.storyId ?? 'unknown',
-              MUSHI_EVENT: 'qa_story.failed',
-            },
           },
           f,
         )
